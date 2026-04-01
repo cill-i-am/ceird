@@ -1,7 +1,10 @@
 import { spawn, spawnSync } from "node:child_process"
+import { repairPortlessRoutesFile } from "./portless-state.mjs"
 
 const proxyPort = process.env.PORTLESS_PORT ?? "1355"
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
+
+repairPortlessRoutesFile()
 
 const startProxy = spawnSync(command, ["exec", "portless", "proxy", "start", "-p", proxyPort], {
   stdio: "inherit",
