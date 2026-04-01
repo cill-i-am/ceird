@@ -2,6 +2,11 @@ import { readFileSync, existsSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 
+if (process.env.CI === "true") {
+  console.log("Skipping opensrc sync because CI=true.")
+  process.exit(0)
+}
+
 const workspacePackages = [
   "apps/api/package.json",
   "apps/app/package.json",
