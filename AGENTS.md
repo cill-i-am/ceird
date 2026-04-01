@@ -8,6 +8,9 @@ This is a greenfield project and has not been released.
 - Do not preserve workarounds unless they still make clear architectural sense.
 - Prefer clean, sweeping refactors over incremental patching when that improves the codebase.
 - It is fine to reshape APIs, folder structure, and internal architecture when needed.
+- Keep the code simple and readable.
+- Ensure maximum type safety.
+- Always leave the codebase better than you found it.
 
 ## Dependency Source
 
