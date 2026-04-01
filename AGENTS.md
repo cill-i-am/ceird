@@ -1,5 +1,14 @@
 # Agent Context
 
+## Project Status
+
+This is a greenfield project and has not been released.
+
+- Do not optimize for backward compatibility.
+- Do not preserve workarounds unless they still make clear architectural sense.
+- Prefer clean, sweeping refactors over incremental patching when that improves the codebase.
+- It is fine to reshape APIs, folder structure, and internal architecture when needed.
+
 ## Dependency Source
 
 This repo keeps fetched dependency source code in `opensrc/` for local agent context.
