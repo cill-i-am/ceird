@@ -2,6 +2,9 @@
   "name": "task-tracker",
   "private": true,
   "scripts": {
+    "opensrc:sync": "node scripts/sync-opensrc.mjs",
+    "postinstall": "pnpm run opensrc:sync",
+    "prebuild": "pnpm run opensrc:sync",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
@@ -9,6 +12,7 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "opensrc": "^0.6.0",
     "prettier": "^3.7.4",
     "turbo": "^2.9.3",
     "typescript": "5.9.2"
