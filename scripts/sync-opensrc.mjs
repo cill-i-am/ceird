@@ -1,38 +1,39 @@
-import { readFileSync, existsSync } from "node:fs"
-import { spawnSync } from "node:child_process"
-import path from "node:path"
+import { spawnSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
 
 if (process.env.CI === "true") {
-  console.log("Skipping opensrc sync because CI=true.")
-  process.exit(0)
+  console.log("Skipping opensrc sync because CI=true.");
+  process.exit(0);
 }
 
-const workspacePackages = [
-  "apps/api/package.json",
-  "apps/app/package.json",
-]
+const workspacePackages = ["apps/api/package.json", "apps/app/package.json"];
 
-const extraPackages = ["portless"]
-const skippedPackages = new Set(["react"])
-const extraSources = ["github:facebook/react"]
+const extraPackages = ["portless"];
+const skippedPackages = new Set(["react"]);
+const extraSources = ["github:facebook/react"];
 
-const packages = new Set(extraPackages)
+const packages = new Set(extraPackages);
 
 for (const packagePath of workspacePackages) {
-  const fullPath = path.resolve(packagePath)
-  if (!existsSync(fullPath)) continue
+  const fullPath = path.resolve(packagePath);
+  if (!existsSync(fullPath)) {
+    continue;
+  }
 
-  const packageJson = JSON.parse(readFileSync(fullPath, "utf8"))
+  const packageJson = JSON.parse(readFileSync(fullPath, "utf8"));
   for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
-    if (skippedPackages.has(dependency)) continue
-    packages.add(dependency)
+    if (skippedPackages.has(dependency)) {
+      continue;
+    }
+    packages.add(dependency);
   }
 }
 
-const sourceList = [...packages, ...extraSources].sort()
+const sourceList = [...packages, ...extraSources].toSorted();
 
 if (sourceList.length === 0) {
-  process.exit(0)
+  process.exit(0);
 }
 
 const result = spawnSync(
@@ -44,9 +45,9 @@ const result = spawnSync(
       ...process.env,
       CI: process.env.CI ?? "1",
     },
-  },
-)
+  }
+);
 
 if (result.status !== 0) {
-  process.exit(result.status ?? 1)
+  process.exit(result.status ?? 1);
 }

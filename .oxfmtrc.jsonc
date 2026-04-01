@@ -1,0 +1,34 @@
+// Ultracite + Oxfmt configuration
+// https://oxc.rs/docs/guide/usage/formatter/config-file-reference.html
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "ignorePatterns": [
+    ".agents/**",
+    "opensrc/**",
+    "apps/app/src/routeTree.gen.ts",
+  ],
+  "jsxSingleQuote": false,
+  "printWidth": 80,
+  "quoteProps": "as-needed",
+  "semi": true,
+  "singleQuote": false,
+  "sortImports": {
+    "ignoreCase": true,
+    "newlinesBetween": true,
+    "order": "asc",
+  },
+  "sortPackageJson": {
+    "sortScripts": true,
+  },
+  "sortTailwindcss": {
+    "functions": ["clsx", "cn", "cx", "cva", "tw", "twMerge", "twJoin", "tv"],
+    "stylesheet": "./apps/app/src/styles.css",
+  },
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "useTabs": false,
+}

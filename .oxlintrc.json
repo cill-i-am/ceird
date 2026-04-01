@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "./node_modules/ultracite/config/oxlint/core/.oxlintrc.json",
+    "./node_modules/ultracite/config/oxlint/react/.oxlintrc.json",
+    "./node_modules/ultracite/config/oxlint/vitest/.oxlintrc.json"
+  ],
+  "ignorePatterns": [
+    ".agents/**",
+    "opensrc/**",
+    "apps/app/src/routeTree.gen.ts"
+  ],
+  "rules": {
+    "func-style": "off",
+    "no-use-before-define": "off",
+    "react/no-danger": "off",
+    "react-perf/jsx-no-new-function-as-prop": "off",
+    "sort-keys": "off",
+    "unicorn/filename-case": "off"
+  }
+}

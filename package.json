@@ -2,30 +2,38 @@
   "name": "task-tracker",
   "private": true,
   "scripts": {
+    "build": "turbo run build",
+    "check": "ultracite check .",
+    "check-types": "turbo run check-types",
+    "dev": "node scripts/dev.mjs",
+    "fix": "ultracite fix .",
+    "format": "oxfmt --check .",
+    "format:write": "oxfmt --write .",
+    "lint": "oxlint .",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
     "prebuild": "pnpm run opensrc:sync",
-    "build": "turbo run build",
-    "dev": "node scripts/dev.mjs",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "prepare": "lefthook install"
   },
   "devDependencies": {
+    "lefthook": "^2.1.4",
     "opensrc": "^0.6.0",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
     "portless": "^0.9.1",
-    "prettier": "^3.7.4",
     "turbo": "^2.9.3",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "ultracite": "^7.4.2"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "packageManager": "pnpm@9.0.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
+      "lefthook",
       "lightningcss"
     ]
-  },
-  "engines": {
-    "node": ">=18"
   }
 }

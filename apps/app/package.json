@@ -6,10 +6,10 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "portless run --name app.task-tracker node ../../scripts/vite-portless-dev.mjs",
-    "dev:raw": "vite dev --port 3000",
     "build": "vite build",
     "check-types": "tsc --noEmit -p tsconfig.json",
+    "dev": "portless run --name app.task-tracker node ../../scripts/vite-portless-dev.mjs",
+    "dev:raw": "vite dev --port 3000",
     "preview": "vite preview",
     "test": "vitest run"
   },
