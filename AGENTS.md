@@ -30,3 +30,12 @@ When working from a linked git worktree, prefer the sandbox workflow over the ho
 - Use `pnpm sandbox:down` when you are finished with that worktree's sandbox.
 - Prefer the sandbox URLs and `portless` aliases for worktree development. Fall back to the loopback URLs printed by the CLI when aliases are unavailable.
 - Do not default to `pnpm dev` inside linked worktrees unless the user explicitly asks for the non-sandbox flow.
+
+## Type Boundaries
+
+Model runtime and type safety according to the boundary the code is crossing.
+
+- Use `Config` or `Schema` at input/output boundaries such as environment loading, HTTP payloads, persistence boundaries, and external integrations.
+- Prefer inferred types from `Schema` for shared DTOs and domain payloads that cross module or service boundaries.
+- Keep plain TypeScript interfaces and types for simple internal computed objects that stay inside a trusted local implementation and do not need runtime decoding.
+- Do not add runtime schemas for internal shapes unless they provide a clear boundary-level benefit such as decoding, validation, serialization, or contract sharing.

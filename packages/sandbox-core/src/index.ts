@@ -57,6 +57,7 @@ export interface SandboxRecord {
   readonly worktreePath: string;
   readonly repoRoot: string;
   readonly hostnameSlug: string;
+  readonly betterAuthSecret?: string;
   readonly status: SandboxStatus;
   readonly containers: SandboxContainers;
   readonly ports: SandboxPorts;

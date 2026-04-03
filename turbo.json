@@ -24,6 +24,7 @@
       "cache": false,
       "persistent": true,
       "env": [
+        "BETTER_AUTH_SECRET",
         "DATABASE_URL",
         "HOST",
         "PNPM_STORE_DIR",

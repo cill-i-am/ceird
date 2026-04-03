@@ -15,6 +15,7 @@ export interface BringSandboxUpOptions {
   readonly now: string;
   readonly takenSlugs: ReadonlySet<string>;
   readonly existingRecord: SandboxRecord | undefined;
+  readonly generateBetterAuthSecret: () => string;
   readonly ensurePrerequisites: () => Promise<void>;
   readonly allocatePorts: () => Promise<SandboxPorts>;
   readonly startStack: (record: SandboxRecord) => Promise<void>;
@@ -45,6 +46,9 @@ export async function bringSandboxUp(
     repoRoot: options.repoRoot,
     worktreePath: options.worktreePath,
     hostnameSlug: identity.hostnameSlug,
+    betterAuthSecret:
+      options.existingRecord?.betterAuthSecret ??
+      options.generateBetterAuthSecret(),
     status: "ready",
     containers: {
       app: resourceNames.appContainer,

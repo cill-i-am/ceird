@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -290,6 +291,7 @@ export function makeSandboxRuntime(): SandboxRuntime {
         filter: "api",
         sandboxId: record.sandboxId,
         databaseUrl: internalDatabaseUrl,
+        betterAuthSecret: record.betterAuthSecret,
       });
       await recreateNodeServiceContainer({
         containerName: resourceNames.appContainer,
@@ -457,6 +459,7 @@ export function makeSandboxRuntime(): SandboxRuntime {
         waitForHealth: (record) => healthChecker.waitForReady(record),
         registerAliases: (record) => portlessService.registerAliases(record),
         persist: (record) => sandboxRegistry.upsert(record),
+        generateBetterAuthSecret: makeSandboxBetterAuthSecret,
       });
     },
     down: async () => {
@@ -742,11 +745,40 @@ interface RecreateNodeServiceContainerOptions {
   readonly filter: "app" | "api";
   readonly sandboxId: string;
   readonly databaseUrl: string;
+  readonly betterAuthSecret?: string;
+}
+
+export function makeNodeServiceEnvironmentEntries(options: {
+  readonly databaseUrl: string;
+  readonly filter: "app" | "api";
+  readonly publishedPort: number;
+  readonly sandboxId: string;
+  readonly betterAuthSecret?: string;
+}): string[] {
+  return [
+    "HOST=0.0.0.0",
+    `PORT=${options.publishedPort}`,
+    `SANDBOX_ID=${options.sandboxId}`,
+    "TASK_TRACKER_SANDBOX=1",
+    `DATABASE_URL=${options.databaseUrl}`,
+    ...(options.filter === "api" && options.betterAuthSecret
+      ? [`BETTER_AUTH_SECRET=${options.betterAuthSecret}`]
+      : []),
+    "PNPM_STORE_DIR=/pnpm/store",
+  ];
 }
 
 async function recreateNodeServiceContainer(
   options: RecreateNodeServiceContainerOptions
 ): Promise<void> {
+  const environmentEntries = makeNodeServiceEnvironmentEntries({
+    databaseUrl: options.databaseUrl,
+    filter: options.filter,
+    publishedPort: options.publishedPort,
+    sandboxId: options.sandboxId,
+    betterAuthSecret: options.betterAuthSecret,
+  });
+
   await removeContainer(options.containerName);
   await exec(
     runCommand("docker", [
@@ -758,18 +790,7 @@ async function recreateNodeServiceContainer(
       options.network,
       "-p",
       `127.0.0.1:${options.publishedPort}:${options.publishedPort}`,
-      "-e",
-      "HOST=0.0.0.0",
-      "-e",
-      `PORT=${options.publishedPort}`,
-      "-e",
-      `SANDBOX_ID=${options.sandboxId}`,
-      "-e",
-      "TASK_TRACKER_SANDBOX=1",
-      "-e",
-      `DATABASE_URL=${options.databaseUrl}`,
-      "-e",
-      "PNPM_STORE_DIR=/pnpm/store",
+      ...environmentEntries.flatMap((entry) => ["-e", entry]),
       "-v",
       `${options.worktreePath}:/workspace`,
       "-v",
@@ -782,6 +803,10 @@ async function recreateNodeServiceContainer(
       options.filter,
     ])
   );
+}
+
+function makeSandboxBetterAuthSecret(): string {
+  return randomBytes(32).toString("hex");
 }
 
 async function removeContainer(name: string): Promise<void> {
