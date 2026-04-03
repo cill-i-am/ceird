@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { memo } from "react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactElement } from "react";
 
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
@@ -22,6 +22,35 @@ const { mockedUseSession } = vi.hoisted(() => ({
       refetch: () => Promise<void>;
     }
   >(),
+}));
+
+const { mockedAppSidebar } = vi.hoisted(() => ({
+  mockedAppSidebar: vi.fn<
+    ({
+      user,
+    }: {
+      user?: {
+        name: string;
+        email: string;
+        image?: string | null;
+      } | null;
+    } & ComponentProps<"div">) => ReactElement
+  >(
+    ({
+      user,
+      ...props
+    }: {
+      user?: {
+        name: string;
+        email: string;
+        image?: string | null;
+      } | null;
+    } & ComponentProps<"div">) => (
+      <aside data-testid="app-sidebar" {...props}>
+        {user?.name ?? "missing user"}
+      </aside>
+    )
+  ),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -62,7 +91,7 @@ vi.mock(import("#/components/site-header"), () => ({
 }));
 
 vi.mock(import("#/components/app-sidebar"), () => ({
-  AppSidebar: () => <aside>Workspace Sidebar</aside>,
+  AppSidebar: mockedAppSidebar,
 }));
 
 describe("app layout", () => {
@@ -87,14 +116,25 @@ describe("app layout", () => {
   });
 
   it(
-    "renders the shared app chrome",
+    "passes the session user into the app sidebar",
     {
       timeout: 10_000,
     },
     () => {
       render(<AppLayout />);
 
-      expect(screen.getByText(/task tracker/i)).toBeInTheDocument();
+      expect(mockedAppSidebar).toHaveBeenCalledExactlyOnceWith(
+        {
+          user: {
+            name: "Taylor Example",
+            email: "person@example.com",
+            image: null,
+          },
+        }
+      );
+      expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
+        "Taylor Example"
+      );
     }
   );
 });

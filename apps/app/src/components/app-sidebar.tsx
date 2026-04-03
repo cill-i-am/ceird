@@ -2,7 +2,7 @@
 
 import { CommandIcon, ComputerTerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import { NavMain } from "#/components/nav-main";
@@ -45,6 +45,8 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & {
   user?: NavUserAccount | null;
 }) {
+  const navigate = useNavigate();
+
   return (
     <Sidebar
       className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
@@ -80,7 +82,7 @@ export function AppSidebar({
       </SidebarContent>
       {user ? (
         <SidebarFooter>
-          <NavUser user={user} />
+          <NavUser user={user} navigate={navigate} />
         </SidebarFooter>
       ) : null}
     </Sidebar>

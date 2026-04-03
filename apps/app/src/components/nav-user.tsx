@@ -2,7 +2,6 @@
 
 import { UnfoldMoreIcon, LogoutIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -29,6 +28,8 @@ export interface NavUserAccount {
   image?: string | null;
 }
 
+export type NavUserNavigate = (options: { to: string }) => Promise<void>;
+
 function getInitials(name: string) {
   const initials = name
     .split(/\s+/)
@@ -41,9 +42,14 @@ function getInitials(name: string) {
   return initials || "U";
 }
 
-export function NavUser({ user }: { user: NavUserAccount }) {
+export function NavUser({
+  user,
+  navigate,
+}: {
+  user: NavUserAccount;
+  navigate: NavUserNavigate;
+}) {
   const { isMobile } = useSidebar();
-  const navigate = useNavigate();
   const [isSigningOut, setIsSigningOut] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 

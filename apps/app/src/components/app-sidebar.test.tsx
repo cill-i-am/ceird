@@ -3,6 +3,10 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
 
+const { mockedNavigate } = vi.hoisted(() => ({
+  mockedNavigate: vi.fn<() => Promise<void>>(),
+}));
+
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
 
@@ -11,6 +15,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     Link: (({ children, ...props }: ComponentProps<"a">) => (
       <a {...props}>{children}</a>
     )) as typeof actual.Link,
+    useNavigate: () => mockedNavigate,
   };
 });
 
