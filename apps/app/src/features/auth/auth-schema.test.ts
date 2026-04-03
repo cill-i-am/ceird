@@ -51,7 +51,7 @@ describe("auth schemas", () => {
   }, 1000);
 });
 
-describe(resolveAuthBaseURL, () => {
+describe("auth base URL resolution", () => {
   it("maps the app portless origin to the API origin", () => {
     expect(
       resolveAuthBaseURL("https://agent-one.app.task-tracker.localhost:1355")

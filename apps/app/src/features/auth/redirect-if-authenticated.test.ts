@@ -23,7 +23,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
   } as unknown as typeof AuthClient,
 }));
 
-describe(redirectIfAuthenticated, () => {
+describe("auth route redirect guard", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
