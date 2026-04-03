@@ -8,7 +8,6 @@ import {
 import { NodeHttpServer } from "@effect/platform-node";
 import { getTableName } from "drizzle-orm";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
 
 import {
   makeAuthenticationConfig,

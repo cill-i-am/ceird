@@ -3,7 +3,6 @@ import path from "node:path";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { afterAll, describe, expect, it } from "vitest";
 
 import { createAuthentication } from "./auth.js";
 import {
@@ -17,7 +16,7 @@ describe("authentication integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
 
   afterAll(async () => {
-    await Promise.all([...cleanup].reverse().map((step) => step()));
+    await Promise.all([...cleanup].toReversed().map((step) => step()));
   });
 
   it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, and rate limiting", async () => {
