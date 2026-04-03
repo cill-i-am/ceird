@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { memo } from "react";
 import type { ComponentProps } from "react";
 
-import { AppLayout } from "./_app";
+import { AppLayout } from "./app-layout";
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
