@@ -324,4 +324,28 @@ describe("nav user", () => {
       expect(mockedNavigate).toHaveBeenCalledOnce();
     }
   );
+
+  it(
+    "shows the fallback error message when sign-out throws",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedSignOut.mockRejectedValueOnce(new Error("sign out failed"));
+
+      const userInteraction = userEvent.setup();
+      renderNavUser();
+
+      await userInteraction.click(
+        screen.getByRole("button", {
+          name: /sign out/i,
+        })
+      );
+
+      await expect(screen.findByRole("status")).resolves.toHaveTextContent(
+        "Couldn't sign out. Please try again."
+      );
+      expect(mockedNavigate).not.toHaveBeenCalled();
+    }
+  );
 });

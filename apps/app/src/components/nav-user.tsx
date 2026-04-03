@@ -54,20 +54,22 @@ export function NavUser({
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   async function handleSignOut() {
-    const result = await signOut();
-
-    if (result.error) {
-      setErrorMessage("Couldn't sign out. Please try again.");
-      return result;
-    }
-
     try {
-      await navigate({ to: "/login" });
-    } catch {
-      setErrorMessage("Couldn't redirect after sign out. Please try again.");
-    }
+      const result = await signOut();
 
-    return result;
+      if (result.error) {
+        setErrorMessage("Couldn't sign out. Please try again.");
+        return;
+      }
+
+      try {
+        await navigate({ to: "/login" });
+      } catch {
+        setErrorMessage("Couldn't redirect after sign out. Please try again.");
+      }
+    } catch {
+      setErrorMessage("Couldn't sign out. Please try again.");
+    }
   }
 
   return (
@@ -157,16 +159,4 @@ export function NavUser({
       </SidebarMenuItem>
     </SidebarMenu>
   );
-}
-
-export async function signOutAndNavigate(
-  navigate: (options: { to: string }) => Promise<void>
-) {
-  const result = await signOut();
-
-  if (!result.error) {
-    await navigate({ to: "/login" });
-  }
-
-  return result;
 }
