@@ -126,7 +126,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Task Tracker</span>
-                <span className="truncate text-xs">authenticated shell</span>
+                <span className="truncate text-xs">shadcn starter</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
