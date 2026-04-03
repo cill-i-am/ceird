@@ -6,9 +6,12 @@ import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
 import { NavMain } from "#/components/nav-main";
+import { NavUser } from "#/components/nav-user";
+import type { NavUserAccount } from "#/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -36,7 +39,12 @@ const data = {
   ],
 };
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  user,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  user?: NavUserAccount | null;
+}) {
   return (
     <Sidebar
       className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
@@ -69,10 +77,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <div className="mt-auto px-4 pb-4 text-sm text-muted-foreground">
-          Task Tracker
-        </div>
       </SidebarContent>
+      {user ? (
+        <SidebarFooter>
+          <NavUser user={user} />
+        </SidebarFooter>
+      ) : null}
     </Sidebar>
   );
 }

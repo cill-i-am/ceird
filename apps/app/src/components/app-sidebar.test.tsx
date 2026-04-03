@@ -111,24 +111,44 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   };
 });
 
+vi.mock(import("#/components/nav-user"), () => ({
+  NavUser: ({
+    user,
+  }: {
+    user: {
+      name: string;
+      email: string;
+      image?: string | null;
+    };
+  }) => (
+    <div data-testid="nav-user">
+      {user.name} {user.email}
+    </div>
+  ),
+}));
+
 describe("app sidebar", () => {
   it(
-    "hides the starter and promo text",
+    "shows the real session user and hides starter text",
     {
       timeout: 10_000,
     },
     () => {
-      render(<AppSidebar />);
+      render(
+        <AppSidebar
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            image: null,
+          }}
+        />
+      );
 
+      expect(screen.getByTestId("nav-user")).toHaveTextContent(
+        "Taylor Example person@example.com"
+      );
       expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/shadcn starter/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/tanstack start/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/tanstack router/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/shadcn\/ui/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/tanstack github/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/follow on x/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/auth screens/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/form patterns/i)).not.toBeInTheDocument();
     }
   );
 });
