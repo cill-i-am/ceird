@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
@@ -9,7 +10,20 @@ function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
 }
 
+async function expectAuthenticatedHome(page: Page) {
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
+  await expect(page.getByText("Start simple, ship quickly.")).toHaveCount(0);
+}
+
 test.describe("auth pages", () => {
+  test("redirects unauthenticated users from / to /login", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(new LoginPage(page).heading).toBeVisible();
+  });
+
   test("login shows inline validation after submit", async ({ page }) => {
     const loginPage = new LoginPage(page);
 
@@ -55,8 +69,7 @@ test.describe("auth pages", () => {
     await signupPage.confirmPassword.fill("password123");
     await signupPage.submit.click();
 
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText("Start simple, ship quickly.")).toBeVisible();
+    await expectAuthenticatedHome(page);
   });
 
   test("login redirects to the app shell after success", async ({
@@ -84,7 +97,6 @@ test.describe("auth pages", () => {
     await loginPage.password.fill(password);
     await loginPage.submit.click();
 
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText("Start simple, ship quickly.")).toBeVisible();
+    await expectAuthenticatedHome(page);
   });
 });

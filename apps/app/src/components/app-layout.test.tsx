@@ -61,7 +61,7 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 });
 
 vi.mock(import("#/components/site-header"), () => ({
-  SiteHeader: () => <header>Task Tracker Header</header>,
+  SiteHeader: () => <header>Your work</header>,
 }));
 
 vi.mock(import("#/components/app-sidebar"), () => ({
@@ -100,6 +100,11 @@ describe("app layout", () => {
       expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
         "Taylor Example"
       );
+      expect(screen.getByText("Your work")).toBeVisible();
+      expect(
+        screen.queryByText("Start simple, ship quickly.")
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
     }
   );
 });
