@@ -40,18 +40,20 @@ function mapAppOriginToApiOrigin(url: URL): URL {
 }
 
 export function resolveAuthBaseURL(
-  origin = globalThis.location?.origin
-): string {
+  origin?: string | undefined
+): string | undefined {
   const url = typeof origin === "string" ? toURL(origin) : undefined;
 
   if (!url) {
-    return AUTH_BASE_PATH;
+    return undefined;
   }
 
   return new URL(AUTH_BASE_PATH, mapAppOriginToApiOrigin(url)).toString();
 }
 
+const authBaseURL = resolveAuthBaseURL(globalThis.location?.origin);
+
 export const authClient = createAuthClient({
   basePath: AUTH_BASE_PATH,
-  baseURL: resolveAuthBaseURL(),
+  ...(authBaseURL ? { baseURL: authBaseURL } : {}),
 });

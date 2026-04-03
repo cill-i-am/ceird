@@ -1,5 +1,3 @@
-
-
 import { resolveAuthBaseURL } from "../../lib/auth-client";
 import { decodeLoginInput, decodeSignupInput } from "./auth-schemas";
 
@@ -64,5 +62,13 @@ describe(resolveAuthBaseURL, () => {
     expect(resolveAuthBaseURL("http://127.0.0.1:3000")).toBe(
       "http://127.0.0.1:3001/api/auth"
     );
+  }, 1000);
+
+  it("returns undefined when no origin is available", () => {
+    expect(resolveAuthBaseURL()).toBeUndefined();
+  }, 1000);
+
+  it("returns undefined for an invalid origin", () => {
+    expect(resolveAuthBaseURL("not-a-url")).toBeUndefined();
   }, 1000);
 });
