@@ -2,10 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Schema } from "effect";
 
-import { loginSchema } from "#/features/auth/auth-schemas";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
-import { LoginPage } from "./login";
+import { loginSchema } from "./auth-schemas";
+import { LoginPage } from "./login-page";
 
 const { mockedGetSession, mockedSignInEmail } = vi.hoisted(() => ({
   mockedGetSession: vi.fn<
@@ -39,7 +39,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
   } as unknown as typeof AuthClient,
 }));
 
-describe("login route", () => {
+describe("login page", () => {
   beforeEach(() => {
     mockedGetSession.mockResolvedValue({ data: null, error: null });
     mockedSignInEmail.mockResolvedValue({
