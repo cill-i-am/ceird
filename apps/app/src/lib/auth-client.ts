@@ -1,7 +1,7 @@
 import { createAuthClient } from "better-auth/react";
 
 const AUTH_BASE_PATH = "/api/auth";
-const LOCAL_APP_PORT = "3000";
+const LOCAL_APP_PORTS = new Set(["3000", "4173"]);
 const LOCAL_API_PORT = "3001";
 
 function toURL(input: string): URL | undefined {
@@ -30,7 +30,7 @@ function mapAppOriginToApiOrigin(url: URL): URL {
 
   if (
     (mapped.hostname === "127.0.0.1" || mapped.hostname === "localhost") &&
-    mapped.port === LOCAL_APP_PORT
+    LOCAL_APP_PORTS.has(mapped.port)
   ) {
     mapped.port = LOCAL_API_PORT;
     return mapped;
@@ -39,13 +39,21 @@ function mapAppOriginToApiOrigin(url: URL): URL {
   return mapped;
 }
 
+function resolveServerAuthBaseURL(): string | undefined {
+  if (typeof process === "undefined") {
+    return undefined;
+  }
+
+  return process.env.BETTER_AUTH_BASE_URL;
+}
+
 export function resolveAuthBaseURL(
   origin?: string | undefined
 ): string | undefined {
   const url = typeof origin === "string" ? toURL(origin) : undefined;
 
   if (!url) {
-    return undefined;
+    return resolveServerAuthBaseURL();
   }
 
   return new URL(AUTH_BASE_PATH, mapAppOriginToApiOrigin(url)).toString();
