@@ -14,11 +14,17 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
 
-import { getErrorText, getFormErrorText } from "./auth-form-errors";
+import {
+  getAuthFailureMessage,
+  getErrorText,
+  getFormErrorText,
+} from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { useAuthSuccessNavigation } from "./auth-navigation";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
 
 export function LoginPage() {
+  const navigateOnSuccess = useAuthSuccessNavigation();
   const form = useForm({
     defaultValues: {
       email: "",
@@ -38,11 +44,15 @@ export function LoginPage() {
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: result.error.message ?? "Unable to sign in",
+            form: getAuthFailureMessage("signIn", result.error),
             fields: {},
           },
         });
+
+        return;
       }
+
+      await navigateOnSuccess();
     },
   });
 

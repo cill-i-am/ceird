@@ -7,6 +7,7 @@
   "bracketSpacing": true,
   "endOfLine": "lf",
   "ignorePatterns": [
+    ".agents/skills/**",
     ".agents/**",
     "opensrc/**",
     "apps/app/src/routeTree.gen.ts",

@@ -14,11 +14,17 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
 
-import { getErrorText, getFormErrorText } from "./auth-form-errors";
+import {
+  getAuthFailureMessage,
+  getErrorText,
+  getFormErrorText,
+} from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { useAuthSuccessNavigation } from "./auth-navigation";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
 
 export function SignupPage() {
+  const navigateOnSuccess = useAuthSuccessNavigation();
   const form = useForm({
     defaultValues: {
       name: "",
@@ -44,11 +50,15 @@ export function SignupPage() {
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: result.error.message ?? "Unable to sign up",
+            form: getAuthFailureMessage("signUp", result.error),
             fields: {},
           },
         });
+
+        return;
       }
+
+      await navigateOnSuccess();
     },
   });
 

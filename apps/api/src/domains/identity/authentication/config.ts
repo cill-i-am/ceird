@@ -1,9 +1,41 @@
-import { Config, Effect, Option, pipe } from "effect";
+import { Config, Effect, Option, Schema, pipe } from "effect";
 
 export const DEFAULT_AUTH_BASE_PATH = "/api/auth" as const;
 export const DEFAULT_AUTH_DATABASE_URL =
   "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker";
 export const DEFAULT_SANDBOX_ALLOWED_HOST_PATTERN = "*.localhost:1355";
+const TrustedOriginPattern = Schema.String.pipe(
+  Schema.pattern(/^https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::\d+)?$/i),
+  Schema.brand("TrustedOriginPattern")
+);
+
+export type TrustedOriginPattern = Schema.Schema.Type<
+  typeof TrustedOriginPattern
+>;
+
+const decodeTrustedOriginPattern =
+  Schema.decodeUnknownSync(TrustedOriginPattern);
+
+function makeTrustedOriginPattern(value: string): TrustedOriginPattern {
+  return decodeTrustedOriginPattern(value);
+}
+
+export const DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN = makeTrustedOriginPattern(
+  "http://*.app.task-tracker.localhost:1355"
+);
+export const DEFAULT_SANDBOX_APP_ORIGIN_HTTPS_PATTERN =
+  makeTrustedOriginPattern("https://*.app.task-tracker.localhost:1355");
+
+const DEFAULT_LOCAL_APP_ORIGIN_STRINGS = [
+  "http://127.0.0.1:3000",
+  "http://localhost:3000",
+  "http://127.0.0.1:4173",
+  "http://localhost:4173",
+] as const;
+
+const DEFAULT_LOCAL_APP_ORIGINS = DEFAULT_LOCAL_APP_ORIGIN_STRINGS.map(
+  makeTrustedOriginPattern
+);
 export const authenticationDatabaseUrlConfig = Config.string(
   "DATABASE_URL"
 ).pipe(Config.withDefault(DEFAULT_AUTH_DATABASE_URL));
@@ -26,6 +58,7 @@ export interface AuthenticationConfig {
   readonly appName: "Task Tracker";
   readonly basePath: typeof DEFAULT_AUTH_BASE_PATH;
   readonly baseURL: string | DynamicAuthenticationBaseUrl;
+  readonly trustedOrigins: TrustedOriginPattern[];
   readonly secret: string;
   readonly databaseUrl: string;
   readonly rateLimit: {
@@ -45,6 +78,31 @@ export interface AuthenticationConfig {
   readonly emailAndPassword: {
     readonly enabled: true;
   };
+}
+
+export function makeAuthenticationTrustedOrigins(
+  environment: Pick<AuthenticationEnvironment, "portlessUrl">
+): TrustedOriginPattern[] {
+  const trustedOrigins = new Set<TrustedOriginPattern>([
+    ...DEFAULT_LOCAL_APP_ORIGINS,
+    DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN,
+    DEFAULT_SANDBOX_APP_ORIGIN_HTTPS_PATTERN,
+  ]);
+
+  if (environment.portlessUrl) {
+    try {
+      const appUrl = new URL(environment.portlessUrl);
+      appUrl.hostname = appUrl.hostname.replace(
+        ".api.task-tracker.localhost",
+        ".app.task-tracker.localhost"
+      );
+      trustedOrigins.add(makeTrustedOriginPattern(appUrl.origin));
+    } catch {
+      // Ignore malformed PORTLESS_URL values and keep the default trusted origins.
+    }
+  }
+
+  return [...trustedOrigins];
 }
 
 export function makeDynamicAuthenticationBaseUrl(
@@ -82,6 +140,7 @@ export function makeAuthenticationConfig(
     baseURL:
       environment.explicitBaseUrl ??
       makeDynamicAuthenticationBaseUrl(environment),
+    trustedOrigins: makeAuthenticationTrustedOrigins(environment),
     secret: environment.secret,
     databaseUrl: environment.databaseUrl,
     rateLimit: {

@@ -1,6 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 
-const AUTH_BASE_PATH = "/api/auth";
+export const AUTH_BASE_PATH = "/api/auth";
 const LOCAL_APP_PORTS = new Set(["3000", "4173"]);
 const LOCAL_API_PORT = "3001";
 
@@ -39,29 +39,28 @@ function mapAppOriginToApiOrigin(url: URL): URL {
   return mapped;
 }
 
-function resolveServerAuthBaseURL(): string | undefined {
-  if (typeof process === "undefined") {
-    return undefined;
-  }
-
-  return process.env.BETTER_AUTH_BASE_URL;
-}
-
 export function resolveAuthBaseURL(
   origin?: string | undefined
 ): string | undefined {
   const url = typeof origin === "string" ? toURL(origin) : undefined;
 
   if (!url) {
-    return resolveServerAuthBaseURL();
+    return undefined;
   }
 
   return new URL(AUTH_BASE_PATH, mapAppOriginToApiOrigin(url)).toString();
 }
 
-const authBaseURL = resolveAuthBaseURL(globalThis.location?.origin);
+export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
+  return createAuthClient({
+    basePath: AUTH_BASE_PATH,
+    ...(baseURL ? { baseURL } : {}),
+  });
+}
 
-export const authClient = createAuthClient({
-  basePath: AUTH_BASE_PATH,
-  ...(authBaseURL ? { baseURL: authBaseURL } : {}),
-});
+const authBaseURL =
+  typeof window === "undefined"
+    ? undefined
+    : resolveAuthBaseURL(window.location.origin);
+
+export const authClient = createTaskTrackerAuthClient(authBaseURL);

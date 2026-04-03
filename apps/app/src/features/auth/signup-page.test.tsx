@@ -5,33 +5,40 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { SignupPage } from "./signup-page";
 
-const { mockedGetSession, mockedSignUpEmail } = vi.hoisted(() => ({
-  mockedGetSession: vi.fn<
-    () => Promise<{
-      data: null;
-      error: null;
-    }>
-  >(),
-  mockedSignUpEmail: vi.fn<
-    (input: { name: string; email: string; password: string }) => Promise<{
-      data: {
-        token: string | null;
-        user: {
-          id: string;
-          email: string;
-          name: string;
-          emailVerified: boolean;
-          createdAt: Date;
-          updatedAt: Date;
-        };
-      } | null;
-      error: {
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
+const { mockedGetSession, mockedNavigate, mockedSignUpEmail } = vi.hoisted(
+  () => ({
+    mockedGetSession: vi.fn<
+      () => Promise<{
+        data: null;
+        error: null;
+      }>
+    >(),
+    mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
+    mockedSignUpEmail: vi.fn<
+      (input: { name: string; email: string; password: string }) => Promise<{
+        data: {
+          token: string | null;
+          user: {
+            id: string;
+            email: string;
+            name: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+          };
+        } | null;
+        error: {
+          message: string;
+          status: number;
+          statusText: string;
+        } | null;
+      }>
+    >(),
+  })
+);
+
+vi.mock(import("./auth-navigation"), () => ({
+  useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
 }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
@@ -46,6 +53,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
 describe("signup page", () => {
   beforeEach(() => {
     mockedGetSession.mockResolvedValue({ data: null, error: null });
+    mockedNavigate.mockResolvedValue();
     mockedSignUpEmail.mockResolvedValue({
       data: {
         token: null,
@@ -84,6 +92,36 @@ describe("signup page", () => {
         password: "password123",
       });
     });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+  }, 10_000);
+
+  it("shows a safe server error when sign-up fails", async () => {
+    mockedSignUpEmail.mockResolvedValue({
+      data: null,
+      error: {
+        message: "User already exists",
+        status: 409,
+        statusText: "Conflict",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Confirm password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await expect(
+      screen.findByText("We couldn't create your account. Please try again.")
+    ).resolves.toBeInTheDocument();
   }, 10_000);
 
   it("shows the password mismatch error inline", async () => {

@@ -11,6 +11,7 @@ import { Effect } from "effect";
 
 import {
   makeAuthenticationConfig,
+  makeAuthenticationTrustedOrigins,
   makeDynamicAuthenticationBaseUrl,
 } from "./config.js";
 import {
@@ -35,6 +36,14 @@ describe("makeAuthenticationConfig()", () => {
     expect(config).toMatchObject({
       basePath: "/api/auth",
       baseURL: "http://127.0.0.1:3001",
+      trustedOrigins: expect.arrayContaining([
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:4173",
+        "http://localhost:4173",
+        "http://*.app.task-tracker.localhost:1355",
+        "https://*.app.task-tracker.localhost:1355",
+      ]),
       secret: "super-secret-value",
       databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
       rateLimit: {
@@ -75,6 +84,14 @@ describe("makeAuthenticationConfig()", () => {
         "task-tracker.api.task-tracker.localhost:1355",
       ])
     );
+  }, 10_000);
+
+  it("adds the matching app origin for a portless sandbox URL", () => {
+    expect(
+      makeAuthenticationTrustedOrigins({
+        portlessUrl: "https://task-tracker.api.task-tracker.localhost:1355",
+      })
+    ).toContain("https://task-tracker.app.task-tracker.localhost:1355");
   }, 10_000);
 });
 

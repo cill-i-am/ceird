@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 export function getErrorText(
   errors: readonly unknown[] | undefined
 ): string | undefined {
@@ -22,6 +24,29 @@ export function getErrorText(
   }
 
   return undefined;
+}
+
+type AuthFailureAction = "signIn" | "signUp";
+const AuthFailureError = Schema.Struct({
+  status: Schema.optional(Schema.Number),
+});
+const isAuthFailureError = Schema.is(AuthFailureError);
+
+export function getAuthFailureMessage(
+  action: AuthFailureAction,
+  error: unknown
+): string {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  if (authFailureError?.status === 429) {
+    return "Too many attempts. Please wait and try again.";
+  }
+
+  if (action === "signIn") {
+    return "We couldn't sign you in. Check your email and password and try again.";
+  }
+
+  return "We couldn't create your account. Please try again.";
 }
 
 export function getFormErrorText(error: unknown): string | undefined {

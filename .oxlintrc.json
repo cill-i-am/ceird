@@ -6,6 +6,7 @@
     "./node_modules/ultracite/config/oxlint/vitest/.oxlintrc.json"
   ],
   "ignorePatterns": [
+    ".agents/skills/**",
     ".agents/**",
     "opensrc/**",
     "apps/app/src/routeTree.gen.ts"

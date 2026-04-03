@@ -7,27 +7,34 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 import { loginSchema } from "./auth-schemas";
 import { LoginPage } from "./login-page";
 
-const { mockedGetSession, mockedSignInEmail } = vi.hoisted(() => ({
-  mockedGetSession: vi.fn<
-    () => Promise<{
-      data: null;
-      error: null;
-    }>
-  >(),
-  mockedSignInEmail: vi.fn<
-    (input: { email: string; password: string }) => Promise<{
-      data: {
-        session: {
-          id: string;
-        };
-      } | null;
-      error: {
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
+const { mockedGetSession, mockedNavigate, mockedSignInEmail } = vi.hoisted(
+  () => ({
+    mockedGetSession: vi.fn<
+      () => Promise<{
+        data: null;
+        error: null;
+      }>
+    >(),
+    mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
+    mockedSignInEmail: vi.fn<
+      (input: { email: string; password: string }) => Promise<{
+        data: {
+          session: {
+            id: string;
+          };
+        } | null;
+        error: {
+          message: string;
+          status: number;
+          statusText: string;
+        } | null;
+      }>
+    >(),
+  })
+);
+
+vi.mock(import("./auth-navigation"), () => ({
+  useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
 }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
@@ -42,6 +49,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
 describe("login page", () => {
   beforeEach(() => {
     mockedGetSession.mockResolvedValue({ data: null, error: null });
+    mockedNavigate.mockResolvedValue();
     mockedSignInEmail.mockResolvedValue({
       data: {
         session: {
@@ -71,13 +79,18 @@ describe("login page", () => {
         password: "password123",
       });
     });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
   }, 10_000);
 
-  it("shows a server error when sign-in fails", async () => {
+  it("shows a safe server error when sign-in fails", async () => {
     mockedSignInEmail.mockResolvedValue({
       data: null,
       error: {
-        message: "Invalid email or password",
+        message: "There is no account for that email address",
         status: 401,
         statusText: "Unauthorized",
       },
@@ -92,7 +105,9 @@ describe("login page", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     await expect(
-      screen.findByText("Invalid email or password")
+      screen.findByText(
+        "We couldn't sign you in. Check your email and password and try again."
+      )
     ).resolves.toBeInTheDocument();
   }, 10_000);
 
