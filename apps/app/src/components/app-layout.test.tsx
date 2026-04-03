@@ -123,15 +123,14 @@ describe("app layout", () => {
     () => {
       render(<AppLayout />);
 
-      expect(mockedAppSidebar).toHaveBeenCalledExactlyOnceWith(
-        {
-          user: {
-            name: "Taylor Example",
-            email: "person@example.com",
-            image: null,
-          },
-        }
-      );
+      expect(mockedAppSidebar).toHaveBeenCalledOnce();
+      expect(mockedAppSidebar.mock.calls[0]?.[0]).toStrictEqual({
+        user: {
+          name: "Taylor Example",
+          email: "person@example.com",
+          image: null,
+        },
+      });
       expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
         "Taylor Example"
       );

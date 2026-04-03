@@ -293,4 +293,35 @@ describe("nav user", () => {
       });
     }
   );
+
+  it(
+    "shows a redirect failure message when navigation rejects after sign-out succeeds",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedSignOut.mockResolvedValue({
+        data: {
+          success: true,
+        },
+        error: null,
+      });
+      mockedNavigate.mockRejectedValueOnce(new Error("navigation failed"));
+
+      const userInteraction = userEvent.setup();
+      renderNavUser();
+
+      await userInteraction.click(
+        screen.getByRole("button", {
+          name: /sign out/i,
+        })
+      );
+
+      await expect(screen.findByRole("status")).resolves.toHaveTextContent(
+        "Couldn't redirect after sign out. Please try again."
+      );
+      expect(mockedSignOut).toHaveBeenCalledOnce();
+      expect(mockedNavigate).toHaveBeenCalledOnce();
+    }
+  );
 });
