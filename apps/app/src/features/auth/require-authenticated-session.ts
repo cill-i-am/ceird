@@ -11,7 +11,7 @@ async function getCurrentSession() {
   }
 
   const session = await authClient.getSession();
-  return session.data?.session ?? null;
+  return session.data ?? null;
 }
 
 export async function requireAuthenticatedSession() {

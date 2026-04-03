@@ -1,7 +1,5 @@
 import { isRedirect } from "@tanstack/react-router";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
-
 import { requireAuthenticatedSession } from "./require-authenticated-session";
 
 interface Session {
@@ -15,11 +13,20 @@ interface Session {
   userAgent?: string | null;
 }
 
+interface User {
+  name: string;
+  email: string;
+  image?: string | null;
+}
+
+interface AuthSession {
+  session: Session;
+  user: User;
+}
+
 type SessionResponse =
   | {
-      data: {
-        session: Session;
-      } | null;
+      data: AuthSession | null;
       error: null;
     }
   | {
@@ -32,24 +39,37 @@ const {
   mockedGetSession,
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
-  mockedGetServerAuthSession: vi.fn<() => Promise<Session | null>>(),
-  mockedGetSession: vi.fn<() => Promise<SessionResponse>>(),
+  mockedGetServerAuthSession:
+    vi.fn<(...args: unknown[]) => Promise<AuthSession | null>>(),
+  mockedGetSession: vi.fn<(...args: unknown[]) => Promise<SessionResponse>>(),
   mockedIsServerEnvironment: vi.fn<() => boolean>(),
 }));
 
-vi.mock(import("./server-session"), () => ({
-  getCurrentServerSession: mockedGetServerAuthSession,
-}));
+vi.mock(import("./server-session"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getCurrentServerSession:
+      mockedGetServerAuthSession as typeof actual.getCurrentServerSession,
+  };
+});
 
 vi.mock(import("./runtime-environment"), () => ({
   isServerEnvironment: mockedIsServerEnvironment,
 }));
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    getSession: mockedGetSession,
-  } as unknown as typeof AuthClient,
-}));
+vi.mock(import("#/lib/auth-client"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    authClient: {
+      ...actual.authClient,
+      getSession: mockedGetSession as typeof actual.authClient.getSession,
+    },
+  };
+});
 
 describe(requireAuthenticatedSession, () => {
   afterEach(() => {
@@ -72,13 +92,20 @@ describe(requireAuthenticatedSession, () => {
   }, 1000);
 
   it("resolves with the server session when one exists", async () => {
-    const session: Session = {
-      id: "session_123",
-      createdAt: new Date("2026-04-03T12:00:00.000Z"),
-      updatedAt: new Date("2026-04-03T12:00:00.000Z"),
-      userId: "user_123",
-      expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-      token: "session-token",
+    const session: AuthSession = {
+      session: {
+        id: "session_123",
+        createdAt: new Date("2026-04-03T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-03T12:00:00.000Z"),
+        userId: "user_123",
+        expiresAt: new Date("2026-04-10T12:00:00.000Z"),
+        token: "session-token",
+      },
+      user: {
+        name: "Taylor Example",
+        email: "person@example.com",
+        image: null,
+      },
     };
 
     mockedIsServerEnvironment.mockReturnValue(true);
@@ -93,20 +120,25 @@ describe(requireAuthenticatedSession, () => {
   }, 1000);
 
   it("resolves with the client session when one exists", async () => {
-    const session: Session = {
-      id: "session_234",
-      createdAt: new Date("2026-04-03T12:00:00.000Z"),
-      updatedAt: new Date("2026-04-03T12:00:00.000Z"),
-      userId: "user_234",
-      expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-      token: "session-token-client",
+    const session: AuthSession = {
+      session: {
+        id: "session_234",
+        createdAt: new Date("2026-04-03T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-03T12:00:00.000Z"),
+        userId: "user_234",
+        expiresAt: new Date("2026-04-10T12:00:00.000Z"),
+        token: "session-token-client",
+      },
+      user: {
+        name: "Taylor Example",
+        email: "person@example.com",
+        image: null,
+      },
     };
 
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({
-      data: {
-        session,
-      },
+      data: session,
       error: null,
     });
 

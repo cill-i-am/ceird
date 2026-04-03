@@ -30,6 +30,6 @@ export const getServerAuthSession = createServerFn({ method: "GET" }).handler(
       },
     });
 
-    return session.data?.session ?? null;
+    return session.data ?? null;
   }
 );

@@ -2,27 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { memo } from "react";
 import type { ComponentProps, ReactElement } from "react";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
-
 import { AppLayout } from "./app-layout";
-
-const { mockedUseSession } = vi.hoisted(() => ({
-  mockedUseSession: vi.fn<
-    () => {
-      data: {
-        user: {
-          name: string;
-          email: string;
-          image: null;
-        };
-      };
-      error: null;
-      isPending: boolean;
-      isRefetching: boolean;
-      refetch: () => Promise<void>;
-    }
-  >(),
-}));
 
 const { mockedAppSidebar } = vi.hoisted(() => ({
   mockedAppSidebar: vi.fn<
@@ -80,12 +60,6 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   };
 });
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    useSession: mockedUseSession,
-  } as unknown as typeof AuthClient,
-}));
-
 vi.mock(import("#/components/site-header"), () => ({
   SiteHeader: () => <header>Task Tracker Header</header>,
 }));
@@ -95,33 +69,25 @@ vi.mock(import("#/components/app-sidebar"), () => ({
 }));
 
 describe("app layout", () => {
-  beforeEach(() => {
-    mockedUseSession.mockReturnValue({
-      data: {
-        user: {
-          name: "Taylor Example",
-          email: "person@example.com",
-          image: null,
-        },
-      },
-      error: null,
-      isPending: false,
-      isRefetching: false,
-      refetch: () => Promise.resolve(),
-    });
-  });
-
   afterEach(() => {
     vi.clearAllMocks();
   });
 
   it(
-    "passes the session user into the app sidebar",
+    "passes the provided session user into the app sidebar",
     {
       timeout: 10_000,
     },
     () => {
-      render(<AppLayout />);
+      render(
+        <AppLayout
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            image: null,
+          }}
+        />
+      );
 
       expect(mockedAppSidebar).toHaveBeenCalledOnce();
       expect(mockedAppSidebar.mock.calls[0]?.[0]).toStrictEqual({
