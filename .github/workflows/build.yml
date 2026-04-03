@@ -116,7 +116,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           ROLLUP_VERSION=$(node -e "const fs = require('fs'); const lockfile = fs.readFileSync('pnpm-lock.yaml', 'utf8'); const match = lockfile.match(/^  rollup@([^:]+):/m); if (!match) { process.exit(1); } console.log(match[1]);")
-          npm install --no-save --no-package-lock "@rollup/rollup-linux-x64-gnu@${ROLLUP_VERSION}"
+          pnpm add --save-dev --ignore-workspace-root-check "@rollup/rollup-linux-x64-gnu@${ROLLUP_VERSION}"
 
       - name: Build
         run: pnpm build
