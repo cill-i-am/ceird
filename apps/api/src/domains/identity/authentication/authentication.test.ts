@@ -56,7 +56,7 @@ describe("makeAuthenticationConfig()", () => {
       },
     });
 
-    expect("socialProviders" in config).toBe(false);
+    expect(config).not.toHaveProperty("socialProviders");
   }, 10_000);
 
   it("supports a dynamic host configuration for sandbox aliases and local fallbacks", () => {
