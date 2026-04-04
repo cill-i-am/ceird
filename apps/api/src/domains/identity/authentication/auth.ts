@@ -33,17 +33,59 @@ export function createAuthentication(options: {
     }),
     emailAndPassword: {
       ...authConfig.emailAndPassword,
-      sendResetPassword: ({ user, url }) =>
-        sendPasswordResetEmail({
+      sendResetPassword: ({ user, url }) => {
+        const input = {
           recipientEmail: user.email,
           recipientName: user.name ?? user.email,
           resetUrl: url,
-        }),
+        } as const satisfies PasswordResetEmailInput;
+
+        queueMicrotask(async () => {
+          try {
+            await sendPasswordResetEmail(input);
+          } catch (error) {
+            reportPasswordResetEmailDeliveryFailure(error, input);
+          }
+        });
+
+        return Promise.resolve();
+      },
     },
   });
 }
 
 export type AuthenticationService = ReturnType<typeof createAuthentication>;
+
+function reportPasswordResetEmailDeliveryFailure(
+  error: unknown,
+  input: PasswordResetEmailInput
+) {
+  if (typeof error === "object" && error !== null) {
+    console.error("Password reset email delivery failed", {
+      error: {
+        cause:
+          "cause" in error && typeof error.cause === "string"
+            ? error.cause
+            : undefined,
+        message:
+          "message" in error && typeof error.message === "string"
+            ? error.message
+            : String(error),
+        tag:
+          "_tag" in error && typeof error._tag === "string" ? error._tag : "",
+      },
+      recipientEmail: input.recipientEmail,
+    });
+    return;
+  }
+
+  console.error("Password reset email delivery failed", {
+    error: {
+      message: String(error),
+    },
+    recipientEmail: input.recipientEmail,
+  });
+}
 
 function matchesTrustedOrigin(
   origin: string,

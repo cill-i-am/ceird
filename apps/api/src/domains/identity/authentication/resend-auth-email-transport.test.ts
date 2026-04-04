@@ -96,4 +96,32 @@ describe("makeResendAuthEmailTransport()", () => {
       cause: "upstream timeout",
     });
   }, 10_000);
+
+  it("maps rejected resend requests into AuthEmailDeliveryError", async () => {
+    const result = await Effect.runPromise(
+      Effect.flatMap(
+        makeResendAuthEmailTransport({
+          resend: {
+            emails: {
+              send: (): Promise<CreateEmailResponse> =>
+                Promise.reject(new Error("socket hang up")),
+            },
+          },
+        }),
+        (transport) => transport.send(makeMessage())
+      ).pipe(Effect.withConfigProvider(makeConfigProvider()), Effect.either)
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(AuthEmailDeliveryError);
+    expect(result.left).toMatchObject({
+      _tag: "AuthEmailDeliveryError",
+      message: "Failed to send auth email via Resend",
+      cause: "socket hang up",
+    });
+  }, 10_000);
 });

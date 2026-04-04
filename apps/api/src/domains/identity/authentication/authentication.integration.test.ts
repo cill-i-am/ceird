@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
 import { createAuthentication } from "./auth.js";
@@ -19,7 +21,9 @@ describe("authentication integration", () => {
     await Promise.all([...cleanup].toReversed().map((step) => step()));
   });
 
-  it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, and rate limiting", async () => {
+  it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, and rate limiting", async (context: {
+    skip: (note?: string) => never;
+  }) => {
     const testDatabase = await createTestDatabase();
     cleanup.push(testDatabase.cleanup);
 
@@ -28,7 +32,9 @@ describe("authentication integration", () => {
     cleanup.push(() => adminPool.end());
 
     if (!(await canConnect(adminPool))) {
-      return;
+      context.skip(
+        "Auth integration database unavailable; skipping native password reset flow coverage"
+      );
     }
 
     await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
@@ -56,6 +62,9 @@ describe("authentication integration", () => {
     cleanup.push(() => authPool.end());
 
     const capturedResetUrls: string[] = [];
+    const passwordResetDelivery = await Effect.runPromise(
+      Deferred.make<boolean>()
+    );
     const auth = createAuthentication({
       config: makeAuthenticationConfig({
         baseUrl: "http://127.0.0.1:3000",
@@ -63,9 +72,9 @@ describe("authentication integration", () => {
         databaseUrl,
       }),
       database: drizzle(authPool, { schema: authSchema }),
-      sendPasswordResetEmail: ({ resetUrl }) => {
+      sendPasswordResetEmail: async ({ resetUrl }) => {
         capturedResetUrls.push(resetUrl);
-        return Promise.resolve();
+        await Effect.runPromise(Deferred.await(passwordResetDelivery));
       },
     });
 
@@ -127,12 +136,25 @@ describe("authentication integration", () => {
       (await sessionAfterSignInResponse.json()) as SessionResponse;
     expect(sessionAfterSignIn?.user?.email).toBe("integration@example.com");
 
-    const resetRequestResponse = await auth.handler(
+    const resetRequestPromise = auth.handler(
       makeJsonRequest("/request-password-reset", {
         email: "integration@example.com",
         redirectTo: "http://127.0.0.1:3000/reset-password",
       })
     );
+
+    await expect(
+      Promise.race([
+        resetRequestPromise.then((response) => response.status),
+        wait(100).then(() => "timed-out" as const),
+      ])
+    ).resolves.toBe(200);
+
+    await Effect.runPromise(
+      Deferred.completeWith(passwordResetDelivery, Effect.succeed(true))
+    );
+
+    const resetRequestResponse = await resetRequestPromise;
     expect(resetRequestResponse.status).toBe(200);
     expect(capturedResetUrls).toHaveLength(1);
 
@@ -140,7 +162,7 @@ describe("authentication integration", () => {
     expect(resetUrl).toContain("http://127.0.0.1:3000/reset-password");
 
     const resetToken = resetUrl.split("?", 1)[0]?.split("/").pop();
-    expect(resetToken).toBeTruthy();
+    expect(resetToken).toBe(true);
 
     const resetPasswordResponse = await auth.handler(
       makeJsonRequest("/reset-password", {
@@ -293,6 +315,10 @@ async function applyMigration(
   } finally {
     await pool.end();
   }
+}
+
+function wait(milliseconds: number) {
+  return delay(milliseconds);
 }
 
 function makeJsonRequest(
