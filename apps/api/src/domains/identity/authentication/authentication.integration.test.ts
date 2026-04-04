@@ -55,6 +55,7 @@ describe("authentication integration", () => {
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
 
+    const capturedResetUrls: string[] = [];
     const auth = createAuthentication({
       config: makeAuthenticationConfig({
         baseUrl: "http://127.0.0.1:3000",
@@ -62,6 +63,10 @@ describe("authentication integration", () => {
         databaseUrl,
       }),
       database: drizzle(authPool, { schema: authSchema }),
+      sendPasswordResetEmail: ({ resetUrl }) => {
+        capturedResetUrls.push(resetUrl);
+        return Promise.resolve();
+      },
     });
 
     const cookieJar = new Map<string, string>();
@@ -121,6 +126,51 @@ describe("authentication integration", () => {
     const sessionAfterSignIn =
       (await sessionAfterSignInResponse.json()) as SessionResponse;
     expect(sessionAfterSignIn?.user?.email).toBe("integration@example.com");
+
+    const resetRequestResponse = await auth.handler(
+      makeJsonRequest("/request-password-reset", {
+        email: "integration@example.com",
+        redirectTo: "http://127.0.0.1:3000/reset-password",
+      })
+    );
+    expect(resetRequestResponse.status).toBe(200);
+    expect(capturedResetUrls).toHaveLength(1);
+
+    const [resetUrl] = capturedResetUrls;
+    expect(resetUrl).toContain("http://127.0.0.1:3000/reset-password");
+
+    const resetToken = resetUrl.split("?", 1)[0]?.split("/").pop();
+    expect(resetToken).toBeTruthy();
+
+    const resetPasswordResponse = await auth.handler(
+      makeJsonRequest("/reset-password", {
+        token: resetToken,
+        newPassword: "new horse battery staple",
+      })
+    );
+    expect(resetPasswordResponse.status).toBe(200);
+
+    const oldPasswordResponse = await auth.handler(
+      makeJsonRequest(
+        "/sign-in/email",
+        {
+          email: "integration@example.com",
+          password: "correct horse battery staple",
+        },
+        {
+          forwardedFor: "203.0.113.20",
+        }
+      )
+    );
+    expect(oldPasswordResponse.status).toBe(401);
+
+    const newPasswordResponse = await auth.handler(
+      makeJsonRequest("/sign-in/email", {
+        email: "integration@example.com",
+        password: "new horse battery staple",
+      })
+    );
+    expect(newPasswordResponse.status).toBe(200);
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const response = await auth.handler(

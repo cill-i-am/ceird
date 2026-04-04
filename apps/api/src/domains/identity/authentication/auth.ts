@@ -4,19 +4,25 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer } from "effect";
 
+import { AuthEmailSender } from "./auth-email.js";
+import type { PasswordResetEmailInput } from "./auth-email.js";
 import { loadAuthenticationConfig } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
   AuthenticationDatabase,
   AuthenticationDatabaseLive,
 } from "./database.js";
+import { ResendAuthEmailTransportLive } from "./resend-auth-email-transport.js";
 import { authSchema } from "./schema.js";
 
 export function createAuthentication(options: {
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
+  readonly sendPasswordResetEmail: (
+    input: PasswordResetEmailInput
+  ) => Promise<void>;
 }) {
-  const { config, database } = options;
+  const { config, database, sendPasswordResetEmail } = options;
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
   return betterAuth({
@@ -25,6 +31,15 @@ export function createAuthentication(options: {
       provider: "pg",
       schema: authSchema,
     }),
+    emailAndPassword: {
+      ...authConfig.emailAndPassword,
+      sendResetPassword: ({ user, url }) =>
+        sendPasswordResetEmail({
+          recipientEmail: user.email,
+          recipientName: user.name ?? user.email,
+          resetUrl: url,
+        }),
+    },
   });
 }
 
@@ -121,18 +136,25 @@ export class Authentication extends Context.Tag(
   "@task-tracker/domains/identity/authentication/Authentication"
 )<Authentication, AuthenticationService>() {}
 
-export const AuthenticationLive = Layer.effect(
+export const AuthenticationLive = Layer.scoped(
   Authentication,
   Effect.gen(function* AuthenticationLive() {
     const config = yield* loadAuthenticationConfig;
-    const { db } = yield* AuthenticationDatabase;
+    const databaseContext = yield* Layer.build(AuthenticationDatabaseLive);
+    const authEmailContext = yield* Layer.build(
+      AuthEmailSender.Default.pipe(Layer.provide(ResendAuthEmailTransportLive))
+    );
+    const { db } = Context.get(databaseContext, AuthenticationDatabase);
+    const authEmailSender = Context.get(authEmailContext, AuthEmailSender);
 
     return createAuthentication({
       config,
       database: db,
+      sendPasswordResetEmail: (input) =>
+        Effect.runPromise(authEmailSender.sendPasswordResetEmail(input)),
     });
   })
-).pipe(Layer.provide(AuthenticationDatabaseLive));
+);
 
 export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
   Effect.gen(function* mountAuthenticationHttp() {
