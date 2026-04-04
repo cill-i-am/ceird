@@ -9,7 +9,7 @@
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
-    "lint": "oxlint .",
+    "lint": "oxlint . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
     "prebuild": "pnpm run opensrc:sync",

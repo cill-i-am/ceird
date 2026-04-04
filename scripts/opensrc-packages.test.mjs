@@ -71,7 +71,10 @@ test("matches allowed packages by exact name or approved scope prefix", () => {
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/react-start"), true);
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/router-plugin"), false);
   assert.equal(shouldIncludeOpensrcPackage("tailwindcss"), true);
-  assert.equal(shouldIncludeOpensrcPackage("@fontsource-variable/raleway"), false);
+  assert.equal(
+    shouldIncludeOpensrcPackage("@fontsource-variable/raleway"),
+    false
+  );
   assert.equal(shouldIncludeOpensrcPackage("@tailwindcss/vite"), false);
   assert.equal(shouldIncludeOpensrcPackage("clsx"), false);
 });

@@ -71,7 +71,7 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
   };
 });
 
-describe(requireAuthenticatedSession, () => {
+describe("authenticated-session requirement", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
