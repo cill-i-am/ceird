@@ -1,5 +1,13 @@
-import { resolveAuthBaseURL } from "../../lib/auth-client";
-import { decodeLoginInput, decodeSignupInput } from "./auth-schemas";
+import {
+  buildPasswordResetRedirectTo,
+  resolveAuthBaseURL,
+} from "../../lib/auth-client";
+import {
+  decodeLoginInput,
+  decodePasswordResetInput,
+  decodePasswordResetRequestInput,
+  decodeSignupInput,
+} from "./auth-schemas";
 
 describe("auth schemas", () => {
   it("rejects an invalid login email", () => {
@@ -49,6 +57,34 @@ describe("auth schemas", () => {
       confirmPassword: "supersecret",
     });
   }, 1000);
+
+  it("rejects short reset request passwords", () => {
+    expect(() =>
+      decodePasswordResetInput({
+        password: "short",
+        confirmPassword: "short",
+      })
+    ).toThrow(/8/i);
+  }, 1000);
+
+  it("rejects mismatched reset request passwords", () => {
+    expect(() =>
+      decodePasswordResetInput({
+        password: "supersecret",
+        confirmPassword: "different-secret",
+      })
+    ).toThrow(/match/i);
+  }, 1000);
+
+  it("normalizes surrounding whitespace in reset request input", () => {
+    expect(
+      decodePasswordResetRequestInput({
+        email: " user@example.com ",
+      })
+    ).toStrictEqual({
+      email: "user@example.com",
+    });
+  }, 1000);
 });
 
 describe("auth base URL resolution", () => {
@@ -85,5 +121,11 @@ describe("auth base URL resolution", () => {
         "not-a-url"
       )
     ).toBe("https://agent-one.api.task-tracker.localhost:1355/api/auth");
+  }, 1000);
+
+  it("builds the password reset redirect URL from an origin", () => {
+    expect(buildPasswordResetRedirectTo("https://app.example.com")).toBe(
+      "https://app.example.com/reset-password"
+    );
   }, 1000);
 });
