@@ -115,4 +115,47 @@ describe("password reset page", () => {
       });
     });
   }, 10_000);
+
+  it("shows a safe form error and does not navigate when reset fails", async () => {
+    mockedResetPassword.mockResolvedValue({
+      data: null,
+      error: {
+        message: "invalid token",
+        status: 400,
+        statusText: "Bad Request",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+
+    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(screen.getByLabelText("Confirm password"), "password123");
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+
+    await expect(
+      screen.findByText("We couldn't reset your password. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("shows the shared mismatch validation message and blocks submission", async () => {
+    const user = userEvent.setup();
+
+    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+
+    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "different-password"
+    );
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+
+    await expect(
+      screen.findByText("Passwords must match")
+    ).resolves.toBeInTheDocument();
+    expect(mockedResetPassword).not.toHaveBeenCalled();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
 });
