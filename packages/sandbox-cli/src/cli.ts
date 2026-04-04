@@ -5,6 +5,7 @@ import { Console, Effect } from "effect";
 import { makeSandboxRuntime } from "./runtime.js";
 import { SandboxNotFoundError } from "./sandbox-not-found-error.js";
 import { SandboxPreflightError } from "./sandbox-preflight-error.js";
+import { formatSandboxViewLines } from "./sandbox-view.js";
 
 const runtime = makeSandboxRuntime();
 
@@ -83,9 +84,11 @@ const listCommand = Command.make("list", {}, () =>
                 Effect.zipRight(
                   Console.log(`  worktree: ${entry.record.worktreePath}`)
                 ),
-                Effect.zipRight(Console.log(`  app: ${entry.urls.app}`)),
-                Effect.zipRight(Console.log(`  api: ${entry.urls.api}`)),
-                Effect.zipRight(Console.log(`  db: ${entry.urls.postgres}`))
+                Effect.zipRight(Console.log(`  app url: ${entry.urls.app}`)),
+                Effect.zipRight(Console.log(`  api url: ${entry.urls.api}`)),
+                Effect.zipRight(
+                  Console.log(`  postgres url: ${entry.urls.postgres}`)
+                )
               )
             ),
             { discard: true }
@@ -150,13 +153,9 @@ function printSandboxView(
   }
 ) {
   return Effect.gen(function* printSandboxViewEffect() {
-    yield* Console.log(label);
-    yield* Console.log(`  slug: ${hostnameSlug}`);
-    yield* Console.log(`  app: ${urls.app}`);
-    yield* Console.log(`  api: ${urls.api}`);
-    yield* Console.log(`  db: ${urls.postgres}`);
-    yield* Console.log(`  app fallback: ${urls.fallbackApp}`);
-    yield* Console.log(`  api fallback: ${urls.fallbackApi}`);
+    for (const line of formatSandboxViewLines(label, hostnameSlug, urls)) {
+      yield* Console.log(line);
+    }
   });
 }
 
