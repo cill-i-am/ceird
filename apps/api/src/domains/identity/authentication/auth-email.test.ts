@@ -8,6 +8,20 @@ import {
 import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
 
+function makeAuthEmailSenderTestLayer(
+  send: (
+    message: TransportMessage
+  ) => Effect.Effect<void, AuthEmailDeliveryError>
+) {
+  return AuthEmailSender.Default.pipe(
+    Layer.provide(
+      Layer.succeed(AuthEmailTransport, {
+        send,
+      })
+    )
+  );
+}
+
 describe("auth email sender password reset delivery", () => {
   it("composes the expected password reset message", async () => {
     const sentMessages: TransportMessage[] = [];
@@ -19,15 +33,10 @@ describe("auth email sender password reset delivery", () => {
         resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
       }).pipe(
         Effect.provide(
-          AuthEmailSender.Default.pipe(
-            Layer.provide(
-              Layer.succeed(AuthEmailTransport, {
-                send: (message) =>
-                  Effect.sync(() => {
-                    sentMessages.push(message);
-                  }),
-              })
-            )
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
           )
         )
       )
@@ -61,16 +70,11 @@ describe("auth email sender password reset delivery", () => {
       }).pipe(
         Effect.either,
         Effect.provide(
-          AuthEmailSender.Default.pipe(
-            Layer.provide(
-              Layer.succeed(AuthEmailTransport, {
-                send: () =>
-                  Effect.fail(
-                    new AuthEmailDeliveryError({
-                      message: "Provider request failed",
-                      cause: "upstream timeout",
-                    })
-                  ),
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailDeliveryError({
+                message: "Provider request failed",
+                cause: "upstream timeout",
               })
             )
           )
@@ -90,17 +94,86 @@ describe("auth email sender password reset delivery", () => {
       cause: "Provider request failed",
     });
   }, 10_000);
+
+  it("rejects malformed runtime input before sending", async () => {
+    const sentMessages: TransportMessage[] = [];
+
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendPasswordResetEmail({
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        resetUrl:
+          "https://user:password@app.task-tracker.localhost/reset?token=abc123",
+      } as never).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toMatchObject({
+      _tag: "PasswordResetDeliveryError",
+      message: "Invalid password reset email input",
+      recipientEmail: "alice@example.com",
+    });
+  }, 10_000);
+
+  it("escapes html-sensitive values in the composed html body", async () => {
+    const sentMessages: TransportMessage[] = [];
+
+    await Effect.runPromise(
+      AuthEmailSender.sendPasswordResetEmail({
+        recipientEmail: "alice@example.com",
+        recipientName: 'Alice & <Admin> "Boss"',
+        resetUrl:
+          "https://app.task-tracker.localhost/reset?token=abc&next=%2Fhome",
+      }).pipe(
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]?.html).toBe(
+      '<p>Hello Alice &amp; &lt;Admin&gt; &quot;Boss&quot;,</p><p><a href="https://app.task-tracker.localhost/reset?token=abc&amp;next=%2Fhome">Reset your password</a></p>'
+    );
+    expect(sentMessages[0]?.html).not.toContain("<Admin>");
+    expect(sentMessages[0]?.html).toContain("&amp;next=%2Fhome");
+  }, 10_000);
 });
 
 describe("auth email config loading", () => {
   it("requires auth email config through Config", async () => {
-    const result = Effect.runPromise(
+    const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(ConfigProvider.fromMap(new Map()))
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map())),
+        Effect.either
       )
     );
 
-    await expect(result).rejects.toThrow(/AUTH_EMAIL_FROM/);
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
+    expect(result.left.cause).toMatch(/AUTH_EMAIL_FROM/);
   }, 10_000);
 
   it("loads auth email config with defaults", async () => {
@@ -145,6 +218,32 @@ describe("auth email config loading", () => {
     }
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
-    expect(result.left.message).toMatch(/RESEND_API_KEY/);
+    expect(result.left.message).toBe("Invalid auth email configuration");
+    expect(result.left.cause).toMatch(/RESEND_API_KEY/);
+  }, 10_000);
+
+  it("rejects invalid auth email sender addresses", async () => {
+    const result = await Effect.runPromise(
+      loadAuthEmailConfig.pipe(
+        Effect.withConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([
+              ["AUTH_EMAIL_FROM", "not-an-email"],
+              ["RESEND_API_KEY", "re_test_123"],
+            ])
+          )
+        ),
+        Effect.either
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
+    expect(result.left.cause).toMatch(/AUTH_EMAIL_FROM/);
+    expect(result.left.cause).toMatch(/valid email/i);
   }, 10_000);
 });

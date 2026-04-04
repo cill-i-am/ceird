@@ -2,6 +2,12 @@ import { Config, Effect } from "effect";
 
 import { AuthEmailConfigurationError } from "./auth-email-errors.js";
 
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailAddress(value: string) {
+  return EMAIL_ADDRESS_PATTERN.test(value);
+}
+
 export interface AuthEmailConfig {
   readonly from: string;
   readonly fromName: string;
@@ -9,7 +15,12 @@ export interface AuthEmailConfig {
 }
 
 export const loadAuthEmailConfig = Config.all({
-  from: Config.string("AUTH_EMAIL_FROM"),
+  from: Config.string("AUTH_EMAIL_FROM").pipe(
+    Config.validate({
+      message: "AUTH_EMAIL_FROM must be a valid email address",
+      validation: isValidEmailAddress,
+    })
+  ),
   fromName: Config.string("AUTH_EMAIL_FROM_NAME").pipe(
     Config.withDefault("Task Tracker")
   ),
@@ -23,7 +34,8 @@ export const loadAuthEmailConfig = Config.all({
   Effect.mapError(
     (cause) =>
       new AuthEmailConfigurationError({
-        message: cause.toString(),
+        message: "Invalid auth email configuration",
+        cause: cause.toString(),
       })
   )
 );

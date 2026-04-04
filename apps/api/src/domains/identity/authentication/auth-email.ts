@@ -1,25 +1,78 @@
-/* oxlint-disable eslint/max-classes-per-file */
+/* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
 
-import { Context, Effect, Schema } from "effect";
+import { Context, Effect, ParseResult, Schema } from "effect";
 
 import type { AuthEmailDeliveryError } from "./auth-email-errors.js";
 import { PasswordResetDeliveryError } from "./auth-email-errors.js";
 
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailAddress(value: string) {
+  return EMAIL_ADDRESS_PATTERN.test(value);
+}
+
+function isValidResetUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function extractRecipientEmail(input: unknown) {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "recipientEmail" in input &&
+    typeof input.recipientEmail === "string"
+  ) {
+    return input.recipientEmail;
+  }
+
+  return "unknown";
+}
+
 const EmailAddress = Schema.String.pipe(
-  Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+  Schema.filter((value) => isValidEmailAddress(value), {
+    message: () => "Expected a valid email address",
+  })
 );
 
-const AbsoluteUrl = Schema.String.pipe(Schema.pattern(/^https?:\/\//));
+const ResetUrl = Schema.String.pipe(
+  Schema.filter((value) => isValidResetUrl(value), {
+    message: () => "Expected a valid http or https URL without credentials",
+  })
+);
 
 export const PasswordResetEmailInput = Schema.Struct({
   recipientEmail: EmailAddress,
   recipientName: Schema.String,
-  resetUrl: AbsoluteUrl,
+  resetUrl: ResetUrl,
 });
 
 export type PasswordResetEmailInput = Schema.Schema.Type<
   typeof PasswordResetEmailInput
 >;
+
+const decodePasswordResetEmailInput = Schema.decodeUnknown(
+  PasswordResetEmailInput
+);
 
 export interface TransportMessage {
   readonly html: string;
@@ -48,7 +101,18 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
 
       const sendPasswordResetEmail = Effect.fn(
         "AuthEmailSender.sendPasswordResetEmail"
-      )(function* sendPasswordResetEmail(input: PasswordResetEmailInput) {
+      )(function* sendPasswordResetEmail(rawInput: unknown) {
+        const input = yield* decodePasswordResetEmailInput(rawInput).pipe(
+          Effect.mapError(
+            (parseError) =>
+              new PasswordResetDeliveryError({
+                message: "Invalid password reset email input",
+                recipientEmail: extractRecipientEmail(rawInput),
+                cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
+              })
+          )
+        );
+
         const subject = "Reset your password";
         const text = [
           `Hello ${input.recipientName},`,
@@ -57,8 +121,8 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           input.resetUrl,
         ].join("\n");
         const html = [
-          `<p>Hello ${input.recipientName},</p>`,
-          `<p><a href="${input.resetUrl}">Reset your password</a></p>`,
+          `<p>Hello ${escapeHtml(input.recipientName)},</p>`,
+          `<p><a href="${escapeHtml(input.resetUrl)}">Reset your password</a></p>`,
         ].join("");
 
         yield* transport
