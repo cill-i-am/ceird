@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import type { AppLayoutProps } from "#/components/app-layout";
 
-import { AuthenticatedAppLayout } from "./_app";
+import { AuthenticatedAppLayout } from "./authenticated-app-layout";
 
 const { mockedUseRouteContext, mockedAppLayout } = vi.hoisted(() => ({
   mockedUseRouteContext: vi.fn<
@@ -34,7 +34,7 @@ vi.mock(import("#/components/app-layout"), async (importActual) => {
   };
 });
 
-describe("authenticated app route", () => {
+describe("authenticated app layout", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
