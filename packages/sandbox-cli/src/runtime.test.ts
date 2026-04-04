@@ -11,6 +11,7 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
       databaseUrl: "postgresql://postgres:postgres@postgres:5432/task_tracker",
       filter: "api",
       publishedPort: 4301,
+      serverAuthOrigin: "http://tt-sbx-agent-one-api:4301",
       sandboxId: "abc123def456",
       betterAuthSecret: "super-secret",
     });
@@ -19,6 +20,7 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
       databaseUrl: "postgresql://postgres:postgres@postgres:5432/task_tracker",
       filter: "app",
       publishedPort: 4300,
+      serverAuthOrigin: "http://tt-sbx-agent-one-api:4301",
       sandboxId: "abc123def456",
       betterAuthSecret: "super-secret",
     });
@@ -30,6 +32,7 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
     expect(appEnv).toContain(
       "VITE_AUTH_ORIGIN=https://agent-one.api.task-tracker.localhost:1355"
     );
+    expect(appEnv).toContain("AUTH_ORIGIN=http://tt-sbx-agent-one-api:4301");
     expect(appEnv).not.toContain("BETTER_AUTH_SECRET=super-secret");
     expect(appEnv).not.toContain(
       "BETTER_AUTH_BASE_URL=https://agent-one.api.task-tracker.localhost:1355"
@@ -42,6 +45,7 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
       databaseUrl: "postgresql://postgres:postgres@postgres:5432/task_tracker",
       filter: "api",
       publishedPort: 4301,
+      serverAuthOrigin: "http://tt-sbx-agent-one-api:4301",
       sandboxId: "abc123def456",
       betterAuthSecret: "super-secret",
     });
@@ -50,12 +54,14 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
       databaseUrl: "postgresql://postgres:postgres@postgres:5432/task_tracker",
       filter: "app",
       publishedPort: 4300,
+      serverAuthOrigin: "http://tt-sbx-agent-one-api:4301",
       sandboxId: "abc123def456",
       betterAuthSecret: "super-secret",
     });
 
     expect(apiEnv).toContain("BETTER_AUTH_BASE_URL=http://127.0.0.1:4301");
     expect(appEnv).toContain("VITE_AUTH_ORIGIN=http://127.0.0.1:4301");
+    expect(appEnv).toContain("AUTH_ORIGIN=http://tt-sbx-agent-one-api:4301");
   }, 10_000);
 });
 

@@ -5,31 +5,50 @@ import {
   getRequestProtocol,
 } from "@tanstack/react-start/server";
 
-import {
-  createTaskTrackerAuthClient,
-  resolveAuthBaseURL,
-} from "#/lib/auth-client";
+import { resolveAuthBaseURL } from "#/lib/auth-client";
+import type { createTaskTrackerAuthClient } from "#/lib/auth-client";
+
+type ServerAuthSession = Awaited<
+  ReturnType<ReturnType<typeof createTaskTrackerAuthClient>["getSession"]>
+>["data"];
 
 export const getServerAuthSession = createServerFn({ method: "GET" }).handler(
   async () => {
     const cookie = getRequestHeader("cookie");
+    const serverAuthOrigin = readServerAuthOrigin();
     const authBaseURL = resolveAuthBaseURL(
-      `${getRequestProtocol()}://${getRequestHost()}`
+      `${getRequestProtocol()}://${getRequestHost()}`,
+      serverAuthOrigin
     );
 
     if (!cookie || !authBaseURL) {
       return null;
     }
 
-    const authClient = createTaskTrackerAuthClient(authBaseURL);
-    const session = await authClient.getSession({
-      fetchOptions: {
-        headers: {
-          cookie,
-        },
+    const response = await fetch(new URL("get-session", `${authBaseURL}/`), {
+      headers: {
+        accept: "application/json",
+        cookie,
       },
     });
 
-    return session.data ?? null;
+    if (!response.ok) {
+      return null;
+    }
+
+    return ((await response.json()) as ServerAuthSession | null) ?? null;
   }
 );
+
+function readServerAuthOrigin(): string | undefined {
+  const processEnvironment = (
+    globalThis as typeof globalThis & {
+      process?: {
+        env?: Record<string, string | undefined>;
+      };
+    }
+  ).process?.env;
+
+  const authOrigin = processEnvironment?.AUTH_ORIGIN;
+  return typeof authOrigin === "string" ? authOrigin : undefined;
+}

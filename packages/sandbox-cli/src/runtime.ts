@@ -30,7 +30,6 @@ import { SandboxPreflightError } from "./sandbox-preflight-error.js";
 import { formatSandboxStartupTimeoutLines } from "./sandbox-view.js";
 
 const SANDBOX_PROXY_PORT = 1355;
-const SANDBOX_READY_TIMEOUT_MS = 60_000;
 const SANDBOX_DEV_IMAGE = "task-tracker-sandbox-dev:latest";
 const SANDBOX_READY_POLL_INTERVAL_MS = 1000;
 const SANDBOX_READY_TIMEOUT_MS = 180_000;
@@ -280,6 +279,10 @@ export function makeSandboxRuntime(): SandboxRuntime {
         publishedPort: record.ports.api,
         aliasesHealthy,
       });
+      const serverAuthOrigin = makeSandboxServerAuthOrigin({
+        apiContainerName: resourceNames.apiContainer,
+        publishedPort: record.ports.api,
+      });
 
       await ensureDockerNetwork(resourceNames.network);
       await ensureDockerVolume(resourceNames.postgresVolume);
@@ -301,6 +304,7 @@ export function makeSandboxRuntime(): SandboxRuntime {
         nodeModulesVolume: resourceNames.apiNodeModulesVolume,
         pnpmStoreVolume: resourceNames.pnpmStoreVolume,
         authOrigin,
+        serverAuthOrigin,
         filter: "api",
         sandboxId: record.sandboxId,
         databaseUrl: internalDatabaseUrl,
@@ -315,6 +319,7 @@ export function makeSandboxRuntime(): SandboxRuntime {
         nodeModulesVolume: resourceNames.appNodeModulesVolume,
         pnpmStoreVolume: resourceNames.pnpmStoreVolume,
         authOrigin,
+        serverAuthOrigin,
         filter: "app",
         sandboxId: record.sandboxId,
         databaseUrl: internalDatabaseUrl,
@@ -773,6 +778,7 @@ interface RecreateNodeServiceContainerOptions {
   readonly nodeModulesVolume: string;
   readonly pnpmStoreVolume: string;
   readonly authOrigin: string;
+  readonly serverAuthOrigin: string;
   readonly filter: "app" | "api";
   readonly sandboxId: string;
   readonly databaseUrl: string;
@@ -784,6 +790,7 @@ export function makeNodeServiceEnvironmentEntries(options: {
   readonly databaseUrl: string;
   readonly filter: "app" | "api";
   readonly publishedPort: number;
+  readonly serverAuthOrigin: string;
   readonly sandboxId: string;
   readonly betterAuthSecret?: string;
 }): string[] {
@@ -794,7 +801,10 @@ export function makeNodeServiceEnvironmentEntries(options: {
     "TASK_TRACKER_SANDBOX=1",
     `DATABASE_URL=${options.databaseUrl}`,
     ...(options.filter === "app"
-      ? [`VITE_AUTH_ORIGIN=${options.authOrigin}`]
+      ? [
+          `AUTH_ORIGIN=${options.serverAuthOrigin}`,
+          `VITE_AUTH_ORIGIN=${options.authOrigin}`,
+        ]
       : []),
     ...(options.filter === "api"
       ? [
@@ -816,6 +826,7 @@ async function recreateNodeServiceContainer(
     databaseUrl: options.databaseUrl,
     filter: options.filter,
     publishedPort: options.publishedPort,
+    serverAuthOrigin: options.serverAuthOrigin,
     sandboxId: options.sandboxId,
     betterAuthSecret: options.betterAuthSecret,
   });
@@ -858,6 +869,13 @@ function makeSandboxAuthOrigin(options: {
   return options.aliasesHealthy
     ? `https://${options.hostnameSlug}.api.task-tracker.localhost:${SANDBOX_PROXY_PORT}`
     : `http://127.0.0.1:${options.publishedPort}`;
+}
+
+function makeSandboxServerAuthOrigin(options: {
+  readonly apiContainerName: string;
+  readonly publishedPort: number;
+}): string {
+  return `http://${options.apiContainerName}:${options.publishedPort}`;
 }
 
 async function removeContainer(name: string): Promise<void> {
