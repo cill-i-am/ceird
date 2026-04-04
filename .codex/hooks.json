@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/session_start_sanity.mjs",
+            "statusMessage": "Running workspace sanity checks"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/stop_workspace_hygiene.mjs",
+            "statusMessage": "Checking workspace hygiene"
+          }
+        ]
+      }
+    ]
+  }
+}
