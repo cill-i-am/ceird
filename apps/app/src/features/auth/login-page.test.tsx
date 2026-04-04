@@ -86,6 +86,14 @@ describe("login page", () => {
     });
   }, 10_000);
 
+  it("shows a forgot-password link to the public reset request page", () => {
+    render(<LoginPage />);
+
+    expect(
+      screen.getByRole("link", { name: "Forgot password?" })
+    ).toHaveAttribute("href", "/forgot-password");
+  }, 10_000);
+
   it("shows a safe server error when sign-in fails", async () => {
     mockedSignInEmail.mockResolvedValue({
       data: null,

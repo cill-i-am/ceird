@@ -131,6 +131,15 @@ export function LoginPage() {
                   );
                 }}
               </form.Field>
+
+              <div className="text-right">
+                <a
+                  href="/forgot-password"
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Forgot password?
+                </a>
+              </div>
             </FieldGroup>
 
             <CardFooter className="flex-col items-stretch gap-4 px-0">
