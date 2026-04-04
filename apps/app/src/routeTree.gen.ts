@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable import/first, no-unused-vars, typescript-eslint/ban-ts-comment, typescript-eslint/no-explicit-any */
 
 // @ts-nocheck
 
@@ -14,7 +14,6 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
-import { Route as AppAboutRouteImport } from './routes/_app.about'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -40,24 +39,17 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAboutRoute = AppAboutRouteImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => AppRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/about': typeof AppAboutRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/about': typeof AppAboutRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -66,22 +58,14 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/_app/about': typeof AppAboutRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/login' | '/signup' | '/about'
+  fullPaths: '/' | '/health' | '/login' | '/signup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/health' | '/login' | '/signup' | '/about' | '/'
-  id:
-    | '__root__'
-    | '/_app'
-    | '/health'
-    | '/login'
-    | '/signup'
-    | '/_app/about'
-    | '/_app/'
+  to: '/health' | '/login' | '/signup' | '/'
+  id: '__root__' | '/_app' | '/health' | '/login' | '/signup' | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -128,23 +112,14 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/about': {
-      id: '/_app/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AppAboutRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
 interface AppRouteChildren {
-  AppAboutRoute: typeof AppAboutRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAboutRoute: AppAboutRoute,
   AppIndexRoute: AppIndexRoute,
 }
 

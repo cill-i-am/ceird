@@ -1,21 +1,13 @@
 "use client";
 
-import {
-  BookOpen02Icon,
-  ChartRingIcon,
-  CommandIcon,
-  ComputerTerminalIcon,
-  CropIcon,
-  SentIcon,
-} from "@hugeicons/core-free-icons";
+import { CommandIcon, ComputerTerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import { NavMain } from "#/components/nav-main";
-import { NavProjects } from "#/components/nav-projects";
-import { NavSecondary } from "#/components/nav-secondary";
 import { NavUser } from "#/components/nav-user";
+import type { NavUserAccount } from "#/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -27,11 +19,6 @@ import {
 } from "#/components/ui/sidebar";
 
 const data = {
-  user: {
-    name: "Task Tracker",
-    email: "starter workspace",
-    avatar: "",
-  },
   navMain: [
     {
       title: "Overview",
@@ -44,67 +31,22 @@ const data = {
           url: "/",
         },
         {
-          title: "About",
-          url: "/about",
-        },
-        {
           title: "Health",
           url: "/health",
         },
       ],
     },
-    {
-      title: "Documentation",
-      url: "https://tanstack.com/start/latest/docs/framework/react/overview",
-      icon: <HugeiconsIcon icon={BookOpen02Icon} strokeWidth={2} />,
-      items: [
-        {
-          title: "TanStack Start",
-          url: "https://tanstack.com/start/latest/docs/framework/react/overview",
-        },
-        {
-          title: "TanStack Router",
-          url: "https://tanstack.com/router/latest",
-        },
-        {
-          title: "shadcn/ui",
-          url: "https://ui.shadcn.com",
-        },
-      ],
-    },
-    {
-      title: "Status",
-      url: "/health",
-      icon: <HugeiconsIcon icon={ChartRingIcon} strokeWidth={2} />,
-    },
-  ],
-  navSecondary: [
-    {
-      title: "TanStack GitHub",
-      url: "https://github.com/TanStack",
-      icon: <HugeiconsIcon icon={ChartRingIcon} strokeWidth={2} />,
-    },
-    {
-      title: "Follow on X",
-      url: "https://x.com/tan_stack",
-      icon: <HugeiconsIcon icon={SentIcon} strokeWidth={2} />,
-    },
-  ],
-  projects: [
-    {
-      name: "Auth Screens",
-      url: "/",
-      icon: <HugeiconsIcon icon={CropIcon} strokeWidth={2} />,
-    },
-    {
-      name: "Form Patterns",
-      url: "https://ui.shadcn.com/docs/forms/tanstack-form",
-      icon: <HugeiconsIcon icon={BookOpen02Icon} strokeWidth={2} />,
-    },
   ],
 };
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  user,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  user?: NavUserAccount | null;
+}) {
+  const navigate = useNavigate();
+
   return (
     <Sidebar
       className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
@@ -130,7 +72,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Task Tracker</span>
-                <span className="truncate text-xs">shadcn starter</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -138,12 +79,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
+      {user ? (
+        <SidebarFooter>
+          <NavUser user={user} navigate={navigate} />
+        </SidebarFooter>
+      ) : null}
     </Sidebar>
   );
 }

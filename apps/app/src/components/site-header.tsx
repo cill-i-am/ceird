@@ -2,7 +2,7 @@
 
 import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 
 import { SearchForm } from "#/components/search-form";
 import ThemeToggle from "#/components/ThemeToggle";
@@ -20,16 +20,6 @@ import { useSidebar } from "#/components/ui/sidebar";
 
 export function SiteHeader() {
   const { toggleSidebar } = useSidebar();
-  const location = useLocation();
-  let currentPage = "Workspace";
-
-  if (location.pathname === "/") {
-    currentPage = "Home";
-  } else if (location.pathname === "/about") {
-    currentPage = "About";
-  } else if (location.pathname === "/health") {
-    currentPage = "Health";
-  }
 
   return (
     <header className="sticky top-0 z-50 flex w-full items-center border-b bg-background">
@@ -55,7 +45,7 @@ export function SiteHeader() {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>{currentPage}</BreadcrumbPage>
+              <BreadcrumbPage>Your work</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>

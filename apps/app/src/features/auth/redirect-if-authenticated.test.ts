@@ -1,7 +1,5 @@
 import { isRedirect } from "@tanstack/react-router";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
-
 import { redirectIfAuthenticated } from "./redirect-if-authenticated";
 
 const {
@@ -10,22 +8,34 @@ const {
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
   mockedGetServerAuthSession: vi.fn<
-    () => Promise<{
-      id: string;
-      createdAt: Date;
-      updatedAt: Date;
-      userId: string;
-      expiresAt: Date;
-      token: string;
-      ipAddress?: string | null;
-      userAgent?: string | null;
+    (...args: unknown[]) => Promise<{
+      session: {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        expiresAt: Date;
+        token: string;
+        ipAddress?: string | null;
+        userAgent?: string | null;
+      };
+      user: {
+        name: string;
+        email: string;
+        image?: string | null;
+      };
     } | null>
   >(),
   mockedGetSession: vi.fn<
-    () => Promise<{
+    (...args: unknown[]) => Promise<{
       data: {
         session: {
           id: string;
+        };
+        user: {
+          name: string;
+          email: string;
+          image?: string | null;
         };
       } | null;
       error: null;
@@ -34,19 +44,31 @@ const {
   mockedIsServerEnvironment: vi.fn<() => boolean>(),
 }));
 
-vi.mock(import("./server-session"), () => ({
-  getCurrentServerSession: mockedGetServerAuthSession,
-}));
+vi.mock(import("./server-session"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getCurrentServerSession:
+      mockedGetServerAuthSession as typeof actual.getCurrentServerSession,
+  };
+});
 
 vi.mock(import("./runtime-environment"), () => ({
   isServerEnvironment: mockedIsServerEnvironment,
 }));
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    getSession: mockedGetSession,
-  } as unknown as typeof AuthClient,
-}));
+vi.mock(import("#/lib/auth-client"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    authClient: {
+      ...actual.authClient,
+      getSession: mockedGetSession as typeof actual.authClient.getSession,
+    },
+  };
+});
 
 describe("auth route redirect guard", () => {
   afterEach(() => {
@@ -59,6 +81,11 @@ describe("auth route redirect guard", () => {
       data: {
         session: {
           id: "session_123",
+        },
+        user: {
+          name: "Taylor Example",
+          email: "person@example.com",
+          image: null,
         },
       },
       error: null,
@@ -85,12 +112,19 @@ describe("auth route redirect guard", () => {
   it("uses the server session check during SSR", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
     mockedGetServerAuthSession.mockResolvedValue({
-      id: "session_456",
-      createdAt: new Date("2026-04-03T12:00:00.000Z"),
-      updatedAt: new Date("2026-04-03T12:00:00.000Z"),
-      userId: "user_123",
-      expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-      token: "session-token",
+      session: {
+        id: "session_456",
+        createdAt: new Date("2026-04-03T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-03T12:00:00.000Z"),
+        userId: "user_123",
+        expiresAt: new Date("2026-04-10T12:00:00.000Z"),
+        token: "session-token",
+      },
+      user: {
+        name: "Taylor Example",
+        email: "person@example.com",
+        image: null,
+      },
     });
     mockedGetSession.mockRejectedValue(
       new Error("Browser auth client should not run during SSR")

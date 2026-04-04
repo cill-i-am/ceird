@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AppLayout } from "#/components/app-layout";
+import { AuthenticatedAppLayout } from "#/features/auth/authenticated-app-layout";
+import { requireAuthenticatedSession } from "#/features/auth/require-authenticated-session";
 
 export const Route = createFileRoute("/_app")({
-  component: AppLayout,
+  beforeLoad: async () => {
+    const session = await requireAuthenticatedSession();
+
+    return { session };
+  },
+  component: AuthenticatedAppLayout,
 });
