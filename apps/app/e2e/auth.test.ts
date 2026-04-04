@@ -11,7 +11,7 @@ function createTestEmail(prefix: string): string {
 }
 
 async function expectAuthenticatedHome(page: Page) {
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL("http://localhost:4173/");
   await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
   await expect(page.getByText("Start simple, ship quickly.")).toHaveCount(0);
 }
@@ -22,6 +22,42 @@ test.describe("auth pages", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(new LoginPage(page).heading).toBeVisible();
+  });
+
+  test("redirects unauthenticated client-side transitions from / to /login", async ({
+    page,
+  }) => {
+    const loginPage = new LoginPage(page);
+    const documentRequests: string[] = [];
+
+    page.on("request", (request) => {
+      if (request.resourceType() === "document") {
+        documentRequests.push(request.url());
+      }
+    });
+
+    await loginPage.goto();
+    await page.evaluate(async () => {
+      const router = (
+        window as Window & {
+          __TSR_ROUTER__?: {
+            navigate: (options: { to: string }) => Promise<unknown>;
+          };
+        }
+      ).__TSR_ROUTER__;
+
+      if (!router) {
+        throw new Error("Expected TanStack Router to be available");
+      }
+
+      await router.navigate({ to: "/" });
+    });
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(loginPage.heading).toBeVisible();
+    expect(
+      documentRequests.filter((url) => url === "http://localhost:4173/")
+    ).toHaveLength(0);
   });
 
   test("login shows inline validation after submit", async ({ page }) => {
