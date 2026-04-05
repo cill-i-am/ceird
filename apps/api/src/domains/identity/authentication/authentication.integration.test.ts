@@ -66,6 +66,7 @@ describe("authentication integration", () => {
       Deferred.make<boolean>()
     );
     const auth = createAuthentication({
+      backgroundTaskHandler: () => {},
       config: makeAuthenticationConfig({
         baseUrl: "http://127.0.0.1:3000",
         secret: "0123456789abcdef0123456789abcdef",
