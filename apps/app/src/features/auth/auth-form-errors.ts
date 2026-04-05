@@ -49,6 +49,32 @@ export function getAuthFailureMessage(
   return "We couldn't create your account. Please try again.";
 }
 
+export function getPasswordResetRequestFailureMessage(error: unknown): string {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  if (authFailureError?.status === 429) {
+    return "Too many attempts. Please wait and try again.";
+  }
+
+  return "We couldn't send a password reset link. Please try again.";
+}
+
+export function getPasswordResetFailureMessage(error: unknown): string {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  if (authFailureError?.status === 429) {
+    return "Too many attempts. Please wait and try again.";
+  }
+
+  return "We couldn't reset your password. Please try again.";
+}
+
+export function isInvalidPasswordResetTokenError(error: unknown): boolean {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  return authFailureError?.status === 400 || authFailureError?.status === 401;
+}
+
 export function getFormErrorText(error: unknown): string | undefined {
   if (typeof error === "string" && error.length > 0) {
     return error;

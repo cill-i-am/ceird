@@ -88,6 +88,7 @@ export interface AuthenticationConfig {
   };
   readonly emailAndPassword: {
     readonly enabled: true;
+    readonly revokeSessionsOnPasswordReset: true;
   };
 }
 
@@ -148,6 +149,7 @@ export function makeAuthenticationConfig(
     },
     emailAndPassword: {
       enabled: true,
+      revokeSessionsOnPasswordReset: true,
     },
   };
 }

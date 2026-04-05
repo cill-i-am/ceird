@@ -2,33 +2,106 @@ import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Layer } from "effect";
+import { Effect, Layer, Runtime } from "effect";
 
+import { AuthEmailSender } from "./auth-email.js";
+import type { PasswordResetEmailInput } from "./auth-email.js";
 import { loadAuthenticationConfig } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
   AuthenticationDatabase,
   AuthenticationDatabaseLive,
 } from "./database.js";
+import { ResendAuthEmailTransportLive } from "./resend-auth-email-transport.js";
 import { authSchema } from "./schema.js";
 
 export function createAuthentication(options: {
+  readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
+  readonly reportPasswordResetEmailFailure: (error: unknown) => void;
+  readonly sendPasswordResetEmail: (
+    input: PasswordResetEmailInput
+  ) => Promise<void>;
 }) {
-  const { config, database } = options;
+  const { config, database, sendPasswordResetEmail } = options;
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
   return betterAuth({
     ...authConfig,
+    advanced: {
+      backgroundTasks: {
+        handler: options.backgroundTaskHandler,
+      },
+    },
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: authSchema,
     }),
+    emailAndPassword: {
+      ...authConfig.emailAndPassword,
+      sendResetPassword: async ({ token, user, url }) => {
+        try {
+          await sendPasswordResetEmail({
+            idempotencyKey: `password-reset/${user.id}/${token}`,
+            recipientEmail: user.email,
+            recipientName: user.name ?? user.email,
+            resetUrl: url,
+          } as const satisfies PasswordResetEmailInput);
+        } catch (error) {
+          options.reportPasswordResetEmailFailure(error);
+          throw error;
+        }
+      },
+    },
   });
 }
 
-export type AuthenticationService = ReturnType<typeof createAuthentication>;
+function makeAuthenticationBackgroundTaskHandler() {
+  return (task: Promise<unknown>) => {
+    // Follow-up tracked in TSK-37: replace this temporary in-process
+    // queueMicrotask scheduler with a durable background queue so auth email
+    // delivery survives process restarts and can be retried independently of
+    // the request lifecycle.
+    queueMicrotask(() => {
+      void task;
+    });
+  };
+}
+
+function makePasswordResetEmailFailureReporter(
+  runtime: Runtime.Runtime<never>
+) {
+  const runFork = Runtime.runFork(runtime);
+
+  return (error: unknown) => {
+    runFork(
+      Effect.logError("Password reset email delivery failed", {
+        error: serializeBackgroundTaskError(error),
+      })
+    );
+  };
+}
+
+function serializeBackgroundTaskError(error: unknown) {
+  if (typeof error === "object" && error !== null) {
+    return {
+      cause:
+        "cause" in error && typeof error.cause === "string"
+          ? error.cause
+          : undefined,
+      message:
+        "message" in error && typeof error.message === "string"
+          ? error.message
+          : String(error),
+      tag: "_tag" in error && typeof error._tag === "string" ? error._tag : "",
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
 
 function matchesTrustedOrigin(
   origin: string,
@@ -117,22 +190,35 @@ function withAuthenticationCors(
   };
 }
 
-export class Authentication extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/Authentication"
-)<Authentication, AuthenticationService>() {}
+const AuthenticationEmailSenderLive = AuthEmailSender.Default.pipe(
+  Layer.provide(ResendAuthEmailTransportLive)
+);
 
-export const AuthenticationLive = Layer.effect(
-  Authentication,
-  Effect.gen(function* AuthenticationLive() {
-    const config = yield* loadAuthenticationConfig;
-    const { db } = yield* AuthenticationDatabase;
+export class Authentication extends Effect.Service<Authentication>()(
+  "@task-tracker/domains/identity/authentication/Authentication",
+  {
+    dependencies: [AuthenticationDatabaseLive, AuthenticationEmailSenderLive],
+    effect: Effect.gen(function* AuthenticationLive() {
+      const config = yield* loadAuthenticationConfig;
+      const { db } = yield* AuthenticationDatabase;
+      const authEmailSender = yield* AuthEmailSender;
+      const runtime = yield* Effect.runtime<never>();
+      const runPromise = Runtime.runPromise(runtime);
+      const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
+      const reportPasswordResetEmailFailure =
+        makePasswordResetEmailFailureReporter(runtime);
 
-    return createAuthentication({
-      config,
-      database: db,
-    });
-  })
-).pipe(Layer.provide(AuthenticationDatabaseLive));
+      return createAuthentication({
+        backgroundTaskHandler,
+        config,
+        database: db,
+        reportPasswordResetEmailFailure,
+        sendPasswordResetEmail: (input) =>
+          runPromise(authEmailSender.sendPasswordResetEmail(input)),
+      });
+    }),
+  }
+) {}
 
 export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
   Effect.gen(function* mountAuthenticationHttp() {
@@ -151,4 +237,4 @@ export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
       }
     );
   })
-).pipe(Layer.provide(AuthenticationLive));
+).pipe(Layer.provide(Authentication.Default));

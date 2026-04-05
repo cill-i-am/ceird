@@ -60,6 +60,7 @@ describe("makeAuthenticationConfig()", () => {
       },
       emailAndPassword: {
         enabled: true,
+        revokeSessionsOnPasswordReset: true,
       },
     });
 

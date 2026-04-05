@@ -29,6 +29,9 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
     expect(apiEnv).toContain(
       "BETTER_AUTH_BASE_URL=https://agent-one.api.task-tracker.localhost:1355"
     );
+    expect(apiEnv).toContain("AUTH_EMAIL_FROM=auth@task-tracker.localhost");
+    expect(apiEnv).toContain("AUTH_EMAIL_FROM_NAME=Task Tracker");
+    expect(apiEnv).toContain("RESEND_API_KEY=re_test_placeholder");
     expect(appEnv).toContain(
       "VITE_AUTH_ORIGIN=https://agent-one.api.task-tracker.localhost:1355"
     );
@@ -60,6 +63,9 @@ describe("makeNodeServiceEnvironmentEntries()", () => {
     });
 
     expect(apiEnv).toContain("BETTER_AUTH_BASE_URL=http://127.0.0.1:4301");
+    expect(apiEnv).toContain("AUTH_EMAIL_FROM=auth@task-tracker.localhost");
+    expect(apiEnv).toContain("AUTH_EMAIL_FROM_NAME=Task Tracker");
+    expect(apiEnv).toContain("RESEND_API_KEY=re_test_placeholder");
     expect(appEnv).toContain("VITE_AUTH_ORIGIN=http://127.0.0.1:4301");
     expect(appEnv).toContain("AUTH_ORIGIN=http://tt-sbx-agent-one-api:4301");
   }, 10_000);

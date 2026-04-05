@@ -67,6 +67,10 @@ export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
   });
 }
 
+export function buildPasswordResetRedirectTo(origin: string): string {
+  return new URL("/reset-password", origin).toString();
+}
+
 function readConfiguredAuthOrigin(): string | undefined {
   const envOrigin = import.meta.env.VITE_AUTH_ORIGIN;
   return typeof envOrigin === "string" ? envOrigin : undefined;

@@ -47,13 +47,12 @@ Without extra product input, the safest default order is:
 
 Translated to likely auth milestones:
 
-1. password reset
-2. email verification
-3. transactional email infrastructure and auth success/error polish
-4. organization or workspace-aware identity, if the product needs it
-5. role and permission checks
-6. social auth
-7. app-facing viewer/session convenience helpers, only if still needed
+1. email verification
+2. transactional auth email polish on the shared delivery boundary
+3. organization or workspace-aware identity, if the product needs it
+4. role and permission checks
+5. social auth
+6. app-facing viewer/session convenience helpers, only if still needed
 
 That is a recommendation, not a hidden roadmap commitment.
 
@@ -105,7 +104,8 @@ up.
 
 The current route split should remain the default:
 
-- guest-only auth routes stay public
+- login and signup stay guest-only
+- recovery routes may stay public outside the authenticated shell
 - product routes stay inside the authenticated app boundary
 
 Until there is a compelling reason otherwise:
@@ -119,7 +119,8 @@ Until there is a compelling reason otherwise:
 Current auth routing has a deliberate asymmetry:
 
 - protected routes fail closed
-- guest-only routes fail open
+- guest-only entry routes fail open
+- public recovery routes stay reachable regardless of session state
 
 Future auth screens and guards should preserve that intent:
 
@@ -127,6 +128,8 @@ Future auth screens and guards should preserve that intent:
   or block safely
 - if a guest-only page cannot determine session state, prefer letting the user
   reach the auth UI
+- if a signed-in user opens a public recovery route, prefer leaving that route
+  reachable unless product policy changes explicitly
 
 ### Keep Redirect Logic Predictable
 
@@ -147,30 +150,46 @@ Not a one-off route-level convenience.
 
 ### Password Reset
 
-Password reset should be the next recovery-oriented extension if we need a new
-account lifecycle flow.
+Password reset is now part of the current architecture and sets the default
+pattern for future recovery and verification work.
 
-It should fit like this:
+It fits like this today:
 
-- Better Auth configuration and email delivery policy in `apps/api`
+- Better Auth retains native ownership of
+  `/api/auth/request-password-reset` and `/api/auth/reset-password`
+- `apps/api` owns email delivery policy through the narrow `AuthEmailSender`
+  boundary
+- `ResendAuthEmailTransport` is the first provider adapter behind that boundary
 - public reset-request and reset-complete routes in `apps/app`
-- the same form architecture already used by login and signup
-- safe success and failure copy in the UI
+- the same form architecture already used across the guest auth surface
+- generic reset-request responses that do not enumerate accounts
+- the search-param-driven invalid-link state may specifically call out invalid
+  or expired links
+- submitted reset failures stay on the generic reset failure path
 
 Rules:
 
 - treat reset as a public auth flow, not an authenticated in-app flow
 - keep reset pages outside `/_app`
+- keep reset pages public even for already authenticated users unless product
+  policy changes explicitly
+- keep Better Auth native instead of replacing reset endpoints with app-owned
+  HTTP wrappers
 - prefer generic success messaging where enumeration risk exists
 - reuse the existing validation and error-handling style
 
 ### Email Verification
 
-Email verification should follow the same boundary model as password reset.
+Email verification should be the next auth extension and should reuse the same
+boundary model that password reset now uses.
 
 It should fit like this:
 
 - verification logic and token handling in `apps/api`
+- `AuthEmailSender` should extend to own verification delivery policy the same
+  way it now owns password reset delivery
+- provider-specific delivery should stay behind the auth email transport
+  boundary instead of leaking into auth configuration or route code
 - verification status UI in public auth routes or transitional auth screens in
   `apps/app`
 - account gating rules documented explicitly if verification becomes required
@@ -187,8 +206,21 @@ Rules:
 
 Auth email is shared infrastructure, not a screen-level detail.
 
-It should live as backend auth infrastructure in `apps/api`, even if the first
-user-visible change appears in a single route.
+Password reset already established the first version of this boundary in
+`apps/api` with `AuthEmailSender` plus `ResendAuthEmailTransport`.
+
+That boundary now contributes runtime config at auth startup:
+
+- `AUTH_EMAIL_FROM`
+- `RESEND_API_KEY`
+- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+
+Because `AuthenticationLive` composes the auth email layer at boot, auth
+startup now depends on valid email-boundary config as well as the core Better
+Auth config.
+
+Future auth mail such as email verification should extend that same boundary,
+not create parallel delivery paths.
 
 Rules:
 
@@ -305,9 +337,8 @@ If those answers are fuzzy, the design is probably still too fuzzy.
 If we continue extending auth soon, the highest-value next documents or
 implementation tracks are:
 
-1. password reset architecture and UX
-2. email verification rules and account-state policy
-3. transactional auth email infrastructure
-4. organization-aware auth boundaries, if the product is heading multi-tenant
+1. email verification rules and account-state policy
+2. transactional auth email polish on the shared delivery boundary
+3. organization-aware auth boundaries, if the product is heading multi-tenant
 
 Those are the places where architectural clarity is most likely to matter next.

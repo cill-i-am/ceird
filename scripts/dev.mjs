@@ -4,16 +4,23 @@ import { pathToFileURL } from "node:url";
 import { repairPortlessRoutesFile } from "./portless-state.mjs";
 
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
+const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
+const DEFAULT_RESEND_API_KEY = "re_test_placeholder";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
   const proxyPort = baseEnvironment.PORTLESS_PORT ?? "1355";
 
   return {
     ...baseEnvironment,
+    AUTH_EMAIL_FROM: baseEnvironment.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM,
+    AUTH_EMAIL_FROM_NAME:
+      baseEnvironment.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME,
     BETTER_AUTH_BASE_URL:
       baseEnvironment.BETTER_AUTH_BASE_URL ??
       `https://api.task-tracker.localhost:${proxyPort}`,
     PORTLESS_PORT: proxyPort,
+    RESEND_API_KEY: baseEnvironment.RESEND_API_KEY ?? DEFAULT_RESEND_API_KEY,
   };
 }
 

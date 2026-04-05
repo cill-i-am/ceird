@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
 import { createAuthentication } from "./auth.js";
@@ -19,7 +21,9 @@ describe("authentication integration", () => {
     await Promise.all([...cleanup].toReversed().map((step) => step()));
   });
 
-  it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, and rate limiting", async () => {
+  it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, reset callback handoff, session revocation, and rate limiting", async (context: {
+    skip: (note?: string) => never;
+  }) => {
     const testDatabase = await createTestDatabase();
     cleanup.push(testDatabase.cleanup);
 
@@ -28,7 +32,9 @@ describe("authentication integration", () => {
     cleanup.push(() => adminPool.end());
 
     if (!(await canConnect(adminPool))) {
-      return;
+      context.skip(
+        "Auth integration database unavailable; skipping native password reset flow coverage"
+      );
     }
 
     await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
@@ -55,13 +61,23 @@ describe("authentication integration", () => {
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
 
+    const capturedResetUrls: string[] = [];
+    const passwordResetDelivery = await Effect.runPromise(
+      Deferred.make<boolean>()
+    );
     const auth = createAuthentication({
+      backgroundTaskHandler: () => {},
       config: makeAuthenticationConfig({
         baseUrl: "http://127.0.0.1:3000",
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
       database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      sendPasswordResetEmail: async ({ resetUrl }) => {
+        capturedResetUrls.push(resetUrl);
+        await Effect.runPromise(Deferred.await(passwordResetDelivery));
+      },
     });
 
     const cookieJar = new Map<string, string>();
@@ -122,6 +138,93 @@ describe("authentication integration", () => {
       (await sessionAfterSignInResponse.json()) as SessionResponse;
     expect(sessionAfterSignIn?.user?.email).toBe("integration@example.com");
 
+    const resetRequestPromise = auth.handler(
+      makeJsonRequest("/request-password-reset", {
+        email: "integration@example.com",
+        redirectTo: "http://127.0.0.1:3000/reset-password",
+      })
+    );
+
+    await expect(
+      Promise.race([
+        resetRequestPromise.then((response) => response.status),
+        wait(100).then(() => "timed-out" as const),
+      ])
+    ).resolves.toBe(200);
+
+    await Effect.runPromise(
+      Deferred.completeWith(passwordResetDelivery, Effect.succeed(true))
+    );
+
+    const resetRequestResponse = await resetRequestPromise;
+    expect(resetRequestResponse.status).toBe(200);
+    expect(capturedResetUrls).toHaveLength(1);
+
+    const [resetUrl] = capturedResetUrls;
+    expect(resetUrl).toContain("http://127.0.0.1:3000/reset-password");
+
+    const resetToken = resetUrl.split("?", 1)[0]?.split("/").pop();
+    expect(resetToken).toBeDefined();
+    expect(resetToken).not.toBe("");
+
+    const resetCallbackResponse = await auth.handler(
+      makeRequest(
+        `/reset-password/${resetToken}?callbackURL=${encodeURIComponent("http://127.0.0.1:3000/reset-password")}`
+      )
+    );
+    expect(resetCallbackResponse.status).toBe(302);
+    expect(resetCallbackResponse.headers.get("location")).toBe(
+      `http://127.0.0.1:3000/reset-password?token=${resetToken}`
+    );
+
+    const resetPasswordResponse = await auth.handler(
+      makeJsonRequest("/reset-password", {
+        token: resetToken,
+        newPassword: "new horse battery staple",
+      })
+    );
+    expect(resetPasswordResponse.status).toBe(200);
+
+    const sessionAfterResetResponse = await auth.handler(
+      makeRequest("/get-session", {
+        cookieJar,
+      })
+    );
+    expect(sessionAfterResetResponse.status).toBe(200);
+    await expect(sessionAfterResetResponse.json()).resolves.toBeNull();
+
+    const oldPasswordResponse = await auth.handler(
+      makeJsonRequest(
+        "/sign-in/email",
+        {
+          email: "integration@example.com",
+          password: "correct horse battery staple",
+        },
+        {
+          forwardedFor: "203.0.113.20",
+        }
+      )
+    );
+    expect(oldPasswordResponse.status).toBe(401);
+
+    const newPasswordResponse = await auth.handler(
+      makeJsonRequest("/sign-in/email", {
+        email: "integration@example.com",
+        password: "new horse battery staple",
+      })
+    );
+    expect(newPasswordResponse.status).toBe(200);
+
+    const invalidResetCallbackResponse = await auth.handler(
+      makeRequest(
+        `/reset-password/${resetToken}?callbackURL=${encodeURIComponent("http://127.0.0.1:3000/reset-password")}`
+      )
+    );
+    expect(invalidResetCallbackResponse.status).toBe(302);
+    expect(invalidResetCallbackResponse.headers.get("location")).toBe(
+      "http://127.0.0.1:3000/reset-password?error=INVALID_TOKEN"
+    );
+
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const response = await auth.handler(
         makeJsonRequest(
@@ -160,6 +263,71 @@ describe("authentication integration", () => {
     ]);
     expect(rateLimitRows.rows).toHaveLength(1);
     expect(rateLimitRows.rows[0]?.count).toBe(5);
+  }, 30_000);
+
+  it("reports password reset delivery failures even when Better Auth runs them in background mode", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping background delivery failure reporting coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const reportedFailures: unknown[] = [];
+
+    const auth = createAuthentication({
+      backgroundTaskHandler: () => {},
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: (error) => {
+        reportedFailures.push(error);
+      },
+      sendPasswordResetEmail: () => {
+        throw new Error("upstream timeout");
+      },
+    });
+
+    const signUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "delivery-failure@example.com",
+        name: "Delivery Failure User",
+        password: "correct horse battery staple",
+      })
+    );
+    expect(signUpResponse.status).toBe(200);
+
+    const resetRequestResponse = await auth.handler(
+      makeJsonRequest("/request-password-reset", {
+        email: "delivery-failure@example.com",
+        redirectTo: "http://127.0.0.1:3000/reset-password",
+      })
+    );
+
+    expect(resetRequestResponse.status).toBe(200);
+    expect(reportedFailures).toHaveLength(1);
+    expect(reportedFailures[0]).toBeInstanceOf(Error);
+    expect(reportedFailures[0]).toMatchObject({
+      message: "upstream timeout",
+    });
   }, 30_000);
 });
 
@@ -243,6 +411,10 @@ async function applyMigration(
   } finally {
     await pool.end();
   }
+}
+
+function wait(milliseconds: number) {
+  return delay(milliseconds);
 }
 
 function makeJsonRequest(

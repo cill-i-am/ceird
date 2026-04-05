@@ -45,6 +45,9 @@ const SANDBOX_WORKSPACE_ROOT = path.resolve(
 const SANDBOX_DEFAULT_DB = "task_tracker";
 const SANDBOX_POSTGRES_PASSWORD = "postgres";
 const SANDBOX_POSTGRES_USER = "postgres";
+const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
+const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
+const DEFAULT_RESEND_API_KEY = "re_test_placeholder";
 const DEFAULT_PORTS: SandboxPorts = {
   app: 4300,
   api: 4301,
@@ -794,6 +797,11 @@ export function makeNodeServiceEnvironmentEntries(options: {
   readonly sandboxId: string;
   readonly betterAuthSecret?: string;
 }): string[] {
+  const authEmailFrom = process.env.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM;
+  const authEmailFromName =
+    process.env.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME;
+  const resendApiKey = process.env.RESEND_API_KEY ?? DEFAULT_RESEND_API_KEY;
+
   return [
     "HOST=0.0.0.0",
     `PORT=${options.publishedPort}`,
@@ -808,10 +816,13 @@ export function makeNodeServiceEnvironmentEntries(options: {
       : []),
     ...(options.filter === "api"
       ? [
+          `AUTH_EMAIL_FROM=${authEmailFrom}`,
+          `AUTH_EMAIL_FROM_NAME=${authEmailFromName}`,
           ...(options.betterAuthSecret
             ? [`BETTER_AUTH_SECRET=${options.betterAuthSecret}`]
             : []),
           `BETTER_AUTH_BASE_URL=${options.authOrigin}`,
+          `RESEND_API_KEY=${resendApiKey}`,
         ]
       : []),
     "PNPM_STORE_DIR=/pnpm/store",

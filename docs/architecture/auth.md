@@ -16,6 +16,8 @@ Authentication currently supports only:
 
 - email/password sign-up
 - email/password sign-in
+- password reset request
+- password reset completion
 - sign-out
 - session lookup
 - route protection for the authenticated app shell
@@ -24,7 +26,6 @@ Authentication currently supports only:
 Authentication explicitly does not currently support:
 
 - social auth
-- password reset
 - email verification
 - magic links or OTP flows
 - redirect-back after login or signup
@@ -40,7 +41,7 @@ The system is intentionally split into two layers:
    limiting, trusted-origin policy, and the `/api/auth/*` HTTP surface.
 2. `apps/app` uses Better Auth's native client against that server contract and
    adds only the minimum app-specific behavior needed for:
-   - login and signup forms
+   - guest auth forms
    - session-aware route guards
    - authenticated shell rendering
    - sign-out UX
@@ -81,6 +82,8 @@ Current config decisions:
 - `basePath` is always `/api/auth`
 - `appName` is `"Task Tracker"`
 - email/password auth is enabled
+- Better Auth remains the native owner of
+  `/api/auth/request-password-reset` and `/api/auth/reset-password`
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
 - trusted origins are restricted to known local and sandbox app origins
@@ -89,6 +92,53 @@ Current rate-limit rules:
 
 - `POST /sign-in/email`: 5 attempts per 60 seconds
 - `POST /sign-up/email`: 3 attempts per 60 seconds
+
+Current note:
+
+- auth config currently defines custom rate-limit rules only for sign-in and
+  sign-up
+- password reset revokes existing sessions once the new password is accepted
+
+### Auth Email Runtime Configuration
+
+The auth email boundary adds runtime config in
+`apps/api/src/domains/identity/authentication/auth-email-config.ts`.
+
+Required values:
+
+- `AUTH_EMAIL_FROM`
+- `RESEND_API_KEY`
+
+Current defaulted value:
+
+- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+
+### Auth Email Delivery Boundary
+
+Password reset delivery now crosses one narrow app-owned boundary in `apps/api`:
+
+- `apps/api/src/domains/identity/authentication/auth-email.ts` defines
+  `AuthEmailSender`, an auth-domain Effect service for sending password reset
+  mail
+- `AuthEmailSender` validates the reset payload and renders the auth email
+  content before handing it to a transport
+- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
+  provides `ResendAuthEmailTransport`, the first provider adapter behind that
+  boundary
+
+Rule:
+
+- Better Auth still owns the reset HTTP endpoints and token semantics
+- the app-owned boundary starts at delivery policy, not at route ownership
+- auth startup now depends on valid auth email config as well as core Better
+  Auth config, because `AuthenticationLive` composes `AuthEmailSender` with
+  `ResendAuthEmailTransportLive` at boot
+- password reset emails carry a provider idempotency key so retries do not
+  duplicate delivery
+- Better Auth currently defers reset delivery through an in-process
+  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
+- this in-process scheduling is explicitly temporary and should be replaced by a
+  durable queue in `TSK-37`
 
 ### Base URL Strategy
 
@@ -112,6 +162,11 @@ Current defaults by entry point:
   `https://<slug>.api.task-tracker.localhost:1355`
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
+- supported non-production launchers also inject `AUTH_EMAIL_FROM`,
+  `AUTH_EMAIL_FROM_NAME`, and `RESEND_API_KEY`
+- those launchers may fall back to placeholder auth-email values when the
+  caller has not provided real delivery credentials, but the API itself still
+  requires the variables at runtime
 
 ### Trusted Origins and CORS
 
@@ -260,27 +315,42 @@ This keeps auth decisions consistent across:
 
 The route split is intentionally simple:
 
-### Public Guest-Only Routes
+### Public Auth Routes
 
 - `/login`
 - `/signup`
+- `/forgot-password`
+- `/reset-password`
 
-These routes are guest-only, not merely public.
+These routes all live outside `/_app`, but they do not all share the same
+access policy.
+
+- `/login` and `/signup` are guest-only routes
+- `/forgot-password` and `/reset-password` are public auth-recovery routes and
+  remain reachable even when a user is already signed in
 
 Behavior:
 
-- if a session exists, redirect to `/`
-- if session lookup fails unexpectedly, treat the user as unauthenticated and
-  allow the page to render
+- `/login` and `/signup`: if a session exists, redirect to `/`
+- `/login` and `/signup`: if session lookup fails unexpectedly, treat the user
+  as unauthenticated and allow the page to render
+- `/forgot-password` and `/reset-password`: render as public recovery routes
+  without `redirectIfAuthenticated`
 
-This is implemented by
+`/login` and `/signup` use
 `apps/app/src/features/auth/redirect-if-authenticated.ts`.
+
+`/forgot-password` and `/reset-password` are mounted as public routes without
+that guard.
 
 Design rule:
 
-- guest-only pages fail open on lookup failure
-- we prefer preserving access to login/signup over blocking the user due to a
-  transient session-read problem
+- guest-only entry routes fail open on lookup failure
+- public recovery routes stay reachable regardless of session state
+- we prefer preserving access to public auth and recovery routes over blocking
+  the user due to a transient session-read problem
+- password recovery remains outside `/_app` because it is an account recovery
+  flow, not an authenticated product flow
 
 ### Protected App Routes
 
@@ -368,6 +438,34 @@ Current behavior:
 - displays safe form-level failure messaging for server/auth errors
 - navigates to `/` after success
 
+### Password Reset Request
+
+`apps/app/src/features/auth/password-reset-request-page.tsx` owns the reset
+request screen.
+
+Current behavior:
+
+- uses TanStack Form for form state
+- validates the email payload through shared auth schemas
+- calls Better Auth's native password reset request flow
+- keeps success and failure messaging generic so the response stays
+  non-enumerating
+
+### Password Reset Completion
+
+`apps/app/src/features/auth/password-reset-page.tsx` owns the reset completion
+screen.
+
+Current behavior:
+
+- uses TanStack Form for form state
+- validates password and token inputs before submit
+- calls Better Auth's native password reset completion flow
+- shows specific invalid-or-expired-link copy for the search-param-driven
+  invalid-link state
+- keeps failed `resetPassword` submissions on the same generic, safe form-error
+  path used elsewhere in auth UI
+
 ### Shared Validation Rules
 
 The shared auth schemas live in
@@ -406,6 +504,10 @@ Rules:
 - rate-limit responses (`429`) map to a specific retry-later message
 - other sign-in failures map to a generic credentials-oriented message
 - other sign-up failures map to a generic account-creation message
+- password reset request responses remain generic and non-enumerating
+- the search-param-driven invalid-link state may specifically call out invalid
+  or expired links
+- submitted reset failures still use the generic reset failure message
 
 This is a deliberate anti-enumeration and UX decision.
 
@@ -445,6 +547,7 @@ These are the important current rules we are following.
 - keep auth mounted at `/api/auth`
 - restrict trusted origins to known app origins
 - use database-backed rate limiting
+- revoke existing sessions on successful password reset
 - use server-first session lookup for SSR-protected routes
 - fail closed for protected routes
 - fail open for guest-only routes
@@ -457,7 +560,7 @@ These are the important current rules we are following.
 - create app-owned session endpoints just to reshape Better Auth responses
 - duplicate auth logic inside page components when route guards can own it
 - support redirect-back targets yet
-- support social auth, reset-password, or email verification yet
+- support social auth or email verification yet
 - implement authorization concerns like roles or permissions in this slice
 - allow arbitrary origins to use credentialed auth CORS
 
@@ -467,9 +570,15 @@ These are the important current rules we are following.
 
 - `apps/api/src/domains/identity/authentication/auth.ts`
   Creates and mounts Better Auth, applies auth CORS, preserves `/api/auth`
-  prefixing.
+  prefixing, and delegates password reset delivery through `AuthEmailSender`.
 - `apps/api/src/domains/identity/authentication/config.ts`
   Defines auth scope, base URL behavior, trusted origins, and rate limits.
+- `apps/api/src/domains/identity/authentication/auth-email-config.ts`
+  Defines required auth email runtime config and defaults.
+- `apps/api/src/domains/identity/authentication/auth-email.ts`
+  Defines the auth email boundary for password reset delivery.
+- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
+  Implements the first auth email transport adapter with Resend.
 - `apps/api/src/domains/identity/authentication/schema.ts`
   Defines auth persistence tables.
 - `apps/api/src/domains/identity/authentication/database.ts`
@@ -489,6 +598,10 @@ These are the important current rules we are following.
   Sign-in UI and submit flow.
 - `apps/app/src/features/auth/signup-page.tsx`
   Sign-up UI and submit flow.
+- `apps/app/src/features/auth/password-reset-request-page.tsx`
+  Password reset request UI with generic response handling.
+- `apps/app/src/features/auth/password-reset-page.tsx`
+  Password reset completion UI with invalid/expired-link feedback.
 - `apps/app/src/components/nav-user.tsx`
   Sign-out interaction.
 
@@ -497,13 +610,17 @@ These are the important current rules we are following.
 These decisions are currently encoded in the implementation and tests.
 
 - Stay close to Better Auth's native server and client contracts.
-- Keep auth scope limited to email/password plus session handling.
-- Make `/login` and `/signup` guest-only routes.
+- Keep auth scope limited to email/password, password reset, and session
+  handling.
+- Keep `/login` and `/signup` guest-only, and keep `/forgot-password` and
+  `/reset-password` as public recovery routes outside `/_app`.
 - Make the app shell under `/_app` the authenticated boundary.
 - Keep redirect destinations simple and fixed.
 - Prefer server-first session checks when rendering protected content.
 - Use shared schema-based input validation for auth forms.
 - Show safe, generic server-error copy instead of backend internals.
+- Keep password reset request responses generic while allowing invalid or
+  expired reset-link feedback on completion.
 - Treat sign-out as a real user action with visible failure handling.
 
 ## Testing Coverage That Defines Behavior
@@ -511,10 +628,13 @@ These decisions are currently encoded in the implementation and tests.
 The current behavior is reinforced by:
 
 - unit tests for auth config and schema shape
+- unit tests for auth email delivery boundaries
 - unit tests for protected-route and guest-route guards
-- unit tests for login and signup submit behavior
+- unit tests for login, signup, and password reset submit behavior
 - integration tests for sign-up, sign-in, sign-out, session reads, and rate
   limiting in the API auth slice
+- integration tests for password reset delivery and completion behavior in the
+  API auth slice
 - Playwright tests for end-to-end login, signup, and route-protection behavior
 
 If a future change conflicts with this document, the tests should be updated in

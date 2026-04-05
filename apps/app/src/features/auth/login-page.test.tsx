@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Schema } from "effect";
+import type { ComponentProps } from "react";
 
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
@@ -36,6 +37,27 @@ const { mockedGetSession, mockedNavigate, mockedSignInEmail } = vi.hoisted(
 vi.mock(import("./auth-navigation"), () => ({
   useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
 }));
+
+vi.mock(import("@tanstack/react-router"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    Link: (({
+      children,
+      to,
+      ...props
+    }: ComponentProps<"a"> & { to?: string }) => (
+      <a
+        data-router-link="true"
+        href={typeof to === "string" ? to : props.href}
+        {...props}
+      >
+        {children}
+      </a>
+    )) as typeof actual.Link,
+  };
+});
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
@@ -84,6 +106,15 @@ describe("login page", () => {
         to: "/",
       });
     });
+  }, 10_000);
+
+  it("shows a forgot-password link to the public reset request page", () => {
+    render(<LoginPage />);
+
+    const link = screen.getByRole("link", { name: "Forgot password?" });
+
+    expect(link).toHaveAttribute("href", "/forgot-password");
+    expect(link).toHaveAttribute("data-router-link", "true");
   }, 10_000);
 
   it("shows a safe server error when sign-in fails", async () => {
