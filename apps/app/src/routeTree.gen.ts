@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable import/first, no-unused-vars, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
 
 // @ts-nocheck
 
@@ -16,6 +16,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -51,6 +52,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
+  id: '/create-organization',
+  path: '/create-organization',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/create-organization': typeof AppCreateOrganizationRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/create-organization': typeof AppCreateOrganizationRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/_app/create-organization': typeof AppCreateOrganizationRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/create-organization'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/create-organization'
     | '/'
   id:
     | '__root__'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/_app/create-organization'
     | '/_app/'
   fileRoutesById: FileRoutesById
 }
@@ -166,14 +178,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/create-organization': {
+      id: '/_app/create-organization'
+      path: '/create-organization'
+      fullPath: '/create-organization'
+      preLoaderRoute: typeof AppCreateOrganizationRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppCreateOrganizationRoute: typeof AppCreateOrganizationRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCreateOrganizationRoute: AppCreateOrganizationRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
