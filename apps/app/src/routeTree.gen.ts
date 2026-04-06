@@ -1,4 +1,4 @@
-/* eslint-disable import/first, no-unused-vars, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
+/* eslint-disable */
 
 // @ts-nocheck
 
@@ -15,8 +15,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
+import { Route as AppOrgRouteImport } from './routes/_app._org'
+import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -47,19 +48,23 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
   id: '/create-organization',
   path: '/create-organization',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOrgRoute = AppOrgRouteImport.update({
+  id: '/_org',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrgIndexRoute = AppOrgIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppOrgRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof AppOrgIndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
@@ -68,13 +73,13 @@ export interface FileRoutesByFullPath {
   '/create-organization': typeof AppCreateOrganizationRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AppOrgIndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/create-organization': typeof AppCreateOrganizationRoute
-  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -84,8 +89,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/_app/_org': typeof AppOrgRouteWithChildren
   '/_app/create-organization': typeof AppCreateOrganizationRoute
-  '/_app/': typeof AppIndexRoute
+  '/_app/_org/': typeof AppOrgIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -99,13 +105,13 @@ export interface FileRouteTypes {
     | '/create-organization'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/forgot-password'
     | '/health'
     | '/login'
     | '/reset-password'
     | '/signup'
     | '/create-organization'
-    | '/'
   id:
     | '__root__'
     | '/_app'
@@ -114,8 +120,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/_app/_org'
     | '/_app/create-organization'
-    | '/_app/'
+    | '/_app/_org/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -171,13 +178,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/create-organization': {
       id: '/_app/create-organization'
       path: '/create-organization'
@@ -185,17 +185,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCreateOrganizationRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/_org': {
+      id: '/_app/_org'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppOrgRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/_org/': {
+      id: '/_app/_org/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppOrgIndexRouteImport
+      parentRoute: typeof AppOrgRoute
+    }
   }
 }
 
+interface AppOrgRouteChildren {
+  AppOrgIndexRoute: typeof AppOrgIndexRoute
+}
+
+const AppOrgRouteChildren: AppOrgRouteChildren = {
+  AppOrgIndexRoute: AppOrgIndexRoute,
+}
+
+const AppOrgRouteWithChildren =
+  AppOrgRoute._addFileChildren(AppOrgRouteChildren)
+
 interface AppRouteChildren {
+  AppOrgRoute: typeof AppOrgRouteWithChildren
   AppCreateOrganizationRoute: typeof AppCreateOrganizationRoute
-  AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppOrgRoute: AppOrgRouteWithChildren,
   AppCreateOrganizationRoute: AppCreateOrganizationRoute,
-  AppIndexRoute: AppIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

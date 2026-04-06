@@ -3,11 +3,16 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
 
 function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
+}
+
+function createTestSlug(prefix: string): string {
+  return `${prefix}-${randomUUID()}`;
 }
 
 async function expectAuthenticatedHome(page: Page) {
@@ -94,8 +99,9 @@ test.describe("auth pages", () => {
     await expect(signupPage.alerts).toContainText("Passwords must match");
   });
 
-  test("signup redirects to the app shell after success", async ({ page }) => {
+  test("signup creates an org before entering the app", async ({ page }) => {
     const signupPage = new SignupPage(page);
+    const createOrganizationPage = new CreateOrganizationPage(page);
     const email = createTestEmail("signup");
 
     await signupPage.goto();
@@ -105,16 +111,22 @@ test.describe("auth pages", () => {
     await signupPage.confirmPassword.fill("password123");
     await signupPage.submit.click();
 
+    await createOrganizationPage.expectLoaded();
+    await createOrganizationPage.name.fill("Acme Field Ops");
+    await createOrganizationPage.slug.fill(createTestSlug("acme-field-ops"));
+    await createOrganizationPage.submit.click();
+
     await expectAuthenticatedHome(page);
   });
 
-  test("login redirects to the app shell after success", async ({
+  test("login creates an org before entering the app", async ({
     page,
     request,
   }) => {
     const email = createTestEmail("login");
     const password = "password123";
     const loginPage = new LoginPage(page);
+    const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(
       "http://127.0.0.1:3001/api/auth/sign-up/email",
       {
@@ -132,6 +144,11 @@ test.describe("auth pages", () => {
     await loginPage.email.fill(email);
     await loginPage.password.fill(password);
     await loginPage.submit.click();
+
+    await createOrganizationPage.expectLoaded();
+    await createOrganizationPage.name.fill("Field Services Team");
+    await createOrganizationPage.slug.fill(createTestSlug("field-services"));
+    await createOrganizationPage.submit.click();
 
     await expectAuthenticatedHome(page);
   });
