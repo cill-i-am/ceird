@@ -83,6 +83,16 @@ describe("authentication integration", () => {
     );
     updateCookieJar(cookieJar, organizationResponse);
     expect(organizationResponse.status).toBe(200);
+    const createdOrganization =
+      (await organizationResponse.json()) as CreatedOrganizationResponse;
+    expect(createdOrganization.id).toStrictEqual(expect.any(String));
+    expect(createdOrganization.name).toBe("Org Flow Organization");
+    expect(createdOrganization.slug).toBe("org-flow-organization");
+    expect(createdOrganization.members).toHaveLength(1);
+    expect(createdOrganization.members[0]?.organizationId).toBe(
+      createdOrganization.id
+    );
+    expect(createdOrganization.members[0]?.role).toBe("owner");
 
     const sessionAfterOrganizationCreateResponse = await auth.handler(
       makeRequest("/get-session", {
@@ -95,9 +105,45 @@ describe("authentication integration", () => {
     expect(sessionAfterOrganizationCreate?.user?.email).toBe(
       "org-flow@example.com"
     );
-    expect(
-      sessionAfterOrganizationCreate?.session?.activeOrganizationId
-    ).toBeDefined();
+    expect(sessionAfterOrganizationCreate?.session?.activeOrganizationId).toBe(
+      createdOrganization.id
+    );
+
+    const organizationRows = await adminPool.query<{
+      id: string;
+      name: string;
+      slug: string;
+    }>(`select id, name, slug from organization where id = $1`, [
+      createdOrganization.id,
+    ]);
+    expect(organizationRows.rows).toStrictEqual([
+      {
+        id: createdOrganization.id,
+        name: "Org Flow Organization",
+        slug: "org-flow-organization",
+      },
+    ]);
+
+    const creatorRows = await adminPool.query<{
+      id: string;
+    }>(`select id from "user" where email = $1`, ["org-flow@example.com"]);
+    expect(creatorRows.rows).toHaveLength(1);
+
+    const memberRows = await adminPool.query<{
+      organization_id: string;
+      role: string;
+      user_id: string;
+    }>(
+      `select organization_id, role, user_id from member where organization_id = $1 and user_id = $2`,
+      [createdOrganization.id, creatorRows.rows[0]?.id]
+    );
+    expect(memberRows.rows).toStrictEqual([
+      {
+        organization_id: createdOrganization.id,
+        role: "owner",
+        user_id: creatorRows.rows[0]?.id as string,
+      },
+    ]);
   }, 30_000);
 
   it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, reset callback handoff, session revocation, and rate limiting", async (context: {
@@ -118,16 +164,14 @@ describe("authentication integration", () => {
 
     await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
     await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
 
     await adminPool.query(
       `insert into rate_limit (key, count, last_request) values ($1, $2, $3)`,
       ["203.0.113.9|/sign-in/email", 2, Date.now()]
     );
 
-    await expect(
-      applyMigration(databaseUrl, "0002_slippery_hulk.sql")
-    ).resolves.toBeUndefined();
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
 
     const migrationRows = await adminPool.query<{
       id: string;
@@ -534,6 +578,16 @@ interface SessionResponse {
   readonly session?: {
     readonly activeOrganizationId?: string;
   };
+}
+
+interface CreatedOrganizationResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly members: readonly {
+    readonly organizationId: string;
+    readonly role: string;
+  }[];
 }
 
 function makeRequest(routePath: string, options?: RequestOptions): Request {

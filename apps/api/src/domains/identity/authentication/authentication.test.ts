@@ -18,6 +18,9 @@ import * as schemaModule from "./schema.js";
 import {
   authSchema,
   account,
+  invitation,
+  member,
+  organization,
   rateLimit,
   session,
   user,
@@ -131,6 +134,9 @@ describe("auth schema", () => {
   }, 10_000);
 
   it("exports the organization tables and active organization session field", () => {
+    expect(getTableName(organization)).toBe("organization");
+    expect(getTableName(member)).toBe("member");
+    expect(getTableName(invitation)).toBe("invitation");
     expect(schemaModule.organization).toBeDefined();
     expect(schemaModule.member).toBeDefined();
     expect(schemaModule.invitation).toBeDefined();
