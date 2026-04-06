@@ -71,28 +71,22 @@ export async function ensureActiveOrganizationId() {
     throw redirect({ to: "/login" });
   }
 
-  const { activeOrganizationId } = session.session;
-
-  if (activeOrganizationId) {
-    return {
-      activeOrganizationId,
-      session,
-    };
-  }
-
   const organizations = await resolveOrganizationListForAccess(
     await listOrganizations()
   );
 
-  const [firstOrganization] = organizations;
+  const activeOrganizationId = resolveCurrentOrganizationId(
+    session.session.activeOrganizationId,
+    organizations
+  );
 
-  if (!firstOrganization) {
+  if (!activeOrganizationId) {
     throw redirect({ href: "/create-organization" });
   }
 
   return {
-    activeOrganizationId: firstOrganization.id,
-    session: withActiveOrganizationId(session, firstOrganization.id),
+    activeOrganizationId,
+    session: withActiveOrganizationId(session, activeOrganizationId),
   };
 }
 
@@ -107,13 +101,17 @@ export async function redirectIfOrganizationReady() {
     throw redirect({ to: "/login" });
   }
 
-  if (session.session.activeOrganizationId) {
-    throw redirect({ to: "/" });
-  }
-
   const organizations = await resolveOrganizationListForAccess(
     await listOrganizations()
   );
+  const activeOrganizationId = resolveCurrentOrganizationId(
+    session.session.activeOrganizationId,
+    organizations
+  );
+
+  if (activeOrganizationId) {
+    throw redirect({ to: "/" });
+  }
 
   if (organizations.length > 0) {
     throw redirect({ to: "/" });
@@ -152,4 +150,23 @@ function withActiveOrganizationId(
       activeOrganizationId,
     },
   } satisfies Session;
+}
+
+function resolveCurrentOrganizationId(
+  activeOrganizationId: string | null | undefined,
+  organizations: readonly OrganizationSummary[]
+) {
+  if (!activeOrganizationId) {
+    return organizations[0]?.id ?? null;
+  }
+
+  const activeOrganization = organizations.find(
+    (organization) => organization.id === activeOrganizationId
+  );
+
+  if (activeOrganization) {
+    return activeOrganization.id;
+  }
+
+  return organizations[0]?.id ?? null;
 }

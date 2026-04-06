@@ -176,7 +176,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBeFalsy();
+    expect(isRedirect(failure)).toBe(false);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("server session down");
     expect(mockedListServerOrganizations).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBeFalsy();
+    expect(isRedirect(failure)).toBe(false);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain(
       "Session lookup returned an invalid payload."
@@ -204,7 +204,7 @@ describe("organization access helpers", () => {
     expect(mockedGetStrictServerSession).not.toHaveBeenCalled();
   }, 1000);
 
-  it("returns active organization id from the current session when available", async () => {
+  it("keeps the active organization when it still exists in the current membership list", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({
       data: {
@@ -217,11 +217,48 @@ describe("organization access helpers", () => {
       },
       error: null,
     });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
 
     await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
       activeOrganizationId: "org_active",
     });
-    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("falls back to the first current organization when the active organization is stale", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: { activeOrganizationId: "org_stale" },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_current", name: "Current Org", slug: "current-org" }],
+      error: null,
+    });
+
+    await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+      activeOrganizationId: "org_current",
+      session: {
+        session: {
+          activeOrganizationId: "org_current",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+    });
   }, 1000);
 
   it("falls back to the first organization when there is no active organization", async () => {
@@ -318,7 +355,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBe(false);
+    expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("upstream unavailable");
   }, 1000);
@@ -427,7 +464,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBeFalsy();
+    expect(isRedirect(failure)).toBe(false);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("server session down");
     expect(mockedListServerOrganizations).not.toHaveBeenCalled();
@@ -448,6 +485,10 @@ describe("organization access helpers", () => {
       },
       error: null,
     });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
 
     const result = redirectIfOrganizationReady();
 
@@ -455,6 +496,29 @@ describe("organization access helpers", () => {
       options: { to: "/" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
+  }, 1000);
+
+  it("allows onboarding to continue when the active organization is stale and no memberships remain", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          activeOrganizationId: "org_stale",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    await expect(redirectIfOrganizationReady()).resolves.toBeUndefined();
   }, 1000);
 
   it("rethrows client-side organization lookup failures in redirectIfOrganizationReady", async () => {
@@ -476,7 +540,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBe(false);
+    expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("network down");
   }, 1000);
