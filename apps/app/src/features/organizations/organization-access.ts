@@ -15,7 +15,7 @@ type Organization = NonNullable<
 
 type OrganizationAccessState = {
   session: Session;
-  organizations: Organization[];
+  organizations: readonly Organization[];
   organizationId: string | null;
 } | null;
 
@@ -87,7 +87,7 @@ export async function requireOrganizationAccess() {
     return access;
   }
 
-  throw redirect({ to: "/create-organization" as never });
+  throw redirect({ href: "/create-organization" });
 }
 
 export async function redirectIfOrganizationReady() {

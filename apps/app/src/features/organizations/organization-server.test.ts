@@ -3,6 +3,7 @@ import { getCurrentServerOrganizations } from "./organization-server";
 interface Organization {
   id: string;
   name: string;
+  slug: string;
 }
 
 const {
@@ -37,7 +38,7 @@ describe("server organization lookup", () => {
 
   it("forwards the current auth cookie to the resolved auth origin", async () => {
     const organizations: Organization[] = [
-      { id: "org_123", name: "Fallback Org" },
+      { id: "org_123", name: "Fallback Org", slug: "fallback-org" },
     ];
 
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -66,7 +67,9 @@ describe("server organization lookup", () => {
   }, 1000);
 
   it("derives the auth base url from the current request when no auth origin is configured", async () => {
-    const organizations: Organization[] = [{ id: "org_456", name: "Acme" }];
+    const organizations: Organization[] = [
+      { id: "org_456", name: "Acme", slug: "acme" },
+    ];
 
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
@@ -132,6 +135,48 @@ describe("server organization lookup", () => {
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain(
       "Organization lookup returned no data."
+    );
+  }, 1000);
+
+  it("throws when the organization payload is not an array", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    mockedGetRequestProtocol.mockReturnValue("http");
+    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
+
+    const failure = await getCurrentServerOrganizations().catch(
+      (caughtError) => caughtError
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(
+      "Organization lookup returned an invalid payload."
+    );
+  }, 1000);
+
+  it("throws when an organization summary has invalid field types", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    mockedGetRequestProtocol.mockReturnValue("http");
+    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json([{ id: 123, name: "Acme", slug: "acme" }])
+    );
+
+    const failure = await getCurrentServerOrganizations().catch(
+      (caughtError) => caughtError
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(
+      "Organization lookup returned an invalid payload."
     );
   }, 1000);
 });

@@ -19,6 +19,7 @@ interface Session {
 interface Organization {
   id: string;
   name: string;
+  slug: string;
 }
 
 const {
@@ -103,7 +104,7 @@ describe("organization access helpers", () => {
     const result = requireOrganizationAccess();
 
     await expect(result).rejects.toMatchObject({
-      options: { to: "/create-organization" },
+      options: { href: "/create-organization" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
     expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
@@ -146,8 +147,8 @@ describe("organization access helpers", () => {
     });
     mockedGetClientOrganizations.mockResolvedValue({
       data: [
-        { id: "org_first", name: "First Org" },
-        { id: "org_second", name: "Second Org" },
+        { id: "org_first", name: "First Org", slug: "first-org" },
+        { id: "org_second", name: "Second Org", slug: "second-org" },
       ],
       error: null,
     });
@@ -177,7 +178,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBe(false);
+    expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("network down");
   }, 1000);
@@ -225,7 +226,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBe(false);
+    expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("network down");
   }, 1000);
@@ -241,7 +242,7 @@ describe("organization access helpers", () => {
       },
     });
     mockedGetServerOrganizations.mockResolvedValue([
-      { id: "org_server", name: "Server Org" },
+      { id: "org_server", name: "Server Org", slug: "server-org" },
     ]);
 
     await expect(requireOrganizationAccess()).resolves.toMatchObject({
@@ -269,7 +270,7 @@ describe("organization access helpers", () => {
       (caughtError) => caughtError
     );
 
-    expect(isRedirect(failure)).toBe(false);
+    expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("upstream unavailable");
     expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
