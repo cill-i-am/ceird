@@ -24,8 +24,16 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
     serverAuthOrigin
   );
 
-  if (!cookie || !authBaseURL) {
-    return null;
+  if (!cookie) {
+    throw new Error(
+      "Cannot list organizations without the current auth cookie."
+    );
+  }
+
+  if (!authBaseURL) {
+    throw new Error(
+      "Cannot resolve the auth base URL for organization lookup."
+    );
   }
 
   const response = await fetch(
@@ -39,10 +47,18 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   );
 
   if (!response.ok) {
-    return null;
+    throw new Error(
+      `Organization lookup failed with status ${response.status}.`
+    );
   }
 
-  return ((await response.json()) as ServerOrganization[] | null) ?? null;
+  const organizations = (await response.json()) as ServerOrganization[] | null;
+
+  if (!organizations) {
+    throw new Error("Organization lookup returned no data.");
+  }
+
+  return organizations;
 });
 
 function readServerAuthOrigin(): string | undefined {

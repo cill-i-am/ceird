@@ -33,16 +33,21 @@ async function getCurrentSession() {
 }
 
 async function getCurrentOrganizations() {
-  try {
-    if (isServerEnvironment()) {
-      return await getCurrentServerOrganizations();
-    }
-
-    const organizations = await authClient.organization.list();
-    return organizations.data ?? null;
-  } catch {
-    return null;
+  if (isServerEnvironment()) {
+    return await getCurrentServerOrganizations();
   }
+
+  const organizations = await authClient.organization.list();
+
+  if (organizations.error) {
+    throw organizations.error;
+  }
+
+  if (!organizations.data) {
+    throw new Error("Organization lookup returned no data.");
+  }
+
+  return organizations.data;
 }
 
 async function getOrganizationAccessState(): Promise<OrganizationAccessState> {
@@ -62,7 +67,7 @@ async function getOrganizationAccessState(): Promise<OrganizationAccessState> {
     };
   }
 
-  const organizations = (await getCurrentOrganizations()) ?? [];
+  const organizations = await getCurrentOrganizations();
 
   return {
     session,
@@ -94,9 +99,17 @@ export async function requireOrganizationAccess() {
 }
 
 export async function redirectIfOrganizationReady() {
-  const access = await getOrganizationAccessState();
+  try {
+    const access = await getOrganizationAccessState();
 
-  if (access?.organizationId) {
-    throw redirect({ to: "/" });
+    if (access?.organizationId) {
+      throw redirect({ to: "/" });
+    }
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error;
+    }
+
+    throw redirect({ to: "/login" });
   }
 }

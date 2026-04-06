@@ -158,6 +158,29 @@ describe("organization access helpers", () => {
     expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
   }, 1000);
 
+  it("redirects to /login when organization lookup fails unexpectedly during access checks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {},
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockRejectedValue(new Error("network down"));
+
+    const result = requireOrganizationAccess();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/login" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+  }, 1000);
+
   it("redirects onboarding users away from /create-organization when org access is ready", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({
@@ -182,6 +205,29 @@ describe("organization access helpers", () => {
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
 
+  it("redirects to /login instead of allowing onboarding when organization lookup fails", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {},
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockRejectedValue(new Error("network down"));
+
+    const result = redirectIfOrganizationReady();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/login" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+  }, 1000);
+
   it("uses the server organization listing path during SSR", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
     mockedGetServerSession.mockResolvedValue({
@@ -200,6 +246,29 @@ describe("organization access helpers", () => {
       organizationId: "org_server",
     });
     expect(mockedGetServerOrganizations).toHaveBeenCalledOnce();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("redirects to /login during SSR when organization lookup fails", async () => {
+    mockedIsServerEnvironment.mockReturnValue(true);
+    mockedGetServerSession.mockResolvedValue({
+      session: {},
+      user: {
+        id: "user_123",
+        name: "Taylor Example",
+        email: "taylor@example.com",
+      },
+    });
+    mockedGetServerOrganizations.mockRejectedValue(
+      new Error("upstream unavailable")
+    );
+
+    const result = requireOrganizationAccess();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/login" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
     expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
   }, 1000);
 });
