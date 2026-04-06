@@ -3,6 +3,7 @@ import {
   getRequestHeader,
   getRequestHost,
   getRequestProtocol,
+  setResponseHeader,
 } from "@tanstack/react-start/server";
 import { Schema } from "effect";
 
@@ -126,6 +127,32 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   return decodeOrganizationSummariesStrict(organizations);
 });
 
+export const setCurrentServerActiveOrganization = createServerOnlyFn(
+  async (organizationId: string | null) => {
+    const authRequest = readServerAuthRequestStrict();
+    const response = await fetch(
+      new URL("organization/set-active", `${authRequest.authBaseURL}/`),
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: authRequest.cookie,
+        },
+        body: JSON.stringify({ organizationId }),
+      }
+    );
+
+    forwardResponseCookies(response);
+
+    if (!response.ok) {
+      throw new Error(
+        `Setting active organization failed with status ${response.status}.`
+      );
+    }
+  }
+);
+
 function readServerSessionRequest(): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
 
@@ -243,4 +270,27 @@ export function decodeOrganizationAccessSession(
   }
 
   return session as OrganizationAccessSession;
+}
+
+function forwardResponseCookies(response: Response) {
+  const setCookieValues = getSetCookieValues(response.headers);
+
+  if (setCookieValues.length === 0) {
+    return;
+  }
+
+  setResponseHeader("set-cookie", setCookieValues);
+}
+
+function getSetCookieValues(headers: Headers) {
+  const headersWithGetSetCookie = headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+
+  if (typeof headersWithGetSetCookie.getSetCookie === "function") {
+    return headersWithGetSetCookie.getSetCookie();
+  }
+
+  const value = headers.get("set-cookie");
+  return value ? [value] : [];
 }

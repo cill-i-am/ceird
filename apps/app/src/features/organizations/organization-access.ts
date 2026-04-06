@@ -9,6 +9,7 @@ import {
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   listCurrentServerOrganizations,
+  setCurrentServerActiveOrganization,
 } from "./organization-server";
 
 export interface OrganizationSummary {
@@ -80,6 +81,11 @@ export async function ensureActiveOrganizationId() {
     organizations
   );
 
+  await synchronizeActiveOrganization(
+    session.session.activeOrganizationId ?? null,
+    activeOrganizationId
+  );
+
   if (!activeOrganizationId) {
     throw redirect({ href: "/create-organization" });
   }
@@ -107,6 +113,11 @@ export async function redirectIfOrganizationReady() {
   const activeOrganizationId = resolveCurrentOrganizationId(
     session.session.activeOrganizationId,
     organizations
+  );
+
+  await synchronizeActiveOrganization(
+    session.session.activeOrganizationId ?? null,
+    activeOrganizationId
   );
 
   if (activeOrganizationId) {
@@ -169,4 +180,26 @@ function resolveCurrentOrganizationId(
   }
 
   return organizations[0]?.id ?? null;
+}
+
+async function synchronizeActiveOrganization(
+  currentOrganizationId: string | null,
+  nextOrganizationId: string | null
+) {
+  if (currentOrganizationId === nextOrganizationId) {
+    return;
+  }
+
+  if (isServerEnvironment()) {
+    await setCurrentServerActiveOrganization(nextOrganizationId);
+    return;
+  }
+
+  const result = await authClient.organization.setActive({
+    organizationId: nextOrganizationId,
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
 }

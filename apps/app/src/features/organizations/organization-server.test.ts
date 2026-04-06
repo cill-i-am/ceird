@@ -2,6 +2,7 @@ import {
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   listCurrentServerOrganizations,
+  setCurrentServerActiveOrganization,
 } from "./organization-server";
 
 interface Organization {
@@ -41,16 +42,20 @@ const {
   mockedGetRequestHeader,
   mockedGetRequestHost,
   mockedGetRequestProtocol,
+  mockedSetResponseHeader,
 } = vi.hoisted(() => ({
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
   mockedGetRequestHost: vi.fn<() => string>(),
   mockedGetRequestProtocol: vi.fn<() => string>(),
+  mockedSetResponseHeader:
+    vi.fn<(name: string, value: string | string[]) => void>(),
 }));
 
 vi.mock(import("@tanstack/react-start/server"), () => ({
   getRequestHeader: mockedGetRequestHeader,
   getRequestHost: mockedGetRequestHost,
   getRequestProtocol: mockedGetRequestProtocol,
+  setResponseHeader: mockedSetResponseHeader,
 }));
 
 describe("server organization lookup", () => {
@@ -241,6 +246,76 @@ describe("server organization lookup", () => {
         extraUserField: "keep-me-too",
       },
     });
+  }, 1000);
+
+  it("sets the active organization and forwards auth cookies to the current response", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    mockedGetRequestProtocol.mockReturnValue("http");
+    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+
+    const response = Response.json(
+      { id: "org_123" },
+      {
+        status: 200,
+        headers: {
+          "set-cookie":
+            "better-auth.session_token=next-token; Path=/; HttpOnly",
+        },
+      }
+    );
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+
+    await expect(
+      setCurrentServerActiveOrganization("org_123")
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/set-active", "http://tt-sbx-api:4301/api/auth/"),
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=session-token",
+        },
+        body: JSON.stringify({ organizationId: "org_123" }),
+      }
+    );
+    expect(mockedSetResponseHeader).toHaveBeenCalledWith("set-cookie", [
+      "better-auth.session_token=next-token; Path=/; HttpOnly",
+    ]);
+  }, 1000);
+
+  it("can clear the active organization on the server", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    mockedGetRequestProtocol.mockReturnValue("http");
+    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("null", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      })
+    );
+
+    await expect(
+      setCurrentServerActiveOrganization(null)
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/set-active", "http://tt-sbx-api:4301/api/auth/"),
+      expect.objectContaining({
+        body: JSON.stringify({ organizationId: null }),
+      })
+    );
   }, 1000);
 
   it("returns null when strict session lookup positively resolves to no session", async () => {

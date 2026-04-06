@@ -42,8 +42,10 @@ const {
   mockedGetStrictServerSession,
   mockedListServerOrganizations,
   mockedGetStrictServerOrganizations,
+  mockedSetServerActiveOrganization,
   mockedGetSession,
   mockedGetClientOrganizations,
+  mockedSetClientActiveOrganization,
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
   mockedGetServerSession: vi.fn<() => Promise<Session | null>>(),
@@ -52,11 +54,19 @@ const {
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
   mockedGetStrictServerOrganizations:
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
+  mockedSetServerActiveOrganization:
+    vi.fn<(organizationId: string | null) => Promise<void>>(),
   mockedGetSession:
     vi.fn<() => Promise<{ data: Session | null; error: Error | null }>>(),
   mockedGetClientOrganizations:
     vi.fn<
       () => Promise<{ data: Organization[] | null; error: Error | null }>
+    >(),
+  mockedSetClientActiveOrganization:
+    vi.fn<
+      (input: {
+        organizationId: string | null;
+      }) => Promise<{ data: Organization | null; error: Error | null }>
     >(),
   mockedIsServerEnvironment: vi.fn<() => boolean>(),
 }));
@@ -82,6 +92,8 @@ vi.mock(import("./organization-server"), async (importActual) => {
       mockedListServerOrganizations as typeof actual.listCurrentServerOrganizations,
     getCurrentServerOrganizations:
       mockedGetStrictServerOrganizations as typeof actual.getCurrentServerOrganizations,
+    setCurrentServerActiveOrganization:
+      mockedSetServerActiveOrganization as typeof actual.setCurrentServerActiveOrganization,
   };
 });
 
@@ -100,12 +112,22 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
       organization: {
         ...actual.authClient.organization,
         list: mockedGetClientOrganizations as unknown as typeof actual.authClient.organization.list,
+        setActive:
+          mockedSetClientActiveOrganization as unknown as typeof actual.authClient.organization.setActive,
       },
     },
   };
 });
 
 describe("organization access helpers", () => {
+  beforeEach(() => {
+    mockedSetClientActiveOrganization.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+    mockedSetServerActiveOrganization.mockResolvedValue();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -226,6 +248,7 @@ describe("organization access helpers", () => {
       activeOrganizationId: "org_active",
     });
     expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
   it("falls back to the first current organization when the active organization is stale", async () => {
@@ -258,6 +281,9 @@ describe("organization access helpers", () => {
           email: "taylor@example.com",
         },
       },
+    });
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: "org_current",
     });
   }, 1000);
 
@@ -295,6 +321,9 @@ describe("organization access helpers", () => {
         },
       },
     });
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: "org_first",
+    });
   }, 1000);
 
   it("redirects to /create-organization when there are no organizations", async () => {
@@ -321,6 +350,7 @@ describe("organization access helpers", () => {
       options: { href: "/create-organization" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
   it("rethrows SSR organization lookup failures when list helper returns an ambiguous empty list", async () => {
@@ -358,6 +388,7 @@ describe("organization access helpers", () => {
     expect(isRedirect(failure)).toBeFalsy();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("upstream unavailable");
+    expect(mockedSetServerActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
   it("uses the strict SSR organization fallback when the lenient list is empty", async () => {
@@ -413,6 +444,9 @@ describe("organization access helpers", () => {
         },
       },
     });
+    expect(mockedSetServerActiveOrganization).toHaveBeenCalledWith(
+      "org_server"
+    );
   }, 1000);
 
   it("redirects authenticated users without organizations to /create-organization", async () => {
@@ -496,6 +530,7 @@ describe("organization access helpers", () => {
       options: { to: "/" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
   it("allows onboarding to continue when the active organization is stale and no memberships remain", async () => {
@@ -519,6 +554,9 @@ describe("organization access helpers", () => {
     });
 
     await expect(redirectIfOrganizationReady()).resolves.toBeUndefined();
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: null,
+    });
   }, 1000);
 
   it("rethrows client-side organization lookup failures in redirectIfOrganizationReady", async () => {
