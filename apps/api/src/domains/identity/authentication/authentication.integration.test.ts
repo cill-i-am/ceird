@@ -223,10 +223,12 @@ describe("authentication integration", () => {
     cleanup.push(testDatabase.cleanup);
 
     const databaseUrl = testDatabase.url;
-    const adminPool = new Pool({ connectionString: databaseUrl });
-    cleanup.push(() => adminPool.end());
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
 
-    if (!(await canConnect(adminPool))) {
+    if (!canReachDatabase) {
       context.skip(
         "Auth integration database unavailable; skipping email verification flow coverage"
       );
@@ -339,10 +341,12 @@ describe("authentication integration", () => {
     cleanup.push(testDatabase.cleanup);
 
     const databaseUrl = testDatabase.url;
-    const adminPool = new Pool({ connectionString: databaseUrl });
-    cleanup.push(() => adminPool.end());
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
 
-    if (!(await canConnect(adminPool))) {
+    if (!canReachDatabase) {
       context.skip(
         "Auth integration database unavailable; skipping resend verification rate-limit coverage"
       );
@@ -419,6 +423,17 @@ describe("authentication integration", () => {
     );
 
     expect(limitedResponse.status).toBe(429);
+
+    const rateLimitRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+        key: string;
+      }>(`select key, count from rate_limit where key = $1`, [
+        "203.0.113.25|/send-verification-email",
+      ])
+    );
+    expect(rateLimitRows.rows).toHaveLength(1);
+    expect(rateLimitRows.rows[0]?.count).toBe(3);
   }, 30_000);
 
   it("rejects organization creation when the slug violates the app contract", async (context: {
@@ -807,6 +822,68 @@ describe("authentication integration", () => {
       message: "upstream timeout",
     });
   }, 30_000);
+
+  it("reports verification email delivery failures even when Better Auth runs them in background mode", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping verification delivery failure reporting coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const reportedFailures: unknown[] = [];
+
+    const auth = createAuthentication({
+      backgroundTaskHandler: () => {},
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: (error) => {
+        reportedFailures.push(error);
+      },
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: () => {
+        throw new Error("upstream timeout");
+      },
+    });
+
+    const signUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "verification-delivery-failure@example.com",
+        name: "Verification Delivery Failure User",
+        password: "correct horse battery staple",
+      })
+    );
+
+    expect(signUpResponse.status).toBe(200);
+    expect(reportedFailures).toHaveLength(1);
+    expect(reportedFailures[0]).toBeInstanceOf(Error);
+    expect(reportedFailures[0]).toMatchObject({
+      message: "upstream timeout",
+    });
+  }, 30_000);
 });
 
 async function createTestDatabase(): Promise<{
@@ -862,6 +939,19 @@ async function canConnect(pool: Pool): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function withPool<Result>(
+  connectionString: string,
+  operation: (pool: Pool) => Promise<Result>
+): Promise<Result> {
+  const pool = new Pool({ connectionString });
+
+  try {
+    return await operation(pool);
+  } finally {
+    await pool.end();
   }
 }
 

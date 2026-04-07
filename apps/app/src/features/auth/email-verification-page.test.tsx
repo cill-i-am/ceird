@@ -41,6 +41,12 @@ describe("email verification page", () => {
     const appLink = screen.getByRole("link", { name: "Go to the app" });
     expect(appLink).toHaveAttribute("href", "/");
     expect(appLink).toHaveAttribute("data-router-link", "true");
+    expect(appLink).toHaveClass("bg-primary");
+
+    const loginLink = screen.getByRole("link", { name: "Back to login" });
+    expect(loginLink).toHaveAttribute("href", "/login");
+    expect(loginLink).toHaveAttribute("data-router-link", "true");
+    expect(loginLink).toHaveClass("border-border");
   }, 10_000);
 
   it("shows the success state for status=success", () => {

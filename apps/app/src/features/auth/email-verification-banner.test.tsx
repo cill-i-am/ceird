@@ -85,7 +85,7 @@ describe("email verification banner", () => {
   );
 
   it(
-    "uses a non-assertive banner region and softer resend confirmation copy",
+    "announces resend confirmation through the inline status message only",
     {
       timeout: 10_000,
     },
@@ -99,17 +99,19 @@ describe("email verification banner", () => {
         />
       );
 
-      expect(
-        screen.getByRole("region", { name: "Email verification reminder" })
-      ).toBeInTheDocument();
-
       await user.click(
         screen.getByRole("button", { name: "Resend verification email" })
       );
 
-      await expect(
-        screen.findByText("Another verification email has been requested.")
-      ).resolves.toBeInTheDocument();
+      const successMessage = await screen.findByText(
+        "Another verification email has been requested."
+      );
+
+      expect(successMessage).toHaveAttribute("role", "status");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: "Email verification reminder" })
+      ).toBeInTheDocument();
     }
   );
 });

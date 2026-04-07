@@ -57,7 +57,6 @@ export function EmailVerificationBanner({
       className="mx-4 mt-4"
       role="region"
       aria-label="Email verification reminder"
-      aria-live="polite"
     >
       <AlertTitle>Verify your email</AlertTitle>
       <AlertDescription className="flex flex-col gap-4">

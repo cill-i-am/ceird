@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { buttonVariants } from "#/components/ui/button";
 import {
   Card,
   CardDescription,
@@ -29,15 +30,15 @@ export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardFooter className="flex-col items-stretch gap-4">
-          <Link
-            to="/"
-            className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
+          <Link to="/" className={buttonVariants({ className: "w-full" })}>
             Go to the app
           </Link>
           <Link
             to="/login"
-            className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
+            className={buttonVariants({
+              className: "w-full",
+              variant: "outline",
+            })}
           >
             Back to login
           </Link>

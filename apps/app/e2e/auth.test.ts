@@ -21,6 +21,45 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(page.getByText("Start simple, ship quickly.")).toHaveCount(0);
 }
 
+async function signUpAndCreateOrganization(
+  page: Page,
+  options?: {
+    readonly email?: string;
+    readonly name?: string;
+    readonly organizationName?: string;
+    readonly organizationSlugPrefix?: string;
+    readonly password?: string;
+  }
+) {
+  const signupPage = new SignupPage(page);
+  const createOrganizationPage = new CreateOrganizationPage(page);
+  const email = options?.email ?? createTestEmail("signup");
+  const password = options?.password ?? "password123";
+
+  await signupPage.goto();
+  await signupPage.name.fill(options?.name ?? "Taylor Example");
+  await signupPage.email.fill(email);
+  await signupPage.password.fill(password);
+  await signupPage.confirmPassword.fill(password);
+  await signupPage.submit.click();
+
+  await createOrganizationPage.expectLoaded();
+  await createOrganizationPage.name.fill(
+    options?.organizationName ?? "Acme Field Ops"
+  );
+  await createOrganizationPage.slug.fill(
+    createTestSlug(options?.organizationSlugPrefix ?? "acme-field-ops")
+  );
+  await createOrganizationPage.submit.click();
+
+  await expectAuthenticatedHome(page);
+
+  return {
+    email,
+    password,
+  };
+}
+
 test.describe("auth pages", () => {
   test("redirects unauthenticated users from / to /login", async ({ page }) => {
     await page.goto("/");
@@ -100,23 +139,55 @@ test.describe("auth pages", () => {
   });
 
   test("signup creates an org before entering the app", async ({ page }) => {
-    const signupPage = new SignupPage(page);
-    const createOrganizationPage = new CreateOrganizationPage(page);
-    const email = createTestEmail("signup");
+    await signUpAndCreateOrganization(page);
+  });
 
-    await signupPage.goto();
-    await signupPage.name.fill("Taylor Example");
-    await signupPage.email.fill(email);
-    await signupPage.password.fill("password123");
-    await signupPage.confirmPassword.fill("password123");
-    await signupPage.submit.click();
+  test("shows an email verification reminder for unverified users in the app shell", async ({
+    page,
+  }) => {
+    const { email } = await signUpAndCreateOrganization(page, {
+      email: createTestEmail("verification-banner"),
+      organizationName: "Verification Banner Org",
+      organizationSlugPrefix: "verification-banner-org",
+    });
 
-    await createOrganizationPage.expectLoaded();
-    await createOrganizationPage.name.fill("Acme Field Ops");
-    await createOrganizationPage.slug.fill(createTestSlug("acme-field-ops"));
-    await createOrganizationPage.submit.click();
+    const banner = page.getByRole("region", {
+      name: "Email verification reminder",
+    });
 
-    await expectAuthenticatedHome(page);
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(
+      `${email} is not verified yet. Check your inbox for the verification link, or request another email.`
+    );
+    await expect(
+      banner.getByRole("button", { name: "Resend verification email" })
+    ).toBeVisible();
+  });
+
+  test("lets an unverified user request another verification email from the app shell", async ({
+    page,
+  }) => {
+    await signUpAndCreateOrganization(page, {
+      email: createTestEmail("verification-resend"),
+      organizationName: "Verification Resend Org",
+      organizationSlugPrefix: "verification-resend-org",
+    });
+
+    const banner = page.getByRole("region", {
+      name: "Email verification reminder",
+    });
+    const resendButton = banner.getByRole("button", {
+      name: "Resend verification email",
+    });
+
+    await resendButton.click();
+
+    await expect(
+      banner.getByText("Another verification email has been requested.")
+    ).toBeVisible();
+    await expect(
+      banner.getByRole("button", { name: "Resend verification email" })
+    ).toBeVisible();
   });
 
   test("login creates an org before entering the app", async ({
@@ -184,5 +255,58 @@ test.describe("auth pages", () => {
 
     await expectAuthenticatedHome(page);
     await expect(page).not.toHaveURL(/\/create-organization$/);
+  });
+
+  test("verify-email shows the success state when status=success", async ({
+    page,
+  }) => {
+    await page.goto("/verify-email?status=success");
+
+    await expect(page).toHaveURL(/\/verify-email\?status=success$/);
+    await expect(
+      page.locator('[data-slot="card-title"]', { hasText: "Email verified" })
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Your email address is verified. You can continue in the app or sign in again if needed."
+      )
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Go to the app" })
+    ).toHaveAttribute("href", "/");
+  });
+
+  test("verify-email shows the invalid-link state for expired or invalid links", async ({
+    page,
+  }) => {
+    await page.goto("/verify-email?error=INVALID_TOKEN");
+
+    await expect(page).toHaveURL(/\/verify-email\?/);
+    await expect
+      .poll(() => {
+        const url = new URL(page.url());
+
+        return {
+          error: url.searchParams.get("error"),
+          status: url.searchParams.get("status"),
+        };
+      })
+      .toEqual({
+        error: "INVALID_TOKEN",
+        status: "invalid-token",
+      });
+    await expect(
+      page.locator('[data-slot="card-title"]', {
+        hasText: "Verification link invalid",
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "This verification link is invalid or has expired. Request a fresh verification email from the app."
+      )
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Back to login" })
+    ).toHaveAttribute("href", "/login");
   });
 });
