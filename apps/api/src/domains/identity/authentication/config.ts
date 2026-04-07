@@ -90,6 +90,12 @@ export interface AuthenticationConfig {
     readonly enabled: true;
     readonly revokeSessionsOnPasswordReset: true;
   };
+  readonly emailVerification: {
+    readonly autoSignInAfterVerification: false;
+    readonly expiresIn: 3600;
+    readonly sendOnSignIn: false;
+    readonly sendOnSignUp: true;
+  };
 }
 
 export function makeAuthenticationTrustedOrigins(
@@ -150,6 +156,12 @@ export function makeAuthenticationConfig(
     emailAndPassword: {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
+    },
+    emailVerification: {
+      autoSignInAfterVerification: false,
+      expiresIn: 3600,
+      sendOnSignIn: false,
+      sendOnSignUp: true,
     },
   };
 }

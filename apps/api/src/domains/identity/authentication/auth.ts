@@ -8,7 +8,10 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
 import { AuthEmailSender } from "./auth-email.js";
-import type { PasswordResetEmailInput } from "./auth-email.js";
+import type {
+  EmailVerificationEmailInput,
+  PasswordResetEmailInput,
+} from "./auth-email.js";
 import { loadAuthenticationConfig } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
@@ -23,11 +26,20 @@ export function createAuthentication(options: {
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
+  readonly reportVerificationEmailFailure?: (error: unknown) => void;
   readonly sendPasswordResetEmail: (
     input: PasswordResetEmailInput
   ) => Promise<void>;
+  readonly sendVerificationEmail?: (
+    input: EmailVerificationEmailInput
+  ) => Promise<void>;
 }) {
-  const { config, database, sendPasswordResetEmail } = options;
+  const { config, database, sendPasswordResetEmail, sendVerificationEmail } =
+    options;
+  const reportVerificationEmailFailure =
+    options.reportVerificationEmailFailure ?? (() => {});
+  const sendVerificationEmailHandler =
+    sendVerificationEmail ?? (() => Promise.resolve());
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
   return betterAuth({
@@ -84,6 +96,22 @@ export function createAuthentication(options: {
         }
       },
     },
+    emailVerification: {
+      ...authConfig.emailVerification,
+      sendVerificationEmail: async ({ user, token, url }) => {
+        try {
+          await sendVerificationEmailHandler({
+            idempotencyKey: `email-verification/${user.id}/${token}`,
+            recipientEmail: user.email,
+            recipientName: user.name ?? user.email,
+            verificationUrl: url,
+          } as const satisfies EmailVerificationEmailInput);
+        } catch (error) {
+          reportVerificationEmailFailure(error);
+          throw error;
+        }
+      },
+    },
   });
 }
 
@@ -107,6 +135,18 @@ function makePasswordResetEmailFailureReporter(
   return (error: unknown) => {
     runFork(
       Effect.logError("Password reset email delivery failed", {
+        error: serializeBackgroundTaskError(error),
+      })
+    );
+  };
+}
+
+function makeVerificationEmailFailureReporter(runtime: Runtime.Runtime<never>) {
+  const runFork = Runtime.runFork(runtime);
+
+  return (error: unknown) => {
+    runFork(
+      Effect.logError("Verification email delivery failed", {
         error: serializeBackgroundTaskError(error),
       })
     );
@@ -237,14 +277,19 @@ export class Authentication extends Effect.Service<Authentication>()(
       const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
       const reportPasswordResetEmailFailure =
         makePasswordResetEmailFailureReporter(runtime);
+      const reportVerificationEmailFailure =
+        makeVerificationEmailFailureReporter(runtime);
 
       return createAuthentication({
         backgroundTaskHandler,
         config,
         database: db,
         reportPasswordResetEmailFailure,
+        reportVerificationEmailFailure,
         sendPasswordResetEmail: (input) =>
           runPromise(authEmailSender.sendPasswordResetEmail(input)),
+        sendVerificationEmail: (input) =>
+          runPromise(authEmailSender.sendEmailVerificationEmail(input)),
       });
     }),
   }

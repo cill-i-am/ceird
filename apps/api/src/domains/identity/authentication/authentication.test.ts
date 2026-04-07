@@ -69,6 +69,12 @@ describe("makeAuthenticationConfig()", () => {
         enabled: true,
         revokeSessionsOnPasswordReset: true,
       },
+      emailVerification: {
+        autoSignInAfterVerification: false,
+        expiresIn: 3600,
+        sendOnSignIn: false,
+        sendOnSignUp: true,
+      },
     });
 
     expect(config).not.toHaveProperty("socialProviders");
