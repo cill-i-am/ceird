@@ -49,34 +49,38 @@ export function getAuthFailureMessage(
   return "We couldn't create your account. Please try again.";
 }
 
-export function getPasswordResetRequestFailureMessage(error: unknown): string {
+function getRateLimitedFailureMessage(
+  error: unknown,
+  fallbackMessage: string
+): string {
   const authFailureError = isAuthFailureError(error) ? error : undefined;
 
   if (authFailureError?.status === 429) {
     return "Too many attempts. Please wait and try again.";
   }
 
-  return "We couldn't send a password reset link. Please try again.";
+  return fallbackMessage;
+}
+
+export function getPasswordResetRequestFailureMessage(error: unknown): string {
+  return getRateLimitedFailureMessage(
+    error,
+    "We couldn't send a password reset link. Please try again."
+  );
 }
 
 export function getEmailVerificationFailureMessage(error: unknown): string {
-  const authFailureError = isAuthFailureError(error) ? error : undefined;
-
-  if (authFailureError?.status === 429) {
-    return "Too many attempts. Please wait and try again.";
-  }
-
-  return "We couldn't send a verification email. Please try again.";
+  return getRateLimitedFailureMessage(
+    error,
+    "We couldn't send a verification email. Please try again."
+  );
 }
 
 export function getPasswordResetFailureMessage(error: unknown): string {
-  const authFailureError = isAuthFailureError(error) ? error : undefined;
-
-  if (authFailureError?.status === 429) {
-    return "Too many attempts. Please wait and try again.";
-  }
-
-  return "We couldn't reset your password. Please try again.";
+  return getRateLimitedFailureMessage(
+    error,
+    "We couldn't reset your password. Please try again."
+  );
 }
 
 export function isInvalidPasswordResetTokenError(error: unknown): boolean {

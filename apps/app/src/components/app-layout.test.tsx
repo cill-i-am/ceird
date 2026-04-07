@@ -98,11 +98,10 @@ describe("app layout", () => {
     () => {
       render(
         <AppLayout
-          email="person@example.com"
-          emailVerified={false}
           user={{
             name: "Taylor Example",
             email: "person@example.com",
+            emailVerified: false,
             image: null,
           }}
         />
@@ -113,6 +112,7 @@ describe("app layout", () => {
         user: {
           name: "Taylor Example",
           email: "person@example.com",
+          emailVerified: false,
           image: null,
         },
       });
@@ -130,6 +130,30 @@ describe("app layout", () => {
       expect(screen.getByTestId("sidebar-inset")).toContainElement(
         screen.getByTestId("app-layout-outlet")
       );
+    }
+  );
+
+  it(
+    "skips the verification banner for verified users",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      render(
+        <AppLayout
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: true,
+            image: null,
+          }}
+        />
+      );
+
+      expect(mockedEmailVerificationBanner).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId("email-verification-banner")
+      ).not.toBeInTheDocument();
     }
   );
 });

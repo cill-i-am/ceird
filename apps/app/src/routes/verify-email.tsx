@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { EmailVerificationPage } from "#/features/auth/email-verification-page";
+import { decodeEmailVerificationSearch } from '#/features/auth/email-verification-search';
+import type { EmailVerificationSearch } from '#/features/auth/email-verification-search';
 
 export const Route = createFileRoute("/verify-email")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    error: typeof search.error === "string" ? search.error : undefined,
-    status: typeof search.status === "string" ? search.status : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): EmailVerificationSearch =>
+    decodeEmailVerificationSearch(search),
   component: VerifyEmailRoute,
 });
 

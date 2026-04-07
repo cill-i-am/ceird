@@ -8,18 +8,14 @@ import {
   CardTitle,
 } from "#/components/ui/card";
 
-import { decodeEmailVerificationSearch } from "./email-verification-search";
+import type { EmailVerificationSearch } from "./email-verification-search";
 
 interface EmailVerificationPageProps {
-  search?: {
-    error?: string;
-    status?: string;
-  };
+  search?: EmailVerificationSearch;
 }
 
 export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
-  const normalizedSearch = decodeEmailVerificationSearch(search ?? {});
-  const isInvalidToken = normalizedSearch.status === "invalid-token";
+  const isInvalidToken = search?.status !== "success";
   const title = isInvalidToken ? "Verification link invalid" : "Email verified";
   const description = isInvalidToken
     ? "This verification link is invalid or has expired. Request a fresh verification email from the app."

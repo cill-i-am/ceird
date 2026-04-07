@@ -8,13 +8,17 @@ import { SiteHeader } from "#/components/site-header";
 import { SidebarInset, SidebarProvider } from "#/components/ui/sidebar";
 import { EmailVerificationBanner } from "#/features/auth/email-verification-banner";
 
+export type AppLayoutUser =
+  | (NavUserAccount & {
+      emailVerified: boolean;
+    })
+  | null;
+
 export interface AppLayoutProps {
-  email?: string;
-  emailVerified?: boolean;
-  user: NavUserAccount | null;
+  user: AppLayoutUser;
 }
 
-export function AppLayout({ user, email, emailVerified }: AppLayoutProps) {
+export function AppLayout({ user }: AppLayoutProps) {
   return (
     <SidebarProvider className="flex flex-col [--header-height:calc(--spacing(14))]">
       <SiteHeader />
@@ -22,10 +26,10 @@ export function AppLayout({ user, email, emailVerified }: AppLayoutProps) {
         <AppSidebar user={user} />
         <SidebarInset>
           <div className="flex flex-1 flex-col">
-            {email ? (
+            {user && !user.emailVerified ? (
               <EmailVerificationBanner
-                email={email}
-                emailVerified={Boolean(emailVerified)}
+                email={user.email}
+                emailVerified={user.emailVerified}
               />
             ) : null}
             <Outlet />

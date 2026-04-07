@@ -54,8 +54,8 @@ describe("email verification page", () => {
     ).toBeInTheDocument();
   }, 10_000);
 
-  it("shows the invalid-link state for INVALID_TOKEN", () => {
-    render(<EmailVerificationPage search={{ error: "INVALID_TOKEN" }} />);
+  it("shows the invalid-link state for invalid-token search", () => {
+    render(<EmailVerificationPage search={{ status: "invalid-token" }} />);
 
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
@@ -63,27 +63,5 @@ describe("email verification page", () => {
         "This verification link is invalid or has expired. Request a fresh verification email from the app."
       )
     ).toBeInTheDocument();
-  }, 10_000);
-
-  it("shows the invalid-link state for TOKEN_EXPIRED", () => {
-    render(<EmailVerificationPage search={{ error: "TOKEN_EXPIRED" }} />);
-
-    expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
-    ).toBeInTheDocument();
-  }, 10_000);
-
-  it("prefers the invalid-link state when error and status=success are both present", () => {
-    render(
-      <EmailVerificationPage
-        search={{ error: "INVALID_TOKEN", status: "success" }}
-      />
-    );
-
-    expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
-    expect(screen.queryByText("Email verified")).not.toBeInTheDocument();
   }, 10_000);
 });

@@ -69,8 +69,6 @@ describe("authenticated app layout", () => {
       });
       expect(mockedAppLayout).toHaveBeenCalledOnce();
       expect(mockedAppLayout.mock.calls[0]?.[0]).toStrictEqual({
-        email: "person@example.com",
-        emailVerified: false,
         user: {
           name: "Taylor Example",
           email: "person@example.com",
