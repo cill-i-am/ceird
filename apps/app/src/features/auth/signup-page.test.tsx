@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
+import type * as AuthClientModule from "#/lib/auth-client";
 
 import { SignupPage } from "./signup-page";
 
@@ -15,7 +15,12 @@ const { mockedGetSession, mockedNavigate, mockedSignUpEmail } = vi.hoisted(
     >(),
     mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
     mockedSignUpEmail: vi.fn<
-      (input: { name: string; email: string; password: string }) => Promise<{
+      (input: {
+        name: string;
+        email: string;
+        password: string;
+        callbackURL: string;
+      }) => Promise<{
         data: {
           token: string | null;
           user: {
@@ -47,11 +52,14 @@ vi.mock(import("#/lib/auth-client"), () => ({
     signUp: {
       email: mockedSignUpEmail,
     },
-  } as unknown as typeof AuthClient,
+  } as unknown as typeof AuthClientModule.authClient,
+  buildEmailVerificationRedirectTo: (origin: string) =>
+    new URL("/verify-email", origin).toString(),
 }));
 
 describe("signup page", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "http://localhost:3000/signup");
     mockedGetSession.mockResolvedValue({ data: null, error: null });
     mockedNavigate.mockResolvedValue();
     mockedSignUpEmail.mockResolvedValue({
@@ -90,6 +98,7 @@ describe("signup page", () => {
         name: "Taylor Example",
         email: "person@example.com",
         password: "password123",
+        callbackURL: "http://localhost:3000/verify-email",
       });
     });
     await waitFor(() => {

@@ -73,6 +73,10 @@ export function buildPasswordResetRedirectTo(origin: string): string {
   return new URL("/reset-password", origin).toString();
 }
 
+export function buildEmailVerificationRedirectTo(origin: string): string {
+  return new URL("/verify-email", origin).toString();
+}
+
 function readConfiguredAuthOrigin(): string | undefined {
   const envOrigin = import.meta.env.VITE_AUTH_ORIGIN;
   return typeof envOrigin === "string" ? envOrigin : undefined;

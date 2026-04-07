@@ -12,7 +12,10 @@ import {
 } from "#/components/ui/card";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { authClient } from "#/lib/auth-client";
+import {
+  authClient,
+  buildEmailVerificationRedirectTo,
+} from "#/lib/auth-client";
 
 import {
   getAuthFailureMessage,
@@ -45,6 +48,7 @@ export function SignupPage() {
         name: credentials.name,
         email: credentials.email,
         password: credentials.password,
+        callbackURL: buildEmailVerificationRedirectTo(window.location.origin),
       });
 
       if (result.error) {
