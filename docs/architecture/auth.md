@@ -92,6 +92,7 @@ Current rate-limit rules:
 
 - `POST /sign-in/email`: 5 attempts per 60 seconds
 - `POST /sign-up/email`: 3 attempts per 60 seconds
+- `POST /send-verification-email`: 3 attempts per 60 seconds
 
 Current note:
 
