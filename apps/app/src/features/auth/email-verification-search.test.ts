@@ -7,10 +7,20 @@ describe("email verification search", () => {
     });
   }, 1000);
 
-  it("maps invalid_token to the invalid-token state", () => {
+  it("maps INVALID_TOKEN to the invalid-token state", () => {
     expect(
       decodeEmailVerificationSearch({
-        error: "invalid_token",
+        error: "INVALID_TOKEN",
+      })
+    ).toStrictEqual({
+      status: "invalid-token",
+    });
+  }, 1000);
+
+  it("maps TOKEN_EXPIRED to the invalid-token state", () => {
+    expect(
+      decodeEmailVerificationSearch({
+        error: "TOKEN_EXPIRED",
       })
     ).toStrictEqual({
       status: "invalid-token",

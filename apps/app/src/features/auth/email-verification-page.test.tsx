@@ -43,8 +43,19 @@ describe("email verification page", () => {
     expect(appLink).toHaveAttribute("data-router-link", "true");
   }, 10_000);
 
-  it("shows the invalid-link state for invalid_token", () => {
-    render(<EmailVerificationPage search={{ error: "invalid_token" }} />);
+  it("shows the invalid-link state for INVALID_TOKEN", () => {
+    render(<EmailVerificationPage search={{ error: "INVALID_TOKEN" }} />);
+
+    expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This verification link is invalid or has expired. Request a fresh verification email from the app."
+      )
+    ).toBeInTheDocument();
+  }, 10_000);
+
+  it("shows the invalid-link state for TOKEN_EXPIRED", () => {
+    render(<EmailVerificationPage search={{ error: "TOKEN_EXPIRED" }} />);
 
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
