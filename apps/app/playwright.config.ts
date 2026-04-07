@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "pnpm --filter api exec tsx src/index.ts",
+      command: "pnpm --dir ../api exec tsx src/index.ts",
       env: {
         ...process.env,
         AUTH_EMAIL_FROM: playwrightAuthEmailFrom,
@@ -31,8 +31,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command:
-        "pnpm --filter app exec vite dev --host 127.0.0.1 --port 4173 --strictPort",
+      command: "pnpm exec vite dev --host 127.0.0.1 --port 4173 --strictPort",
       url: "http://127.0.0.1:4173",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
