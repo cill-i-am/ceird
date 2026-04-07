@@ -8,7 +8,13 @@ import { AuthenticatedAppLayout } from "./authenticated-app-layout";
 const { mockedUseRouteContext, mockedAppLayout } = vi.hoisted(() => ({
   mockedUseRouteContext: vi.fn<
     (...args: unknown[]) => {
-      session: { user: AppLayoutProps["user"] };
+      session: {
+        user:
+          | (NonNullable<AppLayoutProps["user"]> & {
+              emailVerified: boolean;
+            })
+          | null;
+      };
     }
   >(),
   mockedAppLayout: vi.fn<(props: AppLayoutProps) => ReactNode>(({ user }) => (
@@ -50,6 +56,7 @@ describe("authenticated app layout", () => {
           user: {
             name: "Taylor Example",
             email: "person@example.com",
+            emailVerified: false,
             image: null,
           },
         },
@@ -62,9 +69,12 @@ describe("authenticated app layout", () => {
       });
       expect(mockedAppLayout).toHaveBeenCalledOnce();
       expect(mockedAppLayout.mock.calls[0]?.[0]).toStrictEqual({
+        email: "person@example.com",
+        emailVerified: false,
         user: {
           name: "Taylor Example",
           email: "person@example.com",
+          emailVerified: false,
           image: null,
         },
       });

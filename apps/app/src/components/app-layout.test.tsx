@@ -4,7 +4,7 @@ import type { ComponentProps, ReactElement } from "react";
 
 import { AppLayout } from "./app-layout";
 
-const { mockedAppSidebar } = vi.hoisted(() => ({
+const { mockedAppSidebar, mockedEmailVerificationBanner } = vi.hoisted(() => ({
   mockedAppSidebar: vi.fn<
     ({
       user,
@@ -31,6 +31,19 @@ const { mockedAppSidebar } = vi.hoisted(() => ({
       </aside>
     )
   ),
+  mockedEmailVerificationBanner: vi.fn<
+    ({
+      email,
+      emailVerified,
+    }: {
+      email: string;
+      emailVerified: boolean;
+    }) => ReactElement
+  >(({ email, emailVerified }) => (
+    <div data-testid="email-verification-banner">
+      {email}:{String(emailVerified)}
+    </div>
+  )),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -68,6 +81,10 @@ vi.mock(import("#/components/app-sidebar"), () => ({
   AppSidebar: mockedAppSidebar,
 }));
 
+vi.mock(import("#/features/auth/email-verification-banner"), () => ({
+  EmailVerificationBanner: mockedEmailVerificationBanner,
+}));
+
 describe("app layout", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -81,6 +98,8 @@ describe("app layout", () => {
     () => {
       render(
         <AppLayout
+          email="person@example.com"
+          emailVerified={false}
           user={{
             name: "Taylor Example",
             email: "person@example.com",
@@ -97,6 +116,14 @@ describe("app layout", () => {
           image: null,
         },
       });
+      expect(mockedEmailVerificationBanner).toHaveBeenCalledOnce();
+      expect(mockedEmailVerificationBanner.mock.calls[0]?.[0]).toStrictEqual({
+        email: "person@example.com",
+        emailVerified: false,
+      });
+      expect(screen.getByTestId("email-verification-banner")).toHaveTextContent(
+        "person@example.com:false"
+      );
       expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
         "Taylor Example"
       );

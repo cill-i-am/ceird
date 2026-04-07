@@ -59,6 +59,16 @@ export function getPasswordResetRequestFailureMessage(error: unknown): string {
   return "We couldn't send a password reset link. Please try again.";
 }
 
+export function getEmailVerificationFailureMessage(error: unknown): string {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  if (authFailureError?.status === 429) {
+    return "Too many attempts. Please wait and try again.";
+  }
+
+  return "We couldn't send a verification email. Please try again.";
+}
+
 export function getPasswordResetFailureMessage(error: unknown): string {
   const authFailureError = isAuthFailureError(error) ? error : undefined;
 
