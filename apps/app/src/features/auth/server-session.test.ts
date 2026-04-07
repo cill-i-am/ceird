@@ -43,17 +43,10 @@ vi.mock(import("@tanstack/react-start/server"), () => ({
 }));
 
 describe("server session lookup", () => {
-  const originalAuthOrigin = process.env.AUTH_ORIGIN;
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-
-    if (originalAuthOrigin === undefined) {
-      delete process.env.AUTH_ORIGIN;
-    } else {
-      process.env.AUTH_ORIGIN = originalAuthOrigin;
-    }
+    vi.unstubAllGlobals();
   });
 
   it("returns null when the incoming request has no auth cookie", async () => {
@@ -94,7 +87,7 @@ describe("server session lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -103,6 +96,53 @@ describe("server session lookup", () => {
     await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("get-session", "http://tt-sbx-api:4301/api/auth/"),
+      {
+        headers: {
+          accept: "application/json",
+          cookie: "better-auth.session_token=session-token",
+        },
+      }
+    );
+  }, 1000);
+
+  it("does not fall back to process.env.AUTH_ORIGIN for session lookup", async () => {
+    const authSession: AuthSession = {
+      session: {
+        id: "session_123",
+        createdAt: "2026-04-04T17:08:12.497Z",
+        updatedAt: "2026-04-04T17:08:12.497Z",
+        userId: "user_123",
+        expiresAt: "2026-04-11T17:08:12.497Z",
+        token: "session-token",
+        ipAddress: "",
+        userAgent: "curl/8.7.1",
+      },
+      user: {
+        id: "user_123",
+        name: "Fallback User",
+        email: "fallback@example.com",
+        image: null,
+        emailVerified: false,
+        createdAt: "2026-04-04T17:08:12.488Z",
+        updatedAt: "2026-04-04T17:08:12.488Z",
+      },
+    };
+
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    mockedGetRequestProtocol.mockReturnValue("http");
+    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", null);
+    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(authSession));
+
+    await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("get-session", "http://127.0.0.1:4300/api/auth/"),
       {
         headers: {
           accept: "application/json",

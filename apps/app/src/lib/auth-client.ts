@@ -1,3 +1,4 @@
+import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 export const AUTH_BASE_PATH = "/api/auth";
@@ -63,6 +64,7 @@ export function resolveAuthBaseURL(
 export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
+    plugins: [organizationClient()],
     ...(baseURL ? { baseURL } : {}),
   });
 }

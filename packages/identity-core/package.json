@@ -1,0 +1,22 @@
+{
+  "name": "@task-tracker/identity-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --globals"
+  },
+  "dependencies": {
+    "effect": "^3.21.0"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.84.2",
+    "@types/node": "^25.5.0",
+    "typescript": "5.9.2",
+    "vitest": "^3.0.5"
+  }
+}

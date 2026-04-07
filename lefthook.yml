@@ -6,7 +6,7 @@ pre-commit:
         - "**/*.{js,jsx,ts,tsx,json,jsonc,css,md}"
       stage_fixed: true
     - name: oxlint
-      run: pnpm exec oxlint --fix {staged_files}
+      run: pnpm exec oxlint --fix --ignore-pattern 'apps/app/src/routeTree.gen.ts' {staged_files}
       glob:
         - "**/*.{js,jsx,ts,tsx}"
       stage_fixed: true

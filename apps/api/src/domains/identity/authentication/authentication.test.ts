@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import {
   HttpClient,
   HttpRouter,
@@ -14,9 +17,13 @@ import {
   makeAuthenticationConfig,
   makeAuthenticationTrustedOrigins,
 } from "./config.js";
+import * as schemaModule from "./schema.js";
 import {
   authSchema,
   account,
+  invitation,
+  member,
+  organization,
   rateLimit,
   session,
   user,
@@ -127,6 +134,36 @@ describe("auth schema", () => {
       verification,
       rateLimit,
     });
+  }, 10_000);
+
+  it("exports the organization tables and active organization session field", () => {
+    expect(getTableName(organization)).toBe("organization");
+    expect(getTableName(member)).toBe("member");
+    expect(getTableName(invitation)).toBe("invitation");
+    expect(schemaModule.organization).toBeDefined();
+    expect(schemaModule.member).toBeDefined();
+    expect(schemaModule.invitation).toBeDefined();
+    expect(
+      (session as unknown as Record<string, unknown>).activeOrganizationId
+    ).toBeDefined();
+    expect(authSchema).toMatchObject({
+      organization: schemaModule.organization,
+      member: schemaModule.member,
+      invitation: schemaModule.invitation,
+      session,
+    });
+  }, 10_000);
+
+  it("stores a database-level slug format check in the organization migration", async () => {
+    const migrationPath = path.resolve(
+      process.cwd(),
+      "drizzle",
+      "0003_organizations.sql"
+    );
+    const migrationSql = await fs.readFile(migrationPath, "utf8");
+
+    expect(migrationSql).toContain("organization_slug_format_chk");
+    expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
   }, 10_000);
 
   it("preserves the /api/auth prefix when mounting auth routes", async () => {

@@ -1,6 +1,9 @@
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
+import { decodeCreateOrganizationInput } from "@task-tracker/identity-core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
+import { organization } from "better-auth/plugins/organization";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
@@ -38,6 +41,33 @@ export function createAuthentication(options: {
       provider: "pg",
       schema: authSchema,
     }),
+    plugins: [
+      organization({
+        organizationHooks: {
+          beforeCreateOrganization: ({ organization: nextOrganization }) => {
+            let input;
+
+            try {
+              input = decodeCreateOrganizationInput(nextOrganization);
+            } catch {
+              throw APIError.from("BAD_REQUEST", {
+                code: "INVALID_ORGANIZATION_INPUT",
+                message:
+                  "Organization name must be at least 2 characters long and the slug must use lowercase letters, numbers, and hyphens only.",
+              });
+            }
+
+            return Promise.resolve({
+              data: {
+                ...nextOrganization,
+                name: input.name,
+                slug: input.slug,
+              },
+            });
+          },
+        },
+      }),
+    ],
     emailAndPassword: {
       ...authConfig.emailAndPassword,
       sendResetPassword: async ({ token, user, url }) => {
