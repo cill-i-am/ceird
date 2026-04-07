@@ -95,8 +95,8 @@ Current rate-limit rules:
 
 Current note:
 
-- auth config currently defines custom rate-limit rules only for sign-in and
-  sign-up
+- auth config currently defines custom rate-limit rules for sign-in, sign-up,
+  and verification email delivery
 - password reset revokes existing sessions once the new password is accepted
 
 ### Auth Email Runtime Configuration
