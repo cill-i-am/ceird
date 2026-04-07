@@ -85,12 +85,63 @@ jobs:
       - name: Type Check
         run: pnpm check-types
 
+  e2e:
+    runs-on: ubuntu-latest
+    needs:
+      - check-types
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: task_tracker
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d task_tracker"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/task_tracker
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter app exec playwright install --with-deps chromium
+
+      - name: Apply auth migrations
+        run: pnpm --filter api db:migrate
+
+      - name: Run E2E tests
+        run: pnpm --filter app e2e
+
   build:
     runs-on: ubuntu-latest
     needs:
       - lint
       - format
       - check-types
+      - e2e
 
     steps:
       - name: Checkout

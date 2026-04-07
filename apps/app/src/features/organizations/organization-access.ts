@@ -3,19 +3,21 @@ import { redirect } from "@tanstack/react-router";
 import { authClient } from "#/lib/auth-client";
 
 import { isServerEnvironment } from "../auth/runtime-environment";
-import { getCurrentServerSession } from "../auth/server-session";
 import {
-  decodeOrganizationAccessSession,
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   listCurrentServerOrganizations,
-  setCurrentServerActiveOrganization,
 } from "./organization-server";
 
 export interface OrganizationSummary {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
+}
+
+export interface ActiveOrganizationSync {
+  readonly required: boolean;
+  readonly targetOrganizationId: string | null;
 }
 
 type Session = NonNullable<
@@ -27,12 +29,6 @@ type RawOrganization = NonNullable<
 
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
-    const session = await getCurrentServerSession();
-
-    if (session) {
-      return decodeOrganizationAccessSession(session);
-    }
-
     return await getCurrentServerOrganizationSession();
   }
 
@@ -72,19 +68,8 @@ export async function ensureActiveOrganizationId() {
     throw redirect({ to: "/login" });
   }
 
-  const organizations = await resolveOrganizationListForAccess(
-    await listOrganizations()
-  );
-
-  const activeOrganizationId = resolveCurrentOrganizationId(
-    session.session.activeOrganizationId,
-    organizations
-  );
-
-  await synchronizeActiveOrganization(
-    session.session.activeOrganizationId ?? null,
-    activeOrganizationId
-  );
+  const { activeOrganizationId, activeOrganizationSync } =
+    await resolveOrganizationAccessState(session);
 
   if (!activeOrganizationId) {
     throw redirect({ href: "/create-organization" });
@@ -92,6 +77,7 @@ export async function ensureActiveOrganizationId() {
 
   return {
     activeOrganizationId,
+    activeOrganizationSync,
     session: withActiveOrganizationId(session, activeOrganizationId),
   };
 }
@@ -107,18 +93,8 @@ export async function redirectIfOrganizationReady() {
     throw redirect({ to: "/login" });
   }
 
-  const organizations = await resolveOrganizationListForAccess(
-    await listOrganizations()
-  );
-  const activeOrganizationId = resolveCurrentOrganizationId(
-    session.session.activeOrganizationId,
-    organizations
-  );
-
-  await synchronizeActiveOrganization(
-    session.session.activeOrganizationId ?? null,
-    activeOrganizationId
-  );
+  const { activeOrganizationId, activeOrganizationSync, organizations } =
+    await resolveOrganizationAccessState(session);
 
   if (activeOrganizationId) {
     throw redirect({ to: "/" });
@@ -127,6 +103,29 @@ export async function redirectIfOrganizationReady() {
   if (organizations.length > 0) {
     throw redirect({ to: "/" });
   }
+
+  return {
+    activeOrganizationSync,
+  };
+}
+
+async function resolveOrganizationAccessState(session: Session) {
+  const organizations = await resolveOrganizationListForAccess(
+    await listOrganizations()
+  );
+  const activeOrganizationId = resolveCurrentOrganizationId(
+    session.session.activeOrganizationId,
+    organizations
+  );
+
+  return {
+    activeOrganizationId,
+    activeOrganizationSync: createActiveOrganizationSync(
+      session.session.activeOrganizationId ?? null,
+      activeOrganizationId
+    ),
+    organizations,
+  };
 }
 
 async function resolveOrganizationListForAccess(
@@ -182,21 +181,25 @@ function resolveCurrentOrganizationId(
   return organizations[0]?.id ?? null;
 }
 
-async function synchronizeActiveOrganization(
+function createActiveOrganizationSync(
   currentOrganizationId: string | null,
-  nextOrganizationId: string | null
-) {
-  if (currentOrganizationId === nextOrganizationId) {
-    return;
-  }
+  targetOrganizationId: string | null
+): ActiveOrganizationSync {
+  return {
+    required: currentOrganizationId !== targetOrganizationId,
+    targetOrganizationId,
+  };
+}
 
-  if (isServerEnvironment()) {
-    await setCurrentServerActiveOrganization(nextOrganizationId);
+export async function synchronizeClientActiveOrganization(
+  activeOrganizationSync: ActiveOrganizationSync
+) {
+  if (!activeOrganizationSync.required) {
     return;
   }
 
   const result = await authClient.organization.setActive({
-    organizationId: nextOrganizationId,
+    organizationId: activeOrganizationSync.targetOrganizationId,
   });
 
   if (result.error) {

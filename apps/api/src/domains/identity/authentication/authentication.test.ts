@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import {
   HttpClient,
   HttpRouter,
@@ -149,6 +152,18 @@ describe("auth schema", () => {
       invitation: schemaModule.invitation,
       session,
     });
+  }, 10_000);
+
+  it("stores a database-level slug format check in the organization migration", async () => {
+    const migrationPath = path.resolve(
+      process.cwd(),
+      "drizzle",
+      "0003_organizations.sql"
+    );
+    const migrationSql = await fs.readFile(migrationPath, "utf8");
+
+    expect(migrationSql).toContain("organization_slug_format_chk");
+    expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
   }, 10_000);
 
   it("preserves the /api/auth prefix when mounting auth routes", async () => {

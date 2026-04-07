@@ -152,4 +152,37 @@ test.describe("auth pages", () => {
 
     await expectAuthenticatedHome(page);
   });
+
+  test("login skips onboarding when the user already belongs to an org", async ({
+    page,
+  }) => {
+    const email = createTestEmail("existing-org-login");
+    const password = "password123";
+    const signupPage = new SignupPage(page);
+    const createOrganizationPage = new CreateOrganizationPage(page);
+    const loginPage = new LoginPage(page);
+
+    await signupPage.goto();
+    await signupPage.name.fill("Taylor Example");
+    await signupPage.email.fill(email);
+    await signupPage.password.fill(password);
+    await signupPage.confirmPassword.fill(password);
+    await signupPage.submit.click();
+
+    await createOrganizationPage.expectLoaded();
+    await createOrganizationPage.name.fill("Existing Org Team");
+    await createOrganizationPage.slug.fill(createTestSlug("existing-org-team"));
+    await createOrganizationPage.submit.click();
+
+    await expectAuthenticatedHome(page);
+    await page.context().clearCookies();
+
+    await loginPage.goto();
+    await loginPage.email.fill(email);
+    await loginPage.password.fill(password);
+    await loginPage.submit.click();
+
+    await expectAuthenticatedHome(page);
+    await expect(page).not.toHaveURL(/\/create-organization$/);
+  });
 });

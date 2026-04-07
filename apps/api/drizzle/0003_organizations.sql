@@ -23,7 +23,8 @@ CREATE TABLE "organization" (
 	"slug" text NOT NULL,
 	"logo" text,
 	"metadata" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "organization_slug_format_chk" CHECK ("organization"."slug" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$')
 );
 --> statement-breakpoint
 ALTER TABLE "session" ADD COLUMN "active_organization_id" text;--> statement-breakpoint

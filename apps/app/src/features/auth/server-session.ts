@@ -7,6 +7,7 @@ import {
 
 import { resolveAuthBaseURL } from "#/lib/auth-client";
 import type { createTaskTrackerAuthClient } from "#/lib/auth-client";
+import { readConfiguredServerAuthOrigin } from "#/lib/server-auth-origin";
 
 type ServerAuthSession = Awaited<
   ReturnType<ReturnType<typeof createTaskTrackerAuthClient>["getSession"]>
@@ -14,7 +15,7 @@ type ServerAuthSession = Awaited<
 
 export const getCurrentServerSession = createServerOnlyFn(async () => {
   const cookie = getRequestHeader("cookie");
-  const serverAuthOrigin = readServerAuthOrigin();
+  const serverAuthOrigin = readConfiguredServerAuthOrigin();
   const authBaseURL = resolveAuthBaseURL(
     `${getRequestProtocol()}://${getRequestHost()}`,
     serverAuthOrigin
@@ -37,12 +38,3 @@ export const getCurrentServerSession = createServerOnlyFn(async () => {
 
   return ((await response.json()) as ServerAuthSession | null) ?? null;
 });
-
-function readServerAuthOrigin(): string | undefined {
-  if (typeof __SERVER_AUTH_ORIGIN__ === "string") {
-    return __SERVER_AUTH_ORIGIN__;
-  }
-
-  const authOrigin = process.env.AUTH_ORIGIN;
-  return typeof authOrigin === "string" ? authOrigin : undefined;
-}

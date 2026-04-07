@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  check,
   bigint,
   boolean,
   integer,
@@ -32,7 +33,13 @@ export const organization = pgTable(
     metadata: text("metadata"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (table) => [uniqueIndex("organization_slug_idx").on(table.slug)]
+  (table) => [
+    uniqueIndex("organization_slug_idx").on(table.slug),
+    check(
+      "organization_slug_format_chk",
+      sql`${table.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`
+    ),
+  ]
 );
 
 export const member = pgTable(

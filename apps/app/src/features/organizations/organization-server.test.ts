@@ -2,7 +2,6 @@ import {
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   listCurrentServerOrganizations,
-  setCurrentServerActiveOrganization,
 } from "./organization-server";
 
 interface Organization {
@@ -42,34 +41,23 @@ const {
   mockedGetRequestHeader,
   mockedGetRequestHost,
   mockedGetRequestProtocol,
-  mockedSetResponseHeader,
 } = vi.hoisted(() => ({
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
   mockedGetRequestHost: vi.fn<() => string>(),
   mockedGetRequestProtocol: vi.fn<() => string>(),
-  mockedSetResponseHeader:
-    vi.fn<(name: string, value: string | string[]) => void>(),
 }));
 
 vi.mock(import("@tanstack/react-start/server"), () => ({
   getRequestHeader: mockedGetRequestHeader,
   getRequestHost: mockedGetRequestHost,
   getRequestProtocol: mockedGetRequestProtocol,
-  setResponseHeader: mockedSetResponseHeader,
 }));
 
 describe("server organization lookup", () => {
-  const originalAuthOrigin = process.env.AUTH_ORIGIN;
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-
-    if (originalAuthOrigin === undefined) {
-      delete process.env.AUTH_ORIGIN;
-    } else {
-      process.env.AUTH_ORIGIN = originalAuthOrigin;
-    }
+    vi.unstubAllGlobals();
   });
 
   it("forwards the current auth cookie to the resolved auth origin", async () => {
@@ -82,7 +70,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -106,7 +94,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation(() => "");
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
@@ -119,7 +107,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("");
-    delete process.env.AUTH_ORIGIN;
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", null);
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
@@ -132,7 +120,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("boom", { status: 503, statusText: "Service Unavailable" })
@@ -147,7 +135,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
 
@@ -183,7 +171,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -203,7 +191,7 @@ describe("server organization lookup", () => {
     );
   }, 1000);
 
-  it("preserves extra fields on strict session lookup after validation", async () => {
+  it("returns the decoded strict session shape after validation", async () => {
     const authSession = {
       session: {
         id: "session_123",
@@ -234,87 +222,62 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(authSession));
 
-    await expect(getCurrentServerOrganizationSession()).resolves.toMatchObject({
+    await expect(getCurrentServerOrganizationSession()).resolves.toStrictEqual({
       session: {
-        extraSessionField: "keep-me",
+        id: "session_123",
+        createdAt: "2026-04-04T17:08:12.497Z",
+        updatedAt: "2026-04-04T17:08:12.497Z",
+        userId: "user_123",
+        expiresAt: "2026-04-11T17:08:12.497Z",
+        token: "session-token",
+        ipAddress: "",
+        userAgent: "curl/8.7.1",
+        activeOrganizationId: "org_123",
       },
       user: {
-        extraUserField: "keep-me-too",
+        id: "user_123",
+        name: "Taylor Example",
+        email: "taylor@example.com",
+        image: null,
+        emailVerified: false,
+        createdAt: "2026-04-04T17:08:12.488Z",
+        updatedAt: "2026-04-04T17:08:12.488Z",
       },
     });
   }, 1000);
 
-  it("sets the active organization and forwards auth cookies to the current response", async () => {
+  it("does not fall back to process.env.AUTH_ORIGIN in SSR auth requests", async () => {
+    const organizations: Organization[] = [
+      { id: "org_123", name: "Fallback Org", slug: "fallback-org" },
+    ];
+
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", null);
     process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
 
-    const response = Response.json(
-      { id: "org_123" },
-      {
-        status: 200,
-        headers: {
-          "set-cookie":
-            "better-auth.session_token=next-token; Path=/; HttpOnly",
-        },
-      }
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(organizations));
+
+    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual(
+      organizations
     );
-
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
-
-    await expect(
-      setCurrentServerActiveOrganization("org_123")
-    ).resolves.toBeUndefined();
-
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("organization/set-active", "http://tt-sbx-api:4301/api/auth/"),
+      new URL("organization/list", "http://127.0.0.1:4300/api/auth/"),
       {
-        method: "POST",
         headers: {
           accept: "application/json",
-          "content-type": "application/json",
           cookie: "better-auth.session_token=session-token",
         },
-        body: JSON.stringify({ organizationId: "org_123" }),
       }
-    );
-    expect(mockedSetResponseHeader).toHaveBeenCalledWith("set-cookie", [
-      "better-auth.session_token=next-token; Path=/; HttpOnly",
-    ]);
-  }, 1000);
-
-  it("can clear the active organization on the server", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    mockedGetRequestProtocol.mockReturnValue("http");
-    mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
-
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("null", {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-        },
-      })
-    );
-
-    await expect(
-      setCurrentServerActiveOrganization(null)
-    ).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      new URL("organization/set-active", "http://tt-sbx-api:4301/api/auth/"),
-      expect.objectContaining({
-        body: JSON.stringify({ organizationId: null }),
-      })
     );
   }, 1000);
 
@@ -324,7 +287,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(null));
 
@@ -337,7 +300,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("boom", { status: 503, statusText: "Service Unavailable" })
@@ -359,7 +322,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({
@@ -390,7 +353,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("boom", { status: 503, statusText: "Service Unavailable" })
@@ -412,7 +375,7 @@ describe("server organization lookup", () => {
     );
     mockedGetRequestProtocol.mockReturnValue("http");
     mockedGetRequestHost.mockReturnValue("127.0.0.1:4300");
-    process.env.AUTH_ORIGIN = "http://tt-sbx-api:4301";
+    vi.stubGlobal("__SERVER_AUTH_ORIGIN__", "http://tt-sbx-api:4301");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
 

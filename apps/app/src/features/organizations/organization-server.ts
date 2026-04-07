@@ -3,11 +3,11 @@ import {
   getRequestHeader,
   getRequestHost,
   getRequestProtocol,
-  setResponseHeader,
 } from "@tanstack/react-start/server";
 import { Schema } from "effect";
 
 import { resolveAuthBaseURL } from "#/lib/auth-client";
+import { readConfiguredServerAuthOrigin } from "#/lib/server-auth-origin";
 
 const OrganizationSummarySchema = Schema.Struct({
   id: Schema.String,
@@ -127,32 +127,6 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   return decodeOrganizationSummariesStrict(organizations);
 });
 
-export const setCurrentServerActiveOrganization = createServerOnlyFn(
-  async (organizationId: string | null) => {
-    const authRequest = readServerAuthRequestStrict();
-    const response = await fetch(
-      new URL("organization/set-active", `${authRequest.authBaseURL}/`),
-      {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          cookie: authRequest.cookie,
-        },
-        body: JSON.stringify({ organizationId }),
-      }
-    );
-
-    forwardResponseCookies(response);
-
-    if (!response.ok) {
-      throw new Error(
-        `Setting active organization failed with status ${response.status}.`
-      );
-    }
-  }
-);
-
 function readServerSessionRequest(): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
 
@@ -203,21 +177,10 @@ function readServerAuthRequestStrict(): ServerAuthRequest {
 }
 
 function readServerAuthBaseURL(): string | undefined {
-  const serverAuthOrigin = readServerAuthOrigin();
-
   return resolveAuthBaseURL(
     `${getRequestProtocol()}://${getRequestHost()}`,
-    serverAuthOrigin
+    readConfiguredServerAuthOrigin()
   );
-}
-
-function readServerAuthOrigin(): string | undefined {
-  if (typeof __SERVER_AUTH_ORIGIN__ === "string") {
-    return __SERVER_AUTH_ORIGIN__;
-  }
-
-  const authOrigin = process.env.AUTH_ORIGIN;
-  return typeof authOrigin === "string" ? authOrigin : undefined;
 }
 
 async function fetchOrganizations(authRequest: ServerAuthRequest) {
@@ -264,33 +227,8 @@ export function decodeOrganizationAccessSession(
   session: unknown
 ): OrganizationAccessSession {
   try {
-    Schema.decodeUnknownSync(OrganizationAccessSessionSchema)(session);
+    return Schema.decodeUnknownSync(OrganizationAccessSessionSchema)(session);
   } catch {
     throw new Error("Session lookup returned an invalid payload.");
   }
-
-  return session as OrganizationAccessSession;
-}
-
-function forwardResponseCookies(response: Response) {
-  const setCookieValues = getSetCookieValues(response.headers);
-
-  if (setCookieValues.length === 0) {
-    return;
-  }
-
-  setResponseHeader("set-cookie", setCookieValues);
-}
-
-function getSetCookieValues(headers: Headers) {
-  const headersWithGetSetCookie = headers as Headers & {
-    getSetCookie?: () => string[];
-  };
-
-  if (typeof headersWithGetSetCookie.getSetCookie === "function") {
-    return headersWithGetSetCookie.getSetCookie();
-  }
-
-  const value = headers.get("set-cookie");
-  return value ? [value] : [];
 }

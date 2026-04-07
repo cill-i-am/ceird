@@ -144,6 +144,141 @@ describe("authentication integration", () => {
         user_id: creatorRows.rows[0]?.id as string,
       },
     ]);
+
+    const listedOrganizationsResponse = await auth.handler(
+      makeRequest("/organization/list", {
+        cookieJar,
+      })
+    );
+    expect(listedOrganizationsResponse.status).toBe(200);
+    const listedOrganizations =
+      (await listedOrganizationsResponse.json()) as readonly {
+        readonly id: string;
+        readonly slug: string;
+      }[];
+    expect(listedOrganizations).toContainEqual(
+      expect.objectContaining({
+        id: createdOrganization.id,
+        slug: "org-flow-organization",
+      })
+    );
+
+    const clearedActiveOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/set-active",
+        {
+          organizationId: null,
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+    updateCookieJar(cookieJar, clearedActiveOrganizationResponse);
+    expect(clearedActiveOrganizationResponse.status).toBe(200);
+
+    const sessionAfterClearResponse = await auth.handler(
+      makeRequest("/get-session", {
+        cookieJar,
+      })
+    );
+    expect(sessionAfterClearResponse.status).toBe(200);
+    const sessionAfterClear =
+      (await sessionAfterClearResponse.json()) as SessionResponse;
+    expect(sessionAfterClear?.session?.activeOrganizationId).toBeNull();
+
+    const restoredActiveOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/set-active",
+        {
+          organizationId: createdOrganization.id,
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+    updateCookieJar(cookieJar, restoredActiveOrganizationResponse);
+    expect(restoredActiveOrganizationResponse.status).toBe(200);
+
+    const sessionAfterRestoreResponse = await auth.handler(
+      makeRequest("/get-session", {
+        cookieJar,
+      })
+    );
+    expect(sessionAfterRestoreResponse.status).toBe(200);
+    const sessionAfterRestore =
+      (await sessionAfterRestoreResponse.json()) as SessionResponse;
+    expect(sessionAfterRestore?.session?.activeOrganizationId).toBe(
+      createdOrganization.id
+    );
+  }, 30_000);
+
+  it("rejects organization creation when the slug violates the app contract", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping organization slug validation coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      backgroundTaskHandler: () => {},
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+    });
+
+    const cookieJar = new Map<string, string>();
+
+    const signUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "invalid-slug@example.com",
+        name: "Invalid Slug User",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(cookieJar, signUpResponse);
+    expect(signUpResponse.status).toBe(200);
+
+    const organizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Invalid Slug Organization",
+          slug: "Invalid Slug",
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+
+    expect(organizationResponse.status).toBe(400);
+    await expect(organizationResponse.json()).resolves.toMatchObject({
+      code: "INVALID_ORGANIZATION_INPUT",
+    });
   }, 30_000);
 
   it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, reset callback handoff, session revocation, and rate limiting", async (context: {
