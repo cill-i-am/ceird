@@ -54,7 +54,9 @@ describe("authentication integration", () => {
       }),
       database: drizzle(authPool, { schema: authSchema }),
       reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: () => {},
       sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
     });
 
     const cookieJar = new Map<string, string>();
@@ -247,7 +249,9 @@ describe("authentication integration", () => {
       }),
       database: drizzle(authPool, { schema: authSchema }),
       reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: () => {},
       sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
     });
 
     const cookieJar = new Map<string, string>();
@@ -333,10 +337,12 @@ describe("authentication integration", () => {
       }),
       database: drizzle(authPool, { schema: authSchema }),
       reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: () => {},
       sendPasswordResetEmail: async ({ resetUrl }) => {
         capturedResetUrls.push(resetUrl);
         await Effect.runPromise(Deferred.await(passwordResetDelivery));
       },
+      sendVerificationEmail: async () => {},
     });
 
     const cookieJar = new Map<string, string>();
@@ -566,9 +572,11 @@ describe("authentication integration", () => {
       reportPasswordResetEmailFailure: (error) => {
         reportedFailures.push(error);
       },
+      reportVerificationEmailFailure: () => {},
       sendPasswordResetEmail: () => {
         throw new Error("upstream timeout");
       },
+      sendVerificationEmail: async () => {},
     });
 
     const signUpResponse = await auth.handler(
