@@ -26,4 +26,14 @@ describe("email verification search", () => {
       status: "invalid-token",
     });
   }, 1000);
+
+  it("maps any string error to the invalid-token state", () => {
+    expect(
+      decodeEmailVerificationSearch({
+        error: "USER_NOT_FOUND",
+      })
+    ).toStrictEqual({
+      status: "invalid-token",
+    });
+  }, 1000);
 });
