@@ -139,8 +139,9 @@ Rule:
   same transport boundary and idempotency pattern as password reset mail
 - password reset emails carry a provider idempotency key so retries do not
   duplicate delivery
-- Better Auth currently defers reset delivery through an in-process
-  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
+- Better Auth currently defers auth email delivery through an in-process
+  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`,
+  including verification sends and password reset mail
 - this in-process scheduling is explicitly temporary and should be replaced by a
   durable queue in `TSK-37`
 
