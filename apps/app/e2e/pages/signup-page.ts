@@ -10,7 +10,7 @@ export class SignupPage {
   async goto() {
     await this.page.goto("/signup");
     await this.page.waitForFunction(() => Boolean(window.__TSR_ROUTER__));
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(1500);
   }
 
   get heading(): Locator {

@@ -19,9 +19,7 @@ export class CreateOrganizationPage {
   }
 
   async expectLoaded() {
-    await expect(this.page).toHaveURL(
-      "http://localhost:4173/create-organization"
-    );
+    await expect(this.page).toHaveURL(/\/create-organization$/);
     await expect(this.heading).toBeVisible();
   }
 }

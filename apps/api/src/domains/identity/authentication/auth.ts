@@ -8,7 +8,10 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
 import { AuthEmailSender } from "./auth-email.js";
-import type { PasswordResetEmailInput } from "./auth-email.js";
+import type {
+  EmailVerificationEmailInput,
+  PasswordResetEmailInput,
+} from "./auth-email.js";
 import { loadAuthenticationConfig } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
@@ -18,16 +21,24 @@ import {
 import { ResendAuthEmailTransportLive } from "./resend-auth-email-transport.js";
 import { authSchema } from "./schema.js";
 
+type AuthEmailFailureReporter = (error: unknown) => void;
+type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
+
 export function createAuthentication(options: {
   readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
+  readonly reportVerificationEmailFailure: (error: unknown) => void;
   readonly sendPasswordResetEmail: (
     input: PasswordResetEmailInput
   ) => Promise<void>;
+  readonly sendVerificationEmail: (
+    input: EmailVerificationEmailInput
+  ) => Promise<void>;
 }) {
-  const { config, database, sendPasswordResetEmail } = options;
+  const { config, database, sendPasswordResetEmail, sendVerificationEmail } =
+    options;
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
   return betterAuth({
@@ -71,17 +82,31 @@ export function createAuthentication(options: {
     emailAndPassword: {
       ...authConfig.emailAndPassword,
       sendResetPassword: async ({ token, user, url }) => {
-        try {
-          await sendPasswordResetEmail({
+        await deliverAuthEmail({
+          reportFailure: options.reportPasswordResetEmailFailure,
+          send: sendPasswordResetEmail,
+          input: {
             idempotencyKey: `password-reset/${user.id}/${token}`,
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
             resetUrl: url,
-          } as const satisfies PasswordResetEmailInput);
-        } catch (error) {
-          options.reportPasswordResetEmailFailure(error);
-          throw error;
-        }
+          } as const satisfies PasswordResetEmailInput,
+        });
+      },
+    },
+    emailVerification: {
+      ...authConfig.emailVerification,
+      sendVerificationEmail: async ({ user, token, url }) => {
+        await deliverAuthEmail({
+          reportFailure: options.reportVerificationEmailFailure,
+          send: sendVerificationEmail,
+          input: {
+            idempotencyKey: `email-verification/${user.id}/${token}`,
+            recipientEmail: user.email,
+            recipientName: user.name ?? user.email,
+            verificationUrl: url,
+          } as const satisfies EmailVerificationEmailInput,
+        });
       },
     },
   });
@@ -99,14 +124,28 @@ function makeAuthenticationBackgroundTaskHandler() {
   };
 }
 
-function makePasswordResetEmailFailureReporter(
-  runtime: Runtime.Runtime<never>
+async function deliverAuthEmail<Input>(options: {
+  readonly input: Input;
+  readonly reportFailure: AuthEmailFailureReporter;
+  readonly send: AuthEmailPromiseSender<Input>;
+}) {
+  try {
+    await options.send(options.input);
+  } catch (error) {
+    options.reportFailure(error);
+    throw error;
+  }
+}
+
+function makeEmailFailureReporter(
+  runtime: Runtime.Runtime<never>,
+  label: string
 ) {
   const runFork = Runtime.runFork(runtime);
 
   return (error: unknown) => {
     runFork(
-      Effect.logError("Password reset email delivery failed", {
+      Effect.logError(label, {
         error: serializeBackgroundTaskError(error),
       })
     );
@@ -235,16 +274,25 @@ export class Authentication extends Effect.Service<Authentication>()(
       const runtime = yield* Effect.runtime<never>();
       const runPromise = Runtime.runPromise(runtime);
       const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
-      const reportPasswordResetEmailFailure =
-        makePasswordResetEmailFailureReporter(runtime);
+      const reportPasswordResetEmailFailure = makeEmailFailureReporter(
+        runtime,
+        "Password reset email delivery failed"
+      );
+      const reportVerificationEmailFailure = makeEmailFailureReporter(
+        runtime,
+        "Verification email delivery failed"
+      );
 
       return createAuthentication({
         backgroundTaskHandler,
         config,
         database: db,
         reportPasswordResetEmailFailure,
+        reportVerificationEmailFailure,
         sendPasswordResetEmail: (input) =>
           runPromise(authEmailSender.sendPasswordResetEmail(input)),
+        sendVerificationEmail: (input) =>
+          runPromise(authEmailSender.sendEmailVerificationEmail(input)),
       });
     }),
   }

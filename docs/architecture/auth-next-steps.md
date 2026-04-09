@@ -47,12 +47,11 @@ Without extra product input, the safest default order is:
 
 Translated to likely auth milestones:
 
-1. email verification
-2. transactional auth email polish on the shared delivery boundary
-3. organization or workspace-aware identity, if the product needs it
-4. role and permission checks
-5. social auth
-6. app-facing viewer/session convenience helpers, only if still needed
+1. transactional auth email polish on the shared delivery boundary
+2. organization or workspace-aware identity, if the product needs it
+3. role and permission checks
+4. social auth
+5. app-facing viewer/session convenience helpers, only if still needed
 
 That is a recommendation, not a hidden roadmap commitment.
 
@@ -151,7 +150,7 @@ Not a one-off route-level convenience.
 ### Password Reset
 
 Password reset is now part of the current architecture and sets the default
-pattern for future recovery and verification work.
+pattern for future recovery work.
 
 It fits like this today:
 
@@ -180,27 +179,27 @@ Rules:
 
 ### Email Verification
 
-Email verification should be the next auth extension and should reuse the same
-boundary model that password reset now uses.
+Email verification is already part of the current architecture and uses the
+same delivery boundary that password reset introduced.
 
-It should fit like this:
+It fits like this today:
 
-- verification logic and token handling in `apps/api`
-- `AuthEmailSender` should extend to own verification delivery policy the same
-  way it now owns password reset delivery
-- provider-specific delivery should stay behind the auth email transport
-  boundary instead of leaking into auth configuration or route code
-- verification status UI in public auth routes or transitional auth screens in
-  `apps/app`
-- account gating rules documented explicitly if verification becomes required
+- verification is link-based and the verification mail is delivered through
+  `AuthEmailSender`
+- the verification callback lands on the public `/verify-email` result route
+  outside `/_app`
+- verification does not block app access; the authenticated shell stays usable
+  while `session.user.emailVerified` is false
+- the authenticated shell shows a resend reminder until verification completes
+- resend requests stay inside the app shell and use the current session email
+  plus a `/verify-email` callback URL
 
 Rules:
 
-- do not quietly make verification mandatory without documenting its effect on
-  sign-in and session behavior
-- if verification blocks product access, that is a route-policy change and
-  should be treated as such
-- verification messaging should remain user-safe and task-focused
+- keep verification public and link-based rather than inventing a second flow
+- do not turn unverified email into a hard gate without a deliberate route
+  policy change
+- keep verification messaging safe, specific, and task-focused
 
 ### Transactional Auth Email
 
@@ -219,8 +218,8 @@ Because `AuthenticationLive` composes the auth email layer at boot, auth
 startup now depends on valid email-boundary config as well as the core Better
 Auth config.
 
-Future auth mail such as email verification should extend that same boundary,
-not create parallel delivery paths.
+Future auth mail should extend that same boundary, not create parallel delivery
+paths.
 
 Rules:
 
@@ -337,8 +336,8 @@ If those answers are fuzzy, the design is probably still too fuzzy.
 If we continue extending auth soon, the highest-value next documents or
 implementation tracks are:
 
-1. email verification rules and account-state policy
-2. transactional auth email polish on the shared delivery boundary
-3. organization-aware auth boundaries, if the product is heading multi-tenant
+1. transactional auth email polish on the shared delivery boundary
+2. organization-aware auth boundaries, if the product is heading multi-tenant
+3. role and permission checks
 
 Those are the places where architectural clarity is most likely to matter next.

@@ -161,6 +161,84 @@ describe("auth email sender password reset delivery", () => {
   }, 10_000);
 });
 
+describe("auth email sender email verification delivery", () => {
+  it("composes the expected email verification message", async () => {
+    const sentMessages: TransportMessage[] = [];
+
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendEmailVerificationEmail({
+        idempotencyKey: "email-verification/user-123/token-verify123",
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        verificationUrl:
+          "https://app.task-tracker.localhost/verify-email?success=1",
+      }).pipe(
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(result).toBeUndefined();
+    expect(sentMessages).toStrictEqual([
+      {
+        idempotencyKey: "email-verification/user-123/token-verify123",
+        to: "alice@example.com",
+        subject: "Verify your email",
+        text: [
+          "Hello Alice,",
+          "",
+          "Use this link to verify your email:",
+          "https://app.task-tracker.localhost/verify-email?success=1",
+        ].join("\n"),
+        html: [
+          "<p>Hello Alice,</p>",
+          '<p><a href="https://app.task-tracker.localhost/verify-email?success=1">Verify your email</a></p>',
+        ].join(""),
+      },
+    ]);
+  }, 10_000);
+
+  it("maps provider failures into EmailVerificationDeliveryError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendEmailVerificationEmail({
+        idempotencyKey: "email-verification/user-123/token-verify123",
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        verificationUrl:
+          "https://app.task-tracker.localhost/verify-email?success=1",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailDeliveryError({
+                message: "Provider request failed",
+                cause: "upstream timeout",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toMatchObject({
+      _tag: "EmailVerificationDeliveryError",
+      message: "Failed to deliver verification email",
+      cause: "Provider request failed",
+    });
+  }, 10_000);
+});
+
 describe("auth email config loading", () => {
   it("requires auth email config through Config", async () => {
     const result = await Effect.runPromise(

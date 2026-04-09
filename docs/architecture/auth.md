@@ -16,6 +16,7 @@ Authentication currently supports only:
 
 - email/password sign-up
 - email/password sign-in
+- email verification
 - password reset request
 - password reset completion
 - sign-out
@@ -26,7 +27,6 @@ Authentication currently supports only:
 Authentication explicitly does not currently support:
 
 - social auth
-- email verification
 - magic links or OTP flows
 - redirect-back after login or signup
 - roles, permissions, or authorization rules
@@ -92,11 +92,12 @@ Current rate-limit rules:
 
 - `POST /sign-in/email`: 5 attempts per 60 seconds
 - `POST /sign-up/email`: 3 attempts per 60 seconds
+- `POST /send-verification-email`: 3 attempts per 60 seconds
 
 Current note:
 
-- auth config currently defines custom rate-limit rules only for sign-in and
-  sign-up
+- auth config currently defines custom rate-limit rules for sign-in, sign-up,
+  and verification email delivery
 - password reset revokes existing sessions once the new password is accepted
 
 ### Auth Email Runtime Configuration
@@ -115,13 +116,14 @@ Current defaulted value:
 
 ### Auth Email Delivery Boundary
 
-Password reset delivery now crosses one narrow app-owned boundary in `apps/api`:
+Password reset and email verification delivery now cross one narrow app-owned
+boundary in `apps/api`:
 
 - `apps/api/src/domains/identity/authentication/auth-email.ts` defines
   `AuthEmailSender`, an auth-domain Effect service for sending password reset
-  mail
-- `AuthEmailSender` validates the reset payload and renders the auth email
-  content before handing it to a transport
+  and verification mail
+- `AuthEmailSender` validates each payload and renders the auth email content
+  before handing it to a transport
 - `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
   provides `ResendAuthEmailTransport`, the first provider adapter behind that
   boundary
@@ -133,10 +135,13 @@ Rule:
 - auth startup now depends on valid auth email config as well as core Better
   Auth config, because `AuthenticationLive` composes `AuthEmailSender` with
   `ResendAuthEmailTransportLive` at boot
+- verification link delivery also passes through `AuthEmailSender`, using the
+  same transport boundary and idempotency pattern as password reset mail
 - password reset emails carry a provider idempotency key so retries do not
   duplicate delivery
-- Better Auth currently defers reset delivery through an in-process
-  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
+- Better Auth currently defers auth email delivery through an in-process
+  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`,
+  including verification sends and password reset mail
 - this in-process scheduling is explicitly temporary and should be replaced by a
   durable queue in `TSK-37`
 
@@ -319,6 +324,7 @@ The route split is intentionally simple:
 
 - `/login`
 - `/signup`
+- `/verify-email`
 - `/forgot-password`
 - `/reset-password`
 
@@ -326,6 +332,7 @@ These routes all live outside `/_app`, but they do not all share the same
 access policy.
 
 - `/login` and `/signup` are guest-only routes
+- `/verify-email` is a public verification result route
 - `/forgot-password` and `/reset-password` are public auth-recovery routes and
   remain reachable even when a user is already signed in
 
@@ -334,11 +341,14 @@ Behavior:
 - `/login` and `/signup`: if a session exists, redirect to `/`
 - `/login` and `/signup`: if session lookup fails unexpectedly, treat the user
   as unauthenticated and allow the page to render
+- `/verify-email`: render the result route without gating it on session state
 - `/forgot-password` and `/reset-password`: render as public recovery routes
   without `redirectIfAuthenticated`
 
 `/login` and `/signup` use
 `apps/app/src/features/auth/redirect-if-authenticated.ts`.
+
+`/verify-email` is mounted as a public route without app-shell gating.
 
 `/forgot-password` and `/reset-password` are mounted as public routes without
 that guard.
@@ -346,11 +356,13 @@ that guard.
 Design rule:
 
 - guest-only entry routes fail open on lookup failure
+- verification result routes stay public and should not block on the current
+  session state
 - public recovery routes stay reachable regardless of session state
 - we prefer preserving access to public auth and recovery routes over blocking
   the user due to a transient session-read problem
-- password recovery remains outside `/_app` because it is an account recovery
-  flow, not an authenticated product flow
+- verification result and password recovery remain outside `/_app` because
+  they are account lifecycle flows, not authenticated product flows
 
 ### Protected App Routes
 
@@ -373,6 +385,29 @@ Design rule:
 
 - protected routes fail closed
 - infrastructure uncertainty is treated the same as unauthenticated access
+
+### Email Verification Reminder
+
+The authenticated shell now shows verification state without turning it into a
+hard access gate.
+
+`apps/app/src/components/app-layout.tsx` renders
+`apps/app/src/features/auth/email-verification-banner.tsx` when the session
+has an email address and `session.user.emailVerified` is false.
+
+Current behavior:
+
+- the shell stays usable while the reminder is visible
+- the reminder offers a resend action from inside the authenticated shell
+- resend requests call `authClient.sendVerificationEmail` with the current
+  user email and a `/verify-email` callback URL
+- the reminder disappears once `session.user.emailVerified` becomes true
+
+Design rule:
+
+- unverified email is a reminder state, not a product lockout
+- the authenticated shell should keep working while verification is pending
+- resend should stay available from the app shell until verification completes
 
 ### Redirect Simplicity Rule
 
@@ -436,6 +471,8 @@ Current behavior:
 - calls `authClient.signUp.email`
 - displays field-level validation inline
 - displays safe form-level failure messaging for server/auth errors
+- requests email verification through the auth backend, which delivers a
+  verification link to the user
 - navigates to `/` after success
 
 ### Password Reset Request
@@ -465,6 +502,18 @@ Current behavior:
   invalid-link state
 - keeps failed `resetPassword` submissions on the same generic, safe form-error
   path used elsewhere in auth UI
+
+### Email Verification Result
+
+`apps/app/src/features/auth/email-verification-page.tsx` owns the public
+verification result screen.
+
+Current behavior:
+
+- renders on the public `/verify-email` route outside `/_app`
+- shows a success or invalid-link result based on the search state
+- keeps the result route reachable without requiring an authenticated shell
+- links users back to the app or login screen after the result is shown
 
 ### Shared Validation Rules
 
@@ -508,6 +557,7 @@ Rules:
 - the search-param-driven invalid-link state may specifically call out invalid
   or expired links
 - submitted reset failures still use the generic reset failure message
+- verification resend failures map to a dedicated verification-safe message
 
 This is a deliberate anti-enumeration and UX decision.
 
@@ -547,6 +597,7 @@ These are the important current rules we are following.
 - keep auth mounted at `/api/auth`
 - restrict trusted origins to known app origins
 - use database-backed rate limiting
+- send verification links through `AuthEmailSender`
 - revoke existing sessions on successful password reset
 - use server-first session lookup for SSR-protected routes
 - fail closed for protected routes
@@ -560,7 +611,7 @@ These are the important current rules we are following.
 - create app-owned session endpoints just to reshape Better Auth responses
 - duplicate auth logic inside page components when route guards can own it
 - support redirect-back targets yet
-- support social auth or email verification yet
+- gate app access on unverified email by default
 - implement authorization concerns like roles or permissions in this slice
 - allow arbitrary origins to use credentialed auth CORS
 
@@ -570,13 +621,14 @@ These are the important current rules we are following.
 
 - `apps/api/src/domains/identity/authentication/auth.ts`
   Creates and mounts Better Auth, applies auth CORS, preserves `/api/auth`
-  prefixing, and delegates password reset delivery through `AuthEmailSender`.
+  prefixing, and delegates password reset and verification delivery through
+  `AuthEmailSender`.
 - `apps/api/src/domains/identity/authentication/config.ts`
   Defines auth scope, base URL behavior, trusted origins, and rate limits.
 - `apps/api/src/domains/identity/authentication/auth-email-config.ts`
   Defines required auth email runtime config and defaults.
 - `apps/api/src/domains/identity/authentication/auth-email.ts`
-  Defines the auth email boundary for password reset delivery.
+  Defines the auth email boundary for password reset and verification delivery.
 - `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
   Implements the first auth email transport adapter with Resend.
 - `apps/api/src/domains/identity/authentication/schema.ts`
@@ -602,6 +654,10 @@ These are the important current rules we are following.
   Password reset request UI with generic response handling.
 - `apps/app/src/features/auth/password-reset-page.tsx`
   Password reset completion UI with invalid/expired-link feedback.
+- `apps/app/src/features/auth/email-verification-page.tsx`
+  Public verification result UI for the `/verify-email` route.
+- `apps/app/src/features/auth/email-verification-banner.tsx`
+  Authenticated-shell reminder with resend support when email is unverified.
 - `apps/app/src/components/nav-user.tsx`
   Sign-out interaction.
 
@@ -610,11 +666,14 @@ These are the important current rules we are following.
 These decisions are currently encoded in the implementation and tests.
 
 - Stay close to Better Auth's native server and client contracts.
-- Keep auth scope limited to email/password, password reset, and session
-  handling.
+- Keep auth scope limited to email/password, email verification, password
+  reset, and session handling.
 - Keep `/login` and `/signup` guest-only, and keep `/forgot-password` and
   `/reset-password` as public recovery routes outside `/_app`.
+- Keep `/verify-email` as a public verification result route outside `/_app`.
 - Make the app shell under `/_app` the authenticated boundary.
+- Keep verification non-blocking for app access while the authenticated shell
+  shows a resend reminder until verification completes.
 - Keep redirect destinations simple and fixed.
 - Prefer server-first session checks when rendering protected content.
 - Use shared schema-based input validation for auth forms.
@@ -631,10 +690,11 @@ The current behavior is reinforced by:
 - unit tests for auth email delivery boundaries
 - unit tests for protected-route and guest-route guards
 - unit tests for login, signup, and password reset submit behavior
+- unit tests for email verification reminder and result behavior
 - integration tests for sign-up, sign-in, sign-out, session reads, and rate
   limiting in the API auth slice
-- integration tests for password reset delivery and completion behavior in the
-  API auth slice
+- integration tests for password reset and verification delivery and completion
+  behavior in the API auth slice
 - Playwright tests for end-to-end login, signup, and route-protection behavior
 
 If a future change conflicts with this document, the tests should be updated in

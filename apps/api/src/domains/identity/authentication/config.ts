@@ -84,11 +84,21 @@ export interface AuthenticationConfig {
         readonly window: 60;
         readonly max: 3;
       };
+      readonly "/send-verification-email": {
+        readonly window: 60;
+        readonly max: 3;
+      };
     };
   };
   readonly emailAndPassword: {
     readonly enabled: true;
     readonly revokeSessionsOnPasswordReset: true;
+  };
+  readonly emailVerification: {
+    readonly autoSignInAfterVerification: false;
+    readonly expiresIn: 3600;
+    readonly sendOnSignIn: false;
+    readonly sendOnSignUp: true;
   };
 }
 
@@ -145,11 +155,21 @@ export function makeAuthenticationConfig(
           window: 60,
           max: 3,
         },
+        "/send-verification-email": {
+          window: 60,
+          max: 3,
+        },
       },
     },
     emailAndPassword: {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
+    },
+    emailVerification: {
+      autoSignInAfterVerification: false,
+      expiresIn: 3600,
+      sendOnSignIn: false,
+      sendOnSignUp: true,
     },
   };
 }

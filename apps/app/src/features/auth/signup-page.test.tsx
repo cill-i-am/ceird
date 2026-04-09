@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
+import type * as AuthClientModule from "#/lib/auth-client";
 
 import { SignupPage } from "./signup-page";
 
@@ -15,7 +15,12 @@ const { mockedGetSession, mockedNavigate, mockedSignUpEmail } = vi.hoisted(
     >(),
     mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
     mockedSignUpEmail: vi.fn<
-      (input: { name: string; email: string; password: string }) => Promise<{
+      (input: {
+        name: string;
+        email: string;
+        password: string;
+        callbackURL: string;
+      }) => Promise<{
         data: {
           token: string | null;
           user: {
@@ -41,17 +46,24 @@ vi.mock(import("./auth-navigation"), () => ({
   useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
 }));
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    getSession: mockedGetSession,
-    signUp: {
-      email: mockedSignUpEmail,
-    },
-  } as unknown as typeof AuthClient,
-}));
+vi.mock(import("#/lib/auth-client"), async () => {
+  const actual =
+    await vi.importActual<typeof AuthClientModule>("#/lib/auth-client");
+
+  return {
+    authClient: {
+      getSession: mockedGetSession,
+      signUp: {
+        email: mockedSignUpEmail,
+      },
+    } as unknown as typeof AuthClientModule.authClient,
+    buildEmailVerificationRedirectTo: actual.buildEmailVerificationRedirectTo,
+  };
+});
 
 describe("signup page", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "http://localhost:3000/signup");
     mockedGetSession.mockResolvedValue({ data: null, error: null });
     mockedNavigate.mockResolvedValue();
     mockedSignUpEmail.mockResolvedValue({
@@ -90,6 +102,7 @@ describe("signup page", () => {
         name: "Taylor Example",
         email: "person@example.com",
         password: "password123",
+        callbackURL: "http://localhost:3000/verify-email?status=success",
       });
     });
     await waitFor(() => {
