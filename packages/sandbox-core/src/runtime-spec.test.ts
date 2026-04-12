@@ -64,6 +64,7 @@ describe("buildSandboxRuntimeSpec()", () => {
           "tt-sbx-node-modules-123456789abc-def456789abc",
         SANDBOX_PNPM_STORE_VOLUME: "tt-sbx-pnpm-store",
         TASK_TRACKER_SANDBOX: "1",
+        AUTH_APP_ORIGIN: "https://agent-one.app.task-tracker.localhost:1355",
         BETTER_AUTH_BASE_URL:
           "https://agent-one.api.task-tracker.localhost:1355",
       },

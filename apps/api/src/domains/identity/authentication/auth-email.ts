@@ -3,7 +3,10 @@
 import { Context, Effect, ParseResult, Schema } from "effect";
 
 import type { AuthEmailDeliveryError } from "./auth-email-errors.js";
-import { PasswordResetDeliveryError } from "./auth-email-errors.js";
+import {
+  OrganizationInvitationDeliveryError,
+  PasswordResetDeliveryError,
+} from "./auth-email-errors.js";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_IDEMPOTENCY_KEY_MAX_LENGTH = 256;
@@ -58,6 +61,8 @@ const ResetUrl = Schema.String.pipe(
     message: () => "Expected a valid http or https URL without credentials",
   })
 );
+const InvitationUrl = ResetUrl;
+const InvitationRole = Schema.Literal("admin", "member");
 
 export const PasswordResetEmailInput = Schema.Struct({
   idempotencyKey: EmailIdempotencyKey,
@@ -72,6 +77,24 @@ export type PasswordResetEmailInput = Schema.Schema.Type<
 
 const decodePasswordResetEmailInput = Schema.decodeUnknown(
   PasswordResetEmailInput
+);
+
+export const OrganizationInvitationEmailInput = Schema.Struct({
+  idempotencyKey: EmailIdempotencyKey,
+  recipientEmail: EmailAddress,
+  recipientName: Schema.String,
+  organizationName: Schema.String,
+  inviterEmail: EmailAddress,
+  invitationUrl: InvitationUrl,
+  role: InvitationRole,
+});
+
+export type OrganizationInvitationEmailInput = Schema.Schema.Type<
+  typeof OrganizationInvitationEmailInput
+>;
+
+const decodeOrganizationInvitationEmailInput = Schema.decodeUnknown(
+  OrganizationInvitationEmailInput
 );
 
 export interface TransportMessage {
@@ -144,7 +167,55 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           );
       });
 
-      return { sendPasswordResetEmail };
+      const sendOrganizationInvitationEmail = Effect.fn(
+        "AuthEmailSender.sendOrganizationInvitationEmail"
+      )(function* sendOrganizationInvitationEmail(rawInput: unknown) {
+        const input = yield* decodeOrganizationInvitationEmailInput(
+          rawInput
+        ).pipe(
+          Effect.mapError(
+            (parseError) =>
+              new OrganizationInvitationDeliveryError({
+                message: "Invalid organization invitation email input",
+                cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
+              })
+          )
+        );
+
+        const subject = `Join ${input.organizationName} on Task Tracker`;
+        const text = [
+          `Hello ${input.recipientName},`,
+          "",
+          `${input.inviterEmail} invited you to join ${input.organizationName} as a ${input.role}.`,
+          "",
+          input.invitationUrl,
+        ].join("\n");
+        const html = [
+          `<p>Hello ${escapeHtml(input.recipientName)},</p>`,
+          `<p>${escapeHtml(input.inviterEmail)} invited you to join ${escapeHtml(input.organizationName)} as a ${escapeHtml(input.role)}.</p>`,
+          `<p><a href="${escapeHtml(input.invitationUrl)}">Accept invitation</a></p>`,
+        ].join("");
+
+        yield* transport
+          .send({
+            idempotencyKey: input.idempotencyKey,
+            to: input.recipientEmail,
+            subject,
+            text,
+            html,
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new OrganizationInvitationDeliveryError({
+                  message: "Failed to deliver organization invitation email",
+                  cause: error.message,
+                })
+            )
+          );
+      });
+
+      return { sendOrganizationInvitationEmail, sendPasswordResetEmail };
     }),
   }
 ) {}

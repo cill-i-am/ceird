@@ -8,6 +8,7 @@ import { makeResendAuthEmailTransport } from "./resend-auth-email-transport.js";
 function makeConfigProvider() {
   return ConfigProvider.fromMap(
     new Map([
+      ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
       ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
       ["AUTH_EMAIL_FROM_NAME", "Task Tracker Auth"],
       ["RESEND_API_KEY", "re_test_123"],

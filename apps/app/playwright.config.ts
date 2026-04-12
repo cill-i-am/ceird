@@ -19,6 +19,7 @@ export default defineConfig({
       "sh -c 'pnpm --filter api exec tsx watch src/index.ts >/tmp/task-tracker-auth-e2e-api.log 2>&1 & api_pid=$!; trap \"kill $api_pid\" EXIT; until curl --silent --max-time 1 http://127.0.0.1:3001/api/auth/get-session >/dev/null 2>&1; do sleep 0.5; done; pnpm --filter app exec vite dev --port 4173 --strictPort'",
     env: {
       ...process.env,
+      AUTH_APP_ORIGIN: "http://127.0.0.1:4173",
       AUTH_EMAIL_FROM: playwrightAuthEmailFrom,
       AUTH_EMAIL_FROM_NAME: playwrightAuthEmailFromName,
       BETTER_AUTH_BASE_URL: "http://127.0.0.1:3001",

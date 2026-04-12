@@ -27,6 +27,7 @@
       "cache": false,
       "persistent": true,
       "env": [
+        "AUTH_APP_ORIGIN",
         "AUTH_EMAIL_FROM",
         "AUTH_EMAIL_FROM_NAME",
         "AUTH_ORIGIN",

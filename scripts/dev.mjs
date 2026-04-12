@@ -13,6 +13,9 @@ export function createDevEnvironment(baseEnvironment = process.env) {
 
   return {
     ...baseEnvironment,
+    AUTH_APP_ORIGIN:
+      baseEnvironment.AUTH_APP_ORIGIN ??
+      `https://app.task-tracker.localhost:${proxyPort}`,
     AUTH_EMAIL_FROM: baseEnvironment.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME:
       baseEnvironment.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME,
