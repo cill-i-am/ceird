@@ -1,4 +1,8 @@
 import CloudflareApi, { APIError } from "cloudflare";
+import type {
+  EmailSendingSendParams,
+  EmailSendingSendResponse,
+} from "cloudflare/resources/email-sending/email-sending";
 import { Effect, Layer } from "effect";
 
 import { loadAuthEmailConfig } from "./auth-email-config.js";
@@ -9,45 +13,28 @@ import {
 import { AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
 
-interface CloudflareSendEmailRequest {
-  readonly from: string;
-  readonly html: string;
-  readonly subject: string;
-  readonly text: string;
-  readonly to: readonly [string, ...string[]];
-}
-
-interface CloudflareSendEmailResponse {
-  readonly result?: {
-    readonly delivered?: readonly string[] | null;
-    readonly permanent_bounces?: readonly string[] | null;
-    readonly queued?: readonly string[] | null;
-  } | null;
-}
-
-interface CloudflareApiClient {
-  readonly post: (
-    path: string,
-    options?: {
-      readonly body?: CloudflareSendEmailRequest;
-    }
-  ) => PromiseLike<CloudflareSendEmailResponse>;
-}
-
 interface SingleRecipientResponseBuckets {
   readonly delivered: readonly string[];
   readonly permanentBounces: readonly string[];
   readonly queued: readonly string[];
 }
 
+interface CloudflareEmailSendingClient {
+  readonly send: (
+    params: EmailSendingSendParams
+  ) => PromiseLike<EmailSendingSendResponse>;
+}
+
 function buildPayload(
   config: {
+    readonly cloudflareAccountId: string;
     readonly from: string;
     readonly fromName: string;
   },
   message: Omit<TransportMessage, "deliveryKey">
-): CloudflareSendEmailRequest {
+): EmailSendingSendParams {
   return {
+    account_id: config.cloudflareAccountId,
     from: `${config.fromName} <${config.from}>`,
     to: [message.to],
     subject: message.subject,
@@ -63,15 +50,12 @@ function isStringArray(value: unknown): value is readonly string[] {
 }
 
 function decodeSingleRecipientResponseBuckets(
-  response: CloudflareSendEmailResponse
+  response: EmailSendingSendResponse
 ): SingleRecipientResponseBuckets {
-  const {result} = response;
-
   if (
-    !result ||
-    !isStringArray(result.delivered) ||
-    !isStringArray(result.permanent_bounces) ||
-    !isStringArray(result.queued)
+    !isStringArray(response.delivered) ||
+    !isStringArray(response.permanent_bounces) ||
+    !isStringArray(response.queued)
   ) {
     throw new AuthEmailRequestError({
       message: "Auth email request failed",
@@ -80,14 +64,14 @@ function decodeSingleRecipientResponseBuckets(
   }
 
   return {
-    delivered: result.delivered,
-    permanentBounces: result.permanent_bounces,
-    queued: result.queued,
+    delivered: response.delivered,
+    permanentBounces: response.permanent_bounces,
+    queued: response.queued,
   };
 }
 
 function classifySingleRecipientResponse(
-  response: CloudflareSendEmailResponse,
+  response: EmailSendingSendResponse,
   recipient: string
 ) {
   const buckets = decodeSingleRecipientResponseBuckets(response);
@@ -157,23 +141,15 @@ function makeAuthEmailRequestError(cause: unknown) {
 }
 
 export function makeCloudflareAuthEmailTransport(options?: {
-  readonly cloudflare?: CloudflareApiClient;
+  readonly cloudflare?: CloudflareEmailSendingClient;
 }) {
   return Effect.gen(function* makeCloudflareAuthEmailTransportEffect() {
     const config = yield* loadAuthEmailConfig;
     const cloudflareClient = new CloudflareApi({
       apiToken: config.cloudflareApiToken,
+      accountId: config.cloudflareAccountId,
     });
-    const cloudflare = options?.cloudflare ?? {
-      post: (
-        path: string,
-        request?: { readonly body?: CloudflareSendEmailRequest }
-      ) =>
-        cloudflareClient.post<
-          CloudflareSendEmailRequest,
-          CloudflareSendEmailResponse
-        >(path, request),
-    };
+    const cloudflare = options?.cloudflare ?? cloudflareClient.emailSending;
 
     return {
       send: (message: TransportMessage) =>
@@ -186,11 +162,8 @@ export function makeCloudflareAuthEmailTransport(options?: {
           Effect.zipRight(
             Effect.tryPromise({
               try: async () => {
-                const response = await cloudflare.post(
-                  `/accounts/${config.cloudflareAccountId}/email/sending/send`,
-                  {
-                    body: buildPayload(config, message),
-                  }
+                const response = await cloudflare.send(
+                  buildPayload(config, message)
                 );
 
                 return classifySingleRecipientResponse(response, message.to);

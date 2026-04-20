@@ -36,15 +36,13 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       Effect.flatMap(
         makeCloudflareAuthEmailTransport({
           cloudflare: {
-            post: (path, options) => {
-              requests.push({ path, options });
+            send: (params) => {
+              requests.push(params);
 
               return Promise.resolve({
-                result: {
-                  delivered: ["alice@example.com"],
-                  permanent_bounces: [],
-                  queued: [],
-                },
+                delivered: ["alice@example.com"],
+                permanent_bounces: [],
+                queued: [],
               });
             },
           },
@@ -55,16 +53,12 @@ describe("makeCloudflareAuthEmailTransport()", () => {
 
     expect(requests).toStrictEqual([
       {
-        path: "/accounts/account_123/email/sending/send",
-        options: {
-          body: {
-            from: "Task Tracker Auth <auth@task-tracker.localhost>",
-            to: ["alice@example.com"],
-            subject: "Reset your password",
-            text: "Reset link",
-            html: "<p>Reset link</p>",
-          },
-        },
+        account_id: "account_123",
+        from: "Task Tracker Auth <auth@task-tracker.localhost>",
+        to: ["alice@example.com"],
+        subject: "Reset your password",
+        text: "Reset link",
+        html: "<p>Reset link</p>",
       },
     ]);
   }, 10_000);
@@ -76,15 +70,13 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       Effect.flatMap(
         makeCloudflareAuthEmailTransport({
           cloudflare: {
-            post: (path, options) => {
-              requests.push({ path, options });
+            send: (params) => {
+              requests.push(params);
 
               return Promise.resolve({
-                result: {
-                  delivered: [],
-                  permanent_bounces: [],
-                  queued: ["alice@example.com"],
-                },
+                delivered: [],
+                permanent_bounces: [],
+                queued: ["alice@example.com"],
               });
             },
           },
@@ -92,23 +84,19 @@ describe("makeCloudflareAuthEmailTransport()", () => {
         (transport) =>
           transport.send({
             ...makeMessage(),
-            deliveryKey: "password-reset/user-123/token-abc123",
+            deliveryKey: "password-reset/6b0f2f8d67d0f8f0",
           })
       ).pipe(Effect.withConfigProvider(makeConfigProvider()))
     );
 
     expect(requests).toStrictEqual([
       {
-        path: "/accounts/account_123/email/sending/send",
-        options: {
-          body: {
-            from: "Task Tracker Auth <auth@task-tracker.localhost>",
-            to: ["alice@example.com"],
-            subject: "Reset your password",
-            text: "Reset link",
-            html: "<p>Reset link</p>",
-          },
-        },
+        account_id: "account_123",
+        from: "Task Tracker Auth <auth@task-tracker.localhost>",
+        to: ["alice@example.com"],
+        subject: "Reset your password",
+        text: "Reset link",
+        html: "<p>Reset link</p>",
       },
     ]);
   }, 10_000);
@@ -118,13 +106,11 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       Effect.flatMap(
         makeCloudflareAuthEmailTransport({
           cloudflare: {
-            post: () =>
+            send: () =>
               Promise.resolve({
-                result: {
-                  delivered: [],
-                  permanent_bounces: ["alice@example.com"],
-                  queued: [],
-                },
+                delivered: [],
+                permanent_bounces: ["alice@example.com"],
+                queued: [],
               }),
           },
         }),
@@ -150,7 +136,7 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       Effect.flatMap(
         makeCloudflareAuthEmailTransport({
           cloudflare: {
-            post: () => Promise.reject(new Error("socket hang up")),
+            send: () => Promise.reject(new Error("socket hang up")),
           },
         }),
         (transport) => transport.send(makeMessage())
@@ -175,13 +161,11 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       Effect.flatMap(
         makeCloudflareAuthEmailTransport({
           cloudflare: {
-            post: () =>
+            send: () =>
               Promise.resolve({
-                result: {
-                  delivered: ["alice@example.com"],
-                  permanent_bounces: [],
-                  queued: ["other@example.com"],
-                },
+                delivered: ["alice@example.com"],
+                permanent_bounces: [],
+                queued: ["other@example.com"],
               }),
           },
         }),
