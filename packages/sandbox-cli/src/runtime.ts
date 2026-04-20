@@ -27,7 +27,6 @@ import {
 import type {
   SandboxRegistryError,
   SandboxRegistryRecord,
-  SharedSandboxEnvironmentInput,
 } from "@task-tracker/sandbox-core/node";
 import { Effect, Schema } from "effect";
 
@@ -72,12 +71,24 @@ const SANDBOX_PROXY_PORT = 1355;
 const SANDBOX_READY_POLL_INTERVAL_MS = 1000;
 const SANDBOX_READY_TIMEOUT_MS = 180_000;
 const SANDBOX_STOP_TIMEOUT_SECONDS = 2;
-const AUTH_EMAIL_REQUIRED_ENV_KEYS = [
-  "AUTH_EMAIL_FROM",
-  "AUTH_EMAIL_FROM_NAME",
-  "CLOUDFLARE_ACCOUNT_ID",
-  "CLOUDFLARE_API_TOKEN",
-] as const;
+const authEmailSharedEnvironmentFields = {
+  AUTH_EMAIL_FROM: Schema.NonEmptyString,
+  AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
+  CLOUDFLARE_ACCOUNT_ID: Schema.NonEmptyString,
+  CLOUDFLARE_API_TOKEN: Schema.NonEmptyString,
+};
+const AuthEmailSharedEnvironment = Schema.Struct(
+  authEmailSharedEnvironmentFields
+);
+type AuthEmailSharedEnvironment = Schema.Schema.Type<
+  typeof AuthEmailSharedEnvironment
+>;
+type AuthEmailSharedEnvironmentOverrides = {
+  readonly [K in keyof AuthEmailSharedEnvironment]: string;
+};
+const AUTH_EMAIL_REQUIRED_ENV_KEYS = Object.keys(
+  authEmailSharedEnvironmentFields
+) as readonly (keyof AuthEmailSharedEnvironmentOverrides)[];
 const SANDBOX_COMPOSE_FILE = path.join(
   fileURLToPath(new URL("../docker", import.meta.url)),
   "sandbox.compose.yaml"
@@ -896,7 +907,7 @@ function exec<A>(
 
 function loadSandboxEnvironmentOrThrow(
   repoRoot: string
-): SandboxPreflightEffect<SharedSandboxEnvironmentInput> {
+): SandboxPreflightEffect<AuthEmailSharedEnvironment> {
   return loadSandboxSharedEnvironment({
     repoRoot,
     requiredKeys: AUTH_EMAIL_REQUIRED_ENV_KEYS,
@@ -906,6 +917,13 @@ function loadSandboxEnvironmentOrThrow(
       error instanceof SandboxEnvironmentError
         ? toSandboxPreflightError(error, { preserveMessage: true })
         : toPreflightError(error, "Sandbox shared environment is invalid")
+    ),
+    Effect.flatMap((environment) =>
+      Schema.decodeUnknown(AuthEmailSharedEnvironment)(environment).pipe(
+        Effect.mapError((error) =>
+          toPreflightError(error, "Sandbox auth email environment is invalid")
+        )
+      )
     )
   );
 }
@@ -1185,9 +1203,10 @@ function ensureComposeEnvironmentFile(
   }).pipe(
     Effect.catchAll((error) =>
       isMissingFileError(error)
-        ? writeComposeEnvironmentFile(record, Object.fromEntries(
-              AUTH_EMAIL_REQUIRED_ENV_KEYS.map((key) => [key, ""])
-            ))
+        ? writeComposeEnvironmentFile(
+            record,
+            makeBlankAuthEmailSharedEnvironmentOverrides()
+          )
         : Effect.fail(
             toPreflightError(
               error,
@@ -1201,7 +1220,7 @@ function ensureComposeEnvironmentFile(
 
 function writeComposeEnvironmentFile(
   record: SandboxRecord,
-  sharedEnvironment: Readonly<Record<string, string>>
+  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
 ): SandboxPreflightEffect<void> {
   const composeEnvFile = getComposeEnvFilePath(record.sandboxName);
   return Effect.gen(function* () {
@@ -1226,7 +1245,7 @@ function writeComposeEnvironmentFile(
 
 export function buildComposeFallbackEnvironmentOverrides(
   record: SandboxRecord,
-  sharedEnvironment: Readonly<Record<string, string>>
+  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
 ): Record<string, string> {
   const urls = buildRecordUrls(record);
 
@@ -1249,6 +1268,12 @@ export function buildComposeFallbackEnvironmentOverrides(
     TASK_TRACKER_SANDBOX: "1",
     VITE_AUTH_ORIGIN: urls.api,
   };
+}
+
+function makeBlankAuthEmailSharedEnvironmentOverrides(): AuthEmailSharedEnvironmentOverrides {
+  return Object.fromEntries(
+    AUTH_EMAIL_REQUIRED_ENV_KEYS.map((key) => [key, ""])
+  ) as AuthEmailSharedEnvironmentOverrides;
 }
 
 function writeComposeEnvironmentFileFromSpec(
