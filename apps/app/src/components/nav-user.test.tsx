@@ -246,6 +246,9 @@ describe("nav user", () => {
 
       await waitFor(() => {
         expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({
+          search: {
+            invitation: undefined,
+          },
           to: "/login",
         });
       });
@@ -307,6 +310,9 @@ describe("nav user", () => {
 
       await waitFor(() => {
         expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({
+          search: {
+            invitation: undefined,
+          },
           to: "/login",
         });
       });

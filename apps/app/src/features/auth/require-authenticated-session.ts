@@ -2,6 +2,7 @@ import { isRedirect, redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
+import { getLoginNavigationTarget } from "./auth-navigation";
 import { isServerEnvironment } from "./runtime-environment";
 import { getCurrentServerSession } from "./server-session";
 
@@ -22,12 +23,12 @@ export async function requireAuthenticatedSession() {
       return session;
     }
 
-    throw redirect({ to: "/login" });
+    throw redirect(getLoginNavigationTarget());
   } catch (error) {
     if (isRedirect(error)) {
       throw error;
     }
 
-    throw redirect({ to: "/login" });
+    throw redirect(getLoginNavigationTarget());
   }
 }

@@ -26,6 +26,14 @@ export class PasswordResetDeliveryError extends Schema.TaggedError<PasswordReset
   }
 ) {}
 
+export class OrganizationInvitationDeliveryError extends Schema.TaggedError<OrganizationInvitationDeliveryError>()(
+  "OrganizationInvitationDeliveryError",
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  }
+) {}
+
 export class EmailVerificationDeliveryError extends Schema.TaggedError<EmailVerificationDeliveryError>()(
   "EmailVerificationDeliveryError",
   {

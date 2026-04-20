@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
+import { API_ORIGIN } from "./test-urls";
 
 function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
@@ -199,7 +200,7 @@ test.describe("auth pages", () => {
     const loginPage = new LoginPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(
-      "http://127.0.0.1:3001/api/auth/sign-up/email",
+      `${API_ORIGIN}/api/auth/sign-up/email`,
       {
         data: {
           email,

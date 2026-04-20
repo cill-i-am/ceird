@@ -2,6 +2,8 @@ import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
+import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
+import { getAuthSuccessNavigationTarget } from "./auth-navigation";
 import { isServerEnvironment } from "./runtime-environment";
 import { getCurrentServerSession } from "./server-session";
 
@@ -18,10 +20,12 @@ async function getCurrentSession() {
   }
 }
 
-export async function redirectIfAuthenticated() {
+export async function redirectIfAuthenticated(
+  search?: InvitationContinuationSearch
+) {
   const session = await getCurrentSession();
 
   if (session) {
-    throw redirect({ to: "/" });
+    throw redirect(getAuthSuccessNavigationTarget(search?.invitation));
   }
 }

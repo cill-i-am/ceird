@@ -15,17 +15,25 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
 
+import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
   getAuthFailureMessage,
   getErrorText,
   getFormErrorText,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
-import { useAuthSuccessNavigation } from "./auth-navigation";
+import {
+  getForgotPasswordNavigationTarget,
+  useAuthSuccessNavigation,
+} from "./auth-navigation";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
 
-export function LoginPage() {
-  const navigateOnSuccess = useAuthSuccessNavigation();
+export function LoginPage({
+  search,
+}: {
+  readonly search?: InvitationContinuationSearch;
+}) {
+  const navigateOnSuccess = useAuthSuccessNavigation(search?.invitation);
   const form = useForm({
     defaultValues: {
       email: "",
@@ -63,7 +71,9 @@ export function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Sign in</CardTitle>
           <CardDescription>
-            Use your email and password to continue.
+            {search?.invitation
+              ? "Sign in with the invited email address to review and accept your invitation."
+              : "Use your email and password to continue."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -135,7 +145,7 @@ export function LoginPage() {
 
               <div className="text-right">
                 <Link
-                  to="/forgot-password"
+                  {...getForgotPasswordNavigationTarget(search?.invitation)}
                   className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                 >
                   Forgot password?

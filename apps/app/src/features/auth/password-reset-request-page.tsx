@@ -16,12 +16,15 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient, buildPasswordResetRedirectTo } from "#/lib/auth-client";
 
+import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
   getErrorText,
   getFormErrorText,
   getPasswordResetRequestFailureMessage,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { getLoginNavigationTarget } from "./auth-navigation";
+import type { LoginNavigationTarget } from "./auth-navigation";
 import {
   decodePasswordResetRequestInput,
   passwordResetRequestSchema,
@@ -30,8 +33,15 @@ import {
 const successCopy =
   "If an account exists for that email, a reset link will be sent.";
 
-export function PasswordResetRequestPage() {
+export function PasswordResetRequestPage({
+  search,
+}: {
+  readonly search?: InvitationContinuationSearch;
+}) {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const loginNavigationTarget: LoginNavigationTarget = getLoginNavigationTarget(
+    search?.invitation
+  );
   const form = useForm({
     defaultValues: {
       email: "",
@@ -47,7 +57,10 @@ export function PasswordResetRequestPage() {
       const input = decodePasswordResetRequestInput(value);
       const result = await authClient.requestPasswordReset({
         email: input.email,
-        redirectTo: buildPasswordResetRedirectTo(window.location.origin),
+        redirectTo: buildPasswordResetRedirectTo(
+          window.location.origin,
+          search?.invitation
+        ),
       });
 
       if (result.error) {
@@ -81,7 +94,7 @@ export function PasswordResetRequestPage() {
             <div className="space-y-4 text-center">
               <p className="text-sm text-muted-foreground">{successCopy}</p>
               <Link
-                to="/login"
+                {...loginNavigationTarget}
                 className="text-sm font-medium text-primary underline-offset-4 hover:underline"
               >
                 Back to login
@@ -148,7 +161,7 @@ export function PasswordResetRequestPage() {
                 </form.Subscribe>
 
                 <Link
-                  to="/login"
+                  {...loginNavigationTarget}
                   className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
                 >
                   Back to login

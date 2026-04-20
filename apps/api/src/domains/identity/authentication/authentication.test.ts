@@ -10,9 +10,13 @@ import {
 } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { getTableName } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect } from "effect";
+import { Pool } from "pg";
 
+import { createAuthentication, matchesTrustedOrigin } from "./auth.js";
 import {
+  DEFAULT_AUTH_DATABASE_URL,
   loadAuthenticationConfig,
   makeAuthenticationConfig,
   makeAuthenticationTrustedOrigins,
@@ -107,6 +111,14 @@ describe("makeAuthenticationConfig()", () => {
     ).toContain("https://task-tracker.app.task-tracker.localhost:1355");
   }, 10_000);
 
+  it("adds the explicit app origin to the trusted origin allowlist", () => {
+    expect(
+      makeAuthenticationTrustedOrigins({
+        appOrigin: "http://127.0.0.1:4304",
+      })
+    ).toContain("http://127.0.0.1:4304");
+  }, 10_000);
+
   it("requires BETTER_AUTH_BASE_URL when loading auth config", async () => {
     await withEnvironment(
       {
@@ -126,6 +138,7 @@ describe("makeAuthenticationConfig()", () => {
   it("loads the explicit Better Auth base URL from config", async () => {
     await withEnvironment(
       {
+        AUTH_APP_ORIGIN: "http://127.0.0.1:4304",
         BETTER_AUTH_BASE_URL: "https://api.task-tracker.localhost:1355",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL:
@@ -139,6 +152,7 @@ describe("makeAuthenticationConfig()", () => {
         expect(config.trustedOrigins).toContain(
           "https://app.task-tracker.localhost:1355"
         );
+        expect(config.trustedOrigins).toContain("http://127.0.0.1:4304");
       }
     );
   }, 10_000);
@@ -231,12 +245,125 @@ describe("auth schema", () => {
   }, 10_000);
 });
 
+describe("createAuthentication()", () => {
+  it("configures organization invitation delivery through the Better Auth organization plugin", async () => {
+    const sentInvitationEmails: unknown[] = [];
+    const pool = new Pool({
+      connectionString: DEFAULT_AUTH_DATABASE_URL,
+      allowExitOnIdle: true,
+    });
+
+    try {
+      const auth = createAuthentication({
+        appOrigin: "http://127.0.0.1:4173",
+        backgroundTaskHandler: () => {},
+        config: makeAuthenticationConfig({
+          baseUrl: "http://127.0.0.1:3000",
+          secret: "0123456789abcdef0123456789abcdef",
+          databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+        }),
+        database: drizzle(pool, { schema: authSchema }),
+        reportPasswordResetEmailFailure: () => {},
+        reportVerificationEmailFailure: () => {},
+        sendOrganizationInvitationEmail: (input) => {
+          sentInvitationEmails.push(input);
+          return Promise.resolve();
+        },
+        sendPasswordResetEmail: async () => {},
+        sendVerificationEmail: async () => {},
+      });
+
+      const organizationPlugin = auth.options.plugins.find(
+        (plugin) => plugin.id === "organization"
+      ) as
+        | {
+            readonly options?: {
+              readonly cancelPendingInvitationsOnReInvite?: boolean;
+              readonly invitationExpiresIn?: number;
+              readonly sendInvitationEmail?: (data: {
+                readonly email: string;
+                readonly id: string;
+                readonly inviter: {
+                  readonly user: {
+                    readonly email: string;
+                  };
+                };
+                readonly organization: {
+                  readonly name: string;
+                };
+                readonly role: string;
+              }) => Promise<void>;
+            };
+          }
+        | undefined;
+
+      expect(organizationPlugin).toBeDefined();
+      if (!organizationPlugin?.options?.cancelPendingInvitationsOnReInvite) {
+        throw new Error(
+          "Expected invite re-sends to cancel pending invitations"
+        );
+      }
+      expect(organizationPlugin?.options?.invitationExpiresIn).toBe(
+        60 * 60 * 24 * 7
+      );
+      expect(organizationPlugin?.options?.sendInvitationEmail).toBeTypeOf(
+        "function"
+      );
+
+      await organizationPlugin?.options?.sendInvitationEmail?.({
+        email: "member@example.com",
+        id: "inv_123",
+        inviter: {
+          user: {
+            email: "owner@example.com",
+          },
+        },
+        organization: {
+          name: "Acme Field Ops",
+        },
+        role: "member",
+      });
+
+      expect(sentInvitationEmails).toStrictEqual([
+        {
+          idempotencyKey: "organization-invitation/inv_123",
+          invitationUrl: "http://127.0.0.1:4173/accept-invitation/inv_123",
+          inviterEmail: "owner@example.com",
+          organizationName: "Acme Field Ops",
+          recipientEmail: "member@example.com",
+          recipientName: "member@example.com",
+          role: "member",
+        },
+      ]);
+    } finally {
+      await pool.end();
+    }
+  }, 10_000);
+
+  it("matches wildcard trusted origins for sandbox aliases", () => {
+    expect({
+      api: matchesTrustedOrigin(
+        "https://organization-invitations.api.task-tracker.localhost:1355",
+        ["https://*.app.task-tracker.localhost:1355"]
+      ),
+      app: matchesTrustedOrigin(
+        "https://organization-invitations.app.task-tracker.localhost:1355",
+        ["https://*.app.task-tracker.localhost:1355"]
+      ),
+    }).toStrictEqual({
+      api: false,
+      app: true,
+    });
+  }, 10_000);
+});
+
 async function withEnvironment(
   nextEnvironment: Record<string, string>,
   run: () => Promise<void>
 ) {
   const previousEnvironment = { ...process.env };
 
+  delete process.env.AUTH_APP_ORIGIN;
   delete process.env.BETTER_AUTH_BASE_URL;
   delete process.env.BETTER_AUTH_SECRET;
   delete process.env.DATABASE_URL;

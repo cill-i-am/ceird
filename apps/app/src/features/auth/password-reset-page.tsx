@@ -22,15 +22,16 @@ import {
   isInvalidPasswordResetTokenError,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import {
+  getForgotPasswordNavigationTarget,
+  getLoginNavigationTarget,
+} from "./auth-navigation";
 import { decodePasswordResetInput, passwordResetSchema } from "./auth-schemas";
 import { decodePasswordResetSearch } from "./password-reset-search";
 import type { PasswordResetSearch } from "./password-reset-search";
 
 interface PasswordResetPageProps {
-  search?: {
-    token?: string;
-    error?: string;
-  };
+  readonly search?: PasswordResetSearch;
 }
 
 export function PasswordResetPage({ search }: PasswordResetPageProps) {
@@ -38,7 +39,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
   const normalizedSearch: PasswordResetSearch = decodePasswordResetSearch(
     search ?? {}
   );
-  const { token } = normalizedSearch;
+  const { invitation, token } = normalizedSearch;
 
   const form = useForm({
     defaultValues: {
@@ -69,6 +70,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
             to: "/reset-password",
             search: {
               error: "INVALID_TOKEN",
+              invitation,
               token: undefined,
             },
           });
@@ -85,7 +87,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
         return;
       }
 
-      await navigate({ to: "/login" });
+      await navigate(getLoginNavigationTarget(invitation));
     },
   });
 
@@ -108,13 +110,13 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
           </CardContent>
           <CardFooter className="flex-col items-stretch gap-4">
             <Link
-              to="/forgot-password"
+              {...getForgotPasswordNavigationTarget(invitation)}
               className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               Request a new reset link
             </Link>
             <Link
-              to="/login"
+              {...getLoginNavigationTarget(invitation)}
               className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               Back to login

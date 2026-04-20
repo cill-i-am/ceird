@@ -34,9 +34,14 @@ const { mockedGetSession, mockedNavigate, mockedSignInEmail } = vi.hoisted(
   })
 );
 
-vi.mock(import("./auth-navigation"), () => ({
-  useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
-}));
+vi.mock(import("./auth-navigation"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
+  };
+});
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -45,17 +50,28 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
+      search,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a
-        data-router-link="true"
-        href={typeof to === "string" ? to : props.href}
-        {...props}
-      >
-        {children}
-      </a>
-    )) as typeof actual.Link,
+    }: ComponentProps<"a"> & {
+      search?: Record<string, string | undefined>;
+      to?: string;
+    }) => {
+      const { href: initialHref } = props;
+      let href = initialHref;
+
+      if (typeof to === "string") {
+        href = search?.invitation
+          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+          : to;
+      }
+
+      return (
+        <a data-router-link="true" href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
   };
 });
 
@@ -108,12 +124,12 @@ describe("login page", () => {
     });
   }, 10_000);
 
-  it("shows a forgot-password link to the public reset request page", () => {
-    render(<LoginPage />);
+  it("preserves invitation continuation in the forgot-password link", () => {
+    render(<LoginPage search={{ invitation: "inv_123" }} />);
 
     const link = screen.getByRole("link", { name: "Forgot password?" });
 
-    expect(link).toHaveAttribute("href", "/forgot-password");
+    expect(link).toHaveAttribute("href", "/forgot-password?invitation=inv_123");
     expect(link).toHaveAttribute("data-router-link", "true");
   }, 10_000);
 

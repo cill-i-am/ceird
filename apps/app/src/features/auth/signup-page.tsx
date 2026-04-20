@@ -17,6 +17,7 @@ import {
   buildEmailVerificationRedirectTo,
 } from "#/lib/auth-client";
 
+import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
   getAuthFailureMessage,
   getErrorText,
@@ -26,8 +27,12 @@ import { AuthFormField } from "./auth-form-field";
 import { useAuthSuccessNavigation } from "./auth-navigation";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
 
-export function SignupPage() {
-  const navigateOnSuccess = useAuthSuccessNavigation();
+export function SignupPage({
+  search,
+}: {
+  readonly search?: InvitationContinuationSearch;
+}) {
+  const navigateOnSuccess = useAuthSuccessNavigation(search?.invitation);
   const form = useForm({
     defaultValues: {
       name: "",
@@ -72,7 +77,9 @@ export function SignupPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Create an account</CardTitle>
           <CardDescription>
-            Sign up with your name, email, and password.
+            {search?.invitation
+              ? "Create an account with the invited email address to accept your invitation."
+              : "Sign up with your name, email, and password."}
           </CardDescription>
         </CardHeader>
         <CardContent>

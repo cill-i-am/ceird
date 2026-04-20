@@ -16,9 +16,11 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
+import { Route as AppOrgMembersRouteImport } from './routes/_app._org.members'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -54,6 +56,12 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AcceptInvitationInvitationIdRoute =
+  AcceptInvitationInvitationIdRouteImport.update({
+    id: '/accept-invitation/$invitationId',
+    path: '/accept-invitation/$invitationId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
   id: '/create-organization',
   path: '/create-organization',
@@ -68,6 +76,11 @@ const AppOrgIndexRoute = AppOrgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppOrgRoute,
 } as any)
+const AppOrgMembersRoute = AppOrgMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AppOrgRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppOrgIndexRoute
@@ -78,6 +91,8 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/members': typeof AppOrgMembersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AppOrgIndexRoute
@@ -88,6 +103,8 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/members': typeof AppOrgMembersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -100,6 +117,8 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_app/_org': typeof AppOrgRouteWithChildren
   '/_app/create-organization': typeof AppCreateOrganizationRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/_app/_org/members': typeof AppOrgMembersRoute
   '/_app/_org/': typeof AppOrgIndexRoute
 }
 export interface FileRouteTypes {
@@ -113,6 +132,8 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/accept-invitation/$invitationId'
+    | '/members'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -123,6 +144,8 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/accept-invitation/$invitationId'
+    | '/members'
   id:
     | '__root__'
     | '/_app'
@@ -134,6 +157,8 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_app/_org'
     | '/_app/create-organization'
+    | '/accept-invitation/$invitationId'
+    | '/_app/_org/members'
     | '/_app/_org/'
   fileRoutesById: FileRoutesById
 }
@@ -145,6 +170,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -198,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accept-invitation/$invitationId': {
+      id: '/accept-invitation/$invitationId'
+      path: '/accept-invitation/$invitationId'
+      fullPath: '/accept-invitation/$invitationId'
+      preLoaderRoute: typeof AcceptInvitationInvitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/create-organization': {
       id: '/_app/create-organization'
       path: '/create-organization'
@@ -219,14 +252,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgIndexRouteImport
       parentRoute: typeof AppOrgRoute
     }
+    '/_app/_org/members': {
+      id: '/_app/_org/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AppOrgMembersRouteImport
+      parentRoute: typeof AppOrgRoute
+    }
   }
 }
 
 interface AppOrgRouteChildren {
+  AppOrgMembersRoute: typeof AppOrgMembersRoute
   AppOrgIndexRoute: typeof AppOrgIndexRoute
 }
 
 const AppOrgRouteChildren: AppOrgRouteChildren = {
+  AppOrgMembersRoute: AppOrgMembersRoute,
   AppOrgIndexRoute: AppOrgIndexRoute,
 }
 
@@ -253,6 +295,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

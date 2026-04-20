@@ -36,6 +36,18 @@ const data = {
         },
       ],
     },
+    {
+      title: "Organization",
+      url: "/members",
+      icon: <HugeiconsIcon icon={CommandIcon} strokeWidth={2} />,
+      isActive: true,
+      items: [
+        {
+          title: "Members",
+          url: "/members",
+        },
+      ],
+    },
   ],
 };
 

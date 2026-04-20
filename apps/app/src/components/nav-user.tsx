@@ -20,6 +20,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
+import type { LoginNavigationTarget } from "#/features/auth/auth-navigation";
+import { getLoginNavigationTarget } from "#/features/auth/auth-navigation";
 import { hardRedirectToLogin } from "#/features/auth/hard-redirect-to-login";
 import { signOut } from "#/features/auth/sign-out";
 
@@ -29,7 +31,7 @@ export interface NavUserAccount {
   image?: string | null;
 }
 
-export type NavUserNavigate = (options: { to: string }) => Promise<void>;
+export type NavUserNavigate = (options: LoginNavigationTarget) => Promise<void>;
 
 function getInitials(name: string) {
   const initials = name
@@ -64,7 +66,7 @@ export function NavUser({
       }
 
       try {
-        await navigate({ to: "/login" });
+        await navigate(getLoginNavigationTarget());
       } catch {
         if (!hardRedirectToLogin()) {
           setErrorMessage(

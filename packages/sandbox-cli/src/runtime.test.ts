@@ -467,7 +467,7 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       AUTH_EMAIL_FROM: "",
       AUTH_EMAIL_FROM_NAME: "",
       RESEND_API_KEY: "",
-      BETTER_AUTH_BASE_URL: "https://alpha.api.task-tracker.localhost:1355",
+      BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
       SANDBOX_NAME: "alpha",
     });
   }, 10_000);

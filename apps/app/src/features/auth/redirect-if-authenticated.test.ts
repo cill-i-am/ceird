@@ -99,6 +99,37 @@ describe("auth route redirect guard", () => {
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
 
+  it("preserves invitation continuation for authenticated auth-page visits", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_123",
+        },
+        user: {
+          name: "Taylor Example",
+          email: "person@example.com",
+          image: null,
+        },
+      },
+      error: null,
+    });
+
+    const result = redirectIfAuthenticated({
+      invitation: "inv_123",
+    });
+
+    await expect(result).rejects.toMatchObject({
+      options: {
+        params: {
+          invitationId: "inv_123",
+        },
+        to: "/accept-invitation/$invitationId",
+      },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+  }, 1000);
+
   it("resolves without throwing when no session exists", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({

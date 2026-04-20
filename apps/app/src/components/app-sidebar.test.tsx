@@ -152,6 +152,10 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com"
       );
+      expect(screen.getByRole("link", { name: "Members" })).toHaveAttribute(
+        "href",
+        "/members"
+      );
       expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/shadcn starter/i)).not.toBeInTheDocument();
     }

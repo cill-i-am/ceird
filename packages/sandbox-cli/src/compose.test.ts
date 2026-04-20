@@ -47,10 +47,10 @@ describe("renderComposeEnvironmentFile()", () => {
         overrides: {
           API_HOST_PORT: "4301",
           APP_HOST_PORT: "4300",
+          AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          BETTER_AUTH_BASE_URL:
-            "https://agent-one.api.task-tracker.localhost:1355",
+          BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
           DATABASE_URL:
             "postgresql://postgres:postgres@postgres:5432/task_tracker",
           RESEND_API_KEY: "re_live_123",
@@ -67,9 +67,10 @@ describe("renderComposeEnvironmentFile()", () => {
         "SANDBOX_PROXY_PORT=1355",
         "API_HOST_PORT=4301",
         "APP_HOST_PORT=4300",
+        "AUTH_APP_ORIGIN=http://127.0.0.1:4300",
         "AUTH_EMAIL_FROM=auth@example.com",
         "AUTH_EMAIL_FROM_NAME=Task Tracker",
-        "BETTER_AUTH_BASE_URL=https://agent-one.api.task-tracker.localhost:1355",
+        "BETTER_AUTH_BASE_URL=http://127.0.0.1:4301",
         "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/task_tracker",
         "RESEND_API_KEY=re_live_123",
         "SANDBOX_DEV_IMAGE=tt-sbx-task-tracker-dev:123456789abc",

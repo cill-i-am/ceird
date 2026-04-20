@@ -86,7 +86,12 @@ describe("authenticated-session requirement", () => {
     const result = requireAuthenticatedSession();
 
     await expect(result).rejects.toMatchObject({
-      options: { to: "/login" },
+      options: {
+        search: {
+          invitation: undefined,
+        },
+        to: "/login",
+      },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
@@ -154,7 +159,12 @@ describe("authenticated-session requirement", () => {
     const result = requireAuthenticatedSession();
 
     await expect(result).rejects.toMatchObject({
-      options: { to: "/login" },
+      options: {
+        search: {
+          invitation: undefined,
+        },
+        to: "/login",
+      },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
     expect(mockedGetServerAuthSession).not.toHaveBeenCalled();

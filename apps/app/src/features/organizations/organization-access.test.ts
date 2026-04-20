@@ -4,6 +4,7 @@ import {
   ensureActiveOrganizationId,
   listOrganizations,
   redirectIfOrganizationReady,
+  requireOrganizationAdministrationAccess,
   requireOrganizationAccess,
 } from "./organization-access";
 import type { OrganizationSummary } from "./organization-access";
@@ -39,18 +40,29 @@ interface Organization {
 
 const {
   mockedGetStrictServerSession,
+  mockedGetServerOrganizationMemberRole,
   mockedListServerOrganizations,
   mockedGetStrictServerOrganizations,
+  mockedGetClientActiveMemberRole,
   mockedGetSession,
   mockedGetClientOrganizations,
   mockedSetClientActiveOrganization,
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
   mockedGetStrictServerSession: vi.fn<() => Promise<Session | null>>(),
+  mockedGetServerOrganizationMemberRole:
+    vi.fn<(organizationId: string) => Promise<{ role: string }>>(),
   mockedListServerOrganizations:
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
   mockedGetStrictServerOrganizations:
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
+  mockedGetClientActiveMemberRole: vi.fn<
+    (input: {
+      query: {
+        organizationId: string;
+      };
+    }) => Promise<{ data: { role: string } | null; error: Error | null }>
+  >(),
   mockedGetSession:
     vi.fn<() => Promise<{ data: Session | null; error: Error | null }>>(),
   mockedGetClientOrganizations:
@@ -71,6 +83,8 @@ vi.mock(import("./organization-server"), async (importActual) => {
 
   return {
     ...actual,
+    getCurrentServerOrganizationMemberRole:
+      mockedGetServerOrganizationMemberRole as typeof actual.getCurrentServerOrganizationMemberRole,
     getCurrentServerOrganizationSession:
       mockedGetStrictServerSession as typeof actual.getCurrentServerOrganizationSession,
     listCurrentServerOrganizations:
@@ -94,6 +108,8 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
       getSession: mockedGetSession as typeof actual.authClient.getSession,
       organization: {
         ...actual.authClient.organization,
+        getActiveMemberRole:
+          mockedGetClientActiveMemberRole as unknown as typeof actual.authClient.organization.getActiveMemberRole,
         list: mockedGetClientOrganizations as unknown as typeof actual.authClient.organization.list,
         setActive:
           mockedSetClientActiveOrganization as unknown as typeof actual.authClient.organization.setActive,
@@ -104,6 +120,15 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
 
 describe("organization access helpers", () => {
   beforeEach(() => {
+    mockedGetClientActiveMemberRole.mockResolvedValue({
+      data: {
+        role: "owner",
+      },
+      error: null,
+    });
+    mockedGetServerOrganizationMemberRole.mockResolvedValue({
+      role: "owner",
+    });
     mockedSetClientActiveOrganization.mockResolvedValue({
       data: null,
       error: null,
@@ -164,7 +189,12 @@ describe("organization access helpers", () => {
     const result = ensureActiveOrganizationId();
 
     await expect(result).rejects.toMatchObject({
-      options: { to: "/login" },
+      options: {
+        search: {
+          invitation: undefined,
+        },
+        to: "/login",
+      },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
@@ -467,6 +497,78 @@ describe("organization access helpers", () => {
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
 
+  it("allows admins and owners through organization administration checks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          activeOrganizationId: "org_active",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
+    mockedGetClientActiveMemberRole.mockResolvedValue({
+      data: {
+        role: "admin",
+      },
+      error: null,
+    });
+
+    await expect(
+      requireOrganizationAdministrationAccess()
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+    });
+    expect(mockedGetClientActiveMemberRole).toHaveBeenCalledWith({
+      query: {
+        organizationId: "org_active",
+      },
+    });
+  }, 1000);
+
+  it("redirects non-admin members away from organization administration routes", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          activeOrganizationId: "org_active",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
+    mockedGetClientActiveMemberRole.mockResolvedValue({
+      data: {
+        role: "member",
+      },
+      error: null,
+    });
+
+    const result = requireOrganizationAdministrationAccess();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+  }, 1000);
+
   it("redirects unauthenticated users to /login from redirectIfOrganizationReady", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({ data: null, error: null });
@@ -474,7 +576,12 @@ describe("organization access helpers", () => {
     const result = redirectIfOrganizationReady();
 
     await expect(result).rejects.toMatchObject({
-      options: { to: "/login" },
+      options: {
+        search: {
+          invitation: undefined,
+        },
+        to: "/login",
+      },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);

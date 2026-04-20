@@ -18,6 +18,9 @@ const OrganizationSummarySchema = Schema.Struct({
 const OrganizationSummaryListSchema = Schema.Array(OrganizationSummarySchema);
 
 const NullableString = Schema.NullOr(Schema.String);
+const OrganizationMemberRoleSchema = Schema.Struct({
+  role: Schema.String,
+});
 
 const OrganizationAccessSessionSchema = Schema.Struct({
   session: Schema.Struct({
@@ -48,6 +51,10 @@ export type OrganizationSummary = Schema.Schema.Type<
 
 export type OrganizationAccessSession = Schema.Schema.Type<
   typeof OrganizationAccessSessionSchema
+>;
+
+export type OrganizationMemberRole = Schema.Schema.Type<
+  typeof OrganizationMemberRoleSchema
 >;
 
 interface ServerAuthRequest {
@@ -126,6 +133,35 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
 
   return decodeOrganizationSummariesStrict(organizations);
 });
+
+export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
+  async (organizationId: string): Promise<OrganizationMemberRole> => {
+    const authRequest = readServerAuthRequestStrict();
+    const response = await fetch(
+      new URL(
+        `organization/get-active-member-role?organizationId=${encodeURIComponent(
+          organizationId
+        )}`,
+        `${authRequest.authBaseURL}/`
+      ),
+      {
+        headers: {
+          accept: "application/json",
+          cookie: authRequest.cookie,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Organization member role lookup failed with status ${response.status}.`
+      );
+    }
+
+    const role = (await response.json()) as unknown;
+    return decodeOrganizationMemberRole(role);
+  }
+);
 
 function readServerSessionRequest(): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
@@ -230,5 +266,17 @@ export function decodeOrganizationAccessSession(
     return Schema.decodeUnknownSync(OrganizationAccessSessionSchema)(session);
   } catch {
     throw new Error("Session lookup returned an invalid payload.");
+  }
+}
+
+export function decodeOrganizationMemberRole(
+  role: unknown
+): OrganizationMemberRole {
+  try {
+    return Schema.decodeUnknownSync(OrganizationMemberRoleSchema)(role);
+  } catch {
+    throw new Error(
+      "Organization member role lookup returned an invalid payload."
+    );
   }
 }

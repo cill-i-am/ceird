@@ -42,17 +42,28 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
+      search,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a
-        data-router-link="true"
-        href={typeof to === "string" ? to : props.href}
-        {...props}
-      >
-        {children}
-      </a>
-    )) as typeof actual.Link,
+    }: ComponentProps<"a"> & {
+      search?: Record<string, string | undefined>;
+      to?: string;
+    }) => {
+      const { href: initialHref } = props;
+      let href = initialHref;
+
+      if (typeof to === "string") {
+        href = search?.invitation
+          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+          : to;
+      }
+
+      return (
+        <a data-router-link="true" href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
   };
 });
 
@@ -71,7 +82,7 @@ describe("password reset request page", () => {
   it("submits email and redirect target to Better Auth", async () => {
     const user = userEvent.setup();
 
-    render(<PasswordResetRequestPage />);
+    render(<PasswordResetRequestPage search={{ invitation: "inv_123" }} />);
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.click(screen.getByRole("button", { name: /send reset link/i }));
@@ -79,7 +90,10 @@ describe("password reset request page", () => {
     await waitFor(() => {
       expect(mockedRequestPasswordReset).toHaveBeenCalledWith({
         email: "person@example.com",
-        redirectTo: buildPasswordResetRedirectTo(window.location.origin),
+        redirectTo: buildPasswordResetRedirectTo(
+          window.location.origin,
+          "inv_123"
+        ),
       });
     });
   }, 10_000);
@@ -87,7 +101,7 @@ describe("password reset request page", () => {
   it("shows the generic success state after submit", async () => {
     const user = userEvent.setup();
 
-    render(<PasswordResetRequestPage />);
+    render(<PasswordResetRequestPage search={{ invitation: "inv_123" }} />);
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.click(screen.getByRole("button", { name: /send reset link/i }));
@@ -102,10 +116,13 @@ describe("password reset request page", () => {
   it("uses router links for back-to-login navigation before and after submit", async () => {
     const user = userEvent.setup();
 
-    render(<PasswordResetRequestPage />);
+    render(<PasswordResetRequestPage search={{ invitation: "inv_123" }} />);
 
     const initialBackLink = screen.getByRole("link", { name: "Back to login" });
-    expect(initialBackLink).toHaveAttribute("href", "/login");
+    expect(initialBackLink).toHaveAttribute(
+      "href",
+      "/login?invitation=inv_123"
+    );
     expect(initialBackLink).toHaveAttribute("data-router-link", "true");
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
@@ -114,7 +131,10 @@ describe("password reset request page", () => {
     const successBackLink = await screen.findByRole("link", {
       name: "Back to login",
     });
-    expect(successBackLink).toHaveAttribute("href", "/login");
+    expect(successBackLink).toHaveAttribute(
+      "href",
+      "/login?invitation=inv_123"
+    );
     expect(successBackLink).toHaveAttribute("data-router-link", "true");
   }, 10_000);
 

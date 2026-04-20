@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
+import { APP_ORIGIN } from "../test-urls";
+
 export class CreateOrganizationPage {
   readonly page: Page;
   readonly heading: Locator;
@@ -19,7 +21,7 @@ export class CreateOrganizationPage {
   }
 
   async expectLoaded() {
-    await expect(this.page).toHaveURL(/\/create-organization$/);
+    await expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`);
     await expect(this.heading).toBeVisible();
   }
 }

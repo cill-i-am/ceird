@@ -36,17 +36,28 @@ vi.mock(import("@tanstack/react-router"), async () => {
     ...actual,
     Link: (({
       children,
+      search,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a
-        data-router-link="true"
-        href={typeof to === "string" ? to : props.href}
-        {...props}
-      >
-        {children}
-      </a>
-    )) as typeof actual.Link,
+    }: ComponentProps<"a"> & {
+      search?: Record<string, string | undefined>;
+      to?: string;
+    }) => {
+      const { href: initialHref } = props;
+      let href = initialHref;
+
+      if (typeof to === "string") {
+        href = search?.invitation
+          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+          : to;
+      }
+
+      return (
+        <a data-router-link="true" href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
     useNavigate: () =>
       mockedNavigate as unknown as ReturnType<typeof actual.useNavigate>,
   };
@@ -66,7 +77,11 @@ describe("password reset page", () => {
   });
 
   it("shows the invalid-link state when search contains INVALID_TOKEN", () => {
-    render(<PasswordResetPage search={{ error: "INVALID_TOKEN" }} />);
+    render(
+      <PasswordResetPage
+        search={{ error: "INVALID_TOKEN", invitation: "inv_123" }}
+      />
+    );
 
     expect(
       screen.getByText("This password reset link is invalid or has expired.")
@@ -75,18 +90,25 @@ describe("password reset page", () => {
     const forgotPasswordLink = screen.getByRole("link", {
       name: "Request a new reset link",
     });
-    expect(forgotPasswordLink).toHaveAttribute("href", "/forgot-password");
+    expect(forgotPasswordLink).toHaveAttribute(
+      "href",
+      "/forgot-password?invitation=inv_123"
+    );
     expect(forgotPasswordLink).toHaveAttribute("data-router-link", "true");
 
     const loginLink = screen.getByRole("link", { name: "Back to login" });
-    expect(loginLink).toHaveAttribute("href", "/login");
+    expect(loginLink).toHaveAttribute("href", "/login?invitation=inv_123");
     expect(loginLink).toHaveAttribute("data-router-link", "true");
   }, 10_000);
 
   it("submits token and newPassword to Better Auth", async () => {
     const user = userEvent.setup();
 
-    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+    render(
+      <PasswordResetPage
+        search={{ invitation: "inv_123", token: "reset-token" }}
+      />
+    );
 
     await user.type(screen.getByLabelText("New password"), "password123");
     await user.type(screen.getByLabelText("Confirm password"), "password123");
@@ -103,7 +125,11 @@ describe("password reset page", () => {
   it("navigates to /login after a successful reset", async () => {
     const user = userEvent.setup();
 
-    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+    render(
+      <PasswordResetPage
+        search={{ invitation: "inv_123", token: "reset-token" }}
+      />
+    );
 
     await user.type(screen.getByLabelText("New password"), "password123");
     await user.type(screen.getByLabelText("Confirm password"), "password123");
@@ -111,6 +137,9 @@ describe("password reset page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          invitation: "inv_123",
+        },
         to: "/login",
       });
     });
@@ -128,7 +157,11 @@ describe("password reset page", () => {
 
     const user = userEvent.setup();
 
-    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+    render(
+      <PasswordResetPage
+        search={{ invitation: "inv_123", token: "reset-token" }}
+      />
+    );
 
     await user.type(screen.getByLabelText("New password"), "password123");
     await user.type(screen.getByLabelText("Confirm password"), "password123");
@@ -138,6 +171,7 @@ describe("password reset page", () => {
       expect(mockedNavigate).toHaveBeenCalledWith({
         search: {
           error: "INVALID_TOKEN",
+          invitation: "inv_123",
           token: undefined,
         },
         to: "/reset-password",

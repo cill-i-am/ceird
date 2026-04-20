@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "#/components/ui/card";
 
+import { getLoginNavigationTarget } from "./auth-navigation";
 import type { EmailVerificationSearch } from "./email-verification-search";
 
 interface EmailVerificationPageProps {
@@ -34,7 +35,7 @@ export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
             Go to the app
           </Link>
           <Link
-            to="/login"
+            {...getLoginNavigationTarget()}
             className={buttonVariants({
               className: "w-full",
               variant: "outline",

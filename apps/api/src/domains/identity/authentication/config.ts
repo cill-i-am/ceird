@@ -59,6 +59,7 @@ const authenticationBaseUrlConfig = Config.string("BETTER_AUTH_BASE_URL").pipe(
 );
 
 export interface AuthenticationEnvironment {
+  readonly appOrigin?: string | undefined;
   readonly baseUrl: string;
   readonly portlessUrl?: string | undefined;
   readonly secret: string;
@@ -103,7 +104,7 @@ export interface AuthenticationConfig {
 }
 
 export function makeAuthenticationTrustedOrigins(
-  environment: Pick<AuthenticationEnvironment, "portlessUrl">
+  environment: Pick<AuthenticationEnvironment, "appOrigin" | "portlessUrl">
 ): TrustedOriginPattern[] {
   const trustedOrigins = new Set<TrustedOriginPattern>([
     ...DEFAULT_LOCAL_APP_ORIGINS,
@@ -127,6 +128,16 @@ export function makeAuthenticationTrustedOrigins(
       trustedOrigins.add(makeTrustedOriginPattern(appUrl.origin));
     } catch {
       // Ignore malformed PORTLESS_URL values and keep the default trusted origins.
+    }
+  }
+
+  if (environment.appOrigin) {
+    try {
+      trustedOrigins.add(
+        makeTrustedOriginPattern(new URL(environment.appOrigin).origin)
+      );
+    } catch {
+      // Ignore malformed AUTH_APP_ORIGIN values and keep the default trusted origins.
     }
   }
 
@@ -181,6 +192,10 @@ export const loadAuthenticationConfig = Effect.gen(
       Config.string("PORTLESS_URL"),
       Config.option
     );
+    const appOrigin = yield* pipe(
+      Config.string("AUTH_APP_ORIGIN"),
+      Config.option
+    );
     const secret = yield* Config.string("BETTER_AUTH_SECRET").pipe(
       Config.validate({
         message: "BETTER_AUTH_SECRET must be at least 32 characters long",
@@ -190,6 +205,7 @@ export const loadAuthenticationConfig = Effect.gen(
     const databaseUrl = yield* authenticationDatabaseUrlConfig;
 
     return makeAuthenticationConfig({
+      appOrigin: Option.getOrUndefined(appOrigin),
       baseUrl,
       portlessUrl: Option.getOrUndefined(portlessUrl),
       secret,

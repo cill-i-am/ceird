@@ -7,8 +7,10 @@ import { organization } from "better-auth/plugins/organization";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
+import { loadAuthEmailConfig } from "./auth-email-config.js";
 import { AuthEmailSender } from "./auth-email.js";
 import type {
+  OrganizationInvitationEmailInput,
   EmailVerificationEmailInput,
   PasswordResetEmailInput,
 } from "./auth-email.js";
@@ -21,14 +23,19 @@ import {
 import { ResendAuthEmailTransportLive } from "./resend-auth-email-transport.js";
 import { authSchema } from "./schema.js";
 
+const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
 
 export function createAuthentication(options: {
+  readonly appOrigin: string;
   readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
+  readonly sendOrganizationInvitationEmail: (
+    input: OrganizationInvitationEmailInput
+  ) => Promise<void>;
   readonly reportVerificationEmailFailure: (error: unknown) => void;
   readonly sendPasswordResetEmail: (
     input: PasswordResetEmailInput
@@ -37,8 +44,13 @@ export function createAuthentication(options: {
     input: EmailVerificationEmailInput
   ) => Promise<void>;
 }) {
-  const { config, database, sendPasswordResetEmail, sendVerificationEmail } =
-    options;
+  const {
+    config,
+    database,
+    sendOrganizationInvitationEmail,
+    sendPasswordResetEmail,
+    sendVerificationEmail,
+  } = options;
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
   return betterAuth({
@@ -54,6 +66,8 @@ export function createAuthentication(options: {
     }),
     plugins: [
       organization({
+        cancelPendingInvitationsOnReInvite: true,
+        invitationExpiresIn: ORGANIZATION_INVITATION_EXPIRATION_SECONDS,
         organizationHooks: {
           beforeCreateOrganization: ({ organization: nextOrganization }) => {
             let input;
@@ -76,6 +90,20 @@ export function createAuthentication(options: {
               },
             });
           },
+        },
+        sendInvitationEmail: async (invitation) => {
+          await sendOrganizationInvitationEmail({
+            idempotencyKey: `organization-invitation/${invitation.id}`,
+            invitationUrl: new URL(
+              `/accept-invitation/${invitation.id}`,
+              options.appOrigin
+            ).toString(),
+            inviterEmail: invitation.inviter.user.email,
+            organizationName: invitation.organization.name,
+            recipientEmail: invitation.email,
+            recipientName: invitation.email,
+            role: invitation.role,
+          } as const satisfies OrganizationInvitationEmailInput);
         },
       }),
     ],
@@ -172,7 +200,7 @@ function serializeBackgroundTaskError(error: unknown) {
   };
 }
 
-function matchesTrustedOrigin(
+export function matchesTrustedOrigin(
   origin: string,
   trustedOrigins: readonly string[]
 ) {
@@ -182,9 +210,7 @@ function matchesTrustedOrigin(
     }
 
     const escapedPattern = pattern.replaceAll(/[.+^${}()|[\]\\]/g, "\\$&");
-    const matcher = escapedPattern
-      .replaceAll("\\*", ".*")
-      .replaceAll("\\?", ".");
+    const matcher = escapedPattern.replaceAll("*", ".*").replaceAll("?", ".");
 
     return new RegExp(`^${matcher}$`).test(origin);
   });
@@ -268,6 +294,7 @@ export class Authentication extends Effect.Service<Authentication>()(
   {
     dependencies: [AuthenticationDatabaseLive, AuthenticationEmailSenderLive],
     effect: Effect.gen(function* AuthenticationLive() {
+      const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
       const { db } = yield* AuthenticationDatabase;
       const authEmailSender = yield* AuthEmailSender;
@@ -284,10 +311,13 @@ export class Authentication extends Effect.Service<Authentication>()(
       );
 
       return createAuthentication({
+        appOrigin: authEmailConfig.appOrigin,
         backgroundTaskHandler,
         config,
         database: db,
         reportPasswordResetEmailFailure,
+        sendOrganizationInvitationEmail: (input) =>
+          runPromise(authEmailSender.sendOrganizationInvitationEmail(input)),
         reportVerificationEmailFailure,
         sendPasswordResetEmail: (input) =>
           runPromise(authEmailSender.sendPasswordResetEmail(input)),

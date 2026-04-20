@@ -2,8 +2,10 @@ import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
+import { getLoginNavigationTarget } from "../auth/auth-navigation";
 import { isServerEnvironment } from "../auth/runtime-environment";
 import {
+  getCurrentServerOrganizationMemberRole,
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   listCurrentServerOrganizations,
@@ -26,6 +28,12 @@ type Session = NonNullable<
 type RawOrganization = NonNullable<
   Awaited<ReturnType<typeof authClient.organization.list>>["data"]
 >[number];
+type OrganizationMemberRole = NonNullable<
+  Awaited<
+    ReturnType<typeof authClient.organization.getActiveMemberRole>
+  >["data"]
+>;
+const ORGANIZATION_ADMINISTRATION_ROLES = new Set(["admin", "owner"]);
 
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
@@ -65,7 +73,7 @@ export async function ensureActiveOrganizationId() {
   const session = await getCurrentSession();
 
   if (!session) {
-    throw redirect({ to: "/login" });
+    throw redirect(getLoginNavigationTarget());
   }
 
   const { activeOrganizationId, activeOrganizationSync } =
@@ -86,11 +94,24 @@ export async function requireOrganizationAccess() {
   return await ensureActiveOrganizationId();
 }
 
+export async function requireOrganizationAdministrationAccess() {
+  const organizationAccess = await ensureActiveOrganizationId();
+  const role = await getActiveOrganizationMemberRole(
+    organizationAccess.activeOrganizationId
+  );
+
+  if (!ORGANIZATION_ADMINISTRATION_ROLES.has(role.role)) {
+    throw redirect({ to: "/" });
+  }
+
+  return organizationAccess;
+}
+
 export async function redirectIfOrganizationReady() {
   const session = await getCurrentSession();
 
   if (!session) {
-    throw redirect({ to: "/login" });
+    throw redirect(getLoginNavigationTarget());
   }
 
   const { activeOrganizationId, activeOrganizationSync, organizations } =
@@ -126,6 +147,28 @@ async function resolveOrganizationAccessState(session: Session) {
     ),
     organizations,
   };
+}
+
+async function getActiveOrganizationMemberRole(organizationId: string) {
+  if (isServerEnvironment()) {
+    return await getCurrentServerOrganizationMemberRole(organizationId);
+  }
+
+  const result = await authClient.organization.getActiveMemberRole({
+    query: {
+      organizationId,
+    },
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (!result.data) {
+    throw new Error("Organization member role lookup returned no data.");
+  }
+
+  return result.data satisfies OrganizationMemberRole;
 }
 
 async function resolveOrganizationListForAccess(

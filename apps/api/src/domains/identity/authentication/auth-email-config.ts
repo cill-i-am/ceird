@@ -9,12 +9,31 @@ function isValidEmailAddress(value: string) {
 }
 
 export interface AuthEmailConfig {
+  readonly appOrigin: string;
   readonly from: string;
   readonly fromName: string;
   readonly resendApiKey: string;
 }
 
 export const loadAuthEmailConfig = Config.all({
+  appOrigin: Config.string("AUTH_APP_ORIGIN").pipe(
+    Config.validate({
+      message: "AUTH_APP_ORIGIN must be a valid absolute URL origin",
+      validation: (value) => {
+        try {
+          const url = new URL(value);
+          return (
+            (url.protocol === "http:" || url.protocol === "https:") &&
+            url.username.length === 0 &&
+            url.password.length === 0 &&
+            url.pathname === "/"
+          );
+        } catch {
+          return false;
+        }
+      },
+    })
+  ),
   from: Config.string("AUTH_EMAIL_FROM").pipe(
     Config.validate({
       message: "AUTH_EMAIL_FROM must be a valid email address",
