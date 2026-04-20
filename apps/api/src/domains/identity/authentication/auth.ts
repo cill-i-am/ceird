@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import { decodeCreateOrganizationInput } from "@task-tracker/identity-core";
 import { betterAuth } from "better-auth";
@@ -17,6 +19,17 @@ import {
   AuthenticationDatabaseLive,
 } from "./database.js";
 import { authSchema } from "./schema.js";
+
+function makePasswordResetDeliveryKey(input: {
+  readonly token: string;
+  readonly userId: string;
+}) {
+  const digest = createHash("sha256")
+    .update(`password-reset:${input.userId}:${input.token}`)
+    .digest("hex");
+
+  return `password-reset/${digest}`;
+}
 
 export function createAuthentication(options: {
   readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
@@ -73,7 +86,10 @@ export function createAuthentication(options: {
       sendResetPassword: async ({ token, user, url }) => {
         try {
           await sendPasswordResetEmail({
-            deliveryKey: `password-reset/${user.id}/${token}`,
+            deliveryKey: makePasswordResetDeliveryKey({
+              token,
+              userId: user.id,
+            }),
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
             resetUrl: url,
