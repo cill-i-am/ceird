@@ -54,7 +54,10 @@ describe("makeCloudflareAuthEmailTransport()", () => {
     expect(requests).toStrictEqual([
       {
         account_id: "account_123",
-        from: "Task Tracker Auth <auth@task-tracker.localhost>",
+        from: {
+          address: "auth@task-tracker.localhost",
+          name: "Task Tracker Auth",
+        },
         to: ["alice@example.com"],
         subject: "Reset your password",
         text: "Reset link",
@@ -92,7 +95,10 @@ describe("makeCloudflareAuthEmailTransport()", () => {
     expect(requests).toStrictEqual([
       {
         account_id: "account_123",
-        from: "Task Tracker Auth <auth@task-tracker.localhost>",
+        from: {
+          address: "auth@task-tracker.localhost",
+          name: "Task Tracker Auth",
+        },
         to: ["alice@example.com"],
         subject: "Reset your password",
         text: "Reset link",

@@ -37,7 +37,10 @@ function buildPayload(
 ): EmailSendingSendParams {
   return {
     account_id: config.cloudflareAccountId,
-    from: `${config.fromName} <${config.from}>`,
+    from: {
+      address: config.from,
+      name: config.fromName,
+    },
     to: [message.to],
     subject: message.subject,
     text: message.text,
