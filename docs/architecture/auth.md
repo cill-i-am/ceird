@@ -107,7 +107,8 @@ The auth email boundary adds runtime config in
 Required values:
 
 - `AUTH_EMAIL_FROM`
-- `RESEND_API_KEY`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
 
 Current defaulted value:
 
@@ -115,16 +116,18 @@ Current defaulted value:
 
 ### Auth Email Delivery Boundary
 
-Password reset delivery now crosses one narrow app-owned boundary in `apps/api`:
+Password reset delivery now crosses one narrow app-owned boundary in
+`apps/api`:
 
 - `apps/api/src/domains/identity/authentication/auth-email.ts` defines
   `AuthEmailSender`, an auth-domain Effect service for sending password reset
-  mail
-- `AuthEmailSender` validates the reset payload and renders the auth email
-  content before handing it to a transport
-- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
-  provides `ResendAuthEmailTransport`, the first provider adapter behind that
-  boundary
+  mail and future auth-mail variants
+- `AuthEmailSender` validates the reset payload, renders the auth email
+  content, and keeps the transport contract provider-neutral through
+  `deliveryKey`
+- `apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts`
+  provides `CloudflareAuthEmailTransport`, the current provider adapter behind
+  that boundary
 
 Rule:
 
@@ -132,9 +135,12 @@ Rule:
 - the app-owned boundary starts at delivery policy, not at route ownership
 - auth startup now depends on valid auth email config as well as core Better
   Auth config, because `AuthenticationLive` composes `AuthEmailSender` with
-  `ResendAuthEmailTransportLive` at boot
+  `CloudflareAuthEmailTransportLive` at boot
 - password reset emails carry a provider idempotency key so retries do not
   duplicate delivery
+- that `deliveryKey` remains stable across transports so future verification
+  mail can reuse the same boundary without baking provider-specific naming into
+  the domain contract
 - Better Auth currently defers reset delivery through an in-process
   `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
 - this in-process scheduling is explicitly temporary and should be replaced by a
@@ -163,7 +169,7 @@ Current defaults by entry point:
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
 - supported non-production launchers also inject `AUTH_EMAIL_FROM`,
-  `AUTH_EMAIL_FROM_NAME`, and `RESEND_API_KEY`
+  `AUTH_EMAIL_FROM_NAME`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`
 - those launchers may fall back to placeholder auth-email values when the
   caller has not provided real delivery credentials, but the API itself still
   requires the variables at runtime
@@ -576,9 +582,10 @@ These are the important current rules we are following.
 - `apps/api/src/domains/identity/authentication/auth-email-config.ts`
   Defines required auth email runtime config and defaults.
 - `apps/api/src/domains/identity/authentication/auth-email.ts`
-  Defines the auth email boundary for password reset delivery.
-- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
-  Implements the first auth email transport adapter with Resend.
+  Defines the auth email boundary for password reset delivery and future
+  auth-mail reuse.
+- `apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts`
+  Implements the current auth email transport adapter with Cloudflare.
 - `apps/api/src/domains/identity/authentication/schema.ts`
   Defines auth persistence tables.
 - `apps/api/src/domains/identity/authentication/database.ts`
@@ -621,6 +628,8 @@ These decisions are currently encoded in the implementation and tests.
 - Show safe, generic server-error copy instead of backend internals.
 - Keep password reset request responses generic while allowing invalid or
   expired reset-link feedback on completion.
+- Reuse the auth email boundary for future verification mail instead of
+  introducing provider-specific mini-systems.
 - Treat sign-out as a real user action with visible failure handling.
 
 ## Testing Coverage That Defines Behavior
