@@ -20,6 +20,22 @@ interface RunCommandResult {
 
 const execFileAsync = promisify(execFile);
 
+export interface SandboxProcess {
+  readonly cwd: () => Effect.Effect<string, never, never>;
+  readonly env: () => Effect.Effect<NodeJS.ProcessEnv, never, never>;
+  readonly argv: () => Effect.Effect<readonly string[], never, never>;
+  readonly setExitCode: (code: number) => Effect.Effect<void, never, never>;
+  readonly runCommand: (
+    command: string,
+    args: readonly string[],
+    options?: RunCommandOptions
+  ) => Effect.Effect<RunCommandResult, SandboxCommandError>;
+  readonly isPortOpen: (port: number) => Effect.Effect<boolean, never, never>;
+  readonly isPortAvailable: (
+    port: number
+  ) => Effect.Effect<boolean, never, never>;
+}
+
 export function runCommand(
   command: string,
   args: readonly string[],
@@ -111,3 +127,30 @@ export function isPortAvailable(port: number): Promise<boolean> {
 
   return promise;
 }
+
+export class SandboxProcessService extends Effect.Service<SandboxProcessService>()(
+  "@task-tracker/sandbox-cli/SandboxProcessService",
+  {
+    accessors: true,
+    effect: Effect.succeed<SandboxProcess>({
+      cwd: () => Effect.sync(() => process.cwd()),
+      env: () => Effect.sync(() => process.env),
+      argv: () => Effect.sync(() => [...process.argv]),
+      setExitCode: (code) =>
+        Effect.sync(() => {
+          process.exitCode = code;
+        }),
+      runCommand,
+      isPortOpen: (port) =>
+        Effect.tryPromise({
+          try: () => isPortOpen(port),
+          catch: () => false,
+        }).pipe(Effect.orElseSucceed(() => false)),
+      isPortAvailable: (port) =>
+        Effect.tryPromise({
+          try: () => isPortAvailable(port),
+          catch: () => false,
+        }).pipe(Effect.orElseSucceed(() => false)),
+    }),
+  }
+) {}

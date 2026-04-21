@@ -13,7 +13,8 @@ import type {
 import { validateSandboxName } from "@task-tracker/sandbox-core";
 import { Cause, Console, Effect, Exit, Option } from "effect";
 
-import { makeSandboxRuntime } from "./runtime.js";
+import { SandboxProcessService } from "./process.js";
+import { SandboxLifecycleService } from "./runtime.js";
 import {
   SANDBOX_NOT_FOUND_ERROR_TAG,
   SandboxNotFoundError,
@@ -29,7 +30,6 @@ import {
 import type { SandboxStartupProgressEvent } from "./startup-progress.js";
 import { detectSandboxTerminalStyle } from "./terminal-style.js";
 
-const runtime = makeSandboxRuntime();
 const terminalStyle = detectSandboxTerminalStyle();
 const nameOption = Options.text("name").pipe(
   Options.withAlias("n"),
@@ -41,7 +41,7 @@ const upCommand = Command.make("up", { name: nameOption }, ({ name }) =>
   parseSandboxNameOption(name).pipe(
     Effect.tap(() => Console.log("Starting sandbox...")),
     Effect.flatMap((explicitSandboxName) =>
-      runtime.lifecycle.up({
+      SandboxLifecycleService.up({
         explicitSandboxName,
         reportProgress: printSandboxStartupProgress,
       })
@@ -55,7 +55,7 @@ const upCommand = Command.make("up", { name: nameOption }, ({ name }) =>
 const downCommand = Command.make("down", { name: nameOption }, ({ name }) =>
   parseSandboxNameOption(name).pipe(
     Effect.flatMap((explicitSandboxName) =>
-      runtime.lifecycle.down({
+      SandboxLifecycleService.down({
         explicitSandboxName,
       })
     ),
@@ -71,7 +71,7 @@ const downCommand = Command.make("down", { name: nameOption }, ({ name }) =>
 const statusCommand = Command.make("status", { name: nameOption }, ({ name }) =>
   parseSandboxNameOption(name).pipe(
     Effect.flatMap((explicitSandboxName) =>
-      runtime.lifecycle.status({
+      SandboxLifecycleService.status({
         explicitSandboxName,
       })
     ),
@@ -85,24 +85,22 @@ const statusCommand = Command.make("status", { name: nameOption }, ({ name }) =>
 );
 
 const listCommand = Command.make("list", {}, () =>
-  runtime.lifecycle
-    .list()
-    .pipe(
-      Effect.flatMap((result) =>
-        result.entries.length === 0
-          ? Console.log("No sandboxes are currently registered.")
-          : Effect.forEach(
-              result.entries,
-              (entry) =>
-                printSandboxView(
-                  `${entry.record.sandboxName} (${entry.record.status})`,
-                  entry.record,
-                  entry.urls
-                ),
-              { discard: true }
-            )
-      )
+  SandboxLifecycleService.list().pipe(
+    Effect.flatMap((result) =>
+      result.entries.length === 0
+        ? Console.log("No sandboxes are currently registered.")
+        : Effect.forEach(
+            result.entries,
+            (entry) =>
+              printSandboxView(
+                `${entry.record.sandboxName} (${entry.record.status})`,
+                entry.record,
+                entry.urls
+              ),
+            { discard: true }
+          )
     )
+  )
 );
 
 const logsCommand = Command.make(
@@ -113,7 +111,7 @@ const logsCommand = Command.make(
       Effect.flatMap((explicitSandboxName) =>
         parseServiceOption(service).pipe(
           Effect.flatMap((parsedService) =>
-            runtime.lifecycle.logs({
+            SandboxLifecycleService.logs({
               explicitSandboxName,
               service: parsedService,
             })
@@ -130,7 +128,7 @@ const logsCommand = Command.make(
 const urlCommand = Command.make("url", { name: nameOption }, ({ name }) =>
   parseSandboxNameOption(name).pipe(
     Effect.flatMap((explicitSandboxName) =>
-      runtime.lifecycle.url({
+      SandboxLifecycleService.url({
         explicitSandboxName,
       })
     ),
@@ -236,11 +234,11 @@ export function getSandboxPreflightMessage(
     : undefined;
 }
 
-function runCli(): Effect.Effect<void, never, never> {
-  const argv = process.argv.filter(
-    (argument, index) => !(index > 1 && argument === "--")
-  );
+function runCli() {
   return Effect.gen(function* () {
+    const argv = (yield* SandboxProcessService.argv()).filter(
+      (argument, index) => !(index > 1 && argument === "--")
+    );
     const exit = yield* cli(argv).pipe(
       Effect.provide(NodeContext.layer),
       Effect.exit
@@ -249,9 +247,7 @@ function runCli(): Effect.Effect<void, never, never> {
 
     if (preflightMessage) {
       yield* Console.error(preflightMessage);
-      yield* Effect.sync(() => {
-        process.exitCode = 1;
-      });
+      yield* SandboxProcessService.setExitCode(1);
       return;
     }
 
@@ -264,13 +260,16 @@ function runCli(): Effect.Effect<void, never, never> {
       yield* Console.error(
         message instanceof Error ? message.message : String(message)
       );
-      yield* Effect.sync(() => {
-        process.exitCode = 1;
-      });
+      yield* SandboxProcessService.setExitCode(1);
     }
   });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  void Effect.runPromise(runCli());
+  void Effect.runPromise(
+    runCli().pipe(
+      Effect.provide(SandboxLifecycleService.Default),
+      Effect.provide(SandboxProcessService.Default)
+    )
+  );
 }

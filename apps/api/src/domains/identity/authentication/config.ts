@@ -103,6 +103,15 @@ export interface AuthenticationConfig {
   };
 }
 
+export class AuthenticationConfigService extends Effect.Service<AuthenticationConfigService>()(
+  "@task-tracker/domains/identity/authentication/AuthenticationConfigService",
+  {
+    effect: Effect.gen(function* AuthenticationConfigServiceEffect() {
+      return yield* loadAuthenticationConfig;
+    }),
+  }
+) {}
+
 export function makeAuthenticationTrustedOrigins(
   environment: Pick<AuthenticationEnvironment, "appOrigin" | "portlessUrl">
 ): TrustedOriginPattern[] {

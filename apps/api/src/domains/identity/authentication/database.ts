@@ -7,8 +7,8 @@ import { Pool } from "pg";
 
 import {
   authenticationDatabaseUrlConfig,
+  AuthenticationConfigService,
   DEFAULT_AUTH_DATABASE_URL,
-  loadAuthenticationConfig,
 } from "./config.js";
 import { AuthenticationDatabaseConnectionError } from "./errors.js";
 import { authSchema } from "./schema.js";
@@ -18,34 +18,37 @@ export interface AuthenticationDatabaseService {
   readonly db: NodePgDatabase<typeof authSchema>;
 }
 
-export class AuthenticationDatabase extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthenticationDatabase"
-)<AuthenticationDatabase, AuthenticationDatabaseService>() {}
+export class AuthenticationDatabase extends Effect.Service<AuthenticationDatabase>()(
+  "@task-tracker/domains/identity/authentication/AuthenticationDatabase",
+  {
+    dependencies: [AuthenticationConfigService.Default],
+    scoped: Effect.gen(function* AuthenticationDatabaseLive() {
+      const config = yield* AuthenticationConfigService;
 
-export const AuthenticationDatabaseLive = Layer.scoped(
-  AuthenticationDatabase,
-  Effect.gen(function* AuthenticationDatabaseLive() {
-    const config = yield* loadAuthenticationConfig;
+      const pool = yield* Effect.acquireRelease(
+        Effect.sync(() => new Pool({ connectionString: config.databaseUrl })),
+        (poolInstance) => Effect.promise(() => poolInstance.end())
+      );
 
-    const pool = yield* Effect.acquireRelease(
-      Effect.sync(() => new Pool({ connectionString: config.databaseUrl })),
-      (poolInstance) => Effect.promise(() => poolInstance.end())
-    );
+      yield* Effect.tryPromise({
+        try: () => pool.query("select 1"),
+        catch: (cause) =>
+          new AuthenticationDatabaseConnectionError({
+            cause: cause instanceof Error ? cause.message : String(cause),
+            message: "Failed to connect to the authentication database",
+          }),
+      });
 
-    yield* Effect.tryPromise({
-      try: () => pool.query("select 1"),
-      catch: (cause) =>
-        new AuthenticationDatabaseConnectionError({
-          cause: cause instanceof Error ? cause.message : String(cause),
-          message: "Failed to connect to the authentication database",
-        }),
-    });
+      return {
+        pool,
+        db: drizzle(pool, { schema: authSchema }),
+      };
+    }),
+  }
+) {}
 
-    return {
-      pool,
-      db: drizzle(pool, { schema: authSchema }),
-    };
-  })
+export const AuthenticationDatabaseLive = AuthenticationDatabase.Default.pipe(
+  Layer.provide(AuthenticationConfigService.Default)
 );
 
 export const EffectSqlLive = PgClient.layerConfig(

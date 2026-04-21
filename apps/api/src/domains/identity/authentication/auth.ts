@@ -205,10 +205,21 @@ function makeEmailFailureReporter(
   const runFork = Runtime.runFork(runtime);
 
   return (error: unknown) => {
+    const serializedError = serializeBackgroundTaskError(error);
+
     runFork(
-      Effect.logError(label, {
-        error: serializeBackgroundTaskError(error),
-      })
+      Effect.logError("Authentication background email delivery failed").pipe(
+        Effect.annotateLogs({
+          authEmailFailureLabel: label,
+          ...(serializedError.cause
+            ? { authEmailFailureCause: serializedError.cause }
+            : {}),
+          authEmailFailureMessage: serializedError.message,
+          ...(serializedError.tag
+            ? { authEmailFailureTag: serializedError.tag }
+            : {}),
+        })
+      )
     );
   };
 }

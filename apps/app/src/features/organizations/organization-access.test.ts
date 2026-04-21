@@ -255,6 +255,11 @@ describe("organization access helpers", () => {
     });
 
     await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
+      activeOrganization: {
+        id: "org_active",
+        name: "Active Org",
+        slug: "active-org",
+      },
       activeOrganizationId: "org_active",
       activeOrganizationSync: {
         required: false,
@@ -284,6 +289,11 @@ describe("organization access helpers", () => {
     });
 
     await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+      activeOrganization: {
+        id: "org_current",
+        name: "Current Org",
+        slug: "current-org",
+      },
       activeOrganizationId: "org_current",
       activeOrganizationSync: {
         required: true,
@@ -325,6 +335,11 @@ describe("organization access helpers", () => {
     });
 
     await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+      activeOrganization: {
+        id: "org_first",
+        name: "First Org",
+        slug: "first-org",
+      },
       activeOrganizationId: "org_first",
       activeOrganizationSync: {
         required: true,
@@ -440,6 +455,11 @@ describe("organization access helpers", () => {
     ]);
 
     await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+      activeOrganization: {
+        id: "org_server",
+        name: "Server Org",
+        slug: "server-org",
+      },
       activeOrganizationId: "org_server",
       activeOrganizationSync: {
         required: true,
@@ -526,6 +546,11 @@ describe("organization access helpers", () => {
     await expect(
       requireOrganizationAdministrationAccess()
     ).resolves.toMatchObject({
+      activeOrganization: {
+        id: "org_active",
+        name: "Active Org",
+        slug: "active-org",
+      },
       activeOrganizationId: "org_active",
     });
     expect(mockedGetClientActiveMemberRole).toHaveBeenCalledWith({

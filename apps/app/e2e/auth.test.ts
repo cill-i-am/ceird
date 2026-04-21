@@ -18,8 +18,10 @@ function createTestSlug(prefix: string): string {
 
 async function expectAuthenticatedHome(page: Page) {
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
-  await expect(page.getByText("Start simple, ship quickly.")).toHaveCount(0);
+  await expect(page.getByText(/^Active organization$/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Invite teammates" })
+  ).toBeVisible();
 }
 
 async function signUpAndCreateOrganization(

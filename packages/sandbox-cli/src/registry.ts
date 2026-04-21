@@ -29,41 +29,12 @@ export function getComposeEnvFilePath(sandboxName: SandboxName): string {
 export const readRegistry = Effect.fn("SandboxRegistry.read")(function* () {
   const registryPath = getRegistryPath();
   yield* Effect.annotateCurrentSpan("registryPath", registryPath);
-  return yield* Effect.tryPromise({
-    try: () => fs.readFile(registryPath, "utf8"),
-    catch: (error) => error,
-  }).pipe(
-    Effect.catchAll((error) =>
-      isMissingFileError(error)
-        ? Effect.succeed("")
-        : Effect.fail(
-            new SandboxRegistryError({
-              message:
-                error instanceof Error
-                  ? `Failed to read sandbox registry at ${registryPath}: ${error.message}`
-                  : `Failed to read sandbox registry at ${registryPath}.`,
-              registryPath,
-            })
-          )
-    ),
-    Effect.flatMap((raw) =>
-      raw === ""
-        ? Effect.succeed([])
-        : Effect.try({
-            try: () =>
-              Schema.decodeUnknownSync(SandboxRegistryPayload)(JSON.parse(raw))
-                .sandboxes,
-            catch: (error) =>
-              new SandboxRegistryError({
-                message:
-                  error instanceof Error
-                    ? `Sandbox registry at ${registryPath} is invalid: ${error.message}`
-                    : `Sandbox registry at ${registryPath} is invalid. Remove or repair the file, then rerun the sandbox CLI.`,
-                registryPath,
-              }),
-          })
-    )
-  );
+  const raw = yield* readOptionalRegistryFile(registryPath);
+  if (raw === "") {
+    return [];
+  }
+
+  return yield* parseRegistryPayload(registryPath, raw);
 });
 
 export const writeRegistry = Effect.fn("SandboxRegistry.write")(function* (
@@ -152,3 +123,44 @@ export const writeSandboxStateFile = Effect.fn(
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
+
+const readOptionalRegistryFile = Effect.fn("SandboxRegistry.readOptionalFile")(
+  function* (registryPath: string) {
+    return yield* Effect.tryPromise({
+      try: () => fs.readFile(registryPath, "utf8"),
+      catch: (error) => error,
+    }).pipe(
+      Effect.catchAll((error) =>
+        isMissingFileError(error)
+          ? Effect.succeed("")
+          : Effect.fail(
+              new SandboxRegistryError({
+                message:
+                  error instanceof Error
+                    ? `Failed to read sandbox registry at ${registryPath}: ${error.message}`
+                    : `Failed to read sandbox registry at ${registryPath}.`,
+                registryPath,
+              })
+            )
+      )
+    );
+  }
+);
+
+const parseRegistryPayload = Effect.fn("SandboxRegistry.parsePayload")(
+  function* (registryPath: string, raw: string) {
+    return yield* Effect.try({
+      try: () =>
+        Schema.decodeUnknownSync(SandboxRegistryPayload)(JSON.parse(raw))
+          .sandboxes,
+      catch: (error) =>
+        new SandboxRegistryError({
+          message:
+            error instanceof Error
+              ? `Sandbox registry at ${registryPath} is invalid: ${error.message}`
+              : `Sandbox registry at ${registryPath} is invalid. Remove or repair the file, then rerun the sandbox CLI.`,
+          registryPath,
+        }),
+    });
+  }
+);

@@ -132,6 +132,10 @@ const decodeEmailVerificationEmailInput = Schema.decodeUnknown(
   EmailVerificationEmailInput
 );
 
+function formatParseError(parseError: ParseResult.ParseError) {
+  return ParseResult.TreeFormatter.formatErrorSync(parseError);
+}
+
 export interface TransportMessage {
   readonly deliveryKey?: string;
   readonly html: string;
@@ -159,6 +163,22 @@ export class AuthEmailTransport extends Context.Tag(
   }
 >() {}
 
+function decodeAuthEmailInput<Input, ErrorType>(options: {
+  readonly rawInput: unknown;
+  readonly decode: (
+    input: unknown
+  ) => Effect.Effect<Input, ParseResult.ParseError>;
+  readonly onInvalidInput: (cause: string) => ErrorType;
+}) {
+  return options
+    .decode(options.rawInput)
+    .pipe(
+      Effect.mapError((parseError) =>
+        options.onInvalidInput(formatParseError(parseError))
+      )
+    );
+}
+
 export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
   "@task-tracker/domains/identity/authentication/AuthEmailSender",
   {
@@ -169,15 +189,15 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
       const sendPasswordResetEmail = Effect.fn(
         "AuthEmailSender.sendPasswordResetEmail"
       )(function* sendPasswordResetEmail(rawInput: unknown) {
-        const input = yield* decodePasswordResetEmailInput(rawInput).pipe(
-          Effect.mapError(
-            (parseError) =>
-              new InvalidPasswordResetEmailInputError({
-                message: "Invalid password reset email input",
-                cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
-              })
-          )
-        );
+        const input = yield* decodeAuthEmailInput({
+          rawInput,
+          decode: decodePasswordResetEmailInput,
+          onInvalidInput: (cause) =>
+            new InvalidPasswordResetEmailInputError({
+              message: "Invalid password reset email input",
+              cause,
+            }),
+        });
 
         const subject = "Reset your password";
         const text = [
@@ -222,17 +242,15 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
       const sendOrganizationInvitationEmail = Effect.fn(
         "AuthEmailSender.sendOrganizationInvitationEmail"
       )(function* sendOrganizationInvitationEmail(rawInput: unknown) {
-        const input = yield* decodeOrganizationInvitationEmailInput(
-          rawInput
-        ).pipe(
-          Effect.mapError(
-            (parseError) =>
-              new OrganizationInvitationDeliveryError({
-                message: "Invalid organization invitation email input",
-                cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
-              })
-          )
-        );
+        const input = yield* decodeAuthEmailInput({
+          rawInput,
+          decode: decodeOrganizationInvitationEmailInput,
+          onInvalidInput: (cause) =>
+            new OrganizationInvitationDeliveryError({
+              message: "Invalid organization invitation email input",
+              cause,
+            }),
+        });
 
         const subject = `Join ${input.organizationName} on Task Tracker`;
         const text = [
@@ -270,15 +288,15 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
       const sendEmailVerificationEmail = Effect.fn(
         "AuthEmailSender.sendEmailVerificationEmail"
       )(function* sendEmailVerificationEmail(rawInput: unknown) {
-        const input = yield* decodeEmailVerificationEmailInput(rawInput).pipe(
-          Effect.mapError(
-            (parseError) =>
-              new EmailVerificationDeliveryError({
-                message: "Invalid verification email input",
-                cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
-              })
-          )
-        );
+        const input = yield* decodeAuthEmailInput({
+          rawInput,
+          decode: decodeEmailVerificationEmailInput,
+          onInvalidInput: (cause) =>
+            new EmailVerificationDeliveryError({
+              message: "Invalid verification email input",
+              cause,
+            }),
+        });
 
         const subject = "Verify your email";
         const text = [

@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_app/_org")({
     const organizationAccess = await requireOrganizationAccess();
 
     return {
+      activeOrganization: organizationAccess.activeOrganization,
       activeOrganizationId: organizationAccess.activeOrganizationId,
       activeOrganizationSync: organizationAccess.activeOrganizationSync,
     };

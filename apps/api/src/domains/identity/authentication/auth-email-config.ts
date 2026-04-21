@@ -16,7 +16,7 @@ export interface AuthEmailConfig {
   readonly fromName: string;
 }
 
-export const loadAuthEmailConfig = Config.all({
+const AuthEmailConfigConfig = Config.all({
   appOrigin: Config.string("AUTH_APP_ORIGIN").pipe(
     Config.validate({
       message: "AUTH_APP_ORIGIN must be a valid absolute URL origin",
@@ -65,3 +65,12 @@ export const loadAuthEmailConfig = Config.all({
       })
   )
 );
+
+export class AuthEmailConfigService extends Effect.Service<AuthEmailConfigService>()(
+  "@task-tracker/domains/identity/authentication/AuthEmailConfigService",
+  {
+    effect: AuthEmailConfigConfig,
+  }
+) {}
+
+export const loadAuthEmailConfig = AuthEmailConfigConfig;

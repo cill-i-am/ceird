@@ -76,7 +76,7 @@ export async function ensureActiveOrganizationId() {
     throw redirect(getLoginNavigationTarget());
   }
 
-  const { activeOrganizationId, activeOrganizationSync } =
+  const { activeOrganization, activeOrganizationId, activeOrganizationSync } =
     await resolveOrganizationAccessState(session);
 
   if (!activeOrganizationId) {
@@ -84,6 +84,7 @@ export async function ensureActiveOrganizationId() {
   }
 
   return {
+    activeOrganization,
     activeOrganizationId,
     activeOrganizationSync,
     session: withActiveOrganizationId(session, activeOrganizationId),
@@ -134,12 +135,14 @@ async function resolveOrganizationAccessState(session: Session) {
   const organizations = await resolveOrganizationListForAccess(
     await listOrganizations()
   );
-  const activeOrganizationId = resolveCurrentOrganizationId(
+  const activeOrganization = resolveCurrentOrganization(
     session.session.activeOrganizationId,
     organizations
   );
+  const activeOrganizationId = activeOrganization?.id ?? null;
 
   return {
+    activeOrganization,
     activeOrganizationId,
     activeOrganizationSync: createActiveOrganizationSync(
       session.session.activeOrganizationId ?? null,
@@ -205,12 +208,12 @@ function withActiveOrganizationId(
   } satisfies Session;
 }
 
-function resolveCurrentOrganizationId(
+function resolveCurrentOrganization(
   activeOrganizationId: string | null | undefined,
   organizations: readonly OrganizationSummary[]
 ) {
   if (!activeOrganizationId) {
-    return organizations[0]?.id ?? null;
+    return organizations[0] ?? null;
   }
 
   const activeOrganization = organizations.find(
@@ -218,10 +221,10 @@ function resolveCurrentOrganizationId(
   );
 
   if (activeOrganization) {
-    return activeOrganization.id;
+    return activeOrganization;
   }
 
-  return organizations[0]?.id ?? null;
+  return organizations[0] ?? null;
 }
 
 function createActiveOrganizationSync(

@@ -39,22 +39,7 @@ export const loadSandboxSharedEnvironment = Effect.fn(
     ENV_FILES,
     (relativePath) => {
       const filePath = path.join(input.repoRoot, relativePath);
-      return readFile(filePath).pipe(
-        Effect.catchAll((error) =>
-          isMissingFileError(error)
-            ? Effect.succeed("")
-            : Effect.fail(
-                new SandboxEnvironmentError({
-                  message:
-                    error instanceof Error
-                      ? `Failed to read sandbox env file ${filePath}: ${error.message}`
-                      : `Failed to read sandbox env file ${filePath}.`,
-                  missing: [],
-                  filePath,
-                })
-              )
-        )
-      );
+      return readOptionalEnvironmentFile(filePath, readFile);
     },
     { concurrency: "unbounded" }
   );
@@ -83,25 +68,10 @@ export const loadSandboxSharedEnvironment = Effect.fn(
     }
   }
 
-  return yield* Schema.decodeUnknown(SharedSandboxEnvironment)(
-    selectedEnvironment
-  ).pipe(
-    Effect.mapError(() => {
-      const missing = input.requiredKeys.filter((key) => {
-        const value = merged[key];
-
-        return typeof value !== "string" || value.length === 0;
-      });
-
-      return new SandboxEnvironmentError({
-        message:
-          missing.length === 0
-            ? "Sandbox shared env is invalid."
-            : `Missing required sandbox env vars: ${missing.join(", ")}. Add them to .env or .env.local at the repo root, or export them in the shell before running the sandbox CLI.`,
-        missing,
-      });
-    })
-  );
+  return yield* decodeSandboxSharedEnvironment({
+    environment: selectedEnvironment,
+    requiredKeys: input.requiredKeys,
+  });
 });
 
 const readEnvFile = Effect.fn("SandboxEnv.readFile")(function* (
@@ -113,6 +83,57 @@ const readEnvFile = Effect.fn("SandboxEnv.readFile")(function* (
     catch: (error) => error,
   });
 });
+
+const readOptionalEnvironmentFile = Effect.fn("SandboxEnv.readOptionalFile")(
+  function* (
+    filePath: string,
+    readFile: (filePath: string) => Effect.Effect<string, unknown, never>
+  ) {
+    return yield* readFile(filePath).pipe(
+      Effect.catchAll((error) =>
+        isMissingFileError(error)
+          ? Effect.succeed("")
+          : Effect.fail(
+              new SandboxEnvironmentError({
+                message:
+                  error instanceof Error
+                    ? `Failed to read sandbox env file ${filePath}: ${error.message}`
+                    : `Failed to read sandbox env file ${filePath}.`,
+                missing: [],
+                filePath,
+              })
+            )
+      )
+    );
+  }
+);
+
+const decodeSandboxSharedEnvironment = Effect.fn("SandboxEnv.decodeShared")(
+  function* (input: {
+    readonly environment: Record<string, string | undefined>;
+    readonly requiredKeys: readonly string[];
+  }) {
+    return yield* Schema.decodeUnknown(SharedSandboxEnvironment)(
+      input.environment
+    ).pipe(
+      Effect.mapError(() => {
+        const missing = input.requiredKeys.filter((key) => {
+          const value = input.environment[key];
+
+          return typeof value !== "string" || value.length === 0;
+        });
+
+        return new SandboxEnvironmentError({
+          message:
+            missing.length === 0
+              ? "Sandbox shared env is invalid."
+              : `Missing required sandbox env vars: ${missing.join(", ")}. Add them to .env or .env.local at the repo root, or export them in the shell before running the sandbox CLI.`,
+          missing,
+        });
+      })
+    );
+  }
+);
 
 function parseEnvironmentFile(content: string): Record<string, string> {
   return Object.fromEntries(

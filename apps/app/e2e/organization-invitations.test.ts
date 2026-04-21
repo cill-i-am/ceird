@@ -28,7 +28,10 @@ function createForwardedFor() {
 
 async function expectAuthenticatedHome(page: Page) {
   await expect(page).toHaveURL(`${APP_ORIGIN}/`);
-  await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
+  await expect(page.getByText(/^Active organization$/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Invite teammates" })
+  ).toBeVisible();
 }
 
 async function getCookieHeader(page: Page) {
