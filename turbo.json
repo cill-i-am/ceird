@@ -33,11 +33,12 @@
         "AUTH_ORIGIN",
         "BETTER_AUTH_BASE_URL",
         "BETTER_AUTH_SECRET",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_API_TOKEN",
         "DATABASE_URL",
         "HOST",
         "PNPM_STORE_DIR",
         "PORT",
-        "RESEND_API_KEY",
         "SANDBOX_ID",
         "TASK_TRACKER_SANDBOX",
         "VITE_AUTH_ORIGIN"

@@ -15,7 +15,8 @@ test("adds a default Better Auth base URL for local portless dev", () => {
   );
   assert.equal(env.AUTH_EMAIL_FROM, "auth@task-tracker.localhost");
   assert.equal(env.AUTH_EMAIL_FROM_NAME, "Task Tracker");
-  assert.equal(env.RESEND_API_KEY, "re_test_placeholder");
+  assert.equal(env.CLOUDFLARE_ACCOUNT_ID, "cloudflare-account-test");
+  assert.equal(env.CLOUDFLARE_API_TOKEN, "cloudflare-token-test");
 });
 
 test("preserves an explicit Better Auth base URL override", () => {
@@ -23,13 +24,15 @@ test("preserves an explicit Better Auth base URL override", () => {
     AUTH_EMAIL_FROM: "custom@example.com",
     AUTH_EMAIL_FROM_NAME: "Custom Sender",
     BETTER_AUTH_BASE_URL: "https://custom-auth.example.com",
+    CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+    CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
     PATH: process.env.PATH ?? "",
     PORTLESS_PORT: "1355",
-    RESEND_API_KEY: "re_live_custom",
   });
 
   assert.equal(env.BETTER_AUTH_BASE_URL, "https://custom-auth.example.com");
   assert.equal(env.AUTH_EMAIL_FROM, "custom@example.com");
   assert.equal(env.AUTH_EMAIL_FROM_NAME, "Custom Sender");
-  assert.equal(env.RESEND_API_KEY, "re_live_custom");
+  assert.equal(env.CLOUDFLARE_ACCOUNT_ID, "cloudflare-account-live");
+  assert.equal(env.CLOUDFLARE_API_TOKEN, "cloudflare-token-live");
 });

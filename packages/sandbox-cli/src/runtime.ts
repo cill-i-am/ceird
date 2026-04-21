@@ -21,15 +21,14 @@ import type {
 } from "@task-tracker/sandbox-core";
 import {
   loadSandboxSharedEnvironment,
-  SANDBOX_ENVIRONMENT_ERROR_TAG,
   SANDBOX_REGISTRY_ERROR_TAG,
+  SandboxEnvironmentError,
 } from "@task-tracker/sandbox-core/node";
 import type {
   SandboxRegistryError,
   SandboxRegistryRecord,
-  SharedSandboxEnvironmentInput,
 } from "@task-tracker/sandbox-core/node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import {
   buildComposeCommandArgs,
@@ -77,6 +76,55 @@ const SANDBOX_PROXY_PORT = 1355;
 const SANDBOX_READY_POLL_INTERVAL_MS = 1000;
 const SANDBOX_READY_TIMEOUT_MS = 180_000;
 const SANDBOX_STOP_TIMEOUT_SECONDS = 2;
+const AUTH_EMAIL_SHARED_ENV_KEYS = [
+  "AUTH_EMAIL_FROM",
+  "AUTH_EMAIL_FROM_NAME",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+] as const;
+const AUTH_EMAIL_REQUIRED_ENV_KEYS = [
+  "AUTH_EMAIL_FROM",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+] as const;
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailAddress(value: string) {
+  return EMAIL_ADDRESS_PATTERN.test(value);
+}
+
+const authEmailSharedEnvironmentFields = {
+  AUTH_EMAIL_FROM: Schema.String.pipe(
+    Schema.filter((value: string) => isValidEmailAddress(value)),
+    Schema.annotations({
+      message: () => "AUTH_EMAIL_FROM must be a valid email address",
+    })
+  ),
+  AUTH_EMAIL_FROM_NAME: Schema.optionalWith(Schema.String, {
+    default: () => "Task Tracker",
+  }),
+  CLOUDFLARE_ACCOUNT_ID: Schema.String.pipe(
+    Schema.filter((value: string) => value.trim().length > 0),
+    Schema.annotations({
+      message: () => "CLOUDFLARE_ACCOUNT_ID must not be empty",
+    })
+  ),
+  CLOUDFLARE_API_TOKEN: Schema.String.pipe(
+    Schema.filter((value: string) => value.trim().length > 0),
+    Schema.annotations({
+      message: () => "CLOUDFLARE_API_TOKEN must not be empty",
+    })
+  ),
+};
+export const AuthEmailSharedEnvironment = Schema.Struct(
+  authEmailSharedEnvironmentFields
+);
+type AuthEmailSharedEnvironment = Schema.Schema.Type<
+  typeof AuthEmailSharedEnvironment
+>;
+type AuthEmailSharedEnvironmentOverrides = {
+  readonly [K in keyof AuthEmailSharedEnvironment]: string;
+};
 const SANDBOX_COMPOSE_FILE = path.join(
   fileURLToPath(new URL("../docker", import.meta.url)),
   "sandbox.compose.yaml"
@@ -1064,18 +1112,36 @@ function exec<A>(
   );
 }
 
-function loadSandboxEnvironmentOrThrow(
+export function loadSandboxEnvironmentOrThrow(
   sandboxProcess: SandboxProcess,
   repoRoot: string
-): SandboxPreflightEffect<SharedSandboxEnvironmentInput> {
+): SandboxPreflightEffect<AuthEmailSharedEnvironment>;
+export function loadSandboxEnvironmentOrThrow(
+  sandboxProcess: SandboxProcess,
+  repoRoot: string
+): SandboxPreflightEffect<AuthEmailSharedEnvironment> {
   return sandboxProcess.env().pipe(
     Effect.flatMap((processEnv) =>
       loadSandboxSharedEnvironment({
         repoRoot,
+        requiredKeys: AUTH_EMAIL_REQUIRED_ENV_KEYS,
+        optionalKeys: ["AUTH_EMAIL_FROM_NAME"],
         processEnv,
+      })
+    ),
+    Effect.mapError((error) =>
+      error instanceof SandboxEnvironmentError
+        ? toSandboxPreflightError(error, { preserveMessage: true })
+        : toPreflightError(error, "Sandbox shared environment is invalid")
+    ),
+    Effect.flatMap((environment) =>
+      Effect.try({
+        try: () =>
+          Schema.decodeUnknownSync(AuthEmailSharedEnvironment)(environment),
+        catch: (error) => error,
       }).pipe(
-        Effect.catchTag(SANDBOX_ENVIRONMENT_ERROR_TAG, (error) =>
-          Effect.fail(toSandboxPreflightError(error, { preserveMessage: true }))
+        Effect.mapError((error) =>
+          toPreflightError(error, "Sandbox auth email environment is invalid")
         )
       )
     )
@@ -1317,11 +1383,10 @@ function ensureComposeEnvironmentFile(
   return sandboxFileSystem.access(composeEnvFile).pipe(
     Effect.catchAll((error) =>
       isMissingFileError(error)
-        ? writeComposeEnvironmentFile(record, {
-            AUTH_EMAIL_FROM: "",
-            AUTH_EMAIL_FROM_NAME: "",
-            RESEND_API_KEY: "",
-          })
+        ? writeComposeEnvironmentFile(
+            record,
+            makeBlankAuthEmailSharedEnvironmentOverrides()
+          )
         : Effect.fail(
             toPreflightError(
               error,
@@ -1335,11 +1400,7 @@ function ensureComposeEnvironmentFile(
 
 function writeComposeEnvironmentFile(
   record: SandboxRecord,
-  sharedEnvironment: {
-    readonly AUTH_EMAIL_FROM: string;
-    readonly AUTH_EMAIL_FROM_NAME: string;
-    readonly RESEND_API_KEY: string;
-  }
+  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
 ): SandboxPreflightEffect<void> {
   const composeEnvFile = getComposeEnvFilePath(record.sandboxName);
   return Effect.gen(function* () {
@@ -1364,15 +1425,12 @@ function writeComposeEnvironmentFile(
 
 export function buildComposeFallbackEnvironmentOverrides(
   record: SandboxRecord,
-  sharedEnvironment: {
-    readonly AUTH_EMAIL_FROM: string;
-    readonly AUTH_EMAIL_FROM_NAME: string;
-    readonly RESEND_API_KEY: string;
-  }
+  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
 ): Record<string, string> {
   const urls = buildRecordUrls(record);
 
   return {
+    ...sharedEnvironment,
     API_HOST_PORT: String(record.ports.api),
     APP_HOST_PORT: String(record.ports.app),
     AUTH_APP_ORIGIN: urls.fallbackApp,
@@ -1385,7 +1443,6 @@ export function buildComposeFallbackEnvironmentOverrides(
     HOST: "0.0.0.0",
     PORT: String(record.ports.api),
     POSTGRES_HOST_PORT: String(record.ports.postgres),
-    RESEND_API_KEY: sharedEnvironment.RESEND_API_KEY,
     SANDBOX_ID: record.sandboxId,
     SANDBOX_DEV_IMAGE: record.runtimeAssets.devImage,
     SANDBOX_NODE_MODULES_VOLUME: record.runtimeAssets.nodeModulesVolume,
@@ -1394,6 +1451,12 @@ export function buildComposeFallbackEnvironmentOverrides(
     TASK_TRACKER_SANDBOX: "1",
     VITE_AUTH_ORIGIN: urls.fallbackApi,
   };
+}
+
+function makeBlankAuthEmailSharedEnvironmentOverrides(): AuthEmailSharedEnvironmentOverrides {
+  return Object.fromEntries(
+    AUTH_EMAIL_SHARED_ENV_KEYS.map((key) => [key, ""])
+  ) as AuthEmailSharedEnvironmentOverrides;
 }
 
 function writeComposeEnvironmentFileFromSpec(

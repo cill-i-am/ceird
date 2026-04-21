@@ -11,6 +11,12 @@ const runtimeAssets = Schema.decodeUnknownSync(SandboxRuntimeAssets)({
   nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
   pnpmStoreVolume: "tt-sbx-pnpm-store",
 });
+const sharedEnvironment = {
+  AUTH_EMAIL_FROM: "auth@example.com",
+  AUTH_EMAIL_FROM_NAME: "Task Tracker",
+  CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+  CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
+};
 
 describe("validateSandboxName()", () => {
   it("accepts lowercase kebab-case names", () => {
@@ -41,11 +47,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         betterAuthSecret: "0123456789abcdef0123456789abcdef",
         aliasesHealthy: true,
         proxyPort: 1355,
-        sharedEnvironment: {
-          AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          RESEND_API_KEY: "re_live_123",
-        },
+        sharedEnvironment,
       })
     );
 
@@ -66,6 +68,10 @@ describe("buildSandboxRuntimeSpec()", () => {
         TASK_TRACKER_SANDBOX: "1",
         AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
         BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
+        AUTH_EMAIL_FROM: "auth@example.com",
+        AUTH_EMAIL_FROM_NAME: "Task Tracker",
+        CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+        CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
       },
     });
   }, 10_000);
@@ -86,11 +92,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         betterAuthSecret: "0123456789abcdef0123456789abcdef",
         aliasesHealthy: true,
         proxyPort: 1355,
-        sharedEnvironment: {
-          AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          RESEND_API_KEY: "re_live_123",
-        },
+        sharedEnvironment,
       })
     );
 
@@ -115,11 +117,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         betterAuthSecret: "0123456789abcdef0123456789abcdef",
         aliasesHealthy: false,
         proxyPort: 1355,
-        sharedEnvironment: {
-          AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          RESEND_API_KEY: "re_live_123",
-        },
+        sharedEnvironment,
       })
     );
 
@@ -147,11 +145,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         betterAuthSecret: "0123456789abcdef0123456789abcdef",
         aliasesHealthy: true,
         proxyPort: 1355,
-        sharedEnvironment: {
-          AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          RESEND_API_KEY: "re_live_123",
-        },
+        sharedEnvironment,
       }).pipe(Effect.either)
     );
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -6,6 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
+import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication } from "./auth.js";
 import {
   DEFAULT_AUTH_DATABASE_URL,
@@ -615,7 +617,7 @@ describe("authentication integration", () => {
     expect(invitation.organizationId).toBe(createdOrganization.id);
     expect(sentInvitationEmails).toStrictEqual([
       expect.objectContaining({
-        idempotencyKey: `organization-invitation/${invitation.id}`,
+        deliveryKey: `organization-invitation/${invitation.id}`,
         invitationUrl: `http://127.0.0.1:4173/accept-invitation/${invitation.id}`,
         inviterEmail: "owner@example.com",
         organizationName: "Acme Field Ops",
@@ -701,7 +703,7 @@ describe("authentication integration", () => {
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
 
-    const capturedResetUrls: string[] = [];
+    const capturedPasswordResetEmails: PasswordResetEmailInput[] = [];
     const passwordResetDelivery = await Effect.runPromise(
       Deferred.make<boolean>()
     );
@@ -717,8 +719,8 @@ describe("authentication integration", () => {
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
-      sendPasswordResetEmail: async ({ resetUrl }) => {
-        capturedResetUrls.push(resetUrl);
+      sendPasswordResetEmail: async (input) => {
+        capturedPasswordResetEmails.push(input);
         await Effect.runPromise(Deferred.await(passwordResetDelivery));
       },
       sendVerificationEmail: async () => {},
@@ -802,9 +804,14 @@ describe("authentication integration", () => {
 
     const resetRequestResponse = await resetRequestPromise;
     expect(resetRequestResponse.status).toBe(200);
-    expect(capturedResetUrls).toHaveLength(1);
+    expect(capturedPasswordResetEmails).toHaveLength(1);
 
-    const [resetUrl] = capturedResetUrls;
+    const [capturedPasswordResetEmail] = capturedPasswordResetEmails;
+    const resetUrl = capturedPasswordResetEmail?.resetUrl;
+    expect(capturedPasswordResetEmail?.deliveryKey).toMatch(
+      /^password-reset\/[0-9a-f]{64}$/
+    );
+    expect(resetUrl).toBeDefined();
     const parsedResetUrl = new URL(resetUrl);
     expect(parsedResetUrl.origin).toBe("http://127.0.0.1:3000");
     expect(parsedResetUrl.pathname).toMatch(/^\/api\/auth\/reset-password\/.+/);
@@ -815,6 +822,18 @@ describe("authentication integration", () => {
     const resetToken = resetUrl.split("?", 1)[0]?.split("/").pop();
     expect(resetToken).toBeDefined();
     expect(resetToken).not.toBe("");
+    if (!resetToken) {
+      throw new Error("Expected Better Auth reset URL to include a token");
+    }
+    expect(capturedPasswordResetEmail?.deliveryKey).not.toContain(resetToken);
+
+    const userRows = await adminPool.query<{
+      id: string;
+    }>(`select id from "user" where email = $1`, ["integration@example.com"]);
+    expect(userRows.rows).toHaveLength(1);
+    expect(capturedPasswordResetEmail?.deliveryKey).toBe(
+      `password-reset/${createHash("sha256").update(`password-reset:${userRows.rows[0]?.id}:${resetToken}`).digest("hex")}`
+    );
 
     const resetCallbackResponse = await auth.handler(
       makeRequest(

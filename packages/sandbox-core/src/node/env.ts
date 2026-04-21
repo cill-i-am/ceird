@@ -24,7 +24,9 @@ export class SandboxEnvironmentError extends Schema.TaggedError<SandboxEnvironme
 export const loadSandboxSharedEnvironment = Effect.fn(
   "SandboxEnv.loadSharedEnvironment"
 )(function* (input: {
+  readonly optionalKeys?: readonly string[];
   readonly repoRoot: string;
+  readonly requiredKeys: readonly string[];
   readonly processEnv?: Record<string, string | undefined>;
   readonly readFile?: (
     filePath: string
@@ -55,7 +57,21 @@ export const loadSandboxSharedEnvironment = Effect.fn(
     ),
   };
 
-  return yield* decodeSandboxSharedEnvironment(merged);
+  const selectedEnvironment = Object.fromEntries(
+    input.requiredKeys.map((key) => [key, merged[key]])
+  );
+  for (const key of input.optionalKeys ?? []) {
+    const value = merged[key];
+
+    if (typeof value === "string" && value.length > 0) {
+      selectedEnvironment[key] = value;
+    }
+  }
+
+  return yield* decodeSandboxSharedEnvironment({
+    environment: selectedEnvironment,
+    requiredKeys: input.requiredKeys,
+  });
 });
 
 const readEnvFile = Effect.fn("SandboxEnv.readFile")(function* (
@@ -93,10 +109,20 @@ const readOptionalEnvironmentFile = Effect.fn("SandboxEnv.readOptionalFile")(
 );
 
 const decodeSandboxSharedEnvironment = Effect.fn("SandboxEnv.decodeShared")(
-  function* (input: Record<string, string>) {
-    return yield* Schema.decodeUnknown(SharedSandboxEnvironment)(input).pipe(
-      Effect.mapError((error) => {
-        const missing = [...extractMissingVariables(error)];
+  function* (input: {
+    readonly environment: Record<string, string | undefined>;
+    readonly requiredKeys: readonly string[];
+  }) {
+    return yield* Schema.decodeUnknown(SharedSandboxEnvironment)(
+      input.environment
+    ).pipe(
+      Effect.mapError(() => {
+        const missing = input.requiredKeys.filter((key) => {
+          const value = input.environment[key];
+
+          return typeof value !== "string" || value.length === 0;
+        });
+
         return new SandboxEnvironmentError({
           message:
             missing.length === 0
@@ -115,23 +141,6 @@ function parseEnvironmentFile(content: string): Record<string, string> {
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )
   );
-}
-
-function extractMissingVariables(error: unknown): Set<string> {
-  const missing = new Set<string>();
-  const message = JSON.stringify(error);
-
-  for (const variable of [
-    "AUTH_EMAIL_FROM",
-    "AUTH_EMAIL_FROM_NAME",
-    "RESEND_API_KEY",
-  ]) {
-    if (message.includes(variable)) {
-      missing.add(variable);
-    }
-  }
-
-  return missing;
 }
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {

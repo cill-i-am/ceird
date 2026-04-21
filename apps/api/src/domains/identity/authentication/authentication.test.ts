@@ -326,7 +326,7 @@ describe("createAuthentication()", () => {
 
       expect(sentInvitationEmails).toStrictEqual([
         {
-          idempotencyKey: "organization-invitation/inv_123",
+          deliveryKey: "organization-invitation/inv_123",
           invitationUrl: "http://127.0.0.1:4173/accept-invitation/inv_123",
           inviterEmail: "owner@example.com",
           organizationName: "Acme Field Ops",

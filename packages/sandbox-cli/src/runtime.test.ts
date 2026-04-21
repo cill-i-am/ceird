@@ -1,3 +1,7 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { validateSandboxName } from "@task-tracker/sandbox-core";
 import {
   SandboxRegistryError,
@@ -5,12 +9,15 @@ import {
 } from "@task-tracker/sandbox-core/node";
 import { Effect, Either, Exit, Schema } from "effect";
 
+import type { SandboxProcess } from "./process.js";
 import {
+  AuthEmailSharedEnvironment,
   buildComposeFallbackEnvironmentOverrides,
   cleanupFailedSandboxUp,
   ensureSandboxProxyHealthy,
   finalizeSandboxRename,
   removeAliasesBestEffort,
+  loadSandboxEnvironmentOrThrow,
   resolveRepoRootFromGitPaths,
   selectSandboxRecord,
   waitForSandboxServicesReady,
@@ -461,14 +468,155 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       buildComposeFallbackEnvironmentOverrides(baseRecord, {
         AUTH_EMAIL_FROM: "",
         AUTH_EMAIL_FROM_NAME: "",
-        RESEND_API_KEY: "",
+        CLOUDFLARE_ACCOUNT_ID: "",
+        CLOUDFLARE_API_TOKEN: "",
       })
     ).toMatchObject({
       AUTH_EMAIL_FROM: "",
       AUTH_EMAIL_FROM_NAME: "",
-      RESEND_API_KEY: "",
+      CLOUDFLARE_ACCOUNT_ID: "",
+      CLOUDFLARE_API_TOKEN: "",
+      AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
       BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
       SANDBOX_NAME: "alpha",
     });
   }, 10_000);
+});
+
+describe("loadSandboxEnvironmentOrThrow()", () => {
+  it("preserves an explicit AUTH_EMAIL_FROM_NAME override from sandbox env files", async () => {
+    const repoRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "task-tracker-sandbox-env-")
+    );
+    const previousEnv = {
+      AUTH_EMAIL_FROM: process.env.AUTH_EMAIL_FROM,
+      AUTH_EMAIL_FROM_NAME: process.env.AUTH_EMAIL_FROM_NAME,
+      CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+    };
+
+    try {
+      await fs.writeFile(
+        path.join(repoRoot, ".env"),
+        [
+          "AUTH_EMAIL_FROM=auth@example.com",
+          "AUTH_EMAIL_FROM_NAME=Task Tracker Auth",
+          "CLOUDFLARE_ACCOUNT_ID=account_123",
+          "CLOUDFLARE_API_TOKEN=token_123",
+        ].join("\n")
+      );
+
+      process.env.AUTH_EMAIL_FROM = "auth@example.com";
+      delete process.env.AUTH_EMAIL_FROM_NAME;
+      process.env.CLOUDFLARE_ACCOUNT_ID = "account_123";
+      process.env.CLOUDFLARE_API_TOKEN = "token_123";
+      const sandboxProcess: SandboxProcess = {
+        argv: () => Effect.succeed([]),
+        cwd: () => Effect.succeed(repoRoot),
+        env: () => Effect.succeed(process.env),
+        isPortAvailable: () => Effect.succeed(true),
+        isPortOpen: () => Effect.succeed(false),
+        runCommand: () => Effect.die("not used"),
+        setExitCode: () => Effect.void,
+      };
+
+      await expect(
+        Effect.runPromise(
+          loadSandboxEnvironmentOrThrow(sandboxProcess, repoRoot)
+        )
+      ).resolves.toStrictEqual({
+        AUTH_EMAIL_FROM: "auth@example.com",
+        AUTH_EMAIL_FROM_NAME: "Task Tracker Auth",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      });
+    } finally {
+      if (previousEnv.AUTH_EMAIL_FROM === undefined) {
+        delete process.env.AUTH_EMAIL_FROM;
+      } else {
+        process.env.AUTH_EMAIL_FROM = previousEnv.AUTH_EMAIL_FROM;
+      }
+
+      if (previousEnv.AUTH_EMAIL_FROM_NAME === undefined) {
+        delete process.env.AUTH_EMAIL_FROM_NAME;
+      } else {
+        process.env.AUTH_EMAIL_FROM_NAME = previousEnv.AUTH_EMAIL_FROM_NAME;
+      }
+
+      if (previousEnv.CLOUDFLARE_ACCOUNT_ID === undefined) {
+        delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      } else {
+        process.env.CLOUDFLARE_ACCOUNT_ID = previousEnv.CLOUDFLARE_ACCOUNT_ID;
+      }
+
+      if (previousEnv.CLOUDFLARE_API_TOKEN === undefined) {
+        delete process.env.CLOUDFLARE_API_TOKEN;
+      } else {
+        process.env.CLOUDFLARE_API_TOKEN = previousEnv.CLOUDFLARE_API_TOKEN;
+      }
+
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  }, 10_000);
+});
+
+describe("authEmailSharedEnvironment", () => {
+  it("defaults AUTH_EMAIL_FROM_NAME when it is omitted", () => {
+    expect(
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "auth@example.com",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toStrictEqual({
+      AUTH_EMAIL_FROM: "auth@example.com",
+      AUTH_EMAIL_FROM_NAME: "Task Tracker",
+      CLOUDFLARE_ACCOUNT_ID: "account_123",
+      CLOUDFLARE_API_TOKEN: "token_123",
+    });
+  }, 10_000);
+
+  it("rejects invalid AUTH_EMAIL_FROM values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "not-an-email",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toThrow(/AUTH_EMAIL_FROM/);
+    expect(() =>
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "not-an-email",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toThrow(/valid email address/);
+  }, 10_000);
+
+  it.each(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] as const)(
+    "rejects whitespace-only %s values",
+    (key) => {
+      expect(() =>
+        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+          AUTH_EMAIL_FROM: "auth@example.com",
+          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          CLOUDFLARE_ACCOUNT_ID:
+            key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
+          CLOUDFLARE_API_TOKEN:
+            key === "CLOUDFLARE_API_TOKEN" ? "\t" : "token_123",
+        })
+      ).toThrow(key);
+      expect(() =>
+        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+          AUTH_EMAIL_FROM: "auth@example.com",
+          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          CLOUDFLARE_ACCOUNT_ID:
+            key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
+          CLOUDFLARE_API_TOKEN:
+            key === "CLOUDFLARE_API_TOKEN" ? "\t" : "token_123",
+        })
+      ).toThrow(/must not be empty/);
+    },
+    10_000
+  );
 });

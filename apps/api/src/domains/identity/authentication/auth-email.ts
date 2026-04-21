@@ -2,15 +2,25 @@
 
 import { Context, Effect, ParseResult, Schema } from "effect";
 
-import type { AuthEmailDeliveryError } from "./auth-email-errors.js";
+import type {
+  AuthEmailRejectedError,
+  AuthEmailRequestError,
+} from "./auth-email-errors.js";
 import {
-  EmailVerificationDeliveryError,
-  OrganizationInvitationDeliveryError,
-  PasswordResetDeliveryError,
+  EmailVerificationEmailRejectedError,
+  EmailVerificationEmailRequestError,
+  InvalidPasswordResetEmailInputError,
+  InvalidEmailVerificationEmailInputError,
+  InvalidOrganizationInvitationEmailInputError,
+  OrganizationInvitationEmailRejectedError,
+  OrganizationInvitationEmailRequestError,
+  PasswordResetEmailRejectedError,
+  PasswordResetEmailRequestError,
 } from "./auth-email-errors.js";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RESEND_IDEMPOTENCY_KEY_MAX_LENGTH = 256;
+const PASSWORD_RESET_DELIVERY_KEY_PATTERN = /^password-reset\/[0-9a-f]{64}$/;
+const DELIVERY_KEY_MAX_LENGTH = 256;
 
 function isValidEmailAddress(value: string) {
   return EMAIL_ADDRESS_PATTERN.test(value);
@@ -46,13 +56,20 @@ const EmailAddress = Schema.String.pipe(
   })
 );
 
-const EmailIdempotencyKey = Schema.String.pipe(
+const PasswordResetDeliveryKey = Schema.String.pipe(
+  Schema.filter((value) => PASSWORD_RESET_DELIVERY_KEY_PATTERN.test(value), {
+    message: () =>
+      "Expected a password reset delivery key in the format password-reset/<sha256>",
+  })
+);
+
+const DeliveryKey = Schema.String.pipe(
   Schema.filter(
     (value) =>
-      value.length > 0 && value.length <= RESEND_IDEMPOTENCY_KEY_MAX_LENGTH,
+      value.trim().length > 0 && value.length <= DELIVERY_KEY_MAX_LENGTH,
     {
       message: () =>
-        `Expected a non-empty idempotency key up to ${RESEND_IDEMPOTENCY_KEY_MAX_LENGTH} characters`,
+        `Expected a non-empty delivery key up to ${DELIVERY_KEY_MAX_LENGTH} characters`,
     }
   )
 );
@@ -72,7 +89,7 @@ const InvitationRole = Schema.String.pipe(
 export const VerificationUrl = ResetUrl;
 
 export const PasswordResetEmailInput = Schema.Struct({
-  idempotencyKey: EmailIdempotencyKey,
+  deliveryKey: PasswordResetDeliveryKey,
   recipientEmail: EmailAddress,
   recipientName: Schema.String,
   resetUrl: ResetUrl,
@@ -87,7 +104,7 @@ const decodePasswordResetEmailInput = Schema.decodeUnknown(
 );
 
 export const OrganizationInvitationEmailInput = Schema.Struct({
-  idempotencyKey: EmailIdempotencyKey,
+  deliveryKey: DeliveryKey,
   recipientEmail: EmailAddress,
   recipientName: Schema.String,
   organizationName: Schema.String,
@@ -105,7 +122,7 @@ const decodeOrganizationInvitationEmailInput = Schema.decodeUnknown(
 );
 
 export const EmailVerificationEmailInput = Schema.Struct({
-  idempotencyKey: EmailIdempotencyKey,
+  deliveryKey: DeliveryKey,
   recipientEmail: EmailAddress,
   recipientName: Schema.String,
   verificationUrl: VerificationUrl,
@@ -124,12 +141,28 @@ function formatParseError(parseError: ParseResult.ParseError) {
 }
 
 export interface TransportMessage {
+  readonly deliveryKey?: string;
   readonly html: string;
-  readonly idempotencyKey?: string;
   readonly subject: string;
   readonly text: string;
   readonly to: string;
 }
+
+export type AuthEmailTransportError =
+  | AuthEmailRejectedError
+  | AuthEmailRequestError;
+export type OrganizationInvitationEmailError =
+  | InvalidOrganizationInvitationEmailInputError
+  | OrganizationInvitationEmailRejectedError
+  | OrganizationInvitationEmailRequestError;
+export type PasswordResetEmailError =
+  | InvalidPasswordResetEmailInputError
+  | PasswordResetEmailRejectedError
+  | PasswordResetEmailRequestError;
+export type EmailVerificationEmailError =
+  | InvalidEmailVerificationEmailInputError
+  | EmailVerificationEmailRejectedError
+  | EmailVerificationEmailRequestError;
 
 export class AuthEmailTransport extends Context.Tag(
   "@task-tracker/domains/identity/authentication/AuthEmailTransport"
@@ -138,7 +171,7 @@ export class AuthEmailTransport extends Context.Tag(
   {
     readonly send: (
       message: TransportMessage
-    ) => Effect.Effect<void, AuthEmailDeliveryError>;
+    ) => Effect.Effect<void, AuthEmailTransportError>;
   }
 >() {}
 
@@ -158,42 +191,6 @@ function decodeAuthEmailInput<Input, ErrorType>(options: {
     );
 }
 
-function sendTransportMessage<ErrorType>(options: {
-  readonly emailType:
-    | "email-verification"
-    | "organization-invitation"
-    | "password-reset";
-  readonly message: TransportMessage;
-  readonly transport: {
-    readonly send: (
-      message: TransportMessage
-    ) => Effect.Effect<void, AuthEmailDeliveryError>;
-  };
-  readonly onDeliveryFailure: (cause: string) => ErrorType;
-}) {
-  return Effect.gen(function* sendTransportMessageEffect() {
-    yield* Effect.annotateCurrentSpan("auth.email.type", options.emailType);
-    yield* Effect.annotateCurrentSpan(
-      "auth.email.recipient",
-      options.message.to
-    );
-    if (options.message.idempotencyKey) {
-      yield* Effect.annotateCurrentSpan(
-        "auth.email.idempotencyKey",
-        options.message.idempotencyKey
-      );
-    }
-
-    yield* options.transport
-      .send(options.message)
-      .pipe(
-        Effect.catchTag("AuthEmailDeliveryError", (error) =>
-          Effect.fail(options.onDeliveryFailure(error.message))
-        )
-      );
-  });
-}
-
 export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
   "@task-tracker/domains/identity/authentication/AuthEmailSender",
   {
@@ -208,7 +205,7 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           rawInput,
           decode: decodePasswordResetEmailInput,
           onInvalidInput: (cause) =>
-            new PasswordResetDeliveryError({
+            new InvalidPasswordResetEmailInputError({
               message: "Invalid password reset email input",
               cause,
             }),
@@ -226,22 +223,32 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           `<p><a href="${escapeHtml(input.resetUrl)}">Reset your password</a></p>`,
         ].join("");
 
-        yield* sendTransportMessage({
-          emailType: "password-reset",
-          message: {
-            idempotencyKey: input.idempotencyKey,
+        yield* transport
+          .send({
+            deliveryKey: input.deliveryKey,
             to: input.recipientEmail,
             subject,
             text,
             html,
-          },
-          transport,
-          onDeliveryFailure: (cause) =>
-            new PasswordResetDeliveryError({
-              message: "Failed to deliver password reset email",
-              cause,
-            }),
-        });
+          })
+          .pipe(
+            Effect.catchTags({
+              AuthEmailRejectedError: (error) =>
+                Effect.fail(
+                  new PasswordResetEmailRejectedError({
+                    message: "Password reset email was rejected for delivery",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+              AuthEmailRequestError: (error) =>
+                Effect.fail(
+                  new PasswordResetEmailRequestError({
+                    message: "Failed to deliver password reset email",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+            })
+          );
       });
 
       const sendOrganizationInvitationEmail = Effect.fn(
@@ -251,7 +258,7 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           rawInput,
           decode: decodeOrganizationInvitationEmailInput,
           onInvalidInput: (cause) =>
-            new OrganizationInvitationDeliveryError({
+            new InvalidOrganizationInvitationEmailInputError({
               message: "Invalid organization invitation email input",
               cause,
             }),
@@ -271,22 +278,33 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           `<p><a href="${escapeHtml(input.invitationUrl)}">Accept invitation</a></p>`,
         ].join("");
 
-        yield* sendTransportMessage({
-          emailType: "organization-invitation",
-          message: {
-            idempotencyKey: input.idempotencyKey,
+        yield* transport
+          .send({
+            deliveryKey: input.deliveryKey,
             to: input.recipientEmail,
             subject,
             text,
             html,
-          },
-          transport,
-          onDeliveryFailure: (cause) =>
-            new OrganizationInvitationDeliveryError({
-              message: "Failed to deliver organization invitation email",
-              cause,
-            }),
-        });
+          })
+          .pipe(
+            Effect.catchTags({
+              AuthEmailRejectedError: (error) =>
+                Effect.fail(
+                  new OrganizationInvitationEmailRejectedError({
+                    message:
+                      "Organization invitation email was rejected for delivery",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+              AuthEmailRequestError: (error) =>
+                Effect.fail(
+                  new OrganizationInvitationEmailRequestError({
+                    message: "Failed to deliver organization invitation email",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+            })
+          );
       });
 
       const sendEmailVerificationEmail = Effect.fn(
@@ -296,7 +314,7 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           rawInput,
           decode: decodeEmailVerificationEmailInput,
           onInvalidInput: (cause) =>
-            new EmailVerificationDeliveryError({
+            new InvalidEmailVerificationEmailInputError({
               message: "Invalid verification email input",
               cause,
             }),
@@ -314,22 +332,32 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
           `<p><a href="${escapeHtml(input.verificationUrl)}">Verify your email</a></p>`,
         ].join("");
 
-        yield* sendTransportMessage({
-          emailType: "email-verification",
-          message: {
-            idempotencyKey: input.idempotencyKey,
+        yield* transport
+          .send({
+            deliveryKey: input.deliveryKey,
             to: input.recipientEmail,
             subject,
             text,
             html,
-          },
-          transport,
-          onDeliveryFailure: (cause) =>
-            new EmailVerificationDeliveryError({
-              message: "Failed to deliver verification email",
-              cause,
-            }),
-        });
+          })
+          .pipe(
+            Effect.catchTags({
+              AuthEmailRejectedError: (error) =>
+                Effect.fail(
+                  new EmailVerificationEmailRejectedError({
+                    message: "Verification email was rejected for delivery",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+              AuthEmailRequestError: (error) =>
+                Effect.fail(
+                  new EmailVerificationEmailRequestError({
+                    message: "Failed to deliver verification email",
+                    cause: error.cause ?? error.message,
+                  })
+                ),
+            })
+          );
       });
 
       return {

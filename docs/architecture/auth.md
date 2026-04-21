@@ -108,7 +108,8 @@ The auth email boundary adds runtime config in
 Required values:
 
 - `AUTH_EMAIL_FROM`
-- `RESEND_API_KEY`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
 
 Current defaulted value:
 
@@ -120,13 +121,12 @@ Password reset and email verification delivery now cross one narrow app-owned
 boundary in `apps/api`:
 
 - `apps/api/src/domains/identity/authentication/auth-email.ts` defines
-  `AuthEmailSender`, an auth-domain Effect service for sending password reset
-  and verification mail
-- `AuthEmailSender` validates each payload and renders the auth email content
-  before handing it to a transport
-- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
-  provides `ResendAuthEmailTransport`, the first provider adapter behind that
-  boundary
+  `AuthEmailSender`, an auth-domain Effect service for sending password reset,
+  verification, and organization invitation mail
+- `AuthEmailSender` validates each payload, renders the auth email content,
+  and keeps the transport contract provider-neutral through `deliveryKey`
+- `apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts`
+  provides the current Cloudflare transport adapter behind that boundary
 
 Rule:
 
@@ -134,11 +134,16 @@ Rule:
 - the app-owned boundary starts at delivery policy, not at route ownership
 - auth startup now depends on valid auth email config as well as core Better
   Auth config, because `AuthenticationLive` composes `AuthEmailSender` with
-  `ResendAuthEmailTransportLive` at boot
-- verification link delivery also passes through `AuthEmailSender`, using the
-  same transport boundary and idempotency pattern as password reset mail
-- password reset emails carry a provider idempotency key so retries do not
-  duplicate delivery
+  `CloudflareAuthEmailTransportLive` at boot
+- password reset emails carry a stable provider-neutral `deliveryKey` at the
+  auth boundary for correlation and transport stability
+- that `deliveryKey` stays consistent across transports so future verification
+  mail can reuse the same boundary without baking provider-specific naming into
+  the domain contract
+- Better Auth currently defers reset delivery through an in-process
+  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
+- verification and organization invitation mail now pass through the same
+  `AuthEmailSender` boundary
 - Better Auth currently defers auth email delivery through an in-process
   `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`,
   including verification sends and password reset mail
@@ -167,11 +172,12 @@ Current defaults by entry point:
   `https://<slug>.api.task-tracker.localhost:1355`
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
-- supported non-production launchers also inject `AUTH_EMAIL_FROM`,
-  `AUTH_EMAIL_FROM_NAME`, and `RESEND_API_KEY`
-- those launchers may fall back to placeholder auth-email values when the
-  caller has not provided real delivery credentials, but the API itself still
-  requires the variables at runtime
+- local dev and Playwright launchers also inject `AUTH_EMAIL_FROM`,
+  `AUTH_EMAIL_FROM_NAME`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`
+  and may substitute placeholder auth-email values when real delivery
+  credentials are unavailable
+- sandbox startup preflight still validates the same auth-email variables
+  before compose launch and does not rely on placeholder fallback
 
 ### Trusted Origins and CORS
 
@@ -628,9 +634,10 @@ These are the important current rules we are following.
 - `apps/api/src/domains/identity/authentication/auth-email-config.ts`
   Defines required auth email runtime config and defaults.
 - `apps/api/src/domains/identity/authentication/auth-email.ts`
-  Defines the auth email boundary for password reset and verification delivery.
-- `apps/api/src/domains/identity/authentication/resend-auth-email-transport.ts`
-  Implements the first auth email transport adapter with Resend.
+  Defines the auth email boundary for password reset, verification, and
+  organization invitation delivery.
+- `apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts`
+  Implements the current auth email transport adapter with Cloudflare.
 - `apps/api/src/domains/identity/authentication/schema.ts`
   Defines auth persistence tables.
 - `apps/api/src/domains/identity/authentication/database.ts`
@@ -680,6 +687,8 @@ These decisions are currently encoded in the implementation and tests.
 - Show safe, generic server-error copy instead of backend internals.
 - Keep password reset request responses generic while allowing invalid or
   expired reset-link feedback on completion.
+- Reuse the auth email boundary for future verification mail instead of
+  introducing provider-specific mini-systems.
 - Treat sign-out as a real user action with visible failure handling.
 
 ## Testing Coverage That Defines Behavior

@@ -57,19 +57,15 @@ export type SandboxRuntimeAssets = Schema.Schema.Type<
   typeof SandboxRuntimeAssets
 >;
 
-export interface SharedSandboxEnvironment {
-  readonly AUTH_EMAIL_FROM: string;
-  readonly AUTH_EMAIL_FROM_NAME: string;
-  readonly RESEND_API_KEY: string;
-}
-
-export const SharedSandboxEnvironment = Schema.Struct({
-  AUTH_EMAIL_FROM: Schema.NonEmptyString,
-  AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
-  RESEND_API_KEY: Schema.NonEmptyString,
+export const SharedSandboxEnvironment = Schema.Record({
+  key: Schema.String,
+  value: Schema.NonEmptyString,
 });
+export type SharedSandboxEnvironment = Schema.Schema.Type<
+  typeof SharedSandboxEnvironment
+>;
 
-export const SandboxRuntimeOverrides = Schema.Struct({
+const BaseSandboxRuntimeOverrides = Schema.Struct({
   API_HOST_PORT: Schema.String,
   APP_HOST_PORT: Schema.String,
   AUTH_APP_ORIGIN: SandboxHttpUrl,
@@ -82,7 +78,6 @@ export const SandboxRuntimeOverrides = Schema.Struct({
   HOST: Schema.String,
   PORT: Schema.String,
   POSTGRES_HOST_PORT: Schema.String,
-  RESEND_API_KEY: Schema.NonEmptyString,
   SANDBOX_ID: SandboxIdSchema,
   SANDBOX_DEV_IMAGE: SandboxDockerImageReference,
   SANDBOX_NODE_MODULES_VOLUME: SandboxDockerVolumeName,
@@ -92,9 +87,15 @@ export const SandboxRuntimeOverrides = Schema.Struct({
   VITE_AUTH_ORIGIN: SandboxHttpUrl,
 });
 
+export const SandboxRuntimeOverrides = Schema.Record({
+  key: Schema.String,
+  value: Schema.String,
+});
+
 export type SandboxRuntimeOverrides = Schema.Schema.Type<
   typeof SandboxRuntimeOverrides
->;
+> &
+  Schema.Schema.Type<typeof BaseSandboxRuntimeOverrides>;
 
 export function buildSandboxRuntimeOverrides(input: {
   readonly ports: SandboxPorts;
@@ -105,7 +106,10 @@ export function buildSandboxRuntimeOverrides(input: {
   readonly sandboxName: SandboxName;
   readonly sharedEnvironment: SharedSandboxEnvironment;
 }): SandboxRuntimeOverrides {
-  return Schema.decodeUnknownSync(SandboxRuntimeOverrides)({
+  const sharedEnvironment = Schema.decodeUnknownSync(SharedSandboxEnvironment)(
+    input.sharedEnvironment
+  );
+  const baseOverrides = Schema.decodeUnknownSync(BaseSandboxRuntimeOverrides)({
     API_HOST_PORT: String(input.ports.api),
     APP_HOST_PORT: String(input.ports.app),
     AUTH_APP_ORIGIN: input.urls.fallbackApp,
@@ -118,7 +122,6 @@ export function buildSandboxRuntimeOverrides(input: {
     HOST: "0.0.0.0",
     PORT: String(input.ports.api),
     POSTGRES_HOST_PORT: String(input.ports.postgres),
-    RESEND_API_KEY: input.sharedEnvironment.RESEND_API_KEY,
     SANDBOX_ID: input.sandboxId,
     SANDBOX_DEV_IMAGE: input.runtimeAssets.devImage,
     SANDBOX_NODE_MODULES_VOLUME: input.runtimeAssets.nodeModulesVolume,
@@ -127,6 +130,11 @@ export function buildSandboxRuntimeOverrides(input: {
     TASK_TRACKER_SANDBOX: "1",
     VITE_AUTH_ORIGIN: input.urls.fallbackApi,
   });
+
+  return Schema.decodeUnknownSync(SandboxRuntimeOverrides)({
+    ...sharedEnvironment,
+    ...baseOverrides,
+  }) as SandboxRuntimeOverrides;
 }
 
 export const buildSandboxRuntimeSpec = Effect.fn("SandboxRuntimeSpec.build")(

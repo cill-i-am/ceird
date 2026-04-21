@@ -3,15 +3,28 @@ import { ConfigProvider, Effect, Layer } from "effect";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthEmailConfigurationError,
-  AuthEmailDeliveryError,
+  AuthEmailRejectedError,
+  AuthEmailRequestError,
+  EmailVerificationEmailRejectedError,
+  EmailVerificationEmailRequestError,
+  InvalidEmailVerificationEmailInputError,
+  InvalidOrganizationInvitationEmailInputError,
+  InvalidPasswordResetEmailInputError,
+  OrganizationInvitationEmailRejectedError,
+  OrganizationInvitationEmailRequestError,
+  PasswordResetEmailRejectedError,
+  PasswordResetEmailRequestError,
 } from "./auth-email-errors.js";
 import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
 
+const PASSWORD_RESET_DELIVERY_KEY =
+  "password-reset/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
 function makeAuthEmailSenderTestLayer(
   send: (
     message: TransportMessage
-  ) => Effect.Effect<void, AuthEmailDeliveryError>
+  ) => Effect.Effect<void, AuthEmailRequestError | AuthEmailRejectedError>
 ) {
   return AuthEmailSender.Default.pipe(
     Layer.provide(
@@ -28,7 +41,7 @@ describe("auth email sender password reset delivery", () => {
 
     const result = await Effect.runPromise(
       AuthEmailSender.sendOrganizationInvitationEmail({
-        idempotencyKey: "organization-invitation/inv_123",
+        deliveryKey: "organization-invitation/inv_123",
         recipientEmail: "member@example.com",
         recipientName: "Taylor Example",
         organizationName: "Acme Field Ops",
@@ -50,7 +63,7 @@ describe("auth email sender password reset delivery", () => {
     expect(result).toBeUndefined();
     expect(sentMessages).toStrictEqual([
       {
-        idempotencyKey: "organization-invitation/inv_123",
+        deliveryKey: "organization-invitation/inv_123",
         to: "member@example.com",
         subject: "Join Acme Field Ops on Task Tracker",
         text: [
@@ -74,7 +87,7 @@ describe("auth email sender password reset delivery", () => {
 
     const result = await Effect.runPromise(
       AuthEmailSender.sendOrganizationInvitationEmail({
-        idempotencyKey: "organization-invitation/inv_456",
+        deliveryKey: "organization-invitation/inv_456",
         recipientEmail: "owner-invitee@example.com",
         recipientName: "Jordan Example",
         organizationName: "Northwind Ops",
@@ -97,12 +110,132 @@ describe("auth email sender password reset delivery", () => {
     expect(sentMessages[0]?.text).toContain("as a owner.");
   }, 10_000);
 
+  it("rejects invalid organization invitation input before sending", async () => {
+    const sentMessages: TransportMessage[] = [];
+
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendOrganizationInvitationEmail({
+        deliveryKey: "organization-invitation/inv_789",
+        recipientEmail: "member@example.com",
+        recipientName: "Taylor Example",
+        organizationName: "Acme Field Ops",
+        inviterEmail: "owner@example.com",
+        invitationUrl:
+          "https://user:password@app.task-tracker.localhost/accept-invitation/inv_789",
+        role: "member",
+      } as never).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toBeInstanceOf(
+      InvalidOrganizationInvitationEmailInputError
+    );
+    expect(result.left).toMatchObject({
+      _tag: "InvalidOrganizationInvitationEmailInputError",
+      message: "Invalid organization invitation email input",
+    });
+  }, 10_000);
+
+  it("maps organization invitation provider request failures into OrganizationInvitationEmailRequestError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendOrganizationInvitationEmail({
+        deliveryKey: "organization-invitation/inv_req",
+        recipientEmail: "member@example.com",
+        recipientName: "Taylor Example",
+        organizationName: "Acme Field Ops",
+        inviterEmail: "owner@example.com",
+        invitationUrl:
+          "https://app.task-tracker.localhost/accept-invitation/inv_req",
+        role: "member",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailRequestError({
+                message: "Auth email request failed",
+                cause: "upstream timeout",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(OrganizationInvitationEmailRequestError);
+    expect(result.left).toMatchObject({
+      _tag: "OrganizationInvitationEmailRequestError",
+      message: "Failed to deliver organization invitation email",
+      cause: "upstream timeout",
+    });
+  }, 10_000);
+
+  it("maps organization invitation provider rejections into OrganizationInvitationEmailRejectedError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendOrganizationInvitationEmail({
+        deliveryKey: "organization-invitation/inv_rejected",
+        recipientEmail: "member@example.com",
+        recipientName: "Taylor Example",
+        organizationName: "Acme Field Ops",
+        inviterEmail: "owner@example.com",
+        invitationUrl:
+          "https://app.task-tracker.localhost/accept-invitation/inv_rejected",
+        role: "member",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailRejectedError({
+                message: "Auth email was rejected",
+                cause: "recipient address rejected",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(
+      OrganizationInvitationEmailRejectedError
+    );
+    expect(result.left).toMatchObject({
+      _tag: "OrganizationInvitationEmailRejectedError",
+      message: "Organization invitation email was rejected for delivery",
+      cause: "recipient address rejected",
+    });
+  }, 10_000);
+
   it("composes the expected password reset message", async () => {
     const sentMessages: TransportMessage[] = [];
 
     const result = await Effect.runPromise(
       AuthEmailSender.sendPasswordResetEmail({
-        idempotencyKey: "password-reset/user-123/token-abc123",
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
@@ -120,7 +253,7 @@ describe("auth email sender password reset delivery", () => {
     expect(result).toBeUndefined();
     expect(sentMessages).toStrictEqual([
       {
-        idempotencyKey: "password-reset/user-123/token-abc123",
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         to: "alice@example.com",
         subject: "Reset your password",
         text: [
@@ -137,10 +270,10 @@ describe("auth email sender password reset delivery", () => {
     ]);
   }, 10_000);
 
-  it("maps provider failures into PasswordResetDeliveryError", async () => {
+  it("maps provider request failures into PasswordResetEmailRequestError", async () => {
     const result = await Effect.runPromise(
       AuthEmailSender.sendPasswordResetEmail({
-        idempotencyKey: "password-reset/user-123/token-abc123",
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
@@ -149,8 +282,8 @@ describe("auth email sender password reset delivery", () => {
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
-              new AuthEmailDeliveryError({
-                message: "Provider request failed",
+              new AuthEmailRequestError({
+                message: "Auth email request failed",
                 cause: "upstream timeout",
               })
             )
@@ -164,10 +297,11 @@ describe("auth email sender password reset delivery", () => {
       return;
     }
 
+    expect(result.left).toBeInstanceOf(PasswordResetEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetDeliveryError",
+      _tag: "PasswordResetEmailRequestError",
       message: "Failed to deliver password reset email",
-      cause: "Provider request failed",
+      cause: "upstream timeout",
     });
   }, 10_000);
 
@@ -176,7 +310,7 @@ describe("auth email sender password reset delivery", () => {
 
     const result = await Effect.runPromise(
       AuthEmailSender.sendPasswordResetEmail({
-        idempotencyKey: "password-reset/user-123/token-abc123",
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         resetUrl:
@@ -199,9 +333,82 @@ describe("auth email sender password reset delivery", () => {
     }
 
     expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetDeliveryError",
+      _tag: "InvalidPasswordResetEmailInputError",
       message: "Invalid password reset email input",
+    });
+  }, 10_000);
+
+  it("rejects unsafe delivery keys before sending", async () => {
+    const sentMessages: TransportMessage[] = [];
+
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendPasswordResetEmail({
+        deliveryKey: "password-reset/user-123/token-abc123",
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+      } as never).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
+    expect(result.left).toMatchObject({
+      _tag: "InvalidPasswordResetEmailInputError",
+      message: "Invalid password reset email input",
+    });
+    expect(result.left.cause).toMatch(
+      /password reset delivery key in the format password-reset\/<sha256>/
+    );
+  }, 10_000);
+
+  it("maps provider rejections into PasswordResetEmailRejectedError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendPasswordResetEmail({
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailRejectedError({
+                message: "Auth email was rejected",
+                cause: "recipient address rejected",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(PasswordResetEmailRejectedError);
+    expect(result.left).toMatchObject({
+      _tag: "PasswordResetEmailRejectedError",
+      message: "Password reset email was rejected for delivery",
+      cause: "recipient address rejected",
     });
   }, 10_000);
 
@@ -210,7 +417,7 @@ describe("auth email sender password reset delivery", () => {
 
     await Effect.runPromise(
       AuthEmailSender.sendPasswordResetEmail({
-        idempotencyKey: "password-reset/user-123/token-abc123",
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: 'Alice & <Admin> "Boss"',
         resetUrl:
@@ -241,7 +448,7 @@ describe("auth email sender email verification delivery", () => {
 
     const result = await Effect.runPromise(
       AuthEmailSender.sendEmailVerificationEmail({
-        idempotencyKey: "email-verification/user-123/token-verify123",
+        deliveryKey: "email-verification/user-123/token-verify123",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         verificationUrl:
@@ -260,7 +467,7 @@ describe("auth email sender email verification delivery", () => {
     expect(result).toBeUndefined();
     expect(sentMessages).toStrictEqual([
       {
-        idempotencyKey: "email-verification/user-123/token-verify123",
+        deliveryKey: "email-verification/user-123/token-verify123",
         to: "alice@example.com",
         subject: "Verify your email",
         text: [
@@ -277,10 +484,45 @@ describe("auth email sender email verification delivery", () => {
     ]);
   }, 10_000);
 
-  it("maps provider failures into EmailVerificationDeliveryError", async () => {
+  it("rejects invalid verification input before sending", async () => {
+    const sentMessages: TransportMessage[] = [];
+
     const result = await Effect.runPromise(
       AuthEmailSender.sendEmailVerificationEmail({
-        idempotencyKey: "email-verification/user-123/token-verify123",
+        deliveryKey: "email-verification/user-123/token-invalid",
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        verificationUrl:
+          "https://user:password@app.task-tracker.localhost/verify-email?success=1",
+      } as never).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer((message) =>
+            Effect.sync(() => {
+              sentMessages.push(message);
+            })
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toBeInstanceOf(InvalidEmailVerificationEmailInputError);
+    expect(result.left).toMatchObject({
+      _tag: "InvalidEmailVerificationEmailInputError",
+      message: "Invalid verification email input",
+    });
+  }, 10_000);
+
+  it("maps provider request failures into EmailVerificationEmailRequestError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendEmailVerificationEmail({
+        deliveryKey: "email-verification/user-123/token-verify123",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         verificationUrl:
@@ -290,8 +532,8 @@ describe("auth email sender email verification delivery", () => {
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
-              new AuthEmailDeliveryError({
-                message: "Provider request failed",
+              new AuthEmailRequestError({
+                message: "Auth email request failed",
                 cause: "upstream timeout",
               })
             )
@@ -305,10 +547,47 @@ describe("auth email sender email verification delivery", () => {
       return;
     }
 
+    expect(result.left).toBeInstanceOf(EmailVerificationEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "EmailVerificationDeliveryError",
+      _tag: "EmailVerificationEmailRequestError",
       message: "Failed to deliver verification email",
-      cause: "Provider request failed",
+      cause: "upstream timeout",
+    });
+  }, 10_000);
+
+  it("maps provider rejections into EmailVerificationEmailRejectedError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendEmailVerificationEmail({
+        deliveryKey: "email-verification/user-123/token-rejected",
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        verificationUrl:
+          "https://app.task-tracker.localhost/verify-email?success=1",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailRejectedError({
+                message: "Auth email was rejected",
+                cause: "recipient address rejected",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(EmailVerificationEmailRejectedError);
+    expect(result.left).toMatchObject({
+      _tag: "EmailVerificationEmailRejectedError",
+      message: "Verification email was rejected for delivery",
+      cause: "recipient address rejected",
     });
   }, 10_000);
 });
@@ -339,7 +618,8 @@ describe("auth email config loading", () => {
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-              ["RESEND_API_KEY", "re_test_123"],
+              ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
+              ["CLOUDFLARE_API_TOKEN", "token_123"],
             ])
           )
         )
@@ -350,7 +630,8 @@ describe("auth email config loading", () => {
       appOrigin: "https://app.task-tracker.localhost",
       from: "auth@task-tracker.localhost",
       fromName: "Task Tracker",
-      resendApiKey: "re_test_123",
+      cloudflareAccountId: "account_123",
+      cloudflareApiToken: "token_123",
     });
   }, 10_000);
 
@@ -359,10 +640,7 @@ describe("auth email config loading", () => {
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
-            new Map([
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-              ["RESEND_API_KEY", "re_test_123"],
-            ])
+            new Map([["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"]])
           )
         ),
         Effect.either
@@ -378,7 +656,7 @@ describe("auth email config loading", () => {
     expect(result.left.cause).toMatch(/AUTH_APP_ORIGIN/);
   }, 10_000);
 
-  it("maps config failures into AuthEmailConfigurationError", async () => {
+  it("maps missing Cloudflare config into AuthEmailConfigurationError", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
@@ -386,7 +664,6 @@ describe("auth email config loading", () => {
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-              ["RESEND_API_KEY", ""],
             ])
           )
         ),
@@ -401,7 +678,9 @@ describe("auth email config loading", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
     expect(result.left.message).toBe("Invalid auth email configuration");
-    expect(result.left.cause).toMatch(/RESEND_API_KEY/);
+    expect(result.left.cause).toMatch(
+      /CLOUDFLARE_ACCOUNT_ID|CLOUDFLARE_API_TOKEN/
+    );
   }, 10_000);
 
   it("rejects invalid auth email sender addresses", async () => {
@@ -412,7 +691,8 @@ describe("auth email config loading", () => {
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "not-an-email"],
-              ["RESEND_API_KEY", "re_test_123"],
+              ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
+              ["CLOUDFLARE_API_TOKEN", "token_123"],
             ])
           )
         ),

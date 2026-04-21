@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import { decodeCreateOrganizationInput } from "@task-tracker/identity-core";
 import { betterAuth } from "better-auth";
@@ -8,7 +10,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
 import { loadAuthEmailConfig } from "./auth-email-config.js";
-import { AuthEmailSender } from "./auth-email.js";
+import { AuthEmailPromiseBridge } from "./auth-email-promise-bridge.js";
 import type {
   EmailVerificationEmailInput,
   OrganizationInvitationEmailInput,
@@ -20,12 +22,34 @@ import {
   AuthenticationDatabase,
   AuthenticationDatabaseLive,
 } from "./database.js";
-import { ResendAuthEmailTransportLive } from "./resend-auth-email-transport.js";
 import { authSchema } from "./schema.js";
 
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
+
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
+
+function makePasswordResetDeliveryKey(input: {
+  readonly token: string;
+  readonly userId: string;
+}) {
+  const digest = createHash("sha256")
+    .update(`password-reset:${input.userId}:${input.token}`)
+    .digest("hex");
+
+  return `password-reset/${digest}`;
+}
+
+function makeEmailVerificationDeliveryKey(input: {
+  readonly token: string;
+  readonly userId: string;
+}) {
+  const digest = createHash("sha256")
+    .update(`email-verification:${input.userId}:${input.token}`)
+    .digest("hex");
+
+  return `email-verification/${digest}`;
+}
 
 export function createAuthentication(options: {
   readonly appOrigin: string;
@@ -93,7 +117,7 @@ export function createAuthentication(options: {
         },
         sendInvitationEmail: async (invitation) => {
           await sendOrganizationInvitationEmail({
-            idempotencyKey: `organization-invitation/${invitation.id}`,
+            deliveryKey: `organization-invitation/${invitation.id}`,
             invitationUrl: new URL(
               `/accept-invitation/${invitation.id}`,
               options.appOrigin
@@ -114,7 +138,10 @@ export function createAuthentication(options: {
           reportFailure: options.reportPasswordResetEmailFailure,
           send: sendPasswordResetEmail,
           input: {
-            idempotencyKey: `password-reset/${user.id}/${token}`,
+            deliveryKey: makePasswordResetDeliveryKey({
+              token,
+              userId: user.id,
+            }),
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
             resetUrl: url,
@@ -129,7 +156,10 @@ export function createAuthentication(options: {
           reportFailure: options.reportVerificationEmailFailure,
           send: sendVerificationEmail,
           input: {
-            idempotencyKey: `email-verification/${user.id}/${token}`,
+            deliveryKey: makeEmailVerificationDeliveryKey({
+              token,
+              userId: user.id,
+            }),
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
             verificationUrl: url,
@@ -296,21 +326,16 @@ function withAuthenticationCors(
   };
 }
 
-const AuthenticationEmailSenderLive = AuthEmailSender.Default.pipe(
-  Layer.provide(ResendAuthEmailTransportLive)
-);
-
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",
   {
-    dependencies: [AuthenticationDatabaseLive, AuthenticationEmailSenderLive],
+    dependencies: [AuthenticationDatabaseLive, AuthEmailPromiseBridge.Default],
     effect: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
       const { db } = yield* AuthenticationDatabase;
-      const authEmailSender = yield* AuthEmailSender;
+      const authEmailPromiseBridge = yield* AuthEmailPromiseBridge;
       const runtime = yield* Effect.runtime<never>();
-      const runPromise = Runtime.runPromise(runtime);
       const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
       const reportPasswordResetEmailFailure = makeEmailFailureReporter(
         runtime,
@@ -327,13 +352,12 @@ export class Authentication extends Effect.Service<Authentication>()(
         config,
         database: db,
         reportPasswordResetEmailFailure,
-        sendOrganizationInvitationEmail: (input) =>
-          runPromise(authEmailSender.sendOrganizationInvitationEmail(input)),
+        sendOrganizationInvitationEmail:
+          authEmailPromiseBridge.sendOrganizationInvitationEmail,
         reportVerificationEmailFailure,
-        sendPasswordResetEmail: (input) =>
-          runPromise(authEmailSender.sendPasswordResetEmail(input)),
-        sendVerificationEmail: (input) =>
-          runPromise(authEmailSender.sendEmailVerificationEmail(input)),
+        sendPasswordResetEmail: authEmailPromiseBridge.send,
+        sendVerificationEmail:
+          authEmailPromiseBridge.sendEmailVerificationEmail,
       });
     }),
   }

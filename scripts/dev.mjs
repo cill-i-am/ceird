@@ -6,7 +6,8 @@ import { repairPortlessRoutesFile } from "./portless-state.mjs";
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
 const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
-const DEFAULT_RESEND_API_KEY = "re_test_placeholder";
+const DEFAULT_CLOUDFLARE_ACCOUNT_ID = "cloudflare-account-test";
+const DEFAULT_CLOUDFLARE_API_TOKEN = "cloudflare-token-test";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
   const proxyPort = baseEnvironment.PORTLESS_PORT ?? "1355";
@@ -22,8 +23,11 @@ export function createDevEnvironment(baseEnvironment = process.env) {
     BETTER_AUTH_BASE_URL:
       baseEnvironment.BETTER_AUTH_BASE_URL ??
       `https://api.task-tracker.localhost:${proxyPort}`,
+    CLOUDFLARE_ACCOUNT_ID:
+      baseEnvironment.CLOUDFLARE_ACCOUNT_ID ?? DEFAULT_CLOUDFLARE_ACCOUNT_ID,
+    CLOUDFLARE_API_TOKEN:
+      baseEnvironment.CLOUDFLARE_API_TOKEN ?? DEFAULT_CLOUDFLARE_API_TOKEN,
     PORTLESS_PORT: proxyPort,
-    RESEND_API_KEY: baseEnvironment.RESEND_API_KEY ?? DEFAULT_RESEND_API_KEY,
   };
 }
 

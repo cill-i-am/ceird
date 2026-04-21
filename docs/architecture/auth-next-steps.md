@@ -158,7 +158,8 @@ It fits like this today:
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
 - `apps/api` owns email delivery policy through the narrow `AuthEmailSender`
   boundary
-- `ResendAuthEmailTransport` is the first provider adapter behind that boundary
+- `CloudflareAuthEmailTransport` is the current provider adapter behind that
+  boundary
 - public reset-request and reset-complete routes in `apps/app`
 - the same form architecture already used across the guest auth surface
 - generic reset-request responses that do not enumerate accounts
@@ -206,20 +207,24 @@ Rules:
 Auth email is shared infrastructure, not a screen-level detail.
 
 Password reset already established the first version of this boundary in
-`apps/api` with `AuthEmailSender` plus `ResendAuthEmailTransport`.
+`apps/api` with `AuthEmailSender` plus `CloudflareAuthEmailTransport`.
 
 That boundary now contributes runtime config at auth startup:
 
 - `AUTH_EMAIL_FROM`
-- `RESEND_API_KEY`
 - `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
 
 Because `AuthenticationLive` composes the auth email layer at boot, auth
 startup now depends on valid email-boundary config as well as the core Better
 Auth config.
 
-Future auth mail should extend that same boundary, not create parallel delivery
-paths.
+Future auth mail such as email verification and organization invitations
+should extend that same boundary, not create parallel delivery paths. The
+`deliveryKey` field stays provider-neutral so auth mail can share the same
+transport contract without leaking provider-specific naming into the domain
+model.
 
 Rules:
 

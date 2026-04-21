@@ -51,9 +51,10 @@ describe("renderComposeEnvironmentFile()", () => {
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
           BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
+          CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+          CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           DATABASE_URL:
             "postgresql://postgres:postgres@postgres:5432/task_tracker",
-          RESEND_API_KEY: "re_live_123",
           SANDBOX_DEV_IMAGE: "tt-sbx-task-tracker-dev:123456789abc",
           SANDBOX_NODE_MODULES_VOLUME:
             "tt-sbx-node-modules-123456789abc-def456789abc",
@@ -71,8 +72,9 @@ describe("renderComposeEnvironmentFile()", () => {
         "AUTH_EMAIL_FROM=auth@example.com",
         "AUTH_EMAIL_FROM_NAME=Task Tracker",
         "BETTER_AUTH_BASE_URL=http://127.0.0.1:4301",
+        "CLOUDFLARE_ACCOUNT_ID=cloudflare-account-live",
+        "CLOUDFLARE_API_TOKEN=cloudflare-token-live",
         "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/task_tracker",
-        "RESEND_API_KEY=re_live_123",
         "SANDBOX_DEV_IMAGE=tt-sbx-task-tracker-dev:123456789abc",
         "SANDBOX_NODE_MODULES_VOLUME=tt-sbx-node-modules-123456789abc-def456789abc",
         "SANDBOX_PNPM_STORE_VOLUME=tt-sbx-pnpm-store",

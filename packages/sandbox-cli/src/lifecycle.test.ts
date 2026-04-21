@@ -27,7 +27,8 @@ describe("bringSandboxUp()", () => {
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
             AUTH_EMAIL_FROM_NAME: "Task Tracker",
-            RESEND_API_KEY: "re_live_123",
+            CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+            CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
         resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
         allocatePorts: () =>
@@ -105,7 +106,8 @@ describe("bringSandboxUp()", () => {
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
             AUTH_EMAIL_FROM_NAME: "Task Tracker",
-            RESEND_API_KEY: "re_live_123",
+            CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+            CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
         resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
         allocatePorts: () =>
@@ -142,7 +144,8 @@ describe("bringSandboxUp()", () => {
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
             AUTH_EMAIL_FROM_NAME: "Task Tracker",
-            RESEND_API_KEY: "re_live_123",
+            CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+            CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
         resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
         allocatePorts: () =>
@@ -184,7 +187,8 @@ describe("bringSandboxUp()", () => {
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
             AUTH_EMAIL_FROM_NAME: "Task Tracker",
-            RESEND_API_KEY: "re_live_123",
+            CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+            CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
         resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
         allocatePorts: () =>
@@ -260,7 +264,8 @@ describe("bringSandboxUp()", () => {
             Effect.succeed({
               AUTH_EMAIL_FROM: "auth@example.com",
               AUTH_EMAIL_FROM_NAME: "Task Tracker",
-              RESEND_API_KEY: "re_live_123",
+              CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+              CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
             }),
           resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
           allocatePorts: () =>
@@ -370,7 +375,8 @@ describe("bringSandboxUp()", () => {
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
             AUTH_EMAIL_FROM_NAME: "Task Tracker",
-            RESEND_API_KEY: "re_live_123",
+            CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
+            CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
         resolveRuntimeAssets: () => Effect.succeed(runtimeAssets),
         allocatePorts: () =>
