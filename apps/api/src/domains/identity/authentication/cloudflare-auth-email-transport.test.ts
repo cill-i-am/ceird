@@ -24,11 +24,17 @@ function makeMessage(overrides?: Partial<TransportMessage>): TransportMessage {
     subject: "Reset your password",
     text: "Reset link",
     html: "<p>Reset link</p>",
+    deliveryKey:
+      "password-reset/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     ...overrides,
   };
 }
 
 describe("makeCloudflareAuthEmailTransport()", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses the configured Cloudflare account path and sender payload", async () => {
     const requests: unknown[] = [];
 
@@ -87,7 +93,8 @@ describe("makeCloudflareAuthEmailTransport()", () => {
         (transport) =>
           transport.send({
             ...makeMessage(),
-            deliveryKey: "password-reset/6b0f2f8d67d0f8f0",
+            deliveryKey:
+              "password-reset/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           })
       ).pipe(Effect.withConfigProvider(makeConfigProvider()))
     );
@@ -133,8 +140,101 @@ describe("makeCloudflareAuthEmailTransport()", () => {
     expect(result.left).toMatchObject({
       _tag: "AuthEmailRejectedError",
       message: "Auth email was rejected",
-      cause: "Cloudflare permanently bounced alice@example.com",
+      cause: "Cloudflare permanently bounced recipient at example.com",
     });
+    expect(result.left.cause).not.toContain("alice@example.com");
+  }, 10_000);
+
+  it("suppresses duplicate sends with the same deliveryKey", async () => {
+    const requests: unknown[] = [];
+
+    const transport = await Effect.runPromise(
+      makeCloudflareAuthEmailTransport({
+        cloudflare: {
+          send: (params) => {
+            requests.push(params);
+
+            return Promise.resolve({
+              delivered: ["alice@example.com"],
+              permanent_bounces: [],
+              queued: [],
+            });
+          },
+        },
+      }).pipe(Effect.withConfigProvider(makeConfigProvider()))
+    );
+
+    await Effect.runPromise(transport.send(makeMessage()));
+    await Effect.runPromise(transport.send(makeMessage()));
+
+    expect(requests).toHaveLength(1);
+  }, 10_000);
+
+  it("allows retries after request failures clear the deliveryKey reservation", async () => {
+    const requests: unknown[] = [];
+    let attempt = 0;
+
+    const transport = await Effect.runPromise(
+      makeCloudflareAuthEmailTransport({
+        cloudflare: {
+          send: (params) => {
+            requests.push(params);
+            attempt += 1;
+
+            if (attempt === 1) {
+              return Promise.reject(new Error("socket hang up"));
+            }
+
+            return Promise.resolve({
+              delivered: ["alice@example.com"],
+              permanent_bounces: [],
+              queued: [],
+            });
+          },
+        },
+      }).pipe(Effect.withConfigProvider(makeConfigProvider()))
+    );
+
+    const firstAttempt = await Effect.runPromise(
+      transport.send(makeMessage()).pipe(Effect.either)
+    );
+
+    expect(firstAttempt._tag).toBe("Left");
+
+    await Effect.runPromise(transport.send(makeMessage()));
+
+    expect(requests).toHaveLength(2);
+  }, 10_000);
+
+  it("expires stale deliveryKey reservations after the ttl elapses", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-21T12:00:00.000Z"));
+
+    const requests: unknown[] = [];
+
+    const transport = await Effect.runPromise(
+      makeCloudflareAuthEmailTransport({
+        cloudflare: {
+          send: (params) => {
+            requests.push(params);
+
+            return Promise.resolve({
+              delivered: ["alice@example.com"],
+              permanent_bounces: [],
+              queued: [],
+            });
+          },
+        },
+      }).pipe(Effect.withConfigProvider(makeConfigProvider()))
+    );
+
+    await Effect.runPromise(transport.send(makeMessage()));
+
+    vi.setSystemTime(new Date("2026-04-21T12:10:01.000Z"));
+
+    await Effect.runPromise(transport.send(makeMessage()));
+
+    expect(requests).toHaveLength(2);
   }, 10_000);
 
   it("maps Cloudflare request failures into AuthEmailRequestError", async () => {

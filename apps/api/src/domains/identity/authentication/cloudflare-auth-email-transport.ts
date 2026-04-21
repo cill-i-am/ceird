@@ -27,6 +27,8 @@ interface CloudflareEmailSendingClient {
   ) => PromiseLike<EmailSendingSendResponse>;
 }
 
+const DELIVERY_KEY_DEDUPE_TTL_MS = 10 * 60 * 1000;
+
 function buildPayload(
   config: {
     readonly cloudflareAccountId: string;
@@ -121,6 +123,45 @@ function buildRecipientLogContext(recipient: string) {
   };
 }
 
+function buildRedactedRecipientDescription(recipient: string) {
+  const [_, domain = ""] = recipient.split("@");
+
+  return domain.length > 0 ? `recipient at ${domain}` : "recipient";
+}
+
+function pruneExpiredDeliveryKeys(
+  dedupeEntries: Map<string, number>,
+  now: number
+) {
+  for (const [deliveryKey, expiresAt] of dedupeEntries.entries()) {
+    if (expiresAt <= now) {
+      dedupeEntries.delete(deliveryKey);
+    }
+  }
+}
+
+function reserveDeliveryKey(
+  dedupeEntries: Map<string, number>,
+  deliveryKey: string
+) {
+  const now = Date.now();
+  pruneExpiredDeliveryKeys(dedupeEntries, now);
+
+  if (dedupeEntries.has(deliveryKey)) {
+    return false;
+  }
+
+  dedupeEntries.set(deliveryKey, now + DELIVERY_KEY_DEDUPE_TTL_MS);
+  return true;
+}
+
+function retainDeliveryKey(
+  dedupeEntries: Map<string, number>,
+  deliveryKey: string
+) {
+  dedupeEntries.set(deliveryKey, Date.now() + DELIVERY_KEY_DEDUPE_TTL_MS);
+}
+
 function makeAuthEmailRequestError(cause: unknown) {
   if (
     cause instanceof AuthEmailRequestError ||
@@ -167,10 +208,11 @@ export function makeCloudflareAuthEmailTransport(options?: {
       accountId: config.cloudflareAccountId,
     });
     const cloudflare = options?.cloudflare ?? cloudflareClient.emailSending;
+    const deliveryKeyDedupeEntries = new Map<string, number>();
 
     return {
-      send: (message: TransportMessage) =>
-        Effect.log("Auth email transport send attempt", {
+      send: (message: TransportMessage) => {
+        const sendEffect = Effect.log("Auth email transport send attempt", {
           ...buildRecipientLogContext(message.to),
           provider: "cloudflare",
           deliveryKey: message.deliveryKey,
@@ -193,7 +235,7 @@ export function makeCloudflareAuthEmailTransport(options?: {
               ? Effect.fail(
                   new AuthEmailRejectedError({
                     message: "Auth email was rejected",
-                    cause: `Cloudflare permanently bounced ${message.to}`,
+                    cause: `Cloudflare permanently bounced ${buildRedactedRecipientDescription(message.to)}`,
                   })
                 )
               : Effect.log("Auth email transport send outcome", {
@@ -220,7 +262,47 @@ export function makeCloudflareAuthEmailTransport(options?: {
               }).pipe(Effect.zipRight(Effect.fail(error))),
           }),
           Effect.asVoid
-        ),
+        );
+
+        const { deliveryKey } = message;
+
+        if (!deliveryKey) {
+          return sendEffect;
+        }
+
+        // The current auth flow already relies on in-process background tasks, so
+        // a short-lived process-local reservation restores practical dedupe.
+        return Effect.sync(() =>
+          reserveDeliveryKey(deliveryKeyDedupeEntries, deliveryKey)
+        ).pipe(
+          Effect.flatMap((shouldSend) =>
+            shouldSend
+              ? sendEffect.pipe(
+                  Effect.tap(() =>
+                    Effect.sync(() =>
+                      retainDeliveryKey(deliveryKeyDedupeEntries, deliveryKey)
+                    )
+                  ),
+                  Effect.catchTags({
+                    AuthEmailRejectedError: (error) =>
+                      Effect.sync(() =>
+                        retainDeliveryKey(deliveryKeyDedupeEntries, deliveryKey)
+                      ).pipe(Effect.zipRight(Effect.fail(error))),
+                    AuthEmailRequestError: (error) =>
+                      Effect.sync(() => {
+                        deliveryKeyDedupeEntries.delete(deliveryKey);
+                      }).pipe(Effect.zipRight(Effect.fail(error))),
+                  })
+                )
+              : Effect.log("Auth email transport send outcome", {
+                  ...buildRecipientLogContext(message.to),
+                  provider: "cloudflare",
+                  deliveryKey,
+                  outcomeBucket: "deduped",
+                }).pipe(Effect.asVoid)
+          )
+        );
+      },
     };
   });
 }
