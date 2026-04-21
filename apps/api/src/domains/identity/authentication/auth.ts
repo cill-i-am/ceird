@@ -236,9 +236,11 @@ function withAuthenticationCors(
   };
 }
 
-const AuthenticationEmailSenderLive = AuthEmailSender.Default.pipe(
-  Layer.provide(CloudflareAuthEmailTransportLive)
-);
+// The auth domain depends on the sender service; the concrete Cloudflare
+// transport stays injected at this infrastructure edge.
+const AuthenticationEmailSenderLive = Layer.provide(AuthEmailSender.Default, [
+  CloudflareAuthEmailTransportLive,
+]);
 
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",

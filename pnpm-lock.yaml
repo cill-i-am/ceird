@@ -287,6 +287,9 @@ importers:
         specifier: ^3.21.0
         version: 3.21.0
     devDependencies:
+      '@effect/language-service':
+        specifier: ^0.84.2
+        version: 0.84.2
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
