@@ -6,7 +6,11 @@ import type {
   AuthEmailRejectedError,
   AuthEmailRequestError,
 } from "./auth-email-errors.js";
-import { PasswordResetDeliveryError } from "./auth-email-errors.js";
+import {
+  InvalidPasswordResetEmailInputError,
+  PasswordResetEmailRejectedError,
+  PasswordResetEmailRequestError,
+} from "./auth-email-errors.js";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_RESET_DELIVERY_KEY_PATTERN = /^password-reset\/[0-9a-f]{64}$/;
@@ -84,6 +88,10 @@ export interface TransportMessage {
 export type AuthEmailTransportError =
   | AuthEmailRejectedError
   | AuthEmailRequestError;
+export type PasswordResetEmailError =
+  | InvalidPasswordResetEmailInputError
+  | PasswordResetEmailRejectedError
+  | PasswordResetEmailRequestError;
 
 export class AuthEmailTransport extends Context.Tag(
   "@task-tracker/domains/identity/authentication/AuthEmailTransport"
@@ -109,7 +117,7 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
         const input = yield* decodePasswordResetEmailInput(rawInput).pipe(
           Effect.mapError(
             (parseError) =>
-              new PasswordResetDeliveryError({
+              new InvalidPasswordResetEmailInputError({
                 message: "Invalid password reset email input",
                 cause: ParseResult.TreeFormatter.formatErrorSync(parseError),
               })
@@ -140,14 +148,14 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
             Effect.catchTags({
               AuthEmailRejectedError: (error) =>
                 Effect.fail(
-                  new PasswordResetDeliveryError({
+                  new PasswordResetEmailRejectedError({
                     message: "Password reset email was rejected for delivery",
                     cause: error.cause ?? error.message,
                   })
                 ),
               AuthEmailRequestError: (error) =>
                 Effect.fail(
-                  new PasswordResetDeliveryError({
+                  new PasswordResetEmailRequestError({
                     message: "Failed to deliver password reset email",
                     cause: error.cause ?? error.message,
                   })

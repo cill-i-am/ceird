@@ -9,9 +9,11 @@ import { organization } from "better-auth/plugins/organization";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
-import { AuthEmailSender } from "./auth-email.js";
+import {
+  PasswordResetEmailPromiseBridge,
+  PasswordResetEmailPromiseBridgeLive,
+} from "./auth-email-promise-bridge.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
-import { CloudflareAuthEmailTransportLive } from "./cloudflare-auth-email-transport.js";
 import { loadAuthenticationConfig } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
@@ -236,22 +238,19 @@ function withAuthenticationCors(
   };
 }
 
-// The auth domain depends on the sender service; the concrete Cloudflare
-// transport stays injected at this infrastructure edge.
-const AuthenticationEmailSenderLive = Layer.provide(AuthEmailSender.Default, [
-  CloudflareAuthEmailTransportLive,
-]);
-
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",
   {
-    dependencies: [AuthenticationDatabaseLive, AuthenticationEmailSenderLive],
+    dependencies: [
+      AuthenticationDatabaseLive,
+      PasswordResetEmailPromiseBridgeLive,
+    ],
     effect: Effect.gen(function* AuthenticationLive() {
       const config = yield* loadAuthenticationConfig;
       const { db } = yield* AuthenticationDatabase;
-      const authEmailSender = yield* AuthEmailSender;
+      const passwordResetEmailPromiseBridge =
+        yield* PasswordResetEmailPromiseBridge;
       const runtime = yield* Effect.runtime<never>();
-      const runPromise = Runtime.runPromise(runtime);
       const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
       const reportPasswordResetEmailFailure =
         makePasswordResetEmailFailureReporter(runtime);
@@ -261,8 +260,7 @@ export class Authentication extends Effect.Service<Authentication>()(
         config,
         database: db,
         reportPasswordResetEmailFailure,
-        sendPasswordResetEmail: (input) =>
-          runPromise(authEmailSender.sendPasswordResetEmail(input)),
+        sendPasswordResetEmail: passwordResetEmailPromiseBridge.send,
       });
     }),
   }

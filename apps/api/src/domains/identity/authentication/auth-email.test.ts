@@ -1,11 +1,13 @@
 import { ConfigProvider, Effect, Layer } from "effect";
 
 import { loadAuthEmailConfig } from "./auth-email-config.js";
-import type { AuthEmailRejectedError } from "./auth-email-errors.js";
 import {
   AuthEmailConfigurationError,
+  AuthEmailRejectedError,
   AuthEmailRequestError,
-  PasswordResetDeliveryError,
+  InvalidPasswordResetEmailInputError,
+  PasswordResetEmailRejectedError,
+  PasswordResetEmailRequestError,
 } from "./auth-email-errors.js";
 import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
@@ -68,7 +70,7 @@ describe("auth email sender password reset delivery", () => {
     ]);
   }, 10_000);
 
-  it("maps provider failures into PasswordResetDeliveryError", async () => {
+  it("maps provider request failures into PasswordResetEmailRequestError", async () => {
     const result = await Effect.runPromise(
       AuthEmailSender.sendPasswordResetEmail({
         deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
@@ -95,9 +97,9 @@ describe("auth email sender password reset delivery", () => {
       return;
     }
 
-    expect(result.left).toBeInstanceOf(PasswordResetDeliveryError);
+    expect(result.left).toBeInstanceOf(PasswordResetEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetDeliveryError",
+      _tag: "PasswordResetEmailRequestError",
       message: "Failed to deliver password reset email",
       cause: "upstream timeout",
     });
@@ -131,9 +133,9 @@ describe("auth email sender password reset delivery", () => {
     }
 
     expect(sentMessages).toStrictEqual([]);
-    expect(result.left).toBeInstanceOf(PasswordResetDeliveryError);
+    expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetDeliveryError",
+      _tag: "InvalidPasswordResetEmailInputError",
       message: "Invalid password reset email input",
     });
   }, 10_000);
@@ -165,14 +167,49 @@ describe("auth email sender password reset delivery", () => {
     }
 
     expect(sentMessages).toStrictEqual([]);
-    expect(result.left).toBeInstanceOf(PasswordResetDeliveryError);
+    expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetDeliveryError",
+      _tag: "InvalidPasswordResetEmailInputError",
       message: "Invalid password reset email input",
     });
     expect(result.left.cause).toMatch(
       /password reset delivery key in the format password-reset\/<sha256>/
     );
+  }, 10_000);
+
+  it("maps provider rejections into PasswordResetEmailRejectedError", async () => {
+    const result = await Effect.runPromise(
+      AuthEmailSender.sendPasswordResetEmail({
+        deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
+        recipientEmail: "alice@example.com",
+        recipientName: "Alice",
+        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+      }).pipe(
+        Effect.either,
+        Effect.provide(
+          makeAuthEmailSenderTestLayer(() =>
+            Effect.fail(
+              new AuthEmailRejectedError({
+                message: "Auth email was rejected",
+                cause: "recipient address rejected",
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(PasswordResetEmailRejectedError);
+    expect(result.left).toMatchObject({
+      _tag: "PasswordResetEmailRejectedError",
+      message: "Password reset email was rejected for delivery",
+      cause: "recipient address rejected",
+    });
   }, 10_000);
 
   it("escapes html-sensitive values in the composed html body", async () => {

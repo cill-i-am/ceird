@@ -26,8 +26,24 @@ export class AuthEmailRejectedError extends Schema.TaggedError<AuthEmailRejected
   }
 ) {}
 
-export class PasswordResetDeliveryError extends Schema.TaggedError<PasswordResetDeliveryError>()(
-  "PasswordResetDeliveryError",
+export class InvalidPasswordResetEmailInputError extends Schema.TaggedError<InvalidPasswordResetEmailInputError>()(
+  "InvalidPasswordResetEmailInputError",
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  }
+) {}
+
+export class PasswordResetEmailRejectedError extends Schema.TaggedError<PasswordResetEmailRejectedError>()(
+  "PasswordResetEmailRejectedError",
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  }
+) {}
+
+export class PasswordResetEmailRequestError extends Schema.TaggedError<PasswordResetEmailRequestError>()(
+  "PasswordResetEmailRequestError",
   {
     cause: Schema.optional(Schema.String),
     message: Schema.String,
