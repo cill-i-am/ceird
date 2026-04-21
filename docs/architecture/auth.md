@@ -168,11 +168,12 @@ Current defaults by entry point:
   `https://<slug>.api.task-tracker.localhost:1355`
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
-- supported non-production launchers also inject `AUTH_EMAIL_FROM`,
+- local dev and Playwright launchers also inject `AUTH_EMAIL_FROM`,
   `AUTH_EMAIL_FROM_NAME`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`
-- those launchers may fall back to placeholder auth-email values when the
-  caller has not provided real delivery credentials, but the API itself still
-  requires the variables at runtime
+  and may substitute placeholder auth-email values when real delivery
+  credentials are unavailable
+- sandbox startup preflight still validates the same auth-email variables
+  before compose launch and does not rely on placeholder fallback
 
 ### Trusted Origins and CORS
 

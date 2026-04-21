@@ -6,6 +6,7 @@ import {
 import { Effect, Either, Exit, Schema } from "effect";
 
 import {
+  AuthEmailSharedEnvironment,
   buildComposeFallbackEnvironmentOverrides,
   cleanupFailedSandboxUp,
   ensureSandboxProxyHealthy,
@@ -473,4 +474,65 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       SANDBOX_NAME: "alpha",
     });
   }, 10_000);
+});
+
+describe("authEmailSharedEnvironment", () => {
+  it("defaults AUTH_EMAIL_FROM_NAME when it is omitted", () => {
+    expect(
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "auth@example.com",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toStrictEqual({
+      AUTH_EMAIL_FROM: "auth@example.com",
+      AUTH_EMAIL_FROM_NAME: "Task Tracker",
+      CLOUDFLARE_ACCOUNT_ID: "account_123",
+      CLOUDFLARE_API_TOKEN: "token_123",
+    });
+  }, 10_000);
+
+  it("rejects invalid AUTH_EMAIL_FROM values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "not-an-email",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toThrow(/AUTH_EMAIL_FROM/);
+    expect(() =>
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "not-an-email",
+        CLOUDFLARE_ACCOUNT_ID: "account_123",
+        CLOUDFLARE_API_TOKEN: "token_123",
+      })
+    ).toThrow(/valid email address/);
+  }, 10_000);
+
+  it.each(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] as const)(
+    "rejects whitespace-only %s values",
+    (key) => {
+      expect(() =>
+        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+          AUTH_EMAIL_FROM: "auth@example.com",
+          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          CLOUDFLARE_ACCOUNT_ID:
+            key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
+          CLOUDFLARE_API_TOKEN:
+            key === "CLOUDFLARE_API_TOKEN" ? "\t" : "token_123",
+        })
+      ).toThrow(key);
+      expect(() =>
+        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+          AUTH_EMAIL_FROM: "auth@example.com",
+          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          CLOUDFLARE_ACCOUNT_ID:
+            key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
+          CLOUDFLARE_API_TOKEN:
+            key === "CLOUDFLARE_API_TOKEN" ? "\t" : "token_123",
+        })
+      ).toThrow(/must not be empty/);
+    },
+    10_000
+  );
 });

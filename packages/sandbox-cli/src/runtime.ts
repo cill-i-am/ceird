@@ -71,13 +71,47 @@ const SANDBOX_PROXY_PORT = 1355;
 const SANDBOX_READY_POLL_INTERVAL_MS = 1000;
 const SANDBOX_READY_TIMEOUT_MS = 180_000;
 const SANDBOX_STOP_TIMEOUT_SECONDS = 2;
+const AUTH_EMAIL_SHARED_ENV_KEYS = [
+  "AUTH_EMAIL_FROM",
+  "AUTH_EMAIL_FROM_NAME",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+] as const;
+const AUTH_EMAIL_REQUIRED_ENV_KEYS = [
+  "AUTH_EMAIL_FROM",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+] as const;
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailAddress(value: string) {
+  return EMAIL_ADDRESS_PATTERN.test(value);
+}
+
 const authEmailSharedEnvironmentFields = {
-  AUTH_EMAIL_FROM: Schema.NonEmptyString,
-  AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
-  CLOUDFLARE_ACCOUNT_ID: Schema.NonEmptyString,
-  CLOUDFLARE_API_TOKEN: Schema.NonEmptyString,
+  AUTH_EMAIL_FROM: Schema.String.pipe(
+    Schema.filter((value: string) => isValidEmailAddress(value)),
+    Schema.annotations({
+      message: () => "AUTH_EMAIL_FROM must be a valid email address",
+    })
+  ),
+  AUTH_EMAIL_FROM_NAME: Schema.optionalWith(Schema.String, {
+    default: () => "Task Tracker",
+  }),
+  CLOUDFLARE_ACCOUNT_ID: Schema.String.pipe(
+    Schema.filter((value: string) => value.trim().length > 0),
+    Schema.annotations({
+      message: () => "CLOUDFLARE_ACCOUNT_ID must not be empty",
+    })
+  ),
+  CLOUDFLARE_API_TOKEN: Schema.String.pipe(
+    Schema.filter((value: string) => value.trim().length > 0),
+    Schema.annotations({
+      message: () => "CLOUDFLARE_API_TOKEN must not be empty",
+    })
+  ),
 };
-const AuthEmailSharedEnvironment = Schema.Struct(
+export const AuthEmailSharedEnvironment = Schema.Struct(
   authEmailSharedEnvironmentFields
 );
 type AuthEmailSharedEnvironment = Schema.Schema.Type<
@@ -86,9 +120,6 @@ type AuthEmailSharedEnvironment = Schema.Schema.Type<
 type AuthEmailSharedEnvironmentOverrides = {
   readonly [K in keyof AuthEmailSharedEnvironment]: string;
 };
-const AUTH_EMAIL_REQUIRED_ENV_KEYS = Object.keys(
-  authEmailSharedEnvironmentFields
-) as readonly (keyof AuthEmailSharedEnvironmentOverrides)[];
 const SANDBOX_COMPOSE_FILE = path.join(
   fileURLToPath(new URL("../docker", import.meta.url)),
   "sandbox.compose.yaml"
@@ -919,7 +950,11 @@ function loadSandboxEnvironmentOrThrow(
         : toPreflightError(error, "Sandbox shared environment is invalid")
     ),
     Effect.flatMap((environment) =>
-      Schema.decodeUnknown(AuthEmailSharedEnvironment)(environment).pipe(
+      Effect.try({
+        try: () =>
+          Schema.decodeUnknownSync(AuthEmailSharedEnvironment)(environment),
+        catch: (error) => error,
+      }).pipe(
         Effect.mapError((error) =>
           toPreflightError(error, "Sandbox auth email environment is invalid")
         )
@@ -1272,7 +1307,7 @@ export function buildComposeFallbackEnvironmentOverrides(
 
 function makeBlankAuthEmailSharedEnvironmentOverrides(): AuthEmailSharedEnvironmentOverrides {
   return Object.fromEntries(
-    AUTH_EMAIL_REQUIRED_ENV_KEYS.map((key) => [key, ""])
+    AUTH_EMAIL_SHARED_ENV_KEYS.map((key) => [key, ""])
   ) as AuthEmailSharedEnvironmentOverrides;
 }
 
