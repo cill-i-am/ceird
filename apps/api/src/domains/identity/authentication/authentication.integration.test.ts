@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -11,6 +9,12 @@ import {
   AppDatabase,
   AppDatabaseLive,
 } from "../../../platform/database/database.js";
+import {
+  applyMigration,
+  canConnect,
+  createTestDatabase as createPlatformTestDatabase,
+  withPool,
+} from "../../../platform/database/test-database.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication } from "./auth.js";
 import {
@@ -1158,99 +1162,14 @@ describe("authentication integration", () => {
   }, 30_000);
 });
 
-async function createTestDatabase(): Promise<{
+function createTestDatabase(): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly url: string;
 }> {
-  const baseUrl = new URL(
-    process.env.AUTH_TEST_DATABASE_URL ?? DEFAULT_AUTH_DATABASE_URL
-  );
-  const adminUrl = new URL(baseUrl);
-  adminUrl.pathname = "/postgres";
-
-  const databaseName = `auth_test_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const adminPool = new Pool({ connectionString: adminUrl.toString() });
-
-  if (!(await canConnect(adminPool))) {
-    await adminPool.end();
-    return {
-      cleanup: async () => {},
-      url: baseUrl.toString(),
-    };
-  }
-
-  await adminPool.query(`create database "${databaseName}"`);
-  await adminPool.end();
-
-  const databaseUrl = new URL(baseUrl);
-  databaseUrl.pathname = `/${databaseName}`;
-
-  return {
-    cleanup: async () => {
-      const dropPool = new Pool({ connectionString: adminUrl.toString() });
-
-      try {
-        await dropPool.query(
-          `select pg_terminate_backend(pid)
-           from pg_stat_activity
-           where datname = $1 and pid <> pg_backend_pid()`,
-          [databaseName]
-        );
-        await dropPool.query(`drop database if exists "${databaseName}"`);
-      } finally {
-        await dropPool.end();
-      }
-    },
-    url: databaseUrl.toString(),
-  };
-}
-
-async function canConnect(pool: Pool): Promise<boolean> {
-  try {
-    await pool.query("select 1");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function withPool<Result>(
-  connectionString: string,
-  operation: (pool: Pool) => Promise<Result>
-): Promise<Result> {
-  const pool = new Pool({ connectionString });
-
-  try {
-    return await operation(pool);
-  } finally {
-    await pool.end();
-  }
-}
-
-async function applyMigration(
-  databaseUrl: string,
-  migrationFileName: string
-): Promise<void> {
-  const migrationPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    migrationFileName
-  );
-  const migrationSql = await fs.readFile(migrationPath, "utf8");
-  const statements = migrationSql
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
-
-  const pool = new Pool({ connectionString: databaseUrl });
-
-  try {
-    for (const statement of statements) {
-      await pool.query(statement);
-    }
-  } finally {
-    await pool.end();
-  }
+  return createPlatformTestDatabase({
+    baseUrl: process.env.AUTH_TEST_DATABASE_URL ?? DEFAULT_AUTH_DATABASE_URL,
+    prefix: "auth_test",
+  });
 }
 
 function wait(milliseconds: number) {

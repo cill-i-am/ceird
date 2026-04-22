@@ -1,0 +1,698 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  OrganizationId,
+  RegionId,
+  SiteId,
+  UserId,
+  WorkItemId,
+} from "@task-tracker/jobs-core";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Cause, ConfigProvider, Effect, Exit, Option, Schema } from "effect";
+
+import {
+  member,
+  organization,
+  serviceRegion,
+  site,
+  user,
+  workItem,
+} from "../../platform/database/schema.js";
+import {
+  applyAllMigrations,
+  canConnect,
+  createTestDatabase,
+  withPool,
+} from "../../platform/database/test-database.js";
+import {
+  ContactsRepository,
+  JobsRepositoriesLive,
+  JobsRepository,
+  SitesRepository,
+  withJobsTransaction,
+} from "./repositories.js";
+
+describe("jobs repositories integration", () => {
+  const cleanup: (() => Promise<void>)[] = [];
+
+  afterAll(async () => {
+    await Promise.all([...cleanup].toReversed().map((step) => step()));
+  });
+
+  it("creates aggregate job detail across jobs, comments, activity, and visits", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository aggregate coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const regionId = await insertRegion(
+      databaseUrl,
+      identity.organizationId,
+      "Dublin"
+    );
+
+    const createdSiteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        name: "Docklands Campus",
+        organizationId: identity.organizationId,
+        regionId,
+        town: "Dublin",
+      })
+    );
+    const createdContactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.create({
+        email: "site-contact@example.com",
+        name: "Aoife Byrne",
+        organizationId: identity.organizationId,
+        phone: "+353871234567",
+      })
+    );
+
+    await runJobsEffect(
+      databaseUrl,
+      SitesRepository.linkContact({
+        contactId: createdContactId,
+        isPrimary: true,
+        siteId: createdSiteId,
+      })
+    );
+
+    const createdJob = await runJobsEffect(
+      databaseUrl,
+      withJobsTransaction(
+        Effect.gen(function* () {
+          const job = yield* JobsRepository.create({
+            contactId: createdContactId,
+            createdByUserId: identity.ownerUserId,
+            organizationId: identity.organizationId,
+            priority: "high",
+            siteId: createdSiteId,
+            title: "Replace damaged window seal",
+          });
+
+          yield* JobsRepository.addComment({
+            authorUserId: identity.ownerUserId,
+            body: "Customer reported repeat water ingress by the front lobby.",
+            workItemId: job.id,
+          });
+          yield* JobsRepository.addActivity({
+            actorUserId: identity.ownerUserId,
+            organizationId: identity.organizationId,
+            payload: {
+              eventType: "job_created",
+              kind: job.kind,
+              priority: job.priority,
+              title: job.title,
+            },
+            workItemId: job.id,
+          });
+          yield* JobsRepository.addVisit({
+            authorUserId: identity.assigneeUserId,
+            durationMinutes: 120,
+            note: "Initial inspection completed and seal dimensions captured.",
+            organizationId: identity.organizationId,
+            visitDate: "2026-04-21",
+            workItemId: job.id,
+          });
+
+          return job;
+        })
+      )
+    );
+
+    const detail = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.getDetail(identity.organizationId, createdJob.id)
+    );
+
+    const detailValue = expectSome(detail);
+
+    expect(detailValue.job.kind).toBe("job");
+    expect(detailValue.job.title).toBe("Replace damaged window seal");
+    expect(detailValue.job.siteId).toBe(createdSiteId);
+    expect(detailValue.job.contactId).toBe(createdContactId);
+    expect(detailValue.comments).toHaveLength(1);
+    expect(detailValue.comments[0]?.body).toContain("water ingress");
+    expect(detailValue.activity).toHaveLength(1);
+    expect(detailValue.activity[0]?.payload.eventType).toBe("job_created");
+    expect(detailValue.visits).toHaveLength(1);
+    expect(detailValue.visits[0]?.visitDate).toBe("2026-04-21");
+    expect(detailValue.visits[0]?.durationMinutes).toBe(120);
+
+    const foundSiteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.findById(identity.organizationId, createdSiteId)
+    );
+    const foundContactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.findById(identity.organizationId, createdContactId)
+    );
+
+    expect(Option.getOrUndefined(foundSiteId)).toBe(createdSiteId);
+    expect(Option.getOrUndefined(foundContactId)).toBe(createdContactId);
+  }, 30_000);
+
+  it("filters and paginates job lists by org-scoped fields", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository filter coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const northRegionId = await insertRegion(
+      databaseUrl,
+      identity.organizationId,
+      "North"
+    );
+    const southRegionId = await insertRegion(
+      databaseUrl,
+      identity.organizationId,
+      "South"
+    );
+    const northSiteId = await insertSite(
+      databaseUrl,
+      identity.organizationId,
+      northRegionId,
+      "North Site"
+    );
+    const southSiteId = await insertSite(
+      databaseUrl,
+      identity.organizationId,
+      southRegionId,
+      "South Site"
+    );
+
+    const newestJobId = decodeWorkItemId(
+      "00000000-0000-4000-8000-000000000003"
+    );
+    const middleJobId = decodeWorkItemId(
+      "00000000-0000-4000-8000-000000000002"
+    );
+    const oldestJobId = decodeWorkItemId(
+      "00000000-0000-4000-8000-000000000001"
+    );
+
+    await withPool(databaseUrl, async (pool) => {
+      const db = drizzle(pool);
+
+      await db.insert(workItem).values([
+        {
+          assigneeId: identity.assigneeUserId,
+          completedAt: null,
+          completedByUserId: null,
+          contactId: null,
+          coordinatorId: identity.coordinatorUserId,
+          createdAt: new Date("2026-04-21T10:00:00.000Z"),
+          createdByUserId: identity.ownerUserId,
+          id: newestJobId,
+          kind: "job",
+          organizationId: identity.organizationId,
+          priority: "urgent",
+          siteId: northSiteId,
+          status: "in_progress",
+          title: "Newest north job",
+          updatedAt: new Date("2026-04-21T10:00:00.000Z"),
+          blockedReason: null,
+        },
+        {
+          assigneeId: identity.assigneeUserId,
+          completedAt: null,
+          completedByUserId: null,
+          contactId: null,
+          coordinatorId: null,
+          createdAt: new Date("2026-04-20T09:00:00.000Z"),
+          createdByUserId: identity.ownerUserId,
+          id: middleJobId,
+          kind: "job",
+          organizationId: identity.organizationId,
+          priority: "medium",
+          siteId: southSiteId,
+          status: "blocked",
+          title: "Blocked south job",
+          updatedAt: new Date("2026-04-20T09:00:00.000Z"),
+          blockedReason: "Awaiting access materials",
+        },
+        {
+          assigneeId: null,
+          completedAt: null,
+          completedByUserId: null,
+          contactId: null,
+          coordinatorId: identity.coordinatorUserId,
+          createdAt: new Date("2026-04-19T08:00:00.000Z"),
+          createdByUserId: identity.ownerUserId,
+          id: oldestJobId,
+          kind: "job",
+          organizationId: identity.organizationId,
+          priority: "low",
+          siteId: northSiteId,
+          status: "triaged",
+          title: "Oldest north job",
+          updatedAt: new Date("2026-04-20T09:00:00.000Z"),
+          blockedReason: null,
+        },
+      ]);
+    });
+
+    const firstPage = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { limit: 2 })
+    );
+
+    expect(firstPage.items.map((item) => item.id)).toStrictEqual([
+      newestJobId,
+      middleJobId,
+    ]);
+    expect(firstPage.nextCursor).toBeDefined();
+
+    const secondPage = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, {
+        cursor: firstPage.nextCursor,
+        limit: 2,
+      })
+    );
+
+    expect(secondPage.items.map((item) => item.id)).toStrictEqual([
+      oldestJobId,
+    ]);
+    expect(secondPage.nextCursor).toBeUndefined();
+
+    const byRegion = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { regionId: northRegionId })
+    );
+    const byAssignee = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, {
+        assigneeId: identity.assigneeUserId,
+      })
+    );
+    const byCoordinator = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, {
+        coordinatorId: identity.coordinatorUserId,
+      })
+    );
+    const byPriority = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { priority: "urgent" })
+    );
+    const bySite = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { siteId: southSiteId })
+    );
+    const byStatus = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { status: "blocked" })
+    );
+
+    expect(byRegion.items.map((item) => item.id)).toStrictEqual([
+      newestJobId,
+      oldestJobId,
+    ]);
+    expect(byAssignee.items.map((item) => item.id)).toStrictEqual([
+      newestJobId,
+      middleJobId,
+    ]);
+    expect(byCoordinator.items.map((item) => item.id)).toStrictEqual([
+      newestJobId,
+      oldestJobId,
+    ]);
+    expect(byPriority.items.map((item) => item.id)).toStrictEqual([
+      newestJobId,
+    ]);
+    expect(bySite.items.map((item) => item.id)).toStrictEqual([middleJobId]);
+    expect(byStatus.items.map((item) => item.id)).toStrictEqual([middleJobId]);
+  }, 30_000);
+
+  it("rejects foreign-organization references on writes", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping organization-boundary coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const primaryIdentity = await seedIdentityRecords(databaseUrl);
+    const foreignIdentity = await seedIdentityRecords(databaseUrl);
+    const primaryRegionId = await insertRegion(
+      databaseUrl,
+      primaryIdentity.organizationId,
+      "Primary"
+    );
+    const primarySiteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        name: "Primary Site",
+        organizationId: primaryIdentity.organizationId,
+        regionId: primaryRegionId,
+      })
+    );
+    const foreignContactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.create({
+        name: "Foreign Contact",
+        organizationId: foreignIdentity.organizationId,
+      })
+    );
+    const primaryJob = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        title: "Primary org job",
+      })
+    );
+
+    const createWithForeignContactExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.create({
+        contactId: foreignContactId,
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        title: "Should fail",
+      })
+    );
+    const linkForeignContactExit = await runJobsEffectExit(
+      databaseUrl,
+      SitesRepository.linkContact({
+        contactId: foreignContactId,
+        siteId: primarySiteId,
+      })
+    );
+    const commentFromForeignMemberExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.addComment({
+        authorUserId: foreignIdentity.ownerUserId,
+        body: "Cross-org comment",
+        workItemId: primaryJob.id,
+      })
+    );
+    const visitWithForeignOrganizationExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.addVisit({
+        authorUserId: foreignIdentity.ownerUserId,
+        durationMinutes: 60,
+        note: "Cross-org visit",
+        organizationId: foreignIdentity.organizationId,
+        visitDate: "2026-04-21",
+        workItemId: primaryJob.id,
+      })
+    );
+
+    expectFailureTag(
+      createWithForeignContactExit,
+      "@task-tracker/jobs-core/ContactNotFoundError"
+    );
+    expectFailureTag(
+      linkForeignContactExit,
+      "@task-tracker/jobs-core/ContactNotFoundError"
+    );
+    expectFailureTag(
+      commentFromForeignMemberExit,
+      "@task-tracker/domains/jobs/OrganizationMemberNotFoundError"
+    );
+    expectFailureTag(
+      visitWithForeignOrganizationExit,
+      "@task-tracker/domains/jobs/WorkItemOrganizationMismatchError"
+    );
+  }, 30_000);
+
+  it("rolls back multi-step writes wrapped in a repository transaction", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping transaction rollback coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+
+    const exit = await runJobsEffectExit(
+      databaseUrl,
+      withJobsTransaction(
+        Effect.gen(function* () {
+          const job = yield* JobsRepository.create({
+            createdByUserId: identity.ownerUserId,
+            organizationId: identity.organizationId,
+            title: "Should never persist",
+          });
+
+          yield* JobsRepository.addComment({
+            authorUserId: identity.ownerUserId,
+            body: "This comment should also roll back.",
+            workItemId: job.id,
+          });
+
+          return yield* Effect.fail("rollback");
+        })
+      )
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+
+    const jobs = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, {})
+    );
+
+    expect(jobs.items).toHaveLength(0);
+  }, 30_000);
+});
+
+async function runJobsEffect<Value, Error, Requirements>(
+  databaseUrl: string,
+  effect: Effect.Effect<Value, Error, Requirements>
+): Promise<Value> {
+  return await Effect.runPromise(
+    Effect.scoped(prepareJobsEffect(databaseUrl, effect))
+  );
+}
+
+async function runJobsEffectExit<Value, Error, Requirements>(
+  databaseUrl: string,
+  effect: Effect.Effect<Value, Error, Requirements>
+): Promise<Exit.Exit<Value, Error>> {
+  return await Effect.runPromiseExit(
+    Effect.scoped(prepareJobsEffect(databaseUrl, effect))
+  );
+}
+
+function makeConfigProvider(databaseUrl: string) {
+  return ConfigProvider.fromMap(
+    new Map([
+      ["DATABASE_URL", databaseUrl],
+      ["JOBS_DEFAULT_LIST_LIMIT", "50"],
+    ])
+  );
+}
+
+function prepareJobsEffect<Value, Error, Requirements>(
+  databaseUrl: string,
+  effect: Effect.Effect<Value, Error, Requirements>
+) {
+  return effect.pipe(
+    Effect.provide(JobsRepositoriesLive),
+    Effect.withConfigProvider(makeConfigProvider(databaseUrl))
+  ) as Effect.Effect<Value, Error, never>;
+}
+
+async function seedIdentityRecords(databaseUrl: string) {
+  const organizationId = decodeOrganizationId(randomUUID());
+  const ownerUserId = decodeUserId(randomUUID());
+  const assigneeUserId = decodeUserId(randomUUID());
+  const coordinatorUserId = decodeUserId(randomUUID());
+
+  await withPool(databaseUrl, async (pool) => {
+    const db = drizzle(pool);
+
+    await db.insert(organization).values({
+      id: organizationId,
+      name: "Northwind Construction",
+      slug: `northwind-${Date.now()}`,
+    });
+    await db.insert(user).values([
+      {
+        email: `owner-${Date.now()}@example.com`,
+        emailVerified: true,
+        id: ownerUserId,
+        name: "Owner User",
+      },
+      {
+        email: `assignee-${Date.now()}@example.com`,
+        emailVerified: true,
+        id: assigneeUserId,
+        name: "Assignee User",
+      },
+      {
+        email: `coordinator-${Date.now()}@example.com`,
+        emailVerified: true,
+        id: coordinatorUserId,
+        name: "Coordinator User",
+      },
+    ]);
+    await db.insert(member).values([
+      {
+        createdAt: new Date(),
+        id: randomUUID(),
+        organizationId,
+        role: "owner",
+        userId: ownerUserId,
+      },
+      {
+        createdAt: new Date(),
+        id: randomUUID(),
+        organizationId,
+        role: "member",
+        userId: assigneeUserId,
+      },
+      {
+        createdAt: new Date(),
+        id: randomUUID(),
+        organizationId,
+        role: "member",
+        userId: coordinatorUserId,
+      },
+    ]);
+  });
+
+  return {
+    assigneeUserId,
+    coordinatorUserId,
+    organizationId,
+    ownerUserId,
+  };
+}
+
+async function insertRegion(
+  databaseUrl: string,
+  organizationId: Schema.Schema.Type<typeof OrganizationId>,
+  name: string
+) {
+  const regionId = decodeRegionId(randomUUID());
+
+  await withPool(databaseUrl, async (pool) => {
+    const db = drizzle(pool);
+
+    await db.insert(serviceRegion).values({
+      id: regionId,
+      name,
+      organizationId,
+      slug: name.toLowerCase(),
+      updatedAt: new Date(),
+      createdAt: new Date(),
+    });
+  });
+
+  return regionId;
+}
+
+async function insertSite(
+  databaseUrl: string,
+  organizationId: Schema.Schema.Type<typeof OrganizationId>,
+  regionId: Schema.Schema.Type<typeof RegionId>,
+  name: string
+) {
+  const siteId = decodeSiteId(randomUUID());
+
+  await withPool(databaseUrl, async (pool) => {
+    const db = drizzle(pool);
+
+    await db.insert(site).values({
+      id: siteId,
+      name,
+      organizationId,
+      regionId,
+      updatedAt: new Date(),
+      createdAt: new Date(),
+    });
+  });
+
+  return siteId;
+}
+
+const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeRegionId = Schema.decodeUnknownSync(RegionId);
+const decodeSiteId = Schema.decodeUnknownSync(SiteId);
+const decodeUserId = Schema.decodeUnknownSync(UserId);
+const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
+
+function expectFailureTag<Value, Error>(
+  exit: Exit.Exit<Value, Error>,
+  expectedTag: string
+) {
+  const failure = Exit.isFailure(exit)
+    ? ((Option.getOrUndefined(Cause.failureOption(exit.cause)) as
+        | { readonly _tag?: string }
+        | undefined) ?? undefined)
+    : undefined;
+
+  expect(failure?._tag).toBe(expectedTag);
+}
+
+function expectSome<Value>(option: Option.Option<Value>): Value {
+  const value = Option.getOrUndefined(option);
+
+  expect(value).toBeDefined();
+
+  if (value === undefined) {
+    throw new Error("Expected Option.some value");
+  }
+
+  return value;
+}

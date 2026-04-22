@@ -57,6 +57,9 @@ importers:
       '@task-tracker/identity-core':
         specifier: workspace:*
         version: link:../../packages/identity-core
+      '@task-tracker/jobs-core':
+        specifier: workspace:*
+        version: link:../../packages/jobs-core
       '@task-tracker/sandbox-core':
         specifier: workspace:*
         version: link:../../packages/sandbox-core

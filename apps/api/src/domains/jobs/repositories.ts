@@ -1,0 +1,1189 @@
+/* oxlint-disable eslint/max-classes-per-file */
+
+import { randomUUID } from "node:crypto";
+
+import { SqlClient } from "@effect/sql";
+import {
+  ActivityId as ActivityIdSchema,
+  CommentId as CommentIdSchema,
+  ContactId as ContactIdSchema,
+  ContactNotFoundError,
+  IsoDateTimeString as IsoDateTimeStringSchema,
+  JobActivityPayloadSchema,
+  JobActivitySchema,
+  JobCommentSchema,
+  JobDetailSchema,
+  JobListCursor as JobListCursorSchema,
+  JobListItemSchema,
+  JobListResponseSchema,
+  JobNotFoundError,
+  JobSchema,
+  JobVisitSchema,
+  SiteNotFoundError,
+  SiteId as SiteIdSchema,
+  VisitId as VisitIdSchema,
+  WorkItemId as WorkItemIdSchema,
+} from "@task-tracker/jobs-core";
+import type {
+  ContactIdType as ContactId,
+  Job,
+  JobActivity,
+  JobActivityPayload,
+  JobComment,
+  JobDetail,
+  JobKind,
+  JobListCursorType as JobListCursor,
+  JobListQuery,
+  JobPriority,
+  JobStatus,
+  JobTitle,
+  JobVisit,
+  OrganizationIdType as OrganizationId,
+  RegionIdType as RegionId,
+  SiteIdType as SiteId,
+  UserIdType as UserId,
+  WorkItemIdType as WorkItemId,
+} from "@task-tracker/jobs-core";
+import { Config, Effect, Layer, Option, Schema } from "effect";
+
+import {
+  AppDatabaseLive,
+  AppEffectSqlLive,
+} from "../../platform/database/database.js";
+import {
+  JobListCursorInvalidError,
+  OrganizationMemberNotFoundError,
+  RegionNotFoundError,
+  WorkItemOrganizationMismatchError,
+} from "./errors.js";
+
+interface JobCursorState {
+  readonly id: WorkItemId;
+  readonly updatedAt: string;
+}
+
+interface WorkItemRow {
+  readonly assignee_id: string | null;
+  readonly blocked_reason: string | null;
+  readonly completed_at: Date | null;
+  readonly completed_by_user_id: string | null;
+  readonly contact_id: string | null;
+  readonly coordinator_id: string | null;
+  readonly created_at: Date;
+  readonly created_by_user_id: string;
+  readonly id: string;
+  readonly kind: string;
+  readonly organization_id: string;
+  readonly priority: string;
+  readonly site_id: string | null;
+  readonly status: string;
+  readonly title: string;
+  readonly updated_at: Date;
+}
+
+interface WorkItemCommentRow {
+  readonly author_user_id: string;
+  readonly body: string;
+  readonly created_at: Date;
+  readonly id: string;
+  readonly work_item_id: string;
+}
+
+interface WorkItemActivityRow {
+  readonly actor_user_id: string | null;
+  readonly created_at: Date;
+  readonly event_type: string;
+  readonly id: string;
+  readonly organization_id: string;
+  readonly payload: unknown;
+  readonly work_item_id: string;
+}
+
+interface WorkItemVisitRow {
+  readonly author_user_id: string;
+  readonly created_at: Date;
+  readonly duration_minutes: number;
+  readonly id: string;
+  readonly note: string;
+  readonly organization_id: string;
+  readonly visit_date: Date;
+  readonly work_item_id: string;
+}
+
+interface IdRow {
+  readonly id: string;
+}
+
+export interface CreateJobRecordInput {
+  readonly assigneeId?: UserId;
+  readonly blockedReason?: string;
+  readonly completedAt?: string;
+  readonly completedByUserId?: UserId;
+  readonly contactId?: ContactId;
+  readonly coordinatorId?: UserId;
+  readonly createdByUserId: UserId;
+  readonly kind?: JobKind;
+  readonly organizationId: OrganizationId;
+  readonly priority?: JobPriority;
+  readonly siteId?: SiteId;
+  readonly status?: JobStatus;
+  readonly title: JobTitle;
+}
+
+export interface PatchJobRecordInput {
+  readonly assigneeId?: UserId | null;
+  readonly contactId?: ContactId | null;
+  readonly coordinatorId?: UserId | null;
+  readonly priority?: JobPriority;
+  readonly siteId?: SiteId | null;
+  readonly title?: JobTitle;
+}
+
+export interface TransitionJobRecordInput {
+  readonly blockedReason?: string;
+  readonly completedAt?: string;
+  readonly completedByUserId?: UserId | null;
+  readonly status: JobStatus;
+}
+
+export interface AddJobCommentRecordInput {
+  readonly authorUserId: UserId;
+  readonly body: string;
+  readonly workItemId: WorkItemId;
+}
+
+export interface AddJobActivityRecordInput {
+  readonly actorUserId?: UserId;
+  readonly organizationId: OrganizationId;
+  readonly payload: JobActivityPayload;
+  readonly workItemId: WorkItemId;
+}
+
+export interface AddJobVisitRecordInput {
+  readonly authorUserId: UserId;
+  readonly durationMinutes: number;
+  readonly note: string;
+  readonly organizationId: OrganizationId;
+  readonly visitDate: string;
+  readonly workItemId: WorkItemId;
+}
+
+export interface CreateSiteRecordInput {
+  readonly accessNotes?: string;
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly county?: string;
+  readonly eircode?: string;
+  readonly name: string;
+  readonly organizationId: OrganizationId;
+  readonly regionId?: RegionId;
+  readonly town?: string;
+}
+
+export interface CreateContactRecordInput {
+  readonly email?: string;
+  readonly name: string;
+  readonly notes?: string;
+  readonly organizationId: OrganizationId;
+  readonly phone?: string;
+}
+
+export interface LinkSiteContactInput {
+  readonly contactId: ContactId;
+  readonly isPrimary?: boolean;
+  readonly siteId: SiteId;
+}
+
+const decodeJob = Schema.decodeUnknownSync(JobSchema);
+const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
+const decodeJobActivityPayload = Schema.decodeUnknownSync(
+  JobActivityPayloadSchema
+);
+const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
+const decodeCommentId = Schema.decodeUnknownSync(CommentIdSchema);
+const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
+const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
+const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
+const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
+const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
+const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
+const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
+const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
+const decodeVisitId = Schema.decodeUnknownSync(VisitIdSchema);
+const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
+const decodeJobCursorState = Schema.decodeUnknownSync(
+  Schema.Struct({
+    id: WorkItemIdSchema,
+    updatedAt: IsoDateTimeStringSchema,
+  })
+);
+
+export class JobsRepository extends Effect.Service<JobsRepository>()(
+  "@task-tracker/domains/jobs/JobsRepository",
+  {
+    accessors: true,
+    effect: Effect.gen(function* JobsRepositoryLive() {
+      const sql = yield* SqlClient.SqlClient;
+      const defaultListLimit = yield* Config.integer(
+        "JOBS_DEFAULT_LIST_LIMIT"
+      ).pipe(Config.withDefault(50));
+      const boundedDefaultListLimit = clampJobListLimit(defaultListLimit);
+
+      const withTransaction = Effect.fn("JobsRepository.withTransaction")(
+        <Value, Error, Requirements>(
+          effect: Effect.Effect<Value, Error, Requirements>
+        ) => sql.withTransaction(effect)
+      );
+
+      const ensureSiteInOrganization = Effect.fn(
+        "JobsRepository.ensureSiteInOrganization"
+      )(function* (organizationId: OrganizationId, siteId: SiteId) {
+        const rows = yield* sql<IdRow>`
+          select id
+          from sites
+          where organization_id = ${organizationId}
+            and id = ${siteId}
+          limit 1
+        `;
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(
+            new SiteNotFoundError({
+              message: "Site does not exist in the organization",
+              siteId,
+            })
+          );
+        }
+
+        return siteId;
+      });
+
+      const ensureContactInOrganization = Effect.fn(
+        "JobsRepository.ensureContactInOrganization"
+      )(function* (organizationId: OrganizationId, contactId: ContactId) {
+        const rows = yield* sql<IdRow>`
+          select id
+          from contacts
+          where organization_id = ${organizationId}
+            and id = ${contactId}
+          limit 1
+        `;
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(
+            new ContactNotFoundError({
+              contactId,
+              message: "Contact does not exist in the organization",
+            })
+          );
+        }
+
+        return contactId;
+      });
+
+      const ensureOrganizationMember = Effect.fn(
+        "JobsRepository.ensureOrganizationMember"
+      )(function* (organizationId: OrganizationId, userId: UserId) {
+        const rows = yield* sql<IdRow>`
+          select user_id as id
+          from member
+          where organization_id = ${organizationId}
+            and user_id = ${userId}
+          limit 1
+        `;
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(
+            new OrganizationMemberNotFoundError({
+              message: "User is not a member of the organization",
+              organizationId,
+              userId,
+            })
+          );
+        }
+
+        return userId;
+      });
+
+      const lookupWorkItemOrganization = Effect.fn(
+        "JobsRepository.lookupWorkItemOrganization"
+      )(function* (workItemId: WorkItemId) {
+        const rows = yield* sql<{ readonly organization_id: string }>`
+          select organization_id
+          from work_items
+          where id = ${workItemId}
+          limit 1
+        `;
+
+        return Option.fromNullable(
+          rows[0]?.organization_id as OrganizationId | undefined
+        );
+      });
+
+      const ensureWorkItemOrganizationMatches = Effect.fn(
+        "JobsRepository.ensureWorkItemOrganizationMatches"
+      )(function* (organizationId: OrganizationId, workItemId: WorkItemId) {
+        const workItemOrganizationId =
+          yield* lookupWorkItemOrganization(workItemId);
+
+        if (Option.isNone(workItemOrganizationId)) {
+          return yield* Effect.fail(
+            new JobNotFoundError({
+              message: "Job does not exist",
+              workItemId,
+            })
+          );
+        }
+
+        if (workItemOrganizationId.value !== organizationId) {
+          return yield* Effect.fail(
+            new WorkItemOrganizationMismatchError({
+              message: "Job does not belong to the organization",
+              organizationId,
+              workItemId,
+            })
+          );
+        }
+
+        return workItemId;
+      });
+
+      const validateLinkedJobReferences = Effect.fn(
+        "JobsRepository.validateLinkedJobReferences"
+      )(function* (
+        organizationId: OrganizationId,
+        input: {
+          readonly assigneeId?: UserId | null;
+          readonly contactId?: ContactId | null;
+          readonly coordinatorId?: UserId | null;
+          readonly siteId?: SiteId | null;
+        }
+      ) {
+        if (input.siteId !== undefined && input.siteId !== null) {
+          yield* ensureSiteInOrganization(organizationId, input.siteId);
+        }
+
+        if (input.contactId !== undefined && input.contactId !== null) {
+          yield* ensureContactInOrganization(organizationId, input.contactId);
+        }
+
+        if (input.assigneeId !== undefined && input.assigneeId !== null) {
+          yield* ensureOrganizationMember(organizationId, input.assigneeId);
+        }
+
+        if (input.coordinatorId !== undefined && input.coordinatorId !== null) {
+          yield* ensureOrganizationMember(organizationId, input.coordinatorId);
+        }
+      });
+
+      const list = Effect.fn("JobsRepository.list")(function* (
+        organizationId: OrganizationId,
+        query: JobListQuery
+      ) {
+        const limit = clampJobListLimit(query.limit ?? boundedDefaultListLimit);
+        const clauses = [sql`work_items.organization_id = ${organizationId}`];
+        const sitesJoin =
+          query.regionId === undefined
+            ? sql``
+            : sql`left join sites on sites.id = work_items.site_id`;
+
+        if (query.status !== undefined) {
+          clauses.push(sql`work_items.status = ${query.status}`);
+        }
+
+        if (query.assigneeId !== undefined) {
+          clauses.push(sql`work_items.assignee_id = ${query.assigneeId}`);
+        }
+
+        if (query.coordinatorId !== undefined) {
+          clauses.push(sql`work_items.coordinator_id = ${query.coordinatorId}`);
+        }
+
+        if (query.priority !== undefined) {
+          clauses.push(sql`work_items.priority = ${query.priority}`);
+        }
+
+        if (query.siteId !== undefined) {
+          clauses.push(sql`work_items.site_id = ${query.siteId}`);
+        }
+
+        if (query.regionId !== undefined) {
+          clauses.push(sql`sites.region_id = ${query.regionId}`);
+        }
+
+        if (query.cursor !== undefined) {
+          const encodedCursor = query.cursor;
+          const cursor = yield* Effect.try({
+            try: () => decodeCursor(encodedCursor),
+            catch: () =>
+              new JobListCursorInvalidError({
+                cursor: encodedCursor,
+                message: "Job list cursor is invalid",
+              }),
+          });
+
+          clauses.push(
+            sql`(
+              work_items.updated_at < ${cursor.updatedAt}
+              or (
+                work_items.updated_at = ${cursor.updatedAt}
+                and work_items.id < ${cursor.id}
+              )
+            )`
+          );
+        }
+
+        const rows = yield* sql<WorkItemRow>`
+          select
+            work_items.id,
+            work_items.kind,
+            work_items.title,
+            work_items.status,
+            work_items.priority,
+            work_items.site_id,
+            work_items.contact_id,
+            work_items.assignee_id,
+            work_items.coordinator_id,
+            work_items.blocked_reason,
+            work_items.completed_at,
+            work_items.completed_by_user_id,
+            work_items.created_at,
+            work_items.updated_at,
+            work_items.created_by_user_id,
+            work_items.organization_id
+          from work_items
+          ${sitesJoin}
+          where ${sql.and(clauses)}
+          order by work_items.updated_at desc, work_items.id desc
+          limit ${limit + 1}
+        `;
+
+        const items = rows.slice(0, limit).map(mapJobListItemRow);
+        const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
+        const nextCursor =
+          nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
+
+        return decodeJobListResponse({ items, nextCursor });
+      });
+
+      const findById = Effect.fn("JobsRepository.findById")(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId
+      ) {
+        const rows = yield* sql<WorkItemRow>`
+          select *
+          from work_items
+          where organization_id = ${organizationId}
+            and id = ${workItemId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+      });
+
+      const getDetail = Effect.fn("JobsRepository.getDetail")(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId
+      ) {
+        const job = yield* findById(organizationId, workItemId).pipe(
+          Effect.map(Option.getOrUndefined)
+        );
+
+        if (job === undefined) {
+          return Option.none<JobDetail>();
+        }
+
+        const comments = yield* sql<WorkItemCommentRow>`
+          select *
+          from work_item_comments
+          where work_item_id = ${workItemId}
+          order by created_at asc, id asc
+        `;
+        const activity = yield* sql<WorkItemActivityRow>`
+          select *
+          from work_item_activity
+          where work_item_id = ${workItemId}
+          order by created_at desc, id desc
+        `;
+        const visits = yield* sql<WorkItemVisitRow>`
+          select *
+          from work_item_visits
+          where work_item_id = ${workItemId}
+          order by visit_date desc, id desc
+        `;
+
+        return Option.some(
+          decodeJobDetail({
+            activity: activity.map(mapJobActivityRow),
+            comments: comments.map(mapJobCommentRow),
+            job,
+            visits: visits.map(mapJobVisitRow),
+          })
+        );
+      });
+
+      const create = Effect.fn("JobsRepository.create")(function* (
+        input: CreateJobRecordInput
+      ) {
+        yield* ensureOrganizationMember(
+          input.organizationId,
+          input.createdByUserId
+        );
+
+        if (input.completedByUserId !== undefined) {
+          yield* ensureOrganizationMember(
+            input.organizationId,
+            input.completedByUserId
+          );
+        }
+
+        yield* validateLinkedJobReferences(input.organizationId, {
+          assigneeId: input.assigneeId,
+          contactId: input.contactId,
+          coordinatorId: input.coordinatorId,
+          siteId: input.siteId,
+        });
+
+        const insertValues: Record<string, unknown> = {
+          blocked_reason:
+            input.status === "blocked" ? (input.blockedReason ?? null) : null,
+          completed_at:
+            input.status === "completed" && input.completedAt !== undefined
+              ? parseIsoDateTime(input.completedAt)
+              : null,
+          completed_by_user_id:
+            input.status === "completed"
+              ? (input.completedByUserId ?? null)
+              : null,
+          created_by_user_id: input.createdByUserId,
+          id: decodeWorkItemId(randomUUID()),
+          kind: input.kind ?? "job",
+          organization_id: input.organizationId,
+          priority: input.priority ?? "none",
+          status: input.status ?? "new",
+          title: input.title,
+        };
+
+        if (input.siteId !== undefined) {
+          insertValues.site_id = input.siteId;
+        }
+
+        if (input.contactId !== undefined) {
+          insertValues.contact_id = input.contactId;
+        }
+
+        if (input.assigneeId !== undefined) {
+          insertValues.assignee_id = input.assigneeId;
+        }
+
+        if (input.coordinatorId !== undefined) {
+          insertValues.coordinator_id = input.coordinatorId;
+        }
+
+        const rows = yield* sql<WorkItemRow>`
+          insert into work_items ${sql.insert(insertValues).returning("*")}
+        `;
+
+        return mapJobRow(getRequiredRow(rows, "inserted work item"));
+      });
+
+      const patch = Effect.fn("JobsRepository.patch")(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        input: PatchJobRecordInput
+      ) {
+        yield* validateLinkedJobReferences(organizationId, input);
+
+        const values: Record<string, unknown> = {
+          updated_at: new Date(),
+        };
+
+        if (input.title !== undefined) {
+          values.title = input.title;
+        }
+
+        if (input.priority !== undefined) {
+          values.priority = input.priority;
+        }
+
+        if (input.siteId !== undefined) {
+          values.site_id = input.siteId;
+        }
+
+        if (input.contactId !== undefined) {
+          values.contact_id = input.contactId;
+        }
+
+        if (input.assigneeId !== undefined) {
+          values.assignee_id = input.assigneeId;
+        }
+
+        if (input.coordinatorId !== undefined) {
+          values.coordinator_id = input.coordinatorId;
+        }
+
+        const rows = yield* sql<WorkItemRow>`
+          update work_items
+          set ${sql.update(values)}
+          where organization_id = ${organizationId}
+            and id = ${workItemId}
+          returning *
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+      });
+
+      const transition = Effect.fn("JobsRepository.transition")(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        input: TransitionJobRecordInput
+      ) {
+        if (
+          input.completedByUserId !== undefined &&
+          input.completedByUserId !== null
+        ) {
+          yield* ensureOrganizationMember(
+            organizationId,
+            input.completedByUserId
+          );
+        }
+
+        const values: Record<string, unknown> = {
+          blocked_reason:
+            input.status === "blocked" ? (input.blockedReason ?? null) : null,
+          completed_by_user_id:
+            input.status === "completed"
+              ? (input.completedByUserId ?? null)
+              : null,
+          status: input.status,
+          updated_at: new Date(),
+        };
+
+        if (input.status === "completed") {
+          values.completed_at =
+            input.completedAt === undefined
+              ? new Date()
+              : parseIsoDateTime(input.completedAt);
+        } else {
+          values.completed_at = null;
+        }
+
+        const rows = yield* sql<WorkItemRow>`
+          update work_items
+          set ${sql.update(values)}
+          where organization_id = ${organizationId}
+            and id = ${workItemId}
+          returning *
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+      });
+
+      const reopen = Effect.fn("JobsRepository.reopen")(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId
+      ) {
+        const rows = yield* sql<WorkItemRow>`
+          update work_items
+          set ${sql.update({
+            blocked_reason: null,
+            completed_at: null,
+            completed_by_user_id: null,
+            status: "in_progress",
+            updated_at: new Date(),
+          })}
+          where organization_id = ${organizationId}
+            and id = ${workItemId}
+          returning *
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+      });
+
+      const addComment = Effect.fn("JobsRepository.addComment")(function* (
+        input: AddJobCommentRecordInput
+      ) {
+        const workItemOrganizationId = yield* lookupWorkItemOrganization(
+          input.workItemId
+        );
+
+        if (Option.isNone(workItemOrganizationId)) {
+          return yield* Effect.fail(
+            new JobNotFoundError({
+              message: "Job does not exist",
+              workItemId: input.workItemId,
+            })
+          );
+        }
+
+        yield* ensureOrganizationMember(
+          workItemOrganizationId.value,
+          input.authorUserId
+        );
+
+        const rows = yield* sql<WorkItemCommentRow>`
+          insert into work_item_comments ${sql
+            .insert({
+              author_user_id: input.authorUserId,
+              body: input.body,
+              id: decodeCommentId(randomUUID()),
+              work_item_id: input.workItemId,
+            })
+            .returning("*")}
+        `;
+
+        return mapJobCommentRow(
+          getRequiredRow(rows, "inserted work item comment")
+        );
+      });
+
+      const addActivity = Effect.fn("JobsRepository.addActivity")(function* (
+        input: AddJobActivityRecordInput
+      ) {
+        yield* ensureWorkItemOrganizationMatches(
+          input.organizationId,
+          input.workItemId
+        );
+
+        if (input.actorUserId !== undefined) {
+          yield* ensureOrganizationMember(
+            input.organizationId,
+            input.actorUserId
+          );
+        }
+
+        const rows = yield* sql<WorkItemActivityRow>`
+          insert into work_item_activity ${sql
+            .insert({
+              actor_user_id: input.actorUserId ?? null,
+              event_type: input.payload.eventType,
+              id: decodeActivityId(randomUUID()),
+              organization_id: input.organizationId,
+              payload: input.payload,
+              work_item_id: input.workItemId,
+            })
+            .returning("*")}
+        `;
+
+        return mapJobActivityRow(
+          getRequiredRow(rows, "inserted work item activity")
+        );
+      });
+
+      const addVisit = Effect.fn("JobsRepository.addVisit")(function* (
+        input: AddJobVisitRecordInput
+      ) {
+        yield* ensureWorkItemOrganizationMatches(
+          input.organizationId,
+          input.workItemId
+        );
+        yield* ensureOrganizationMember(
+          input.organizationId,
+          input.authorUserId
+        );
+
+        const rows = yield* sql<WorkItemVisitRow>`
+          insert into work_item_visits ${sql
+            .insert({
+              author_user_id: input.authorUserId,
+              duration_minutes: input.durationMinutes,
+              id: decodeVisitId(randomUUID()),
+              note: input.note,
+              organization_id: input.organizationId,
+              visit_date: parseIsoDate(input.visitDate),
+              work_item_id: input.workItemId,
+            })
+            .returning("*")}
+        `;
+
+        return mapJobVisitRow(getRequiredRow(rows, "inserted work item visit"));
+      });
+
+      return {
+        addActivity,
+        addComment,
+        addVisit,
+        create,
+        findById,
+        getDetail,
+        list,
+        patch,
+        reopen,
+        transition,
+        withTransaction,
+      };
+    }),
+  }
+) {}
+
+export class SitesRepository extends Effect.Service<SitesRepository>()(
+  "@task-tracker/domains/jobs/SitesRepository",
+  {
+    accessors: true,
+    effect: Effect.gen(function* SitesRepositoryLive() {
+      const sql = yield* SqlClient.SqlClient;
+
+      const ensureRegionInOrganization = Effect.fn(
+        "SitesRepository.ensureRegionInOrganization"
+      )(function* (organizationId: OrganizationId, regionId: RegionId) {
+        const rows = yield* sql<IdRow>`
+          select id
+          from service_regions
+          where organization_id = ${organizationId}
+            and id = ${regionId}
+          limit 1
+        `;
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(
+            new RegionNotFoundError({
+              message: "Region does not exist in the organization",
+              organizationId,
+              regionId,
+            })
+          );
+        }
+
+        return regionId;
+      });
+
+      const findById = Effect.fn("SitesRepository.findById")(function* (
+        organizationId: OrganizationId,
+        siteId: SiteId
+      ) {
+        const rows = yield* sql<IdRow>`
+          select id
+          from sites
+          where organization_id = ${organizationId}
+            and id = ${siteId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]?.id as SiteId | undefined);
+      });
+
+      const create = Effect.fn("SitesRepository.create")(function* (
+        input: CreateSiteRecordInput
+      ) {
+        if (input.regionId !== undefined) {
+          yield* ensureRegionInOrganization(
+            input.organizationId,
+            input.regionId
+          );
+        }
+
+        const values: Record<string, unknown> = {
+          id: decodeSiteId(randomUUID()),
+          name: input.name,
+          organization_id: input.organizationId,
+        };
+
+        if (input.regionId !== undefined) {
+          values.region_id = input.regionId;
+        }
+
+        if (input.addressLine1 !== undefined) {
+          values.address_line_1 = input.addressLine1;
+        }
+
+        if (input.addressLine2 !== undefined) {
+          values.address_line_2 = input.addressLine2;
+        }
+
+        if (input.town !== undefined) {
+          values.town = input.town;
+        }
+
+        if (input.county !== undefined) {
+          values.county = input.county;
+        }
+
+        if (input.eircode !== undefined) {
+          values.eircode = input.eircode;
+        }
+
+        if (input.accessNotes !== undefined) {
+          values.access_notes = input.accessNotes;
+        }
+
+        const rows = yield* sql<IdRow>`
+          insert into sites ${sql.insert(values).returning("id")}
+        `;
+
+        return getRequiredRow(rows, "inserted site id").id as SiteId;
+      });
+
+      const linkContact = Effect.fn("SitesRepository.linkContact")(function* (
+        input: LinkSiteContactInput
+      ) {
+        const rows = yield* sql<{
+          readonly contact_organization_id: string;
+          readonly site_organization_id: string;
+        }>`
+          select
+            sites.organization_id as site_organization_id,
+            contacts.organization_id as contact_organization_id
+          from sites
+          join contacts on contacts.id = ${input.contactId}
+          where sites.id = ${input.siteId}
+          limit 1
+        `;
+
+        const [ownership] = rows;
+
+        if (ownership === undefined) {
+          const siteExists = yield* sql<IdRow>`
+            select id
+            from sites
+            where id = ${input.siteId}
+            limit 1
+          `;
+
+          if (siteExists[0] === undefined) {
+            return yield* Effect.fail(
+              new SiteNotFoundError({
+                message: "Site does not exist",
+                siteId: input.siteId,
+              })
+            );
+          }
+
+          return yield* Effect.fail(
+            new ContactNotFoundError({
+              contactId: input.contactId,
+              message: "Contact does not exist",
+            })
+          );
+        }
+
+        if (
+          ownership.site_organization_id !== ownership.contact_organization_id
+        ) {
+          return yield* Effect.fail(
+            new ContactNotFoundError({
+              contactId: input.contactId,
+              message: "Contact does not belong to the site's organization",
+            })
+          );
+        }
+
+        yield* sql`
+          insert into site_contacts ${sql.insert({
+            contact_id: input.contactId,
+            is_primary: input.isPrimary ?? false,
+            site_id: input.siteId,
+          })}
+          on conflict do nothing
+        `;
+      });
+
+      return {
+        create,
+        findById,
+        linkContact,
+      };
+    }),
+  }
+) {}
+
+export class ContactsRepository extends Effect.Service<ContactsRepository>()(
+  "@task-tracker/domains/jobs/ContactsRepository",
+  {
+    accessors: true,
+    effect: Effect.gen(function* ContactsRepositoryLive() {
+      const sql = yield* SqlClient.SqlClient;
+
+      const findById = Effect.fn("ContactsRepository.findById")(function* (
+        organizationId: OrganizationId,
+        contactId: ContactId
+      ) {
+        const rows = yield* sql<IdRow>`
+          select id
+          from contacts
+          where organization_id = ${organizationId}
+            and id = ${contactId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]?.id as ContactId | undefined);
+      });
+
+      const create = Effect.fn("ContactsRepository.create")(function* (
+        input: CreateContactRecordInput
+      ) {
+        const values: Record<string, unknown> = {
+          id: decodeContactId(randomUUID()),
+          name: input.name,
+          organization_id: input.organizationId,
+        };
+
+        if (input.email !== undefined) {
+          values.email = input.email;
+        }
+
+        if (input.phone !== undefined) {
+          values.phone = input.phone;
+        }
+
+        if (input.notes !== undefined) {
+          values.notes = input.notes;
+        }
+
+        const rows = yield* sql<IdRow>`
+          insert into contacts ${sql.insert(values).returning("id")}
+        `;
+
+        return getRequiredRow(rows, "inserted contact id").id as ContactId;
+      });
+
+      return {
+        create,
+        findById,
+      };
+    }),
+  }
+) {}
+
+const JobsSqlRuntimeLive = AppEffectSqlLive.pipe(
+  Layer.provideMerge(AppDatabaseLive)
+);
+
+export const JobsRepositoriesLive = Layer.mergeAll(
+  JobsRepository.Default,
+  SitesRepository.Default,
+  ContactsRepository.Default
+).pipe(Layer.provide(JobsSqlRuntimeLive));
+
+export const withJobsTransaction = <Value, Error, Requirements>(
+  effect: Effect.Effect<Value, Error, Requirements>
+) =>
+  Effect.gen(function* () {
+    const repository = yield* JobsRepository;
+
+    return yield* repository.withTransaction(effect);
+  });
+
+function mapJobRow(row: WorkItemRow): Job {
+  return decodeJob({
+    assigneeId: nullableToUndefined(row.assignee_id),
+    blockedReason: nullableToUndefined(row.blocked_reason),
+    completedAt:
+      row.completed_at === null ? undefined : row.completed_at.toISOString(),
+    completedByUserId: nullableToUndefined(row.completed_by_user_id),
+    contactId: nullableToUndefined(row.contact_id),
+    coordinatorId: nullableToUndefined(row.coordinator_id),
+    createdAt: row.created_at.toISOString(),
+    createdByUserId: row.created_by_user_id,
+    id: row.id,
+    kind: row.kind,
+    priority: row.priority,
+    siteId: nullableToUndefined(row.site_id),
+    status: row.status,
+    title: row.title,
+    updatedAt: row.updated_at.toISOString(),
+  });
+}
+
+function mapJobListItemRow(row: WorkItemRow) {
+  return decodeJobListItem({
+    assigneeId: nullableToUndefined(row.assignee_id),
+    contactId: nullableToUndefined(row.contact_id),
+    coordinatorId: nullableToUndefined(row.coordinator_id),
+    createdAt: row.created_at.toISOString(),
+    id: row.id,
+    kind: row.kind,
+    priority: row.priority,
+    siteId: nullableToUndefined(row.site_id),
+    status: row.status,
+    title: row.title,
+    updatedAt: row.updated_at.toISOString(),
+  });
+}
+
+function mapJobCommentRow(row: WorkItemCommentRow): JobComment {
+  return decodeJobComment({
+    authorUserId: row.author_user_id,
+    body: row.body,
+    createdAt: row.created_at.toISOString(),
+    id: row.id,
+    workItemId: row.work_item_id,
+  });
+}
+
+function mapJobActivityRow(row: WorkItemActivityRow): JobActivity {
+  return decodeJobActivity({
+    actorUserId: nullableToUndefined(row.actor_user_id),
+    createdAt: row.created_at.toISOString(),
+    id: row.id,
+    payload: decodeJobActivityPayload(row.payload),
+    workItemId: row.work_item_id,
+  });
+}
+
+function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
+  return decodeJobVisit({
+    authorUserId: row.author_user_id,
+    createdAt: row.created_at.toISOString(),
+    durationMinutes: row.duration_minutes,
+    id: row.id,
+    note: row.note,
+    visitDate: row.visit_date.toISOString().slice(0, 10),
+    workItemId: row.work_item_id,
+  });
+}
+
+function encodeCursor(
+  row: Pick<WorkItemRow, "id" | "updated_at">
+): JobListCursor {
+  return decodeJobListCursor(
+    Buffer.from(
+      JSON.stringify({
+        id: decodeWorkItemId(row.id),
+        updatedAt: row.updated_at.toISOString(),
+      } satisfies JobCursorState)
+    ).toString("base64url")
+  );
+}
+
+function decodeCursor(cursor: JobListCursor): {
+  readonly id: WorkItemId;
+  readonly updatedAt: Date;
+} {
+  const value = decodeJobCursorState(
+    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
+  ) as JobCursorState;
+
+  return {
+    id: value.id,
+    updatedAt: new Date(value.updatedAt),
+  };
+}
+
+function nullableToUndefined<Value>(value: Value | null): Value | undefined {
+  return value === null ? undefined : value;
+}
+
+function getRequiredRow<Value>(
+  rows: readonly Value[],
+  label: string
+): Value {
+  const [row] = rows;
+
+  if (row === undefined) {
+    throw new Error(`Expected ${label} row to be returned`);
+  }
+
+  return row;
+}
+
+function parseIsoDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function parseIsoDateTime(value: string): Date {
+  return new Date(value);
+}
+
+function clampJobListLimit(limit: number): number {
+  return Math.min(100, Math.max(1, limit));
+}
