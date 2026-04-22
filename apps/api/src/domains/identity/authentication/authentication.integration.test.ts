@@ -7,6 +7,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
+import {
+  AppDatabase,
+  AppDatabaseLive,
+} from "../../../platform/database/database.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication } from "./auth.js";
 import {
@@ -22,6 +26,92 @@ describe("authentication integration", () => {
   afterAll(async () => {
     await Promise.all([...cleanup].toReversed().map((step) => step()));
   });
+
+  it("boots authentication on the shared app database runtime", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping shared database runtime coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
+
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = databaseUrl;
+
+    try {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* verifySharedRuntimeBoot() {
+            const { authDb } = yield* AppDatabase;
+            const auth = createAuthentication({
+              appOrigin: "http://127.0.0.1:4173",
+              backgroundTaskHandler: () => {},
+              config: makeAuthenticationConfig({
+                baseUrl: "http://127.0.0.1:3000",
+                secret: "0123456789abcdef0123456789abcdef",
+                databaseUrl,
+              }),
+              database: authDb,
+              reportPasswordResetEmailFailure: () => {},
+              sendOrganizationInvitationEmail: async () => {},
+              reportVerificationEmailFailure: () => {},
+              sendPasswordResetEmail: async () => {},
+              sendVerificationEmail: async () => {},
+            });
+
+            const cookieJar = new Map<string, string>();
+            const signUpResponse = yield* Effect.promise(() =>
+              auth.handler(
+                makeJsonRequest("/sign-up/email", {
+                  email: "shared-runtime@example.com",
+                  name: "Shared Runtime User",
+                  password: "correct horse battery staple",
+                })
+              )
+            );
+            updateCookieJar(cookieJar, signUpResponse);
+
+            const sessionResponse = yield* Effect.promise(() =>
+              auth.handler(
+                makeRequest("/get-session", {
+                  cookieJar,
+                })
+              )
+            );
+
+            return {
+              sessionResponse,
+              signUpResponse,
+            };
+          }).pipe(Effect.provide(AppDatabaseLive))
+        )
+      );
+
+      expect(result.signUpResponse.status).toBe(200);
+      expect(result.sessionResponse.status).toBe(200);
+      const session = (await result.sessionResponse.json()) as SessionResponse;
+      expect(session?.user?.email).toBe("shared-runtime@example.com");
+    } finally {
+      if (previousDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = previousDatabaseUrl;
+      }
+    }
+  }, 30_000);
 
   it("creates an organization after sign-up and stores it as the active organization in the session", async (context: {
     skip: (note?: string) => never;
