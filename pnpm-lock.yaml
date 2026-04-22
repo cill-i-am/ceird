@@ -247,6 +247,28 @@ importers:
         specifier: ^3.0.5
         version: 3.0.5(@types/node@25.5.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.12.14(@types/node@25.5.0)(typescript@5.9.2))(tsx@4.21.0)(yaml@2.8.3)
 
+  packages/jobs-core:
+    dependencies:
+      '@effect/platform':
+        specifier: ^0.96.0
+        version: 0.96.0(effect@3.21.0)
+      effect:
+        specifier: ^3.21.0
+        version: 3.21.0
+    devDependencies:
+      '@effect/language-service':
+        specifier: ^0.84.2
+        version: 0.84.2
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^3.0.5
+        version: 3.0.5(@types/node@25.5.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.12.14(@types/node@25.5.0)(typescript@5.9.2))(tsx@4.21.0)(yaml@2.8.3)
+
   packages/sandbox-cli:
     dependencies:
       '@effect/cli':
