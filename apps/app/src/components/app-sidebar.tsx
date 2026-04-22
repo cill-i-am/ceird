@@ -21,32 +21,15 @@ import {
 const data = {
   navMain: [
     {
-      title: "Overview",
+      title: "Home",
       url: "/",
       icon: <HugeiconsIcon icon={ComputerTerminalIcon} strokeWidth={2} />,
       isActive: true,
-      items: [
-        {
-          title: "Home",
-          url: "/",
-        },
-        {
-          title: "Health",
-          url: "/health",
-        },
-      ],
     },
     {
-      title: "Organization",
+      title: "Members",
       url: "/members",
       icon: <HugeiconsIcon icon={CommandIcon} strokeWidth={2} />,
-      isActive: true,
-      items: [
-        {
-          title: "Members",
-          url: "/members",
-        },
-      ],
     },
   ],
 };

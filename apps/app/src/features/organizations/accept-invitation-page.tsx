@@ -1,22 +1,27 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
-import { Button } from "#/components/ui/button";
+import { Alert, AlertDescription } from "#/components/ui/alert";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
-import { FieldError } from "#/components/ui/field";
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "#/components/ui/empty";
 import { authClient } from "#/lib/auth-client";
 
 import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
 } from "../auth/auth-navigation";
+import {
+  EntryHighlightGrid,
+  EntryShell,
+  EntrySurfaceCard,
+  EntrySupportPanel,
+  INVITATION_AUTH_HIGHLIGHTS,
+} from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
 
@@ -188,78 +193,52 @@ export function AcceptInvitationPage({
     }
   }
 
+  const invitation = "invitation" in state ? state.invitation : undefined;
+  let shellTitle = "Review your organization invitation.";
+  let shellDescription =
+    "We'll check the invitation and help you continue with the right account.";
+
+  if (invitation) {
+    shellTitle = `Join ${invitation.organizationName}`;
+    shellDescription = `Continue with ${invitation.email} to join ${invitation.organizationName} as ${invitation.role}.`;
+  } else if (state.status === "signed-out") {
+    shellTitle = "Continue with the invited account.";
+    shellDescription =
+      "Sign in or create an account to continue into the workspace with the correct email.";
+  }
+  const supportingContent = invitation ? (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <EntrySupportPanel
+        title="Organization"
+        description={invitation.organizationName}
+      />
+      <EntrySupportPanel title="Invited email" description={invitation.email} />
+      <EntrySupportPanel title="Role" description={invitation.role} />
+    </div>
+  ) : (
+    <EntryHighlightGrid items={INVITATION_AUTH_HIGHLIGHTS} />
+  );
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-10">
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">Organization invitation</CardTitle>
-          <CardDescription>
-            Review the invitation details and continue with the invited email
-            address.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {state.status === "loading" ? (
-            <p className="text-sm text-muted-foreground">
-              Loading your invitation...
-            </p>
-          ) : null}
-
-          {state.status === "signed-out" ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Sign in or create an account to continue.
-              </p>
-              <div className="flex gap-3">
-                <Link
-                  {...getLoginNavigationTarget(invitationId)}
-                  className="inline-flex flex-1 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  {...getSignupNavigationTarget(invitationId)}
-                  className="inline-flex flex-1 items-center justify-center rounded-md border border-input px-4 py-2 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground"
-                >
-                  Create account
-                </Link>
-              </div>
-            </>
-          ) : null}
-
-          {"invitation" in state && state.invitation ? (
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold">
-                Join {state.invitation.organizationName}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {state.invitation.inviterEmail} invited {state.invitation.email}{" "}
-                as {state.invitation.role}.
-              </p>
-            </div>
-          ) : null}
-
-          {state.status === "error" || state.status === "switching-account" ? (
-            <FieldError>{state.message}</FieldError>
-          ) : null}
-
-          {state.status === "error" && state.canSwitchAccount ? (
+    <EntryShell
+      badge="Invitation"
+      title={shellTitle}
+      description={shellDescription}
+      supportingContent={supportingContent}
+    >
+      <EntrySurfaceCard
+        badge={
+          state.status === "signed-out"
+            ? "Sign in required"
+            : "Organization invitation"
+        }
+        title="Organization invitation"
+        description="Review the invitation details and continue with the invited email address."
+        footer={
+          invitation ? (
             <Button
               className="w-full"
-              variant="outline"
-              onClick={() => {
-                void handleSwitchAccount();
-              }}
-            >
-              Sign out and try another account
-            </Button>
-          ) : null}
-        </CardContent>
-
-        {"invitation" in state && state.invitation ? (
-          <CardFooter className="px-6 pt-0">
-            <Button
-              className="w-full"
+              size="lg"
               disabled={state.status === "submitting"}
               onClick={() => {
                 void handleAcceptInvitation();
@@ -269,9 +248,74 @@ export function AcceptInvitationPage({
                 ? "Accepting invitation..."
                 : "Accept invitation"}
             </Button>
-          </CardFooter>
+          ) : undefined
+        }
+      >
+        {state.status === "loading" ? (
+          <Empty className="min-h-0 bg-muted/20 px-6 py-8">
+            <EmptyHeader>
+              <EmptyTitle>Loading your invitation...</EmptyTitle>
+              <EmptyDescription>
+                We&apos;re checking the workspace details now.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null}
-      </Card>
-    </div>
+
+        {state.status === "signed-out" ? (
+          <>
+            <p className="text-sm/6 text-muted-foreground">
+              Sign in or create an account to continue.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                {...getLoginNavigationTarget(invitationId)}
+                className={buttonVariants({
+                  className: "flex-1",
+                })}
+              >
+                Sign in
+              </Link>
+              <Link
+                {...getSignupNavigationTarget(invitationId)}
+                className={buttonVariants({
+                  className: "flex-1",
+                  variant: "outline",
+                })}
+              >
+                Create account
+              </Link>
+            </div>
+          </>
+        ) : null}
+
+        {invitation ? (
+          <Alert className="bg-muted/40">
+            <AlertDescription>
+              {invitation.inviterEmail} invited {invitation.email} as{" "}
+              {invitation.role}.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {state.status === "error" || state.status === "switching-account" ? (
+          <Alert variant="destructive">
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {state.status === "error" && state.canSwitchAccount ? (
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={() => {
+              void handleSwitchAccount();
+            }}
+          >
+            Sign out and try another account
+          </Button>
+        ) : null}
+      </EntrySurfaceCard>
+    </EntryShell>
   );
 }

@@ -2,15 +2,13 @@ import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "#/components/ui/empty";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
@@ -27,6 +25,13 @@ import {
   getLoginNavigationTarget,
 } from "./auth-navigation";
 import { decodePasswordResetInput, passwordResetSchema } from "./auth-schemas";
+import {
+  DEFAULT_AUTH_HIGHLIGHTS,
+  EntryHighlightGrid,
+  EntryShell,
+  EntrySurfaceCard,
+  INVITATION_AUTH_HIGHLIGHTS,
+} from "./entry-shell";
 import { decodePasswordResetSearch } from "./password-reset-search";
 import type { PasswordResetSearch } from "./password-reset-search";
 
@@ -40,6 +45,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
     search ?? {}
   );
   const { invitation, token } = normalizedSearch;
+  const isInvitationFlow = Boolean(invitation);
 
   const form = useForm({
     defaultValues: {
@@ -93,137 +99,170 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
 
   if (!token) {
     return (
-      <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-10">
-        <Card className="w-full">
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl">Reset password</CardTitle>
-            <CardDescription>
-              This password reset link is invalid or has expired.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 text-center">
-              <p className="text-sm text-muted-foreground">
+      <EntryShell
+        badge={isInvitationFlow ? "Invitation support" : "Password reset"}
+        title="This reset link has expired or is no longer valid."
+        description="Request a fresh link, then continue back into the workspace with a new password."
+        supportingContent={
+          <EntryHighlightGrid
+            items={
+              isInvitationFlow
+                ? INVITATION_AUTH_HIGHLIGHTS
+                : DEFAULT_AUTH_HIGHLIGHTS
+            }
+          />
+        }
+      >
+        <EntrySurfaceCard
+          badge="Link expired"
+          title="Reset password"
+          description="This password reset link is invalid or has expired."
+          footer={
+            <>
+              <Link
+                {...getForgotPasswordNavigationTarget(invitation)}
+                className={buttonVariants({
+                  variant: "link",
+                  className: "h-auto justify-start p-0",
+                })}
+              >
+                Request a new reset link
+              </Link>
+              <Link
+                {...getLoginNavigationTarget(invitation)}
+                className={buttonVariants({
+                  variant: "link",
+                  className: "h-auto justify-start p-0",
+                })}
+              >
+                Back to login
+              </Link>
+            </>
+          }
+        >
+          <Empty className="min-h-0 bg-muted/20 px-6 py-8">
+            <EmptyHeader>
+              <EmptyTitle>Start again with a fresh link</EmptyTitle>
+              <EmptyDescription>
                 Request a new reset link to continue, or return to login.
-              </p>
-            </div>
-          </CardContent>
-          <CardFooter className="flex-col items-stretch gap-4">
-            <Link
-              {...getForgotPasswordNavigationTarget(invitation)}
-              className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Request a new reset link
-            </Link>
-            <Link
-              {...getLoginNavigationTarget(invitation)}
-              className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Back to login
-            </Link>
-          </CardFooter>
-        </Card>
-      </div>
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </EntrySurfaceCard>
+      </EntryShell>
     );
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-10">
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">Reset password</CardTitle>
-          <CardDescription>
-            Choose a new password to finish signing in.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="space-y-6"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
-            }}
-          >
-            <FieldGroup>
-              <form.Field name="password">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+    <EntryShell
+      badge={isInvitationFlow ? "Invitation support" : "Password reset"}
+      title="Choose a new password and get back into the workspace."
+      description="Once you save a new password, you can continue into the app or finish the invitation flow."
+      supportingContent={
+        <EntryHighlightGrid
+          items={
+            isInvitationFlow
+              ? INVITATION_AUTH_HIGHLIGHTS
+              : DEFAULT_AUTH_HIGHLIGHTS
+          }
+        />
+      }
+    >
+      <EntrySurfaceCard
+        badge="Choose a new password"
+        title="Reset password"
+        description="Choose a new password to finish signing in."
+      >
+        <form
+          className="flex flex-col gap-6"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <FieldGroup>
+            <form.Field name="password">
+              {(field) => {
+                const errorText = getErrorText(field.state.meta.errors);
 
-                  return (
-                    <AuthFormField
-                      label="New password"
-                      htmlFor="password"
-                      invalid={Boolean(errorText)}
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="password"
-                        name={field.name}
-                        type="password"
-                        autoComplete="new-password"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
+                return (
+                  <AuthFormField
+                    label="New password"
+                    htmlFor="password"
+                    invalid={Boolean(errorText)}
+                    descriptionText="Use 8 or more characters."
+                    errorText={errorText}
+                  >
+                    <Input
+                      id="password"
+                      name={field.name}
+                      type="password"
+                      autoComplete="new-password"
+                      value={field.state.value}
+                      aria-invalid={Boolean(errorText) || undefined}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                    />
+                  </AuthFormField>
+                );
+              }}
+            </form.Field>
 
-              <form.Field name="confirmPassword">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+            <form.Field name="confirmPassword">
+              {(field) => {
+                const errorText = getErrorText(field.state.meta.errors);
 
-                  return (
-                    <AuthFormField
-                      label="Confirm password"
-                      htmlFor="confirmPassword"
-                      invalid={Boolean(errorText)}
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="confirmPassword"
-                        name={field.name}
-                        type="password"
-                        autoComplete="new-password"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
-            </FieldGroup>
+                return (
+                  <AuthFormField
+                    label="Confirm password"
+                    htmlFor="confirmPassword"
+                    invalid={Boolean(errorText)}
+                    errorText={errorText}
+                  >
+                    <Input
+                      id="confirmPassword"
+                      name={field.name}
+                      type="password"
+                      autoComplete="new-password"
+                      value={field.state.value}
+                      aria-invalid={Boolean(errorText) || undefined}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                    />
+                  </AuthFormField>
+                );
+              }}
+            </form.Field>
+          </FieldGroup>
 
-            <CardFooter className="flex-col items-stretch gap-4 px-0">
-              <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
-                {(error) =>
-                  getFormErrorText(error) ? (
-                    <FieldError>{getFormErrorText(error)}</FieldError>
-                  ) : null
-                }
-              </form.Subscribe>
+          <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
+            {(error) =>
+              getFormErrorText(error) ? (
+                <FieldError>{getFormErrorText(error)}</FieldError>
+              ) : null
+            }
+          </form.Subscribe>
 
-              <form.Subscribe selector={(state) => state.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Resetting password..." : "Reset password"}
-                  </Button>
-                )}
-              </form.Subscribe>
-            </CardFooter>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          <form.Subscribe selector={(state) => state.isSubmitting}>
+            {(isSubmitting) => (
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Resetting password..." : "Reset password"}
+              </Button>
+            )}
+          </form.Subscribe>
+        </form>
+      </EntrySurfaceCard>
+    </EntryShell>
   );
 }

@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
 import {
@@ -27,9 +28,9 @@ export function NavSecondary({
               <SidebarMenuButton
                 size="sm"
                 render={
-                  <a href={item.url}>
+                  <Link to={item.url}>
                     <span className="sr-only">{item.title}</span>
-                  </a>
+                  </Link>
                 }
               >
                 {item.icon}

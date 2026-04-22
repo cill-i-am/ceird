@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 
 import type * as AuthClientModule from "#/lib/auth-client";
 
@@ -42,9 +43,46 @@ const { mockedGetSession, mockedNavigate, mockedSignUpEmail } = vi.hoisted(
   })
 );
 
-vi.mock(import("./auth-navigation"), () => ({
-  useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
-}));
+vi.mock(import("./auth-navigation"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
+  };
+});
+
+vi.mock(import("@tanstack/react-router"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    Link: (({
+      children,
+      search,
+      to,
+      ...props
+    }: ComponentProps<"a"> & {
+      search?: Record<string, string | undefined>;
+      to?: string;
+    }) => {
+      const { href: initialHref } = props;
+      let href = initialHref;
+
+      if (typeof to === "string") {
+        href = search?.invitation
+          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+          : to;
+      }
+
+      return (
+        <a data-router-link="true" href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
+  };
+});
 
 vi.mock(import("#/lib/auth-client"), async () => {
   const actual =

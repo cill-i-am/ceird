@@ -1,5 +1,6 @@
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Link } from "@tanstack/react-router";
 
 import {
   Collapsible,
@@ -45,9 +46,9 @@ export function NavMain({
             <SidebarMenuButton
               tooltip={item.title}
               render={
-                <a href={item.url}>
+                <Link to={item.url}>
                   <span className="sr-only">{item.title}</span>
-                </a>
+                </Link>
               }
             >
               {item.icon}
@@ -68,9 +69,9 @@ export function NavMain({
                       <SidebarMenuSubItem key={subItem.title}>
                         <SidebarMenuSubButton
                           render={
-                            <a href={subItem.url}>
+                            <Link to={subItem.url}>
                               <span className="sr-only">{subItem.title}</span>
-                            </a>
+                            </Link>
                           }
                         >
                           <span>{subItem.title}</span>

@@ -3,14 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 
 import { Button } from "#/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -18,6 +10,11 @@ import {
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
+import {
+  EntryHighlightGrid,
+  EntryShell,
+  EntrySurfaceCard,
+} from "#/features/auth/entry-shell";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -27,6 +24,23 @@ import {
 
 const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your organization. Please try again.";
+const ORGANIZATION_SETUP_HIGHLIGHTS = [
+  {
+    title: "Name it clearly",
+    description:
+      "Use the name your team already recognizes on calls, invoices, and schedules.",
+  },
+  {
+    title: "Keep the slug durable",
+    description:
+      "Choose a clean slug you can reuse in links and invites without second-guessing it.",
+  },
+  {
+    title: "Invite the crew next",
+    description:
+      "Once the workspace exists, bring in coordinators, admins, and field staff.",
+  },
+] as const;
 
 export function OrganizationOnboardingPage() {
   const navigate = useNavigate();
@@ -65,17 +79,24 @@ export function OrganizationOnboardingPage() {
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 items-center px-4 py-10">
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">Create your organization</CardTitle>
-          <CardDescription>
-            Add your organization name and slug to get started.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <main className="flex flex-1">
+      <EntryShell
+        mode="contained"
+        badge="Workspace setup"
+        title="Create the workspace your team will run from."
+        description="Set up the organization name and slug once, then start inviting the people who will keep work moving."
+        supportingContent={
+          <EntryHighlightGrid items={ORGANIZATION_SETUP_HIGHLIGHTS} />
+        }
+      >
+        <EntrySurfaceCard
+          badge="Step 1"
+          title="Create your organization"
+          description="Add your organization name and slug to get started."
+        >
           <form
-            className="space-y-6"
+            className="flex flex-col gap-6"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -92,6 +113,7 @@ export function OrganizationOnboardingPage() {
                       label="Organization name"
                       htmlFor="organization-name"
                       invalid={Boolean(errorText)}
+                      descriptionText="Use the name your crew already knows."
                       errorText={errorText}
                     >
                       <Input
@@ -120,6 +142,7 @@ export function OrganizationOnboardingPage() {
                       label="Organization slug"
                       htmlFor="organization-slug"
                       invalid={Boolean(errorText)}
+                      descriptionText="This becomes part of invite links and should stay easy to read."
                       errorText={errorText}
                     >
                       <Input
@@ -139,28 +162,31 @@ export function OrganizationOnboardingPage() {
               </form.Field>
             </FieldGroup>
 
-            <CardFooter className="flex-col items-stretch gap-4 px-0">
-              <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
-                {(error) =>
-                  getFormErrorText(error) ? (
-                    <FieldError>{getFormErrorText(error)}</FieldError>
-                  ) : null
-                }
-              </form.Subscribe>
+            <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
+              {(error) =>
+                getFormErrorText(error) ? (
+                  <FieldError>{getFormErrorText(error)}</FieldError>
+                ) : null
+              }
+            </form.Subscribe>
 
-              <form.Subscribe selector={(state) => state.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting
-                      ? "Creating organization..."
-                      : "Create organization"}
-                  </Button>
-                )}
-              </form.Subscribe>
-            </CardFooter>
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? "Creating organization..."
+                    : "Create organization"}
+                </Button>
+              )}
+            </form.Subscribe>
           </form>
-        </CardContent>
-      </Card>
+        </EntrySurfaceCard>
+      </EntryShell>
     </main>
   );
 }

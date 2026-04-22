@@ -94,6 +94,7 @@ export default function ThemeToggle() {
       type="button"
       variant="outline"
       size="sm"
+      className="min-h-11 px-3 sm:min-h-8"
       onClick={toggleMode}
       aria-label={label}
       title={label}
