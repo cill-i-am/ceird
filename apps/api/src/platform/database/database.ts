@@ -2,17 +2,16 @@ import * as PgDrizzle from "@effect/sql-drizzle/Pg";
 import { PgClient } from "@effect/sql-pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Config, Context, Effect, Layer, Redacted } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { Pool } from "pg";
 
 import { authSchema } from "../../domains/identity/authentication/schema.js";
-import { appDatabaseUrlConfig, DEFAULT_APP_DATABASE_URL } from "./config.js";
+import { appDatabaseUrlConfig } from "./config.js";
 import { AppDatabaseConnectionError } from "./errors.js";
 import { appSchema } from "./schema.js";
 
 export interface AppDatabaseService {
   readonly authDb: NodePgDatabase<typeof authSchema>;
-  readonly db: NodePgDatabase<typeof appSchema>;
   readonly pool: Pool;
 }
 
@@ -38,7 +37,6 @@ export class AppDatabase extends Effect.Service<AppDatabase>()(
 
       return {
         authDb: drizzle(pool, { schema: authSchema }),
-        db: drizzle(pool, { schema: appSchema }),
         pool,
       };
     }),
@@ -47,12 +45,14 @@ export class AppDatabase extends Effect.Service<AppDatabase>()(
 
 export const AppDatabaseLive = AppDatabase.Default;
 
-export const AppEffectSqlLive = PgClient.layerConfig(
-  Config.all({
-    url: appDatabaseUrlConfig.pipe(
-      Config.map((url) => Redacted.make(url)),
-      Config.withDefault(Redacted.make(DEFAULT_APP_DATABASE_URL))
-    ),
+export const AppEffectSqlLive = Layer.unwrapEffect(
+  Effect.gen(function* AppEffectSqlLiveLayer() {
+    const { pool } = yield* AppDatabase;
+
+    return PgClient.layerFromPool({
+      // AppDatabase owns the pool lifecycle; the SQL client only borrows it.
+      acquire: Effect.acquireRelease(Effect.succeed(pool), () => Effect.void),
+    });
   })
 );
 
@@ -72,3 +72,9 @@ export const AppEffectDrizzleLive = Layer.effect(
   AppEffectDrizzle,
   makeAppEffectDrizzle.pipe(Effect.map((db) => ({ db })))
 ).pipe(Layer.provide(AppEffectSqlLive));
+
+export const AppDatabaseRuntimeLive = Layer.mergeAll(
+  AppDatabaseLive,
+  AppEffectSqlLive,
+  AppEffectDrizzleLive
+);
