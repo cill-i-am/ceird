@@ -7,6 +7,7 @@ import {
   Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Link } from "@tanstack/react-router";
 
 import {
   DropdownMenu,
@@ -43,9 +44,9 @@ export function NavProjects({
           <SidebarMenuItem key={item.name}>
             <SidebarMenuButton
               render={
-                <a href={item.url}>
+                <Link to={item.url}>
                   <span className="sr-only">{item.name}</span>
-                </a>
+                </Link>
               }
             >
               {item.icon}

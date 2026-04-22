@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 import { APP_ORIGIN } from "../test-urls";
+import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
 export class CreateOrganizationPage {
   readonly page: Page;
@@ -23,5 +24,6 @@ export class CreateOrganizationPage {
   async expectLoaded() {
     await expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`);
     await expect(this.heading).toBeVisible();
+    await waitForSubmitHydration(this.page);
   }
 }

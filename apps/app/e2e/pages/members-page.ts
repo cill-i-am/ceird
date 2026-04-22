@@ -12,8 +12,9 @@ export class MembersPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.locator('[data-slot="card-title"]', {
-      hasText: "Members",
+    this.heading = page.getByRole("heading", {
+      level: 1,
+      name: /Invite the people who keep the work moving/i,
     });
     this.email = page.getByLabel("Email", { exact: true });
     this.role = page.getByLabel("Role", { exact: true });

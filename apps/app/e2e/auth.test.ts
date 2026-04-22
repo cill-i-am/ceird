@@ -17,10 +17,13 @@ function createTestSlug(prefix: string): string {
 }
 
 async function expectAuthenticatedHome(page: Page) {
+  const workspaceHome = page.getByRole("main", { name: "Workspace home" });
+
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText(/^Active organization$/)).toBeVisible();
+  await expect(workspaceHome).toBeVisible();
+  await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Invite teammates" })
   ).toBeVisible();
 }
 

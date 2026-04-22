@@ -1,5 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
+import { waitForSubmitHydration } from "./wait-for-submit-hydration";
+
 export class SignupPage {
   private readonly page: Page;
 
@@ -10,7 +12,7 @@ export class SignupPage {
   async goto() {
     await this.page.goto("/signup");
     await this.page.waitForFunction(() => Boolean(window.__TSR_ROUTER__));
-    await this.page.waitForTimeout(1500);
+    await waitForSubmitHydration(this.page);
   }
 
   get heading(): Locator {

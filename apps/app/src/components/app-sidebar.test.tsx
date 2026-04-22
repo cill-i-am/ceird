@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { isValidElement } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
@@ -12,8 +13,14 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
   return {
     ...actual,
-    Link: (({ children, ...props }: ComponentProps<"a">) => (
-      <a {...props}>{children}</a>
+    Link: (({
+      children,
+      to,
+      ...props
+    }: ComponentProps<"a"> & { to?: string }) => (
+      <a href={to} {...props}>
+        {children}
+      </a>
     )) as typeof actual.Link,
     useNavigate: () => mockedNavigate,
   };
@@ -52,13 +59,22 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
     SidebarMenuButton: (({
       children,
       render: renderProp,
-      ...props
-    }: ComponentProps<"button"> & { render?: ReactNode }) => (
-      <button type="button" data-testid="sidebar-menu-button" {...props}>
-        {renderProp}
-        {children}
-      </button>
-    )) as typeof actual.SidebarMenuButton,
+    }: ComponentProps<"button"> & { render?: ReactNode }) => {
+      if (isValidElement(renderProp)) {
+        return (
+          <div data-testid="sidebar-menu-button">
+            {renderProp}
+            {children}
+          </div>
+        );
+      }
+
+      return (
+        <button type="button" data-testid="sidebar-menu-button">
+          {children}
+        </button>
+      );
+    }) as typeof actual.SidebarMenuButton,
     SidebarMenuItem: (({ children, ...props }: ComponentProps<"div">) => (
       <div data-testid="sidebar-menu-item" {...props}>
         {children}
@@ -92,13 +108,22 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
     SidebarMenuSubButton: (({
       children,
       render: renderProp,
-      ...props
-    }: ComponentProps<"button"> & { render?: ReactNode }) => (
-      <button type="button" data-testid="sidebar-menu-sub-button" {...props}>
-        {renderProp}
-        {children}
-      </button>
-    )) as typeof actual.SidebarMenuSubButton,
+    }: ComponentProps<"button"> & { render?: ReactNode }) => {
+      if (isValidElement(renderProp)) {
+        return (
+          <div data-testid="sidebar-menu-sub-button">
+            {renderProp}
+            {children}
+          </div>
+        );
+      }
+
+      return (
+        <button type="button" data-testid="sidebar-menu-sub-button">
+          {children}
+        </button>
+      );
+    }) as typeof actual.SidebarMenuSubButton,
     SidebarMenuSubItem: (({ children, ...props }: ComponentProps<"div">) => (
       <div data-testid="sidebar-menu-sub-item" {...props}>
         {children}
@@ -152,7 +177,7 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com"
       );
-      expect(screen.getByRole("link", { name: "Members" })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
         "href",
         "/members"
       );
