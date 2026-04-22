@@ -17,7 +17,7 @@
     "@effect/platform-node": "^0.106.0",
     "@effect/sql": "0.51.0",
     "@effect/sql-drizzle": "0.50.0",
-    "@effect/sql-pg": "0.50.0",
+    "@effect/sql-pg": "0.52.1",
     "@task-tracker/identity-core": "workspace:*",
     "@task-tracker/sandbox-core": "workspace:*",
     "better-auth": "1.5.6",
