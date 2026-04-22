@@ -27,10 +27,13 @@ function createForwardedFor() {
 }
 
 async function expectAuthenticatedHome(page: Page) {
+  const workspaceHome = page.getByRole("main", { name: "Workspace home" });
+
   await expect(page).toHaveURL(`${APP_ORIGIN}/`);
-  await expect(page.getByText(/^Active organization$/)).toBeVisible();
+  await expect(workspaceHome).toBeVisible();
+  await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Invite teammates" })
   ).toBeVisible();
 }
 
@@ -383,7 +386,7 @@ test.describe("organization invitations", () => {
       .click();
     await expectAuthenticatedHome(invitedPage);
     await expect(
-      invitedPage.locator('[data-slot="card-title"]', { hasText: "Members" })
+      invitedPage.getByRole("button", { name: "Send invitation" })
     ).not.toBeVisible();
 
     await invitedContext.close();

@@ -19,7 +19,10 @@ export function AuthenticatedShellHome() {
     : "Verification pending";
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 px-4 py-10 sm:py-14">
+    <main
+      aria-label="Workspace home"
+      className="mx-auto flex w-full max-w-5xl flex-1 px-4 py-10 sm:py-14"
+    >
       <div className="flex w-full flex-col gap-6">
         <Card className="w-full">
           <CardHeader className="gap-4">
