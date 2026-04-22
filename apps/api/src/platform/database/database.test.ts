@@ -44,6 +44,7 @@ describe("shared app database effect layers", () => {
         AppEffectDrizzle.pipe(
           Effect.provide(
             AppEffectDrizzleLive.pipe(
+              Layer.provideMerge(AppEffectSqlLive),
               Layer.provide(makeTestAppDatabaseLayer(makeTestPool()))
             )
           ),

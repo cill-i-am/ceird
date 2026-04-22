@@ -71,7 +71,7 @@ export const AppEffectDrizzle = Context.GenericTag<AppEffectDrizzleService>(
 export const AppEffectDrizzleLive = Layer.effect(
   AppEffectDrizzle,
   makeAppEffectDrizzle.pipe(Effect.map((db) => ({ db })))
-).pipe(Layer.provide(AppEffectSqlLive));
+);
 
 export const AppDatabaseRuntimeLive = Layer.mergeAll(
   AppDatabaseLive,
