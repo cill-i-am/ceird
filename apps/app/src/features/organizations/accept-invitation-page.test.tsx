@@ -161,10 +161,21 @@ describe("accept invitation page", () => {
     render(<AcceptInvitationPage invitationId="inv_123" />);
 
     await expect(
-      screen.findByRole("heading", {
-        name: "Continue with the invited account.",
-      })
+      screen.findByRole("heading", { name: "Join Acme Field Ops" })
     ).resolves.toBeInTheDocument();
+    expect(mockedGetInvitation).toHaveBeenCalledWith({
+      query: {
+        id: "inv_123",
+      },
+    });
+    const contextColumn = await screen.findByLabelText("Auth context column");
+    expect(
+      within(contextColumn).getByText("Acme Field Ops")
+    ).toBeInTheDocument();
+    expect(
+      within(contextColumn).getByText("member@example.com")
+    ).toBeInTheDocument();
+    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/login?invitation=inv_123"
@@ -172,7 +183,11 @@ describe("accept invitation page", () => {
     expect(
       screen.getByRole("link", { name: "Create account" })
     ).toHaveAttribute("href", "/signup?invitation=inv_123");
-    expect(mockedGetInvitation).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(
+        "member@example.com will join Acme Field Ops as member."
+      )
+    ).not.toBeInTheDocument();
   }, 10_000);
 
   it("shows invitation details for the authenticated recipient", async () => {
@@ -205,9 +220,12 @@ describe("accept invitation page", () => {
     expect(
       within(contextColumn).getByText("member@example.com")
     ).toBeInTheDocument();
+    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
     expect(
-      screen.getByText("member@example.com will join Acme Field Ops as member.")
-    ).toBeInTheDocument();
+      screen.queryByText(
+        "member@example.com will join Acme Field Ops as member."
+      )
+    ).not.toBeInTheDocument();
   }, 10_000);
 
   it("accepts the invitation and returns to the app", async () => {

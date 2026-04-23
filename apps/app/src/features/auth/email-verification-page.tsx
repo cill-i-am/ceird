@@ -20,8 +20,8 @@ export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
   const isInvalidToken = search?.status !== "success";
   const title = isInvalidToken ? "Verification link invalid" : "Email verified";
   const description = isInvalidToken
-    ? "This verification link is invalid or has expired. Request a fresh verification email from the app."
-    : "Your email address is verified. You can continue in the app or sign in again if needed.";
+    ? "This verification link is invalid or has expired."
+    : "Your email address is verified.";
 
   return (
     <EntryShell
@@ -33,33 +33,19 @@ export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
       }
       description={
         isInvalidToken
-          ? "Open the app and request a fresh verification email when you're ready."
-          : "Your account is ready to continue into the app."
+          ? "Request a fresh verification email from the app."
+          : "You can continue into the app."
       }
       supportingContent={
-        <div className="flex flex-col gap-8">
-          <div className="space-y-3">
-            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              Status checkpoint
-            </p>
-            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-              {isInvalidToken
-                ? "Verification links expire. Request the newest email from inside the app before you try again."
-                : "Verified accounts keep sign-in recovery, invitations, and teammate setup moving without extra friction."}
-            </p>
-          </div>
-
-          <ol className="grid gap-4 text-sm/6 text-muted-foreground">
-            <li className="border-t border-border/60 pt-4">
-              1. {isInvalidToken ? "Open the app." : "Continue into the app."}
-            </li>
-            <li className="border-t border-border/60 pt-4">
-              2.{" "}
-              {isInvalidToken
-                ? "Request a fresh verification email."
-                : "Sign in again if you need a fresh session."}
-            </li>
-          </ol>
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            Status
+          </p>
+          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+            {isInvalidToken
+              ? "Use the newest verification email."
+              : "Your account is ready."}
+          </p>
         </div>
       }
     >
@@ -94,8 +80,8 @@ export function EmailVerificationPage({ search }: EmailVerificationPageProps) {
             </EmptyTitle>
             <EmptyDescription>
               {isInvalidToken
-                ? "Open the app and send a new verification email from your account settings or banner."
-                : "Your email is verified. You can continue in the app or sign in again if you need a fresh session."}
+                ? "Open the app and send a new verification email."
+                : "Continue in the app or sign in again if you need a fresh session."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

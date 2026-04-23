@@ -32,6 +32,7 @@ type InvitationPageState =
       readonly status: "loading";
     }
   | {
+      readonly invitation?: InvitationDetails;
       readonly status: "signed-out";
     }
   | {
@@ -92,8 +93,9 @@ function getInvitationCardCopy(
     return {
       badge: "Sign in required",
       title: "Sign in to continue",
-      description:
-        "Continue with the invited email address to review this workspace invitation.",
+      description: invitation
+        ? "Continue with the invited email address to accept this invitation."
+        : "Continue with the invited email address to review this workspace invitation.",
     };
   }
 
@@ -122,8 +124,10 @@ function getInvitationCardCopy(
 
 function InvitationContextContent({
   invitation,
+  signedOut = false,
 }: {
   readonly invitation?: InvitationDetails;
+  readonly signedOut?: boolean;
 }) {
   if (!invitation) {
     return (
@@ -161,9 +165,9 @@ function InvitationContextContent({
           Invitation details
         </p>
         <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-          This invitation will add {invitation.email} to{" "}
-          {invitation.organizationName}. Accept it from the invited account to
-          keep the membership handoff clean.
+          {signedOut
+            ? `Sign in with ${invitation.email} to join ${invitation.organizationName}.`
+            : `This invitation will add ${invitation.email} to ${invitation.organizationName}. Accept it from the invited account to keep the membership handoff clean.`}
         </p>
       </div>
 
@@ -226,12 +230,7 @@ export function AcceptInvitationPage({
         return;
       }
 
-      if (session.error || !session.data) {
-        setState({
-          status: "signed-out",
-        });
-        return;
-      }
+      const isSignedOut = Boolean(session.error || !session.data);
 
       const invitation = await authClient.organization.getInvitation({
         query: {
@@ -244,6 +243,13 @@ export function AcceptInvitationPage({
       }
 
       if (invitation.error || !invitation.data) {
+        if (isSignedOut) {
+          setState({
+            status: "signed-out",
+          });
+          return;
+        }
+
         setState({
           status: "error",
           canSwitchAccount: true,
@@ -252,10 +258,17 @@ export function AcceptInvitationPage({
         return;
       }
 
-      setState({
-        status: "ready",
-        invitation: invitation.data,
-      });
+      setState(
+        isSignedOut
+          ? {
+              status: "signed-out",
+              invitation: invitation.data,
+            }
+          : {
+              status: "ready",
+              invitation: invitation.data,
+            }
+      );
     }
 
     void loadInvitation();
@@ -344,7 +357,12 @@ export function AcceptInvitationPage({
       badge="Invitation"
       title={shellCopy.title}
       description={shellCopy.description}
-      supportingContent={<InvitationContextContent invitation={invitation} />}
+      supportingContent={
+        <InvitationContextContent
+          invitation={invitation}
+          signedOut={state.status === "signed-out"}
+        />
+      }
     >
       <EntrySurfaceCard
         badge={cardCopy.badge}
@@ -399,15 +417,6 @@ export function AcceptInvitationPage({
               Create account
             </Link>
           </div>
-        ) : null}
-
-        {invitation ? (
-          <Alert className="bg-muted/35">
-            <AlertDescription>
-              {invitation.email} will join {invitation.organizationName} as{" "}
-              {invitation.role}.
-            </AlertDescription>
-          </Alert>
         ) : null}
 
         {state.status === "error" || state.status === "switching-account" ? (

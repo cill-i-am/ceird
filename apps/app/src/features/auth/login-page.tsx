@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
@@ -21,6 +21,9 @@ import {
 } from "./auth-navigation";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const quietLinkClassName =
+  "text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none";
 
 export function LoginPage({
   search,
@@ -126,10 +129,7 @@ export function LoginPage({
           <div className="flex flex-col items-start gap-2 text-sm/6 text-muted-foreground">
             <Link
               {...getForgotPasswordNavigationTarget(search?.invitation)}
-              className={buttonVariants({
-                variant: "link",
-                className: "h-auto p-0 text-muted-foreground",
-              })}
+              className={quietLinkClassName}
             >
               Forgot password?
             </Link>
@@ -139,10 +139,7 @@ export function LoginPage({
                 : "Need an account? "}
               <Link
                 {...getSignupNavigationTarget(search?.invitation)}
-                className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto p-0",
-                })}
+                className={quietLinkClassName}
               >
                 Create one
               </Link>

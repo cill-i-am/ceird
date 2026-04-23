@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -23,6 +23,9 @@ import {
 } from "./auth-navigation";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const quietLinkClassName =
+  "text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none";
 
 export function SignupPage({
   search,
@@ -137,10 +140,7 @@ export function SignupPage({
               Already have an account?{" "}
               <Link
                 {...getLoginNavigationTarget(search?.invitation)}
-                className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto justify-start p-0",
-                })}
+                className={quietLinkClassName}
               >
                 Sign in
               </Link>

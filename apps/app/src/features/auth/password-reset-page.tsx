@@ -40,6 +40,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
   );
   const { invitation, token } = normalizedSearch;
   const isInvitationFlow = Boolean(invitation);
+  const recoveryContext = isInvitationFlow
+    ? "This will return you to the invitation."
+    : "You'll sign in again with the new password.";
 
   const form = useForm({
     defaultValues: {
@@ -96,34 +99,15 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
       <EntryShell
         badge={isInvitationFlow ? "Invitation support" : "Password reset"}
         title="This reset link isn't valid anymore."
-        description="Request a fresh link, then come back with a new password."
+        description="Request a fresh reset link."
         supportingContent={
-          <div className="flex flex-col gap-8">
-            <div className="space-y-3">
-              <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                Recovery checkpoint
-              </p>
-              <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-                {isInvitationFlow
-                  ? "A fresh reset link will send you back through the invited account flow once you set a new password."
-                  : "Reset links expire. Request a new one to get back into the app safely."}
-              </p>
-            </div>
-
-            <ol className="grid gap-4 text-sm/6 text-muted-foreground">
-              <li className="border-t border-border/60 pt-4">
-                1. Request the newest reset email.
-              </li>
-              <li className="border-t border-border/60 pt-4">
-                2. Open the fresh link instead of an older email.
-              </li>
-              <li className="border-t border-border/60 pt-4">
-                3.{" "}
-                {isInvitationFlow
-                  ? "Continue back to the invitation."
-                  : "Sign in with the new password."}
-              </li>
-            </ol>
+          <div className="space-y-3">
+            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              Link expired
+            </p>
+            <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+              Open the newest reset email instead of an older one.
+            </p>
           </div>
         }
       >
@@ -171,45 +155,15 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
     <EntryShell
       badge={isInvitationFlow ? "Invitation support" : "Password reset"}
       title="Choose a new password."
-      description={
-        isInvitationFlow
-          ? "Save a new password, then continue back into the invitation flow."
-          : "Save a new password, then sign back into the app."
-      }
+      description="Save it to continue."
       supportingContent={
-        <div className="flex flex-col gap-8">
-          <div className="space-y-3">
-            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              Finish recovery
-            </p>
-            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-              {isInvitationFlow
-                ? "Use a new password for the invited account, then continue right back to the workspace invitation."
-                : "Choose a password you can reuse confidently the next time you sign in."}
-            </p>
-          </div>
-
-          <dl className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-1 border-t border-border/60 pt-4">
-              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                Password rule
-              </dt>
-              <dd className="text-sm/6 text-muted-foreground">
-                Use at least 8 characters.
-              </dd>
-            </div>
-
-            <div className="space-y-1 border-t border-border/60 pt-4">
-              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                After save
-              </dt>
-              <dd className="text-sm/6 text-muted-foreground">
-                {isInvitationFlow
-                  ? "You'll return to sign in and continue the invitation."
-                  : "You'll return to sign in with the new password."}
-              </dd>
-            </div>
-          </dl>
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            Recovery
+          </p>
+          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+            {recoveryContext}
+          </p>
         </div>
       }
     >
@@ -217,7 +171,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
         badge="Choose a new password"
         className="max-w-lg"
         title="Reset password"
-        description="Choose a new password to finish signing in."
+        description="Use 8 or more characters."
         footer={
           <Link
             {...getLoginNavigationTarget(invitation)}

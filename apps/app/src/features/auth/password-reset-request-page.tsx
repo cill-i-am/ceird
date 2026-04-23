@@ -42,17 +42,19 @@ export function PasswordResetRequestPage({
     search?.invitation
   );
   const isInvitationFlow = Boolean(search?.invitation);
-  let shellDescription =
-    "We'll send a reset link so you can choose a new password and get back in.";
+  let shellDescription = "We'll send one reset link.";
+  let contextDescription = "Use the email tied to your account.";
 
   if (isInvitationFlow && isSubmitted) {
-    shellDescription =
-      "Use the latest reset email, then continue back into the invitation flow.";
+    shellDescription = "Open the latest reset email to continue.";
+    contextDescription =
+      "The newest email will bring you back to the invitation.";
   } else if (isInvitationFlow) {
-    shellDescription =
-      "Request a new reset link for the invited account and keep the handoff moving.";
+    shellDescription = "Use the invited account email.";
+    contextDescription = "Send the reset link to the invited email address.";
   } else if (isSubmitted) {
-    shellDescription = "Use the latest reset email to choose a new password.";
+    shellDescription = "Open the latest reset email to continue.";
+    contextDescription = "Use the newest email in your inbox.";
   }
   const form = useForm({
     defaultValues: {
@@ -96,32 +98,13 @@ export function PasswordResetRequestPage({
       title={isSubmitted ? "Check your email." : "Reset your password."}
       description={shellDescription}
       supportingContent={
-        <div className="flex flex-col gap-8">
-          <div className="space-y-3">
-            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              {isSubmitted ? "What to do next" : "Recovery flow"}
-            </p>
-            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-              {isInvitationFlow
-                ? "The reset link will bring you back through the invited account flow, so you can finish the setup with the right email."
-                : "Reset links are the fastest way back into the app when you can't sign in with your current password."}
-            </p>
-          </div>
-
-          <ol className="grid gap-4 text-sm/6 text-muted-foreground">
-            <li className="border-t border-border/60 pt-4">
-              1. Check your inbox for the newest reset email.
-            </li>
-            <li className="border-t border-border/60 pt-4">
-              2. Open the link and choose a fresh password.
-            </li>
-            <li className="border-t border-border/60 pt-4">
-              3.{" "}
-              {isInvitationFlow
-                ? "Continue back to the invitation."
-                : "Sign back into the app."}
-            </li>
-          </ol>
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            {isSubmitted ? "Next" : "Reset link"}
+          </p>
+          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+            {contextDescription}
+          </p>
         </div>
       }
     >
@@ -131,8 +114,8 @@ export function PasswordResetRequestPage({
         title={isSubmitted ? "Check your email" : "Forgot password?"}
         description={
           isSubmitted
-            ? "Use the reset link in your inbox to continue."
-            : "Enter your email and we'll send you a reset link."
+            ? "Use the reset link in your inbox."
+            : "Enter your email."
         }
         footer={
           <Link
@@ -150,8 +133,7 @@ export function PasswordResetRequestPage({
       >
         {isInvitationFlow && !isSubmitted ? (
           <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
-            Use the email address tied to the invitation so you can continue the
-            handoff once the reset is complete.
+            Send the link to the invited email address.
           </div>
         ) : null}
 

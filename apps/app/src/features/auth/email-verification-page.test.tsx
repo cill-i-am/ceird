@@ -38,9 +38,7 @@ describe("email verification page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      screen.getByText("This verification link is invalid or has expired.")
     ).toBeInTheDocument();
 
     const appLink = screen.getByRole("link", { name: "Go to the app" });
@@ -60,9 +58,7 @@ describe("email verification page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Email verified")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Your email address is verified. You can continue in the app or sign in again if needed."
-      )
+      screen.getByText("Your email address is verified.")
     ).toBeInTheDocument();
   }, 10_000);
 
@@ -76,9 +72,7 @@ describe("email verification page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      screen.getByText("This verification link is invalid or has expired.")
     ).toBeInTheDocument();
   }, 10_000);
 });
