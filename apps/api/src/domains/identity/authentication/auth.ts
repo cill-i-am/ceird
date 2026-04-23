@@ -6,6 +6,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { organization } from "better-auth/plugins/organization";
+import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
@@ -22,14 +23,111 @@ import type {
 } from "./auth-email.js";
 import { loadAuthenticationConfig, matchesTrustedOrigin } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
-import { authSchema } from "./schema.js";
+import {
+  AuthenticationDatabase,
+  AuthenticationDatabaseLive,
+} from "./database.js";
+import {
+  authSchema,
+  invitation as invitationTable,
+  organization as organizationTable,
+} from "./schema.js";
 
 export { matchesTrustedOrigin } from "./config.js";
 
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
+const PUBLIC_INVITATION_PREVIEW_PATH_PATTERN =
+  /^\/api\/public\/invitations\/([^/]+)\/preview$/;
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
+
+export interface PublicInvitationPreview {
+  readonly email: string;
+  readonly organizationName: string;
+  readonly role: string;
+}
+
+export function maskInvitationEmail(email: string) {
+  const [localPart, domainPart] = email.split("@");
+
+  if (!localPart || !domainPart) {
+    return "***";
+  }
+
+  const [domainLabel, ...domainSuffix] = domainPart.split(".");
+  const maskedDomainLabel = domainLabel ? `${domainLabel[0]}***` : "***";
+
+  return `${localPart[0]}***@${maskedDomainLabel}${domainSuffix.length > 0 ? `.${domainSuffix.join(".")}` : ""}`;
+}
+
+export async function findPublicInvitationPreview(options: {
+  readonly database: NodePgDatabase<typeof authSchema>;
+  readonly invitationId: string;
+  readonly now?: Date;
+}): Promise<PublicInvitationPreview | null> {
+  const rows = await options.database
+    .select({
+      email: invitationTable.email,
+      organizationName: organizationTable.name,
+      role: invitationTable.role,
+    })
+    .from(invitationTable)
+    .innerJoin(
+      organizationTable,
+      eq(invitationTable.organizationId, organizationTable.id)
+    )
+    .where(
+      and(
+        eq(invitationTable.id, options.invitationId),
+        eq(invitationTable.status, "pending"),
+        gt(invitationTable.expiresAt, options.now ?? new Date())
+      )
+    )
+    .limit(1);
+
+  const [preview] = rows;
+
+  if (!preview) {
+    return null;
+  }
+
+  return {
+    email: maskInvitationEmail(preview.email),
+    organizationName: preview.organizationName,
+    role: preview.role,
+  };
+}
+
+function matchPublicInvitationPreviewPath(pathname: string) {
+  const match = PUBLIC_INVITATION_PREVIEW_PATH_PATTERN.exec(pathname);
+  return match?.[1];
+}
+
+function makePublicInvitationPreviewHandler(
+  database: NodePgDatabase<typeof authSchema>
+) {
+  return async (request: Request) => {
+    if (request.method !== "GET") {
+      return new Response(null, { status: 404 });
+    }
+
+    const invitationId = matchPublicInvitationPreviewPath(
+      new URL(request.url).pathname
+    );
+
+    if (!invitationId) {
+      return new Response(null, { status: 404 });
+    }
+
+    const preview = await findPublicInvitationPreview({
+      database,
+      invitationId: decodeURIComponent(invitationId),
+    });
+
+    return Response.json(preview);
+  };
+}
 
 function makePasswordResetDeliveryKey(input: {
   readonly token: string;
@@ -117,18 +215,18 @@ export function createAuthentication(options: {
             });
           },
         },
-        sendInvitationEmail: async (invitation) => {
+        sendInvitationEmail: async (organizationInvitation) => {
           await sendOrganizationInvitationEmail({
-            deliveryKey: `organization-invitation/${invitation.id}`,
+            deliveryKey: `organization-invitation/${organizationInvitation.id}`,
             invitationUrl: new URL(
-              `/accept-invitation/${invitation.id}`,
+              `/accept-invitation/${organizationInvitation.id}`,
               options.appOrigin
             ).toString(),
-            inviterEmail: invitation.inviter.user.email,
-            organizationName: invitation.organization.name,
-            recipientEmail: invitation.email,
-            recipientName: invitation.email,
-            role: invitation.role,
+            inviterEmail: organizationInvitation.inviter.user.email,
+            organizationName: organizationInvitation.organization.name,
+            recipientEmail: organizationInvitation.email,
+            recipientName: organizationInvitation.email,
+            role: organizationInvitation.role,
           } as const satisfies OrganizationInvitationEmailInput);
         },
       }),
@@ -352,6 +450,7 @@ export class Authentication extends Effect.Service<Authentication>()(
 export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
   Effect.gen(function* mountAuthenticationHttp() {
     const auth = yield* Authentication;
+    const { db } = yield* AuthenticationDatabase;
     const config = yield* loadAuthenticationConfig;
 
     // Effect strips mount prefixes by default. Better Auth expects to receive
@@ -365,5 +464,21 @@ export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
         includePrefix: true,
       }
     );
+
+    yield* router.mountApp(
+      "/api/public",
+      HttpApp.fromWebHandler(
+        withAuthenticationCors(
+          makePublicInvitationPreviewHandler(db),
+          config.trustedOrigins
+        )
+      ),
+      {
+        includePrefix: true,
+      }
+    );
   })
-).pipe(Layer.provide(Authentication.Default));
+).pipe(
+  Layer.provide(Authentication.Default),
+  Layer.provide(AuthenticationDatabaseLive)
+);

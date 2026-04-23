@@ -14,7 +14,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect } from "effect";
 import { Pool } from "pg";
 
-import { createAuthentication, matchesTrustedOrigin } from "./auth.js";
+import {
+  createAuthentication,
+  maskInvitationEmail,
+  matchesTrustedOrigin,
+} from "./auth.js";
 import {
   DEFAULT_AUTH_DATABASE_URL,
   loadAuthenticationConfig,
@@ -246,6 +250,12 @@ describe("auth schema", () => {
 });
 
 describe("createAuthentication()", () => {
+  it("masks invitation emails for the public preview route", () => {
+    expect(maskInvitationEmail("member@example.com")).toBe("m***@e***.com");
+    expect(maskInvitationEmail("a@b.co")).toBe("a***@b***.co");
+    expect(maskInvitationEmail("invalid-email")).toBe("***");
+  }, 10_000);
+
   it("configures organization invitation delivery through the Better Auth organization plugin", async () => {
     const sentInvitationEmails: unknown[] = [];
     const pool = new Pool({

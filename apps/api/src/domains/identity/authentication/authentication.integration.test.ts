@@ -16,7 +16,7 @@ import {
   withPool,
 } from "../../../platform/database/test-database.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
-import { createAuthentication } from "./auth.js";
+import { createAuthentication, findPublicInvitationPreview } from "./auth.js";
 import {
   DEFAULT_AUTH_DATABASE_URL,
   DEFAULT_AUTH_BASE_PATH,
@@ -638,6 +638,7 @@ describe("authentication integration", () => {
     cleanup.push(() => authPool.end());
 
     const sentInvitationEmails: unknown[] = [];
+    const database = drizzle(authPool, { schema: authSchema });
     const auth = createAuthentication({
       appOrigin: "http://127.0.0.1:4173",
       backgroundTaskHandler: async (task) => {
@@ -648,7 +649,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database,
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: () => {},
       sendOrganizationInvitationEmail: (input) => {
@@ -720,6 +721,17 @@ describe("authentication integration", () => {
       }),
     ]);
 
+    await expect(
+      findPublicInvitationPreview({
+        database,
+        invitationId: invitation.id,
+      })
+    ).resolves.toStrictEqual({
+      email: "m***@e***.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
+
     const invitedCookieJar = new Map<string, string>();
     const invitedSignUpResponse = await auth.handler(
       makeJsonRequest("/sign-up/email", {
@@ -756,6 +768,13 @@ describe("authentication integration", () => {
     expect(invitedSession.session?.activeOrganizationId).toBe(
       createdOrganization.id
     );
+
+    await expect(
+      findPublicInvitationPreview({
+        database,
+        invitationId: invitation.id,
+      })
+    ).resolves.toBeNull();
   }, 30_000);
 
   it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, reset callback handoff, session revocation, and rate limiting", async (context: {

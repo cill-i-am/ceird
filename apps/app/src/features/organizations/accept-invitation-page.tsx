@@ -9,7 +9,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "#/components/ui/empty";
-import { authClient } from "#/lib/auth-client";
+import { authClient, getPublicInvitationPreview } from "#/lib/auth-client";
 
 import {
   getLoginNavigationTarget,
@@ -19,12 +19,15 @@ import { EntryShell, EntrySurfaceCard } from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
 
-interface InvitationDetails {
+interface InvitationPreviewDetails {
   readonly email: string;
-  readonly id: string;
-  readonly inviterEmail: string;
   readonly organizationName: string;
   readonly role: string;
+}
+
+interface InvitationDetails extends InvitationPreviewDetails {
+  readonly id: string;
+  readonly inviterEmail: string;
 }
 
 type InvitationPageState =
@@ -32,7 +35,7 @@ type InvitationPageState =
       readonly status: "loading";
     }
   | {
-      readonly invitation?: InvitationDetails;
+      readonly invitation?: InvitationPreviewDetails;
       readonly status: "signed-out";
     }
   | {
@@ -61,7 +64,7 @@ const INVITATION_ACCEPT_ERROR_MESSAGE =
 
 function getInvitationShellCopy(
   state: InvitationPageState,
-  invitation?: InvitationDetails
+  invitation?: InvitationPreviewDetails | InvitationDetails
 ) {
   if (invitation) {
     return {
@@ -87,7 +90,7 @@ function getInvitationShellCopy(
 
 function getInvitationCardCopy(
   state: InvitationPageState,
-  invitation?: InvitationDetails
+  invitation?: InvitationPreviewDetails | InvitationDetails
 ) {
   if (state.status === "signed-out") {
     return {
@@ -126,7 +129,7 @@ function InvitationContextContent({
   invitation,
   signedOut = false,
 }: {
-  readonly invitation?: InvitationDetails;
+  readonly invitation?: InvitationPreviewDetails | InvitationDetails;
   readonly signedOut?: boolean;
 }) {
   if (!invitation) {
@@ -197,14 +200,16 @@ function InvitationContextContent({
           <dd className="text-sm/6 text-muted-foreground">{invitation.role}</dd>
         </div>
 
-        <div className="space-y-1 border-t border-border/60 pt-4">
-          <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-            Invited by
-          </dt>
-          <dd className="text-sm/6 text-muted-foreground">
-            {invitation.inviterEmail}
-          </dd>
-        </div>
+        {"inviterEmail" in invitation ? (
+          <div className="space-y-1 border-t border-border/60 pt-4">
+            <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              Invited by
+            </dt>
+            <dd className="text-sm/6 text-muted-foreground">
+              {invitation.inviterEmail}
+            </dd>
+          </div>
+        ) : null}
       </dl>
     </div>
   );
@@ -232,6 +237,32 @@ export function AcceptInvitationPage({
 
       const isSignedOut = Boolean(session.error || !session.data);
 
+      if (isSignedOut) {
+        let preview: InvitationPreviewDetails | null = null;
+
+        try {
+          preview = await getPublicInvitationPreview(invitationId);
+        } catch {
+          preview = null;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setState(
+          preview
+            ? {
+                status: "signed-out",
+                invitation: preview,
+              }
+            : {
+                status: "signed-out",
+              }
+        );
+        return;
+      }
+
       const invitation = await authClient.organization.getInvitation({
         query: {
           id: invitationId,
@@ -243,13 +274,6 @@ export function AcceptInvitationPage({
       }
 
       if (invitation.error || !invitation.data) {
-        if (isSignedOut) {
-          setState({
-            status: "signed-out",
-          });
-          return;
-        }
-
         setState({
           status: "error",
           canSwitchAccount: true,
@@ -258,17 +282,10 @@ export function AcceptInvitationPage({
         return;
       }
 
-      setState(
-        isSignedOut
-          ? {
-              status: "signed-out",
-              invitation: invitation.data,
-            }
-          : {
-              status: "ready",
-              invitation: invitation.data,
-            }
-      );
+      setState({
+        status: "ready",
+        invitation: invitation.data,
+      });
     }
 
     void loadInvitation();
