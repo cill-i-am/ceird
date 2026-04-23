@@ -274,9 +274,10 @@ test.describe("auth pages", () => {
       page.locator('[data-slot="card-title"]', { hasText: "Email verified" })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "Your email address is verified. You can continue in the app or sign in again if needed."
-      )
+      page.getByText("Your email address is verified.", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("You can continue safely", { exact: true })
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Go to the app" })
@@ -308,9 +309,12 @@ test.describe("auth pages", () => {
       })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      page.getByText("This verification link is invalid or has expired.", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Request a fresh verification email", { exact: true })
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Back to login" })
