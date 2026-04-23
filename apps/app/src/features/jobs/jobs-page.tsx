@@ -11,6 +11,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type { JobPriority } from "@task-tracker/jobs-core";
+import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
@@ -82,6 +83,7 @@ const STATUS_LABELS = {
   new: "New",
   triaged: "Triaged",
 } as const;
+const JOBS_COMPACT_WORKSPACE_BREAKPOINT = 1280;
 
 export function JobsPage({
   activeOrganizationName,
@@ -100,6 +102,7 @@ export function JobsPage({
   const summary = useAtomValue(jobsSummaryAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
+  const isCompactWorkspace = useJobsCompactWorkspace();
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
@@ -547,23 +550,53 @@ export function JobsPage({
         />
       </section>
 
-      <div className="hidden xl:grid xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start xl:gap-6">
-        {queuePanel}
-        <div className="sticky top-6">{mapPanel}</div>
-      </div>
-
-      <Tabs defaultValue="queue" className="xl:hidden">
-        <TabsList variant="line">
-          <TabsTrigger value="queue">Queue</TabsTrigger>
-          <TabsTrigger value="map">Coverage map</TabsTrigger>
-        </TabsList>
-        <TabsContent value="queue">{queuePanel}</TabsContent>
-        <TabsContent value="map">{mapPanel}</TabsContent>
-      </Tabs>
+      {isCompactWorkspace ? (
+        <Tabs defaultValue="queue" className="gap-4">
+          <TabsList variant="line">
+            <TabsTrigger value="queue">Queue</TabsTrigger>
+            <TabsTrigger value="map">Coverage map</TabsTrigger>
+          </TabsList>
+          <TabsContent value="queue">{queuePanel}</TabsContent>
+          <TabsContent value="map">{mapPanel}</TabsContent>
+        </Tabs>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start">
+          {queuePanel}
+          <div className="sticky top-6">{mapPanel}</div>
+        </div>
+      )}
 
       {children}
     </main>
   );
+}
+
+function useJobsCompactWorkspace() {
+  return React.useSyncExternalStore(
+    subscribeToJobsCompactWorkspace,
+    getJobsCompactWorkspaceSnapshot,
+    () => false
+  );
+}
+
+function subscribeToJobsCompactWorkspace(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => null;
+  }
+
+  window.addEventListener("resize", onStoreChange);
+
+  return () => {
+    window.removeEventListener("resize", onStoreChange);
+  };
+}
+
+function getJobsCompactWorkspaceSnapshot() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.innerWidth < JOBS_COMPACT_WORKSPACE_BREAKPOINT;
 }
 
 function FilterSelect({

@@ -7,7 +7,7 @@ import type {
   UserIdType,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
@@ -26,6 +26,7 @@ const regionNorthId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
 const regionWestId = "44444444-4444-4444-8444-444444444444" as RegionIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
+const originalInnerWidth = window.innerWidth;
 
 const initialList: JobListResponse = {
   items: [
@@ -146,6 +147,10 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 });
 
 describe("jobs page", () => {
+  afterEach(() => {
+    setViewportWidth(originalInnerWidth);
+  });
+
   it(
     "defaults to the active view and can reveal completed jobs",
     {
@@ -194,6 +199,47 @@ describe("jobs page", () => {
       expect(
         within(queuePanel).getAllByText("Canceled visit").length
       ).toBeGreaterThan(0);
+    }
+  );
+
+  it(
+    "mounts a single desktop workspace shell",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      renderJobsPage({ viewportWidth: 1280 });
+
+      expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
+
+      return waitFor(() => {
+        expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
+        expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      });
+    }
+  );
+
+  it(
+    "keeps the compact tabs shell just below the xl breakpoint",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({ viewportWidth: 1279 });
+
+      expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
+      expect(
+        screen.queryByTestId("jobs-coverage-panel")
+      ).not.toBeInTheDocument();
+      await screen.findByRole("tablist");
+
+      await user.click(screen.getByRole("tab", { name: /coverage map/i }));
+
+      await waitFor(() => {
+        expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
+      });
     }
   );
 
@@ -341,7 +387,12 @@ function getPrimaryQueuePanel() {
   return queuePanel;
 }
 
-function renderJobsPage(options?: { readonly viewer?: JobsViewer }) {
+function renderJobsPage(options?: {
+  readonly viewer?: JobsViewer;
+  readonly viewportWidth?: number;
+}) {
+  setViewportWidth(options?.viewportWidth ?? 1440);
+
   return render(
     <RegistryProvider
       initialValues={[
@@ -360,4 +411,13 @@ function renderJobsPage(options?: { readonly viewer?: JobsViewer }) {
       />
     </RegistryProvider>
   );
+}
+
+function setViewportWidth(value: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value,
+    writable: true,
+  });
+  window.dispatchEvent(new Event("resize"));
 }
