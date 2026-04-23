@@ -1,7 +1,5 @@
 "use client";
 
-import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 
 import { SearchForm } from "#/components/search-form";
@@ -14,44 +12,42 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "#/components/ui/breadcrumb";
-import { Button } from "#/components/ui/button";
-import { Separator } from "#/components/ui/separator";
-import { useSidebar } from "#/components/ui/sidebar";
+import { SidebarTrigger } from "#/components/ui/sidebar";
 
 export function SiteHeader() {
-  const { toggleSidebar } = useSidebar();
-
   return (
-    <header className="sticky top-0 z-50 flex w-full items-center border-b bg-background">
-      <div className="flex h-(--header-height) w-full items-center gap-3 px-3 sm:px-4">
-        <Button
-          className="size-11 sm:size-9"
-          variant="ghost"
-          size="icon"
-          aria-label="Toggle navigation"
-          onClick={toggleSidebar}
-        >
-          <HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={2} />
-        </Button>
-        <Separator
-          orientation="vertical"
-          className="hidden sm:block data-vertical:h-5 data-vertical:self-auto"
-        />
-        <Breadcrumb className="hidden sm:block">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink render={<Link to="/" />}>
-                Task Tracker
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Your work</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <SearchForm className="min-w-0 flex-1 sm:ml-auto sm:max-w-xs sm:flex-none" />
-        <ThemeToggle />
+    <header className="sticky top-0 z-40 flex w-full items-center border-b border-border/60 bg-background/90 backdrop-blur">
+      <div className="flex h-(--header-height) w-full items-center gap-3 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <SidebarTrigger
+            className="size-10 rounded-[calc(var(--radius)*2.2)] border border-border/70 bg-background/80 sm:size-8"
+            aria-label="Toggle navigation"
+          />
+          <div className="min-w-0">
+            <p className="text-[0.68rem] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              Workspace
+            </p>
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink render={<Link to="/" />}>
+                    Task Tracker
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>Your work</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        </div>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <SearchForm className="hidden min-w-0 flex-1 md:block md:w-[min(100%,17rem)]" />
+          <div className="shrink-0">
+            <ThemeToggle />
+          </div>
+        </div>
       </div>
     </header>
   );

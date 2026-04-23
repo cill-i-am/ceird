@@ -23,6 +23,17 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       </a>
     )) as typeof actual.Link,
     useNavigate: () => mockedNavigate,
+    useRouterState: ((options?: {
+      select?: (state: { location: { pathname: string } }) => unknown;
+    }) => {
+      const state = {
+        location: {
+          pathname: "/",
+        },
+      };
+
+      return options?.select ? options.select(state) : state;
+    }) as typeof actual.useRouterState,
   };
 });
 

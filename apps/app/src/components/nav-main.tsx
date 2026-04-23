@@ -1,6 +1,6 @@
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 
 import {
   Collapsible,
@@ -33,17 +33,34 @@ export function NavMain({
     }[];
   }[];
 }) {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+
+  function isCurrentPath(url: string) {
+    if (url === "/") {
+      return pathname === "/";
+    }
+
+    return pathname === url || pathname.startsWith(`${url}/`);
+  }
+
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+    <SidebarGroup className="gap-2 pt-0">
+      <SidebarGroupLabel>Workspace</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible
             key={item.title}
-            defaultOpen={item.isActive}
+            defaultOpen={
+              item.items?.length ? isCurrentPath(item.url) : undefined
+            }
             render={<SidebarMenuItem />}
           >
             <SidebarMenuButton
+              isActive={isCurrentPath(item.url)}
+              size="sm"
+              className="rounded-[calc(var(--radius)*2.1)]"
               tooltip={item.title}
               render={
                 <Link to={item.url}>
@@ -68,6 +85,7 @@ export function NavMain({
                     {item.items?.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
                         <SidebarMenuSubButton
+                          isActive={isCurrentPath(subItem.url)}
                           render={
                             <Link to={subItem.url}>
                               <span className="sr-only">{subItem.title}</span>
