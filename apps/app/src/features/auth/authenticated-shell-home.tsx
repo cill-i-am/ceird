@@ -24,17 +24,24 @@ export function AuthenticatedShellHome() {
   const verificationLabel = session.user.emailVerified
     ? "Email verified"
     : "Verification pending";
-  const accessAction = session.user.emailVerified
+  const nextStep = session.user.emailVerified
     ? {
-        href: "/members" as const,
-        label: "Open members",
         status: "Ready",
         title: "Invite the first teammate",
       }
     : {
-        href: "/verify-email" as const,
-        label: "Verify email",
         status: "Pending",
+        title: "Finish account verification",
+      };
+  const verificationAction = session.user.emailVerified
+    ? {
+        description:
+          "Email verification is complete and ready for teammate follow-through.",
+        title: "Account trust is in place",
+      }
+    : {
+        description:
+          "Use the latest verification email before the workspace expands.",
         title: "Finish account verification",
       };
 
@@ -75,8 +82,8 @@ export function AuthenticatedShellHome() {
         />
         <AppStatusStripItem
           label="Next step"
-          value={accessAction.title}
-          meta={accessAction.status}
+          value={nextStep.title}
+          meta={nextStep.status}
         />
         <AppStatusStripItem
           label="System"
@@ -121,8 +128,8 @@ export function AuthenticatedShellHome() {
             <AppRowListItem>
               <AppRowListLeading aria-hidden="true">02</AppRowListLeading>
               <AppRowListBody
-                title={accessAction.title}
-                description="Keep account trust in place before the workspace expands."
+                title={verificationAction.title}
+                description={verificationAction.description}
               />
               <AppRowListMeta>
                 <Badge
@@ -130,17 +137,6 @@ export function AuthenticatedShellHome() {
                 >
                   {verificationLabel}
                 </Badge>
-                {session.user.emailVerified ? null : (
-                  <Link
-                    to={accessAction.href}
-                    className={buttonVariants({
-                      variant: "ghost",
-                      size: "sm",
-                    })}
-                  >
-                    {accessAction.label}
-                  </Link>
-                )}
               </AppRowListMeta>
             </AppRowListItem>
             <AppRowListItem>
@@ -179,7 +175,7 @@ export function AuthenticatedShellHome() {
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Recommended next move</dt>
-              <dd className="font-medium">{accessAction.title}</dd>
+              <dd className="font-medium">{nextStep.title}</dd>
             </div>
           </dl>
           <div className="flex flex-col gap-3 border-t border-border/60 pt-4">

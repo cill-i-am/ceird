@@ -76,6 +76,9 @@ describe("organization members page", () => {
   });
 
   it("loads pending invitations for the active organization", async () => {
+    const longEmail =
+      "very.long.project.supervisor.address@exampleconstructioncompany.com";
+
     mockedListInvitations.mockResolvedValue({
       data: [
         {
@@ -85,7 +88,7 @@ describe("organization members page", () => {
           status: "accepted",
         },
         {
-          email: "pending@example.com",
+          email: longEmail,
           id: "inv_123",
           role: "member",
           status: "pending",
@@ -100,9 +103,7 @@ describe("organization members page", () => {
     expect(
       screen.getByRole("heading", { name: "Pending invitations" })
     ).toBeVisible();
-    await expect(
-      screen.findByText("pending@example.com")
-    ).resolves.toBeVisible();
+    await expect(screen.findByTitle(longEmail)).resolves.toBeVisible();
     expect(screen.queryByText("accepted@example.com")).not.toBeInTheDocument();
     expect(screen.getAllByText("1 open")).toHaveLength(2);
     expect(mockedListInvitations).toHaveBeenCalledWith({
@@ -113,9 +114,42 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("submits invites for the active organization", async () => {
+    mockedListInvitations
+      .mockResolvedValueOnce({
+        data: [
+          {
+            email: "ops@example.com",
+            id: "inv_existing",
+            role: "member",
+            status: "pending",
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            email: "ops@example.com",
+            id: "inv_existing",
+            role: "member",
+            status: "pending",
+          },
+          {
+            email: "member@example.com",
+            id: "inv_456",
+            role: "admin",
+            status: "pending",
+          },
+        ],
+        error: null,
+      });
+
     const user = userEvent.setup();
 
     render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+
+    await expect(screen.findByText("ops@example.com")).resolves.toBeVisible();
+    expect(screen.getAllByText("1 open")).toHaveLength(2);
 
     await user.type(screen.getByLabelText("Email"), "member@example.com");
     await user.selectOptions(screen.getByLabelText("Role"), "admin");
@@ -131,6 +165,23 @@ describe("organization members page", () => {
     await expect(
       screen.findByText("Invitation sent to member@example.com.")
     ).resolves.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedListInvitations).toHaveBeenCalledTimes(2);
+    });
+    expect(mockedListInvitations).toHaveBeenNthCalledWith(1, {
+      query: {
+        organizationId: "org_123",
+      },
+    });
+    expect(mockedListInvitations).toHaveBeenNthCalledWith(2, {
+      query: {
+        organizationId: "org_123",
+      },
+    });
+    await expect(
+      screen.findByTitle("member@example.com")
+    ).resolves.toBeVisible();
+    expect(screen.getAllByText("2 open")).toHaveLength(2);
   }, 10_000);
 
   it("shows a safe error when an invite fails", async () => {
@@ -177,5 +228,31 @@ describe("organization members page", () => {
     expect(
       screen.queryByText("No pending invitations yet.")
     ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows the redesigned empty state and zero counts when there are no pending invitations", async () => {
+    mockedListInvitations.mockResolvedValue({
+      data: [
+        {
+          email: "accepted@example.com",
+          id: "inv_accepted",
+          role: "member",
+          status: "accepted",
+        },
+      ],
+      error: null,
+    });
+
+    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+
+    await expect(
+      screen.findByText("No pending invitations yet.")
+    ).resolves.toBeVisible();
+    expect(
+      screen.getByText(
+        "Send the first invite when you're ready to add someone."
+      )
+    ).toBeVisible();
+    expect(screen.getAllByText("0 open")).toHaveLength(2);
   }, 10_000);
 });

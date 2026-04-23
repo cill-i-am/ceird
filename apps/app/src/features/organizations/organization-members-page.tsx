@@ -5,7 +5,6 @@ import * as React from "react";
 import { AppPageHeader } from "#/components/app-page-header";
 import {
   AppRowList,
-  AppRowListBody,
   AppRowListItem,
   AppRowListLeading,
   AppRowListMeta,
@@ -177,10 +176,17 @@ export function OrganizationMembersPage({
             <AppRowListLeading aria-hidden="true">
               {invitation.email.charAt(0).toUpperCase()}
             </AppRowListLeading>
-            <AppRowListBody
-              title={invitation.email}
-              description="Awaiting acceptance from the invited teammate."
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p
+                className="text-sm font-medium break-all text-foreground"
+                title={invitation.email}
+              >
+                {invitation.email}
+              </p>
+              <p className="text-sm/6 text-muted-foreground">
+                Awaiting acceptance from the invited teammate.
+              </p>
+            </div>
             <AppRowListMeta>
               <Badge variant="secondary">
                 {formatRoleLabel(invitation.role)}

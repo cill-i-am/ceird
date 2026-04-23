@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { AuthenticatedShellHome } from "./authenticated-shell-home";
@@ -101,9 +101,15 @@ describe("authenticated shell home", () => {
       expect(
         screen.getByRole("link", { name: /check system health/i })
       ).toHaveAttribute("href", "/health");
+      const nextActions = screen
+        .getByRole("heading", { name: /next actions/i })
+        .closest("section");
+      expect(nextActions).not.toBeNull();
       expect(
-        screen.getByRole("link", { name: /verify email/i })
-      ).toHaveAttribute("href", "/verify-email");
+        within(nextActions as HTMLElement).getByText(
+          /finish account verification/i
+        )
+      ).toBeInTheDocument();
       expect(screen.getAllByText(/verification pending/i)).not.toHaveLength(0);
     }
   );
@@ -137,6 +143,21 @@ describe("authenticated shell home", () => {
       render(<AuthenticatedShellHome />);
 
       expect(screen.getAllByText(/email verified/i)).not.toHaveLength(0);
+      expect(
+        screen.getByText(/account trust is in place/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /verify email/i })
+      ).not.toBeInTheDocument();
+      const nextActions = screen
+        .getByRole("heading", { name: /next actions/i })
+        .closest("section");
+      expect(nextActions).not.toBeNull();
+      expect(
+        within(nextActions as HTMLElement).getByText(
+          /account trust is in place/i
+        )
+      ).toBeInTheDocument();
     }
   );
 });
