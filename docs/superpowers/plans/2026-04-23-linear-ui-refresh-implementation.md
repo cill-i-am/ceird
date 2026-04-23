@@ -1,6 +1,6 @@
 # Linear-Inspired UI Refresh Implementation Plan
 
-> **For agentic workers:** Use `executing-plans` or equivalent task-by-task execution. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rework the app UI so auth and pre-app flows align closely with shadcn `login-02`, the authenticated shell aligns structurally with shadcn `dashboard-01`, and the overall product feels quieter, denser, and more Linear-inspired across both light and dark themes.
 
@@ -21,8 +21,8 @@
 - `apps/app/src/features/auth/auth-split-shell.tsx` — shared split-shell primitive derived from the approved auth direction
 - `apps/app/src/features/auth/auth-context-panel.tsx` — reusable right-column contextual panel for public flows
 - `apps/app/src/features/auth/auth-split-shell.test.tsx` — tests for public auth shell rendering semantics
-- `apps/app/src/components/app-page-header.test.tsx` — unit tests for page header behavior if logic is introduced
-- `apps/app/src/components/app-row-list.test.tsx` — unit tests for reusable row list behavior if logic is introduced
+- `apps/app/src/components/app-page-header.test.tsx` — tests for the compact page-header primitive
+- `apps/app/src/components/app-row-list.test.tsx` — tests for reusable row-list rendering semantics
 
 **Modify:**
 
@@ -43,19 +43,32 @@
 - `apps/app/src/features/organizations/organization-onboarding-page.tsx` — align onboarding with the shared auth/pre-app split shell
 - `apps/app/src/features/auth/authenticated-shell-home.tsx` — replace hero-card composition with page header, status strip, and calmer secondary panel
 - `apps/app/src/features/organizations/organization-members-page.tsx` — replace card-per-row invitation rendering with a denser operational layout
-- `apps/app/src/features/auth/*.test.tsx` — update auth/public page tests for the new structure where assertions are too coupled to previous copy/layout
-- `apps/app/src/features/organizations/*.test.tsx` — update onboarding/invitation/member page tests for the new structure where needed
-- `apps/app/src/components/*.test.tsx` — update shell-component tests impacted by the layout refresh
+- `apps/app/src/features/auth/login-page.test.tsx` — update login expectations for the new auth shell
+- `apps/app/src/features/auth/signup-page.test.tsx` — update signup expectations for the new auth shell
+- `apps/app/src/features/auth/password-reset-request-page.test.tsx` — update reset-request expectations for the new auth shell
+- `apps/app/src/features/auth/password-reset-page.test.tsx` — update reset-completion expectations for the new auth shell
+- `apps/app/src/features/auth/email-verification-page.test.tsx` — update verification expectations for the new auth shell
+- `apps/app/src/features/auth/authenticated-shell-home.test.tsx` — update home-page expectations for the denser signed-in layout
+- `apps/app/src/features/organizations/accept-invitation-page.test.tsx` — update invitation expectations for context-column metadata
+- `apps/app/src/features/organizations/organization-onboarding-page.test.tsx` — update onboarding expectations for the shared split shell
+- `apps/app/src/features/organizations/organization-members-page.test.tsx` — update members-page expectations for row-based invitations
+- `apps/app/src/components/app-layout.test.tsx` — update shell assertions if signed-in layout structure changes
+- `apps/app/src/components/app-sidebar.test.tsx` — update sidebar assertions for the slimmer shell chrome
+- `apps/app/src/components/nav-user.test.tsx` — update user-menu assertions if density or wording changes
 - `apps/app/e2e/auth.test.ts` — refresh selectors and assertions for the updated auth flows
 - `apps/app/e2e/organization-invitations.test.ts` — refresh selectors and assertions for the updated invitation/members flow
-- `apps/app/e2e/pages/*.ts` — update page objects to match the redesigned surfaces
+- `apps/app/e2e/pages/login-page.ts` — update selectors for the redesigned login flow
+- `apps/app/e2e/pages/signup-page.ts` — update selectors for the redesigned signup flow
+- `apps/app/e2e/pages/create-organization-page.ts` — update selectors for redesigned onboarding
+- `apps/app/e2e/pages/members-page.ts` — update selectors for the row-based members surface
+- `apps/app/e2e/pages/wait-for-submit-hydration.ts` — adjust only if hydration timing hooks or selectors change
 
 ## Task 1: Retune The Global Visual System
 
 **Files:**
 
 - Modify: `apps/app/src/styles.css`
-- Modify: `apps/app/src/components/ui/card.tsx` if required
+- Modify: `apps/app/src/components/ui/card.tsx` only if token changes alone are not enough
 
 - [ ] **Step 1: Review the current theme tokens and identify the minimum token shifts needed**
 
@@ -81,8 +94,10 @@ Implement:
 
 - [ ] **Step 3: Audit focused-surface styling**
 
-Only if needed, update the shared card styling so intentionally isolated surfaces
-like auth forms or utility panels feel sharp and consistent with the new system.
+If token changes alone are not enough, update the shared card styling so
+intentionally isolated surfaces like auth forms or utility panels feel sharp
+and consistent with the new system. If the token changes already produce the
+right feel, leave `apps/app/src/components/ui/card.tsx` unchanged.
 
 - [ ] **Step 4: Run targeted checks**
 
@@ -164,7 +179,13 @@ git commit -m "feat(app): add shared auth split shell"
 - Modify: `apps/app/src/features/auth/email-verification-page.tsx`
 - Modify: `apps/app/src/features/organizations/accept-invitation-page.tsx`
 - Modify: `apps/app/src/features/organizations/organization-onboarding-page.tsx`
-- Modify: related page tests
+- Modify: `apps/app/src/features/auth/login-page.test.tsx`
+- Modify: `apps/app/src/features/auth/signup-page.test.tsx`
+- Modify: `apps/app/src/features/auth/password-reset-request-page.test.tsx`
+- Modify: `apps/app/src/features/auth/password-reset-page.test.tsx`
+- Modify: `apps/app/src/features/auth/email-verification-page.test.tsx`
+- Modify: `apps/app/src/features/organizations/accept-invitation-page.test.tsx`
+- Modify: `apps/app/src/features/organizations/organization-onboarding-page.test.tsx`
 
 - [ ] **Step 1: Migrate login and signup**
 
@@ -222,7 +243,8 @@ git commit -m "feat(app): refresh auth and onboarding flows"
 - Create: `apps/app/src/components/app-status-strip.tsx`
 - Create: `apps/app/src/components/app-utility-panel.tsx`
 - Create: `apps/app/src/components/app-row-list.tsx`
-- Create: related tests as needed
+- Create: `apps/app/src/components/app-page-header.test.tsx`
+- Create: `apps/app/src/components/app-row-list.test.tsx`
 - Modify: `apps/app/src/components/app-layout.tsx`
 - Modify: `apps/app/src/components/app-sidebar.tsx`
 - Modify: `apps/app/src/components/site-header.tsx`
@@ -275,7 +297,8 @@ git commit -m "feat(app): refresh authenticated shell layout"
 
 - Modify: `apps/app/src/features/auth/authenticated-shell-home.tsx`
 - Modify: `apps/app/src/features/organizations/organization-members-page.tsx`
-- Modify: related tests
+- Modify: `apps/app/src/features/auth/authenticated-shell-home.test.tsx`
+- Modify: `apps/app/src/features/organizations/organization-members-page.test.tsx`
 
 - [ ] **Step 1: Refactor the home page**
 
@@ -327,7 +350,11 @@ git commit -m "feat(app): redesign home and members surfaces"
 
 - Modify: `apps/app/e2e/auth.test.ts`
 - Modify: `apps/app/e2e/organization-invitations.test.ts`
-- Modify: `apps/app/e2e/pages/*.ts`
+- Modify: `apps/app/e2e/pages/login-page.ts`
+- Modify: `apps/app/e2e/pages/signup-page.ts`
+- Modify: `apps/app/e2e/pages/create-organization-page.ts`
+- Modify: `apps/app/e2e/pages/members-page.ts`
+- Modify: `apps/app/e2e/pages/wait-for-submit-hydration.ts`
 
 - [ ] **Step 1: Update Playwright selectors and page objects**
 
@@ -407,3 +434,12 @@ The plan is complete when:
 - automated tests pass
 - Computer Use QA confirms the full app feels materially closer to the approved
   Linear-inspired product direction
+
+## Execution Handoff
+
+Plan complete and saved to `docs/superpowers/plans/2026-04-23-linear-ui-refresh-implementation.md`.
+
+Two execution options:
+
+1. Subagent-Driven (recommended) - I dispatch a fresh subagent per task, review between tasks, and keep the rollout tightly staged.
+2. Inline Execution - Execute tasks in this session using `executing-plans`, with checkpoints for review.
