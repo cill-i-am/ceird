@@ -1,5 +1,7 @@
 import {
+  AuthClientConfigurationError,
   buildPasswordResetRedirectTo,
+  createBrowserTaskTrackerAuthClient,
   resolveAuthBaseURL,
 } from "../../lib/auth-client";
 import {
@@ -121,6 +123,15 @@ describe("auth base URL resolution", () => {
         "not-a-url"
       )
     ).toBe("https://agent-one.api.task-tracker.localhost:1355/api/auth");
+  }, 1000);
+
+  it("fails closed for browser auth clients on unrecognized app hosts", () => {
+    const authClient = createBrowserTaskTrackerAuthClient(
+      "https://app.task-tracker.example.com"
+    );
+
+    expect(() => authClient.getSession()).toThrow(AuthClientConfigurationError);
+    expect(() => authClient.getSession()).toThrow(/trusted auth API origin/i);
   }, 1000);
 
   it("builds the password reset redirect URL from an origin", () => {

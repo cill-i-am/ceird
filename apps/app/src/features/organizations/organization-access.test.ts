@@ -301,7 +301,7 @@ describe("organization access helpers", () => {
       },
       session: {
         session: {
-          activeOrganizationId: "org_current",
+          activeOrganizationId: "org_stale",
         },
         user: {
           id: "user_123",
@@ -346,9 +346,7 @@ describe("organization access helpers", () => {
         targetOrganizationId: "org_first",
       },
       session: {
-        session: {
-          activeOrganizationId: "org_first",
-        },
+        session: {},
         user: {
           id: "user_123",
           name: "Taylor Example",
@@ -475,7 +473,6 @@ describe("organization access helpers", () => {
           token: "session-token",
           ipAddress: "",
           userAgent: "curl/8.7.1",
-          activeOrganizationId: "org_server",
         },
         user: {
           id: "user_123",
@@ -489,6 +486,36 @@ describe("organization access helpers", () => {
       },
     });
     expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("defers organization administration role checks while active organization sync is pending", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {},
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_first", name: "First Org", slug: "first-org" }],
+      error: null,
+    });
+
+    await expect(
+      requireOrganizationAdministrationAccess()
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_first",
+      activeOrganizationSync: {
+        required: true,
+        targetOrganizationId: "org_first",
+      },
+    });
+    expect(mockedGetClientActiveMemberRole).not.toHaveBeenCalled();
   }, 1000);
 
   it("redirects authenticated users without organizations to /create-organization", async () => {

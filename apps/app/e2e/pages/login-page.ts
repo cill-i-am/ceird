@@ -11,7 +11,6 @@ export class LoginPage {
 
   async goto() {
     await this.page.goto("/login");
-    await this.page.waitForFunction(() => Boolean(window.__TSR_ROUTER__));
     await waitForSubmitHydration(this.page);
   }
 

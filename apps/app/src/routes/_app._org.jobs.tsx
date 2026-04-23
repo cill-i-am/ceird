@@ -1,0 +1,157 @@
+import { RegistryProvider } from "@effect-atom/atom-react";
+import {
+  Outlet,
+  createFileRoute,
+  useRouteContext,
+} from "@tanstack/react-router";
+import type {
+  JobListResponse,
+  JobOptionsResponse,
+} from "@task-tracker/jobs-core";
+
+import { JobsPage } from "#/features/jobs/jobs-page";
+import {
+  getCurrentServerJobOptions,
+  listAllCurrentServerJobs,
+} from "#/features/jobs/jobs-server";
+import {
+  jobsListStateAtom,
+  jobsOptionsStateAtom,
+  seedJobsListState,
+  seedJobsOptionsState,
+} from "#/features/jobs/jobs-state";
+import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import {
+  ensureActiveOrganizationId,
+  getCurrentOrganizationMemberRole,
+} from "#/features/organizations/organization-access";
+
+const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
+  contacts: [],
+  members: [],
+  regions: [],
+  sites: [],
+};
+
+const EMPTY_JOBS_LIST: JobListResponse = {
+  items: [],
+  nextCursor: undefined,
+};
+
+interface JobsRouteOrganizationAccess {
+  readonly activeOrganizationId: string;
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentUserId: string;
+}
+
+function toJobsRouteOrganizationAccess(
+  organizationAccess: Awaited<ReturnType<typeof ensureActiveOrganizationId>>
+): JobsRouteOrganizationAccess {
+  return {
+    activeOrganizationId: organizationAccess.activeOrganizationId,
+    activeOrganizationSync: organizationAccess.activeOrganizationSync,
+    currentUserId: organizationAccess.session.user.id,
+  };
+}
+
+export async function loadJobsRouteData(
+  organizationAccess?: JobsRouteOrganizationAccess
+) {
+  const resolvedOrganizationAccess =
+    organizationAccess ??
+    toJobsRouteOrganizationAccess(await ensureActiveOrganizationId());
+
+  if (resolvedOrganizationAccess.activeOrganizationSync.required) {
+    return {
+      list: EMPTY_JOBS_LIST,
+      options: EMPTY_JOBS_OPTIONS,
+      viewer: {
+        role: "member",
+        userId: resolvedOrganizationAccess.currentUserId,
+      } satisfies JobsViewer,
+    };
+  }
+
+  const activeRole = await getCurrentOrganizationMemberRole(
+    resolvedOrganizationAccess.activeOrganizationId
+  );
+  const [list, options] = await Promise.all([
+    listAllCurrentServerJobs({}),
+    getCurrentServerJobOptions(),
+  ]);
+
+  return {
+    list,
+    options,
+    viewer: {
+      role: normalizeJobsViewerRole(activeRole.role),
+      userId: resolvedOrganizationAccess.currentUserId,
+    } satisfies JobsViewer,
+  };
+}
+
+export const Route = createFileRoute("/_app/_org/jobs")({
+  loader: ({ context }) => loadJobsRouteData(context),
+  component: JobsRoute,
+});
+
+export function JobsRouteContent({
+  activeOrganizationId,
+  activeOrganizationName,
+  children,
+  list,
+  options,
+  viewer,
+}: {
+  readonly activeOrganizationId: string;
+  readonly activeOrganizationName: string;
+  readonly children?: React.ReactNode;
+  readonly list: JobListResponse;
+  readonly options: JobOptionsResponse;
+  readonly viewer: JobsViewer;
+}) {
+  return (
+    <RegistryProvider
+      key={activeOrganizationId}
+      initialValues={[
+        [jobsListStateAtom, seedJobsListState(activeOrganizationId, list)],
+        [
+          jobsOptionsStateAtom,
+          seedJobsOptionsState(activeOrganizationId, options),
+        ],
+      ]}
+    >
+      <JobsPage activeOrganizationName={activeOrganizationName} viewer={viewer}>
+        {children}
+      </JobsPage>
+    </RegistryProvider>
+  );
+}
+
+function JobsRoute() {
+  const { activeOrganization, activeOrganizationId } = useRouteContext({
+    from: "/_app/_org",
+  });
+  const { list, options, viewer } = Route.useLoaderData();
+
+  return (
+    <JobsRouteContent
+      activeOrganizationName={activeOrganization.name}
+      activeOrganizationId={activeOrganizationId}
+      list={list}
+      options={options}
+      viewer={viewer}
+    >
+      <Outlet />
+    </JobsRouteContent>
+  );
+}
+
+function normalizeJobsViewerRole(role: string): JobsViewer["role"] {
+  if (role === "owner" || role === "admin" || role === "member") {
+    return role;
+  }
+
+  throw new Error("Organization member role is not supported by Jobs.");
+}

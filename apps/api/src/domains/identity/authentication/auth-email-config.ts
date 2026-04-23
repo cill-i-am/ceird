@@ -3,12 +3,17 @@ import { Config, Effect } from "effect";
 import { AuthEmailConfigurationError } from "./auth-email-errors.js";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const AUTH_EMAIL_TRANSPORT_MODES = ["cloudflare", "noop"] as const;
+
+export type AuthEmailTransportMode =
+  (typeof AUTH_EMAIL_TRANSPORT_MODES)[number];
 
 function isValidEmailAddress(value: string) {
   return EMAIL_ADDRESS_PATTERN.test(value);
 }
 
 export interface AuthEmailConfig {
+  readonly transportMode: AuthEmailTransportMode;
   readonly cloudflareAccountId: string;
   readonly cloudflareApiToken: string;
   readonly appOrigin: string;
@@ -16,7 +21,15 @@ export interface AuthEmailConfig {
   readonly fromName: string;
 }
 
-const AuthEmailConfigConfig = Config.all({
+const baseAuthEmailConfig = Config.all({
+  transportMode: Config.string("AUTH_EMAIL_TRANSPORT").pipe(
+    Config.withDefault("cloudflare"),
+    Config.validate({
+      message: `AUTH_EMAIL_TRANSPORT must be one of ${AUTH_EMAIL_TRANSPORT_MODES.join(", ")}`,
+      validation: (value): value is AuthEmailTransportMode =>
+        AUTH_EMAIL_TRANSPORT_MODES.includes(value as AuthEmailTransportMode),
+    })
+  ),
   appOrigin: Config.string("AUTH_APP_ORIGIN").pipe(
     Config.validate({
       message: "AUTH_APP_ORIGIN must be a valid absolute URL origin",
@@ -44,6 +57,9 @@ const AuthEmailConfigConfig = Config.all({
   fromName: Config.string("AUTH_EMAIL_FROM_NAME").pipe(
     Config.withDefault("Task Tracker")
   ),
+});
+
+const cloudflareAuthEmailConfig = Config.all({
   cloudflareAccountId: Config.string("CLOUDFLARE_ACCOUNT_ID").pipe(
     Config.validate({
       message: "CLOUDFLARE_ACCOUNT_ID must not be empty",
@@ -56,7 +72,28 @@ const AuthEmailConfigConfig = Config.all({
       validation: (value) => value.trim().length > 0,
     })
   ),
-}).pipe(
+});
+
+const AuthEmailConfigConfig = Effect.gen(
+  function* AuthEmailConfigConfigEffect() {
+    const config = yield* baseAuthEmailConfig;
+
+    if (config.transportMode === "noop") {
+      return {
+        ...config,
+        cloudflareAccountId: "",
+        cloudflareApiToken: "",
+      } satisfies AuthEmailConfig;
+    }
+
+    const cloudflareConfig = yield* cloudflareAuthEmailConfig;
+
+    return {
+      ...config,
+      ...cloudflareConfig,
+    } satisfies AuthEmailConfig;
+  }
+).pipe(
   Effect.mapError(
     (cause) =>
       new AuthEmailConfigurationError({

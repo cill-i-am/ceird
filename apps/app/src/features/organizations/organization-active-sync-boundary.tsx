@@ -1,3 +1,4 @@
+import { useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
@@ -15,6 +16,7 @@ export function OrganizationActiveSyncBoundary({
   activeOrganizationSync,
   children,
 }: OrganizationActiveSyncBoundaryProps) {
+  const router = useRouter();
   const { required, targetOrganizationId } = activeOrganizationSync;
   const [syncState, setSyncState] = useState<SyncState>(
     required ? "syncing" : "ready"
@@ -38,6 +40,7 @@ export function OrganizationActiveSyncBoundary({
           required,
           targetOrganizationId,
         });
+        await router.invalidate({ sync: true });
 
         if (!cancelled) {
           setSyncState("ready");
@@ -52,7 +55,7 @@ export function OrganizationActiveSyncBoundary({
     return () => {
       cancelled = true;
     };
-  }, [required, targetOrganizationId]);
+  }, [required, router, targetOrganizationId]);
 
   if (syncState === "syncing") {
     return (

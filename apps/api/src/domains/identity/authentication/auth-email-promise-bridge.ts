@@ -1,6 +1,7 @@
 import { Effect, Layer, Runtime } from "effect";
 
-import { AuthEmailSender } from "./auth-email.js";
+import { loadAuthEmailConfig } from "./auth-email-config.js";
+import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type {
   EmailVerificationEmailInput,
   OrganizationInvitationEmailInput,
@@ -8,8 +9,26 @@ import type {
 } from "./auth-email.js";
 import { CloudflareAuthEmailTransportLive } from "./cloudflare-auth-email-transport.js";
 
+const NoopAuthEmailTransportLive = Layer.succeed(AuthEmailTransport, {
+  send: () =>
+    Effect.log("Auth email transport send skipped", {
+      outcomeBucket: "noop",
+      provider: "noop",
+    }).pipe(Effect.asVoid),
+});
+
+const AuthenticationEmailTransportLive = Layer.unwrapEffect(
+  Effect.gen(function* AuthenticationEmailTransportLiveLayer() {
+    const { transportMode } = yield* loadAuthEmailConfig;
+
+    return transportMode === "noop"
+      ? NoopAuthEmailTransportLive
+      : CloudflareAuthEmailTransportLive;
+  })
+);
+
 const AuthenticationEmailSenderLive = AuthEmailSender.Default.pipe(
-  Layer.provideMerge(CloudflareAuthEmailTransportLive)
+  Layer.provideMerge(AuthenticationEmailTransportLive)
 );
 
 export class AuthEmailPromiseBridge extends Effect.Service<AuthEmailPromiseBridge>()(

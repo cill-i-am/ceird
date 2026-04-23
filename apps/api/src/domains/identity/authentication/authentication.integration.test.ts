@@ -1,12 +1,20 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
+import {
+  AppDatabase,
+  AppDatabaseLive,
+} from "../../../platform/database/database.js";
+import {
+  applyMigration,
+  canConnect,
+  createTestDatabase as createPlatformTestDatabase,
+  withPool,
+} from "../../../platform/database/test-database.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication } from "./auth.js";
 import {
@@ -22,6 +30,92 @@ describe("authentication integration", () => {
   afterAll(async () => {
     await Promise.all([...cleanup].toReversed().map((step) => step()));
   });
+
+  it("boots authentication on the shared app database runtime", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping shared database runtime coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
+
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = databaseUrl;
+
+    try {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* verifySharedRuntimeBoot() {
+            const { authDb } = yield* AppDatabase;
+            const auth = createAuthentication({
+              appOrigin: "http://127.0.0.1:4173",
+              backgroundTaskHandler: () => {},
+              config: makeAuthenticationConfig({
+                baseUrl: "http://127.0.0.1:3000",
+                secret: "0123456789abcdef0123456789abcdef",
+                databaseUrl,
+              }),
+              database: authDb,
+              reportPasswordResetEmailFailure: () => {},
+              sendOrganizationInvitationEmail: async () => {},
+              reportVerificationEmailFailure: () => {},
+              sendPasswordResetEmail: async () => {},
+              sendVerificationEmail: async () => {},
+            });
+
+            const cookieJar = new Map<string, string>();
+            const signUpResponse = yield* Effect.promise(() =>
+              auth.handler(
+                makeJsonRequest("/sign-up/email", {
+                  email: "shared-runtime@example.com",
+                  name: "Shared Runtime User",
+                  password: "correct horse battery staple",
+                })
+              )
+            );
+            updateCookieJar(cookieJar, signUpResponse);
+
+            const sessionResponse = yield* Effect.promise(() =>
+              auth.handler(
+                makeRequest("/get-session", {
+                  cookieJar,
+                })
+              )
+            );
+
+            return {
+              sessionResponse,
+              signUpResponse,
+            };
+          }).pipe(Effect.provide(AppDatabaseLive))
+        )
+      );
+
+      expect(result.signUpResponse.status).toBe(200);
+      expect(result.sessionResponse.status).toBe(200);
+      const session = (await result.sessionResponse.json()) as SessionResponse;
+      expect(session?.user?.email).toBe("shared-runtime@example.com");
+    } finally {
+      if (previousDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = previousDatabaseUrl;
+      }
+    }
+  }, 30_000);
 
   it("creates an organization after sign-up and stores it as the active organization in the session", async (context: {
     skip: (note?: string) => never;
@@ -1068,99 +1162,14 @@ describe("authentication integration", () => {
   }, 30_000);
 });
 
-async function createTestDatabase(): Promise<{
+function createTestDatabase(): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly url: string;
 }> {
-  const baseUrl = new URL(
-    process.env.AUTH_TEST_DATABASE_URL ?? DEFAULT_AUTH_DATABASE_URL
-  );
-  const adminUrl = new URL(baseUrl);
-  adminUrl.pathname = "/postgres";
-
-  const databaseName = `auth_test_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const adminPool = new Pool({ connectionString: adminUrl.toString() });
-
-  if (!(await canConnect(adminPool))) {
-    await adminPool.end();
-    return {
-      cleanup: async () => {},
-      url: baseUrl.toString(),
-    };
-  }
-
-  await adminPool.query(`create database "${databaseName}"`);
-  await adminPool.end();
-
-  const databaseUrl = new URL(baseUrl);
-  databaseUrl.pathname = `/${databaseName}`;
-
-  return {
-    cleanup: async () => {
-      const dropPool = new Pool({ connectionString: adminUrl.toString() });
-
-      try {
-        await dropPool.query(
-          `select pg_terminate_backend(pid)
-           from pg_stat_activity
-           where datname = $1 and pid <> pg_backend_pid()`,
-          [databaseName]
-        );
-        await dropPool.query(`drop database if exists "${databaseName}"`);
-      } finally {
-        await dropPool.end();
-      }
-    },
-    url: databaseUrl.toString(),
-  };
-}
-
-async function canConnect(pool: Pool): Promise<boolean> {
-  try {
-    await pool.query("select 1");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function withPool<Result>(
-  connectionString: string,
-  operation: (pool: Pool) => Promise<Result>
-): Promise<Result> {
-  const pool = new Pool({ connectionString });
-
-  try {
-    return await operation(pool);
-  } finally {
-    await pool.end();
-  }
-}
-
-async function applyMigration(
-  databaseUrl: string,
-  migrationFileName: string
-): Promise<void> {
-  const migrationPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    migrationFileName
-  );
-  const migrationSql = await fs.readFile(migrationPath, "utf8");
-  const statements = migrationSql
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
-
-  const pool = new Pool({ connectionString: databaseUrl });
-
-  try {
-    for (const statement of statements) {
-      await pool.query(statement);
-    }
-  } finally {
-    await pool.end();
-  }
+  return createPlatformTestDatabase({
+    baseUrl: process.env.AUTH_TEST_DATABASE_URL ?? DEFAULT_AUTH_DATABASE_URL,
+    prefix: "auth_test",
+  });
 }
 
 function wait(milliseconds: number) {

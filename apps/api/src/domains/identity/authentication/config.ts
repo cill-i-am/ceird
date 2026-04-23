@@ -1,8 +1,12 @@
 import { Config, Effect, Option, Schema, pipe } from "effect";
 
+import {
+  DEFAULT_APP_DATABASE_URL,
+  appDatabaseUrlConfig,
+} from "../../../platform/database/config.js";
+
 export const DEFAULT_AUTH_BASE_PATH = "/api/auth" as const;
-export const DEFAULT_AUTH_DATABASE_URL =
-  "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker";
+export const DEFAULT_AUTH_DATABASE_URL = DEFAULT_APP_DATABASE_URL;
 const TrustedOriginPattern = Schema.String.pipe(
   Schema.pattern(/^https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::\d+)?$/i),
   Schema.brand("TrustedOriginPattern")
@@ -17,6 +21,22 @@ const decodeTrustedOriginPattern =
 
 function makeTrustedOriginPattern(value: string): TrustedOriginPattern {
   return decodeTrustedOriginPattern(value);
+}
+
+export function matchesTrustedOrigin(
+  origin: string,
+  trustedOrigins: readonly string[]
+) {
+  return trustedOrigins.some((pattern) => {
+    if (!pattern.includes("*") && !pattern.includes("?")) {
+      return pattern === origin;
+    }
+
+    const escapedPattern = pattern.replaceAll(/[.+^${}()|[\]\\]/g, "\\$&");
+    const matcher = escapedPattern.replaceAll("*", ".*").replaceAll("?", ".");
+
+    return new RegExp(`^${matcher}$`).test(origin);
+  });
 }
 
 export const DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN = makeTrustedOriginPattern(
@@ -41,9 +61,7 @@ const DEFAULT_LOCAL_APP_ORIGIN_STRINGS = [
 const DEFAULT_LOCAL_APP_ORIGINS = DEFAULT_LOCAL_APP_ORIGIN_STRINGS.map(
   makeTrustedOriginPattern
 );
-export const authenticationDatabaseUrlConfig = Config.string(
-  "DATABASE_URL"
-).pipe(Config.withDefault(DEFAULT_AUTH_DATABASE_URL));
+export const authenticationDatabaseUrlConfig = appDatabaseUrlConfig;
 const authenticationBaseUrlConfig = Config.string("BETTER_AUTH_BASE_URL").pipe(
   Config.validate({
     message: "BETTER_AUTH_BASE_URL must be a valid absolute URL",

@@ -14,6 +14,8 @@ import {
 import { Config, Effect, Layer, Schema } from "effect";
 
 import { AuthenticationHttpLive } from "./domains/identity/authentication/auth.js";
+import { JobsHttpLive } from "./domains/jobs/http.js";
+import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 
 const Api = HttpApi.make("TaskTrackerApi").add(
   HttpApiGroup.make("system")
@@ -41,7 +43,11 @@ const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
 
 const ApiContractLive = HttpApiBuilder.api(Api).pipe(Layer.provide(SystemLive));
 
-export const ApiLive = Layer.mergeAll(ApiContractLive, AuthenticationHttpLive);
+export const ApiLive = Layer.mergeAll(
+  ApiContractLive,
+  AuthenticationHttpLive,
+  JobsHttpLive
+).pipe(Layer.provide(AppDatabaseRuntimeLive));
 
 export const ServerConfig = Config.all({
   host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),

@@ -1,13 +1,8 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import {
-  getRequestHeader,
-  getRequestHost,
-  getRequestProtocol,
-} from "@tanstack/react-start/server";
+import { getRequestHeader } from "@tanstack/react-start/server";
 import { Schema } from "effect";
 
-import { resolveAuthBaseURL } from "#/lib/auth-client";
-import { readConfiguredServerAuthOrigin } from "#/lib/server-auth-origin";
+import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
 
 const OrganizationSummarySchema = Schema.Struct({
   id: Schema.String,
@@ -163,6 +158,30 @@ export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
   }
 );
 
+export const setCurrentServerActiveOrganization = createServerOnlyFn(
+  async (organizationId: string): Promise<void> => {
+    const authRequest = readServerAuthRequestStrict();
+    const response = await fetch(
+      new URL("organization/set-active", `${authRequest.authBaseURL}/`),
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: authRequest.cookie,
+        },
+        body: JSON.stringify({ organizationId }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Active organization sync failed with status ${response.status}.`
+      );
+    }
+  }
+);
+
 function readServerSessionRequest(): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
 
@@ -213,10 +232,7 @@ function readServerAuthRequestStrict(): ServerAuthRequest {
 }
 
 function readServerAuthBaseURL(): string | undefined {
-  return resolveAuthBaseURL(
-    `${getRequestProtocol()}://${getRequestHost()}`,
-    readConfiguredServerAuthOrigin()
-  );
+  return resolveConfiguredServerAuthBaseURL();
 }
 
 async function fetchOrganizations(authRequest: ServerAuthRequest) {

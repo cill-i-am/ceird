@@ -87,6 +87,7 @@ test.describe("auth pages", () => {
     });
 
     await loginPage.goto();
+    await page.waitForFunction(() => Boolean(window.__TSR_ROUTER__));
     await page.evaluate(async () => {
       const router = (
         window as Window & {

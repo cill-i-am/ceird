@@ -177,6 +177,10 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com"
       );
+      expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
       expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
         "href",
         "/members"

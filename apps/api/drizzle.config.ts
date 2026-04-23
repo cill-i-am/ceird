@@ -1,12 +1,12 @@
 import { defineConfig } from "drizzle-kit";
 import { Effect } from "effect";
 
-import { authenticationDatabaseUrlConfig } from "./src/domains/identity/authentication/config";
+import { appDatabaseUrlConfig } from "./src/platform/database/config";
 
-const databaseUrl = Effect.runSync(authenticationDatabaseUrlConfig);
+const databaseUrl = Effect.runSync(appDatabaseUrlConfig);
 
 export default defineConfig({
-  schema: "./src/domains/identity/authentication/schema.ts",
+  schema: "./src/platform/database/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {

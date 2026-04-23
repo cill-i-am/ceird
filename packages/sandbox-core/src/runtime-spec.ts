@@ -67,11 +67,11 @@ export type SharedSandboxEnvironment = Schema.Schema.Type<
 
 const BaseSandboxRuntimeOverrides = Schema.Struct({
   API_HOST_PORT: Schema.String,
+  API_ORIGIN: SandboxHttpUrl,
   APP_HOST_PORT: Schema.String,
   AUTH_APP_ORIGIN: SandboxHttpUrl,
   AUTH_EMAIL_FROM: Schema.NonEmptyString,
   AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
-  AUTH_ORIGIN: SandboxHttpUrl,
   BETTER_AUTH_BASE_URL: SandboxHttpUrl,
   BETTER_AUTH_SECRET: Schema.NonEmptyString,
   DATABASE_URL: SandboxPostgresUrl,
@@ -84,7 +84,7 @@ const BaseSandboxRuntimeOverrides = Schema.Struct({
   SANDBOX_NAME: SandboxNameSchema,
   SANDBOX_PNPM_STORE_VOLUME: SandboxDockerVolumeName,
   TASK_TRACKER_SANDBOX: Schema.Literal("1"),
-  VITE_AUTH_ORIGIN: SandboxHttpUrl,
+  VITE_API_ORIGIN: SandboxHttpUrl,
 });
 
 export const SandboxRuntimeOverrides = Schema.Record({
@@ -111,11 +111,11 @@ export function buildSandboxRuntimeOverrides(input: {
   );
   const baseOverrides = Schema.decodeUnknownSync(BaseSandboxRuntimeOverrides)({
     API_HOST_PORT: String(input.ports.api),
+    API_ORIGIN: `http://api:${input.ports.api}`,
     APP_HOST_PORT: String(input.ports.app),
     AUTH_APP_ORIGIN: input.urls.fallbackApp,
     AUTH_EMAIL_FROM: input.sharedEnvironment.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: input.sharedEnvironment.AUTH_EMAIL_FROM_NAME,
-    AUTH_ORIGIN: `http://api:${input.ports.api}`,
     BETTER_AUTH_BASE_URL: input.urls.fallbackApi,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
     DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
@@ -128,7 +128,7 @@ export function buildSandboxRuntimeOverrides(input: {
     SANDBOX_NAME: input.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
     TASK_TRACKER_SANDBOX: "1",
-    VITE_AUTH_ORIGIN: input.urls.fallbackApi,
+    VITE_API_ORIGIN: input.urls.fallbackApi,
   });
 
   return Schema.decodeUnknownSync(SandboxRuntimeOverrides)({

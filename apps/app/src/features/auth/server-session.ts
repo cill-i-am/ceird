@@ -1,13 +1,8 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import {
-  getRequestHeader,
-  getRequestHost,
-  getRequestProtocol,
-} from "@tanstack/react-start/server";
+import { getRequestHeader } from "@tanstack/react-start/server";
 
-import { resolveAuthBaseURL } from "#/lib/auth-client";
+import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
 import type { createTaskTrackerAuthClient } from "#/lib/auth-client";
-import { readConfiguredServerAuthOrigin } from "#/lib/server-auth-origin";
 
 type ServerAuthSession = Awaited<
   ReturnType<ReturnType<typeof createTaskTrackerAuthClient>["getSession"]>
@@ -15,11 +10,7 @@ type ServerAuthSession = Awaited<
 
 export const getCurrentServerSession = createServerOnlyFn(async () => {
   const cookie = getRequestHeader("cookie");
-  const serverAuthOrigin = readConfiguredServerAuthOrigin();
-  const authBaseURL = resolveAuthBaseURL(
-    `${getRequestProtocol()}://${getRequestHost()}`,
-    serverAuthOrigin
-  );
+  const authBaseURL = resolveConfiguredServerAuthBaseURL();
 
   if (!cookie || !authBaseURL) {
     return null;

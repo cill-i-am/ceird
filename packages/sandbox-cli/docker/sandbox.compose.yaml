@@ -51,13 +51,13 @@ services:
     working_dir: /workspace
     command: ["app"]
     environment:
-      AUTH_ORIGIN: ${AUTH_ORIGIN}
+      API_ORIGIN: ${API_ORIGIN}
       HOST: 0.0.0.0
       PNPM_STORE_DIR: /pnpm/store
       PORT: ${APP_HOST_PORT}
       SANDBOX_ID: ${SANDBOX_ID}
       TASK_TRACKER_SANDBOX: ${TASK_TRACKER_SANDBOX}
-      VITE_AUTH_ORIGIN: ${VITE_AUTH_ORIGIN}
+      VITE_API_ORIGIN: ${VITE_API_ORIGIN}
     volumes:
       - ${SANDBOX_WORKTREE_PATH}:/workspace
       - pnpm-store:/pnpm/store

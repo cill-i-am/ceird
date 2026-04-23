@@ -163,4 +163,10 @@
   pre code {
     @apply border-0 bg-transparent p-0 text-inherit;
   }
+  .maplibregl-popup-content {
+    @apply rounded-none! bg-transparent! p-0! shadow-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
 }

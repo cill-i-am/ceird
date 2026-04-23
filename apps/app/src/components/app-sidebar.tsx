@@ -1,6 +1,10 @@
 "use client";
 
-import { CommandIcon, ComputerTerminalIcon } from "@hugeicons/core-free-icons";
+import {
+  Briefcase01Icon,
+  CommandIcon,
+  ComputerTerminalIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
@@ -25,6 +29,11 @@ const data = {
       url: "/",
       icon: <HugeiconsIcon icon={ComputerTerminalIcon} strokeWidth={2} />,
       isActive: true,
+    },
+    {
+      title: "Jobs",
+      url: "/jobs",
+      icon: <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />,
     },
     {
       title: "Members",

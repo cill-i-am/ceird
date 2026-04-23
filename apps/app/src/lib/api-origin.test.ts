@@ -1,0 +1,66 @@
+import { readConfiguredServerApiOrigin, resolveApiOrigin } from "./api-origin";
+
+describe("api origin resolution", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("prefers an injected API origin when one is provided", () => {
+    expect(
+      resolveApiOrigin("http://127.0.0.1:4300", "http://127.0.0.1:4301")
+    ).toBe("http://127.0.0.1:4301");
+  }, 1000);
+
+  it("maps the app portless origin to the API origin", () => {
+    expect(
+      resolveApiOrigin("https://agent-one.app.task-tracker.localhost:1355")
+    ).toBe("https://agent-one.api.task-tracker.localhost:1355");
+  }, 1000);
+
+  it("maps the raw local app dev origin to the local API origin", () => {
+    expect(resolveApiOrigin("http://127.0.0.1:3000")).toBe(
+      "http://127.0.0.1:3001"
+    );
+  }, 1000);
+
+  it("returns undefined when no origin is available", () => {
+    expect(resolveApiOrigin()).toBeUndefined();
+  }, 1000);
+
+  it("returns undefined for an invalid origin", () => {
+    expect(resolveApiOrigin("not-a-url")).toBeUndefined();
+  }, 1000);
+
+  it("falls back to host-based mapping when the injected API origin is invalid", () => {
+    expect(
+      resolveApiOrigin(
+        "https://agent-one.app.task-tracker.localhost:1355",
+        "not-a-url"
+      )
+    ).toBe("https://agent-one.api.task-tracker.localhost:1355");
+  }, 1000);
+
+  it("fails closed for unrecognized app hosts without an explicit API origin", () => {
+    expect(
+      resolveApiOrigin("https://app.task-tracker.example.com")
+    ).toBeUndefined();
+  }, 1000);
+
+  it("fails closed for unrecognized app hosts when the injected API origin is invalid", () => {
+    expect(
+      resolveApiOrigin("https://app.task-tracker.example.com", "not-a-url")
+    ).toBeUndefined();
+  }, 1000);
+
+  it("reads the injected server API origin", () => {
+    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+
+    expect(readConfiguredServerApiOrigin()).toBe("http://tt-sbx-api:4301");
+  }, 1000);
+
+  it("returns undefined when no server API origin is injected", () => {
+    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
+
+    expect(readConfiguredServerApiOrigin()).toBeUndefined();
+  }, 1000);
+});

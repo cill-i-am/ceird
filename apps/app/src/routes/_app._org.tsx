@@ -15,6 +15,7 @@ export const Route = createFileRoute("/_app/_org")({
       activeOrganization: organizationAccess.activeOrganization,
       activeOrganizationId: organizationAccess.activeOrganizationId,
       activeOrganizationSync: organizationAccess.activeOrganizationSync,
+      currentUserId: organizationAccess.session.user.id,
     };
   },
   component: OrganizationRouteComponent,

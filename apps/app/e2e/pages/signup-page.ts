@@ -11,7 +11,6 @@ export class SignupPage {
 
   async goto() {
     await this.page.goto("/signup");
-    await this.page.waitForFunction(() => Boolean(window.__TSR_ROUTER__));
     await waitForSubmitHydration(this.page);
   }
 

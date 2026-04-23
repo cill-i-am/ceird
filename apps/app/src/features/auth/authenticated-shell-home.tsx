@@ -1,3 +1,5 @@
+import { Briefcase01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useRouteContext } from "@tanstack/react-router";
 
 import { Badge } from "#/components/ui/badge";
@@ -136,9 +138,20 @@ export function AuthenticatedShellHome() {
                   <CardDescription className="max-w-none">
                     The product is still early, so this page stays deliberately
                     light. It should orient the team, not bury them in a demo
-                    dashboard.
+                    dashboard. Jobs is now ready as the first operational slice.
                   </CardDescription>
                 </div>
+                <Link
+                  to="/jobs"
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                >
+                  <HugeiconsIcon
+                    icon={Briefcase01Icon}
+                    strokeWidth={2}
+                    data-icon="inline-start"
+                  />
+                  Open Jobs
+                </Link>
               </div>
             </section>
           </CardContent>

@@ -30,7 +30,7 @@
         "AUTH_APP_ORIGIN",
         "AUTH_EMAIL_FROM",
         "AUTH_EMAIL_FROM_NAME",
-        "AUTH_ORIGIN",
+        "API_ORIGIN",
         "BETTER_AUTH_BASE_URL",
         "BETTER_AUTH_SECRET",
         "CLOUDFLARE_ACCOUNT_ID",
@@ -41,7 +41,7 @@
         "PORT",
         "SANDBOX_ID",
         "TASK_TRACKER_SANDBOX",
-        "VITE_AUTH_ORIGIN"
+        "VITE_API_ORIGIN"
       ]
     },
     "sandbox:up": {

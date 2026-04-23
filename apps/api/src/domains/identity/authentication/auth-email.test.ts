@@ -627,11 +627,37 @@ describe("auth email config loading", () => {
     );
 
     expect(config).toStrictEqual({
+      transportMode: "cloudflare",
       appOrigin: "https://app.task-tracker.localhost",
       from: "auth@task-tracker.localhost",
       fromName: "Task Tracker",
       cloudflareAccountId: "account_123",
       cloudflareApiToken: "token_123",
+    });
+  }, 10_000);
+
+  it("loads noop auth email config without Cloudflare credentials", async () => {
+    const config = await Effect.runPromise(
+      loadAuthEmailConfig.pipe(
+        Effect.withConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([
+              ["AUTH_EMAIL_TRANSPORT", "noop"],
+              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+            ])
+          )
+        )
+      )
+    );
+
+    expect(config).toStrictEqual({
+      transportMode: "noop",
+      appOrigin: "https://app.task-tracker.localhost",
+      from: "auth@task-tracker.localhost",
+      fromName: "Task Tracker",
+      cloudflareAccountId: "",
+      cloudflareApiToken: "",
     });
   }, 10_000);
 

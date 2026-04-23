@@ -87,7 +87,7 @@ export async function ensureActiveOrganizationId() {
     activeOrganization,
     activeOrganizationId,
     activeOrganizationSync,
-    session: withActiveOrganizationId(session, activeOrganizationId),
+    session,
   };
 }
 
@@ -97,7 +97,12 @@ export async function requireOrganizationAccess() {
 
 export async function requireOrganizationAdministrationAccess() {
   const organizationAccess = await ensureActiveOrganizationId();
-  const role = await getActiveOrganizationMemberRole(
+
+  if (organizationAccess.activeOrganizationSync.required) {
+    return organizationAccess;
+  }
+
+  const role = await getCurrentOrganizationMemberRole(
     organizationAccess.activeOrganizationId
   );
 
@@ -152,7 +157,7 @@ async function resolveOrganizationAccessState(session: Session) {
   };
 }
 
-async function getActiveOrganizationMemberRole(organizationId: string) {
+export async function getCurrentOrganizationMemberRole(organizationId: string) {
   if (isServerEnvironment()) {
     return await getCurrentServerOrganizationMemberRole(organizationId);
   }
@@ -193,19 +198,6 @@ function toOrganizationSummary(
     name: organization.name,
     slug: organization.slug,
   };
-}
-
-function withActiveOrganizationId(
-  session: Session,
-  activeOrganizationId: string
-) {
-  return {
-    ...session,
-    session: {
-      ...session.session,
-      activeOrganizationId,
-    },
-  } satisfies Session;
 }
 
 function resolveCurrentOrganization(

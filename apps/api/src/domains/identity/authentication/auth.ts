@@ -9,6 +9,10 @@ import { organization } from "better-auth/plugins/organization";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
+import {
+  AppDatabase,
+  AppDatabaseLive,
+} from "../../../platform/database/database.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import { AuthEmailPromiseBridge } from "./auth-email-promise-bridge.js";
 import type {
@@ -16,13 +20,11 @@ import type {
   OrganizationInvitationEmailInput,
   PasswordResetEmailInput,
 } from "./auth-email.js";
-import { loadAuthenticationConfig } from "./config.js";
+import { loadAuthenticationConfig, matchesTrustedOrigin } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
-import {
-  AuthenticationDatabase,
-  AuthenticationDatabaseLive,
-} from "./database.js";
 import { authSchema } from "./schema.js";
+
+export { matchesTrustedOrigin } from "./config.js";
 
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
 
@@ -241,22 +243,6 @@ function serializeBackgroundTaskError(error: unknown) {
   };
 }
 
-export function matchesTrustedOrigin(
-  origin: string,
-  trustedOrigins: readonly string[]
-) {
-  return trustedOrigins.some((pattern) => {
-    if (!pattern.includes("*") && !pattern.includes("?")) {
-      return pattern === origin;
-    }
-
-    const escapedPattern = pattern.replaceAll(/[.+^${}()|[\]\\]/g, "\\$&");
-    const matcher = escapedPattern.replaceAll("*", ".*").replaceAll("?", ".");
-
-    return new RegExp(`^${matcher}$`).test(origin);
-  });
-}
-
 function appendVaryHeader(headers: Headers, value: string) {
   const current = headers.get("Vary");
 
@@ -329,11 +315,11 @@ function withAuthenticationCors(
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",
   {
-    dependencies: [AuthenticationDatabaseLive, AuthEmailPromiseBridge.Default],
+    dependencies: [AppDatabaseLive, AuthEmailPromiseBridge.Default],
     effect: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
-      const { db } = yield* AuthenticationDatabase;
+      const { authDb } = yield* AppDatabase;
       const authEmailPromiseBridge = yield* AuthEmailPromiseBridge;
       const runtime = yield* Effect.runtime<never>();
       const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
@@ -350,7 +336,7 @@ export class Authentication extends Effect.Service<Authentication>()(
         appOrigin: authEmailConfig.appOrigin,
         backgroundTaskHandler,
         config,
-        database: db,
+        database: authDb,
         reportPasswordResetEmailFailure,
         sendOrganizationInvitationEmail:
           authEmailPromiseBridge.sendOrganizationInvitationEmail,

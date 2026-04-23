@@ -82,6 +82,10 @@ describe("authenticated shell home", () => {
         screen.getByRole("heading", { name: "Acme Field Ops" })
       ).toBeInTheDocument();
       expect(screen.getByText(/@acme-field-ops/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /open jobs/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
       expect(
         screen.getByRole("link", { name: /invite teammates/i })
       ).toHaveAttribute("href", "/members");

@@ -1432,11 +1432,11 @@ export function buildComposeFallbackEnvironmentOverrides(
   return {
     ...sharedEnvironment,
     API_HOST_PORT: String(record.ports.api),
+    API_ORIGIN: `http://api:${record.ports.api}`,
     APP_HOST_PORT: String(record.ports.app),
     AUTH_APP_ORIGIN: urls.fallbackApp,
     AUTH_EMAIL_FROM: sharedEnvironment.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: sharedEnvironment.AUTH_EMAIL_FROM_NAME,
-    AUTH_ORIGIN: `http://api:${record.ports.api}`,
     BETTER_AUTH_BASE_URL: urls.fallbackApi,
     BETTER_AUTH_SECRET: record.betterAuthSecret,
     DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
@@ -1449,7 +1449,7 @@ export function buildComposeFallbackEnvironmentOverrides(
     SANDBOX_NAME: record.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: record.runtimeAssets.pnpmStoreVolume,
     TASK_TRACKER_SANDBOX: "1",
-    VITE_AUTH_ORIGIN: urls.fallbackApi,
+    VITE_API_ORIGIN: urls.fallbackApi,
   };
 }
 

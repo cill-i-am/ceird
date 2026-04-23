@@ -1,1 +1,1 @@
-declare const __SERVER_AUTH_ORIGIN__: string | null;
+declare const __SERVER_API_ORIGIN__: string | null;
