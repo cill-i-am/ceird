@@ -33,7 +33,10 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(workspaceHome).toBeVisible();
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Open jobs" })
+  ).toBeVisible();
+  await expect(
+    workspaceHome.getByText("Invite the first teammate")
   ).toBeVisible();
 }
 

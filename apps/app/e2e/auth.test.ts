@@ -23,7 +23,10 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(workspaceHome).toBeVisible();
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Open jobs" })
+  ).toBeVisible();
+  await expect(
+    workspaceHome.getByText("Invite the first teammate")
   ).toBeVisible();
 }
 
@@ -158,14 +161,12 @@ test.describe("auth pages", () => {
       organizationSlugPrefix: "verification-banner-org",
     });
 
-    const banner = page.getByRole("region", {
+    const banner = page.getByRole("alert", {
       name: "Email verification reminder",
     });
 
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText(
-      `${email} is not verified yet. Check your inbox for the verification link, or request another email.`
-    );
+    await expect(banner).toContainText(`${email} is not verified yet.`);
     await expect(
       banner.getByRole("button", { name: "Resend verification email" })
     ).toBeVisible();
@@ -180,7 +181,7 @@ test.describe("auth pages", () => {
       organizationSlugPrefix: "verification-resend-org",
     });
 
-    const banner = page.getByRole("region", {
+    const banner = page.getByRole("alert", {
       name: "Email verification reminder",
     });
     const resendButton = banner.getByRole("button", {

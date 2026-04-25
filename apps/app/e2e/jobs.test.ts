@@ -60,17 +60,15 @@ test.describe("jobs flow", () => {
 
     await createSheet.expectOpen();
     await createSheet.title.fill(jobTitle);
-    await createSheet.priority.selectOption("high");
+    await createSheet.choosePriorityOption("High");
     await createSheet.chooseSiteOption("Create a new site");
     await createSheet.siteName.fill(siteName);
-    await createSheet.chooseContactOption("Create a new contact");
-    await createSheet.contactName.fill(contactName);
+    await createSheet.closeSiteDialog();
+    await createSheet.createInlineContact(contactName);
     await createSheet.submit.click();
 
     await jobsPage.expectLoaded();
-    await expect(page.getByRole("alert")).toContainText(
-      `${jobTitle} added to Jobs`
-    );
+    await expect(page.getByRole("status")).toContainText(jobTitle);
     await expect(jobsPage.jobCard(jobTitle)).toBeVisible();
 
     await jobsPage.openJob(jobTitle);

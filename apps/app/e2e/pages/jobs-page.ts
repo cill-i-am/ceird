@@ -14,7 +14,7 @@ export class JobsPage {
     this.page = page;
     this.heading = page.getByRole("heading", {
       level: 1,
-      name: /keep .* moving without the admin drag/i,
+      name: "Jobs",
     });
     this.newJobButton = page.getByRole("link", { name: "New job" });
   }
@@ -57,18 +57,20 @@ export class JobsCreateSheet {
   constructor(page: Page) {
     this.page = page;
     this.root = page.getByRole("dialog", {
-      name: "Capture the work while it is still fresh.",
+      name: "New job",
     });
     this.heading = this.root.getByRole("heading", {
       level: 2,
-      name: "Capture the work while it is still fresh.",
+      name: "New job",
     });
     this.title = this.root.getByLabel("Title");
     this.priority = this.root.getByLabel("Priority", { exact: true });
     this.site = this.root.getByLabel("Site");
-    this.siteName = this.root.getByLabel("Site name");
+    this.siteName = page
+      .getByRole("dialog", { name: "New site" })
+      .getByLabel("Site name");
     this.contact = this.root.getByLabel("Contact");
-    this.contactName = this.root.getByLabel("Contact name");
+    this.contactName = page.getByPlaceholder("Contact");
     this.submit = this.root.getByRole("button", { name: "Create job" });
   }
 
@@ -93,6 +95,30 @@ export class JobsCreateSheet {
       .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
         hasText: optionLabel,
       })
+      .click();
+  }
+
+  async choosePriorityOption(optionLabel: string) {
+    await this.priority.click();
+    await this.page
+      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
+        hasText: optionLabel,
+      })
+      .click();
+  }
+
+  async createInlineContact(contactName: string) {
+    await this.contact.click();
+    await this.contactName.fill(contactName);
+    await this.page
+      .getByRole("option", { name: `Create new contact: "${contactName}"` })
+      .click();
+  }
+
+  async closeSiteDialog() {
+    await this.page
+      .getByRole("dialog", { name: "New site" })
+      .getByRole("button", { name: "Done" })
       .click();
   }
 }
