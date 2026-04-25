@@ -17,7 +17,7 @@ export class JobsPage {
       name: "Jobs",
     });
     this.newJobButton = page
-      .getByRole("banner")
+      .locator("header")
       .getByRole("link", { name: "New job" });
   }
 
