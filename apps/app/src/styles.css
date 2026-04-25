@@ -133,6 +133,8 @@
 
   html {
     @apply font-sans antialiased;
+    scrollbar-width: thin;
+    scrollbar-color: gray transparent;
   }
 
   body {
