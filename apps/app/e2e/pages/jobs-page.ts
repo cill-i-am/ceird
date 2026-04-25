@@ -28,6 +28,9 @@ export class JobsPage {
 
   async expectLoaded() {
     await expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`);
+    await expect(
+      this.page.getByRole("dialog", { name: "New job" })
+    ).toBeHidden();
     await expect(this.heading).toBeVisible();
   }
 
