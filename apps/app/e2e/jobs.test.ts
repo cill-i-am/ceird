@@ -84,13 +84,13 @@ test.describe("jobs flow", () => {
     await detailSheet.addComment.click();
     await expect(detailSheet.commentItem(comment)).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("in_progress");
+    await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("blocked");
+    await detailSheet.chooseStatusOption("Blocked");
     await detailSheet.blockedReason.fill(blockedReason);
     await detailSheet.applyStatusChange.click();
     await expect(
@@ -100,7 +100,7 @@ test.describe("jobs flow", () => {
       detailSheet.root.getByText(blockedReason, { exact: true })
     ).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("in_progress");
+    await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
@@ -116,7 +116,7 @@ test.describe("jobs flow", () => {
     await expect(detailSheet.visitItem(visitNote)).toBeVisible();
     await expect(detailSheet.root.getByText("2h logged")).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("completed");
+    await detailSheet.chooseStatusOption("Completed");
     await detailSheet.applyStatusChange.click();
     await expect(detailSheet.reopenJob).toBeVisible();
 

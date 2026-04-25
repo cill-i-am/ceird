@@ -178,4 +178,14 @@ export class JobDetailSheet {
     ).toBeVisible();
     await waitForSubmitHydration(this.page);
   }
+
+  async chooseStatusOption(optionLabel: string) {
+    await this.statusSelect.click();
+    await this.page
+      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
+        hasText: optionLabel,
+      })
+      .click();
+    await expect(this.statusSelect).toContainText(optionLabel);
+  }
 }
