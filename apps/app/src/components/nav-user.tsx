@@ -1,7 +1,12 @@
 "use client";
 
-import { UnfoldMoreIcon, LogoutIcon } from "@hugeicons/core-free-icons";
+import {
+  AccountSetting01Icon,
+  LogoutIcon,
+  UnfoldMoreIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -132,6 +137,14 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem
+                render={
+                  <Link to="/settings" search={{ emailChange: undefined }} />
+                }
+              >
+                <HugeiconsIcon icon={AccountSetting01Icon} strokeWidth={2} />
+                Settings
+              </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isSigningOut}
                 onSelect={async (event) => {
