@@ -26,6 +26,8 @@ declare module "@tanstack/react-router" {
         | "/jobs"
         | "/jobs/new"
         | "/members"
+        | "/organization/settings"
+        | "/settings"
         | "/sites"
         | "/sites/new";
     };

@@ -3,6 +3,7 @@
 import {
   AccountSetting01Icon,
   LogoutIcon,
+  Settings02Icon,
   UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -137,6 +138,10 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem render={<Link to="/organization/settings" />}>
+                <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
+                Organization settings
+              </DropdownMenuItem>
               <DropdownMenuItem
                 render={
                   <Link to="/settings" search={{ emailChange: undefined }} />

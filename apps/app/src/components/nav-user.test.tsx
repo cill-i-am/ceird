@@ -75,6 +75,23 @@ vi.mock(
   }
 );
 
+vi.mock(import("@tanstack/react-router"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    Link: (({
+      children,
+      to,
+      ...props
+    }: ComponentProps<"a"> & { to?: string }) => (
+      <a href={to} {...props}>
+        {children}
+      </a>
+    )) as typeof actual.Link,
+  };
+});
+
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
 
@@ -235,6 +252,14 @@ describe("nav user", () => {
     return render(<NavUser user={user} navigate={mockedNavigate} />);
   }
 
+  it("links to organization settings from the account menu", () => {
+    renderNavUser();
+
+    expect(
+      screen.getByRole("link", { name: /organization settings/i })
+    ).toHaveAttribute("href", "/organization/settings");
+  }, 10_000);
+
   it(
     "links to account settings from the user dropdown",
     {
@@ -243,10 +268,11 @@ describe("nav user", () => {
     () => {
       renderNavUser();
 
-      expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
-        "href",
-        "/settings"
-      );
+      expect(
+        screen
+          .getAllByRole("link")
+          .find((link) => link.getAttribute("href") === "/settings")
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("button", {
           name: /sign out/i,
