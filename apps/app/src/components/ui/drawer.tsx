@@ -9,6 +9,14 @@ function Drawer({
   return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
 }
 
+function DrawerNestedRoot({
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) {
+  return (
+    <DrawerPrimitive.NestedRoot data-slot="drawer-nested-root" {...props} />
+  );
+}
+
 function DrawerTrigger({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
@@ -118,6 +126,19 @@ function DrawerDescription({
   );
 }
 
+function DrawerHandle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Handle>) {
+  return (
+    <DrawerPrimitive.Handle
+      data-slot="drawer-handle"
+      className={cn("mx-auto mt-4", className)}
+      {...props}
+    />
+  );
+}
+
 export {
   Drawer,
   DrawerPortal,
@@ -129,4 +150,6 @@ export {
   DrawerFooter,
   DrawerTitle,
   DrawerDescription,
+  DrawerNestedRoot,
+  DrawerHandle,
 };
