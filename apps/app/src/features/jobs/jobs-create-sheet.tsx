@@ -45,15 +45,9 @@ import {
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog";
-import {
-  Drawer,
   DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "#/components/ui/drawer";
@@ -64,6 +58,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
+import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { cn } from "#/lib/utils";
@@ -163,8 +158,8 @@ export function JobsCreateSheet() {
   const [values, setValues] =
     React.useState<JobsCreateFormState>(defaultFormState);
   const [overlayOpen, setOverlayOpen] = React.useState(true);
-  const [siteDialogOpen, setSiteDialogOpen] = React.useState(false);
-  const [locationDialogOpen, setLocationDialogOpen] = React.useState(false);
+  const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
+  const [locationDrawerOpen, setLocationDrawerOpen] = React.useState(false);
   const closeNavigationTimeout = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -184,21 +179,21 @@ export function JobsCreateSheet() {
 
   React.useEffect(() => {
     if (values.siteSelection !== INLINE_CREATE_VALUE) {
-      setSiteDialogOpen(false);
-      setLocationDialogOpen(false);
+      setSiteDrawerOpen(false);
+      setLocationDrawerOpen(false);
     }
   }, [values.siteSelection]);
 
   React.useEffect(() => {
     if (fieldErrors.siteLatitude || fieldErrors.siteLongitude) {
-      setSiteDialogOpen(true);
-      setLocationDialogOpen(true);
+      setSiteDrawerOpen(true);
+      setLocationDrawerOpen(true);
     }
   }, [fieldErrors.siteLatitude, fieldErrors.siteLongitude]);
 
   React.useEffect(() => {
     if (fieldErrors.siteName && values.siteSelection === INLINE_CREATE_VALUE) {
-      setSiteDialogOpen(true);
+      setSiteDrawerOpen(true);
     }
   }, [fieldErrors.siteName, values.siteSelection]);
 
@@ -387,7 +382,7 @@ export function JobsCreateSheet() {
                   }));
 
                   if (nextValue === INLINE_CREATE_VALUE) {
-                    setSiteDialogOpen(true);
+                    setSiteDrawerOpen(true);
                   }
                 }}
               />
@@ -441,7 +436,7 @@ export function JobsCreateSheet() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setSiteDialogOpen(true)}
+                  onClick={() => setSiteDrawerOpen(true)}
                 >
                   Edit details
                 </Button>
@@ -450,7 +445,7 @@ export function JobsCreateSheet() {
           </FieldGroup>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <Button
             type="button"
             variant="ghost"
@@ -466,20 +461,30 @@ export function JobsCreateSheet() {
             />
             {createResult.waiting ? "Creating..." : "Create job"}
           </Button>
-        </div>
+        </DrawerFooter>
       </form>
 
-      <Dialog open={siteDialogOpen} onOpenChange={setSiteDialogOpen}>
-        <DialogContent className="flex max-h-[min(680px,calc(100vh-2rem))] grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-2xl">
-          <DialogHeader className="border-b px-6 py-4">
+      <ResponsiveDrawer
+        nested
+        open={siteDrawerOpen}
+        onOpenChange={(nextOpen) => {
+          setSiteDrawerOpen(nextOpen);
+
+          if (!nextOpen) {
+            setLocationDrawerOpen(false);
+          }
+        }}
+      >
+        <DrawerContent className="max-h-[92vh] w-full p-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
+          <DrawerHeader className="border-b px-5 py-4 text-left md:px-6">
             <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
               Site
             </Badge>
-            <DialogTitle>New site</DialogTitle>
-            <DialogDescription>
+            <DrawerTitle>New site</DrawerTitle>
+            <DrawerDescription>
               Capture the place once. Pin it if the map matters.
-            </DialogDescription>
-          </DialogHeader>
+            </DrawerDescription>
+          </DrawerHeader>
 
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             <FieldGroup>
@@ -538,231 +543,244 @@ export function JobsCreateSheet() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => setLocationDialogOpen(true)}
+                onClick={() => setLocationDrawerOpen(true)}
               >
                 Edit location
               </Button>
             </div>
           </div>
 
-          <div className="flex justify-end border-t px-5 py-4 sm:px-6">
-            <Button type="button" onClick={() => setSiteDialogOpen(false)}>
+          <div
+            aria-hidden={locationDrawerOpen ? true : undefined}
+            className="flex justify-end border-t px-5 py-4 sm:px-6"
+          >
+            <Button type="button" onClick={() => setSiteDrawerOpen(false)}>
               Done
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
-        <DialogContent className="flex max-h-[min(720px,calc(100vh-2rem))] grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-3xl">
-          <DialogHeader className="border-b px-6 py-4">
-            <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-              Location
-            </Badge>
-            <DialogTitle>Site location</DialogTitle>
-            <DialogDescription>
-              Add the address, then place the pin if helpful.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid flex-1 gap-5 overflow-y-auto px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,1.05fr)]">
-            <FieldGroup>
-              <AuthFormField
-                label="Address line 1"
-                htmlFor="new-site-address-line-1"
-                invalid={false}
-              >
-                <Input
-                  id="new-site-address-line-1"
-                  value={values.siteAddressLine1}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      siteAddressLine1: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Address line 2"
-                htmlFor="new-site-address-line-2"
-                invalid={false}
-              >
-                <Input
-                  id="new-site-address-line-2"
-                  value={values.siteAddressLine2}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      siteAddressLine2: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AuthFormField
-                  label="Town"
-                  htmlFor="new-site-town"
-                  invalid={false}
+          <ResponsiveDrawer
+            nested
+            open={locationDrawerOpen}
+            onOpenChange={setLocationDrawerOpen}
+          >
+            <DrawerContent className="max-h-[92vh] w-full p-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-3xl">
+              <DrawerHeader className="border-b px-5 py-4 text-left md:px-6">
+                <Badge
+                  variant="secondary"
+                  className="w-fit rounded-full px-3 py-1"
                 >
-                  <Input
-                    id="new-site-town"
-                    value={values.siteTown}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        siteTown: event.target.value,
-                      }))
-                    }
-                  />
-                </AuthFormField>
+                  Location
+                </Badge>
+                <DrawerTitle>Site location</DrawerTitle>
+                <DrawerDescription>
+                  Add the address, then place the pin if helpful.
+                </DrawerDescription>
+              </DrawerHeader>
 
-                <AuthFormField
-                  label="County"
-                  htmlFor="new-site-county"
-                  invalid={false}
-                >
-                  <Input
-                    id="new-site-county"
-                    value={values.siteCounty}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        siteCounty: event.target.value,
-                      }))
-                    }
-                  />
-                </AuthFormField>
-              </div>
-
-              <AuthFormField
-                label="Eircode"
-                htmlFor="new-site-eircode"
-                invalid={false}
-              >
-                <Input
-                  id="new-site-eircode"
-                  value={values.siteEircode}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      siteEircode: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Access notes"
-                htmlFor="new-site-access-notes"
-                invalid={false}
-              >
-                <Textarea
-                  id="new-site-access-notes"
-                  rows={3}
-                  value={values.siteAccessNotes}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      siteAccessNotes: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-            </FieldGroup>
-
-            <div className="flex flex-col gap-3 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex max-w-[32rem] flex-col gap-1">
-                  <p className="font-medium">Site pin</p>
-                </div>
-                {parsedSiteCoordinates ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setValues((current) => ({
-                        ...current,
-                        siteLatitude: "",
-                        siteLongitude: "",
-                      }))
-                    }
+              <div className="grid flex-1 gap-5 overflow-y-auto px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,1.05fr)]">
+                <FieldGroup>
+                  <AuthFormField
+                    label="Address line 1"
+                    htmlFor="new-site-address-line-1"
+                    invalid={false}
                   >
-                    Clear pin
-                  </Button>
-                ) : null}
-              </div>
+                    <Input
+                      id="new-site-address-line-1"
+                      value={values.siteAddressLine1}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          siteAddressLine1: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
 
-              <JobsSitePinPicker
-                latitude={parsedSiteCoordinates?.latitude}
-                longitude={parsedSiteCoordinates?.longitude}
-                onChange={(next) =>
-                  setValues((current) => ({
-                    ...current,
-                    siteLatitude: formatCoordinate(next.latitude),
-                    siteLongitude: formatCoordinate(next.longitude),
-                  }))
-                }
-              />
+                  <AuthFormField
+                    label="Address line 2"
+                    htmlFor="new-site-address-line-2"
+                    invalid={false}
+                  >
+                    <Input
+                      id="new-site-address-line-2"
+                      value={values.siteAddressLine2}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          siteAddressLine2: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AuthFormField
-                  label="Latitude"
-                  htmlFor="new-site-latitude"
-                  invalid={Boolean(fieldErrors.siteLatitude)}
-                  errorText={fieldErrors.siteLatitude}
-                >
-                  <Input
-                    id="new-site-latitude"
-                    inputMode="decimal"
-                    value={values.siteLatitude}
-                    aria-invalid={
-                      Boolean(fieldErrors.siteLatitude) || undefined
-                    }
-                    onChange={(event) =>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <AuthFormField
+                      label="Town"
+                      htmlFor="new-site-town"
+                      invalid={false}
+                    >
+                      <Input
+                        id="new-site-town"
+                        value={values.siteTown}
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            siteTown: event.target.value,
+                          }))
+                        }
+                      />
+                    </AuthFormField>
+
+                    <AuthFormField
+                      label="County"
+                      htmlFor="new-site-county"
+                      invalid={false}
+                    >
+                      <Input
+                        id="new-site-county"
+                        value={values.siteCounty}
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            siteCounty: event.target.value,
+                          }))
+                        }
+                      />
+                    </AuthFormField>
+                  </div>
+
+                  <AuthFormField
+                    label="Eircode"
+                    htmlFor="new-site-eircode"
+                    invalid={false}
+                  >
+                    <Input
+                      id="new-site-eircode"
+                      value={values.siteEircode}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          siteEircode: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
+
+                  <AuthFormField
+                    label="Access notes"
+                    htmlFor="new-site-access-notes"
+                    invalid={false}
+                  >
+                    <Textarea
+                      id="new-site-access-notes"
+                      rows={3}
+                      value={values.siteAccessNotes}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          siteAccessNotes: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
+                </FieldGroup>
+
+                <div className="flex flex-col gap-3 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex max-w-[32rem] flex-col gap-1">
+                      <p className="font-medium">Site pin</p>
+                    </div>
+                    {parsedSiteCoordinates ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setValues((current) => ({
+                            ...current,
+                            siteLatitude: "",
+                            siteLongitude: "",
+                          }))
+                        }
+                      >
+                        Clear pin
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <JobsSitePinPicker
+                    latitude={parsedSiteCoordinates?.latitude}
+                    longitude={parsedSiteCoordinates?.longitude}
+                    onChange={(next) =>
                       setValues((current) => ({
                         ...current,
-                        siteLatitude: event.target.value,
+                        siteLatitude: formatCoordinate(next.latitude),
+                        siteLongitude: formatCoordinate(next.longitude),
                       }))
                     }
                   />
-                </AuthFormField>
 
-                <AuthFormField
-                  label="Longitude"
-                  htmlFor="new-site-longitude"
-                  invalid={Boolean(fieldErrors.siteLongitude)}
-                  errorText={fieldErrors.siteLongitude}
-                >
-                  <Input
-                    id="new-site-longitude"
-                    inputMode="decimal"
-                    value={values.siteLongitude}
-                    aria-invalid={
-                      Boolean(fieldErrors.siteLongitude) || undefined
-                    }
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        siteLongitude: event.target.value,
-                      }))
-                    }
-                  />
-                </AuthFormField>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <AuthFormField
+                      label="Latitude"
+                      htmlFor="new-site-latitude"
+                      invalid={Boolean(fieldErrors.siteLatitude)}
+                      errorText={fieldErrors.siteLatitude}
+                    >
+                      <Input
+                        id="new-site-latitude"
+                        inputMode="decimal"
+                        value={values.siteLatitude}
+                        aria-invalid={
+                          Boolean(fieldErrors.siteLatitude) || undefined
+                        }
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            siteLatitude: event.target.value,
+                          }))
+                        }
+                      />
+                    </AuthFormField>
+
+                    <AuthFormField
+                      label="Longitude"
+                      htmlFor="new-site-longitude"
+                      invalid={Boolean(fieldErrors.siteLongitude)}
+                      errorText={fieldErrors.siteLongitude}
+                    >
+                      <Input
+                        id="new-site-longitude"
+                        inputMode="decimal"
+                        value={values.siteLongitude}
+                        aria-invalid={
+                          Boolean(fieldErrors.siteLongitude) || undefined
+                        }
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            siteLongitude: event.target.value,
+                          }))
+                        }
+                      />
+                    </AuthFormField>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="flex justify-end border-t px-5 py-4 sm:px-6">
-            <Button type="button" onClick={() => setLocationDialogOpen(false)}>
-              Done
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+              <div className="flex justify-end border-t px-5 py-4 sm:px-6">
+                <Button
+                  type="button"
+                  onClick={() => setLocationDrawerOpen(false)}
+                >
+                  Done
+                </Button>
+              </div>
+            </DrawerContent>
+          </ResponsiveDrawer>
+        </DrawerContent>
+      </ResponsiveDrawer>
     </ResponsiveCreateOverlay>
   );
 }
@@ -979,62 +997,16 @@ function ResponsiveCreateOverlay({
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
 }) {
-  const isDesktop = useResponsiveCreateDialog();
-
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="flex max-h-[min(760px,calc(100vh-2rem))] max-w-5xl grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-3xl"
-          showCloseButton
-        >
-          <DialogHeader className="border-b px-6 py-5">
-            <DialogTitle>New job</DialogTitle>
-          </DialogHeader>
-          {children}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[92vh] p-0">
-        <DrawerHeader className="border-b px-5 py-4 text-left">
+    <ResponsiveDrawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[92vh] w-full p-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-3xl">
+        <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New job</DrawerTitle>
         </DrawerHeader>
         {children}
       </DrawerContent>
-    </Drawer>
+    </ResponsiveDrawer>
   );
-}
-
-function useResponsiveCreateDialog() {
-  return React.useSyncExternalStore(
-    subscribeToCreateDialogViewport,
-    getCreateDialogViewportSnapshot,
-    () => true
-  );
-}
-
-function subscribeToCreateDialogViewport(onStoreChange: () => void) {
-  if (typeof window === "undefined") {
-    return () => null;
-  }
-
-  window.addEventListener("resize", onStoreChange);
-
-  return () => {
-    window.removeEventListener("resize", onStoreChange);
-  };
-}
-
-function getCreateDialogViewportSnapshot() {
-  if (typeof window === "undefined") {
-    return true;
-  }
-
-  return window.innerWidth >= 768;
 }
 
 function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {

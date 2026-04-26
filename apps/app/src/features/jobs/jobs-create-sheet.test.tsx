@@ -211,21 +211,30 @@ vi.mock("#/components/ui/select", () => ({
   Select: (props: ComponentProps<"select">) => <select {...props} />,
 }));
 
-vi.mock("#/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: { children?: ReactNode }) => (
+vi.mock("#/components/ui/responsive-drawer", () => ({
+  ResponsiveDrawer: ({
+    children,
+    open = true,
+  }: {
+    children?: ReactNode;
+    open?: boolean;
+  }) => (open ? <div>{children}</div> : null),
+}));
+
+vi.mock("#/components/ui/drawer", () => ({
+  DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
-  SheetDescription: ({ children }: { children?: ReactNode }) => (
+  DrawerDescription: ({ children }: { children?: ReactNode }) => (
     <p>{children}</p>
   ),
-  SheetFooter: ({ children }: { children?: ReactNode }) => (
+  DrawerFooter: ({ children }: { children?: ReactNode }) => (
     <footer>{children}</footer>
   ),
-  SheetHeader: ({ children }: { children?: ReactNode }) => (
+  DrawerHeader: ({ children }: { children?: ReactNode }) => (
     <header>{children}</header>
   ),
-  SheetTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
+  DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
 vi.mock("#/features/auth/auth-form-field", () => ({
