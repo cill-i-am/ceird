@@ -27,6 +27,7 @@ export function getErrorText(
 }
 
 type AuthFailureAction = "signIn" | "signUp";
+type SettingsFailureAction = "email" | "password" | "profile";
 const AuthFailureError = Schema.Struct({
   status: Schema.optional(Schema.Number),
 });
@@ -81,6 +82,24 @@ export function getPasswordResetFailureMessage(error: unknown): string {
     error,
     "We couldn't reset your password. Please try again."
   );
+}
+
+export function getSettingsFailureMessage(
+  action: SettingsFailureAction,
+  error: unknown
+): string {
+  let fallbackMessage: string;
+
+  if (action === "profile") {
+    fallbackMessage = "We couldn't update your profile. Please try again.";
+  } else if (action === "email") {
+    fallbackMessage = "We couldn't send that email change. Please try again.";
+  } else {
+    fallbackMessage =
+      "We couldn't update your password. Check your current password and try again.";
+  }
+
+  return getRateLimitedFailureMessage(error, fallbackMessage);
 }
 
 export function isInvalidPasswordResetTokenError(error: unknown): boolean {

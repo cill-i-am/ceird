@@ -61,7 +61,7 @@ describe("auth client", () => {
 
   it("builds the email change callback URL for the settings page", () => {
     expect(buildEmailChangeRedirectTo("http://localhost:3000")).toBe(
-      "http://localhost:3000/settings?emailChange=verified"
+      "http://localhost:3000/settings?emailChange=complete"
     );
   }, 1000);
 });

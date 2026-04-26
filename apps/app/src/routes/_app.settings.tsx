@@ -1,6 +1,7 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 
 import { UserSettingsPage } from "#/features/settings/user-settings-page";
+import { decodeUserSettingsSearch } from "#/features/settings/user-settings-search";
 
 export const Route = createFileRoute("/_app/settings")({
   staticData: {
@@ -8,9 +9,7 @@ export const Route = createFileRoute("/_app/settings")({
       label: "Settings",
     },
   },
-  validateSearch: (search: Record<string, unknown>) => ({
-    emailChange: search.emailChange === "verified" ? "verified" : undefined,
-  }),
+  validateSearch: decodeUserSettingsSearch,
   component: SettingsRoute,
 });
 

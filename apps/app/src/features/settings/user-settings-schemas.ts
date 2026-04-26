@@ -2,23 +2,26 @@
 
 import { ParseResult, Schema } from "effect";
 
-const Email = Schema.Trim.pipe(
-  Schema.nonEmptyString({
-    message: () => "Enter a valid email address",
-  }),
-  Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, {
+import {
+  accountEmailSchema,
+  accountNameSchema,
+  accountPasswordSchema,
+} from "#/features/auth/auth-schemas";
+
+const SettingsEmail = accountEmailSchema.pipe(
+  Schema.annotations({
     message: () => "Enter a valid email address",
   })
 );
 
-const Password = Schema.Trim.pipe(
-  Schema.minLength(8, {
+const SettingsPassword = accountPasswordSchema.pipe(
+  Schema.annotations({
     message: () => "Use 8 or more characters",
   })
 );
 
-const Name = Schema.Trim.pipe(
-  Schema.minLength(2, {
+const SettingsName = accountNameSchema.pipe(
+  Schema.annotations({
     message: () => "Use at least 2 characters",
   })
 );
@@ -34,13 +37,13 @@ const ImageUrl = Schema.transform(Schema.Trim, Schema.NullOr(Schema.String), {
         return true;
       }
 
-      try {
-        const url = new URL(value);
-
-        return url.protocol === "http:" || url.protocol === "https:";
-      } catch {
+      if (!URL.canParse(value)) {
         return false;
       }
+
+      const url = new URL(value);
+
+      return url.protocol === "http:" || url.protocol === "https:";
     },
     {
       message: () => "Enter a valid http or https image URL",
@@ -49,21 +52,25 @@ const ImageUrl = Schema.transform(Schema.Trim, Schema.NullOr(Schema.String), {
 );
 
 const ProfileSettingsInput = Schema.Struct({
-  name: Name,
+  name: SettingsName,
   image: ImageUrl,
 });
 
 const ChangeEmailInput = Schema.Struct({
-  email: Email,
+  email: SettingsEmail,
 });
 
 const ChangePasswordInput = Schema.Struct({
-  currentPassword: Password,
-  newPassword: Password,
-  confirmPassword: Password,
+  currentPassword: SettingsPassword,
+  newPassword: SettingsPassword,
+  confirmPassword: SettingsPassword,
 }).pipe(
   Schema.filter((input) => input.newPassword === input.confirmPassword, {
     message: () => "Passwords must match",
+  }),
+  Schema.filter((input) => input.currentPassword !== input.newPassword, {
+    message: () =>
+      "Use a new password that is different from your current password",
   })
 );
 

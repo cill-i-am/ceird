@@ -160,7 +160,7 @@ export function buildEmailVerificationRedirectTo(origin: string): string {
 
 export function buildEmailChangeRedirectTo(origin: string): string {
   const redirectURL = new URL("/settings", origin);
-  redirectURL.searchParams.set("emailChange", "verified");
+  redirectURL.searchParams.set("emailChange", "complete");
 
   return redirectURL.toString();
 }

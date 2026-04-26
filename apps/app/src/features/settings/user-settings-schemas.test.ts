@@ -40,6 +40,24 @@ describe("user settings schemas", () => {
     ).toThrow(/at least 2/i);
   });
 
+  it("rejects malformed avatar image URLs", () => {
+    expect(() =>
+      decodeProfileSettingsInput({
+        name: "Taylor Example",
+        image: "not-a-url",
+      })
+    ).toThrow(/valid http or https image URL/i);
+  });
+
+  it("rejects non-http avatar image URLs", () => {
+    expect(() =>
+      decodeProfileSettingsInput({
+        name: "Taylor Example",
+        image: "ftp://example.com/avatar.png",
+      })
+    ).toThrow(/valid http or https image URL/i);
+  });
+
   it("normalizes change email input", () => {
     expect(
       decodeChangeEmailInput({
@@ -72,6 +90,20 @@ describe("user settings schemas", () => {
     });
   });
 
+  it("preserves surrounding whitespace in password inputs", () => {
+    expect(
+      decodeChangePasswordInput({
+        currentPassword: "  old-password  ",
+        newPassword: "  new-password  ",
+        confirmPassword: "  new-password  ",
+      })
+    ).toStrictEqual({
+      currentPassword: "  old-password  ",
+      newPassword: "  new-password  ",
+      confirmPassword: "  new-password  ",
+    });
+  });
+
   it("rejects mismatched password confirmation", () => {
     expect(() =>
       decodeChangePasswordInput({
@@ -80,5 +112,15 @@ describe("user settings schemas", () => {
         confirmPassword: "different-password",
       })
     ).toThrow(/passwords must match/i);
+  });
+
+  it("rejects unchanged password submissions", () => {
+    expect(() =>
+      decodeChangePasswordInput({
+        currentPassword: "same-password",
+        newPassword: "same-password",
+        confirmPassword: "same-password",
+      })
+    ).toThrow(/different from your current password/i);
   });
 });

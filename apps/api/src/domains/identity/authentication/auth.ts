@@ -147,12 +147,24 @@ function makeEmailVerificationDeliveryKey(input: {
   return `email-verification/${digest}`;
 }
 
+function makeEmailChangeConfirmationDeliveryKey(input: {
+  readonly token: string;
+  readonly userId: string;
+}) {
+  const digest = createHash("sha256")
+    .update(`email-change-confirmation:${input.userId}:${input.token}`)
+    .digest("hex");
+
+  return `email-change-confirmation/${digest}`;
+}
+
 export function createAuthentication(options: {
   readonly appOrigin: string;
   readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
   readonly config: AuthenticationConfig;
   readonly database: NodePgDatabase<typeof authSchema>;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
+  readonly reportEmailChangeConfirmationFailure?: (error: unknown) => void;
   readonly sendOrganizationInvitationEmail: (
     input: OrganizationInvitationEmailInput
   ) => Promise<void>;
@@ -262,6 +274,29 @@ export function createAuthentication(options: {
             verificationUrl: url,
           } as const satisfies EmailVerificationEmailInput,
         });
+      },
+    },
+    user: {
+      ...authConfig.user,
+      changeEmail: {
+        ...authConfig.user.changeEmail,
+        sendChangeEmailConfirmation: async ({ user, token, url }) => {
+          await deliverAuthEmail({
+            reportFailure:
+              options.reportEmailChangeConfirmationFailure ??
+              options.reportVerificationEmailFailure,
+            send: sendVerificationEmail,
+            input: {
+              deliveryKey: makeEmailChangeConfirmationDeliveryKey({
+                token,
+                userId: user.id,
+              }),
+              recipientEmail: user.email,
+              recipientName: user.name ?? user.email,
+              verificationUrl: url,
+            } as const satisfies EmailVerificationEmailInput,
+          });
+        },
       },
     },
   });
@@ -426,12 +461,17 @@ export class Authentication extends Effect.Service<Authentication>()(
         runtime,
         "Verification email delivery failed"
       );
+      const reportEmailChangeConfirmationFailure = makeEmailFailureReporter(
+        runtime,
+        "Email change confirmation delivery failed"
+      );
 
       return createAuthentication({
         appOrigin: authEmailConfig.appOrigin,
         backgroundTaskHandler,
         config,
         database: authDb,
+        reportEmailChangeConfirmationFailure,
         reportPasswordResetEmailFailure,
         sendOrganizationInvitationEmail:
           authEmailPromiseBridge.sendOrganizationInvitationEmail,

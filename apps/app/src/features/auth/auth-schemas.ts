@@ -1,24 +1,24 @@
 import { ParseResult, Schema } from "effect";
 
-const Email = Schema.Trim.pipe(
+export const accountEmailSchema = Schema.Trim.pipe(
   Schema.nonEmptyString(),
   Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
 );
 
-const Password = Schema.Trim.pipe(Schema.minLength(8));
+export const accountPasswordSchema = Schema.String.pipe(Schema.minLength(8));
 
-const Name = Schema.Trim.pipe(Schema.minLength(2));
+export const accountNameSchema = Schema.Trim.pipe(Schema.minLength(2));
 
 const LoginInput = Schema.Struct({
-  email: Email,
-  password: Password,
+  email: accountEmailSchema,
+  password: accountPasswordSchema,
 });
 
 const SignupInput = Schema.Struct({
-  name: Name,
-  email: Email,
-  password: Password,
-  confirmPassword: Password,
+  name: accountNameSchema,
+  email: accountEmailSchema,
+  password: accountPasswordSchema,
+  confirmPassword: accountPasswordSchema,
 }).pipe(
   Schema.filter((input) => input.password === input.confirmPassword),
   Schema.annotations({
@@ -27,12 +27,12 @@ const SignupInput = Schema.Struct({
 );
 
 const PasswordResetRequestInput = Schema.Struct({
-  email: Email,
+  email: accountEmailSchema,
 });
 
 const PasswordResetInput = Schema.Struct({
-  password: Password,
-  confirmPassword: Password,
+  password: accountPasswordSchema,
+  confirmPassword: accountPasswordSchema,
 }).pipe(
   Schema.filter((input) => input.password === input.confirmPassword),
   Schema.annotations({

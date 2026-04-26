@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import {
   getErrorText,
   getFormErrorText,
+  getSettingsFailureMessage,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { authClient, buildEmailChangeRedirectTo } from "#/lib/auth-client";
@@ -23,31 +24,30 @@ import {
   decodeProfileSettingsInput,
   profileSettingsSchema,
 } from "./user-settings-schemas";
+import type { EmailChangeStatus } from "./user-settings-search";
 
 export interface UserSettingsAccount {
   readonly email: string;
-  readonly emailVerified: boolean;
   readonly image?: string | null;
   readonly name: string;
 }
 
-function getSettingsFailureMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string" &&
-    error.message.trim().length > 0
-  ) {
-    return error.message;
-  }
-
-  return "We couldn't save that change. Please try again.";
-}
-
-function FormStatus({ children }: { readonly children: React.ReactNode }) {
+function FormStatus({
+  children,
+  tone = "neutral",
+}: {
+  readonly children: React.ReactNode;
+  readonly tone?: "destructive" | "neutral";
+}) {
   return (
-    <p className="text-sm text-muted-foreground" role="status">
+    <p
+      className={
+        tone === "destructive"
+          ? "text-sm text-destructive"
+          : "text-sm text-muted-foreground"
+      }
+      role={tone === "destructive" ? "alert" : "status"}
+    >
       {children}
     </p>
   );
@@ -58,20 +58,22 @@ export function UserSettingsPage({
   emailChangeStatus,
 }: {
   readonly user: UserSettingsAccount;
-  readonly emailChangeStatus?: string | undefined;
+  readonly emailChangeStatus?: EmailChangeStatus | undefined;
 }) {
   const router = useRouter();
   const [profileMessage, setProfileMessage] = React.useState<string | null>(
     null
   );
-  const [emailMessage, setEmailMessage] = React.useState<string | null>(
-    emailChangeStatus === "verified"
-      ? "Your email address has been updated."
-      : null
+  const [emailMessage, setEmailMessage] = React.useState<string | null>(() =>
+    getEmailChangeStatusMessage(emailChangeStatus)
   );
   const [passwordMessage, setPasswordMessage] = React.useState<string | null>(
     null
   );
+
+  React.useEffect(() => {
+    setEmailMessage(getEmailChangeStatusMessage(emailChangeStatus));
+  }, [emailChangeStatus]);
 
   const profileForm = useForm({
     defaultValues: {
@@ -86,6 +88,11 @@ export function UserSettingsPage({
       setProfileMessage(null);
 
       const input = decodeProfileSettingsInput(value);
+      if (input.name === user.name && input.image === (user.image ?? null)) {
+        setProfileMessage("No profile changes to save.");
+        return;
+      }
+
       const result = await authClient.updateUser({
         name: input.name,
         image: input.image,
@@ -94,7 +101,7 @@ export function UserSettingsPage({
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: getSettingsFailureMessage(result.error),
+            form: getSettingsFailureMessage("profile", result.error),
             fields: {},
           },
         });
@@ -136,7 +143,7 @@ export function UserSettingsPage({
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: getSettingsFailureMessage(result.error),
+            form: getSettingsFailureMessage("email", result.error),
             fields: {},
           },
         });
@@ -171,7 +178,7 @@ export function UserSettingsPage({
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: getSettingsFailureMessage(result.error),
+            form: getSettingsFailureMessage("password", result.error),
             fields: {},
           },
         });
@@ -298,7 +305,7 @@ export function UserSettingsPage({
             <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
               Current email
             </p>
-            <p className="mt-1 truncate text-sm font-medium text-foreground">
+            <p className="mt-1 text-sm font-medium break-all text-foreground">
               {user.email}
             </p>
           </div>
@@ -349,7 +356,15 @@ export function UserSettingsPage({
                 ) : null
               }
             </emailForm.Subscribe>
-            {emailMessage ? <FormStatus>{emailMessage}</FormStatus> : null}
+            {emailMessage ? (
+              <FormStatus
+                tone={
+                  emailChangeStatus === "failed" ? "destructive" : "neutral"
+                }
+              >
+                {emailMessage}
+              </FormStatus>
+            ) : null}
 
             <emailForm.Subscribe selector={(state) => state.isSubmitting}>
               {(isSubmitting) => (
@@ -497,4 +512,18 @@ export function UserSettingsPage({
       </div>
     </div>
   );
+}
+
+function getEmailChangeStatusMessage(
+  status: EmailChangeStatus | undefined
+): string | null {
+  if (status === "complete") {
+    return "Email verification completed. Your current sign-in email is shown below.";
+  }
+
+  if (status === "failed") {
+    return "That email verification link is invalid or expired. Request a new email change to try again.";
+  }
+
+  return null;
 }

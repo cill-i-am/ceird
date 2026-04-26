@@ -114,6 +114,14 @@ export interface AuthenticationConfig {
         readonly window: 60;
         readonly max: 3;
       };
+      readonly "/change-email": {
+        readonly window: 60;
+        readonly max: 3;
+      };
+      readonly "/change-password": {
+        readonly window: 60;
+        readonly max: 5;
+      };
     };
   };
   readonly emailAndPassword: {
@@ -258,6 +266,14 @@ export function makeAuthenticationConfig(
         "/send-verification-email": {
           window: 60,
           max: 3,
+        },
+        "/change-email": {
+          window: 60,
+          max: 3,
+        },
+        "/change-password": {
+          window: 60,
+          max: 5,
         },
       },
     },
