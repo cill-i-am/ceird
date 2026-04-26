@@ -158,6 +158,13 @@ export function buildEmailVerificationRedirectTo(origin: string): string {
   return redirectURL.toString();
 }
 
+export function buildEmailChangeRedirectTo(origin: string): string {
+  const redirectURL = new URL("/settings", origin);
+  redirectURL.searchParams.set("emailChange", "complete");
+
+  return redirectURL.toString();
+}
+
 export const authClient =
   typeof window === "undefined"
     ? createTaskTrackerAuthClient()

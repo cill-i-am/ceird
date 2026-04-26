@@ -26,11 +26,23 @@ describe("auth schemas", () => {
     expect(
       decodeLoginInput({
         email: " user@example.com ",
-        password: "  supersecret  ",
+        password: "supersecret",
       })
     ).toStrictEqual({
       email: "user@example.com",
       password: "supersecret",
+    });
+  }, 1000);
+
+  it("preserves surrounding whitespace in passwords", () => {
+    expect(
+      decodeLoginInput({
+        email: " user@example.com ",
+        password: "  supersecret  ",
+      })
+    ).toStrictEqual({
+      email: "user@example.com",
+      password: "  supersecret  ",
     });
   }, 1000);
 
@@ -50,8 +62,8 @@ describe("auth schemas", () => {
       decodeSignupInput({
         name: " Cillian ",
         email: " cillian@example.com ",
-        password: "  supersecret  ",
-        confirmPassword: "  supersecret  ",
+        password: "supersecret",
+        confirmPassword: "supersecret",
       })
     ).toStrictEqual({
       name: "Cillian",

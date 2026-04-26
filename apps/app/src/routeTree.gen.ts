@@ -17,6 +17,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
+import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
@@ -67,6 +68,11 @@ const AcceptInvitationInvitationIdRoute =
     path: '/accept-invitation/$invitationId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
   id: '/create-organization',
   path: '/create-organization',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/jobs': typeof AppOrgJobsRouteWithChildren
   '/members': typeof AppOrgMembersRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/jobs': typeof AppOrgJobsRouteWithChildren
   '/members': typeof AppOrgMembersRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_app/_org': typeof AppOrgRouteWithChildren
   '/_app/create-organization': typeof AppCreateOrganizationRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/_app/_org/jobs': typeof AppOrgJobsRouteWithChildren
   '/_app/_org/members': typeof AppOrgMembersRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/settings'
     | '/accept-invitation/$invitationId'
     | '/jobs'
     | '/members'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/settings'
     | '/accept-invitation/$invitationId'
     | '/jobs'
     | '/members'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_app/_org'
     | '/_app/create-organization'
+    | '/_app/settings'
     | '/accept-invitation/$invitationId'
     | '/_app/_org/jobs'
     | '/_app/_org/members'
@@ -290,6 +302,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/accept-invitation/$invitationId'
       preLoaderRoute: typeof AcceptInvitationInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/create-organization': {
       id: '/_app/create-organization'
@@ -403,11 +422,13 @@ const AppOrgRouteWithChildren =
 interface AppRouteChildren {
   AppOrgRoute: typeof AppOrgRouteWithChildren
   AppCreateOrganizationRoute: typeof AppCreateOrganizationRoute
+  AppSettingsRoute: typeof AppSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppOrgRoute: AppOrgRouteWithChildren,
   AppCreateOrganizationRoute: AppCreateOrganizationRoute,
+  AppSettingsRoute: AppSettingsRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

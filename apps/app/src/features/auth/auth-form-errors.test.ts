@@ -1,5 +1,6 @@
 import {
   getEmailVerificationFailureMessage,
+  getSettingsFailureMessage,
   isInvalidPasswordResetTokenError,
   getPasswordResetFailureMessage,
   getPasswordResetRequestFailureMessage,
@@ -20,6 +21,12 @@ describe("password reset form errors", () => {
 
   it("preserves the shared rate-limit copy for verification email requests", () => {
     expect(getEmailVerificationFailureMessage({ status: 429 })).toBe(
+      "Too many attempts. Please wait and try again."
+    );
+  }, 1000);
+
+  it("preserves the shared rate-limit copy for settings saves", () => {
+    expect(getSettingsFailureMessage("profile", { status: 429 })).toBe(
       "Too many attempts. Please wait and try again."
     );
   }, 1000);
