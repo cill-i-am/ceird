@@ -65,6 +65,7 @@ describe("jobs authorization", () => {
         Effect.gen(function* () {
           const authorization = yield* JobsAuthorization;
           yield* authorization.ensureCanCreate(owner);
+          yield* authorization.ensureCanCreateSite(owner);
           yield* authorization.ensureCanPatch(owner, assignedJob.id);
           yield* authorization.ensureCanTransition(
             owner,
@@ -79,11 +80,11 @@ describe("jobs authorization", () => {
       runAuthorization(
         Effect.gen(function* () {
           const authorization = yield* JobsAuthorization;
-          yield* authorization.ensureCanCreate(member);
+          yield* authorization.ensureCanCreateSite(member);
         })
       )
     ).rejects.toMatchObject({
-      message: "Only organization owners and admins can create jobs",
+      message: "Only organization owners and admins can create sites",
     });
 
     await expect(

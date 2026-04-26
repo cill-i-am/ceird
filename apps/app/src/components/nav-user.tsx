@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AccountSetting01Icon,
   LogoutIcon,
   Settings02Icon,
   UnfoldMoreIcon,
@@ -137,13 +138,18 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem render={<Link to="/settings" />}>
+              <DropdownMenuItem render={<Link to="/organization/settings" />}>
                 <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
+                Organization settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                render={
+                  <Link to="/settings" search={{ emailChange: undefined }} />
+                }
+              >
+                <HugeiconsIcon icon={AccountSetting01Icon} strokeWidth={2} />
                 Settings
               </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={isSigningOut}
                 onSelect={async (event) => {

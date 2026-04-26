@@ -5,6 +5,7 @@ import type {
   JobListQuery,
   JobListResponse,
   JobOptionsResponse,
+  SitesOptionsResponse,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
 import { Effect } from "effect";
@@ -16,6 +17,7 @@ import {
   listAllCurrentServerJobsDirect,
   getCurrentServerJobDetailDirect,
   getCurrentServerJobOptionsDirect,
+  getCurrentServerSiteOptionsDirect,
   listCurrentServerJobsDirect,
 } from "./jobs-server.server";
 
@@ -38,6 +40,10 @@ const getCurrentServerJobDetailIsomorphic = createIsomorphicFn()
 const getCurrentServerJobOptionsIsomorphic = createIsomorphicFn()
   .server(() => getCurrentServerJobOptionsDirect())
   .client(() => getCurrentBrowserJobOptions());
+
+const getCurrentServerSiteOptionsIsomorphic = createIsomorphicFn()
+  .server(() => getCurrentServerSiteOptionsDirect())
+  .client(() => getCurrentBrowserSiteOptions());
 
 function runBrowserJobsClient<Response>(
   execute: (client: JobsApiClient) => Effect.Effect<Response, unknown>
@@ -100,6 +106,10 @@ async function getCurrentBrowserJobOptions(): Promise<JobOptionsResponse> {
   return await runBrowserJobsClient((client) => client.jobs.getJobOptions());
 }
 
+async function getCurrentBrowserSiteOptions(): Promise<SitesOptionsResponse> {
+  return await runBrowserJobsClient((client) => client.sites.getSiteOptions());
+}
+
 export function listCurrentServerJobs(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
@@ -120,4 +130,8 @@ export function getCurrentServerJobDetail(
 
 export function getCurrentServerJobOptions(): Promise<JobOptionsResponse> {
   return getCurrentServerJobOptionsIsomorphic();
+}
+
+export function getCurrentServerSiteOptions(): Promise<SitesOptionsResponse> {
+  return getCurrentServerSiteOptionsIsomorphic();
 }

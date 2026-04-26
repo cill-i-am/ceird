@@ -8,6 +8,8 @@ import {
   AddJobVisitResponseSchema,
   CreateJobInputSchema,
   CreateJobResponseSchema,
+  CreateSiteInputSchema,
+  CreateSiteResponseSchema,
   JobDetailResponseSchema,
   JobListQuerySchema,
   JobOptionsResponseSchema,
@@ -15,6 +17,7 @@ import {
   PatchJobInputSchema,
   PatchJobResponseSchema,
   ReopenJobResponseSchema,
+  SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
 } from "./dto.js";
@@ -112,7 +115,26 @@ const jobsGroup = HttpApiGroup.make("jobs")
 
 export const JobsApiGroup = jobsGroup;
 
-export const JobsApi = HttpApi.make("JobsApi").add(JobsApiGroup);
+const sitesGroup = HttpApiGroup.make("sites")
+  .add(
+    HttpApiEndpoint.get("getSiteOptions", "/sites/options")
+      .addSuccess(SitesOptionsResponseSchema)
+      .addError(JobAccessDeniedError)
+  )
+  .add(
+    HttpApiEndpoint.post("createSite", "/sites")
+      .setPayload(CreateSiteInputSchema)
+      .addSuccess(CreateSiteResponseSchema, { status: 201 })
+      .addError(JobAccessDeniedError)
+      .addError(RegionNotFoundError)
+  );
+
+export const SitesApiGroup = sitesGroup;
+
+export const JobsApi = HttpApi.make("JobsApi")
+  .add(JobsApiGroup)
+  .add(SitesApiGroup);
 
 export type JobsApiGroupType = typeof JobsApiGroup;
+export type SitesApiGroupType = typeof SitesApiGroup;
 export type JobsApiType = typeof JobsApi;

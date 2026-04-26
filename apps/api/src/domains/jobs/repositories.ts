@@ -925,6 +925,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           from service_regions
           where organization_id = ${organizationId}
             and id = ${regionId}
+            and archived_at is null
           limit 1
         `;
 
@@ -953,7 +954,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.id as SiteId | undefined);
+        return Option.fromNullable(rows[0]?.id).pipe(Option.map(decodeSiteId));
       });
 
       const create = Effect.fn("SitesRepository.create")(function* (
@@ -1012,7 +1013,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           insert into sites ${sql.insert(values).returning("id")}
         `;
 
-        return getRequiredRow(rows, "inserted site id").id as SiteId;
+        return decodeSiteId(getRequiredRow(rows, "inserted site id").id);
       });
 
       const listRegions = Effect.fn("SitesRepository.listRegions")(function* (
@@ -1055,6 +1056,36 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
 
         return rows.map(mapJobSiteOptionRow);
       });
+
+      const getOptionById = Effect.fn("SitesRepository.getOptionById")(
+        function* (organizationId: OrganizationId, siteId: SiteId) {
+          const rows = yield* sql<JobSiteOptionRow>`
+            select
+              sites.access_notes,
+              sites.address_line_1,
+              sites.address_line_2,
+              sites.county,
+              sites.eircode,
+              sites.id,
+              sites.latitude,
+              sites.longitude,
+              sites.name,
+              service_regions.id as region_id,
+              service_regions.name as region_name,
+              sites.town
+            from sites
+            left join service_regions on service_regions.id = sites.region_id
+            where sites.organization_id = ${organizationId}
+              and sites.id = ${siteId}
+              and sites.archived_at is null
+            limit 1
+          `;
+
+          return Option.fromNullable(rows[0]).pipe(
+            Option.map(mapJobSiteOptionRow)
+          );
+        }
+      );
 
       const linkContact = Effect.fn("SitesRepository.linkContact")(function* (
         input: LinkSiteContactInput
@@ -1125,6 +1156,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
       return {
         create,
         findById,
+        getOptionById,
         linkContact,
         listOptions,
         listRegions,

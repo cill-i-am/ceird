@@ -5,6 +5,8 @@ import {
   AddJobCommentInputSchema,
   AddJobVisitInputSchema,
   CreateJobInputSchema,
+  CreateSiteInputSchema,
+  CreateSiteResponseSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
   JobListQuerySchema,
@@ -16,6 +18,8 @@ import {
   JobsContextSchema,
   JobTitleSchema,
   PatchJobInputSchema,
+  SitesOptionsResponseSchema,
+  SitesApiGroup,
   VisitDurationIncrementError,
   WorkItemId,
 } from "./index.js";
@@ -100,6 +104,81 @@ describe("jobs-core", () => {
             longitude: -6.2603,
           },
         },
+      })
+    ).toThrow(/Site coordinates must include both latitude and longitude/);
+  }, 5000);
+
+  it("reuses the site creation DTO for standalone and inline site creation", () => {
+    const standaloneInput = {
+      accessNotes: "  Enter via reception  ",
+      addressLine1: "  1 Custom House Quay  ",
+      latitude: 53.3498,
+      longitude: -6.2603,
+      name: "  Docklands Campus  ",
+      town: "  Dublin  ",
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)(standaloneInput)
+    ).toStrictEqual({
+      accessNotes: "Enter via reception",
+      addressLine1: "1 Custom House Quay",
+      latitude: 53.3498,
+      longitude: -6.2603,
+      name: "Docklands Campus",
+      town: "Dublin",
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        site: {
+          input: standaloneInput,
+          kind: "create",
+        },
+        title: "Replace boiler",
+      }).site
+    ).toStrictEqual({
+      input: {
+        accessNotes: "Enter via reception",
+        addressLine1: "1 Custom House Quay",
+        latitude: 53.3498,
+        longitude: -6.2603,
+        name: "Docklands Campus",
+        town: "Dublin",
+      },
+      kind: "create",
+    });
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "Docklands Campus",
+        latitude: 53.3498,
+      })
+    ).toThrow(/Site coordinates must include both latitude and longitude/);
+  }, 5000);
+
+  it("validates site option coordinates at response boundaries", () => {
+    const siteOption = {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      name: "Docklands Campus",
+      latitude: 53.3498,
+      longitude: -6.2603,
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
+    ).toStrictEqual(siteOption);
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
+        ...siteOption,
+        latitude: 100,
+      })
+    ).toThrow(/less than or equal to 90/);
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
+        id: siteOption.id,
+        name: siteOption.name,
+        latitude: 53.3498,
       })
     ).toThrow(/Site coordinates must include both latitude and longitude/);
   }, 5000);
@@ -189,21 +268,23 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("keeps site options rich enough for maps and links", () => {
+    const siteOption = {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      name: "Docklands Campus",
+      addressLine1: "1 Custom House Quay",
+      addressLine2: "North Dock",
+      town: "Dublin",
+      county: "Dublin",
+      eircode: "D01 X2X2",
+      accessNotes: "Enter via reception",
+      latitude: 53.3498,
+      longitude: -6.2603,
+      regionId: "550e8400-e29b-41d4-a716-446655440011",
+      regionName: "Dublin",
+    };
+
     expect(
-      ParseResult.decodeUnknownSync(JobSiteOptionSchema)({
-        id: "550e8400-e29b-41d4-a716-446655440010",
-        name: "Docklands Campus",
-        addressLine1: "1 Custom House Quay",
-        addressLine2: "North Dock",
-        town: "Dublin",
-        county: "Dublin",
-        eircode: "D01 X2X2",
-        accessNotes: "Enter via reception",
-        latitude: 53.3498,
-        longitude: -6.2603,
-        regionId: "550e8400-e29b-41d4-a716-446655440011",
-        regionName: "Dublin",
-      })
+      ParseResult.decodeUnknownSync(JobSiteOptionSchema)(siteOption)
     ).toStrictEqual({
       id: "550e8400-e29b-41d4-a716-446655440010",
       name: "Docklands Campus",
@@ -218,6 +299,11 @@ describe("jobs-core", () => {
       regionId: "550e8400-e29b-41d4-a716-446655440011",
       regionName: "Dublin",
     });
+    expect(
+      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
+    ).toStrictEqual(
+      ParseResult.decodeUnknownSync(JobSiteOptionSchema)(siteOption)
+    );
   }, 5000);
 
   it("surfaces the jobs api contract with the expected paths", () => {
@@ -231,6 +317,8 @@ describe("jobs-core", () => {
       "/jobs/{workItemId}/reopen",
       "/jobs/{workItemId}/comments",
       "/jobs/{workItemId}/visits",
+      "/sites/options",
+      "/sites",
     ]);
 
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
@@ -244,10 +332,55 @@ describe("jobs-core", () => {
     expect(
       spec.paths["/jobs/{workItemId}/visits"]?.post?.responses["400"]
     ).toBeDefined();
+    expect(spec.paths["/sites/options"]?.get?.operationId).toBe(
+      "sites.getSiteOptions"
+    );
+    expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
+  }, 5000);
+
+  it("documents standalone site creation responses", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+
+    expect(spec.paths["/sites"]?.post?.responses["201"]).toBeDefined();
+    expect(spec.paths["/sites"]?.post?.responses["403"]).toBeDefined();
+    expect(spec.paths["/sites"]?.post?.responses["404"]).toBeDefined();
   }, 5000);
 
   it("exports the shared api group", () => {
     expect(JobsApiGroup.identifier).toBe("jobs");
+    expect(SitesApiGroup.identifier).toBe("sites");
+  }, 5000);
+
+  it("exports a lean sites options response", () => {
+    expect(
+      ParseResult.decodeUnknownSync(SitesOptionsResponseSchema)({
+        regions: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440011",
+            name: "Dublin",
+          },
+        ],
+        sites: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440010",
+            name: "Docklands Campus",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      regions: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440011",
+          name: "Dublin",
+        },
+      ],
+      sites: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440010",
+          name: "Docklands Campus",
+        },
+      ],
+    });
   }, 5000);
 
   it("exports runtime schemas for shared context shapes", () => {

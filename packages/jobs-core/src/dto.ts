@@ -194,7 +194,7 @@ export type CreateJobSiteExistingInput = Schema.Schema.Type<
   typeof CreateJobSiteExistingInputSchema
 >;
 
-const CreateJobSiteInlineFieldsSchema = Schema.Struct({
+export const CreateSiteInputSchema = Schema.Struct({
   name: Schema.Trim.pipe(Schema.minLength(1)),
   regionId: Schema.optional(RegionId),
   addressLine1: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
@@ -215,10 +215,11 @@ const CreateJobSiteInlineFieldsSchema = Schema.Struct({
     message: () => "Site coordinates must include both latitude and longitude",
   })
 );
+export type CreateSiteInput = Schema.Schema.Type<typeof CreateSiteInputSchema>;
 
 export const CreateJobSiteInlineInputSchema = Schema.Struct({
   kind: Schema.Literal("create"),
-  input: CreateJobSiteInlineFieldsSchema,
+  input: CreateSiteInputSchema,
 });
 export type CreateJobSiteInlineInput = Schema.Schema.Type<
   typeof CreateJobSiteInlineInputSchema
@@ -370,10 +371,24 @@ export const JobSiteOptionSchema = Schema.Struct({
   county: Schema.optional(Schema.String),
   eircode: Schema.optional(Schema.String),
   accessNotes: Schema.optional(Schema.String),
-  latitude: Schema.optional(Schema.Number),
-  longitude: Schema.optional(Schema.Number),
-});
+  latitude: Schema.optional(SiteLatitudeSchema),
+  longitude: Schema.optional(SiteLongitudeSchema),
+}).pipe(
+  Schema.filter(
+    (site) =>
+      (site.latitude === undefined && site.longitude === undefined) ||
+      (site.latitude !== undefined && site.longitude !== undefined)
+  ),
+  Schema.annotations({
+    message: () => "Site coordinates must include both latitude and longitude",
+  })
+);
 export type JobSiteOption = Schema.Schema.Type<typeof JobSiteOptionSchema>;
+
+export const CreateSiteResponseSchema = JobSiteOptionSchema;
+export type CreateSiteResponse = Schema.Schema.Type<
+  typeof CreateSiteResponseSchema
+>;
 
 export const JobContactOptionSchema = Schema.Struct({
   id: ContactId,
@@ -392,6 +407,14 @@ export const JobOptionsResponseSchema = Schema.Struct({
 });
 export type JobOptionsResponse = Schema.Schema.Type<
   typeof JobOptionsResponseSchema
+>;
+
+export const SitesOptionsResponseSchema = Schema.Struct({
+  regions: Schema.Array(JobRegionOptionSchema),
+  sites: Schema.Array(JobSiteOptionSchema),
+});
+export type SitesOptionsResponse = Schema.Schema.Type<
+  typeof SitesOptionsResponseSchema
 >;
 
 export const JobDetailResponseSchema = JobDetailSchema;

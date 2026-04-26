@@ -36,6 +36,23 @@ const { mockedHardRedirectToLogin } = vi.hoisted(() => ({
   mockedHardRedirectToLogin: vi.fn<() => boolean>(),
 }));
 
+vi.mock(import("@tanstack/react-router"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    Link: (({
+      children,
+      to,
+      ...props
+    }: ComponentProps<"a"> & { to?: string }) => (
+      <a href={to} {...props}>
+        {children}
+      </a>
+    )) as typeof actual.Link,
+  };
+});
+
 vi.mock(import("#/features/auth/sign-out"), async (importActual) => {
   const actual = await importActual();
 
@@ -140,17 +157,15 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       render?: ReactNode;
       disabled?: boolean;
     }) => {
-      if (isValidElement<{ href?: string; to?: string }>(renderSlot)) {
-        const href = renderSlot.props.to ?? renderSlot.props.href;
+      const href = isValidElement<{ href?: string; to?: string }>(renderSlot)
+        ? (renderSlot.props.to ?? renderSlot.props.href)
+        : undefined;
 
-        return (
-          <a href={href} {...props}>
-            {children}
-          </a>
-        );
-      }
-
-      return (
+      return href ? (
+        <a href={href} {...props}>
+          {children}
+        </a>
+      ) : (
         <button
           type="button"
           {...props}
@@ -240,11 +255,31 @@ describe("nav user", () => {
   it("links to organization settings from the account menu", () => {
     renderNavUser();
 
-    expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
-      "href",
-      "/settings"
-    );
+    expect(
+      screen.getByRole("link", { name: /organization settings/i })
+    ).toHaveAttribute("href", "/organization/settings");
   }, 10_000);
+
+  it(
+    "links to account settings from the user dropdown",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      renderNavUser();
+
+      expect(
+        screen
+          .getAllByRole("link")
+          .find((link) => link.getAttribute("href") === "/settings")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: /sign out/i,
+        })
+      ).toBeInTheDocument();
+    }
+  );
 
   it(
     "shows a pending label and blocks repeat clicks while sign-out is in flight",

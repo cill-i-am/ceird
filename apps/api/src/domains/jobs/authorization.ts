@@ -37,6 +37,18 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
               )
       );
 
+      const ensureCanCreateSite = Effect.fn(
+        "JobsAuthorization.ensureCanCreateSite"
+      )((actor: JobsActor) =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can create sites"
+              )
+            )
+      );
+
       const ensureCanPatch = Effect.fn("JobsAuthorization.ensureCanPatch")(
         (actor: JobsActor, workItemId: WorkItemId) =>
           hasElevatedAccess(actor)
@@ -110,6 +122,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
         ensureCanAddVisit,
         ensureCanComment,
         ensureCanCreate,
+        ensureCanCreateSite,
         ensureCanPatch,
         ensureCanReopen,
         ensureCanTransition,

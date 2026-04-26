@@ -265,6 +265,8 @@ function makeHarness(
     create: (_input: unknown) => Effect.succeed(siteId),
     findById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.some(siteId)),
+    getOptionById: (_organizationId: OrganizationId, _siteId: SiteId) =>
+      Effect.succeed(Option.none()),
     linkContact: (_input: {
       readonly contactId: ContactId;
       readonly isPrimary?: boolean;

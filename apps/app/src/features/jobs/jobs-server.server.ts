@@ -5,6 +5,7 @@ import type {
   JobListQuery,
   JobListResponse,
   JobOptionsResponse,
+  SitesOptionsResponse,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
 
@@ -78,6 +79,14 @@ export async function getCurrentServerJobOptionsDirect(): Promise<JobOptionsResp
   const request = readServerJobsRequestStrict();
 
   return await runJobsClient(request, (client) => client.jobs.getJobOptions());
+}
+
+export async function getCurrentServerSiteOptionsDirect(): Promise<SitesOptionsResponse> {
+  const request = readServerJobsRequestStrict();
+
+  return await runJobsClient(request, (client) =>
+    client.sites.getSiteOptions()
+  );
 }
 
 function readServerJobsRequestStrict(): ServerJobsRequest {

@@ -76,6 +76,14 @@ describe("makeAuthenticationConfig()", () => {
             window: 60,
             max: 3,
           },
+          "/change-email": {
+            window: 60,
+            max: 3,
+          },
+          "/change-password": {
+            window: 60,
+            max: 5,
+          },
         },
       },
       emailAndPassword: {
@@ -87,6 +95,11 @@ describe("makeAuthenticationConfig()", () => {
         expiresIn: 3600,
         sendOnSignIn: false,
         sendOnSignUp: true,
+      },
+      user: {
+        changeEmail: {
+          enabled: true,
+        },
       },
     });
 
@@ -105,6 +118,37 @@ describe("makeAuthenticationConfig()", () => {
     ).toStrictEqual({
       window: 60,
       max: 3,
+    });
+  }, 10_000);
+
+  it("applies dedicated sensitive account settings rate limits", () => {
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3001",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+    });
+
+    expect(config.rateLimit.customRules).toMatchObject({
+      "/change-email": {
+        window: 60,
+        max: 3,
+      },
+      "/change-password": {
+        window: 60,
+        max: 5,
+      },
+    });
+  }, 10_000);
+
+  it("enables Better Auth's verified email change flow", () => {
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3001",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+    });
+
+    expect(config.user.changeEmail).toStrictEqual({
+      enabled: true,
     });
   }, 10_000);
 
@@ -323,6 +367,7 @@ describe("createAuthentication()", () => {
           databaseUrl: DEFAULT_AUTH_DATABASE_URL,
         }),
         database: drizzle(pool, { schema: authSchema }),
+        reportEmailChangeConfirmationFailure: () => {},
         reportPasswordResetEmailFailure: () => {},
         reportVerificationEmailFailure: () => {},
         sendOrganizationInvitationEmail: (input) => {
@@ -393,6 +438,68 @@ describe("createAuthentication()", () => {
           recipientEmail: "member@example.com",
           recipientName: "member@example.com",
           role: "member",
+        },
+      ]);
+    } finally {
+      await pool.end();
+    }
+  }, 10_000);
+
+  it("requires current-email confirmation before verified email changes", async () => {
+    const sentVerificationEmails: unknown[] = [];
+    const pool = new Pool({
+      connectionString: DEFAULT_AUTH_DATABASE_URL,
+      allowExitOnIdle: true,
+    });
+
+    try {
+      const auth = createAuthentication({
+        appOrigin: "http://127.0.0.1:4173",
+        backgroundTaskHandler: () => {},
+        config: makeAuthenticationConfig({
+          baseUrl: "http://127.0.0.1:3000",
+          secret: "0123456789abcdef0123456789abcdef",
+          databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+        }),
+        database: drizzle(pool, { schema: authSchema }),
+        reportPasswordResetEmailFailure: () => {},
+        reportVerificationEmailFailure: () => {},
+        sendOrganizationInvitationEmail: async () => {},
+        sendPasswordResetEmail: async () => {},
+        sendVerificationEmail: (input) => {
+          sentVerificationEmails.push(input);
+          return Promise.resolve();
+        },
+      });
+
+      const changeEmail = auth.options.user?.changeEmail;
+
+      expect(changeEmail?.sendChangeEmailConfirmation).toBeTypeOf("function");
+
+      await changeEmail?.sendChangeEmailConfirmation?.({
+        user: {
+          id: "user_123",
+          createdAt: new Date("2026-04-26T12:00:00.000Z"),
+          email: "current@example.com",
+          emailVerified: true,
+          image: null,
+          name: "Taylor Example",
+          updatedAt: new Date("2026-04-26T12:00:00.000Z"),
+        },
+        newEmail: "new@example.com",
+        token: "token_123",
+        url: "http://127.0.0.1:3000/api/auth/verify-email?token=token_123",
+      });
+
+      expect(sentVerificationEmails).toStrictEqual([
+        {
+          deliveryKey: expect.stringMatching(
+            /^email-change-confirmation\/[0-9a-f]{64}$/
+          ),
+          recipientEmail: "current@example.com",
+          recipientName: "Taylor Example",
+          verificationUrl:
+            "http://127.0.0.1:3000/api/auth/verify-email?token=token_123",
         },
       ]);
     } finally {

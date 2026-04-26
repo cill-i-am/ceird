@@ -114,6 +114,14 @@ export interface AuthenticationConfig {
         readonly window: 60;
         readonly max: 3;
       };
+      readonly "/change-email": {
+        readonly window: 60;
+        readonly max: 3;
+      };
+      readonly "/change-password": {
+        readonly window: 60;
+        readonly max: 5;
+      };
     };
   };
   readonly emailAndPassword: {
@@ -125,6 +133,11 @@ export interface AuthenticationConfig {
     readonly expiresIn: 3600;
     readonly sendOnSignIn: false;
     readonly sendOnSignUp: true;
+  };
+  readonly user: {
+    readonly changeEmail: {
+      readonly enabled: true;
+    };
   };
 }
 
@@ -254,6 +267,14 @@ export function makeAuthenticationConfig(
           window: 60,
           max: 3,
         },
+        "/change-email": {
+          window: 60,
+          max: 3,
+        },
+        "/change-password": {
+          window: 60,
+          max: 5,
+        },
       },
     },
     emailAndPassword: {
@@ -265,6 +286,11 @@ export function makeAuthenticationConfig(
       expiresIn: 3600,
       sendOnSignIn: false,
       sendOnSignUp: true,
+    },
+    user: {
+      changeEmail: {
+        enabled: true,
+      },
     },
   };
 }

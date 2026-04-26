@@ -1,14 +1,11 @@
 import { ParseResult, Schema } from "effect";
 
-const Email = Schema.Trim.pipe(
-  Schema.nonEmptyString(),
-  Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
-);
+import { accountEmailSchema } from "#/features/auth/auth-schemas";
 
 const InviteRole = Schema.Literal("admin", "member");
 
 const OrganizationMemberInviteInput = Schema.Struct({
-  email: Email,
+  email: accountEmailSchema,
   role: InviteRole,
 });
 

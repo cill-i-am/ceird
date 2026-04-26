@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  CreateSiteResponseSchema,
+  REGION_NOT_FOUND_ERROR_TAG,
+  SitesOptionsResponseSchema,
+} from "@task-tracker/jobs-core";
+import { ParseResult } from "effect";
 import type { Pool } from "pg";
 
 import {
@@ -244,6 +250,89 @@ describe("jobs http integration", () => {
       expect(options.regions).toHaveLength(0);
       expect(options.sites).toHaveLength(0);
       expect(options.contacts).toHaveLength(0);
+
+      const createSiteResponse = await api.handler(
+        makeJsonRequest(
+          "/sites",
+          {
+            addressLine1: "1 Custom House Quay",
+            latitude: 53.3498,
+            longitude: -6.2603,
+            name: "Docklands Campus",
+            town: "Dublin",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(createSiteResponse.status).toBe(201);
+      const createdSite = ParseResult.decodeUnknownSync(
+        CreateSiteResponseSchema
+      )(await createSiteResponse.json());
+      expect(createdSite).toMatchObject({
+        name: "Docklands Campus",
+      });
+
+      const siteOptionsAfterSiteResponse = await api.handler(
+        makeRequest("/sites/options", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(siteOptionsAfterSiteResponse.status).toBe(200);
+      const siteOptionsAfterSite = ParseResult.decodeUnknownSync(
+        SitesOptionsResponseSchema
+      )(await siteOptionsAfterSiteResponse.json());
+      expect(siteOptionsAfterSite.sites).toContainEqual(
+        expect.objectContaining({
+          id: createdSite.id,
+          name: "Docklands Campus",
+        })
+      );
+
+      const invalidCoordinatesResponse = await api.handler(
+        makeJsonRequest(
+          "/sites",
+          {
+            latitude: 53.3498,
+            name: "Missing Longitude",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(invalidCoordinatesResponse.status).toBe(400);
+
+      const missingRegionResponse = await api.handler(
+        makeJsonRequest(
+          "/sites",
+          {
+            name: "Missing Region Site",
+            regionId: "55555555-5555-4555-8555-555555555555",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(missingRegionResponse.status).toBe(404);
+      await expect(missingRegionResponse.json()).resolves.toMatchObject({
+        _tag: REGION_NOT_FOUND_ERROR_TAG,
+      });
+
+      const memberCreateSiteResponse = await api.handler(
+        makeJsonRequest(
+          "/sites",
+          {
+            name: "Member Site",
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(memberCreateSiteResponse.status).toBe(403);
 
       const createJobResponse = await api.handler(
         makeJsonRequest(

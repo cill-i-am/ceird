@@ -7,6 +7,7 @@ import {
   matchesTrustedOrigin,
 } from "../identity/authentication/config.js";
 import { JobsService } from "./service.js";
+import { SitesService } from "./sites-service.js";
 
 const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
   Effect.gen(function* () {
@@ -35,6 +36,16 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
   })
 );
 
+const SitesHandlersLive = HttpApiBuilder.group(JobsApi, "sites", (handlers) =>
+  Effect.gen(function* () {
+    const sitesService = yield* SitesService;
+
+    return handlers
+      .handle("getSiteOptions", () => sitesService.getOptions())
+      .handle("createSite", ({ payload }) => sitesService.create(payload));
+  })
+);
+
 export const JobsHttpLive = HttpApiBuilder.api(JobsApi).pipe(
   Layer.provide(
     Layer.unwrapEffect(
@@ -50,5 +61,7 @@ export const JobsHttpLive = HttpApiBuilder.api(JobsApi).pipe(
     )
   ),
   Layer.provide(JobsHandlersLive),
-  Layer.provide(JobsService.Default)
+  Layer.provide(SitesHandlersLive),
+  Layer.provide(JobsService.Default),
+  Layer.provide(SitesService.Default)
 );

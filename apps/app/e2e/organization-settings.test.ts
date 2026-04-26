@@ -20,8 +20,8 @@ async function openAccountMenu(page: Page) {
 
 async function openSettingsFromAccountMenu(page: Page) {
   await openAccountMenu(page);
-  await page.getByRole("menuitem", { name: "Settings" }).click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("menuitem", { name: "Organization settings" }).click();
+  await expect(page).toHaveURL(/\/organization\/settings$/);
 }
 
 test("an organization admin can update the organization name from account settings", async ({

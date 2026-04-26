@@ -62,6 +62,8 @@ export {
   CreateJobContactInlineInputSchema,
   CreateJobContactInputSchema,
   CreateJobResponseSchema,
+  CreateSiteInputSchema,
+  CreateSiteResponseSchema,
   CreateJobSiteExistingInputSchema,
   CreateJobSiteInlineInputSchema,
   CreateJobSiteInputSchema,
@@ -95,6 +97,7 @@ export {
   PatchJobInputSchema,
   PatchJobResponseSchema,
   ReopenJobResponseSchema,
+  SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
 } from "./dto.js";
@@ -108,6 +111,8 @@ export type {
   CreateJobContactInlineInput,
   CreateJobContactInput,
   CreateJobResponse,
+  CreateSiteInput,
+  CreateSiteResponse,
   CreateJobSiteExistingInput,
   CreateJobSiteInlineInput,
   CreateJobSiteInput,
@@ -130,6 +135,7 @@ export type {
   PatchJobInput,
   PatchJobResponse,
   ReopenJobResponse,
+  SitesOptionsResponse,
   TransitionJobInput,
   TransitionJobResponse,
   JobsContext,
@@ -159,5 +165,9 @@ export {
   VisitDurationIncrementError,
 } from "./errors.js";
 export type { JobsError } from "./errors.js";
-export { JobsApi, JobsApiGroup } from "./http-api.js";
-export type { JobsApiGroupType, JobsApiType } from "./http-api.js";
+export { JobsApi, JobsApiGroup, SitesApiGroup } from "./http-api.js";
+export type {
+  JobsApiGroupType,
+  JobsApiType,
+  SitesApiGroupType,
+} from "./http-api.js";

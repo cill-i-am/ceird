@@ -35,7 +35,8 @@ describe("settings route loader", () => {
         role,
       });
 
-      const { loadSettingsRoute } = await import("./_app._org.settings");
+      const { loadSettingsRoute } =
+        await import("./_app._org.organization.settings");
 
       await expect(
         loadSettingsRoute({
@@ -62,7 +63,8 @@ describe("settings route loader", () => {
         role: "member",
       });
 
-      const { loadSettingsRoute } = await import("./_app._org.settings");
+      const { loadSettingsRoute } =
+        await import("./_app._org.organization.settings");
       const result = loadSettingsRoute({
         activeOrganizationId: "org_123",
         activeOrganizationSync: {
@@ -84,7 +86,8 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { loadSettingsRoute } = await import("./_app._org.settings");
+      const { loadSettingsRoute } =
+        await import("./_app._org.organization.settings");
 
       await expect(
         loadSettingsRoute({

@@ -6,11 +6,11 @@ import {
 } from "#/features/organizations/organization-access";
 import { OrganizationSettingsPage } from "#/features/organizations/organization-settings-page";
 
-export const Route = createFileRoute("/_app/_org/settings")({
+export const Route = createFileRoute("/_app/_org/organization/settings")({
   staticData: {
     breadcrumb: {
-      label: "Settings",
-      to: "/settings",
+      label: "Organization settings",
+      to: "/organization/settings",
     },
   },
   beforeLoad: ({ context }) => loadSettingsRoute(context),

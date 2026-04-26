@@ -182,6 +182,10 @@ describe("jobs repositories integration", () => {
       databaseUrl,
       SitesRepository.listOptions(identity.organizationId)
     );
+    const createdSiteOptionById = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.getOptionById(identity.organizationId, createdSiteId)
+    );
     const createdSiteOption = siteOptions.find(
       (siteOption) => siteOption.id === createdSiteId
     );
@@ -199,6 +203,9 @@ describe("jobs repositories integration", () => {
     expect(createdSiteOption?.addressLine2).toBeUndefined();
     expect(createdSiteOption?.county).toBeUndefined();
     expect(createdSiteOption?.eircode).toBeUndefined();
+    expect(Option.getOrUndefined(createdSiteOptionById)).toStrictEqual(
+      createdSiteOption
+    );
 
     const foundSiteId = await runJobsEffect(
       databaseUrl,

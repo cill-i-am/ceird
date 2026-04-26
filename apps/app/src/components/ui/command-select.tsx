@@ -34,6 +34,7 @@ export interface CommandSelectGroup {
 }
 
 export interface CommandSelectProps {
+  readonly "aria-describedby"?: string;
   readonly ariaLabel?: string;
   readonly ariaInvalid?: true | undefined;
   readonly className?: string;
@@ -49,6 +50,7 @@ export interface CommandSelectProps {
 }
 
 export function CommandSelect({
+  "aria-describedby": ariaDescribedBy,
   ariaLabel,
   ariaInvalid,
   className,
@@ -75,6 +77,7 @@ export function CommandSelect({
         type="button"
         id={id}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
         className={cn(
           buttonVariants({ variant: "outline" }),

@@ -1,4 +1,8 @@
-import { getPublicInvitationPreview, resolveApiBaseURL } from "./auth-client";
+import {
+  buildEmailChangeRedirectTo,
+  getPublicInvitationPreview,
+  resolveApiBaseURL,
+} from "./auth-client";
 
 describe("auth client", () => {
   afterEach(() => {
@@ -53,5 +57,11 @@ describe("auth client", () => {
     expect(
       resolveApiBaseURL("https://agent-one.app.task-tracker.localhost:1355")
     ).toBe("https://agent-one.api.task-tracker.localhost:1355/api");
+  }, 1000);
+
+  it("builds the email change callback URL for the settings page", () => {
+    expect(buildEmailChangeRedirectTo("http://localhost:3000")).toBe(
+      "http://localhost:3000/settings?emailChange=complete"
+    );
   }, 1000);
 });

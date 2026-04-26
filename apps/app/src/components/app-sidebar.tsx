@@ -4,6 +4,7 @@ import {
   Briefcase01Icon,
   CommandIcon,
   ComputerTerminalIcon,
+  Location01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -34,6 +35,11 @@ const data = {
       title: "Jobs",
       url: "/jobs",
       icon: <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />,
+    },
+    {
+      title: "Sites",
+      url: "/sites",
+      icon: <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />,
     },
     {
       title: "Members",

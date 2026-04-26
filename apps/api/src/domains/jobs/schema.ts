@@ -106,6 +106,14 @@ export const site = pgTable(
       table.organizationId,
       table.regionId
     ),
+    index("sites_organization_active_name_idx")
+      .on(
+        table.organizationId,
+        table.name.asc().nullsLast(),
+        table.createdAt,
+        table.id
+      )
+      .where(sql`${table.archivedAt} is null`),
     check(
       "sites_coordinates_pair_check",
       sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`

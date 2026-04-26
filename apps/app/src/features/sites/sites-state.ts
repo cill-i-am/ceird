@@ -1,0 +1,113 @@
+"use client";
+
+import { Atom } from "@effect-atom/atom-react";
+import type {
+  CreateSiteInput,
+  CreateSiteResponse,
+  JobOptionsResponse,
+  JobSiteOption,
+  SitesOptionsResponse,
+} from "@task-tracker/jobs-core";
+import { Effect } from "effect";
+
+import {
+  makeBrowserJobsClient,
+  provideBrowserJobsHttp,
+} from "#/features/jobs/jobs-client";
+import type { AppJobsError } from "#/features/jobs/jobs-errors";
+import { normalizeJobsError } from "#/features/jobs/jobs-errors";
+import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
+
+export interface SitesNotice {
+  readonly kind: "created";
+  readonly name: string;
+}
+
+export const sitesNoticeAtom = Atom.make<SitesNotice | null>(null).pipe(
+  Atom.keepAlive
+);
+
+export const createSiteMutationAtom = Atom.fn<
+  AppJobsError,
+  CreateSiteResponse,
+  CreateSiteInput
+>((input, get) =>
+  createBrowserSite(input).pipe(
+    Effect.tap((createdSite) =>
+      Effect.gen(function* () {
+        const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
+          Effect.either
+        );
+        const currentOptionsState = get(jobsOptionsStateAtom);
+        const nextOptions =
+          siteOptionsResult._tag === "Right"
+            ? mergeSiteOptions(
+                currentOptionsState.data,
+                siteOptionsResult.right
+              )
+            : upsertSiteOption(currentOptionsState.data, createdSite);
+
+        get.set(jobsOptionsStateAtom, {
+          data: nextOptions,
+          organizationId: currentOptionsState.organizationId,
+        });
+
+        get.set(sitesNoticeAtom, {
+          kind: "created",
+          name: createdSite.name,
+        });
+      })
+    )
+  )
+);
+
+export function upsertSiteOption(
+  options: JobOptionsResponse,
+  site: JobSiteOption
+): JobOptionsResponse {
+  const sites = [
+    site,
+    ...options.sites.filter((existingSite) => existingSite.id !== site.id),
+  ];
+  sites.sort(compareSiteOptions);
+
+  return {
+    ...options,
+    sites,
+  };
+}
+
+function mergeSiteOptions(
+  options: JobOptionsResponse,
+  siteOptions: SitesOptionsResponse
+): JobOptionsResponse {
+  return {
+    ...options,
+    regions: siteOptions.regions,
+    sites: siteOptions.sites,
+  };
+}
+
+function createBrowserSite(input: CreateSiteInput) {
+  return Effect.gen(function* () {
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* client.sites.createSite({ payload: input });
+  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+}
+
+function getBrowserSiteOptions() {
+  return Effect.gen(function* () {
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* client.sites.getSiteOptions();
+  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+}
+
+function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
+}

@@ -1,6 +1,9 @@
 import type {
+  CreateSiteResponse,
   JobDetailResponse,
   JobListResponse,
+  SitesOptionsResponse,
+  SiteIdType,
   UserIdType,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
@@ -49,6 +52,18 @@ const detailResponse: JobDetailResponse = {
   comments: [],
   activity: [],
   visits: [],
+};
+
+const createSiteResponse: CreateSiteResponse = {
+  addressLine1: "1 Custom House Quay",
+  id: "33333333-3333-4333-8333-333333333333" as SiteIdType,
+  name: "Docklands Campus",
+  town: "Dublin",
+};
+
+const siteOptionsResponse: SitesOptionsResponse = {
+  regions: [],
+  sites: [createSiteResponse],
 };
 
 describe("jobs client", () => {
@@ -111,6 +126,53 @@ describe("jobs client", () => {
     );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.credentials).toBe("include");
+  }, 1000);
+
+  it("creates standalone sites through the shared jobs API client", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(createSiteResponse, { status: 201 }));
+
+    await expect(
+      runJobsClient(
+        {
+          requestOrigin: "http://127.0.0.1:3000",
+        },
+        (client) =>
+          client.sites.createSite({
+            payload: {
+              addressLine1: "1 Custom House Quay",
+              name: "Docklands Campus",
+              town: "Dublin",
+            },
+          })
+      )
+    ).resolves.toStrictEqual(createSiteResponse);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://127.0.0.1:3001/sites");
+    expect(requestInit?.method).toBe("POST");
+  }, 1000);
+
+  it("loads standalone site options through the shared jobs API client", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(siteOptionsResponse));
+
+    await expect(
+      runJobsClient(
+        {
+          requestOrigin: "http://127.0.0.1:3000",
+        },
+        (client) => client.sites.getSiteOptions()
+      )
+    ).resolves.toStrictEqual(siteOptionsResponse);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://127.0.0.1:3001/sites/options");
+    expect(requestInit?.method).toBe("GET");
   }, 1000);
 
   it("does not invoke fetch when the jobs API origin cannot be resolved", async () => {
