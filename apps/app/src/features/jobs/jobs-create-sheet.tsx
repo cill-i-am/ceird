@@ -550,14 +550,11 @@ export function JobsCreateSheet() {
             </div>
           </div>
 
-          <div
-            aria-hidden={locationDrawerOpen ? true : undefined}
-            className="flex justify-end border-t px-5 py-4 sm:px-6"
-          >
+          <DrawerFooter className="flex-row justify-end border-t px-5 py-4 sm:px-6">
             <Button type="button" onClick={() => setSiteDrawerOpen(false)}>
               Done
             </Button>
-          </div>
+          </DrawerFooter>
 
           <ResponsiveDrawer
             nested
@@ -769,14 +766,14 @@ export function JobsCreateSheet() {
                 </div>
               </div>
 
-              <div className="flex justify-end border-t px-5 py-4 sm:px-6">
+              <DrawerFooter className="flex-row justify-end border-t px-5 py-4 sm:px-6">
                 <Button
                   type="button"
                   onClick={() => setLocationDrawerOpen(false)}
                 >
                   Done
                 </Button>
-              </div>
+              </DrawerFooter>
             </DrawerContent>
           </ResponsiveDrawer>
         </DrawerContent>
