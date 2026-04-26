@@ -108,6 +108,7 @@ vi.mock("#/components/ui/button", () => ({
       </button>
     );
   },
+  buttonVariants: () => "",
 }));
 
 vi.mock("#/components/ui/collapsible", () => ({
@@ -145,7 +146,20 @@ vi.mock("#/components/ui/command", () => ({
       {children}
     </div>
   ),
-  CommandInput: (props: ComponentProps<"input">) => <input {...props} />,
+  CommandInput: ({
+    onValueChange,
+    ...props
+  }: ComponentProps<"input"> & {
+    onValueChange?: (value: string) => void;
+  }) => (
+    <input
+      {...props}
+      onChange={(event) => {
+        props.onChange?.(event);
+        onValueChange?.(event.currentTarget.value);
+      }}
+    />
+  ),
   CommandItem: ({
     children,
     onSelect,
@@ -246,6 +260,19 @@ async function choosePickerOption(
   await user.click(screen.getByRole("button", { name: optionLabel }));
 }
 
+async function createInlineContact(
+  user: ReturnType<typeof userEvent.setup>,
+  contactName: string
+) {
+  await user.click(screen.getByLabelText("Contact"));
+  await user.type(screen.getByPlaceholderText("Contact"), contactName);
+  await user.click(
+    screen.getByRole("button", {
+      name: `Create new contact: "${contactName}"`,
+    })
+  );
+}
+
 describe("jobs create sheet", () => {
   beforeEach(() => {
     mockedNavigate.mockReset();
@@ -322,7 +349,7 @@ describe("jobs create sheet", () => {
       render(<JobsCreateSheet />);
 
       await user.type(screen.getByLabelText("Title"), "Fix boiler");
-      await user.selectOptions(screen.getByLabelText("Priority"), "high");
+      await choosePickerOption(user, "Priority", "High");
       await choosePickerOption(user, "Site", "Depot");
       await choosePickerOption(user, "Contact", "Pat Contact");
       await user.click(screen.getByRole("button", { name: /create job/i }));
@@ -359,8 +386,8 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("Title"), "Replace sensor");
       await choosePickerOption(user, "Site", "Create a new site");
       await user.type(screen.getByLabelText("Site name"), "Warehouse");
-      await choosePickerOption(user, "Contact", "Create a new contact");
-      await user.type(screen.getByLabelText("Contact name"), "Alex Caller");
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      await createInlineContact(user, "Alex Caller");
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(mockedCreateJob).toHaveBeenCalledWith({
@@ -382,6 +409,58 @@ describe("jobs create sheet", () => {
     }
   );
 
+  it("hides empty existing groups and no-contact clearing actions", async () => {
+    mockedUseAtomValue.mockImplementation((atom: unknown) => {
+      if (atom === createJobMutationAtom) {
+        return {
+          waiting: false,
+        };
+      }
+
+      if (atom === jobsOptionsStateAtom) {
+        return {
+          data: {
+            contacts: [],
+            members: [],
+            regions: [],
+            sites: [],
+          },
+          organizationId: "org_123",
+        };
+      }
+
+      return null;
+    });
+
+    const user = userEvent.setup();
+    render(<JobsCreateSheet />);
+
+    await user.click(screen.getByLabelText("Site"));
+
+    expect(screen.queryByText("Existing sites")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "No site yet" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create a new site" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Contact"));
+
+    expect(
+      screen.queryByRole("button", { name: "No contact yet" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create a new contact" })
+    ).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Contact"), "Alex Caller");
+    expect(
+      screen.getByRole("button", {
+        name: 'Create new contact: "Alex Caller"',
+      })
+    ).toBeInTheDocument();
+  }, 10_000);
+
   it(
     "includes optional site address and pin data in the inline create payload",
     {
@@ -401,8 +480,8 @@ describe("jobs create sheet", () => {
       );
       await choosePickerOption(user, "Site", "Create a new site");
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
-      await user.selectOptions(screen.getByLabelText("Region"), northRegionId);
-      await user.click(screen.getByRole("button", { name: /add details/i }));
+      await choosePickerOption(user, "Region", "North");
+      await user.click(screen.getByRole("button", { name: /edit location/i }));
       await user.type(
         screen.getByLabelText("Address line 1"),
         "1 Custom House Quay"
@@ -416,6 +495,8 @@ describe("jobs create sheet", () => {
       );
       await user.type(screen.getByLabelText("Latitude"), "53.3498");
       await user.type(screen.getByLabelText("Longitude"), "-6.2603");
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(screen.getByRole("button", { name: "Done" }));
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(mockedCreateJob).toHaveBeenCalledWith({
@@ -451,7 +532,7 @@ describe("jobs create sheet", () => {
       render(<JobsCreateSheet />);
 
       await choosePickerOption(user, "Site", "Create a new site");
-      await choosePickerOption(user, "Contact", "Create a new contact");
+      await user.click(screen.getByRole("button", { name: "Done" }));
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(
@@ -459,9 +540,6 @@ describe("jobs create sheet", () => {
       ).toBeInTheDocument();
       expect(
         screen.getAllByText(/add the site name or pick an existing site/i)
-      ).toHaveLength(2);
-      expect(
-        screen.getAllByText(/add the contact name or pick an existing contact/i)
       ).toHaveLength(2);
       expect(mockedCreateJob).not.toHaveBeenCalled();
     }

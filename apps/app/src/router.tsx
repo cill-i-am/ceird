@@ -17,4 +17,11 @@ declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof getRouter>;
   }
+
+  interface StaticDataRouteOption {
+    breadcrumb?: {
+      readonly label: string;
+      readonly to?: "/" | "/jobs" | "/jobs/new" | "/members";
+    };
+  }
 }

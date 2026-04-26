@@ -84,6 +84,11 @@ describe("password reset page", () => {
     );
 
     expect(
+      screen.getByRole("heading", {
+        name: "This reset link isn't valid anymore.",
+      })
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("This password reset link is invalid or has expired.")
     ).toBeInTheDocument();
 
@@ -110,6 +115,9 @@ describe("password reset page", () => {
       />
     );
 
+    expect(
+      screen.getByRole("heading", { name: "Choose a new password." })
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("New password"), "password123");
     await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));

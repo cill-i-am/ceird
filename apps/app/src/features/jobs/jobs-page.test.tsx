@@ -162,9 +162,7 @@ describe("jobs page", () => {
       renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
-      expect(
-        screen.getByRole("heading", { name: /keep acme field ops moving/i })
-      ).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Jobs" })).toBeInTheDocument();
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
@@ -184,14 +182,11 @@ describe("jobs page", () => {
         "href",
         "/jobs/new"
       );
-      expect(
-        within(queuePanel).getByText(/Updated (1 Jan|Jan 1)/)
-      ).toBeInTheDocument();
-
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Status"),
-        "all"
+      expect(within(queuePanel).getAllByText(/Jan 1/).length).toBeGreaterThan(
+        0
       );
+
+      await chooseCommandFilter(user, /status filter/i, "All jobs");
 
       expect(
         within(queuePanel).getAllByText("Closed inspection").length
@@ -207,12 +202,19 @@ describe("jobs page", () => {
     {
       timeout: 10_000,
     },
-    () => {
+    async () => {
+      const user = userEvent.setup();
+
       renderJobsPage({ viewportWidth: 1280 });
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
+      expect(
+        screen.queryByTestId("jobs-coverage-panel")
+      ).not.toBeInTheDocument();
 
-      return waitFor(() => {
+      await user.click(screen.getByRole("button", { name: "Map" }));
+
+      await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
         expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
       });
@@ -220,7 +222,7 @@ describe("jobs page", () => {
   );
 
   it(
-    "keeps the compact tabs shell just below the xl breakpoint",
+    "switches between list and map views below the xl breakpoint",
     {
       timeout: 10_000,
     },
@@ -233,13 +235,18 @@ describe("jobs page", () => {
       expect(
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
-      await screen.findByRole("tablist");
 
-      await user.click(screen.getByRole("tab", { name: /coverage map/i }));
+      await user.click(screen.getByRole("button", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
       });
+
+      expect(screen.queryByTestId("jobs-queue-panel")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "List" }));
+
+      expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
     }
   );
 
@@ -267,10 +274,7 @@ describe("jobs page", () => {
       renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Assignee"),
-        memberOneId
-      );
+      await chooseCommandFilter(user, /assignee filter/i, "Taylor Owner");
 
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
@@ -282,10 +286,7 @@ describe("jobs page", () => {
         within(queuePanel).queryByText("Finalize snag list")
       ).not.toBeInTheDocument();
 
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Priority"),
-        "urgent"
-      );
+      await chooseCommandFilter(user, /priority filter/i, "Urgent");
 
       expect(
         within(queuePanel).queryByText("Inspect boiler")
@@ -293,9 +294,7 @@ describe("jobs page", () => {
       expect(
         within(queuePanel).getAllByText("Await materials").length
       ).toBeGreaterThan(0);
-      const activeFilters = within(queuePanel).getByRole("list", {
-        name: /active filters/i,
-      });
+      const activeFilters = screen.getByLabelText("Active filters");
       expect(
         within(activeFilters).getByText("Assignee: Taylor Owner")
       ).toBeInTheDocument();
@@ -304,7 +303,7 @@ describe("jobs page", () => {
       ).toBeInTheDocument();
 
       await user.click(
-        within(queuePanel).getByRole("button", { name: /clear all filters/i })
+        within(activeFilters).getByRole("button", { name: /clear all/i })
       );
 
       expect(
@@ -327,9 +326,10 @@ describe("jobs page", () => {
       renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Coordinator"),
-        memberOneId
+      await chooseCommandFilter(
+        user,
+        /more filter/i,
+        "Coordinator: Taylor Owner"
       );
 
       expect(
@@ -342,40 +342,46 @@ describe("jobs page", () => {
         within(queuePanel).getAllByText("Finalize snag list").length
       ).toBeGreaterThan(0);
 
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Region"),
-        regionNorthId
-      );
+      await chooseCommandFilter(user, /more filter/i, "Region: North");
 
+      expect(screen.getByText(/no jobs here/i)).toBeInTheDocument();
+
+      await chooseCommandFilter(user, /more filter/i, "All coordinators");
+      await chooseCommandFilter(user, /site filter/i, "Depot");
+
+      const filteredQueuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getByText(/no jobs match this view yet/i)
-      ).toBeInTheDocument();
-
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Coordinator"),
-        "all"
-      );
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Region"),
-        regionNorthId
-      );
-      await user.selectOptions(
-        within(queuePanel).getByLabelText("Site"),
-        siteDepotId
-      );
-
-      expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(filteredQueuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(filteredQueuePanel).getAllByText("Await materials").length
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Finalize snag list")
+        within(filteredQueuePanel).queryByText("Finalize snag list")
       ).not.toBeInTheDocument();
     }
   );
 });
+
+async function chooseCommandFilter(
+  user: ReturnType<typeof userEvent.setup>,
+  buttonName: RegExp,
+  optionText: string
+) {
+  await user.click(screen.getByRole("button", { name: buttonName }));
+  await waitFor(() => {
+    expect(screen.getAllByText(optionText).length).toBeGreaterThan(0);
+  });
+
+  const matches = screen.getAllByText(optionText);
+  const option = matches.at(-1);
+
+  if (!option) {
+    throw new Error(`Expected command option "${optionText}" to be visible.`);
+  }
+
+  await user.click(option);
+}
 
 function getPrimaryQueuePanel() {
   const [queuePanel] = screen.getAllByTestId("jobs-queue-panel");

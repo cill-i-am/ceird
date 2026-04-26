@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
 
-import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Empty,
@@ -28,13 +27,7 @@ import {
   decodePasswordResetRequestInput,
   passwordResetRequestSchema,
 } from "./auth-schemas";
-import {
-  DEFAULT_AUTH_HIGHLIGHTS,
-  EntryHighlightGrid,
-  EntryShell,
-  EntrySurfaceCard,
-  INVITATION_AUTH_HIGHLIGHTS,
-} from "./entry-shell";
+import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 
 const successCopy =
   "If an account exists for that email, a reset link will be sent.";
@@ -49,6 +42,20 @@ export function PasswordResetRequestPage({
     search?.invitation
   );
   const isInvitationFlow = Boolean(search?.invitation);
+  let shellDescription = "We'll send one reset link.";
+  let contextDescription = "Use the email tied to your account.";
+
+  if (isInvitationFlow && isSubmitted) {
+    shellDescription = "Open the latest reset email to continue.";
+    contextDescription =
+      "The newest email will bring you back to the invitation.";
+  } else if (isInvitationFlow) {
+    shellDescription = "Use the invited account email.";
+    contextDescription = "Send the reset link to the invited email address.";
+  } else if (isSubmitted) {
+    shellDescription = "Open the latest reset email to continue.";
+    contextDescription = "Use the newest email in your inbox.";
+  }
   const form = useForm({
     defaultValues: {
       email: "",
@@ -88,40 +95,36 @@ export function PasswordResetRequestPage({
   return (
     <EntryShell
       badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-      title={
-        isInvitationFlow
-          ? "Get back into the invited account without losing the setup."
-          : "Reset access and get back to work."
-      }
-      description={
-        isInvitationFlow
-          ? "Request a fresh reset link for the invited account, then continue through the invitation flow."
-          : "Send a reset link, choose a new password, and get back into the workspace quickly."
-      }
+      title={isSubmitted ? "Check your email." : "Reset your password."}
+      description={shellDescription}
       supportingContent={
-        <EntryHighlightGrid
-          items={
-            isInvitationFlow
-              ? INVITATION_AUTH_HIGHLIGHTS
-              : DEFAULT_AUTH_HIGHLIGHTS
-          }
-        />
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            {isSubmitted ? "Next" : "Reset link"}
+          </p>
+          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+            {contextDescription}
+          </p>
+        </div>
       }
     >
       <EntrySurfaceCard
-        badge={isSubmitted ? "Check your email" : "Reset access"}
-        title="Forgot password?"
+        badge={isSubmitted ? "Email sent" : "Password reset"}
+        className="max-w-lg"
+        title={isSubmitted ? "Check your email" : "Forgot password?"}
         description={
           isSubmitted
-            ? "Check your email for the next step."
-            : "Enter your email and we'll send you a reset link."
+            ? "Use the reset link in your inbox."
+            : "Enter your email."
         }
         footer={
           <Link
             {...loginNavigationTarget}
             className={buttonVariants({
-              variant: "link",
-              className: "h-auto justify-start p-0",
+              variant: isSubmitted ? "default" : "link",
+              className: isSubmitted
+                ? "w-full"
+                : "h-auto justify-start p-0 text-muted-foreground",
             })}
           >
             Back to login
@@ -129,12 +132,9 @@ export function PasswordResetRequestPage({
         }
       >
         {isInvitationFlow && !isSubmitted ? (
-          <Alert className="bg-muted/40">
-            <AlertDescription>
-              Use the email address tied to the invitation so you can continue
-              the handoff once the reset is complete.
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
+            Send the link to the invited email address.
+          </div>
         ) : null}
 
         {isSubmitted ? (

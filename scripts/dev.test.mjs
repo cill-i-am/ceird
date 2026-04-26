@@ -9,6 +9,7 @@ test("adds a default Better Auth base URL for local portless dev", () => {
     PORTLESS_PORT: "1355",
   });
 
+  assert.equal(env.API_ORIGIN, "http://127.0.0.1:3001");
   assert.equal(
     env.BETTER_AUTH_BASE_URL,
     "https://api.task-tracker.localhost:1355"
@@ -21,6 +22,7 @@ test("adds a default Better Auth base URL for local portless dev", () => {
 
 test("preserves an explicit Better Auth base URL override", () => {
   const env = createDevEnvironment({
+    API_ORIGIN: "http://127.0.0.1:4301",
     AUTH_EMAIL_FROM: "custom@example.com",
     AUTH_EMAIL_FROM_NAME: "Custom Sender",
     BETTER_AUTH_BASE_URL: "https://custom-auth.example.com",
@@ -30,6 +32,7 @@ test("preserves an explicit Better Auth base URL override", () => {
     PORTLESS_PORT: "1355",
   });
 
+  assert.equal(env.API_ORIGIN, "http://127.0.0.1:4301");
   assert.equal(env.BETTER_AUTH_BASE_URL, "https://custom-auth.example.com");
   assert.equal(env.AUTH_EMAIL_FROM, "custom@example.com");
   assert.equal(env.AUTH_EMAIL_FROM_NAME, "Custom Sender");

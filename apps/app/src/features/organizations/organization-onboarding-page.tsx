@@ -10,11 +10,7 @@ import {
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
-import {
-  EntryHighlightGrid,
-  EntryShell,
-  EntrySurfaceCard,
-} from "#/features/auth/entry-shell";
+import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -24,23 +20,6 @@ import {
 
 const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your organization. Please try again.";
-const ORGANIZATION_SETUP_HIGHLIGHTS = [
-  {
-    title: "Name it clearly",
-    description:
-      "Use the name your team already recognizes on calls, invoices, and schedules.",
-  },
-  {
-    title: "Keep the slug durable",
-    description:
-      "Choose a clean slug you can reuse in links and invites without second-guessing it.",
-  },
-  {
-    title: "Invite the crew next",
-    description:
-      "Once the workspace exists, bring in coordinators, admins, and field staff.",
-  },
-] as const;
 
 export function OrganizationOnboardingPage() {
   const navigate = useNavigate();
@@ -83,16 +62,59 @@ export function OrganizationOnboardingPage() {
       <EntryShell
         mode="contained"
         badge="Workspace setup"
-        title="Create the workspace your team will run from."
-        description="Set up the organization name and slug once, then start inviting the people who will keep work moving."
+        title="Set up the workspace your team will use."
+        description="Create the organization once, then move straight into inviting the rest of the team."
         supportingContent={
-          <EntryHighlightGrid items={ORGANIZATION_SETUP_HIGHLIGHTS} />
+          <div className="flex flex-col gap-8">
+            <div className="space-y-3">
+              <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                Workspace details
+              </p>
+              <p className="max-w-[48ch] text-sm/7 text-foreground/90">
+                This is the same public setup flow as sign up and invitations:
+                one workspace, one durable name, one slug your team can reuse in
+                links and invites.
+              </p>
+            </div>
+
+            <dl className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-1 border-t border-border/60 pt-4">
+                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                  Organization name
+                </dt>
+                <dd className="text-sm/6 text-muted-foreground">
+                  Use the name your team already knows from calls, schedules,
+                  and paperwork.
+                </dd>
+              </div>
+
+              <div className="space-y-1 border-t border-border/60 pt-4">
+                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                  Organization slug
+                </dt>
+                <dd className="text-sm/6 text-muted-foreground">
+                  Keep it clean and durable so invite links stay easy to share.
+                </dd>
+              </div>
+
+              <div className="space-y-1 border-t border-border/60 pt-4 sm:col-span-2">
+                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                  After this step
+                </dt>
+                <dd className="text-sm/6 text-muted-foreground">
+                  You&rsquo;ll land in the app and can start inviting teammates
+                  right away.
+                </dd>
+              </div>
+            </dl>
+          </div>
         }
       >
         <EntrySurfaceCard
-          badge="Step 1"
+          badge="Workspace"
+          className="max-w-lg"
           title="Create your organization"
-          description="Add your organization name and slug to get started."
+          description="Add the organization name and slug to continue."
         >
           <form
             className="flex flex-col gap-6"

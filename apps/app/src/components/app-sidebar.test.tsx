@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { isValidElement } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -23,6 +23,17 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       </a>
     )) as typeof actual.Link,
     useNavigate: () => mockedNavigate,
+    useRouterState: ((options?: {
+      select?: (state: { location: { pathname: string } }) => unknown;
+    }) => {
+      const state = {
+        location: {
+          pathname: "/",
+        },
+      };
+
+      return options?.select ? options.select(state) : state;
+    }) as typeof actual.useRouterState,
   };
 });
 
@@ -59,17 +70,19 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
     SidebarMenuButton: (({
       children,
       render: renderProp,
-    }: ComponentProps<"button"> & { render?: ReactNode }) => {
-      if (isValidElement(renderProp)) {
-        return (
-          <div data-testid="sidebar-menu-button">
-            {renderProp}
-            {children}
-          </div>
-        );
-      }
+    }: {
+      children?: ReactNode;
+      render?: unknown;
+    }) => {
+      const href = isValidElement<{ href?: string; to?: string }>(renderProp)
+        ? (renderProp.props.to ?? renderProp.props.href)
+        : undefined;
 
-      return (
+      return href ? (
+        <a href={href} data-testid="sidebar-menu-button">
+          {children}
+        </a>
+      ) : (
         <button type="button" data-testid="sidebar-menu-button">
           {children}
         </button>
@@ -108,17 +121,19 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
     SidebarMenuSubButton: (({
       children,
       render: renderProp,
-    }: ComponentProps<"button"> & { render?: ReactNode }) => {
-      if (isValidElement(renderProp)) {
-        return (
-          <div data-testid="sidebar-menu-sub-button">
-            {renderProp}
-            {children}
-          </div>
-        );
-      }
+    }: {
+      children?: ReactNode;
+      render?: unknown;
+    }) => {
+      const href = isValidElement<{ href?: string; to?: string }>(renderProp)
+        ? (renderProp.props.to ?? renderProp.props.href)
+        : undefined;
 
-      return (
+      return href ? (
+        <a href={href} data-testid="sidebar-menu-sub-button">
+          {children}
+        </a>
+      ) : (
         <button type="button" data-testid="sidebar-menu-sub-button">
           {children}
         </button>
@@ -177,13 +192,21 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com"
       );
+      const brandLink = screen.getByRole("link", { name: /task tracker/i });
+
+      expect(brandLink).toHaveAttribute("href", "/");
+      expect(within(brandLink).getByText("Task Tracker")).not.toHaveClass(
+        "sr-only"
+      );
       expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
         "href",
         "/jobs"
       );
-      expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
-        "href",
-        "/members"
+      const membersLink = screen.getByRole("link", { name: /members/i });
+
+      expect(membersLink).toHaveAttribute("href", "/members");
+      expect(within(membersLink).getByText("Members")).not.toHaveClass(
+        "sr-only"
       );
       expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/shadcn starter/i)).not.toBeInTheDocument();

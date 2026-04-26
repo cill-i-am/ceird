@@ -31,43 +31,48 @@ describe("email verification page", () => {
   it("shows the invalid-link state by default", () => {
     render(<EmailVerificationPage />);
 
+    expect(
+      screen.getByRole("heading", {
+        name: "This verification link can't be used.",
+      })
+    ).toBeInTheDocument();
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      screen.getByText("This verification link is invalid or has expired.")
     ).toBeInTheDocument();
 
     const appLink = screen.getByRole("link", { name: "Go to the app" });
     expect(appLink).toHaveAttribute("href", "/");
     expect(appLink).toHaveAttribute("data-router-link", "true");
-    expect(appLink).toHaveClass("bg-primary");
 
     const loginLink = screen.getByRole("link", { name: "Back to login" });
     expect(loginLink).toHaveAttribute("href", "/login");
     expect(loginLink).toHaveAttribute("data-router-link", "true");
-    expect(loginLink).toHaveClass("border-border");
   }, 10_000);
 
   it("shows the success state for status=success", () => {
     render(<EmailVerificationPage search={{ status: "success" }} />);
 
+    expect(
+      screen.getByRole("heading", { name: "Your email is verified." })
+    ).toBeInTheDocument();
     expect(screen.getByText("Email verified")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Your email address is verified. You can continue in the app or sign in again if needed."
-      )
+      screen.getByText("Your email address is verified.")
     ).toBeInTheDocument();
   }, 10_000);
 
   it("shows the invalid-link state for invalid-token search", () => {
     render(<EmailVerificationPage search={{ status: "invalid-token" }} />);
 
+    expect(
+      screen.getByRole("heading", {
+        name: "This verification link can't be used.",
+      })
+    ).toBeInTheDocument();
     expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      screen.getByText("This verification link is invalid or has expired.")
     ).toBeInTheDocument();
   }, 10_000);
 });

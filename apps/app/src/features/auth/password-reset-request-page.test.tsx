@@ -111,6 +111,9 @@ describe("password reset request page", () => {
         "If an account exists for that email, a reset link will be sent."
       )
     ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Check your email." })
+    ).toBeInTheDocument();
   }, 10_000);
 
   it("uses router links for back-to-login navigation before and after submit", async () => {
@@ -166,5 +169,13 @@ describe("password reset request page", () => {
       screen.findByText(expectedMessage)
     ).resolves.toBeInTheDocument();
     expect(mockedRequestPasswordReset).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("uses the new status-oriented heading before submit", () => {
+    render(<PasswordResetRequestPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Reset your password." })
+    ).toBeInTheDocument();
   }, 10_000);
 });

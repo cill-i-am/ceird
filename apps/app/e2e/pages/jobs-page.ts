@@ -14,9 +14,11 @@ export class JobsPage {
     this.page = page;
     this.heading = page.getByRole("heading", {
       level: 1,
-      name: /keep .* moving without the admin drag/i,
+      name: "Jobs",
     });
-    this.newJobButton = page.getByRole("link", { name: "New job" });
+    this.newJobButton = page
+      .locator("header")
+      .getByRole("link", { name: "New job" });
   }
 
   async openFromHome() {
@@ -26,6 +28,9 @@ export class JobsPage {
 
   async expectLoaded() {
     await expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`);
+    await expect(
+      this.page.getByRole("dialog", { name: "New job" })
+    ).toBeHidden();
     await expect(this.heading).toBeVisible();
   }
 
@@ -57,18 +62,20 @@ export class JobsCreateSheet {
   constructor(page: Page) {
     this.page = page;
     this.root = page.getByRole("dialog", {
-      name: "Capture the work while it is still fresh.",
+      name: "New job",
     });
     this.heading = this.root.getByRole("heading", {
       level: 2,
-      name: "Capture the work while it is still fresh.",
+      name: "New job",
     });
     this.title = this.root.getByLabel("Title");
     this.priority = this.root.getByLabel("Priority", { exact: true });
     this.site = this.root.getByLabel("Site");
-    this.siteName = this.root.getByLabel("Site name");
+    this.siteName = page
+      .getByRole("dialog", { name: "New site" })
+      .getByLabel("Site name");
     this.contact = this.root.getByLabel("Contact");
-    this.contactName = this.root.getByLabel("Contact name");
+    this.contactName = page.getByPlaceholder("Contact");
     this.submit = this.root.getByRole("button", { name: "Create job" });
   }
 
@@ -95,6 +102,30 @@ export class JobsCreateSheet {
       })
       .click();
   }
+
+  async choosePriorityOption(optionLabel: string) {
+    await this.priority.click();
+    await this.page
+      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
+        hasText: optionLabel,
+      })
+      .click();
+  }
+
+  async createInlineContact(contactName: string) {
+    await this.contact.click();
+    await this.contactName.fill(contactName);
+    await this.page
+      .getByRole("option", { name: `Create new contact: "${contactName}"` })
+      .click();
+  }
+
+  async closeSiteDialog() {
+    await this.page
+      .getByRole("dialog", { name: "New site" })
+      .getByRole("button", { name: "Done" })
+      .click();
+  }
 }
 
 export class JobDetailSheet {
@@ -118,7 +149,7 @@ export class JobDetailSheet {
     this.root = page.getByRole("dialog");
     this.commentItems = this.root.locator("li");
     this.visitItems = this.root.locator("li");
-    this.statusSelect = this.root.getByLabel("Next status");
+    this.statusSelect = this.root.locator("#job-transition-status");
     this.blockedReason = this.root.getByLabel("Why is it blocked?");
     this.applyStatusChange = this.root.getByRole("button", {
       name: "Apply status change",
@@ -126,7 +157,7 @@ export class JobDetailSheet {
     this.commentBody = this.root.getByLabel("Add a comment");
     this.addComment = this.root.getByRole("button", { name: "Add comment" });
     this.visitDate = this.root.getByLabel("Visit date");
-    this.visitDuration = this.root.getByLabel("Duration");
+    this.visitDuration = this.root.locator("#job-visit-duration");
     this.visitNote = this.root.getByLabel("Visit note");
     this.logVisit = this.root.getByRole("button", { name: "Log visit" });
     this.reopenJob = this.root.getByRole("button", { name: "Reopen job" });
@@ -146,5 +177,25 @@ export class JobDetailSheet {
       this.page.getByRole("heading", { level: 2, name: title })
     ).toBeVisible();
     await waitForSubmitHydration(this.page);
+  }
+
+  async chooseStatusOption(optionLabel: string) {
+    await this.statusSelect.click();
+    await this.page
+      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
+        hasText: optionLabel,
+      })
+      .click();
+    await expect(this.statusSelect).toContainText(optionLabel);
+  }
+
+  async chooseVisitDurationOption(optionLabel: string) {
+    await this.visitDuration.click();
+    await this.page
+      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
+        hasText: optionLabel,
+      })
+      .click();
+    await expect(this.visitDuration).toContainText(optionLabel);
   }
 }

@@ -85,7 +85,7 @@ describe("email verification banner", () => {
   );
 
   it(
-    "announces resend confirmation through the inline status message only",
+    "keeps the reminder as a warning alert and announces resend confirmation inline",
     {
       timeout: 10_000,
     },
@@ -108,9 +108,8 @@ describe("email verification banner", () => {
       );
 
       expect(successMessage).toHaveAttribute("role", "status");
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("region", { name: "Email verification reminder" })
+        screen.getByRole("alert", { name: "Email verification reminder" })
       ).toBeInTheDocument();
     }
   );

@@ -9,6 +9,10 @@ import type {
 } from "@task-tracker/jobs-core";
 
 import { readConfiguredServerApiOrigin } from "#/lib/api-origin";
+import {
+  normalizeServerApiCookieHeader,
+  readServerApiForwardedHeaders,
+} from "#/lib/server-api-forwarded-headers";
 
 import { runJobsClient } from "./jobs-client";
 import { JobsRequestError } from "./jobs-errors";
@@ -16,6 +20,7 @@ import { JobsRequestError } from "./jobs-errors";
 interface ServerJobsRequest {
   readonly cookie: string;
   readonly apiOrigin: string;
+  readonly forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
 }
 
 export async function listCurrentServerJobsDirect(
@@ -93,6 +98,7 @@ function readServerJobsRequestStrict(): ServerJobsRequest {
 
   return {
     apiOrigin,
-    cookie,
+    cookie: normalizeServerApiCookieHeader(cookie, apiOrigin),
+    forwardedHeaders: readServerApiForwardedHeaders(),
   };
 }

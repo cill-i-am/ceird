@@ -13,6 +13,8 @@ import {
   MarkerLabel,
   useMap,
 } from "#/components/ui/map";
+import { formatBrowserGeolocationError } from "#/lib/browser-geolocation";
+import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
 
 import {
@@ -34,6 +36,7 @@ export function JobsSitePinPickerCanvas(props: {
     readonly longitude: number;
   }) => void;
 }) {
+  const [locationError, setLocationError] = React.useState<string | null>(null);
   const hasCoordinates =
     typeof props.latitude === "number" && typeof props.longitude === "number";
   const pin = hasCoordinates
@@ -43,12 +46,25 @@ export function JobsSitePinPickerCanvas(props: {
       }
     : FALLBACK_PIN;
 
+  const handleLocate = React.useEffectEvent(
+    (coords: { readonly latitude: number; readonly longitude: number }) => {
+      setLocationError(null);
+      props.onChange(coords);
+    }
+  );
+  const handleLocateError = React.useEffectEvent(
+    (error: BrowserGeolocationError) => {
+      setLocationError(formatBrowserGeolocationError(error));
+    }
+  );
+
   return (
     <div className="overflow-hidden rounded-2xl border bg-muted/10">
-      <div className="flex items-center gap-2 border-b px-4 py-3 text-sm text-muted-foreground">
-        <HugeiconsIcon icon={MapsGlobal01Icon} strokeWidth={2} />
-        Click anywhere on the map, drag the pin, or use the nudge controls
-        below.
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <HugeiconsIcon icon={MapsGlobal01Icon} strokeWidth={2} />
+          <span>Click the map, drag the pin, or use the locate control.</span>
+        </div>
       </div>
       <div className="h-64">
         <Map
@@ -63,7 +79,13 @@ export function JobsSitePinPickerCanvas(props: {
             longitude={props.longitude}
             onChange={props.onChange}
           />
-          <MapControls position="bottom-right" showZoom />
+          <MapControls
+            position="bottom-right"
+            showLocate
+            showZoom
+            onLocate={handleLocate}
+            onLocateError={handleLocateError}
+          />
           <MapMarker
             latitude={pin.latitude}
             longitude={pin.longitude}
@@ -95,6 +117,11 @@ export function JobsSitePinPickerCanvas(props: {
           </MapMarker>
         </Map>
       </div>
+      {locationError ? (
+        <p className="border-t px-4 py-2 text-sm text-destructive" role="alert">
+          {locationError}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
         <Button
           type="button"

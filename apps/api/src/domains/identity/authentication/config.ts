@@ -91,6 +91,13 @@ export interface AuthenticationConfig {
   readonly trustedOrigins: TrustedOriginPattern[];
   readonly secret: string;
   readonly databaseUrl: string;
+  readonly advanced?: {
+    readonly trustedProxyHeaders: true;
+    readonly crossSubDomainCookies?: {
+      readonly enabled: true;
+      readonly domain: string;
+    };
+  };
   readonly rateLimit: {
     readonly enabled: true;
     readonly storage: "database";
@@ -129,6 +136,42 @@ export class AuthenticationConfigService extends Effect.Service<AuthenticationCo
     }),
   }
 ) {}
+
+const TASK_TRACKER_LOCALHOST_SUFFIX = ".task-tracker.localhost";
+const TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN = "task-tracker.localhost";
+
+function readHostname(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveCrossSubDomainCookieDomain(
+  environment: Pick<
+    AuthenticationEnvironment,
+    "appOrigin" | "baseUrl" | "portlessUrl"
+  >
+): string | undefined {
+  const hostnames = [
+    readHostname(environment.baseUrl),
+    readHostname(environment.portlessUrl),
+    readHostname(environment.appOrigin),
+  ];
+
+  return hostnames.some(
+    (hostname) =>
+      hostname === TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN ||
+      hostname?.endsWith(TASK_TRACKER_LOCALHOST_SUFFIX) === true
+  )
+    ? TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN
+    : undefined;
+}
 
 export function makeAuthenticationTrustedOrigins(
   environment: Pick<AuthenticationEnvironment, "appOrigin" | "portlessUrl">
@@ -174,6 +217,9 @@ export function makeAuthenticationTrustedOrigins(
 export function makeAuthenticationConfig(
   environment: AuthenticationEnvironment
 ): AuthenticationConfig {
+  const crossSubDomainCookieDomain =
+    resolveCrossSubDomainCookieDomain(environment);
+
   return {
     appName: "Task Tracker",
     basePath: DEFAULT_AUTH_BASE_PATH,
@@ -181,6 +227,17 @@ export function makeAuthenticationConfig(
     trustedOrigins: makeAuthenticationTrustedOrigins(environment),
     secret: environment.secret,
     databaseUrl: environment.databaseUrl,
+    advanced: {
+      trustedProxyHeaders: true,
+      ...(crossSubDomainCookieDomain
+        ? {
+            crossSubDomainCookies: {
+              enabled: true,
+              domain: crossSubDomainCookieDomain,
+            },
+          }
+        : {}),
+    },
     rateLimit: {
       enabled: true,
       storage: "database",

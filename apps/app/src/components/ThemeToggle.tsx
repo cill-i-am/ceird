@@ -1,8 +1,40 @@
+import {
+  ComputerIcon,
+  Moon02Icon,
+  Sun03Icon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 
 type ThemeMode = "light" | "dark" | "auto";
+
+const THEME_OPTIONS = [
+  {
+    icon: Sun03Icon,
+    label: "Light",
+    value: "light",
+  },
+  {
+    icon: Moon02Icon,
+    label: "Dark",
+    value: "dark",
+  },
+  {
+    icon: ComputerIcon,
+    label: "System",
+    value: "auto",
+  },
+] as const;
 
 function getInitialMode(): ThemeMode {
   if (typeof window === "undefined") {
@@ -60,46 +92,57 @@ export default function ThemeToggle() {
     };
   }, [mode]);
 
-  function toggleMode() {
-    let nextMode: ThemeMode;
-
-    if (mode === "light") {
-      nextMode = "dark";
-    } else if (mode === "dark") {
-      nextMode = "auto";
-    } else {
-      nextMode = "light";
-    }
-
+  function setThemeMode(nextMode: ThemeMode) {
     setMode(nextMode);
     applyThemeMode(nextMode);
     window.localStorage.setItem("theme", nextMode);
   }
 
-  const label =
-    mode === "auto"
-      ? "Theme mode: auto (system). Click to switch to light mode."
-      : `Theme mode: ${mode}. Click to switch mode.`;
-
-  let buttonLabel = "Light";
-
-  if (mode === "auto") {
-    buttonLabel = "Auto";
-  } else if (mode === "dark") {
-    buttonLabel = "Dark";
-  }
+  const activeOption =
+    THEME_OPTIONS.find((option) => option.value === mode) ?? THEME_OPTIONS[2];
+  const label = `Theme mode: ${activeOption.label}. Choose theme mode.`;
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="min-h-11 px-3 sm:min-h-8"
-      onClick={toggleMode}
-      aria-label={label}
-      title={label}
-    >
-      {buttonLabel}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11 gap-1.5 px-3 sm:min-h-8"
+            aria-label={label}
+            title={label}
+          />
+        }
+      >
+        <HugeiconsIcon
+          icon={activeOption.icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        {activeOption.label}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuGroup>
+          {THEME_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onSelect={() => setThemeMode(option.value)}
+            >
+              <HugeiconsIcon icon={option.icon} strokeWidth={2} />
+              {option.label}
+              {option.value === mode ? (
+                <HugeiconsIcon
+                  icon={Tick02Icon}
+                  strokeWidth={2}
+                  className="ml-auto text-muted-foreground"
+                />
+              ) : null}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

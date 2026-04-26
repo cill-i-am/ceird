@@ -18,6 +18,12 @@ export interface JobsClientOptions {
   readonly requestOrigin?: string | undefined;
   readonly apiOrigin?: string | undefined;
   readonly cookie?: string | undefined;
+  readonly forwardedHeaders?:
+    | {
+        readonly "x-forwarded-host": string;
+        readonly "x-forwarded-proto": "http" | "https";
+      }
+    | undefined;
 }
 
 export function resolveJobsApiOrigin(
@@ -96,11 +102,36 @@ function withOptionalCookie(
   httpClient: HttpClient.HttpClient,
   options: JobsClientOptions
 ): HttpClient.HttpClient {
-  if (!options.cookie) {
+  if (!options.cookie && !options.forwardedHeaders) {
     return httpClient;
   }
 
   return httpClient.pipe(
-    HttpClient.mapRequest(HttpClientRequest.setHeader("cookie", options.cookie))
+    HttpClient.mapRequest((request) => {
+      let nextRequest = request;
+
+      if (options.cookie) {
+        nextRequest = HttpClientRequest.setHeader(
+          nextRequest,
+          "cookie",
+          options.cookie
+        );
+      }
+
+      if (options.forwardedHeaders) {
+        nextRequest = HttpClientRequest.setHeader(
+          nextRequest,
+          "x-forwarded-host",
+          options.forwardedHeaders["x-forwarded-host"]
+        );
+        nextRequest = HttpClientRequest.setHeader(
+          nextRequest,
+          "x-forwarded-proto",
+          options.forwardedHeaders["x-forwarded-proto"]
+        );
+      }
+
+      return nextRequest;
+    })
   );
 }

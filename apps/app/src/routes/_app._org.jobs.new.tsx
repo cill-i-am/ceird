@@ -4,6 +4,12 @@ import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
 import { requireOrganizationAdministrationAccess } from "#/features/organizations/organization-access";
 
 export const Route = createFileRoute("/_app/_org/jobs/new")({
+  staticData: {
+    breadcrumb: {
+      label: "New job",
+      to: "/jobs/new",
+    },
+  },
   beforeLoad: async () => {
     await requireOrganizationAdministrationAccess();
   },

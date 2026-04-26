@@ -5,32 +5,47 @@ import {
   Add01Icon,
   ArrowRight01Icon,
   Briefcase01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
   FilterHorizontalIcon,
-  User03Icon,
+  LeftToRightListBulletIcon,
+  Location01Icon,
+  MapsSquare01Icon,
+  Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import type { JobPriority } from "@task-tracker/jobs-core";
+import type { JobListItem, JobPriority } from "@task-tracker/jobs-core";
 import * as React from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { buttonVariants } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "#/components/ui/command";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "#/components/ui/empty";
-import { Select } from "#/components/ui/select";
-import { Separator } from "#/components/ui/separator";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -39,7 +54,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { cn } from "#/lib/utils";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
 import { hasSiteCoordinates } from "./jobs-location";
@@ -49,12 +64,15 @@ import {
   jobsLookupAtom,
   jobsNoticeAtom,
   jobsOptionsStateAtom,
-  jobsSummaryAtom,
   visibleJobsAtom,
 } from "./jobs-state";
 import type { JobsListFilters } from "./jobs-state";
 import { hasJobsElevatedAccess } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
+
+type JobsViewMode = "list" | "map";
+
+type JobsLookup = ReturnType<typeof useJobsLookup>;
 
 const STATUS_FILTER_OPTIONS = [
   { label: "Active", value: "active" },
@@ -83,10 +101,8 @@ const STATUS_LABELS = {
   new: "New",
   triaged: "Triaged",
 } as const;
-const JOBS_COMPACT_WORKSPACE_BREAKPOINT = 1280;
 
 export function JobsPage({
-  activeOrganizationName,
   children,
   viewer,
 }: {
@@ -94,202 +110,41 @@ export function JobsPage({
   readonly children?: React.ReactNode;
   readonly viewer: JobsViewer;
 }) {
+  const [viewMode, setViewMode] = React.useState<JobsViewMode>("list");
   const filters = useAtomValue(jobsListFiltersAtom);
   const jobs = useAtomValue(visibleJobsAtom);
   const lookup = useAtomValue(jobsLookupAtom);
   const notice = useAtomValue(jobsNoticeAtom);
   const optionsState = useAtomValue(jobsOptionsStateAtom);
-  const summary = useAtomValue(jobsSummaryAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
-  const isCompactWorkspace = useJobsCompactWorkspace();
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
-  const mappedJobCount = jobs.filter((job) => {
-    if (!job.siteId) {
-      return false;
-    }
 
-    return hasSiteCoordinates(lookup.siteById.get(job.siteId));
-  }).length;
+  function patchFilters(patch: Partial<JobsListFilters>) {
+    setFilters((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }
 
-  const queuePanel = (
-    <Card data-testid="jobs-queue-panel">
-      <CardHeader className="gap-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />
-            <CardTitle>Queue</CardTitle>
-          </div>
-          <CardDescription>
-            Start with the active view, then narrow down by ownership, site, or
-            priority when you need a sharper cut.
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <div className="grid gap-3 xl:grid-cols-6">
-          <FilterSelect
-            label="Status"
-            value={filters.status}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                status: value as typeof current.status,
-              }))
-            }
-          >
-            {STATUS_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Assignee"
-            value={filters.assigneeId}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                assigneeId: value as typeof current.assigneeId,
-              }))
-            }
-          >
-            <option value="all">All assignees</option>
-            {optionsState.data.members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Coordinator"
-            value={filters.coordinatorId}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                coordinatorId: value as typeof current.coordinatorId,
-              }))
-            }
-          >
-            <option value="all">All coordinators</option>
-            {optionsState.data.members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Priority"
-            value={filters.priority}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                priority: value as typeof current.priority,
-              }))
-            }
-          >
-            <option value="all">All priorities</option>
-            {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Region"
-            value={filters.regionId}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                regionId: value as typeof current.regionId,
-                siteId:
-                  value === "all"
-                    ? current.siteId
-                    : defaultJobsListFilters.siteId,
-              }))
-            }
-          >
-            <option value="all">All regions</option>
-            {optionsState.data.regions.map((region) => (
-              <option key={region.id} value={region.id}>
-                {region.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Site"
-            value={filters.siteId}
-            onValueChange={(value) =>
-              setFilters((current) => ({
-                ...current,
-                siteId: value as typeof current.siteId,
-              }))
-            }
-          >
-            <option value="all">All sites</option>
-            {optionsState.data.sites
-              .filter((site) =>
-                filters.regionId === "all"
-                  ? true
-                  : site.regionId === filters.regionId
-              )
-              .map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.name}
-                </option>
-              ))}
-          </FilterSelect>
-        </div>
-
+  return (
+    <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
+      <header className="flex min-w-0 flex-col gap-4 border-b pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              Showing {jobs.length} job{jobs.length === 1 ? "" : "s"} in this
-              view.
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
             </span>
-            {hasCustomFilters ? (
-              <ul
-                aria-label="Active filters"
-                className="flex flex-wrap items-center gap-2"
-              >
-                {activeFilters.map((filter) => (
-                  <li key={filter}>
-                    <Badge variant="outline">{filter}</Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <div className="min-w-0">
+              <h1 className="truncate font-heading text-xl font-medium tracking-tight">
+                Jobs
+              </h1>
+            </div>
           </div>
-          {hasCustomFilters ? (
-            <button
-              type="button"
-              className={buttonVariants({ size: "xs", variant: "ghost" })}
-              onClick={() => setFilters(defaultJobsListFilters)}
-            >
-              Clear all filters
-            </button>
-          ) : null}
-        </div>
-
-        <Separator />
-
-        {jobs.length === 0 ? (
-          <Empty className="min-h-[320px] bg-muted/20 px-6 py-10">
-            <EmptyHeader>
-              <EmptyTitle>No jobs match this view yet.</EmptyTitle>
-              <EmptyDescription>
-                {canCreateJobs
-                  ? "Tighten or clear the filters, or start the queue with a fresh job intake."
-                  : "Tighten or clear the filters, or check back once new work lands in the queue."}
-              </EmptyDescription>
-            </EmptyHeader>
+          <div className="flex items-center gap-2">
+            <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
             {canCreateJobs ? (
               <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
                 <HugeiconsIcon
@@ -297,273 +152,62 @@ export function JobsPage({
                   strokeWidth={2}
                   data-icon="inline-start"
                 />
-                Create the first job
+                New job
               </Link>
             ) : null}
-          </Empty>
-        ) : (
-          <>
-            <ul className="flex flex-col gap-3 xl:hidden">
-              {jobs.map((job) => {
-                const site = job.siteId
-                  ? lookup.siteById.get(job.siteId)
-                  : undefined;
-                const assignee = job.assigneeId
-                  ? lookup.memberById.get(job.assigneeId)
-                  : undefined;
-                const coordinator = job.coordinatorId
-                  ? lookup.memberById.get(job.coordinatorId)
-                  : undefined;
-
-                return (
-                  <li key={job.id}>
-                    <Link
-                      to="/jobs/$jobId"
-                      params={{ jobId: job.id }}
-                      className="block rounded-3xl border bg-background/84 p-4 transition-colors hover:bg-muted/30"
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="flex min-w-0 flex-col gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={job.status} />
-                            <PriorityBadge priority={job.priority} />
-                            {site && hasSiteCoordinates(site) ? (
-                              <Badge variant="outline">Pinned</Badge>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <p className="font-medium tracking-tight text-foreground">
-                              {job.title}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                              <span className="font-medium text-foreground/85">
-                                {site?.name ?? "No site yet"}
-                              </span>
-                              {site?.regionName ? (
-                                <>
-                                  <span className="text-muted-foreground">
-                                    •
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    {site.regionName}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                            <p className="text-xs tracking-wide text-muted-foreground uppercase">
-                              Updated {formatRelativeDate(job.updatedAt)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:min-w-[320px]">
-                          <MetaLine
-                            icon={User03Icon}
-                            label="Assignee"
-                            value={assignee?.name ?? "Unassigned"}
-                          />
-                          <MetaLine
-                            icon={User03Icon}
-                            label="Coordinator"
-                            value={coordinator?.name ?? "Not set"}
-                          />
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="hidden overflow-hidden rounded-3xl border bg-background/88 xl:block">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Job</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Site</TableHead>
-                    <TableHead>Assignee</TableHead>
-                    <TableHead>Coordinator</TableHead>
-                    <TableHead className="text-right">Updated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobs.map((job) => {
-                    const site = job.siteId
-                      ? lookup.siteById.get(job.siteId)
-                      : undefined;
-                    const assignee = job.assigneeId
-                      ? lookup.memberById.get(job.assigneeId)
-                      : undefined;
-                    const coordinator = job.coordinatorId
-                      ? lookup.memberById.get(job.coordinatorId)
-                      : undefined;
-
-                    return (
-                      <TableRow
-                        key={job.id}
-                        className="group bg-transparent transition-colors hover:bg-muted/20"
-                      >
-                        <TableCell className="py-3.5">
-                          <Link
-                            to="/jobs/$jobId"
-                            params={{ jobId: job.id }}
-                            className="group/link -mx-3 flex items-start justify-between gap-3 rounded-2xl px-3 py-2 transition-colors hover:bg-muted/25"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 flex-col gap-1.5">
-                                <span className="truncate leading-6 font-medium text-foreground transition-colors group-hover/link:text-foreground/80">
-                                  {job.title}
-                                </span>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  <span>
-                                    {job.kind === "job" ? "Job" : job.kind}
-                                  </span>
-                                  {site && hasSiteCoordinates(site) ? (
-                                    <Badge variant="outline">Pinned</Badge>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                            <span className="inline-flex shrink-0 items-center gap-1 pt-0.5 text-xs font-medium text-muted-foreground transition-colors group-hover/link:text-foreground">
-                              Open
-                              <HugeiconsIcon
-                                icon={ArrowRight01Icon}
-                                strokeWidth={2}
-                                className="size-4"
-                              />
-                            </span>
-                          </Link>
-                        </TableCell>
-                        <TableCell className="py-3.5">
-                          <StatusBadge status={job.status} />
-                        </TableCell>
-                        <TableCell className="py-3.5">
-                          <PriorityBadge priority={job.priority} />
-                        </TableCell>
-                        <TableCell className="py-3.5">
-                          <div className="flex min-w-0 flex-col gap-1">
-                            <span className="truncate font-medium text-foreground/90">
-                              {site?.name ?? "No site yet"}
-                            </span>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {site?.regionName ?? "Unassigned region"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-3.5 text-muted-foreground">
-                          {assignee?.name ?? "Unassigned"}
-                        </TableCell>
-                        <TableCell className="py-3.5 text-muted-foreground">
-                          {coordinator?.name ?? "Not set"}
-                        </TableCell>
-                        <TableCell className="py-3.5 text-right text-muted-foreground">
-                          {formatRelativeDate(job.updatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const mapPanel = (
-    <div data-testid="jobs-coverage-panel">
-      <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
-    </div>
-  );
-
-  return (
-    <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex max-w-3xl flex-col gap-3">
-          <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-            Jobs
-          </Badge>
-          <div className="flex flex-col gap-2">
-            <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl">
-              Keep {activeOrganizationName} moving without the admin drag.
-            </h1>
-            <p className="max-w-[68ch] text-sm/7 text-muted-foreground sm:text-base/7">
-              Intake stays light, the queue stays readable, and the whole team
-              can scan what needs attention before the day gets noisy.
-            </p>
           </div>
         </div>
-        {canCreateJobs ? (
-          <div className="flex flex-wrap gap-3">
-            <Link to="/jobs/new" className={buttonVariants()}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New job
-            </Link>
-          </div>
-        ) : null}
+
+        <JobsCommandToolbar
+          filters={filters}
+          hasCustomFilters={hasCustomFilters}
+          optionsState={optionsState.data}
+          onClearFilters={() => setFilters(defaultJobsListFilters)}
+          onFiltersChange={patchFilters}
+        />
       </header>
 
       {notice ? (
-        <Alert>
-          <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-          <AlertTitle>{notice.title} added to Jobs</AlertTitle>
-          <AlertDescription>
-            The new intake is in the queue and ready for the next step.
-          </AlertDescription>
-          <button
+        <div
+          role="status"
+          className="flex min-w-0 items-center justify-between gap-3 rounded-xl border bg-background px-3 py-2 text-sm shadow-xs"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+            </span>
+            <span className="truncate font-medium">{notice.title}</span>
+            <span className="hidden text-muted-foreground sm:inline">
+              added
+            </span>
+          </div>
+          <Button
             type="button"
-            className={buttonVariants({ size: "xs", variant: "ghost" })}
+            size="xs"
+            variant="ghost"
             onClick={() => setNotice(null)}
           >
             Dismiss
-          </button>
-        </Alert>
+          </Button>
+        </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <SummaryCard
-          label="Visible jobs"
-          value={summary.total}
-          description="Based on the current filters."
+      {hasCustomFilters ? (
+        <ActiveFilterBar
+          filters={activeFilters}
+          onClearAll={() => setFilters(defaultJobsListFilters)}
+          onRemove={(key) =>
+            patchFilters({ [key]: defaultJobsListFilters[key] })
+          }
         />
-        <SummaryCard
-          label="Active"
-          value={summary.active}
-          description="New, triaged, in progress, and blocked."
-        />
-        <SummaryCard
-          label="Blocked"
-          value={summary.blocked}
-          description="Work that needs a true unblock before it moves."
-        />
-        <SummaryCard
-          label="Mapped"
-          value={mappedJobCount}
-          description="Jobs with a pinned site location ready for the map."
-        />
-      </section>
+      ) : null}
 
-      {isCompactWorkspace ? (
-        <Tabs defaultValue="queue" className="gap-4">
-          <TabsList variant="line">
-            <TabsTrigger value="queue">Queue</TabsTrigger>
-            <TabsTrigger value="map">Coverage map</TabsTrigger>
-          </TabsList>
-          <TabsContent value="queue">{queuePanel}</TabsContent>
-          <TabsContent value="map">{mapPanel}</TabsContent>
-        </Tabs>
+      {viewMode === "list" ? (
+        <JobsListView jobs={jobs} canCreateJobs={canCreateJobs} />
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start">
-          {queuePanel}
-          <div className="sticky top-6">{mapPanel}</div>
-        </div>
+        <section data-testid="jobs-coverage-panel" className="min-h-0">
+          <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
+        </section>
       )}
 
       {children}
@@ -571,79 +215,498 @@ export function JobsPage({
   );
 }
 
-function useJobsCompactWorkspace() {
-  return React.useSyncExternalStore(
-    subscribeToJobsCompactWorkspace,
-    getJobsCompactWorkspaceSnapshot,
-    () => false
+function JobsCommandToolbar({
+  filters,
+  hasCustomFilters,
+  onClearFilters,
+  onFiltersChange,
+  optionsState,
+}: {
+  readonly filters: JobsListFilters;
+  readonly hasCustomFilters: boolean;
+  readonly onClearFilters: () => void;
+  readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
+  readonly optionsState: {
+    readonly members: readonly { readonly id: string; readonly name: string }[];
+    readonly regions: readonly { readonly id: string; readonly name: string }[];
+    readonly sites: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly regionId?: string | undefined;
+    }[];
+  };
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+        <InputGroup className="h-8 bg-background xl:max-w-72">
+          <InputGroupAddon>
+            <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
+          </InputGroupAddon>
+          <InputGroupInput
+            aria-label="Search jobs"
+            placeholder="Search jobs"
+            value={filters.query}
+            onChange={(event) => onFiltersChange({ query: event.target.value })}
+          />
+        </InputGroup>
+
+        <div className="no-scrollbar flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
+          <CommandFilter
+            label="Status"
+            value={filters.status}
+            options={STATUS_FILTER_OPTIONS}
+            onValueChange={(value) =>
+              onFiltersChange({ status: value as JobsListFilters["status"] })
+            }
+          />
+          <CommandFilter
+            label="Assignee"
+            value={filters.assigneeId}
+            options={[
+              { label: "All assignees", value: "all" },
+              ...optionsState.members.map((member) => ({
+                label: member.name,
+                value: member.id,
+              })),
+            ]}
+            onValueChange={(value) =>
+              onFiltersChange({
+                assigneeId: value as JobsListFilters["assigneeId"],
+              })
+            }
+          />
+          <CommandFilter
+            label="Priority"
+            value={filters.priority}
+            options={[
+              { label: "All priorities", value: "all" },
+              ...Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
+                label,
+                value,
+              })),
+            ]}
+            onValueChange={(value) =>
+              onFiltersChange({
+                priority: value as JobsListFilters["priority"],
+              })
+            }
+          />
+          <CommandFilter
+            label="Site"
+            value={filters.siteId}
+            options={[
+              { label: "All sites", value: "all" },
+              ...optionsState.sites
+                .filter((site) =>
+                  filters.regionId === "all"
+                    ? true
+                    : site.regionId === filters.regionId
+                )
+                .map((site) => ({
+                  label: site.name,
+                  value: site.id,
+                })),
+            ]}
+            onValueChange={(value) =>
+              onFiltersChange({ siteId: value as JobsListFilters["siteId"] })
+            }
+          />
+          <CommandFilter
+            label="More"
+            value="all"
+            triggerIcon={FilterHorizontalIcon}
+            options={[
+              { label: "All coordinators", value: "coordinator:all" },
+              ...optionsState.members.map((member) => ({
+                label: `Coordinator: ${member.name}`,
+                value: `coordinator:${member.id}`,
+              })),
+              { label: "All regions", value: "region:all" },
+              ...optionsState.regions.map((region) => ({
+                label: `Region: ${region.name}`,
+                value: `region:${region.id}`,
+              })),
+            ]}
+            onValueChange={(value) => {
+              const [kind, nextValue] = value.split(":");
+
+              if (kind === "coordinator") {
+                onFiltersChange({
+                  coordinatorId: nextValue as JobsListFilters["coordinatorId"],
+                });
+                return;
+              }
+
+              if (kind === "region") {
+                onFiltersChange({
+                  regionId: nextValue as JobsListFilters["regionId"],
+                  siteId:
+                    nextValue === "all"
+                      ? filters.siteId
+                      : defaultJobsListFilters.siteId,
+                });
+              }
+            }}
+          />
+
+          {hasCustomFilters ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onClearFilters}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function subscribeToJobsCompactWorkspace(onStoreChange: () => void) {
-  if (typeof window === "undefined") {
-    return () => null;
-  }
-
-  window.addEventListener("resize", onStoreChange);
-
-  return () => {
-    window.removeEventListener("resize", onStoreChange);
-  };
-}
-
-function getJobsCompactWorkspaceSnapshot() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.innerWidth < JOBS_COMPACT_WORKSPACE_BREAKPOINT;
-}
-
-function FilterSelect({
-  children,
+function CommandFilter({
   label,
+  onValueChange,
+  options,
+  triggerIcon,
+  value,
+}: {
+  readonly label: string;
+  readonly onValueChange: (value: string) => void;
+  readonly options: readonly {
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly triggerIcon?: React.ComponentProps<typeof HugeiconsIcon>["icon"];
+  readonly value: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const selected = options.find((option) => option.value === value);
+  const Icon = triggerIcon;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 bg-background"
+            aria-label={`${label} filter`}
+          />
+        }
+      >
+        {Icon ? (
+          <HugeiconsIcon icon={Icon} strokeWidth={2} data-icon="inline-start" />
+        ) : null}
+        <span>{selected?.label ?? label}</span>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`Filter ${label.toLowerCase()}`} />
+          <CommandList>
+            <CommandEmpty>No results.</CommandEmpty>
+            <CommandGroup heading={label}>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.label}
+                  data-checked={option.value === value ? "true" : undefined}
+                  onSelect={() => {
+                    onValueChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ViewModeSwitch({
   onValueChange,
   value,
 }: {
-  readonly children: React.ReactNode;
-  readonly label: string;
-  readonly onValueChange: (value: string) => void;
-  readonly value: string;
+  readonly onValueChange: (value: JobsViewMode) => void;
+  readonly value: JobsViewMode;
 }) {
   return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </span>
-      <Select
-        value={value}
-        onChange={(event) => onValueChange(event.target.value)}
+    <div className="flex items-center rounded-full border bg-background p-0.5">
+      <Button
+        type="button"
+        size="sm"
+        variant={value === "list" ? "secondary" : "ghost"}
+        className="h-7 rounded-full px-2"
+        aria-pressed={value === "list"}
+        onClick={() => onValueChange("list")}
       >
-        {children}
-      </Select>
-    </label>
+        <HugeiconsIcon
+          icon={LeftToRightListBulletIcon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        List
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant={value === "map" ? "secondary" : "ghost"}
+        className="h-7 rounded-full px-2"
+        aria-pressed={value === "map"}
+        onClick={() => onValueChange("map")}
+      >
+        <HugeiconsIcon
+          icon={MapsSquare01Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        Map
+      </Button>
+    </div>
   );
 }
 
-function MetaLine({
-  icon,
-  label,
-  value,
+function ActiveFilterBar({
+  filters,
+  onClearAll,
+  onRemove,
 }: {
-  readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
-  readonly label: string;
-  readonly value: string;
+  readonly filters: readonly ActiveFilterBadge[];
+  readonly onClearAll: () => void;
+  readonly onRemove: (key: keyof JobsListFilters) => void;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <HugeiconsIcon icon={icon} strokeWidth={2} className="mt-0.5" />
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-xs font-medium tracking-wide uppercase">
-          {label}
-        </span>
-        <span className="truncate text-foreground">{value}</span>
-      </div>
+    <div
+      className="flex flex-wrap items-center gap-2"
+      aria-label="Active filters"
+    >
+      {filters.map((filter) => (
+        <Badge
+          key={filter.label}
+          variant="outline"
+          className="gap-1 rounded-full"
+        >
+          {filter.label}
+          <button
+            type="button"
+            className="inline-flex rounded-full text-muted-foreground transition-colors hover:text-foreground"
+            aria-label={`Remove ${filter.label}`}
+            onClick={() => onRemove(filter.key)}
+          >
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+          </button>
+        </Badge>
+      ))}
+      <Button type="button" size="xs" variant="ghost" onClick={onClearAll}>
+        Clear all
+      </Button>
     </div>
+  );
+}
+
+function JobsListView({
+  canCreateJobs,
+  jobs,
+}: {
+  readonly canCreateJobs: boolean;
+  readonly jobs: readonly JobListItem[];
+}) {
+  const lookup = useAtomValue(jobsLookupAtom);
+
+  if (jobs.length === 0) {
+    return <JobsEmptyState canCreateJobs={canCreateJobs} />;
+  }
+
+  return (
+    <section
+      data-testid="jobs-queue-panel"
+      className="overflow-hidden rounded-2xl border bg-background"
+    >
+      <div className="border-b px-3 py-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span className="size-2 rounded-full bg-primary" />
+          <span>Backlog</span>
+          <span className="text-muted-foreground tabular-nums">
+            {jobs.length}
+          </span>
+        </div>
+      </div>
+
+      <ul className="flex flex-col xl:hidden">
+        {jobs.map((job) => (
+          <li key={job.id}>
+            <JobIssueRow job={job} lookup={lookup} compact />
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden xl:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[48%]">Job</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead>Site</TableHead>
+              <TableHead>Owner</TableHead>
+              <TableHead className="text-right">Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {jobs.map((job) => (
+              <JobIssueTableRow key={job.id} job={job} lookup={lookup} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+}
+
+function useJobsLookup() {
+  return useAtomValue(jobsLookupAtom);
+}
+
+function JobIssueTableRow({
+  job,
+  lookup,
+}: {
+  readonly job: JobListItem;
+  readonly lookup: JobsLookup;
+}) {
+  const site = job.siteId ? lookup.siteById.get(job.siteId) : undefined;
+  const assignee = job.assigneeId
+    ? lookup.memberById.get(job.assigneeId)
+    : undefined;
+
+  return (
+    <TableRow className="group h-12 bg-transparent hover:bg-muted/30">
+      <TableCell>
+        <Link
+          to="/jobs/$jobId"
+          params={{ jobId: job.id }}
+          className="flex min-w-0 items-center gap-3"
+        >
+          <span className="flex size-5 items-center justify-center text-muted-foreground">
+            <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+          </span>
+          <span className="min-w-0 truncate font-medium">{job.title}</span>
+          {site && hasSiteCoordinates(site) ? (
+            <HugeiconsIcon
+              icon={Location01Icon}
+              strokeWidth={2}
+              className="text-muted-foreground"
+            />
+          ) : null}
+        </Link>
+      </TableCell>
+      <TableCell>
+        <StatusBadge status={job.status} />
+      </TableCell>
+      <TableCell>
+        <PriorityBadge priority={job.priority} />
+      </TableCell>
+      <TableCell className="max-w-48 truncate text-muted-foreground">
+        {site?.name ?? "No site"}
+      </TableCell>
+      <TableCell className="max-w-40 truncate text-muted-foreground">
+        {assignee?.name ?? "Unassigned"}
+      </TableCell>
+      <TableCell className="text-right text-muted-foreground">
+        {formatRelativeDate(job.updatedAt)}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function JobIssueRow({
+  compact = false,
+  job,
+  lookup,
+}: {
+  readonly compact?: boolean;
+  readonly job: JobListItem;
+  readonly lookup: JobsLookup;
+}) {
+  const site = job.siteId ? lookup.siteById.get(job.siteId) : undefined;
+  const assignee = job.assigneeId
+    ? lookup.memberById.get(job.assigneeId)
+    : undefined;
+
+  return (
+    <Link
+      to="/jobs/$jobId"
+      params={{ jobId: job.id }}
+      className={cn(
+        "group flex min-w-0 items-center gap-3 border-b px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/30",
+        compact ? "items-start" : "items-center"
+      )}
+    >
+      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+        <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="truncate font-medium">{job.title}</span>
+          <StatusBadge status={job.status} />
+          <PriorityBadge priority={job.priority} />
+        </div>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{site?.name ?? "No site"}</span>
+          <span>/</span>
+          <span>{assignee?.name ?? "Unassigned"}</span>
+          <span>/</span>
+          <span>{formatRelativeDate(job.updatedAt)}</span>
+        </div>
+      </div>
+      <HugeiconsIcon
+        icon={ArrowRight01Icon}
+        strokeWidth={2}
+        className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+      />
+    </Link>
+  );
+}
+
+function JobsEmptyState({
+  canCreateJobs,
+}: {
+  readonly canCreateJobs: boolean;
+}) {
+  return (
+    <section data-testid="jobs-queue-panel">
+      <Empty className="min-h-[420px] border-transparent bg-transparent p-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} />
+          </EmptyMedia>
+          <EmptyTitle>No jobs here.</EmptyTitle>
+          <EmptyDescription>
+            Clear filters or add the next piece of work.
+          </EmptyDescription>
+        </EmptyHeader>
+        {canCreateJobs ? (
+          <EmptyContent>
+            <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
+              <HugeiconsIcon
+                icon={Add01Icon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+              New job
+            </Link>
+          </EmptyContent>
+        ) : null}
+      </Empty>
+    </section>
   );
 }
 
@@ -653,7 +716,10 @@ function StatusBadge({
   readonly status: keyof typeof STATUS_LABELS;
 }) {
   return (
-    <Badge variant={status === "blocked" ? "outline" : "secondary"}>
+    <Badge
+      variant={status === "blocked" ? "outline" : "secondary"}
+      className="rounded-full"
+    >
       {STATUS_LABELS[status]}
     </Badge>
   );
@@ -661,33 +727,12 @@ function StatusBadge({
 
 function PriorityBadge({ priority }: { readonly priority: JobPriority }) {
   return (
-    <Badge variant={priority === "none" ? "outline" : "secondary"}>
+    <Badge
+      variant={priority === "none" ? "outline" : "secondary"}
+      className="rounded-full"
+    >
       {PRIORITY_LABELS[priority]}
     </Badge>
-  );
-}
-
-function SummaryCard({
-  description,
-  label,
-  value,
-}: {
-  readonly description: string;
-  readonly label: string;
-  readonly value: number;
-}) {
-  return (
-    <Card className="border-dashed bg-muted/20 shadow-none">
-      <CardContent className="flex items-end justify-between gap-4 p-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-foreground/90">{label}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-        <p className="font-heading text-2xl font-medium text-foreground/85 tabular-nums">
-          {value}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -702,6 +747,11 @@ function formatRelativeDate(value: string) {
   return formatter.format(date);
 }
 
+interface ActiveFilterBadge {
+  readonly key: keyof JobsListFilters;
+  readonly label: string;
+}
+
 function buildActiveFilterBadges(
   filters: JobsListFilters,
   lookup: {
@@ -709,46 +759,60 @@ function buildActiveFilterBadges(
     readonly regionById: ReadonlyMap<string, { readonly name: string }>;
     readonly siteById: ReadonlyMap<string, { readonly name: string }>;
   }
-) {
-  const badges: string[] = [];
+): readonly ActiveFilterBadge[] {
+  const badges: ActiveFilterBadge[] = [];
+
+  if (filters.query.trim().length > 0) {
+    badges.push({ key: "query", label: `Search: ${filters.query.trim()}` });
+  }
 
   if (filters.status !== defaultJobsListFilters.status) {
     const selectedStatus = STATUS_FILTER_OPTIONS.find(
       (option) => option.value === filters.status
     );
 
-    badges.push(`Status: ${selectedStatus?.label ?? filters.status}`);
+    badges.push({
+      key: "status",
+      label: `Status: ${selectedStatus?.label ?? filters.status}`,
+    });
   }
 
   if (filters.assigneeId !== defaultJobsListFilters.assigneeId) {
-    badges.push(
-      `Assignee: ${lookup.memberById.get(filters.assigneeId)?.name ?? "Unknown"}`
-    );
+    badges.push({
+      key: "assigneeId",
+      label: `Assignee: ${lookup.memberById.get(filters.assigneeId)?.name ?? "Unknown"}`,
+    });
   }
 
   if (filters.coordinatorId !== defaultJobsListFilters.coordinatorId) {
-    badges.push(
-      `Coordinator: ${lookup.memberById.get(filters.coordinatorId)?.name ?? "Unknown"}`
-    );
+    badges.push({
+      key: "coordinatorId",
+      label: `Coordinator: ${lookup.memberById.get(filters.coordinatorId)?.name ?? "Unknown"}`,
+    });
   }
 
   if (
     filters.priority !== defaultJobsListFilters.priority &&
     filters.priority !== "all"
   ) {
-    badges.push(`Priority: ${PRIORITY_LABELS[filters.priority] ?? "Unknown"}`);
+    badges.push({
+      key: "priority",
+      label: `Priority: ${PRIORITY_LABELS[filters.priority] ?? "Unknown"}`,
+    });
   }
 
   if (filters.regionId !== defaultJobsListFilters.regionId) {
-    badges.push(
-      `Region: ${lookup.regionById.get(filters.regionId)?.name ?? "Unknown"}`
-    );
+    badges.push({
+      key: "regionId",
+      label: `Region: ${lookup.regionById.get(filters.regionId)?.name ?? "Unknown"}`,
+    });
   }
 
   if (filters.siteId !== defaultJobsListFilters.siteId) {
-    badges.push(
-      `Site: ${lookup.siteById.get(filters.siteId)?.name ?? "Unknown"}`
-    );
+    badges.push({
+      key: "siteId",
+      label: `Site: ${lookup.siteById.get(filters.siteId)?.name ?? "Unknown"}`,
+    });
   }
 
   return badges;

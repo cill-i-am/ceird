@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
@@ -10,6 +10,7 @@ import { AcceptInvitationPage } from "./accept-invitation-page";
 const {
   mockedAcceptInvitation,
   mockedGetInvitation,
+  mockedGetPublicInvitationPreview,
   mockedGetSession,
   mockedNavigate,
   mockedSignOut,
@@ -44,6 +45,13 @@ const {
         statusText: string;
       } | null;
     }>
+  >(),
+  mockedGetPublicInvitationPreview: vi.fn<
+    (invitationId: string) => Promise<{
+      email: string;
+      organizationName: string;
+      role: string;
+    } | null>
   >(),
   mockedGetSession: vi.fn<
     () => Promise<{
@@ -109,6 +117,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
       getInvitation: mockedGetInvitation,
     },
   } as unknown as typeof AuthClient,
+  getPublicInvitationPreview: mockedGetPublicInvitationPreview,
 }));
 
 vi.mock(import("../auth/sign-out"), () => ({
@@ -141,6 +150,11 @@ describe("accept invitation page", () => {
       },
       error: null,
     });
+    mockedGetPublicInvitationPreview.mockResolvedValue({
+      email: "m***@e***.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
     mockedGetSession.mockResolvedValue({
       data: null,
       error: null,
@@ -161,8 +175,18 @@ describe("accept invitation page", () => {
     render(<AcceptInvitationPage invitationId="inv_123" />);
 
     await expect(
-      screen.findByText("Sign in or create an account to continue.")
+      screen.findByRole("heading", { name: "Join Acme Field Ops" })
     ).resolves.toBeInTheDocument();
+    expect(mockedGetPublicInvitationPreview).toHaveBeenCalledWith("inv_123");
+    expect(mockedGetInvitation).not.toHaveBeenCalled();
+    const contextColumn = await screen.findByLabelText("Auth context column");
+    expect(
+      within(contextColumn).getByText("Acme Field Ops")
+    ).toBeInTheDocument();
+    expect(
+      within(contextColumn).getByText("m***@e***.com")
+    ).toBeInTheDocument();
+    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/login?invitation=inv_123"
@@ -170,6 +194,25 @@ describe("accept invitation page", () => {
     expect(
       screen.getByRole("link", { name: "Create account" })
     ).toHaveAttribute("href", "/signup?invitation=inv_123");
+    expect(
+      screen.queryByRole("button", { name: "Accept invitation" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("owner@example.com")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("falls back to generic signed-out copy when the public preview lookup fails", async () => {
+    mockedGetPublicInvitationPreview.mockRejectedValue(
+      new Error("preview unavailable")
+    );
+
+    render(<AcceptInvitationPage invitationId="inv_123" />);
+
+    await expect(
+      screen.findByRole("heading", {
+        name: "Continue with the invited account.",
+      })
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("Acme Field Ops")).not.toBeInTheDocument();
     expect(mockedGetInvitation).not.toHaveBeenCalled();
   }, 10_000);
 
@@ -196,10 +239,17 @@ describe("accept invitation page", () => {
         id: "inv_123",
       },
     });
+    expect(mockedGetPublicInvitationPreview).not.toHaveBeenCalled();
+    const contextColumn = await screen.findByLabelText("Auth context column");
     expect(
-      screen.getByText(
-        "owner@example.com invited member@example.com as member."
-      )
+      within(contextColumn).getByText("owner@example.com")
+    ).toBeInTheDocument();
+    expect(
+      within(contextColumn).getByText("member@example.com")
+    ).toBeInTheDocument();
+    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
+    expect(
+      within(contextColumn).getByText("Acme Field Ops")
     ).toBeInTheDocument();
   }, 10_000);
 

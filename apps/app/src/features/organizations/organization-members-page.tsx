@@ -2,27 +2,21 @@ import { useForm } from "@tanstack/react-form";
 import { Schema } from "effect";
 import * as React from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
+import { AppPageHeader } from "#/components/app-page-header";
+import {
+  AppRowList,
+  AppRowListItem,
+  AppRowListLeading,
+  AppRowListMeta,
+} from "#/components/app-row-list";
+import { AppUtilityPanel } from "#/components/app-utility-panel";
+import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "#/components/ui/empty";
+import { CommandSelect } from "#/components/ui/command-select";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Select } from "#/components/ui/select";
-import { Skeleton } from "#/components/ui/skeleton";
 import { getErrorText } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { authClient } from "#/lib/auth-client";
@@ -44,9 +38,28 @@ const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the details and try again.";
 const INVITATION_LOAD_FAILURE_MESSAGE =
   "We couldn't load invitations right now. Please try again.";
+const ROLE_SELECTION_GROUPS = [
+  {
+    label: "Role",
+    options: [
+      { label: "Member", value: "member" },
+      { label: "Admin", value: "admin" },
+    ],
+  },
+] satisfies readonly CommandSelectGroup[];
 
 function formatRoleLabel(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function formatInvitationCount(count: number) {
+  return count === 1 ? "1 open" : `${count} open`;
+}
+
+function isInviteRole(
+  value: string
+): value is OrganizationMemberInviteInput["role"] {
+  return value === "admin" || value === "member";
 }
 
 export function OrganizationMembersPage({
@@ -58,7 +71,6 @@ export function OrganizationMembersPage({
   const [invitations, setInvitations] = React.useState<
     readonly InvitationSummary[]
   >([]);
-  const [isLoadingInvitations, setIsLoadingInvitations] = React.useState(true);
   const [loadErrorMessage, setLoadErrorMessage] = React.useState<string | null>(
     null
   );
@@ -70,7 +82,7 @@ export function OrganizationMembersPage({
   const loadInvitations = React.useCallback(async () => {
     invitationRequestSequence.current += 1;
     const requestSequence = invitationRequestSequence.current;
-    setIsLoadingInvitations(true);
+    setInvitations([]);
     setLoadErrorMessage(null);
 
     const result = await authClient.organization.listInvitations({
@@ -85,14 +97,12 @@ export function OrganizationMembersPage({
 
     if (result.error || !result.data) {
       setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
-      setIsLoadingInvitations(false);
       return;
     }
 
     setInvitations(
       result.data.filter((invitation) => invitation.status === "pending")
     );
-    setIsLoadingInvitations(false);
   }, [activeOrganizationId]);
 
   React.useEffect(() => {
@@ -134,208 +144,171 @@ export function OrganizationMembersPage({
     },
   });
 
-  let invitationsContent: React.ReactNode = null;
-
-  if (isLoadingInvitations) {
-    invitationsContent = (
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-20 w-full rounded-3xl" />
-        <Skeleton className="h-20 w-full rounded-3xl" />
-        <Skeleton className="h-20 w-full rounded-3xl" />
-      </div>
-    );
-  } else if (loadErrorMessage && invitations.length === 0) {
-    invitationsContent = null;
-  } else if (invitations.length === 0) {
-    invitationsContent = (
-      <Empty className="min-h-[240px] bg-muted/20 px-6 py-8">
-        <EmptyHeader>
-          <EmptyTitle>No pending invitations yet.</EmptyTitle>
-          <EmptyDescription>
-            Invite a teammate when you&apos;re ready to bring them into this
-            workspace.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  } else {
-    invitationsContent = (
-      <ul className="flex flex-col gap-3">
-        {invitations.map((invitation) => (
-          <li
-            key={invitation.id}
-            className="flex flex-col gap-4 rounded-3xl border bg-background/84 p-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex flex-col gap-1">
-              <p className="font-medium">{invitation.email}</p>
-              <p className="text-sm/6 text-muted-foreground">
-                Awaiting a response from the invited teammate.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                {formatRoleLabel(invitation.role)}
-              </Badge>
-              <Badge variant="outline">
-                {formatRoleLabel(invitation.status)}
-              </Badge>
-            </div>
-          </li>
-        ))}
-      </ul>
-    );
-  }
+  const shouldRenderInvitationsSection =
+    invitations.length > 0 || Boolean(loadErrorMessage);
 
   return (
-    <div className="flex flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
-      <header className="flex max-w-3xl flex-col gap-3">
-        <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-          Crew access
-        </Badge>
-        <div className="flex flex-col gap-2">
-          <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl">
-            Invite the people who keep the work moving.
-          </h1>
-          <p className="max-w-[65ch] text-sm/7 text-muted-foreground sm:text-base/7">
-            Bring supervisors, coordinators, and office staff into the current
-            workspace without making access management feel heavy.
-          </p>
-        </div>
-      </header>
+    <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
+      <AppPageHeader eyebrow="Organization access" title="Members" />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Invite teammate</CardTitle>
-            <CardDescription>
-              Send the invite to the email they should use when signing in.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="flex flex-col gap-5"
-              noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void form.handleSubmit();
-              }}
-            >
-              <FieldGroup>
-                <form.Field name="email">
-                  {(field) => {
-                    const errorText = getErrorText(field.state.meta.errors);
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)]">
+        <AppUtilityPanel
+          title="Invite teammate"
+          className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
+        >
+          <form
+            className="flex flex-col gap-5"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
+            }}
+          >
+            <FieldGroup>
+              <form.Field name="email">
+                {(field) => {
+                  const errorText = getErrorText(field.state.meta.errors);
 
-                    return (
-                      <AuthFormField
-                        label="Email"
-                        htmlFor="invite-email"
-                        invalid={Boolean(errorText)}
-                        descriptionText="Use the address tied to the teammate you want in this workspace."
-                        errorText={errorText}
-                      >
-                        <Input
-                          id="invite-email"
-                          name={field.name}
-                          type="email"
-                          autoComplete="email"
-                          value={field.state.value}
-                          aria-invalid={Boolean(errorText) || undefined}
-                          onBlur={field.handleBlur}
-                          onChange={(event) =>
-                            field.handleChange(event.target.value)
+                  return (
+                    <AuthFormField
+                      label="Email"
+                      htmlFor="invite-email"
+                      invalid={Boolean(errorText)}
+                      errorText={errorText}
+                    >
+                      <Input
+                        id="invite-email"
+                        name={field.name}
+                        type="email"
+                        autoComplete="email"
+                        value={field.state.value}
+                        aria-invalid={Boolean(errorText) || undefined}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                      />
+                    </AuthFormField>
+                  );
+                }}
+              </form.Field>
+
+              <form.Field name="role">
+                {(field) => {
+                  const errorText = getErrorText(field.state.meta.errors);
+
+                  return (
+                    <AuthFormField
+                      label="Role"
+                      htmlFor="invite-role"
+                      invalid={Boolean(errorText)}
+                      errorText={errorText}
+                    >
+                      <CommandSelect
+                        id="invite-role"
+                        value={field.state.value}
+                        placeholder="Pick role"
+                        emptyText="No roles found."
+                        groups={ROLE_SELECTION_GROUPS}
+                        ariaInvalid={errorText ? true : undefined}
+                        onValueChange={(nextValue) => {
+                          if (!isInviteRole(nextValue)) {
+                            return;
                           }
-                        />
-                      </AuthFormField>
-                    );
-                  }}
-                </form.Field>
 
-                <form.Field name="role">
-                  {(field) => {
-                    const errorText = getErrorText(field.state.meta.errors);
+                          field.handleChange(nextValue);
+                          field.handleBlur();
+                        }}
+                      />
+                    </AuthFormField>
+                  );
+                }}
+              </form.Field>
+            </FieldGroup>
 
-                    return (
-                      <AuthFormField
-                        label="Role"
-                        htmlFor="invite-role"
-                        invalid={Boolean(errorText)}
-                        descriptionText="Admins can manage members and settings. Members can work inside the organization."
-                        errorText={errorText}
-                      >
-                        <Select
-                          id="invite-role"
-                          name={field.name}
-                          value={field.state.value}
-                          aria-invalid={Boolean(errorText) || undefined}
-                          onBlur={field.handleBlur}
-                          onChange={(event) =>
-                            field.handleChange(
-                              event.target.value as "admin" | "member"
-                            )
-                          }
-                        >
-                          <option value="member">Member</option>
-                          <option value="admin">Admin</option>
-                        </Select>
-                      </AuthFormField>
-                    );
-                  }}
-                </form.Field>
-              </FieldGroup>
+            {errorMessage ? (
+              <p role="alert" className="text-sm text-destructive">
+                {errorMessage}
+              </p>
+            ) : null}
+            {successMessage ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {successMessage}
+              </p>
+            ) : null}
 
-              {errorMessage ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{errorMessage}</AlertDescription>
-                </Alert>
-              ) : null}
-              {successMessage ? (
-                <Alert role="status" className="bg-muted/40">
-                  <AlertTitle>Invitation sent</AlertTitle>
-                  <AlertDescription>{successMessage}</AlertDescription>
-                </Alert>
-              ) : null}
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full sm:w-auto"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Sending invite..." : "Send invite"}
+                </Button>
+              )}
+            </form.Subscribe>
+          </form>
+        </AppUtilityPanel>
 
-              <form.Subscribe selector={(state) => state.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? "Sending invitation..." : "Send invitation"}
-                  </Button>
-                )}
-              </form.Subscribe>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardAction>
-              <Badge variant="outline" className="rounded-full px-3 py-1">
-                {isLoadingInvitations
-                  ? "Updating"
-                  : `${invitations.length} pending`}
+        {shouldRenderInvitationsSection ? (
+          <section
+            aria-labelledby="pending-invitations-heading"
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <h2
+                id="pending-invitations-heading"
+                className="font-heading text-lg font-medium tracking-tight"
+              >
+                Pending invitations
+              </h2>
+              <Badge
+                variant="secondary"
+                className="w-fit rounded-full px-3 py-1"
+              >
+                {formatInvitationCount(invitations.length)}
               </Badge>
-            </CardAction>
-            <CardTitle>Pending invitations</CardTitle>
-            <CardDescription>
-              Outstanding invites for your current organization stay visible
-              here until the teammate accepts.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </div>
             {loadErrorMessage ? (
-              <Alert variant="destructive" className="mb-4">
+              <Alert variant="destructive">
                 <AlertDescription>{loadErrorMessage}</AlertDescription>
               </Alert>
             ) : null}
-            {invitationsContent}
-          </CardContent>
-        </Card>
+            {invitations.length > 0 ? (
+              <AppRowList aria-label="Pending invitations">
+                {invitations.map((invitation) => (
+                  <AppRowListItem key={invitation.id}>
+                    <AppRowListLeading aria-hidden="true">
+                      {invitation.email.charAt(0).toUpperCase()}
+                    </AppRowListLeading>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p
+                        className="text-sm font-medium break-all text-foreground"
+                        title={invitation.email}
+                      >
+                        {invitation.email}
+                      </p>
+                      <p className="text-sm/6 text-muted-foreground">
+                        Awaiting acceptance from the invited teammate.
+                      </p>
+                    </div>
+                    <AppRowListMeta>
+                      <Badge variant="secondary">
+                        {formatRoleLabel(invitation.role)}
+                      </Badge>
+                      <Badge variant="outline">
+                        {formatRoleLabel(invitation.status)}
+                      </Badge>
+                    </AppRowListMeta>
+                  </AppRowListItem>
+                ))}
+              </AppRowList>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </div>
   );

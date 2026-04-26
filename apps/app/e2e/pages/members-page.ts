@@ -14,11 +14,11 @@ export class MembersPage {
     this.page = page;
     this.heading = page.getByRole("heading", {
       level: 1,
-      name: /Invite the people who keep the work moving/i,
+      name: "Members",
     });
     this.email = page.getByLabel("Email", { exact: true });
     this.role = page.getByLabel("Role", { exact: true });
-    this.submit = page.getByRole("button", { name: "Send invitation" });
+    this.submit = page.getByRole("button", { name: "Send invite" });
   }
 
   async goto() {

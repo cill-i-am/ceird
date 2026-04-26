@@ -4,47 +4,55 @@ import type { ComponentProps, ReactElement } from "react";
 
 import { AppLayout } from "./app-layout";
 
-const { mockedAppSidebar, mockedEmailVerificationBanner } = vi.hoisted(() => ({
-  mockedAppSidebar: vi.fn<
-    ({
-      user,
-    }: {
-      user?: {
-        name: string;
+const { mockedAppSidebar, mockedEmailVerificationBanner, mockedSidebarInset } =
+  vi.hoisted(() => ({
+    mockedAppSidebar: vi.fn<
+      ({
+        user,
+      }: {
+        user?: {
+          name: string;
+          email: string;
+          image?: string | null;
+        } | null;
+      } & ComponentProps<"div">) => ReactElement
+    >(
+      ({
+        user,
+        ...props
+      }: {
+        user?: {
+          name: string;
+          email: string;
+          image?: string | null;
+        } | null;
+      } & ComponentProps<"div">) => (
+        <aside data-testid="app-sidebar" {...props}>
+          {user?.name ?? "missing user"}
+        </aside>
+      )
+    ),
+    mockedEmailVerificationBanner: vi.fn<
+      ({
+        email,
+        emailVerified,
+      }: {
         email: string;
-        image?: string | null;
-      } | null;
-    } & ComponentProps<"div">) => ReactElement
-  >(
-    ({
-      user,
-      ...props
-    }: {
-      user?: {
-        name: string;
-        email: string;
-        image?: string | null;
-      } | null;
-    } & ComponentProps<"div">) => (
-      <aside data-testid="app-sidebar" {...props}>
-        {user?.name ?? "missing user"}
-      </aside>
-    )
-  ),
-  mockedEmailVerificationBanner: vi.fn<
-    ({
-      email,
-      emailVerified,
-    }: {
-      email: string;
-      emailVerified: boolean;
-    }) => ReactElement
-  >(({ email, emailVerified }) => (
-    <div data-testid="email-verification-banner">
-      {email}:{String(emailVerified)}
-    </div>
-  )),
-}));
+        emailVerified: boolean;
+      }) => ReactElement
+    >(({ email, emailVerified }) => (
+      <div data-testid="email-verification-banner">
+        {email}:{String(emailVerified)}
+      </div>
+    )),
+    mockedSidebarInset: vi.fn<
+      ({ children, ...props }: ComponentProps<"div">) => ReactElement
+    >(({ children, ...props }: ComponentProps<"div">) => (
+      <div data-testid="sidebar-inset" {...props}>
+        {children}
+      </div>
+    )),
+  }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -60,11 +68,7 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
   return {
     ...actual,
-    SidebarInset: (({ children, ...props }: ComponentProps<"div">) => (
-      <div data-testid="sidebar-inset" {...props}>
-        {children}
-      </div>
-    )) as typeof actual.SidebarInset,
+    SidebarInset: mockedSidebarInset as typeof actual.SidebarInset,
     SidebarProvider: (({ children, ...props }: ComponentProps<"div">) => (
       <div data-testid="sidebar-provider" {...props}>
         {children}
@@ -126,6 +130,10 @@ describe("app layout", () => {
       );
       expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
         "Taylor Example"
+      );
+      expect(mockedSidebarInset).toHaveBeenCalledOnce();
+      expect(mockedSidebarInset.mock.calls[0]?.[0].className).toContain(
+        "overflow-hidden"
       );
       expect(screen.getByTestId("sidebar-inset")).toContainElement(
         screen.getByTestId("app-layout-outlet")

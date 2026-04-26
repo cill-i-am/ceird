@@ -23,7 +23,10 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(workspaceHome).toBeVisible();
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Open jobs" })
+  ).toBeVisible();
+  await expect(
+    workspaceHome.getByText("Invite the first teammate")
   ).toBeVisible();
 }
 
@@ -158,14 +161,12 @@ test.describe("auth pages", () => {
       organizationSlugPrefix: "verification-banner-org",
     });
 
-    const banner = page.getByRole("region", {
+    const banner = page.getByRole("alert", {
       name: "Email verification reminder",
     });
 
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText(
-      `${email} is not verified yet. Check your inbox for the verification link, or request another email.`
-    );
+    await expect(banner).toContainText(`${email} is not verified yet.`);
     await expect(
       banner.getByRole("button", { name: "Resend verification email" })
     ).toBeVisible();
@@ -180,7 +181,7 @@ test.describe("auth pages", () => {
       organizationSlugPrefix: "verification-resend-org",
     });
 
-    const banner = page.getByRole("region", {
+    const banner = page.getByRole("alert", {
       name: "Email verification reminder",
     });
     const resendButton = banner.getByRole("button", {
@@ -274,9 +275,10 @@ test.describe("auth pages", () => {
       page.locator('[data-slot="card-title"]', { hasText: "Email verified" })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "Your email address is verified. You can continue in the app or sign in again if needed."
-      )
+      page.getByText("Your email address is verified.", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("You can continue safely", { exact: true })
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Go to the app" })
@@ -308,9 +310,12 @@ test.describe("auth pages", () => {
       })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "This verification link is invalid or has expired. Request a fresh verification email from the app."
-      )
+      page.getByText("This verification link is invalid or has expired.", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Request a fresh verification email", { exact: true })
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Back to login" })

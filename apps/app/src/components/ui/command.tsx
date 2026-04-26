@@ -130,7 +130,7 @@ function CommandItem({
       <HugeiconsIcon
         icon={Tick02Icon}
         strokeWidth={2}
-        className="ml-auto opacity-0 group-data-[checked=true]/command-item:opacity-100"
+        className="order-2 ml-auto opacity-0 group-data-[checked=true]/command-item:opacity-100"
       />
     </CommandPrimitive.Item>
   );

@@ -4,6 +4,12 @@ import { requireOrganizationAdministrationAccess } from "#/features/organization
 import { OrganizationMembersPage } from "#/features/organizations/organization-members-page";
 
 export const Route = createFileRoute("/_app/_org/members")({
+  staticData: {
+    breadcrumb: {
+      label: "Members",
+      to: "/members",
+    },
+  },
   beforeLoad: async () => {
     await requireOrganizationAdministrationAccess();
   },

@@ -1,3 +1,5 @@
+import { decodePublicInvitationPreview } from "@task-tracker/identity-core";
+import type { PublicInvitationPreview } from "@task-tracker/identity-core";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -7,6 +9,7 @@ import {
   resolveApiOrigin,
 } from "./api-origin";
 
+export const API_BASE_PATH = "/api";
 export const AUTH_BASE_PATH = "/api/auth";
 const configuredApiOrigin = readConfiguredApiOrigin();
 
@@ -32,6 +35,19 @@ export function resolveAuthBaseURL(
 
 export function resolveConfiguredServerAuthBaseURL(): string | undefined {
   return resolveAuthBaseURL(undefined, readConfiguredServerApiOrigin());
+}
+
+export function resolveApiBaseURL(
+  origin?: string | undefined,
+  explicitAuthOrigin?: string | undefined
+): string | undefined {
+  const apiOrigin = resolveApiOrigin(origin, explicitAuthOrigin);
+
+  if (!apiOrigin) {
+    return undefined;
+  }
+
+  return new URL(API_BASE_PATH, apiOrigin).toString();
 }
 
 export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
@@ -62,6 +78,47 @@ function createUnavailableAuthClient(
   return unavailable as unknown as ReturnType<
     typeof createTaskTrackerAuthClient
   >;
+}
+
+const defaultApiBaseURL =
+  typeof window === "undefined"
+    ? undefined
+    : resolveApiBaseURL(window.location.origin, configuredApiOrigin);
+export async function getPublicInvitationPreview(
+  invitationId: string,
+  baseURL = defaultApiBaseURL
+): Promise<PublicInvitationPreview | null> {
+  if (!baseURL) {
+    return null;
+  }
+
+  const response = await fetch(
+    new URL(
+      `public/invitations/${encodeURIComponent(invitationId)}/preview`,
+      `${baseURL}/`
+    ),
+    {
+      headers: {
+        accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json();
+
+  if (payload === null) {
+    return null;
+  }
+
+  try {
+    return decodePublicInvitationPreview(payload);
+  } catch {
+    return null;
+  }
 }
 
 export function createBrowserTaskTrackerAuthClient(

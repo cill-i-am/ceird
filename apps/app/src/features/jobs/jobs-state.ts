@@ -28,6 +28,7 @@ export interface JobsListFilters {
   readonly assigneeId: UserIdType | "all";
   readonly coordinatorId: UserIdType | "all";
   readonly priority: JobPriority | "all";
+  readonly query: string;
   readonly regionId: RegionIdType | "all";
   readonly siteId: SiteIdType | "all";
   readonly status: JobsStatusFilter;
@@ -60,6 +61,7 @@ export const defaultJobsListFilters: JobsListFilters = {
   assigneeId: "all",
   coordinatorId: "all",
   priority: "all",
+  query: "",
   regionId: "all",
   siteId: "all",
   status: "active",
@@ -127,6 +129,17 @@ export const visibleJobsAtom = Atom.make((get) => {
 
     if (filters.siteId !== "all" && item.siteId !== filters.siteId) {
       return false;
+    }
+
+    if (filters.query.trim().length > 0) {
+      const siteName =
+        item.siteId === undefined ? undefined : siteById.get(item.siteId)?.name;
+      const searchable =
+        `${item.title} ${item.kind} ${siteName ?? ""}`.toLowerCase();
+
+      if (!searchable.includes(filters.query.trim().toLowerCase())) {
+        return false;
+      }
     }
 
     if (filters.regionId !== "all") {

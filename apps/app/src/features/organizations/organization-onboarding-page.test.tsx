@@ -64,6 +64,11 @@ describe("organization onboarding page", () => {
 
     render(<OrganizationOnboardingPage />);
 
+    expect(
+      screen.getByRole("heading", {
+        name: "Set up the workspace your team will use.",
+      })
+    ).toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Organization name"),
       "Acme Field Ops"

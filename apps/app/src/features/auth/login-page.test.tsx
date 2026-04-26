@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Schema } from "effect";
 import type { ComponentProps } from "react";
@@ -126,6 +126,15 @@ describe("login page", () => {
 
   it("preserves invitation continuation in the forgot-password link", () => {
     render(<LoginPage search={{ invitation: "inv_123" }} />);
+
+    expect(
+      within(screen.getByLabelText("Auth context column")).getByRole(
+        "heading",
+        {
+          name: "Sign in to finish this invitation.",
+        }
+      )
+    ).toBeInTheDocument();
 
     const link = screen.getByRole("link", { name: "Forgot password?" });
 

@@ -2,8 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 
-import { Alert, AlertDescription } from "#/components/ui/alert";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -23,13 +22,10 @@ import {
   useAuthSuccessNavigation,
 } from "./auth-navigation";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
-import {
-  DEFAULT_AUTH_HIGHLIGHTS,
-  EntryHighlightGrid,
-  EntryShell,
-  EntrySurfaceCard,
-  INVITATION_AUTH_HIGHLIGHTS,
-} from "./entry-shell";
+import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const quietLinkClassName =
+  "text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none";
 
 export function SignupPage({
   search,
@@ -82,57 +78,82 @@ export function SignupPage({
       badge={isInvitationFlow ? "Invitation flow" : "Account setup"}
       title={
         isInvitationFlow
-          ? "Create the account that will carry the invitation forward."
-          : "Create the workspace account your team will rely on."
+          ? "Create the account that will accept this invitation."
+          : "Create the account your team will sign into."
       }
       description={
         isInvitationFlow
-          ? "Set up the invited account, verify the email, and continue directly into the workspace."
-          : "Create a secure account so owners, coordinators, and crew leads can stay on the same page."
+          ? "Use the invited email, verify it, and continue straight into the workspace."
+          : "Set up a secure account once so sign-in, invites, and recovery stay straightforward."
       }
       supportingContent={
-        <EntryHighlightGrid
-          items={
-            isInvitationFlow
-              ? INVITATION_AUTH_HIGHLIGHTS
-              : DEFAULT_AUTH_HIGHLIGHTS
-          }
-        />
+        <div className="flex flex-col gap-8">
+          <div className="space-y-3">
+            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              {isInvitationFlow ? "Create the invited account" : "Set up once"}
+            </p>
+            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
+              {isInvitationFlow
+                ? "Create the account tied to the invitation so the workspace handoff stays attached after verification."
+                : "This is the account you'll use to manage work, invite teammates, and recover access later."}
+            </p>
+          </div>
+
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-1 border-t border-border/60 pt-4">
+              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                Email choice
+              </dt>
+              <dd className="text-sm/6 text-muted-foreground">
+                {isInvitationFlow
+                  ? "Use the invited email address so the invitation lands on the new account."
+                  : "Choose the email you want to keep tied to invites, verification, and sign-in."}
+              </dd>
+            </div>
+
+            <div className="space-y-1 border-t border-border/60 pt-4">
+              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                After this
+              </dt>
+              <dd className="text-sm/6 text-muted-foreground">
+                {isInvitationFlow
+                  ? "You'll verify the address, then continue directly back to the invitation."
+                  : "You'll verify the address, then head into the app."}
+              </dd>
+            </div>
+          </dl>
+        </div>
       }
     >
       <EntrySurfaceCard
-        badge={isInvitationFlow ? "Create invited account" : "Create account"}
+        badge={isInvitationFlow ? "Invited account" : "Create account"}
+        className="max-w-lg"
         title="Create an account"
         description={
           isInvitationFlow
-            ? "Create an account with the invited email address to accept your invitation."
-            : "Sign up with your name, email, and password."
+            ? "Create an account with the invited email address."
+            : "Use your name, email, and password to get started."
         }
         footer={
-          <>
-            <Link
-              {...getLoginNavigationTarget(search?.invitation)}
-              className={buttonVariants({
-                variant: "link",
-                className: "h-auto justify-start p-0",
-              })}
-            >
-              Already have an account? Sign in
-            </Link>
-            <p className="text-sm/6 text-muted-foreground">
-              We&apos;ll ask you to verify your email after setup so invitations
-              and account recovery stay reliable.
+          <div className="flex flex-col items-start gap-2 text-sm/6 text-muted-foreground">
+            <p>
+              Already have an account?{" "}
+              <Link
+                {...getLoginNavigationTarget(search?.invitation)}
+                className={quietLinkClassName}
+              >
+                Sign in
+              </Link>
             </p>
-          </>
+            <p>We&rsquo;ll verify your email before you continue.</p>
+          </div>
         }
       >
         {isInvitationFlow ? (
-          <Alert className="bg-muted/40">
-            <AlertDescription>
-              Create the account with the invited email address so the
-              invitation can attach to the right person.
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
+            Use the invited email address so the invitation attaches to the new
+            account.
+          </div>
         ) : null}
 
         <form

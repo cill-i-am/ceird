@@ -53,21 +53,20 @@ export function AppSidebar({
 
   return (
     <Sidebar
-      className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
+      variant="inset"
+      collapsible="icon"
+      className="border-r-0"
       {...props}
     >
-      <SidebarHeader>
+      <SidebarHeader className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              render={
-                <Link to="/">
-                  <span className="sr-only">Task Tracker</span>
-                </Link>
-              }
+              className="rounded-xl px-2.5 py-2.5"
+              render={<Link to="/" />}
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklab,var(--sidebar-primary-foreground)_30%,transparent)]">
                 <HugeiconsIcon
                   icon={CommandIcon}
                   strokeWidth={2}
@@ -81,11 +80,11 @@ export function AppSidebar({
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="px-1 pb-2">
         <NavMain items={data.navMain} />
       </SidebarContent>
       {user ? (
-        <SidebarFooter>
+        <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-2.5">
           <NavUser user={user} navigate={navigate} />
         </SidebarFooter>
       ) : null}

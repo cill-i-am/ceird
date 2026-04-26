@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { AuthenticatedShellHome } from "./authenticated-shell-home";
@@ -45,6 +45,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
 describe("authenticated shell home", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "http://localhost:3000/tasks");
     mockedUseRouteContext.mockImplementation(({ from }) => {
       if (from === "/_app/_org") {
         return {
@@ -71,7 +72,7 @@ describe("authenticated shell home", () => {
   });
 
   it(
-    "shows the active organization overview and quick links",
+    "shows a quiet organization overview and a single next action",
     {
       timeout: 10_000,
     },
@@ -81,23 +82,63 @@ describe("authenticated shell home", () => {
       expect(
         screen.getByRole("heading", { name: "Acme Field Ops" })
       ).toBeInTheDocument();
-      expect(screen.getByText(/@acme-field-ops/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /next actions/i })
+      ).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /open jobs/i })).toHaveAttribute(
         "href",
         "/jobs"
       );
       expect(
-        screen.getByRole("link", { name: /invite teammates/i })
+        screen.queryByRole("link", { name: /invite teammates/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /check system health/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: /workspace status/i })
+      ).not.toBeInTheDocument();
+
+      const nextActions = screen
+        .getByRole("heading", { name: /next actions/i })
+        .closest("section");
+      expect(nextActions).not.toBeNull();
+      expect(
+        within(nextActions as HTMLElement).getByText(
+          /invite the first teammate/i
+        )
+      ).toBeInTheDocument();
+      expect(
+        within(nextActions as HTMLElement).getByRole("link", { name: /open/i })
       ).toHaveAttribute("href", "/members");
       expect(
-        screen.getByRole("link", { name: /check system health/i })
-      ).toHaveAttribute("href", "/health");
-      expect(screen.getAllByText(/verification pending/i)).not.toHaveLength(0);
+        within(nextActions as HTMLElement).getAllByRole("listitem")
+      ).toHaveLength(1);
+      expect(
+        within(nextActions as HTMLElement).queryByText(
+          /finish account verification/i
+        )
+      ).not.toBeInTheDocument();
+      expect(
+        within(nextActions as HTMLElement).queryByText(/check system health/i)
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/verification pending/i)
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/resend verification email/i)
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/health checks ready/i)
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("/health")).not.toBeInTheDocument();
+      expect(screen.queryByText("taylor@example.com")).not.toBeInTheDocument();
+      expect(screen.queryByText("@acme-field-ops")).not.toBeInTheDocument();
     }
   );
 
   it(
-    "shows a verified account badge when the session email is verified",
+    "keeps verified account state out of the home action list",
     {
       timeout: 10_000,
     },
@@ -124,7 +165,25 @@ describe("authenticated shell home", () => {
 
       render(<AuthenticatedShellHome />);
 
-      expect(screen.getAllByText(/email verified/i)).not.toHaveLength(0);
+      const nextActions = screen
+        .getByRole("heading", { name: /next actions/i })
+        .closest("section");
+      expect(nextActions).not.toBeNull();
+      expect(
+        within(nextActions as HTMLElement).getByText(
+          /invite the first teammate/i
+        )
+      ).toBeInTheDocument();
+      expect(
+        within(nextActions as HTMLElement).getAllByRole("listitem")
+      ).toHaveLength(1);
+      expect(screen.queryByText(/email verified/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/account trust is in place/i)
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /resend verification email/i })
+      ).not.toBeInTheDocument();
     }
   );
 });

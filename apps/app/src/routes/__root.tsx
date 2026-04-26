@@ -74,14 +74,28 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="font-sans [overflow-wrap:anywhere] antialiased selection:bg-primary/20">
         <TooltipProvider>
           {children}
-          {DevelopmentDevtools ? (
-            <React.Suspense fallback={null}>
-              <DevelopmentDevtools />
-            </React.Suspense>
-          ) : null}
+          <ClientOnlyDevelopmentDevtools />
           <Scripts />
         </TooltipProvider>
       </body>
     </html>
+  );
+}
+
+function ClientOnlyDevelopmentDevtools() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || !DevelopmentDevtools) {
+    return null;
+  }
+
+  return (
+    <React.Suspense fallback={null}>
+      <DevelopmentDevtools />
+    </React.Suspense>
   );
 }

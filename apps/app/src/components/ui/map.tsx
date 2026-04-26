@@ -2,9 +2,10 @@
 
 /* oxlint-disable eqeqeq, no-eq-null, no-inline-comments, prefer-destructuring, react/jsx-no-constructed-context-values */
 
-import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
+import { Cause, Effect, Exit } from "effect";
 
 import "maplibre-gl/dist/maplibre-gl.css";
+import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 import MapLibreGL from "maplibre-gl";
 import type { PopupOptions, MarkerOptions } from "maplibre-gl";
 import {
@@ -22,6 +23,8 @@ import {
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { requestBrowserGeolocation } from "#/lib/browser-geolocation";
+import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
 
 const defaultStyles = {
@@ -794,6 +797,8 @@ interface MapControlsProps {
   className?: string;
   /** Callback with user coordinates when located */
   onLocate?: (coords: { longitude: number; latitude: number }) => void;
+  /** Callback when browser geolocation fails */
+  onLocateError?: (error: BrowserGeolocationError) => void;
 }
 
 const positionClasses = {
@@ -849,6 +854,7 @@ function MapControls({
   showFullscreen = false,
   className,
   onLocate,
+  onLocateError,
 }: MapControlsProps) {
   const { map } = useMap();
   const [waitingForLocation, setWaitingForLocation] = useState(false);
@@ -867,28 +873,33 @@ function MapControls({
 
   const handleLocate = useCallback(() => {
     setWaitingForLocation(true);
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const coords = {
-            longitude: pos.coords.longitude,
-            latitude: pos.coords.latitude,
-          };
-          map?.flyTo({
-            center: [coords.longitude, coords.latitude],
-            zoom: 14,
-            duration: 1500,
-          });
-          onLocate?.(coords);
-          setWaitingForLocation(false);
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-          setWaitingForLocation(false);
+
+    void (async () => {
+      const exit = await Effect.runPromiseExit(requestBrowserGeolocation());
+
+      if (Exit.isSuccess(exit)) {
+        const coords = {
+          latitude: exit.value.latitude,
+          longitude: exit.value.longitude,
+        };
+
+        map?.flyTo({
+          center: [coords.longitude, coords.latitude],
+          zoom: 14,
+          duration: 1500,
+        });
+        onLocate?.(coords);
+      } else {
+        const failure = Cause.failureOption(exit.cause);
+
+        if (failure._tag === "Some") {
+          onLocateError?.(failure.value);
         }
-      );
-    }
-  }, [map, onLocate]);
+      }
+
+      setWaitingForLocation(false);
+    })();
+  }, [map, onLocate, onLocateError]);
 
   const handleFullscreen = useCallback(() => {
     const container = map?.getContainer();

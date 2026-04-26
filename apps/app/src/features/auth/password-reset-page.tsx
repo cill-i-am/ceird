@@ -25,13 +25,7 @@ import {
   getLoginNavigationTarget,
 } from "./auth-navigation";
 import { decodePasswordResetInput, passwordResetSchema } from "./auth-schemas";
-import {
-  DEFAULT_AUTH_HIGHLIGHTS,
-  EntryHighlightGrid,
-  EntryShell,
-  EntrySurfaceCard,
-  INVITATION_AUTH_HIGHLIGHTS,
-} from "./entry-shell";
+import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 import { decodePasswordResetSearch } from "./password-reset-search";
 import type { PasswordResetSearch } from "./password-reset-search";
 
@@ -46,6 +40,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
   );
   const { invitation, token } = normalizedSearch;
   const isInvitationFlow = Boolean(invitation);
+  const recoveryContext = isInvitationFlow
+    ? "This will return you to the invitation."
+    : "You'll sign in again with the new password.";
 
   const form = useForm({
     defaultValues: {
@@ -101,29 +98,30 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
     return (
       <EntryShell
         badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-        title="This reset link has expired or is no longer valid."
-        description="Request a fresh link, then continue back into the workspace with a new password."
+        title="This reset link isn't valid anymore."
+        description="Request a fresh reset link."
         supportingContent={
-          <EntryHighlightGrid
-            items={
-              isInvitationFlow
-                ? INVITATION_AUTH_HIGHLIGHTS
-                : DEFAULT_AUTH_HIGHLIGHTS
-            }
-          />
+          <div className="space-y-3">
+            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              Link expired
+            </p>
+            <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+              Open the newest reset email instead of an older one.
+            </p>
+          </div>
         }
       >
         <EntrySurfaceCard
-          badge="Link expired"
-          title="Reset password"
+          badge="Expired link"
+          className="max-w-lg"
+          title="Reset link expired"
           description="This password reset link is invalid or has expired."
           footer={
-            <>
+            <div className="flex flex-col gap-3">
               <Link
                 {...getForgotPasswordNavigationTarget(invitation)}
                 className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto justify-start p-0",
+                  className: "w-full",
                 })}
               >
                 Request a new reset link
@@ -131,13 +129,13 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
               <Link
                 {...getLoginNavigationTarget(invitation)}
                 className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto justify-start p-0",
+                  variant: "outline",
+                  className: "w-full",
                 })}
               >
                 Back to login
               </Link>
-            </>
+            </div>
           }
         >
           <Empty className="min-h-0 bg-muted/20 px-6 py-8">
@@ -156,22 +154,35 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
   return (
     <EntryShell
       badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-      title="Choose a new password and get back into the workspace."
-      description="Once you save a new password, you can continue into the app or finish the invitation flow."
+      title="Choose a new password."
+      description="Save it to continue."
       supportingContent={
-        <EntryHighlightGrid
-          items={
-            isInvitationFlow
-              ? INVITATION_AUTH_HIGHLIGHTS
-              : DEFAULT_AUTH_HIGHLIGHTS
-          }
-        />
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            Recovery
+          </p>
+          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
+            {recoveryContext}
+          </p>
+        </div>
       }
     >
       <EntrySurfaceCard
         badge="Choose a new password"
+        className="max-w-lg"
         title="Reset password"
-        description="Choose a new password to finish signing in."
+        description="Use 8 or more characters."
+        footer={
+          <Link
+            {...getLoginNavigationTarget(invitation)}
+            className={buttonVariants({
+              variant: "link",
+              className: "h-auto justify-start p-0 text-muted-foreground",
+            })}
+          >
+            Back to login
+          </Link>
+        }
       >
         <form
           className="flex flex-col gap-6"

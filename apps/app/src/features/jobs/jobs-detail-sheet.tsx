@@ -29,6 +29,8 @@ import {
   CardHeader,
   CardTitle,
 } from "#/components/ui/card";
+import { CommandSelect } from "#/components/ui/command-select";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   Empty,
   EmptyDescription,
@@ -44,7 +46,6 @@ import {
   FieldLabel,
 } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Select } from "#/components/ui/select";
 import { Separator } from "#/components/ui/separator";
 import {
   Sheet,
@@ -94,6 +95,13 @@ const VISIT_DURATION_OPTIONS = [
   { label: "4 hours", value: "240" },
   { label: "8 hours", value: "480" },
 ] as const;
+
+const VISIT_DURATION_SELECTION_GROUPS = [
+  {
+    label: "Duration",
+    options: VISIT_DURATION_OPTIONS,
+  },
+] satisfies readonly CommandSelectGroup[];
 
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
@@ -147,6 +155,8 @@ export function JobsDetailSheet({
   const canAddVisit = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
+  const transitionSelectionGroups =
+    buildTransitionSelectionGroups(transitionOptions);
 
   const [selectedStatus, setSelectedStatus] = React.useState<JobStatus | "">(
     ""
@@ -335,24 +345,16 @@ export function JobsDetailSheet({
           <Field>
             <FieldLabel htmlFor="job-transition-status">Next status</FieldLabel>
             <FieldContent>
-              <Select
+              <CommandSelect
                 id="job-transition-status"
                 value={selectedStatus}
-                onChange={(event) =>
-                  setSelectedStatus(event.target.value as JobStatus)
+                placeholder="Choose next state"
+                emptyText="No status changes available."
+                groups={transitionSelectionGroups}
+                onValueChange={(nextValue) =>
+                  setSelectedStatus(nextValue as JobStatus | "")
                 }
-              >
-                <option value="">Choose the next state</option>
-                {transitionOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </Select>
-              <FieldDescription>
-                Pick the clearest next state for the queue, not the most
-                optimistic one.
-              </FieldDescription>
+              />
             </FieldContent>
           </Field>
 
@@ -624,22 +626,14 @@ export function JobsDetailSheet({
                               Duration
                             </FieldLabel>
                             <FieldContent>
-                              <Select
+                              <CommandSelect
                                 id="job-visit-duration"
                                 value={visitDurationMinutes}
-                                onChange={(event) =>
-                                  setVisitDurationMinutes(event.target.value)
-                                }
-                              >
-                                {VISIT_DURATION_OPTIONS.map((option) => (
-                                  <option
-                                    key={option.value}
-                                    value={option.value}
-                                  >
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </Select>
+                                placeholder="Pick duration"
+                                emptyText="No durations found."
+                                groups={VISIT_DURATION_SELECTION_GROUPS}
+                                onValueChange={setVisitDurationMinutes}
+                              />
                             </FieldContent>
                           </Field>
                         </div>
@@ -829,6 +823,23 @@ function HeaderMetaCard({
       </p>
     </div>
   );
+}
+
+function buildTransitionSelectionGroups(
+  transitionOptions: readonly JobStatus[]
+) {
+  return [
+    {
+      label: "Next status",
+      options: [
+        { label: "Choose next state", value: "" },
+        ...transitionOptions.map((status) => ({
+          label: STATUS_LABELS[status],
+          value: status,
+        })),
+      ],
+    },
+  ] satisfies readonly CommandSelectGroup[];
 }
 
 function renderMutationError(

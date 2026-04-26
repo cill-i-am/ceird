@@ -21,8 +21,24 @@ export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
 >;
 
+export const PublicInvitationPreviewSchema = Schema.Struct({
+  email: Schema.String,
+  organizationName: Schema.String,
+  role: Schema.String,
+});
+
+export type PublicInvitationPreview = Schema.Schema.Type<
+  typeof PublicInvitationPreviewSchema
+>;
+
 export function decodeCreateOrganizationInput(
   input: unknown
 ): CreateOrganizationInput {
   return ParseResult.decodeUnknownSync(CreateOrganizationInputSchema)(input);
+}
+
+export function decodePublicInvitationPreview(
+  input: unknown
+): PublicInvitationPreview {
+  return ParseResult.decodeUnknownSync(PublicInvitationPreviewSchema)(input);
 }

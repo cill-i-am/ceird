@@ -2,8 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 
-import { Alert, AlertDescription } from "#/components/ui/alert";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
@@ -21,13 +20,10 @@ import {
   useAuthSuccessNavigation,
 } from "./auth-navigation";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
-import {
-  DEFAULT_AUTH_HIGHLIGHTS,
-  EntryHighlightGrid,
-  EntryShell,
-  EntrySurfaceCard,
-  INVITATION_AUTH_HIGHLIGHTS,
-} from "./entry-shell";
+import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const quietLinkClassName =
+  "text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none";
 
 export function LoginPage({
   search,
@@ -73,69 +69,89 @@ export function LoginPage({
       badge={isInvitationFlow ? "Invitation flow" : "Sign in"}
       title={
         isInvitationFlow
-          ? "Pick up the invitation and continue straight into the workspace."
-          : "Sign in to keep the crew aligned."
+          ? "Sign in to finish this invitation."
+          : "Sign in and get back to the work in front of you."
       }
       description={
         isInvitationFlow
-          ? "Use the invited account to review the pending invite and keep the setup moving without losing context."
-          : "Open your workspace, update work, and keep the next action visible for everyone involved."
+          ? "Use the invited account so the pending handoff stays attached when you continue."
+          : "Open your workspace, catch up quickly, and keep the next action visible."
       }
       supportingContent={
-        <EntryHighlightGrid
-          items={
-            isInvitationFlow
-              ? INVITATION_AUTH_HIGHLIGHTS
-              : DEFAULT_AUTH_HIGHLIGHTS
-          }
-        />
+        <div className="flex flex-col gap-8">
+          <div className="space-y-3">
+            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              {isInvitationFlow ? "Continue the handoff" : "Back in the flow"}
+            </p>
+            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
+              {isInvitationFlow
+                ? "The invitation will stay attached after sign in, so you can review it and join the workspace without restarting the flow."
+                : "Return to the same workspace your team is using and pick up the latest work without hunting for context."}
+            </p>
+          </div>
+
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-1 border-t border-border/60 pt-4">
+              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                Use this email
+              </dt>
+              <dd className="text-sm/6 text-muted-foreground">
+                {isInvitationFlow
+                  ? "Sign in with the invited address so the invitation lands on the right account."
+                  : "Use the account your team already recognizes for updates, invites, and recovery."}
+              </dd>
+            </div>
+
+            <div className="space-y-1 border-t border-border/60 pt-4">
+              <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                Next step
+              </dt>
+              <dd className="text-sm/6 text-muted-foreground">
+                {isInvitationFlow
+                  ? "After sign in, you'll go straight back to the invitation review."
+                  : "After sign in, you'll head straight into the app."}
+              </dd>
+            </div>
+          </dl>
+        </div>
       }
     >
       <EntrySurfaceCard
-        badge={isInvitationFlow ? "Continue invitation" : "Welcome back"}
+        badge={isInvitationFlow ? "Invited account" : "Welcome back"}
+        className="max-w-lg"
         title="Sign in"
         description={
           isInvitationFlow
-            ? "Sign in with the invited email address to review and accept your invitation."
+            ? "Use the invited email address to continue."
             : "Use your email and password to continue."
         }
         footer={
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link
-                {...getForgotPasswordNavigationTarget(search?.invitation)}
-                className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto p-0",
-                })}
-              >
-                Forgot password?
-              </Link>
+          <div className="flex flex-col items-start gap-2 text-sm/6 text-muted-foreground">
+            <Link
+              {...getForgotPasswordNavigationTarget(search?.invitation)}
+              className={quietLinkClassName}
+            >
+              Forgot password?
+            </Link>
+            <p>
+              {isInvitationFlow
+                ? "Need to set up the invited account first? "
+                : "Need an account? "}
               <Link
                 {...getSignupNavigationTarget(search?.invitation)}
-                className={buttonVariants({
-                  variant: "link",
-                  className: "h-auto p-0",
-                })}
+                className={quietLinkClassName}
               >
-                {isInvitationFlow ? "Create an account" : "Need an account?"}
+                Create one
               </Link>
-            </div>
-            <p className="text-sm/6 text-muted-foreground">
-              {isInvitationFlow
-                ? "Need a fresh account for this invite? Create one with the invited email address."
-                : "New here? Create an account and get into your team's workspace."}
             </p>
-          </>
+          </div>
         }
       >
         {isInvitationFlow ? (
-          <Alert className="bg-muted/40">
-            <AlertDescription>
-              This sign in keeps your invitation attached so you can review and
-              accept it right away.
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
+            This sign in keeps your invitation attached, so you can review and
+            accept it right away.
+          </div>
         ) : null}
 
         <form

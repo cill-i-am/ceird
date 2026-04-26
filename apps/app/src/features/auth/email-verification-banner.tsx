@@ -1,8 +1,15 @@
 "use client";
 
+import { Alert01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import {
   authClient,
@@ -54,38 +61,36 @@ export function EmailVerificationBanner({
 
   return (
     <Alert
-      className="mx-4 mt-4"
-      role="region"
+      variant="warning"
+      className="mx-3 mt-3 min-h-16 w-auto min-w-0 pr-4 sm:mx-4 sm:mt-4 sm:pr-64 lg:mx-5"
       aria-label="Email verification reminder"
     >
+      <HugeiconsIcon icon={Alert01Icon} strokeWidth={2} />
       <AlertTitle>Verify your email</AlertTitle>
-      <AlertDescription className="flex flex-col gap-4">
-        <p>
-          {email} is not verified yet. Check your inbox for the verification
-          link, or request another email.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => void handleResendVerificationEmail()}
-          >
-            {isSubmitting
-              ? "Sending verification email..."
-              : "Resend verification email"}
-          </Button>
-          {successText ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              {successText}
-            </p>
-          ) : null}
-          {errorText ? (
-            <p className="text-sm text-destructive" role="status">
-              {errorText}
-            </p>
-          ) : null}
-        </div>
+      <AlertDescription>
+        <p className="truncate">{email} is not verified yet.</p>
       </AlertDescription>
+      <AlertAction className="static col-span-full mt-3 flex min-w-0 flex-col gap-2 sm:absolute sm:top-3 sm:right-4 sm:col-span-1 sm:mt-0 sm:flex-row sm:items-center">
+        {successText ? (
+          <p className="text-muted-foreground" role="status">
+            {successText}
+          </p>
+        ) : null}
+        {errorText ? (
+          <p className="text-destructive" role="status">
+            {errorText}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isSubmitting}
+          onClick={() => void handleResendVerificationEmail()}
+        >
+          {isSubmitting ? "Sending..." : "Resend verification email"}
+        </Button>
+      </AlertAction>
     </Alert>
   );
 }

@@ -2,6 +2,7 @@ import {
   AuthClientConfigurationError,
   buildPasswordResetRedirectTo,
   createBrowserTaskTrackerAuthClient,
+  resolveApiBaseURL,
   resolveAuthBaseURL,
 } from "../../lib/auth-client";
 import {
@@ -90,6 +91,12 @@ describe("auth schemas", () => {
 });
 
 describe("auth base URL resolution", () => {
+  it("resolves the api base URL from the same origin mapping rules", () => {
+    expect(
+      resolveApiBaseURL("https://agent-one.app.task-tracker.localhost:1355")
+    ).toBe("https://agent-one.api.task-tracker.localhost:1355/api");
+  }, 1000);
+
   it("prefers an injected auth origin when one is provided", () => {
     expect(
       resolveAuthBaseURL("http://127.0.0.1:4300", "http://127.0.0.1:4301")

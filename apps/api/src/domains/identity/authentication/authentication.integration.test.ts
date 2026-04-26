@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { decodePublicInvitationPreview } from "@task-tracker/identity-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
@@ -15,8 +16,9 @@ import {
   createTestDatabase as createPlatformTestDatabase,
   withPool,
 } from "../../../platform/database/test-database.js";
+import { makeApiWebHandler } from "../../../server.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
-import { createAuthentication } from "./auth.js";
+import { createAuthentication, findPublicInvitationPreview } from "./auth.js";
 import {
   DEFAULT_AUTH_DATABASE_URL,
   DEFAULT_AUTH_BASE_PATH,
@@ -638,6 +640,7 @@ describe("authentication integration", () => {
     cleanup.push(() => authPool.end());
 
     const sentInvitationEmails: unknown[] = [];
+    const database = drizzle(authPool, { schema: authSchema });
     const auth = createAuthentication({
       appOrigin: "http://127.0.0.1:4173",
       backgroundTaskHandler: async (task) => {
@@ -648,7 +651,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database,
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: () => {},
       sendOrganizationInvitationEmail: (input) => {
@@ -720,6 +723,17 @@ describe("authentication integration", () => {
       }),
     ]);
 
+    await expect(
+      findPublicInvitationPreview({
+        database,
+        invitationId: invitation.id,
+      })
+    ).resolves.toStrictEqual({
+      email: "m***@e***.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
+
     const invitedCookieJar = new Map<string, string>();
     const invitedSignUpResponse = await auth.handler(
       makeJsonRequest("/sign-up/email", {
@@ -756,6 +770,167 @@ describe("authentication integration", () => {
     expect(invitedSession.session?.activeOrganizationId).toBe(
       createdOrganization.id
     );
+
+    await expect(
+      findPublicInvitationPreview({
+        database,
+        invitationId: invitation.id,
+      })
+    ).resolves.toBeNull();
+  }, 30_000);
+
+  it("serves the public invitation preview from the mounted api route", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping public invitation preview route coverage"
+      );
+    }
+
+    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
+    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
+    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
+    await applyMigration(databaseUrl, "0003_organizations.sql");
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const ownerCookieJar = new Map<string, string>();
+    const ownerSignUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "owner@example.com",
+        name: "Owner Example",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(ownerCookieJar, ownerSignUpResponse);
+    expect(ownerSignUpResponse.status).toBe(200);
+
+    const organizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    updateCookieJar(ownerCookieJar, organizationResponse);
+    expect(organizationResponse.status).toBe(200);
+
+    const inviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "member@example.com",
+          role: "member",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(inviteResponse.status).toBe(200);
+    const invitation = (await inviteResponse.json()) as {
+      readonly id: string;
+    };
+    const publicPreviewEnvironment = {
+      AUTH_APP_ORIGIN: "http://127.0.0.1:4173",
+      AUTH_EMAIL_FROM: "no-reply@example.com",
+      BETTER_AUTH_BASE_URL: "http://127.0.0.1:3000",
+      BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+      CLOUDFLARE_ACCOUNT_ID: "test-account-id",
+      CLOUDFLARE_API_TOKEN: "test-api-token",
+      DATABASE_URL: databaseUrl,
+    } as const;
+
+    await withEnvironment(publicPreviewEnvironment, async () => {
+      const webHandler = await makeApiWebHandler();
+
+      try {
+        const response = await webHandler.handler(
+          new Request(
+            `http://127.0.0.1:3000/api/public/invitations/${invitation.id}/preview`
+          )
+        );
+
+        expect(response.status).toBe(200);
+        expect(
+          decodePublicInvitationPreview(await response.json())
+        ).toStrictEqual({
+          email: "m***@e***.com",
+          organizationName: "Acme Field Ops",
+          role: "member",
+        });
+      } finally {
+        await webHandler.dispose();
+      }
+    });
+
+    await withEnvironment(publicPreviewEnvironment, async () => {
+      const webHandler = await makeApiWebHandler();
+
+      try {
+        const response = await webHandler.handler(
+          new Request(
+            `http://127.0.0.1:3000/api/public/invitations/missing-preview/preview`
+          )
+        );
+
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toBeNull();
+      } finally {
+        await webHandler.dispose();
+      }
+    });
+
+    await withEnvironment(publicPreviewEnvironment, async () => {
+      const webHandler = await makeApiWebHandler();
+
+      try {
+        const response = await webHandler.handler(
+          new Request(
+            `http://127.0.0.1:3000/api/public/invitations/${invitation.id}/preview`,
+            {
+              method: "POST",
+            }
+          )
+        );
+
+        expect(response.status).toBe(404);
+      } finally {
+        await webHandler.dispose();
+      }
+    });
   }, 30_000);
 
   it("migrates a non-empty rate_limit table and serves sign-up, sign-in, sign-out, session, password reset, reset callback handoff, session revocation, and rate limiting", async (context: {
@@ -1272,5 +1447,26 @@ function updateCookieJar(
     } else {
       cookieJar.set(name, value);
     }
+  }
+}
+
+async function withEnvironment(
+  nextEnvironment: Record<string, string>,
+  run: () => Promise<void>
+) {
+  const previousEnvironment = { ...process.env };
+
+  delete process.env.AUTH_APP_ORIGIN;
+  delete process.env.BETTER_AUTH_BASE_URL;
+  delete process.env.BETTER_AUTH_SECRET;
+  delete process.env.DATABASE_URL;
+  delete process.env.PORTLESS_URL;
+
+  Object.assign(process.env, nextEnvironment);
+
+  try {
+    await run();
+  } finally {
+    process.env = previousEnvironment;
   }
 }

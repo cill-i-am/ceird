@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { Badge } from "#/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -11,7 +10,11 @@ import {
 } from "#/components/ui/card";
 import { cn } from "#/lib/utils";
 
-type EntryShellMode = "contained" | "full";
+import { AuthContextPanel } from "./auth-context-panel";
+import { AuthSplitShell } from "./auth-split-shell";
+import type { AuthSplitShellMode } from "./auth-split-shell";
+
+type EntryShellMode = AuthSplitShellMode;
 
 interface EntryShellProps {
   readonly badge?: string;
@@ -90,56 +93,22 @@ export function EntryShell(props: EntryShellProps) {
   } = props;
 
   return (
-    <div
-      className={cn("w-full", mode === "full" ? "min-h-screen" : "flex flex-1")}
-    >
-      <div
-        className={cn(
-          "mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-8",
-          mode === "full"
-            ? "min-h-screen items-center lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:py-10"
-            : "flex-1 items-start lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:py-8"
-        )}
-      >
-        <section className="relative overflow-hidden rounded-[2rem] border bg-card/80 p-6 shadow-sm ring-1 ring-border/60 sm:p-8 lg:p-10">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_38%)]" />
-          <div className="relative flex h-full flex-col gap-8">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant="secondary" className="rounded-full px-3 py-1">
-                  {kicker}
-                </Badge>
-                {badge ? (
-                  <Badge variant="outline" className="rounded-full px-3 py-1">
-                    {badge}
-                  </Badge>
-                ) : null}
-              </div>
-
-              <div className="flex max-w-2xl flex-col gap-3">
-                <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl lg:text-[2.9rem]">
-                  {title}
-                </h1>
-                <p className="max-w-[65ch] text-sm/7 text-muted-foreground sm:text-base/7">
-                  {description}
-                </p>
-              </div>
-            </div>
-
-            {supportingContent}
-          </div>
-        </section>
-
-        <div
-          className={cn(
-            "flex w-full",
-            mode === "full" ? "items-center lg:justify-end" : "lg:pt-2"
-          )}
+    <AuthSplitShell
+      mode={mode}
+      actionClassName={cn(mode === "full" ? "lg:pr-2" : "lg:pt-2")}
+      context={
+        <AuthContextPanel
+          badge={badge}
+          description={description}
+          kicker={kicker}
+          title={title}
         >
-          {children}
-        </div>
-      </div>
-    </div>
+          {supportingContent}
+        </AuthContextPanel>
+      }
+    >
+      {children}
+    </AuthSplitShell>
   );
 }
 
@@ -147,12 +116,17 @@ export function EntrySurfaceCard(props: EntrySurfaceCardProps) {
   const { badge, children, className, description, footer, title } = props;
 
   return (
-    <Card className={cn("w-full max-w-xl", className)}>
+    <Card
+      className={cn(
+        "w-full max-w-xl rounded-[1.75rem] border border-border/70 bg-card/95 shadow-lg shadow-primary/5",
+        className
+      )}
+    >
       <CardHeader className="flex flex-col gap-4 border-b border-border/70 pb-6">
         {badge ? (
-          <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
             {badge}
-          </Badge>
+          </p>
         ) : null}
 
         <div className="flex flex-col gap-2">
@@ -178,7 +152,7 @@ export function EntrySurfaceCard(props: EntrySurfaceCardProps) {
 
 export function EntryHighlightGrid({ items }: EntryHighlightGridProps) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => (
         <EntrySupportPanel
           key={item.title}
@@ -195,8 +169,9 @@ export function EntrySupportPanel(props: EntrySupportPanelProps) {
 
   return (
     <div
+      data-slot="entry-support-panel"
       className={cn(
-        "rounded-3xl border bg-background/84 p-4 shadow-sm shadow-primary/5",
+        "rounded-3xl border border-border/70 bg-background/92 p-4 shadow-sm shadow-primary/5",
         className
       )}
     >

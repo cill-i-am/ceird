@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
@@ -190,5 +190,22 @@ describe("signup page", () => {
       screen.findByText("Passwords must match")
     ).resolves.toBeInTheDocument();
     expect(mockedSignUpEmail).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("keeps invitation setup context in the right column", () => {
+    render(<SignupPage search={{ invitation: "inv_123" }} />);
+
+    expect(
+      within(screen.getByLabelText("Auth context column")).getByRole(
+        "heading",
+        {
+          name: "Create the account that will accept this invitation.",
+        }
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/login?invitation=inv_123"
+    );
   }, 10_000);
 });

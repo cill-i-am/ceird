@@ -3,6 +3,10 @@ import { getRequestHeader } from "@tanstack/react-start/server";
 import { Schema } from "effect";
 
 import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
+import {
+  normalizeServerApiCookieHeader,
+  readServerApiForwardedHeaders,
+} from "#/lib/server-api-forwarded-headers";
 
 const OrganizationSummarySchema = Schema.Struct({
   id: Schema.String,
@@ -55,6 +59,7 @@ export type OrganizationMemberRole = Schema.Schema.Type<
 interface ServerAuthRequest {
   cookie: string;
   authBaseURL: string;
+  forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
 }
 
 export const getCurrentServerOrganizationSession = createServerOnlyFn(
@@ -71,6 +76,7 @@ export const getCurrentServerOrganizationSession = createServerOnlyFn(
         headers: {
           accept: "application/json",
           cookie: authRequest.cookie,
+          ...authRequest.forwardedHeaders,
         },
       }
     );
@@ -143,6 +149,7 @@ export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
         headers: {
           accept: "application/json",
           cookie: authRequest.cookie,
+          ...authRequest.forwardedHeaders,
         },
       }
     );
@@ -169,6 +176,7 @@ export const setCurrentServerActiveOrganization = createServerOnlyFn(
           accept: "application/json",
           "content-type": "application/json",
           cookie: authRequest.cookie,
+          ...authRequest.forwardedHeaders,
         },
         body: JSON.stringify({ organizationId }),
       }
@@ -190,6 +198,7 @@ function readServerSessionRequest(): ServerAuthRequest | null {
   }
 
   const authBaseURL = readServerAuthBaseURL();
+  const forwardedHeaders = readServerApiForwardedHeaders();
 
   if (!authBaseURL) {
     throw new Error(
@@ -197,18 +206,27 @@ function readServerSessionRequest(): ServerAuthRequest | null {
     );
   }
 
-  return { cookie, authBaseURL };
+  return {
+    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
+    authBaseURL,
+    forwardedHeaders,
+  };
 }
 
 function readServerAuthRequest(): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
   const authBaseURL = readServerAuthBaseURL();
+  const forwardedHeaders = readServerApiForwardedHeaders();
 
   if (!cookie || !authBaseURL) {
     return null;
   }
 
-  return { cookie, authBaseURL };
+  return {
+    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
+    authBaseURL,
+    forwardedHeaders,
+  };
 }
 
 function readServerAuthRequestStrict(): ServerAuthRequest {
@@ -221,6 +239,7 @@ function readServerAuthRequestStrict(): ServerAuthRequest {
   }
 
   const authBaseURL = readServerAuthBaseURL();
+  const forwardedHeaders = readServerApiForwardedHeaders();
 
   if (!authBaseURL) {
     throw new Error(
@@ -228,7 +247,11 @@ function readServerAuthRequestStrict(): ServerAuthRequest {
     );
   }
 
-  return { cookie, authBaseURL };
+  return {
+    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
+    authBaseURL,
+    forwardedHeaders,
+  };
 }
 
 function readServerAuthBaseURL(): string | undefined {
@@ -242,6 +265,7 @@ async function fetchOrganizations(authRequest: ServerAuthRequest) {
       headers: {
         accept: "application/json",
         cookie: authRequest.cookie,
+        ...authRequest.forwardedHeaders,
       },
     }
   );

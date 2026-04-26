@@ -33,7 +33,10 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(workspaceHome).toBeVisible();
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { name: "Invite teammates" })
+    workspaceHome.getByRole("link", { name: "Open jobs" })
+  ).toBeVisible();
+  await expect(
+    workspaceHome.getByText("Invite the first teammate")
   ).toBeVisible();
 }
 
@@ -277,7 +280,13 @@ test.describe("organization invitations", () => {
 
     await invitedPage.goto(`/accept-invitation/${invitationId}`);
     await expect(
-      invitedPage.getByText("Sign in or create an account to continue.")
+      invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
+    ).toBeVisible();
+    await expect(
+      invitedPage.getByRole("link", { name: "Sign in" })
+    ).toBeVisible();
+    await expect(
+      invitedPage.getByRole("link", { name: "Create account" })
     ).toBeVisible();
     await invitedPage.getByRole("link", { name: "Create account" }).click();
 
@@ -386,7 +395,7 @@ test.describe("organization invitations", () => {
       .click();
     await expectAuthenticatedHome(invitedPage);
     await expect(
-      invitedPage.getByRole("button", { name: "Send invitation" })
+      invitedPage.getByRole("button", { name: "Send invite" })
     ).not.toBeVisible();
 
     await invitedContext.close();

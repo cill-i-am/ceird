@@ -93,6 +93,42 @@ describe("server session lookup", () => {
     );
   }, 1000);
 
+  it("forwards the public api host and protocol for server auth reads", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "__Secure-better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "linear-ui-refresh.app.task-tracker.localhost:1355";
+      }
+
+      if (name === "x-forwarded-proto") {
+        return "https";
+      }
+    });
+    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://127.0.0.1:3001");
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(null));
+
+    await expect(getCurrentServerSession()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("get-session", "http://127.0.0.1:3001/api/auth/"),
+      {
+        headers: {
+          accept: "application/json",
+          cookie:
+            "__Secure-better-auth.session_token=session-token; better-auth.session_token=session-token",
+          "x-forwarded-host":
+            "linear-ui-refresh.api.task-tracker.localhost:1355",
+          "x-forwarded-proto": "https",
+        },
+      }
+    );
+  }, 1000);
+
   it("fails closed when the configured server API origin is missing", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined

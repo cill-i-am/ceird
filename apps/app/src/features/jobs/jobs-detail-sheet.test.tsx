@@ -142,6 +142,45 @@ vi.mock("#/components/ui/card", () => ({
   CardTitle: ({ children }: { children?: ReactNode }) => <h3>{children}</h3>,
 }));
 
+vi.mock("#/components/ui/command-select", () => ({
+  CommandSelect: ({
+    emptyText: _emptyText,
+    groups,
+    id,
+    onValueChange,
+    placeholder: _placeholder,
+    searchPlaceholder: _searchPlaceholder,
+    value,
+    ...props
+  }: ComponentProps<"select"> & {
+    emptyText?: string;
+    groups: readonly {
+      readonly options: readonly {
+        readonly label: string;
+        readonly value: string;
+      }[];
+    }[];
+    onValueChange: (value: string) => void;
+    placeholder?: string;
+    searchPlaceholder?: string;
+  }) => (
+    <select
+      id={id}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+      {...props}
+    >
+      {groups.flatMap((group) =>
+        group.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))
+      )}
+    </select>
+  ),
+}));
+
 vi.mock("#/components/ui/empty", () => ({
   Empty: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   EmptyDescription: ({ children }: { children?: ReactNode }) => (

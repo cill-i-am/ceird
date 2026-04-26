@@ -8,6 +8,7 @@ import type {
   JobListResponse,
   JobOptionsResponse,
 } from "@task-tracker/jobs-core";
+import * as React from "react";
 
 import { JobsPage } from "#/features/jobs/jobs-page";
 import {
@@ -92,6 +93,12 @@ export async function loadJobsRouteData(
 }
 
 export const Route = createFileRoute("/_app/_org/jobs")({
+  staticData: {
+    breadcrumb: {
+      label: "Jobs",
+      to: "/jobs",
+    },
+  },
   loader: ({ context }) => loadJobsRouteData(context),
   component: JobsRoute,
 });

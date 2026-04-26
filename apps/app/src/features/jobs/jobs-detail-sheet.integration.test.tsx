@@ -14,7 +14,7 @@ import type {
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { JobsDetailSheet } from "./jobs-detail-sheet";
 import {
@@ -67,6 +67,45 @@ vi.mock("@hugeicons/react", () => ({
   HugeiconsIcon: (({ icon }: { icon?: unknown }) => (
     <span data-testid="hugeicon">{String(icon ?? "icon")}</span>
   )) as never,
+}));
+
+vi.mock("#/components/ui/command-select", () => ({
+  CommandSelect: ({
+    emptyText: _emptyText,
+    groups,
+    id,
+    onValueChange,
+    placeholder: _placeholder,
+    searchPlaceholder: _searchPlaceholder,
+    value,
+    ...props
+  }: ComponentProps<"select"> & {
+    emptyText?: string;
+    groups: readonly {
+      readonly options: readonly {
+        readonly label: string;
+        readonly value: string;
+      }[];
+    }[];
+    onValueChange: (value: string) => void;
+    placeholder?: string;
+    searchPlaceholder?: string;
+  }) => (
+    <select
+      id={id}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+      {...props}
+    >
+      {groups.flatMap((group) =>
+        group.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))
+      )}
+    </select>
+  ),
 }));
 
 vi.mock("#/components/ui/sheet", () => ({

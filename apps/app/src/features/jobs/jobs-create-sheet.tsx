@@ -3,10 +3,14 @@
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
+  AlertSquareIcon,
   ArrowDown01Icon,
-  ArrowRight01Icon,
   Briefcase01Icon,
+  ChartNoAxesColumnIncreasingIcon,
+  Flag01Icon,
   Location01Icon,
+  MinusSignIcon,
+  UserIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -28,12 +32,7 @@ import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "#/components/ui/collapsible";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -43,6 +42,21 @@ import {
   CommandList,
   CommandSeparator,
 } from "#/components/ui/command";
+import { CommandSelect } from "#/components/ui/command-select";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "#/components/ui/drawer";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -50,15 +64,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
-import { Select } from "#/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "#/components/ui/sheet";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { cn } from "#/lib/utils";
@@ -74,14 +79,31 @@ const INLINE_CREATE_VALUE = "__create__";
 const NONE_VALUE = "__none__";
 
 const PRIORITY_OPTIONS: readonly {
+  readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly label: string;
+  readonly shortcut: string;
   readonly value: JobPriority;
 }[] = [
-  { label: "No priority", value: "none" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High", value: "high" },
-  { label: "Urgent", value: "urgent" },
+  { icon: MinusSignIcon, label: "None", shortcut: "0", value: "none" },
+  { icon: AlertSquareIcon, label: "Urgent", shortcut: "1", value: "urgent" },
+  {
+    icon: ChartNoAxesColumnIncreasingIcon,
+    label: "High",
+    shortcut: "2",
+    value: "high",
+  },
+  {
+    icon: ChartNoAxesColumnIncreasingIcon,
+    label: "Medium",
+    shortcut: "3",
+    value: "medium",
+  },
+  {
+    icon: ChartNoAxesColumnIncreasingIcon,
+    label: "Low",
+    shortcut: "4",
+    value: "low",
+  },
 ];
 
 interface JobsCreateFormState {
@@ -108,16 +130,6 @@ interface JobsCreateFieldErrors {
   readonly siteLongitude?: string;
   readonly siteName?: string;
   readonly title?: string;
-}
-
-interface JobsComboboxOption {
-  readonly label: string;
-  readonly value: string;
-}
-
-interface JobsComboboxGroup {
-  readonly label: string;
-  readonly options: readonly JobsComboboxOption[];
 }
 
 const defaultFormState: JobsCreateFormState = {
@@ -150,7 +162,12 @@ export function JobsCreateSheet() {
   );
   const [values, setValues] =
     React.useState<JobsCreateFormState>(defaultFormState);
-  const [siteDetailsOpen, setSiteDetailsOpen] = React.useState(false);
+  const [overlayOpen, setOverlayOpen] = React.useState(true);
+  const [siteDialogOpen, setSiteDialogOpen] = React.useState(false);
+  const [locationDialogOpen, setLocationDialogOpen] = React.useState(false);
+  const closeNavigationTimeout = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const selectedSiteId =
     values.siteSelection === NONE_VALUE ||
@@ -158,26 +175,64 @@ export function JobsCreateSheet() {
       ? undefined
       : resolveSelectedOptionId(options.sites, values.siteSelection);
   const contactGroups = deriveContactsForSite(options.contacts, selectedSiteId);
+  const prioritySelectionGroups = buildPrioritySelectionGroups();
+  const siteRegionSelectionGroups = buildSiteRegionSelectionGroups(
+    options.regions
+  );
   const siteSelectionGroups = buildSiteSelectionGroups(options.sites);
   const contactSelectionGroups = buildContactSelectionGroups(contactGroups);
 
   React.useEffect(() => {
     if (values.siteSelection !== INLINE_CREATE_VALUE) {
-      setSiteDetailsOpen(false);
+      setSiteDialogOpen(false);
+      setLocationDialogOpen(false);
     }
   }, [values.siteSelection]);
 
   React.useEffect(() => {
     if (fieldErrors.siteLatitude || fieldErrors.siteLongitude) {
-      setSiteDetailsOpen(true);
+      setSiteDialogOpen(true);
+      setLocationDialogOpen(true);
     }
   }, [fieldErrors.siteLatitude, fieldErrors.siteLongitude]);
+
+  React.useEffect(() => {
+    if (fieldErrors.siteName && values.siteSelection === INLINE_CREATE_VALUE) {
+      setSiteDialogOpen(true);
+    }
+  }, [fieldErrors.siteName, values.siteSelection]);
+
+  React.useEffect(
+    () => () => {
+      if (closeNavigationTimeout.current) {
+        clearTimeout(closeNavigationTimeout.current);
+      }
+    },
+    []
+  );
   const parsedSiteCoordinates = resolveSiteCoordinateDraft(values);
 
-  function closeSheet() {
-    React.startTransition(() => {
-      navigate({ to: "/jobs" });
-    });
+  function closeSheet({
+    delayed = false,
+  }: { readonly delayed?: boolean } = {}) {
+    setOverlayOpen(false);
+
+    if (closeNavigationTimeout.current) {
+      clearTimeout(closeNavigationTimeout.current);
+    }
+
+    const navigateToJobs = () => {
+      React.startTransition(() => {
+        navigate({ to: "/jobs" });
+      });
+    };
+
+    if (!delayed) {
+      navigateToJobs();
+      return;
+    }
+
+    closeNavigationTimeout.current = setTimeout(navigateToJobs, 140);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -252,575 +307,751 @@ export function JobsCreateSheet() {
   }
 
   return (
-    <Sheet
-      open
+    <ResponsiveCreateOverlay
+      open={overlayOpen}
       onOpenChange={(open) => {
         if (!open) {
-          closeSheet();
+          closeSheet({ delayed: true });
         }
       }}
     >
-      <SheetContent side="right" className="w-full sm:max-w-xl">
-        <SheetHeader className="gap-3 border-b">
-          <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-            New job
-          </Badge>
-          <div className="flex flex-col gap-1.5">
-            <SheetTitle>Capture the work while it is still fresh.</SheetTitle>
-            <SheetDescription>
-              Keep intake tight now. Title, urgency, site, and the right contact
-              are enough to get the queue moving.
-            </SheetDescription>
-          </div>
-        </SheetHeader>
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        noValidate
+        onSubmit={handleSubmit}
+      >
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
+          {Result.builder(createResult)
+            .onError((error) => (
+              <Alert variant="destructive">
+                <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+                <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
+                <AlertDescription>{error.message}</AlertDescription>
+              </Alert>
+            ))
+            .render()}
 
-        <form
-          className="flex min-h-0 flex-1 flex-col"
-          noValidate
-          onSubmit={handleSubmit}
-        >
-          <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
-            {Result.builder(createResult)
-              .onError((error) => (
-                <Alert variant="destructive">
-                  <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-                  <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              ))
-              .render()}
+          <FieldGroup>
+            <AuthFormField
+              label="Title"
+              htmlFor="job-title"
+              invalid={Boolean(fieldErrors.title)}
+              errorText={fieldErrors.title}
+            >
+              <Input
+                id="job-title"
+                value={values.title}
+                aria-invalid={Boolean(fieldErrors.title) || undefined}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+              />
+            </AuthFormField>
+          </FieldGroup>
 
-            <FieldGroup>
-              <AuthFormField
-                label="Title"
-                htmlFor="job-title"
-                invalid={Boolean(fieldErrors.title)}
-                descriptionText="Use the clearest short job title the team would recognise on a busy day."
-                errorText={fieldErrors.title}
-              >
-                <Input
-                  id="job-title"
-                  value={values.title}
-                  aria-invalid={Boolean(fieldErrors.title) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <LinearMetadataSelect
+                id="job-priority"
                 label="Priority"
-                htmlFor="job-priority"
-                invalid={false}
-                descriptionText="If it can wait, leave it at no priority and keep the queue honest."
-              >
-                <Select
-                  id="job-priority"
-                  value={values.priority}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      priority: event.target.value as JobPriority,
-                    }))
-                  }
-                >
-                  {PRIORITY_OPTIONS.map((priority) => (
-                    <option key={priority.value} value={priority.value}>
-                      {priority.label}
-                    </option>
-                  ))}
-                </Select>
-              </AuthFormField>
-            </FieldGroup>
+                value={values.priority}
+                placeholder="Priority"
+                emptyText="No priorities found."
+                groups={prioritySelectionGroups}
+                icon={Flag01Icon}
+                searchPlaceholder="Set priority to..."
+                showGroupHeadings={false}
+                onValueChange={(nextValue) =>
+                  setValues((current) => ({
+                    ...current,
+                    priority: nextValue as JobPriority,
+                  }))
+                }
+              />
+              <LinearMetadataSelect
+                id="job-site"
+                label="Site"
+                value={values.siteSelection}
+                placeholder="Site"
+                emptyText="No sites found."
+                groups={siteSelectionGroups}
+                icon={Location01Icon}
+                errorText={fieldErrors.siteName}
+                onValueChange={(nextValue) => {
+                  setValues((current) => ({
+                    ...current,
+                    siteSelection: nextValue,
+                  }));
 
+                  if (nextValue === INLINE_CREATE_VALUE) {
+                    setSiteDialogOpen(true);
+                  }
+                }}
+              />
+              <LinearContactSelect
+                id="job-contact"
+                value={values.contactSelection}
+                contactName={values.contactName}
+                groups={contactSelectionGroups}
+                errorText={fieldErrors.contactName}
+                onValueChange={(nextValue) =>
+                  setValues((current) => ({
+                    ...current,
+                    contactSelection: nextValue,
+                    contactName: "",
+                  }))
+                }
+                onCreateContact={(contactName) =>
+                  setValues((current) => ({
+                    ...current,
+                    contactName,
+                    contactSelection: INLINE_CREATE_VALUE,
+                  }))
+                }
+              />
+            </div>
+            {fieldErrors.siteName ? (
+              <p className="text-sm text-destructive">{fieldErrors.siteName}</p>
+            ) : null}
+            {fieldErrors.contactName ? (
+              <p className="text-sm text-destructive">
+                {fieldErrors.contactName}
+              </p>
+            ) : null}
+          </div>
+
+          <FieldGroup>
+            {values.siteSelection === INLINE_CREATE_VALUE ? (
+              <div className="flex items-center justify-between gap-3 border-y py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">New site</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {values.siteName.trim() || "Name, region, and location"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSiteDialogOpen(true)}
+                >
+                  Edit details
+                </Button>
+              </div>
+            ) : null}
+          </FieldGroup>
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => closeSheet({ delayed: true })}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={createResult.waiting}>
+            <HugeiconsIcon
+              icon={Add01Icon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+            {createResult.waiting ? "Creating..." : "Create job"}
+          </Button>
+        </div>
+      </form>
+
+      <Dialog open={siteDialogOpen} onOpenChange={setSiteDialogOpen}>
+        <DialogContent className="flex max-h-[min(680px,calc(100vh-2rem))] grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b px-6 py-4">
+            <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+              Site
+            </Badge>
+            <DialogTitle>New site</DialogTitle>
+            <DialogDescription>
+              Capture the place once. Pin it if the map matters.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             <FieldGroup>
               <AuthFormField
-                label="Site"
-                htmlFor="job-site"
+                label="Site name"
+                htmlFor="new-site-name"
                 invalid={Boolean(fieldErrors.siteName)}
-                descriptionText="Pick an existing site or create it inline without leaving intake."
                 errorText={fieldErrors.siteName}
               >
-                <SelectionCombobox
-                  id="job-site"
-                  value={values.siteSelection}
-                  placeholder="Search sites"
-                  emptyText="No sites found."
-                  groups={siteSelectionGroups}
+                <Input
+                  id="new-site-name"
+                  value={values.siteName}
                   aria-invalid={Boolean(fieldErrors.siteName) || undefined}
-                  onValueChange={(nextValue) =>
+                  onChange={(event) =>
                     setValues((current) => ({
                       ...current,
-                      siteSelection: nextValue,
+                      siteName: event.target.value,
                     }))
                   }
                 />
               </AuthFormField>
 
-              {values.siteSelection === INLINE_CREATE_VALUE ? (
-                <div className="rounded-3xl border bg-muted/20 p-4">
-                  <div className="mb-4 flex items-center gap-2">
-                    <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-                    <p className="font-medium">New site details</p>
-                  </div>
-                  <FieldGroup>
-                    <AuthFormField
-                      label="Site name"
-                      htmlFor="new-site-name"
-                      invalid={Boolean(fieldErrors.siteName)}
-                      errorText={fieldErrors.siteName}
-                    >
-                      <Input
-                        id="new-site-name"
-                        value={values.siteName}
-                        aria-invalid={
-                          Boolean(fieldErrors.siteName) || undefined
-                        }
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            siteName: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-
-                    <AuthFormField
-                      label="Region"
-                      htmlFor="new-site-region"
-                      invalid={false}
-                      descriptionText="Optional in v1, but useful when the site already belongs to a service patch."
-                    >
-                      <Select
-                        id="new-site-region"
-                        value={values.siteRegionSelection}
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            siteRegionSelection: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value={NONE_VALUE}>No region yet</option>
-                        {options.regions.map((region) => (
-                          <option key={region.id} value={region.id}>
-                            {region.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </AuthFormField>
-
-                    <Collapsible
-                      open={siteDetailsOpen}
-                      onOpenChange={setSiteDetailsOpen}
-                    >
-                      <div className="rounded-2xl border bg-background/80">
-                        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
-                          <div className="flex max-w-[32rem] flex-col gap-1">
-                            <p className="font-medium">Add location details</p>
-                            <p className="text-sm text-muted-foreground">
-                              Address, access notes, and a pin can wait until
-                              you have them, but they make dispatch and mapping
-                              much better straight away.
-                            </p>
-                          </div>
-                          <CollapsibleTrigger className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted">
-                            <span>
-                              {siteDetailsOpen ? "Hide details" : "Add details"}
-                            </span>
-                            <HugeiconsIcon
-                              icon={ArrowRight01Icon}
-                              strokeWidth={2}
-                              className={cn(
-                                "transition-transform",
-                                siteDetailsOpen ? "rotate-90" : "rotate-0"
-                              )}
-                            />
-                          </CollapsibleTrigger>
-                        </div>
-
-                        <CollapsibleContent className="border-t px-4 py-4">
-                          <FieldGroup>
-                            <AuthFormField
-                              label="Address line 1"
-                              htmlFor="new-site-address-line-1"
-                              invalid={false}
-                            >
-                              <Input
-                                id="new-site-address-line-1"
-                                value={values.siteAddressLine1}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteAddressLine1: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <AuthFormField
-                              label="Address line 2"
-                              htmlFor="new-site-address-line-2"
-                              invalid={false}
-                            >
-                              <Input
-                                id="new-site-address-line-2"
-                                value={values.siteAddressLine2}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteAddressLine2: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <AuthFormField
-                              label="Town"
-                              htmlFor="new-site-town"
-                              invalid={false}
-                            >
-                              <Input
-                                id="new-site-town"
-                                value={values.siteTown}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteTown: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <AuthFormField
-                              label="County"
-                              htmlFor="new-site-county"
-                              invalid={false}
-                            >
-                              <Input
-                                id="new-site-county"
-                                value={values.siteCounty}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteCounty: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <AuthFormField
-                              label="Eircode"
-                              htmlFor="new-site-eircode"
-                              invalid={false}
-                            >
-                              <Input
-                                id="new-site-eircode"
-                                value={values.siteEircode}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteEircode: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <AuthFormField
-                              label="Access notes"
-                              htmlFor="new-site-access-notes"
-                              invalid={false}
-                              descriptionText="Anything the crew should know before they arrive."
-                            >
-                              <Textarea
-                                id="new-site-access-notes"
-                                rows={3}
-                                value={values.siteAccessNotes}
-                                onChange={(event) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteAccessNotes: event.target.value,
-                                  }))
-                                }
-                              />
-                            </AuthFormField>
-
-                            <div className="flex flex-col gap-4 rounded-2xl border bg-muted/10 p-4">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="flex max-w-[32rem] flex-col gap-1">
-                                  <p className="font-medium">Site pin</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    Optional, but worth doing. A pin makes the
-                                    coverage map and Google Maps handoff work
-                                    straight away.
-                                  </p>
-                                </div>
-                                {parsedSiteCoordinates ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      setValues((current) => ({
-                                        ...current,
-                                        siteLatitude: "",
-                                        siteLongitude: "",
-                                      }))
-                                    }
-                                  >
-                                    Clear pin
-                                  </Button>
-                                ) : null}
-                              </div>
-
-                              <JobsSitePinPicker
-                                latitude={parsedSiteCoordinates?.latitude}
-                                longitude={parsedSiteCoordinates?.longitude}
-                                onChange={(next) =>
-                                  setValues((current) => ({
-                                    ...current,
-                                    siteLatitude: formatCoordinate(
-                                      next.latitude
-                                    ),
-                                    siteLongitude: formatCoordinate(
-                                      next.longitude
-                                    ),
-                                  }))
-                                }
-                              />
-
-                              <FieldGroup>
-                                <AuthFormField
-                                  label="Latitude"
-                                  htmlFor="new-site-latitude"
-                                  invalid={Boolean(fieldErrors.siteLatitude)}
-                                  errorText={fieldErrors.siteLatitude}
-                                >
-                                  <Input
-                                    id="new-site-latitude"
-                                    inputMode="decimal"
-                                    value={values.siteLatitude}
-                                    aria-invalid={
-                                      Boolean(fieldErrors.siteLatitude) ||
-                                      undefined
-                                    }
-                                    onChange={(event) =>
-                                      setValues((current) => ({
-                                        ...current,
-                                        siteLatitude: event.target.value,
-                                      }))
-                                    }
-                                  />
-                                </AuthFormField>
-
-                                <AuthFormField
-                                  label="Longitude"
-                                  htmlFor="new-site-longitude"
-                                  invalid={Boolean(fieldErrors.siteLongitude)}
-                                  errorText={fieldErrors.siteLongitude}
-                                >
-                                  <Input
-                                    id="new-site-longitude"
-                                    inputMode="decimal"
-                                    value={values.siteLongitude}
-                                    aria-invalid={
-                                      Boolean(fieldErrors.siteLongitude) ||
-                                      undefined
-                                    }
-                                    onChange={(event) =>
-                                      setValues((current) => ({
-                                        ...current,
-                                        siteLongitude: event.target.value,
-                                      }))
-                                    }
-                                  />
-                                </AuthFormField>
-                              </FieldGroup>
-                            </div>
-                          </FieldGroup>
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  </FieldGroup>
-                </div>
-              ) : null}
-            </FieldGroup>
-
-            <FieldGroup>
               <AuthFormField
-                label="Contact"
-                htmlFor="job-contact"
-                invalid={Boolean(fieldErrors.contactName)}
-                descriptionText="Use an existing contact when the site already has one, or add a new contact inline."
-                errorText={fieldErrors.contactName}
+                label="Region"
+                htmlFor="new-site-region"
+                invalid={false}
               >
-                <SelectionCombobox
-                  id="job-contact"
-                  value={values.contactSelection}
-                  placeholder="Search contacts"
-                  emptyText="No contacts found."
-                  groups={contactSelectionGroups}
-                  aria-invalid={Boolean(fieldErrors.contactName) || undefined}
+                <CommandSelect
+                  id="new-site-region"
+                  value={values.siteRegionSelection}
+                  placeholder="Pick region"
+                  emptyText="No regions found."
+                  groups={siteRegionSelectionGroups}
                   onValueChange={(nextValue) =>
                     setValues((current) => ({
                       ...current,
-                      contactSelection: nextValue,
+                      siteRegionSelection: nextValue,
                     }))
                   }
                 />
               </AuthFormField>
-
-              {values.contactSelection === INLINE_CREATE_VALUE ? (
-                <div className="rounded-3xl border bg-muted/20 p-4">
-                  <div className="mb-4 flex items-center gap-2">
-                    <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-                    <p className="font-medium">New contact details</p>
-                  </div>
-                  <FieldGroup>
-                    <AuthFormField
-                      label="Contact name"
-                      htmlFor="new-contact-name"
-                      invalid={Boolean(fieldErrors.contactName)}
-                      errorText={fieldErrors.contactName}
-                    >
-                      <Input
-                        id="new-contact-name"
-                        value={values.contactName}
-                        aria-invalid={
-                          Boolean(fieldErrors.contactName) || undefined
-                        }
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            contactName: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-                  </FieldGroup>
-                </div>
-              ) : null}
             </FieldGroup>
+
+            <div className="flex items-center justify-between gap-3 border-y py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Location</p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {parsedSiteCoordinates
+                    ? `${formatCoordinate(parsedSiteCoordinates.latitude)}, ${formatCoordinate(
+                        parsedSiteCoordinates.longitude
+                      )}`
+                    : "Address and pin are optional"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setLocationDialogOpen(true)}
+              >
+                Edit location
+              </Button>
+            </div>
           </div>
 
-          <SheetFooter className="border-t">
-            <Button type="button" variant="ghost" onClick={closeSheet}>
-              Cancel
+          <div className="flex justify-end border-t px-5 py-4 sm:px-6">
+            <Button type="button" onClick={() => setSiteDialogOpen(false)}>
+              Done
             </Button>
-            <Button type="submit" disabled={createResult.waiting}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
+        <DialogContent className="flex max-h-[min(720px,calc(100vh-2rem))] grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b px-6 py-4">
+            <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+              Location
+            </Badge>
+            <DialogTitle>Site location</DialogTitle>
+            <DialogDescription>
+              Add the address, then place the pin if helpful.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid flex-1 gap-5 overflow-y-auto px-5 py-4 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,1.05fr)]">
+            <FieldGroup>
+              <AuthFormField
+                label="Address line 1"
+                htmlFor="new-site-address-line-1"
+                invalid={false}
+              >
+                <Input
+                  id="new-site-address-line-1"
+                  value={values.siteAddressLine1}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      siteAddressLine1: event.target.value,
+                    }))
+                  }
+                />
+              </AuthFormField>
+
+              <AuthFormField
+                label="Address line 2"
+                htmlFor="new-site-address-line-2"
+                invalid={false}
+              >
+                <Input
+                  id="new-site-address-line-2"
+                  value={values.siteAddressLine2}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      siteAddressLine2: event.target.value,
+                    }))
+                  }
+                />
+              </AuthFormField>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <AuthFormField
+                  label="Town"
+                  htmlFor="new-site-town"
+                  invalid={false}
+                >
+                  <Input
+                    id="new-site-town"
+                    value={values.siteTown}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        siteTown: event.target.value,
+                      }))
+                    }
+                  />
+                </AuthFormField>
+
+                <AuthFormField
+                  label="County"
+                  htmlFor="new-site-county"
+                  invalid={false}
+                >
+                  <Input
+                    id="new-site-county"
+                    value={values.siteCounty}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        siteCounty: event.target.value,
+                      }))
+                    }
+                  />
+                </AuthFormField>
+              </div>
+
+              <AuthFormField
+                label="Eircode"
+                htmlFor="new-site-eircode"
+                invalid={false}
+              >
+                <Input
+                  id="new-site-eircode"
+                  value={values.siteEircode}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      siteEircode: event.target.value,
+                    }))
+                  }
+                />
+              </AuthFormField>
+
+              <AuthFormField
+                label="Access notes"
+                htmlFor="new-site-access-notes"
+                invalid={false}
+              >
+                <Textarea
+                  id="new-site-access-notes"
+                  rows={3}
+                  value={values.siteAccessNotes}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      siteAccessNotes: event.target.value,
+                    }))
+                  }
+                />
+              </AuthFormField>
+            </FieldGroup>
+
+            <div className="flex flex-col gap-3 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex max-w-[32rem] flex-col gap-1">
+                  <p className="font-medium">Site pin</p>
+                </div>
+                {parsedSiteCoordinates ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setValues((current) => ({
+                        ...current,
+                        siteLatitude: "",
+                        siteLongitude: "",
+                      }))
+                    }
+                  >
+                    Clear pin
+                  </Button>
+                ) : null}
+              </div>
+
+              <JobsSitePinPicker
+                latitude={parsedSiteCoordinates?.latitude}
+                longitude={parsedSiteCoordinates?.longitude}
+                onChange={(next) =>
+                  setValues((current) => ({
+                    ...current,
+                    siteLatitude: formatCoordinate(next.latitude),
+                    siteLongitude: formatCoordinate(next.longitude),
+                  }))
+                }
               />
-              {createResult.waiting ? "Creating..." : "Create job"}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <AuthFormField
+                  label="Latitude"
+                  htmlFor="new-site-latitude"
+                  invalid={Boolean(fieldErrors.siteLatitude)}
+                  errorText={fieldErrors.siteLatitude}
+                >
+                  <Input
+                    id="new-site-latitude"
+                    inputMode="decimal"
+                    value={values.siteLatitude}
+                    aria-invalid={
+                      Boolean(fieldErrors.siteLatitude) || undefined
+                    }
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        siteLatitude: event.target.value,
+                      }))
+                    }
+                  />
+                </AuthFormField>
+
+                <AuthFormField
+                  label="Longitude"
+                  htmlFor="new-site-longitude"
+                  invalid={Boolean(fieldErrors.siteLongitude)}
+                  errorText={fieldErrors.siteLongitude}
+                >
+                  <Input
+                    id="new-site-longitude"
+                    inputMode="decimal"
+                    value={values.siteLongitude}
+                    aria-invalid={
+                      Boolean(fieldErrors.siteLongitude) || undefined
+                    }
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        siteLongitude: event.target.value,
+                      }))
+                    }
+                  />
+                </AuthFormField>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end border-t px-5 py-4 sm:px-6">
+            <Button type="button" onClick={() => setLocationDialogOpen(false)}>
+              Done
             </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </ResponsiveCreateOverlay>
   );
 }
 
-function SelectionCombobox({
-  ariaInvalid,
+function LinearMetadataSelect({
   emptyText,
+  errorText,
   groups,
+  icon,
   id,
+  label,
   onValueChange,
   placeholder,
+  searchPlaceholder,
+  showGroupHeadings,
   value,
 }: {
-  readonly ariaInvalid?: true | undefined;
   readonly emptyText: string;
-  readonly groups: readonly JobsComboboxGroup[];
+  readonly errorText?: string;
+  readonly groups: readonly CommandSelectGroup[];
+  readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly id: string;
+  readonly label: string;
   readonly onValueChange: (value: string) => void;
   readonly placeholder: string;
+  readonly searchPlaceholder?: string;
+  readonly showGroupHeadings?: boolean;
   readonly value: string;
 }) {
-  const [open, setOpen] = React.useState(false);
   const selectedOption =
     groups
       .flatMap((group) => group.options)
       .find((option) => option.value === value) ?? null;
+  const triggerIcon = selectedOption?.icon ?? icon;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full justify-between rounded-4xl font-normal"
-          />
-        }
+    <div>
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <CommandSelect
         id={id}
-        aria-invalid={ariaInvalid}
-      >
-        <span
-          className={cn(
-            "truncate",
-            selectedOption ? "text-foreground" : "text-muted-foreground"
-          )}
-        >
-          {selectedOption?.label ?? placeholder}
-        </span>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          strokeWidth={2}
-          data-icon="inline-end"
-          className="text-muted-foreground"
-        />
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--anchor-width)] p-0" align="start">
-        <Command>
-          <CommandInput placeholder={placeholder} />
-          <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            {groups.map((group, groupIndex) => (
-              <React.Fragment key={group.label}>
-                <CommandGroup heading={group.label}>
-                  {group.options.map((option) => (
-                    <CommandItem
-                      key={option.value}
-                      value={option.label}
-                      data-checked={
-                        option.value === selectedOption?.value
-                          ? "true"
-                          : undefined
-                      }
-                      onSelect={() => {
-                        onValueChange(option.value);
-                        setOpen(false);
-                      }}
-                    >
-                      {option.label}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-                {groupIndex < groups.length - 1 ? <CommandSeparator /> : null}
-              </React.Fragment>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+        value={value}
+        placeholder={placeholder}
+        emptyText={emptyText}
+        groups={groups}
+        ariaLabel={label}
+        ariaInvalid={errorText ? true : undefined}
+        className="h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
+        prefix={<HugeiconsIcon icon={triggerIcon} strokeWidth={2} />}
+        searchPlaceholder={searchPlaceholder}
+        showGroupHeadings={showGroupHeadings}
+        onValueChange={onValueChange}
+      />
+    </div>
   );
 }
 
+function LinearContactSelect({
+  contactName,
+  errorText,
+  groups,
+  id,
+  onCreateContact,
+  onValueChange,
+  value,
+}: {
+  readonly contactName: string;
+  readonly errorText?: string;
+  readonly groups: readonly CommandSelectGroup[];
+  readonly id: string;
+  readonly onCreateContact: (contactName: string) => void;
+  readonly onValueChange: (value: string) => void;
+  readonly value: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const selectedOption =
+    groups
+      .flatMap((group) => group.options)
+      .find((option) => option.value === value) ?? null;
+  const createdContactName =
+    value === INLINE_CREATE_VALUE ? contactName.trim() : "";
+  const triggerLabel = createdContactName || selectedOption?.label || "Contact";
+  const createContactName = query.trim();
+  const visibleGroups = groups.filter((group) => group.options.length > 0);
+
+  return (
+    <div>
+      <label htmlFor={id} className="sr-only">
+        Contact
+      </label>
+      <Popover
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          setQuery(nextOpen ? createdContactName : "");
+        }}
+      >
+        <PopoverTrigger
+          type="button"
+          id={id}
+          aria-label="Contact"
+          aria-invalid={errorText ? true : undefined}
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
+          )}
+        >
+          <HugeiconsIcon
+            icon={UserIcon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          <span>{triggerLabel}</span>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={2}
+            data-icon="inline-end"
+            className="text-muted-foreground"
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[var(--anchor-width)] min-w-72 p-0"
+          align="start"
+        >
+          <Command>
+            <CommandInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder="Contact"
+            />
+            <CommandList>
+              <CommandEmpty>
+                {createContactName
+                  ? "No matching contacts."
+                  : "Type a contact name to create one."}
+              </CommandEmpty>
+              {createContactName ? (
+                <CommandGroup>
+                  <CommandItem
+                    aria-label={`Create new contact: "${createContactName}"`}
+                    value={`Create new contact ${createContactName}`}
+                    className="[&>svg:last-child]:hidden"
+                    onSelect={() => {
+                      onCreateContact(createContactName);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    <span aria-hidden="true" className="text-lg leading-none">
+                      +
+                    </span>
+                    <span>
+                      Create new contact:{" "}
+                      <span className="text-muted-foreground">
+                        &quot;{createContactName}&quot;
+                      </span>
+                    </span>
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
+              {createContactName && visibleGroups.length > 0 ? (
+                <CommandSeparator />
+              ) : null}
+              {visibleGroups.map((group, groupIndex) => (
+                <React.Fragment key={group.label}>
+                  <CommandGroup heading={group.label}>
+                    {group.options.map((option) => (
+                      <CommandItem
+                        key={option.value}
+                        value={option.label}
+                        data-checked={
+                          option.value === selectedOption?.value
+                            ? "true"
+                            : undefined
+                        }
+                        onSelect={() => {
+                          onValueChange(option.value);
+                          setOpen(false);
+                          setQuery("");
+                        }}
+                      >
+                        {option.icon ? (
+                          <HugeiconsIcon
+                            icon={option.icon}
+                            strokeWidth={2}
+                            className="text-muted-foreground"
+                          />
+                        ) : null}
+                        <span className="truncate">{option.label}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                  {groupIndex < visibleGroups.length - 1 ? (
+                    <CommandSeparator />
+                  ) : null}
+                </React.Fragment>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+function ResponsiveCreateOverlay({
+  children,
+  onOpenChange,
+  open,
+}: {
+  readonly children: React.ReactNode;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly open: boolean;
+}) {
+  const isDesktop = useResponsiveCreateDialog();
+
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className="flex max-h-[min(760px,calc(100vh-2rem))] max-w-5xl grid-rows-none flex-col gap-0 overflow-hidden rounded-[1.25rem] p-0 sm:max-w-3xl"
+          showCloseButton
+        >
+          <DialogHeader className="border-b px-6 py-5">
+            <DialogTitle>New job</DialogTitle>
+          </DialogHeader>
+          {children}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[92vh] p-0">
+        <DrawerHeader className="border-b px-5 py-4 text-left">
+          <DrawerTitle>New job</DrawerTitle>
+        </DrawerHeader>
+        {children}
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+function useResponsiveCreateDialog() {
+  return React.useSyncExternalStore(
+    subscribeToCreateDialogViewport,
+    getCreateDialogViewportSnapshot,
+    () => true
+  );
+}
+
+function subscribeToCreateDialogViewport(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => null;
+  }
+
+  window.addEventListener("resize", onStoreChange);
+
+  return () => {
+    window.removeEventListener("resize", onStoreChange);
+  };
+}
+
+function getCreateDialogViewportSnapshot() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.innerWidth >= 768;
+}
+
 function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
+  const hasExistingSites = sites.length > 0;
+
   return [
     {
       label: "Quick actions",
       options: [
-        {
-          label: "No site yet",
-          value: NONE_VALUE,
-        },
+        ...(hasExistingSites
+          ? [
+              {
+                label: "No site yet",
+                value: NONE_VALUE,
+              },
+            ]
+          : []),
         {
           label: "Create a new site",
           value: INLINE_CREATE_VALUE,
@@ -834,27 +1065,58 @@ function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
         value: site.id,
       })),
     },
-  ] satisfies readonly JobsComboboxGroup[];
+  ] satisfies readonly CommandSelectGroup[];
+}
+
+function buildPrioritySelectionGroups() {
+  return [
+    {
+      label: "Priority",
+      options: PRIORITY_OPTIONS.map((priority) => ({
+        icon: priority.icon,
+        label: priority.label,
+        shortcut: priority.shortcut,
+        value: priority.value,
+      })),
+    },
+  ] satisfies readonly CommandSelectGroup[];
+}
+
+function buildSiteRegionSelectionGroups(
+  regions: readonly { readonly id: string; readonly name: string }[]
+) {
+  return [
+    {
+      label: "Region",
+      options: [
+        { label: "No region yet", value: NONE_VALUE },
+        ...regions.map((region) => ({
+          label: region.name,
+          value: region.id,
+        })),
+      ],
+    },
+  ] satisfies readonly CommandSelectGroup[];
 }
 
 function buildContactSelectionGroups(
   contactGroups: ReturnType<typeof deriveContactsForSite>
 ) {
-  const groups: JobsComboboxGroup[] = [
-    {
+  const hasExistingContacts =
+    contactGroups.linked.length > 0 || contactGroups.others.length > 0;
+  const groups: CommandSelectGroup[] = [];
+
+  if (hasExistingContacts) {
+    groups.push({
       label: "Quick actions",
       options: [
         {
           label: "No contact yet",
           value: NONE_VALUE,
         },
-        {
-          label: "Create a new contact",
-          value: INLINE_CREATE_VALUE,
-        },
       ],
-    },
-  ];
+    });
+  }
 
   if (contactGroups.linked.length > 0) {
     groups.push({

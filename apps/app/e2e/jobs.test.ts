@@ -60,17 +60,15 @@ test.describe("jobs flow", () => {
 
     await createSheet.expectOpen();
     await createSheet.title.fill(jobTitle);
-    await createSheet.priority.selectOption("high");
+    await createSheet.choosePriorityOption("High");
     await createSheet.chooseSiteOption("Create a new site");
     await createSheet.siteName.fill(siteName);
-    await createSheet.chooseContactOption("Create a new contact");
-    await createSheet.contactName.fill(contactName);
+    await createSheet.closeSiteDialog();
+    await createSheet.createInlineContact(contactName);
     await createSheet.submit.click();
 
     await jobsPage.expectLoaded();
-    await expect(page.getByRole("alert")).toContainText(
-      `${jobTitle} added to Jobs`
-    );
+    await expect(page.getByRole("status")).toContainText(jobTitle);
     await expect(jobsPage.jobCard(jobTitle)).toBeVisible();
 
     await jobsPage.openJob(jobTitle);
@@ -86,13 +84,13 @@ test.describe("jobs flow", () => {
     await detailSheet.addComment.click();
     await expect(detailSheet.commentItem(comment)).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("in_progress");
+    await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("blocked");
+    await detailSheet.chooseStatusOption("Blocked");
     await detailSheet.blockedReason.fill(blockedReason);
     await detailSheet.applyStatusChange.click();
     await expect(
@@ -102,7 +100,7 @@ test.describe("jobs flow", () => {
       detailSheet.root.getByText(blockedReason, { exact: true })
     ).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("in_progress");
+    await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
@@ -112,13 +110,13 @@ test.describe("jobs flow", () => {
     ).not.toBeVisible();
 
     await detailSheet.visitDate.fill("2026-04-24");
-    await detailSheet.visitDuration.selectOption("120");
+    await detailSheet.chooseVisitDurationOption("2 hours");
     await detailSheet.visitNote.fill(visitNote);
     await detailSheet.logVisit.click();
     await expect(detailSheet.visitItem(visitNote)).toBeVisible();
     await expect(detailSheet.root.getByText("2h logged")).toBeVisible();
 
-    await detailSheet.statusSelect.selectOption("completed");
+    await detailSheet.chooseStatusOption("Completed");
     await detailSheet.applyStatusChange.click();
     await expect(detailSheet.reopenJob).toBeVisible();
 

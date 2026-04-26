@@ -102,9 +102,9 @@ describe("jobs coverage map", () => {
     await expect(
       screen.findByTestId("coverage-map-canvas")
     ).resolves.toHaveTextContent("Depot");
-    expect(screen.getByText(/1 without a pin/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 without pin/i)).toBeInTheDocument();
     expect(screen.getByText("Check classroom snag")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /google maps/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /maps/i })).toHaveAttribute(
       "href",
       expect.stringContaining("Main+Street")
     );
@@ -113,7 +113,7 @@ describe("jobs coverage map", () => {
   it("renders the empty state when no visible jobs have mapped sites", () => {
     render(<JobsCoverageMap jobs={[]} sites={new Map()} />);
 
-    expect(screen.getByText(/no mapped jobs yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no mapped jobs/i)).toBeInTheDocument();
     expect(screen.queryByTestId("coverage-map-canvas")).not.toBeInTheDocument();
   }, 1000);
 });

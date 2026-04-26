@@ -85,36 +85,35 @@ export function NavUser({
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton
-                size="lg"
-                className="aria-expanded:bg-muted aria-expanded:text-foreground"
-              />
+              <SidebarMenuButton className="overflow-visible rounded-[calc(var(--radius)*2.2)] border border-transparent bg-sidebar/40 px-2.5 py-2 aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground" />
             }
           >
-            <Avatar>
+            <Avatar className="size-9 rounded-[calc(var(--radius)*2)] border border-sidebar-border/70">
               <AvatarImage src={user.image ?? undefined} alt={user.name} />
               <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-xs">{user.email}</span>
+              <span className="truncate text-xs text-sidebar-foreground/65">
+                {user.email}
+              </span>
             </div>
             <HugeiconsIcon
               icon={UnfoldMoreIcon}
               strokeWidth={2}
-              className="ml-auto size-4"
+              className="ml-auto size-4 text-sidebar-foreground/60"
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56 rounded-lg"
+            className="min-w-56 rounded-[calc(var(--radius)*2.2)]"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar>
+                <div className="flex items-center gap-3 px-1 py-1.5 text-left text-sm">
+                  <Avatar className="size-9 rounded-[calc(var(--radius)*2)] border border-border/60">
                     <AvatarImage
                       src={user.image ?? undefined}
                       alt={user.name}
@@ -122,6 +121,9 @@ export function NavUser({
                     <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="text-[0.68rem] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                      Signed in
+                    </span>
                     <span className="truncate font-medium">{user.name}</span>
                     <span className="truncate text-xs">{user.email}</span>
                   </div>

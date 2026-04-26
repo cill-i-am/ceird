@@ -10,13 +10,6 @@ import * as React from "react";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
-import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -70,6 +63,7 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   );
   const [canRenderInteractiveMap, setCanRenderInteractiveMap] =
     React.useState(false);
+  const hasUnmappedJobs = unmappedJobs.length > 0;
 
   React.useEffect(() => {
     setCanRenderInteractiveMap(
@@ -79,110 +73,101 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   }, []);
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-              <CardTitle>Coverage map</CardTitle>
-            </div>
-            <CardDescription>
-              Scan the live queue spatially, then jump straight into the job or
-              the site context when something needs action.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">
-              {groupedSites.length} mapped site
-              {groupedSites.length === 1 ? "" : "s"}
-            </Badge>
-            <Badge
-              variant={unmappedJobs.length === 0 ? "secondary" : "outline"}
-            >
-              {unmappedJobs.length} without a pin
-            </Badge>
-          </div>
+    <div className="flex min-h-[calc(100vh-14rem)] flex-col overflow-hidden rounded-2xl border bg-background">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+          <span>Map</span>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="overflow-hidden rounded-3xl border bg-muted/10">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{groupedSites.length} mapped</Badge>
+          <Badge variant={unmappedJobs.length === 0 ? "secondary" : "outline"}>
+            {unmappedJobs.length} without pin
+          </Badge>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "grid min-h-0 flex-1",
+          hasUnmappedJobs
+            ? "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]"
+            : "lg:grid-cols-1"
+        )}
+      >
+        <div className="min-h-[520px] overflow-hidden bg-muted/10">
           {renderMapViewport(groupedSites, canRenderInteractiveMap)}
         </div>
 
-        {unmappedJobs.length > 0 ? (
-          <div className="flex flex-col gap-3 rounded-3xl border border-dashed bg-muted/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-col gap-1">
-                <p className="font-medium">Jobs still missing a pin</p>
-                <p className="text-sm text-muted-foreground">
-                  Add a site pin during intake so the map stays useful for
-                  dispatch and planning.
-                </p>
-              </div>
-              <Badge variant="outline">{unmappedJobs.length}</Badge>
+        {hasUnmappedJobs ? (
+          <aside className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
+            <div className="border-b px-3 py-2">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Needs pin
+              </p>
             </div>
-            <ul className="flex flex-col gap-2">
-              {unmappedJobs.slice(0, 4).map((job) => {
+            <ul className="flex min-h-0 flex-col overflow-y-auto">
+              {unmappedJobs.slice(0, 8).map((job) => {
                 const site = job.siteId ? sites.get(job.siteId) : undefined;
                 const googleMapsUrl = buildGoogleMapsUrl(site);
 
                 return (
-                  <li
-                    key={job.id}
-                    className="flex flex-col gap-2 rounded-2xl border bg-background/84 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          job.status === "blocked" ? "outline" : "secondary"
-                        }
-                      >
-                        {STATUS_LABELS[job.status]}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {site?.name ?? "No site yet"}
-                      </span>
-                    </div>
-                    <p className="font-medium">{job.title}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        to="/jobs/$jobId"
-                        params={{ jobId: job.id }}
-                        className={buttonVariants({
-                          size: "sm",
-                          variant: "ghost",
-                        })}
-                      >
-                        Open job
-                      </Link>
-                      {googleMapsUrl ? (
-                        <a
-                          href={googleMapsUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                  <li key={job.id} className="border-b last:border-b-0">
+                    <div className="flex flex-col gap-2 px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            job.status === "blocked" ? "outline" : "secondary"
+                          }
+                        >
+                          {STATUS_LABELS[job.status]}
+                        </Badge>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {site?.name ?? "No site"}
+                        </span>
+                      </div>
+                      <p className="line-clamp-2 text-sm font-medium">
+                        {job.title}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          to="/jobs/$jobId"
+                          params={{ jobId: job.id }}
                           className={buttonVariants({
-                            size: "sm",
-                            variant: "outline",
+                            size: "xs",
+                            variant: "ghost",
                           })}
                         >
-                          <HugeiconsIcon
-                            icon={MapsLocation01Icon}
-                            strokeWidth={2}
-                            data-icon="inline-start"
-                          />
-                          Google Maps
-                        </a>
-                      ) : null}
+                          Open
+                        </Link>
+                        {googleMapsUrl ? (
+                          <a
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={buttonVariants({
+                              size: "xs",
+                              variant: "outline",
+                            })}
+                          >
+                            <HugeiconsIcon
+                              icon={MapsLocation01Icon}
+                              strokeWidth={2}
+                              data-icon="inline-start"
+                            />
+                            Maps
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 );
               })}
             </ul>
-          </div>
+          </aside>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -192,12 +177,11 @@ function renderMapViewport(
 ) {
   if (groupedSites.length === 0) {
     return (
-      <Empty className="min-h-[420px] bg-muted/10 px-6 py-10">
+      <Empty className="h-full min-h-[520px] rounded-none border-0 bg-muted/10 px-6 py-10">
         <EmptyHeader>
-          <EmptyTitle>No mapped jobs yet.</EmptyTitle>
+          <EmptyTitle>No mapped jobs.</EmptyTitle>
           <EmptyDescription>
-            Drop a pin when creating a new site and the queue will start to
-            light up here.
+            Add a site pin to make this view useful.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -206,21 +190,9 @@ function renderMapViewport(
 
   if (!canRenderInteractiveMap) {
     return (
-      <div className="flex min-h-[420px] flex-col justify-between gap-6 bg-muted/10 p-6">
-        <div className="flex max-w-[32rem] flex-col gap-2">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-            Coverage map
-          </p>
-          <h3 className="font-heading text-2xl font-medium tracking-tight">
-            Preparing the live map.
-          </h3>
-          <p className="text-sm/7 text-muted-foreground">
-            Pinned sites are already grouped, so dispatch can switch from the
-            queue to geography without losing context.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {groupedSites.slice(0, 4).map((group) => (
+      <div className="flex h-full min-h-[520px] flex-col justify-between gap-6 bg-muted/10 p-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {groupedSites.slice(0, 6).map((group) => (
             <div
               key={group.site.id}
               className="rounded-2xl border bg-background/84 p-4"
@@ -261,9 +233,9 @@ function renderMapViewport(
 
 function CoverageMapLoadingState() {
   return (
-    <div className="flex min-h-[420px] flex-col gap-4 bg-muted/10 p-6">
+    <div className="flex min-h-[520px] flex-col gap-4 bg-muted/10 p-4">
       <Skeleton className="h-6 w-44" />
-      <Skeleton className="h-56 w-full rounded-3xl" />
+      <Skeleton className="h-80 w-full rounded-2xl" />
       <div className="grid gap-3 sm:grid-cols-2">
         <Skeleton className="h-20 w-full rounded-2xl" />
         <Skeleton className="h-20 w-full rounded-2xl" />
