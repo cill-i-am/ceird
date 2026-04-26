@@ -87,37 +87,26 @@ export class JobsCreateSheet {
 
   async chooseSiteOption(optionLabel: string) {
     await this.site.click();
-    await this.page
-      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
-        hasText: optionLabel,
-      })
-      .click();
+    await chooseCommandOption(this.page, optionLabel);
   }
 
   async chooseContactOption(optionLabel: string) {
     await this.contact.click();
-    await this.page
-      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
-        hasText: optionLabel,
-      })
-      .click();
+    await chooseCommandOption(this.page, optionLabel);
   }
 
   async choosePriorityOption(optionLabel: string) {
     await this.priority.click();
-    await this.page
-      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
-        hasText: optionLabel,
-      })
-      .click();
+    await chooseCommandOption(this.page, optionLabel);
   }
 
   async createInlineContact(contactName: string) {
     await this.contact.click();
     await this.contactName.fill(contactName);
-    await this.page
-      .getByRole("option", { name: `Create new contact: "${contactName}"` })
-      .click();
+    await chooseCommandOption(
+      this.page,
+      `Create new contact: "${contactName}"`
+    );
   }
 
   async closeSiteDialog() {
@@ -181,21 +170,23 @@ export class JobDetailSheet {
 
   async chooseStatusOption(optionLabel: string) {
     await this.statusSelect.click();
-    await this.page
-      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
-        hasText: optionLabel,
-      })
-      .click();
+    await chooseCommandOption(this.page, optionLabel);
     await expect(this.statusSelect).toContainText(optionLabel);
   }
 
   async chooseVisitDurationOption(optionLabel: string) {
     await this.visitDuration.click();
-    await this.page
-      .locator('[data-slot="command-item"], [data-slot="combobox-item"]', {
-        hasText: optionLabel,
-      })
-      .click();
+    await chooseCommandOption(this.page, optionLabel);
     await expect(this.visitDuration).toContainText(optionLabel);
   }
+}
+
+async function chooseCommandOption(page: Page, optionLabel: string) {
+  const option = page.getByRole("option", {
+    exact: true,
+    name: optionLabel,
+  });
+
+  await option.click();
+  await expect(option).toBeHidden();
 }

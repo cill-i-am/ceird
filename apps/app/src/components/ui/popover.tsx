@@ -1,13 +1,50 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import * as React from "react";
 
 import { cn } from "#/lib/utils";
 
-function Popover({ ...props }: PopoverPrimitive.Root.Props) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
+const PopoverTriggerElementContext = React.createContext<{
+  readonly triggerElementRef: React.RefObject<HTMLElement | null>;
+} | null>(null);
+
+function Popover({ children, ...props }: PopoverPrimitive.Root.Props) {
+  const triggerElementRef = React.useRef<HTMLElement | null>(null);
+  const triggerElementContext = React.useMemo(
+    () => ({ triggerElementRef }),
+    []
+  );
+
+  return (
+    <PopoverTriggerElementContext.Provider value={triggerElementContext}>
+      <PopoverPrimitive.Root data-slot="popover" {...props}>
+        {children}
+      </PopoverPrimitive.Root>
+    </PopoverTriggerElementContext.Provider>
+  );
 }
 
-function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
+function PopoverTrigger({
+  ref,
+  ...props
+}: PopoverPrimitive.Trigger.Props & React.RefAttributes<HTMLElement>) {
+  const triggerElementContext = React.useContext(PopoverTriggerElementContext);
+  const composedRef = React.useCallback(
+    (element: HTMLElement | null) => {
+      if (triggerElementContext) {
+        triggerElementContext.triggerElementRef.current = element;
+      }
+      assignRef(ref, element);
+    },
+    [ref, triggerElementContext]
+  );
+
+  return (
+    <PopoverPrimitive.Trigger
+      ref={composedRef}
+      data-slot="popover-trigger"
+      {...props}
+    />
+  );
 }
 
 function PopoverContent({
@@ -22,14 +59,21 @@ function PopoverContent({
     PopoverPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const triggerElementContext = React.useContext(PopoverTriggerElementContext);
+  const portalContainer =
+    triggerElementContext?.triggerElementRef.current?.closest<HTMLElement>(
+      '[data-slot="drawer-content"], [data-slot="dialog-content"]'
+    ) ?? null;
+
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-[60]"
+        className="isolate z-[70]"
+        style={{ zIndex: 70 }}
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
@@ -42,6 +86,17 @@ function PopoverContent({
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
   );
+}
+
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T) {
+  if (typeof ref === "function") {
+    ref(value);
+    return;
+  }
+
+  if (ref) {
+    ref.current = value;
+  }
 }
 
 export { Popover, PopoverContent, PopoverTrigger };
