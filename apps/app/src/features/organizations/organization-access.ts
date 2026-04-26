@@ -106,11 +106,17 @@ export async function requireOrganizationAdministrationAccess() {
     organizationAccess.activeOrganizationId
   );
 
-  if (!ORGANIZATION_ADMINISTRATION_ROLES.has(role.role)) {
-    throw redirect({ to: "/" });
-  }
+  assertOrganizationAdministrationRole(role);
 
   return organizationAccess;
+}
+
+export function assertOrganizationAdministrationRole(input: {
+  readonly role: string;
+}) {
+  if (!ORGANIZATION_ADMINISTRATION_ROLES.has(input.role)) {
+    throw redirect({ to: "/" });
+  }
 }
 
 export async function redirectIfOrganizationReady() {

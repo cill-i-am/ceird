@@ -102,6 +102,25 @@ describe("organization settings page", () => {
     await expect(
       screen.findByText("Organization updated.")
     ).resolves.toBeVisible();
+
+    await user.type(screen.getByLabelText("Organization name"), " Labs");
+
+    expect(screen.queryByText("Organization updated.")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("does not offer a save action before the name changes", () => {
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: "org_123",
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(mockedUpdateOrganization).not.toHaveBeenCalled();
   }, 10_000);
 
   it("shows a safe error when the update fails", async () => {
@@ -134,5 +153,58 @@ describe("organization settings page", () => {
         "We couldn't update the organization. Please try again."
       )
     ).resolves.toBeVisible();
+  }, 10_000);
+
+  it("shows a safe error when the update request rejects", async () => {
+    mockedUpdateOrganization.mockRejectedValue(new Error("network down"));
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: "org_123",
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    await user.clear(screen.getByLabelText("Organization name"));
+    await user.type(screen.getByLabelText("Organization name"), "Northwind");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await expect(
+      screen.findByText(
+        "We couldn't update the organization. Please try again."
+      )
+    ).resolves.toBeVisible();
+    expect(mockedInvalidate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("resets the form baseline when the active organization changes", () => {
+    const { rerender } = render(
+      <OrganizationSettingsPage
+        organization={{
+          id: "org_123",
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    rerender(
+      <OrganizationSettingsPage
+        organization={{
+          id: "org_456",
+          name: "Northwind Field Ops",
+          slug: "northwind-field-ops",
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Organization name")).toHaveValue(
+      "Northwind Field Ops"
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   }, 10_000);
 });

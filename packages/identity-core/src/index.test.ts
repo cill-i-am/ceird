@@ -44,4 +44,13 @@ describe("updateOrganizationInputSchema", () => {
       })
     ).toThrow(/Expected/);
   }, 1000);
+
+  it("rejects fields outside the organization settings update contract", () => {
+    expect(() =>
+      decodeUpdateOrganizationInput({
+        name: "Northwind Field Ops",
+        slug: "northwind-field-ops",
+      })
+    ).toThrow(/is unexpected/);
+  }, 1000);
 });

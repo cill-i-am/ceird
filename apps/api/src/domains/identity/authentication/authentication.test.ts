@@ -401,66 +401,112 @@ describe("createAuthentication()", () => {
   }, 10_000);
 
   it("normalizes organization update names through the Better Auth organization hook", async () => {
-    const auth = createAuthenticationForPluginInspection();
-    const organizationPlugin = getOrganizationPluginOptions(auth);
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
 
-    const response =
-      await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
-        member: {
-          id: "member_123",
-          organizationId: "org_123",
-          role: "owner",
-          userId: "user_123",
-          createdAt: new Date(),
-        },
-        organization: {
-          name: "  Northwind Field Ops  ",
-        },
-        user: {
-          id: "user_123",
-          email: "owner@example.com",
-          emailVerified: true,
-          name: "Owner Example",
-          createdAt: new Date(),
-          updatedAt: new Date(),
+    try {
+      const organizationPlugin = getOrganizationPluginOptions(auth);
+
+      const response =
+        await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
+          member: {
+            id: "member_123",
+            organizationId: "org_123",
+            role: "owner",
+            userId: "user_123",
+            createdAt: new Date(),
+          },
+          organization: {
+            name: "  Northwind Field Ops  ",
+          },
+          user: {
+            id: "user_123",
+            email: "owner@example.com",
+            emailVerified: true,
+            name: "Owner Example",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+      expect(response).toStrictEqual({
+        data: {
+          name: "Northwind Field Ops",
         },
       });
-
-    expect(response).toStrictEqual({
-      data: {
-        name: "Northwind Field Ops",
-      },
-    });
+    } finally {
+      await cleanup();
+    }
   }, 10_000);
 
   it("rejects invalid organization update names through the Better Auth organization hook", async () => {
-    const auth = createAuthenticationForPluginInspection();
-    const organizationPlugin = getOrganizationPluginOptions(auth);
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
 
-    await expect(async () => {
-      await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
-        member: {
-          id: "member_123",
-          organizationId: "org_123",
-          role: "owner",
-          userId: "user_123",
-          createdAt: new Date(),
-        },
-        organization: {
-          name: "A",
-        },
-        user: {
-          id: "user_123",
-          email: "owner@example.com",
-          emailVerified: true,
-          name: "Owner Example",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+    try {
+      const organizationPlugin = getOrganizationPluginOptions(auth);
+
+      await expect(async () => {
+        await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
+          member: {
+            id: "member_123",
+            organizationId: "org_123",
+            role: "owner",
+            userId: "user_123",
+            createdAt: new Date(),
+          },
+          organization: {
+            name: "A",
+          },
+          user: {
+            id: "user_123",
+            email: "owner@example.com",
+            emailVerified: true,
+            name: "Owner Example",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }).rejects.toMatchObject({
+        status: "BAD_REQUEST",
       });
-    }).rejects.toMatchObject({
-      status: "BAD_REQUEST",
-    });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("rejects non-name organization update fields through the Better Auth organization hook", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const organizationPlugin = getOrganizationPluginOptions(auth);
+
+      await expect(async () => {
+        await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
+          member: {
+            id: "member_123",
+            organizationId: "org_123",
+            role: "owner",
+            userId: "user_123",
+            createdAt: new Date(),
+          },
+          organization: {
+            name: "Northwind Field Ops",
+            slug: "northwind-field-ops",
+          },
+          user: {
+            id: "user_123",
+            email: "owner@example.com",
+            emailVerified: true,
+            name: "Owner Example",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+      });
+    } finally {
+      await cleanup();
+    }
   }, 10_000);
 
   it("matches wildcard trusted origins for sandbox aliases", () => {
@@ -486,7 +532,7 @@ function createAuthenticationForPluginInspection() {
     allowExitOnIdle: true,
   });
 
-  return createAuthentication({
+  const auth = createAuthentication({
     appOrigin: "http://127.0.0.1:4173",
     backgroundTaskHandler: () => {},
     config: makeAuthenticationConfig({
@@ -501,6 +547,11 @@ function createAuthenticationForPluginInspection() {
     sendPasswordResetEmail: async () => {},
     sendVerificationEmail: async () => {},
   });
+
+  return {
+    auth,
+    cleanup: () => pool.end(),
+  };
 }
 
 function getOrganizationPluginOptions(
@@ -522,6 +573,7 @@ function getOrganizationPluginOptions(
               };
               readonly organization: {
                 readonly name?: string;
+                readonly slug?: string;
               };
               readonly user: {
                 readonly id: string;

@@ -57,6 +57,9 @@ test("an organization admin can update the organization name from account settin
   await page.getByLabel("Organization name").fill(updatedOrganizationName);
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status")).toContainText("Organization updated.");
+  await expect(page.getByLabel("Organization name")).toHaveValue(
+    updatedOrganizationName
+  );
 
   await page.reload();
   await expect(page.getByLabel("Organization name")).toHaveValue(

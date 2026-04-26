@@ -19,7 +19,7 @@ import type { OrganizationSummary } from "./organization-access";
 import {
   decodeUpdateOrganizationInput,
   organizationSettingsSchema,
-} from "./organization-settings-schemas";
+} from "./organization-schemas";
 
 const UPDATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't update the organization. Please try again.";
@@ -33,6 +33,10 @@ export function OrganizationSettingsPage({
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null
   );
+  const [savedOrganizationName, setSavedOrganizationName] = React.useState(
+    organization.name
+  );
+  const previousOrganizationIdRef = React.useRef(organization.id);
 
   const form = useForm({
     defaultValues: {
@@ -48,12 +52,32 @@ export function OrganizationSettingsPage({
       setSuccessMessage(null);
 
       const input = decodeUpdateOrganizationInput(value);
-      const result = await authClient.organization.update({
-        data: {
-          name: input.name,
-        },
-        organizationId: organization.id,
-      });
+
+      if (input.name === savedOrganizationName) {
+        formApi.reset({
+          name: savedOrganizationName,
+        });
+        return;
+      }
+
+      let result;
+
+      try {
+        result = await authClient.organization.update({
+          data: {
+            name: input.name,
+          },
+          organizationId: organization.id,
+        });
+      } catch {
+        formApi.setErrorMap({
+          onSubmit: {
+            form: UPDATE_ORGANIZATION_FAILURE_MESSAGE,
+            fields: {},
+          },
+        });
+        return;
+      }
 
       if (result.error || !result.data) {
         formApi.setErrorMap({
@@ -68,10 +92,31 @@ export function OrganizationSettingsPage({
       formApi.reset({
         name: result.data.name,
       });
+      setSavedOrganizationName(result.data.name);
       setSuccessMessage("Organization updated.");
-      await router.invalidate();
+
+      try {
+        await router.invalidate();
+      } catch {
+        setSuccessMessage(
+          "Organization updated. Refresh the page if the old name still appears elsewhere."
+        );
+      }
     },
   });
+
+  React.useEffect(() => {
+    if (previousOrganizationIdRef.current === organization.id) {
+      return;
+    }
+
+    previousOrganizationIdRef.current = organization.id;
+    setSuccessMessage(null);
+    setSavedOrganizationName(organization.name);
+    form.reset({
+      name: organization.name,
+    });
+  }, [form, organization.id, organization.name]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -115,9 +160,10 @@ export function OrganizationSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onChange={(event) => {
+                          setSuccessMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -139,13 +185,18 @@ export function OrganizationSettingsPage({
               </p>
             ) : null}
 
-            <form.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
+            <form.Subscribe
+              selector={(state) => ({
+                isDefaultValue: state.isDefaultValue,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ isDefaultValue, isSubmitting }) => (
                 <Button
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isDefaultValue}
                 >
                   {isSubmitting ? "Saving..." : "Save changes"}
                 </Button>

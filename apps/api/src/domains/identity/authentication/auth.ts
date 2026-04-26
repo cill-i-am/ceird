@@ -39,6 +39,7 @@ export { matchesTrustedOrigin } from "./config.js";
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
 const PUBLIC_INVITATION_PREVIEW_PATH_PATTERN =
   /^\/api\/public\/invitations\/([^/]+)\/preview$/;
+const ORGANIZATION_UPDATE_INPUT_FIELDS = new Set(["name"]);
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
@@ -126,6 +127,25 @@ function makePublicInvitationPreviewHandler(
   };
 }
 
+function throwInvalidOrganizationInput(message: string): never {
+  throw APIError.from("BAD_REQUEST", {
+    code: "INVALID_ORGANIZATION_INPUT",
+    message,
+  });
+}
+
+function assertOrganizationUpdateOnlyChangesName(
+  organizationUpdate: Record<string, unknown>
+) {
+  const unsupportedField = Object.keys(organizationUpdate).find(
+    (field) => !ORGANIZATION_UPDATE_INPUT_FIELDS.has(field)
+  );
+
+  if (unsupportedField) {
+    throwInvalidOrganizationInput("Only organization name can be updated.");
+  }
+}
+
 function makePasswordResetDeliveryKey(input: {
   readonly token: string;
   readonly userId: string;
@@ -197,11 +217,9 @@ export function createAuthentication(options: {
             try {
               input = decodeCreateOrganizationInput(nextOrganization);
             } catch {
-              throw APIError.from("BAD_REQUEST", {
-                code: "INVALID_ORGANIZATION_INPUT",
-                message:
-                  "Organization name must be at least 2 characters long and the slug must use lowercase letters, numbers, and hyphens only.",
-              });
+              throwInvalidOrganizationInput(
+                "Organization name must be at least 2 characters long and the slug must use lowercase letters, numbers, and hyphens only."
+              );
             }
 
             return Promise.resolve({
@@ -215,19 +233,18 @@ export function createAuthentication(options: {
           beforeUpdateOrganization: ({ organization: nextOrganization }) => {
             let input;
 
+            assertOrganizationUpdateOnlyChangesName(nextOrganization);
+
             try {
               input = decodeUpdateOrganizationInput(nextOrganization);
             } catch {
-              throw APIError.from("BAD_REQUEST", {
-                code: "INVALID_ORGANIZATION_INPUT",
-                message:
-                  "Organization name must be at least 2 characters long.",
-              });
+              throwInvalidOrganizationInput(
+                "Organization name must be at least 2 characters long."
+              );
             }
 
             return Promise.resolve({
               data: {
-                ...nextOrganization,
                 name: input.name,
               },
             });

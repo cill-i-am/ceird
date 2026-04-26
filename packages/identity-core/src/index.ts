@@ -48,7 +48,9 @@ export function decodeCreateOrganizationInput(
 export function decodeUpdateOrganizationInput(
   input: unknown
 ): UpdateOrganizationInput {
-  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
+  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input, {
+    onExcessProperty: "error",
+  });
 }
 
 export function decodePublicInvitationPreview(
