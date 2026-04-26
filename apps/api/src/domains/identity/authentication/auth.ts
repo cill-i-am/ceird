@@ -4,6 +4,7 @@ import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import {
   decodeCreateOrganizationInput,
   decodePublicInvitationPreview,
+  decodeUpdateOrganizationInput,
 } from "@task-tracker/identity-core";
 import type { PublicInvitationPreview } from "@task-tracker/identity-core";
 import { betterAuth } from "better-auth";
@@ -208,6 +209,26 @@ export function createAuthentication(options: {
                 ...nextOrganization,
                 name: input.name,
                 slug: input.slug,
+              },
+            });
+          },
+          beforeUpdateOrganization: ({ organization: nextOrganization }) => {
+            let input;
+
+            try {
+              input = decodeUpdateOrganizationInput(nextOrganization);
+            } catch {
+              throw APIError.from("BAD_REQUEST", {
+                code: "INVALID_ORGANIZATION_INPUT",
+                message:
+                  "Organization name must be at least 2 characters long.",
+              });
+            }
+
+            return Promise.resolve({
+              data: {
+                ...nextOrganization,
+                name: input.name,
               },
             });
           },

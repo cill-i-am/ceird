@@ -400,6 +400,69 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
+  it("normalizes organization update names through the Better Auth organization hook", async () => {
+    const auth = createAuthenticationForPluginInspection();
+    const organizationPlugin = getOrganizationPluginOptions(auth);
+
+    const response =
+      await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
+        member: {
+          id: "member_123",
+          organizationId: "org_123",
+          role: "owner",
+          userId: "user_123",
+          createdAt: new Date(),
+        },
+        organization: {
+          name: "  Northwind Field Ops  ",
+        },
+        user: {
+          id: "user_123",
+          email: "owner@example.com",
+          emailVerified: true,
+          name: "Owner Example",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+    expect(response).toStrictEqual({
+      data: {
+        name: "Northwind Field Ops",
+      },
+    });
+  }, 10_000);
+
+  it("rejects invalid organization update names through the Better Auth organization hook", async () => {
+    const auth = createAuthenticationForPluginInspection();
+    const organizationPlugin = getOrganizationPluginOptions(auth);
+
+    await expect(async () => {
+      await organizationPlugin.organizationHooks?.beforeUpdateOrganization?.({
+        member: {
+          id: "member_123",
+          organizationId: "org_123",
+          role: "owner",
+          userId: "user_123",
+          createdAt: new Date(),
+        },
+        organization: {
+          name: "A",
+        },
+        user: {
+          id: "user_123",
+          email: "owner@example.com",
+          emailVerified: true,
+          name: "Owner Example",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }).rejects.toMatchObject({
+      status: "BAD_REQUEST",
+    });
+  }, 10_000);
+
   it("matches wildcard trusted origins for sandbox aliases", () => {
     expect({
       api: matchesTrustedOrigin(
@@ -416,6 +479,70 @@ describe("createAuthentication()", () => {
     });
   }, 10_000);
 });
+
+function createAuthenticationForPluginInspection() {
+  const pool = new Pool({
+    connectionString: DEFAULT_AUTH_DATABASE_URL,
+    allowExitOnIdle: true,
+  });
+
+  return createAuthentication({
+    appOrigin: "http://127.0.0.1:4173",
+    backgroundTaskHandler: () => {},
+    config: makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    }),
+    database: drizzle(pool, { schema: authSchema }),
+    reportPasswordResetEmailFailure: () => {},
+    reportVerificationEmailFailure: () => {},
+    sendOrganizationInvitationEmail: async () => {},
+    sendPasswordResetEmail: async () => {},
+    sendVerificationEmail: async () => {},
+  });
+}
+
+function getOrganizationPluginOptions(
+  auth: ReturnType<typeof createAuthentication>
+) {
+  const organizationPlugin = auth.options.plugins.find(
+    (plugin) => plugin.id === "organization"
+  ) as
+    | {
+        readonly options?: {
+          readonly organizationHooks?: {
+            readonly beforeUpdateOrganization?: (data: {
+              readonly member: {
+                readonly id: string;
+                readonly organizationId: string;
+                readonly role: string;
+                readonly userId: string;
+                readonly createdAt: Date;
+              };
+              readonly organization: {
+                readonly name?: string;
+              };
+              readonly user: {
+                readonly id: string;
+                readonly email: string;
+                readonly emailVerified: boolean;
+                readonly name: string;
+                readonly createdAt: Date;
+                readonly updatedAt: Date;
+              };
+            }) => Promise<unknown>;
+          };
+        };
+      }
+    | undefined;
+
+  if (!organizationPlugin?.options) {
+    throw new Error("Expected organization plugin options to be configured.");
+  }
+
+  return organizationPlugin.options;
+}
 
 async function withEnvironment(
   nextEnvironment: Record<string, string>,
