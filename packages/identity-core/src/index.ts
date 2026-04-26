@@ -17,8 +17,16 @@ export const CreateOrganizationInputSchema = Schema.Struct({
   slug: OrganizationSlugSchema,
 });
 
+export const UpdateOrganizationInputSchema = Schema.Struct({
+  name: OrganizationNameSchema,
+});
+
 export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
+>;
+
+export type UpdateOrganizationInput = Schema.Schema.Type<
+  typeof UpdateOrganizationInputSchema
 >;
 
 export const PublicInvitationPreviewSchema = Schema.Struct({
@@ -35,6 +43,12 @@ export function decodeCreateOrganizationInput(
   input: unknown
 ): CreateOrganizationInput {
   return ParseResult.decodeUnknownSync(CreateOrganizationInputSchema)(input);
+}
+
+export function decodeUpdateOrganizationInput(
+  input: unknown
+): UpdateOrganizationInput {
+  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
 }
 
 export function decodePublicInvitationPreview(
