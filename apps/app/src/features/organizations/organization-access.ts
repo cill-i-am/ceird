@@ -1,4 +1,15 @@
 import { redirect } from "@tanstack/react-router";
+import {
+  decodeOrganizationId,
+  decodeOrganizationMemberRoleResponse,
+  decodeOrganizationSummary,
+  isAdministrativeOrganizationRole,
+} from "@task-tracker/identity-core";
+import type {
+  OrganizationId as OrganizationIdType,
+  OrganizationRole,
+  OrganizationSummary,
+} from "@task-tracker/identity-core";
 
 import { authClient } from "#/lib/auth-client";
 
@@ -10,15 +21,11 @@ import {
   getCurrentServerOrganizations,
 } from "./organization-server";
 
-export interface OrganizationSummary {
-  readonly id: string;
-  readonly slug: string;
-  readonly name: string;
-}
+export type { OrganizationSummary } from "@task-tracker/identity-core";
 
 export interface ActiveOrganizationSync {
   readonly required: boolean;
-  readonly targetOrganizationId: string | null;
+  readonly targetOrganizationId: OrganizationIdType | null;
 }
 
 type Session = NonNullable<
@@ -32,8 +39,6 @@ type OrganizationMemberRole = NonNullable<
     ReturnType<typeof authClient.organization.getActiveMemberRole>
   >["data"]
 >;
-const ORGANIZATION_ADMINISTRATION_ROLES = new Set(["admin", "owner"]);
-
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
     return await getCurrentServerOrganizationSession();
@@ -111,9 +116,9 @@ export async function requireOrganizationAdministrationAccess() {
 }
 
 export function assertOrganizationAdministrationRole(input: {
-  readonly role: string;
+  readonly role: OrganizationRole;
 }) {
-  if (!ORGANIZATION_ADMINISTRATION_ROLES.has(input.role)) {
+  if (!isAdministrativeOrganizationRole(input.role)) {
     throw redirect({ to: "/" });
   }
 }
@@ -143,8 +148,11 @@ export async function redirectIfOrganizationReady() {
 
 async function resolveOrganizationAccessState(session: Session) {
   const organizations = await listOrganizations();
+  const currentActiveOrganizationId = decodeNullableOrganizationId(
+    session.session.activeOrganizationId
+  );
   const activeOrganization = resolveCurrentOrganization(
-    session.session.activeOrganizationId,
+    currentActiveOrganizationId,
     organizations
   );
   const activeOrganizationId = activeOrganization?.id ?? null;
@@ -153,14 +161,16 @@ async function resolveOrganizationAccessState(session: Session) {
     activeOrganization,
     activeOrganizationId,
     activeOrganizationSync: createActiveOrganizationSync(
-      session.session.activeOrganizationId ?? null,
+      currentActiveOrganizationId,
       activeOrganizationId
     ),
     organizations,
   };
 }
 
-export async function getCurrentOrganizationMemberRole(organizationId: string) {
+export async function getCurrentOrganizationMemberRole(
+  organizationId: OrganizationIdType
+) {
   if (isServerEnvironment()) {
     return await getCurrentServerOrganizationMemberRole(organizationId);
   }
@@ -179,21 +189,23 @@ export async function getCurrentOrganizationMemberRole(organizationId: string) {
     throw new Error("Organization member role lookup returned no data.");
   }
 
-  return result.data satisfies OrganizationMemberRole;
+  return decodeOrganizationMemberRoleResponse(
+    result.data satisfies OrganizationMemberRole
+  );
 }
 
 function toOrganizationSummary(
   organization: Pick<RawOrganization, "id" | "name" | "slug">
 ): OrganizationSummary {
-  return {
+  return decodeOrganizationSummary({
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
-  };
+  });
 }
 
 function resolveCurrentOrganization(
-  activeOrganizationId: string | null | undefined,
+  activeOrganizationId: OrganizationIdType | null,
   organizations: readonly OrganizationSummary[]
 ) {
   if (!activeOrganizationId) {
@@ -212,13 +224,19 @@ function resolveCurrentOrganization(
 }
 
 function createActiveOrganizationSync(
-  currentOrganizationId: string | null,
-  targetOrganizationId: string | null
+  currentOrganizationId: OrganizationIdType | null,
+  targetOrganizationId: OrganizationIdType | null
 ): ActiveOrganizationSync {
   return {
     required: currentOrganizationId !== targetOrganizationId,
     targetOrganizationId,
   };
+}
+
+function decodeNullableOrganizationId(
+  organizationId: string | null | undefined
+): OrganizationIdType | null {
+  return organizationId ? decodeOrganizationId(organizationId) : null;
 }
 
 export async function synchronizeClientActiveOrganization(

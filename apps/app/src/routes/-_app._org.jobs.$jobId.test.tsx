@@ -1,4 +1,5 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -20,6 +21,7 @@ const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
 const regionId = "55555555-5555-4555-8555-555555555555" as RegionIdType;
+const organizationId = decodeOrganizationId("org_123");
 
 const { mockedGetCurrentServerJobDetail, mockedNavigate } = vi.hoisted(() => ({
   mockedGetCurrentServerJobDetail: vi.fn<AsyncLoaderMock>(),
@@ -121,7 +123,7 @@ describe("job detail route", () => {
         loadJobDetailRouteData(workItemId, {
           activeOrganizationSync: {
             required: true,
-            targetOrganizationId: "org_123",
+            targetOrganizationId: organizationId,
           },
         })
       ).resolves.toBeNull();
@@ -141,7 +143,7 @@ describe("job detail route", () => {
 
       render(
         <JobsRouteContent
-          activeOrganizationId="org_123"
+          activeOrganizationId={organizationId}
           activeOrganizationName="Acme Field Ops"
           list={{
             items: [

@@ -1,6 +1,7 @@
 "use client";
 
 import { Atom } from "@effect-atom/atom-react";
+import type { OrganizationId } from "@task-tracker/identity-core";
 import type {
   CreateJobInput,
   CreateJobResponse,
@@ -37,12 +38,12 @@ export interface JobsListFilters {
 export interface JobsListState {
   readonly items: readonly JobListItem[];
   readonly nextCursor?: string | undefined;
-  readonly organizationId: string | null;
+  readonly organizationId: OrganizationId | null;
 }
 
 export interface JobsOptionsState {
   readonly data: JobOptionsResponse;
-  readonly organizationId: string | null;
+  readonly organizationId: OrganizationId | null;
 }
 
 export interface JobsNotice {
@@ -269,7 +270,7 @@ export const createJobMutationAtom = Atom.fn<
 ).pipe(Atom.keepAlive);
 
 export function seedJobsListState(
-  organizationId: string,
+  organizationId: OrganizationId,
   response: JobListResponse
 ): JobsListState {
   return {
@@ -280,7 +281,7 @@ export function seedJobsListState(
 }
 
 export function seedJobsOptionsState(
-  organizationId: string,
+  organizationId: OrganizationId,
   response: JobOptionsResponse
 ): JobsOptionsState {
   return {

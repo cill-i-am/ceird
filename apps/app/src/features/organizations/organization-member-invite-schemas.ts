@@ -1,12 +1,11 @@
+import { InvitableOrganizationRole } from "@task-tracker/identity-core";
 import { ParseResult, Schema } from "effect";
 
 import { accountEmailSchema } from "#/features/auth/auth-schemas";
 
-const InviteRole = Schema.Literal("admin", "member");
-
 const OrganizationMemberInviteInput = Schema.Struct({
   email: accountEmailSchema,
-  role: InviteRole,
+  role: InvitableOrganizationRole,
 });
 
 export type OrganizationMemberInviteInput =

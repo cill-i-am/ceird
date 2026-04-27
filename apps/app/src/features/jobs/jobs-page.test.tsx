@@ -1,4 +1,5 @@
 import { RegistryProvider } from "@effect-atom/atom-react";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   JobListResponse,
   JobOptionsResponse,
@@ -26,6 +27,7 @@ const regionNorthId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
 const regionWestId = "44444444-4444-4444-8444-444444444444" as RegionIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
+const organizationId = decodeOrganizationId("org_123");
 const originalInnerWidth = window.innerWidth;
 
 const initialList: JobListResponse = {
@@ -402,8 +404,11 @@ function renderJobsPage(options?: {
   return render(
     <RegistryProvider
       initialValues={[
-        [jobsListStateAtom, seedJobsListState("org_123", initialList)],
-        [jobsOptionsStateAtom, seedJobsOptionsState("org_123", initialOptions)],
+        [jobsListStateAtom, seedJobsListState(organizationId, initialList)],
+        [
+          jobsOptionsStateAtom,
+          seedJobsOptionsState(organizationId, initialOptions),
+        ],
       ]}
     >
       <JobsPage

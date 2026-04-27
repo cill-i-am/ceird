@@ -1,4 +1,13 @@
 import { useForm } from "@tanstack/react-form";
+import {
+  decodeOrganizationRole,
+  INVITABLE_ORGANIZATION_ROLES,
+  InvitableOrganizationRole,
+} from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 import { Schema } from "effect";
 import * as React from "react";
 
@@ -30,7 +39,7 @@ import type { OrganizationMemberInviteInput } from "./organization-member-invite
 interface InvitationSummary {
   readonly email: string;
   readonly id: string;
-  readonly role: string;
+  readonly role: OrganizationRole;
   readonly status: string;
 }
 
@@ -38,15 +47,20 @@ const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the details and try again.";
 const INVITATION_LOAD_FAILURE_MESSAGE =
   "We couldn't load invitations right now. Please try again.";
+const INVITE_ROLE_LABELS = {
+  admin: "Admin",
+  member: "Member",
+} satisfies Record<OrganizationMemberInviteInput["role"], string>;
 const ROLE_SELECTION_GROUPS = [
   {
     label: "Role",
-    options: [
-      { label: "Member", value: "member" },
-      { label: "Admin", value: "admin" },
-    ],
+    options: INVITABLE_ORGANIZATION_ROLES.map((role) => ({
+      label: INVITE_ROLE_LABELS[role],
+      value: role,
+    })),
   },
 ] satisfies readonly CommandSelectGroup[];
+const isInviteRole = Schema.is(InvitableOrganizationRole);
 
 function formatRoleLabel(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -56,16 +70,10 @@ function formatInvitationCount(count: number) {
   return count === 1 ? "1 open" : `${count} open`;
 }
 
-function isInviteRole(
-  value: string
-): value is OrganizationMemberInviteInput["role"] {
-  return value === "admin" || value === "member";
-}
-
 export function OrganizationMembersPage({
   activeOrganizationId,
 }: {
-  readonly activeOrganizationId: string;
+  readonly activeOrganizationId: OrganizationId;
 }) {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [invitations, setInvitations] = React.useState<
@@ -100,9 +108,11 @@ export function OrganizationMembersPage({
       return;
     }
 
-    setInvitations(
-      result.data.filter((invitation) => invitation.status === "pending")
-    );
+    try {
+      setInvitations(result.data.filter(isPendingInvitation).map(toInvitation));
+    } catch {
+      setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
+    }
   }, [activeOrganizationId]);
 
   React.useEffect(() => {
@@ -312,4 +322,22 @@ export function OrganizationMembersPage({
       </div>
     </div>
   );
+}
+
+function isPendingInvitation(input: { readonly status: string }) {
+  return input.status === "pending";
+}
+
+function toInvitation(input: {
+  readonly email: string;
+  readonly id: string;
+  readonly role: string;
+  readonly status: string;
+}): InvitationSummary {
+  return {
+    email: input.email,
+    id: input.id,
+    role: decodeOrganizationRole(input.role),
+    status: input.status,
+  };
 }

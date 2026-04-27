@@ -1,4 +1,9 @@
 import { isRedirect } from "@tanstack/react-router";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 
 import {
   ensureActiveOrganizationId,
@@ -38,6 +43,8 @@ interface Organization {
   slug: string;
 }
 
+const serverOrganizationId = decodeOrganizationId("org_server");
+
 const {
   mockedGetStrictServerSession,
   mockedGetServerOrganizationMemberRole,
@@ -50,7 +57,9 @@ const {
 } = vi.hoisted(() => ({
   mockedGetStrictServerSession: vi.fn<() => Promise<Session | null>>(),
   mockedGetServerOrganizationMemberRole:
-    vi.fn<(organizationId: string) => Promise<{ role: string }>>(),
+    vi.fn<
+      (organizationId: OrganizationId) => Promise<{ role: OrganizationRole }>
+    >(),
   mockedGetStrictServerOrganizations:
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
   mockedGetClientActiveMemberRole: vi.fn<
@@ -150,11 +159,11 @@ describe("organization access helpers", () => {
   it("uses the strict server list helper during SSR", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
     mockedGetStrictServerOrganizations.mockResolvedValue([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
 
     await expect(listOrganizations()).resolves.toStrictEqual([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
     expect(mockedGetStrictServerOrganizations).toHaveBeenCalledOnce();
   }, 1000);
@@ -441,7 +450,7 @@ describe("organization access helpers", () => {
       },
     });
     mockedGetStrictServerOrganizations.mockResolvedValue([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
 
     await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({

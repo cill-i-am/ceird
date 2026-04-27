@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@effect/platform": "^0.96.0",
+    "@task-tracker/identity-core": "workspace:*",
     "effect": "^3.21.0"
   },
   "devDependencies": {

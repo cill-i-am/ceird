@@ -1,9 +1,9 @@
+import { OrganizationId as IdentityOrganizationId } from "@task-tracker/identity-core";
+import type { OrganizationId as OrganizationIdType } from "@task-tracker/identity-core";
 import { Schema } from "effect";
 
-export const OrganizationId = Schema.String.pipe(
-  Schema.brand("@task-tracker/jobs-core/OrganizationId")
-);
-export type OrganizationId = Schema.Schema.Type<typeof OrganizationId>;
+export const OrganizationId = IdentityOrganizationId;
+export type OrganizationId = OrganizationIdType;
 
 export const UserId = Schema.String.pipe(
   Schema.brand("@task-tracker/jobs-core/UserId")

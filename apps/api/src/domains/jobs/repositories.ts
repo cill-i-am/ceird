@@ -24,6 +24,7 @@ import {
   JobSchema,
   JobSiteOptionSchema,
   JobVisitSchema,
+  OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
   SiteNotFoundError,
@@ -239,6 +240,7 @@ const decodeJobActivityPayload = Schema.decodeUnknownSync(
 const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
 const decodeCommentId = Schema.decodeUnknownSync(CommentIdSchema);
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
+const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
@@ -365,8 +367,8 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(
-          rows[0]?.organization_id as OrganizationId | undefined
+        return Option.fromNullable(rows[0]?.organization_id).pipe(
+          Option.map(decodeOrganizationId)
         );
       });
 

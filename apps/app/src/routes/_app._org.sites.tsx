@@ -4,6 +4,7 @@ import {
   createFileRoute,
   useRouteContext,
 } from "@tanstack/react-router";
+import type { OrganizationId } from "@task-tracker/identity-core";
 import type { JobOptionsResponse } from "@task-tracker/jobs-core";
 import * as React from "react";
 
@@ -13,7 +14,6 @@ import {
   seedJobsOptionsState,
 } from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
-import { decodeJobsViewerRole } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   ensureActiveOrganizationId,
@@ -29,7 +29,7 @@ const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 };
 
 interface SitesRouteOrganizationAccess {
-  readonly activeOrganizationId: string;
+  readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentUserId: string;
 }
@@ -61,10 +61,12 @@ export async function loadSitesRouteData(
     };
   }
 
-  const activeRole = await getCurrentOrganizationMemberRole(
-    resolvedOrganizationAccess.activeOrganizationId
-  );
-  const siteOptions = await getCurrentServerSiteOptions();
+  const [activeRole, siteOptions] = await Promise.all([
+    getCurrentOrganizationMemberRole(
+      resolvedOrganizationAccess.activeOrganizationId
+    ),
+    getCurrentServerSiteOptions(),
+  ]);
 
   return {
     options: {
@@ -74,7 +76,7 @@ export async function loadSitesRouteData(
       sites: siteOptions.sites,
     },
     viewer: {
-      role: decodeJobsViewerRole(activeRole.role),
+      role: activeRole.role,
       userId: resolvedOrganizationAccess.currentUserId,
     } satisfies JobsViewer,
   };
@@ -97,7 +99,7 @@ export function SitesRouteContent({
   options,
   viewer,
 }: {
-  readonly activeOrganizationId: string;
+  readonly activeOrganizationId: OrganizationId;
   readonly children?: React.ReactNode;
   readonly options: JobOptionsResponse;
   readonly viewer: JobsViewer;

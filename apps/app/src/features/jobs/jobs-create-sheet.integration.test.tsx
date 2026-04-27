@@ -1,5 +1,6 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   ContactIdType,
   CreateJobResponse,
@@ -27,6 +28,7 @@ type NavigateMock = (...args: unknown[]) => Promise<void>;
 const depotSiteId = "11111111-1111-4111-8111-111111111111" as SiteIdType;
 const depotContactId = "22222222-2222-4222-8222-222222222222" as ContactIdType;
 const existingJobId = "33333333-3333-4333-8333-333333333333" as WorkItemIdType;
+const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedMakeBrowserJobsClient,
@@ -244,7 +246,7 @@ function renderCreateSheet() {
       initialValues={[
         [
           jobsListStateAtom,
-          seedJobsListState("org_123", {
+          seedJobsListState(organizationId, {
             items: [
               {
                 createdAt: "2026-04-23T11:00:00.000Z",
@@ -261,7 +263,7 @@ function renderCreateSheet() {
         ],
         [
           jobsOptionsStateAtom,
-          seedJobsOptionsState("org_123", {
+          seedJobsOptionsState(organizationId, {
             contacts: [
               {
                 id: depotContactId,

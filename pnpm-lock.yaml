@@ -273,6 +273,9 @@ importers:
       '@effect/platform':
         specifier: ^0.96.0
         version: 0.96.0(effect@3.21.0)
+      '@task-tracker/identity-core':
+        specifier: workspace:*
+        version: link:../identity-core
       effect:
         specifier: ^3.21.0
         version: 3.21.0

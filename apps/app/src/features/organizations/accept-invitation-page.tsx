@@ -1,4 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { decodeOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { Alert, AlertDescription } from "#/components/ui/alert";
@@ -22,7 +24,7 @@ import { signOut } from "../auth/sign-out";
 interface InvitationPreviewDetails {
   readonly email: string;
   readonly organizationName: string;
-  readonly role: string;
+  readonly role: OrganizationRole;
 }
 
 interface InvitationDetails extends InvitationPreviewDetails {
@@ -284,7 +286,10 @@ export function AcceptInvitationPage({
 
       setState({
         status: "ready",
-        invitation: invitation.data,
+        invitation: {
+          ...invitation.data,
+          role: decodeOrganizationRole(invitation.data.role),
+        },
       });
     }
 

@@ -1,4 +1,5 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
+import type { OrganizationId } from "@task-tracker/identity-core";
 
 import {
   assertOrganizationAdministrationRole,
@@ -18,10 +19,10 @@ export const Route = createFileRoute("/_app/_org/organization/settings")({
 });
 
 export async function loadSettingsRoute(context: {
-  readonly activeOrganizationId: string;
+  readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: {
     readonly required: boolean;
-    readonly targetOrganizationId: string | null;
+    readonly targetOrganizationId: OrganizationId | null;
   };
 }) {
   if (context.activeOrganizationSync.required) {

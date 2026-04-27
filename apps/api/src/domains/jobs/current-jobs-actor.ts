@@ -1,5 +1,7 @@
 import { HttpServerRequest } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
+import { OrganizationRole as OrganizationRoleSchema } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import { OrganizationId, UserId } from "@task-tracker/jobs-core";
 import type { OrganizationIdType, UserIdType } from "@task-tracker/jobs-core";
 import { Effect, Schema } from "effect";
@@ -25,7 +27,7 @@ interface CurrentJobsActorSession {
   };
 }
 
-export type JobsActorRole = "owner" | "admin" | "member";
+export type JobsActorRole = OrganizationRole;
 
 export interface JobsActor {
   readonly organizationId: OrganizationIdType;
@@ -35,6 +37,7 @@ export interface JobsActor {
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const isOrganizationRole = Schema.is(OrganizationRoleSchema);
 
 export const resolveCurrentJobsActor = Effect.fn("CurrentJobsActor.resolve")(
   function* (options: {
@@ -141,24 +144,5 @@ export class CurrentJobsActor extends Effect.Service<CurrentJobsActor>()(
 function normalizeJobsActorRole(
   membershipRole: string
 ): JobsActorRole | undefined {
-  const roles = new Set(
-    membershipRole
-      .split(",")
-      .map((role) => role.trim())
-      .filter((role) => role.length > 0)
-  );
-
-  if (roles.has("owner")) {
-    return "owner";
-  }
-
-  if (roles.has("admin")) {
-    return "admin";
-  }
-
-  if (roles.has("member")) {
-    return "member";
-  }
-
-  return undefined;
+  return isOrganizationRole(membershipRole) ? membershipRole : undefined;
 }

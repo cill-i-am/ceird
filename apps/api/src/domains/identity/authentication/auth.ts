@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import {
   decodeCreateOrganizationInput,
+  decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeUpdateOrganizationInput,
 } from "@task-tracker/identity-core";
@@ -34,6 +35,8 @@ import {
 export { matchesTrustedOrigin } from "./config.js";
 
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
+const INVALID_ORGANIZATION_ROLE_MESSAGE =
+  "Organization role must be one of owner, admin, or member.";
 const PUBLIC_INVITATION_PREVIEW_PATH_PATTERN =
   /^\/api\/public\/invitations\/([^/]+)\/preview$/;
 const ORGANIZATION_UPDATE_INPUT_FIELDS = new Set(["name"]);
@@ -85,11 +88,11 @@ export async function findPublicInvitationPreview(options: {
     return null;
   }
 
-  return {
+  return decodePublicInvitationPreview({
     email: maskInvitationEmail(preview.email),
     organizationName: preview.organizationName,
     role: preview.role,
-  };
+  });
 }
 
 function matchPublicInvitationPreviewPath(pathname: string) {
@@ -118,9 +121,7 @@ function makePublicInvitationPreviewHandler(
       invitationId: decodeURIComponent(invitationId),
     });
 
-    return Response.json(
-      preview === null ? null : decodePublicInvitationPreview(preview)
-    );
+    return Response.json(preview);
   };
 }
 
@@ -129,6 +130,21 @@ function throwInvalidOrganizationInput(message: string): never {
     code: "INVALID_ORGANIZATION_INPUT",
     message,
   });
+}
+
+function throwInvalidOrganizationRole(): never {
+  throw APIError.from("BAD_REQUEST", {
+    code: "INVALID_ORGANIZATION_ROLE",
+    message: INVALID_ORGANIZATION_ROLE_MESSAGE,
+  });
+}
+
+function decodeWritableOrganizationRole(input: unknown) {
+  try {
+    return decodeOrganizationRole(input);
+  } catch {
+    throwInvalidOrganizationRole();
+  }
 }
 
 function assertOrganizationUpdateOnlyChangesName(
@@ -258,6 +274,26 @@ export function createAuthentication(options: {
               },
             });
           },
+          beforeAddMember: ({ member: nextMember }) =>
+            Promise.resolve({
+              data: {
+                ...nextMember,
+                role: decodeWritableOrganizationRole(nextMember.role),
+              },
+            }),
+          beforeUpdateMemberRole: ({ newRole }) =>
+            Promise.resolve({
+              data: {
+                role: decodeWritableOrganizationRole(newRole),
+              },
+            }),
+          beforeCreateInvitation: ({ invitation: nextInvitation }) =>
+            Promise.resolve({
+              data: {
+                ...nextInvitation,
+                role: decodeWritableOrganizationRole(nextInvitation.role),
+              },
+            }),
         },
         sendInvitationEmail: async (organizationInvitation) => {
           await sendOrganizationInvitationEmail({
@@ -270,7 +306,7 @@ export function createAuthentication(options: {
             organizationName: organizationInvitation.organization.name,
             recipientEmail: organizationInvitation.email,
             recipientName: organizationInvitation.email,
-            role: organizationInvitation.role,
+            role: decodeOrganizationRole(organizationInvitation.role),
           } as const satisfies OrganizationInvitationEmailInput);
         },
       }),

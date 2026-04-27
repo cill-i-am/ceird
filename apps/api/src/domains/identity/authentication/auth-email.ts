@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
 
+import { OrganizationRole } from "@task-tracker/identity-core";
 import { Context, Effect, ParseResult, Schema } from "effect";
 
 import type {
@@ -80,12 +81,6 @@ const ResetUrl = Schema.String.pipe(
   })
 );
 const InvitationUrl = ResetUrl;
-const InvitationRole = Schema.String.pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    message: () => "Expected a non-empty role",
-  })
-);
-
 export const VerificationUrl = ResetUrl;
 
 export const PasswordResetEmailInput = Schema.Struct({
@@ -110,7 +105,7 @@ export const OrganizationInvitationEmailInput = Schema.Struct({
   organizationName: Schema.String,
   inviterEmail: EmailAddress,
   invitationUrl: InvitationUrl,
-  role: InvitationRole,
+  role: OrganizationRole,
 });
 
 export type OrganizationInvitationEmailInput = Schema.Schema.Type<
