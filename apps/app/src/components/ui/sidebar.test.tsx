@@ -58,4 +58,32 @@ describe("sidebar provider", () => {
       "collapsed"
     );
   }, 1000);
+
+  it("lets document listeners observe Mod+B while toggling", async () => {
+    const user = userEvent.setup();
+    const documentListener = vi.fn<(event: KeyboardEvent) => void>();
+    document.addEventListener("keydown", documentListener);
+
+    render(
+      <HotkeysProvider>
+        <SidebarProvider>
+          <SidebarStateProbe />
+        </SidebarProvider>
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("{Control>}b{/Control}");
+
+    expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
+      "collapsed"
+    );
+    expect(documentListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctrlKey: true,
+        key: "b",
+      })
+    );
+
+    document.removeEventListener("keydown", documentListener);
+  }, 1000);
 });

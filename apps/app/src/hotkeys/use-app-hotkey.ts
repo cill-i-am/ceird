@@ -36,6 +36,7 @@ export function useAppHotkey(
 
   useHotkey(definition.hotkey as RegisterableHotkey, callback, {
     preventDefault: true,
+    stopPropagation: false,
     ...options,
     meta: {
       ...getHotkeyMeta(id),
@@ -56,6 +57,7 @@ export function useAppHotkeySequence(
     callback,
     {
       preventDefault: true,
+      stopPropagation: false,
       ...options,
       meta: {
         ...getHotkeyMeta(id),
