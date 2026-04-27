@@ -301,7 +301,7 @@ export const HOTKEYS = {
     id: "mapZoomIn",
     label: "Zoom in",
     scope: "map",
-    when: "Map is focused",
+    when: "Zoom controls are visible",
   },
   mapZoomOut: {
     group: "Map",
@@ -309,7 +309,7 @@ export const HOTKEYS = {
     id: "mapZoomOut",
     label: "Zoom out",
     scope: "map",
-    when: "Map is focused",
+    when: "Zoom controls are visible",
   },
   mapResetBearing: {
     group: "Map",
@@ -317,7 +317,7 @@ export const HOTKEYS = {
     id: "mapResetBearing",
     label: "Reset bearing",
     scope: "map",
-    when: "Map is focused",
+    when: "Compass control is visible",
   },
   mapLocate: {
     group: "Map",
@@ -325,7 +325,7 @@ export const HOTKEYS = {
     id: "mapLocate",
     label: "Locate",
     scope: "map",
-    when: "Map is focused and locate is enabled",
+    when: "Locate control is visible",
   },
   mapFullscreen: {
     group: "Map",
@@ -333,7 +333,7 @@ export const HOTKEYS = {
     id: "mapFullscreen",
     label: "Fullscreen",
     scope: "map",
-    when: "Map is focused and fullscreen is enabled",
+    when: "Fullscreen control is visible",
   },
 } as const satisfies Record<string, HotkeyDefinition>;
 

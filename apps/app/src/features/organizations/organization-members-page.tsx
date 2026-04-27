@@ -27,9 +27,17 @@ import type { CommandSelectGroup } from "#/components/ui/command-select";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Spinner } from "#/components/ui/spinner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { getErrorText } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -104,7 +112,10 @@ export function OrganizationMembersPage({
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null
   );
+  const formRef = React.useRef<HTMLFormElement | null>(null);
   const invitationRequestSequence = React.useRef(0);
+  const roleSelectTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
 
   const loadInvitations = React.useCallback(async () => {
     invitationRequestSequence.current += 1;
@@ -173,6 +184,33 @@ export function OrganizationMembersPage({
     },
   });
 
+  useAppHotkey(
+    "membersSubmit",
+    () => {
+      if (form.state.isSubmitting) {
+        return;
+      }
+
+      formRef.current?.requestSubmit();
+    },
+    { enabled: isHydrated }
+  );
+  useAppHotkey(
+    "membersRole",
+    () => {
+      if (form.state.isSubmitting) {
+        return;
+      }
+
+      roleSelectTriggerRef.current?.focus();
+      setRoleSelectOpen(true);
+    },
+    {
+      enabled: isHydrated && !roleSelectOpen,
+      ignoreInputs: true,
+    }
+  );
+
   const shouldRenderInvitationsSection =
     invitations.length > 0 || Boolean(loadErrorMessage);
 
@@ -225,6 +263,7 @@ export function OrganizationMembersPage({
             className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
           >
             <form
+              ref={formRef}
               className="flex flex-col gap-5"
               method="post"
               noValidate
@@ -276,11 +315,14 @@ export function OrganizationMembersPage({
                       >
                         <CommandSelect
                           id="invite-role"
+                          triggerRef={roleSelectTriggerRef}
                           value={field.state.value}
+                          open={roleSelectOpen}
                           placeholder="Pick role"
                           emptyText="No roles found."
                           groups={ROLE_SELECTION_GROUPS}
                           ariaInvalid={errorText ? true : undefined}
+                          onOpenChange={setRoleSelectOpen}
                           onValueChange={(nextValue) => {
                             if (!isInviteRole(nextValue)) {
                               return;
@@ -308,17 +350,36 @@ export function OrganizationMembersPage({
               ) : null}
 
               <form.Subscribe selector={(state) => state.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full sm:w-auto"
-                    disabled={isSubmitting || !isHydrated}
-                  >
-                    {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
-                    {isSubmitting ? "Sending invite..." : "Send invite"}
-                  </Button>
-                )}
+                {(isSubmitting) => {
+                  const canSubmit = !isSubmitting && isHydrated;
+
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="submit"
+                            size="lg"
+                            className="w-full sm:w-auto"
+                            disabled={!canSubmit}
+                          >
+                            {isSubmitting ? (
+                              <Spinner data-icon="inline-start" />
+                            ) : null}
+                            {isSubmitting ? "Sending invite..." : "Send invite"}
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>
+                        <span>Send invite</span>
+                        <ShortcutHint
+                          hotkey={HOTKEYS.membersSubmit.hotkey}
+                          label={HOTKEYS.membersSubmit.label}
+                        />
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }}
               </form.Subscribe>
             </form>
           </AppUtilityPanel>

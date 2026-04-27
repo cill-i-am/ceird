@@ -33,7 +33,8 @@ export function SiteHeader() {
         .filter((breadcrumb) => breadcrumb !== undefined),
   });
   const activeScopes = useRouterState({
-    select: (state) => getActiveShortcutScopes(state.location.pathname),
+    select: (state) =>
+      getActiveShortcutScopes(state.location.pathname, state.location.search),
   });
 
   return (
@@ -99,7 +100,10 @@ export function SiteHeader() {
   );
 }
 
-function getActiveShortcutScopes(pathname: string): readonly HotkeyScope[] {
+function getActiveShortcutScopes(
+  pathname: string,
+  search?: unknown
+): readonly HotkeyScope[] {
   if (pathname === "/jobs/new") {
     return ["global", "jobs", "job-create"];
   }
@@ -108,9 +112,28 @@ function getActiveShortcutScopes(pathname: string): readonly HotkeyScope[] {
     return ["global", "jobs", "job-detail"];
   }
 
-  if (pathname === "/jobs" || pathname.startsWith("/jobs/")) {
-    return ["global", "jobs"];
+  if (pathname === "/jobs") {
+    return hasMapViewSearch(search)
+      ? ["global", "jobs", "map"]
+      : ["global", "jobs"];
+  }
+
+  if (pathname === "/members") {
+    return ["global", "members"];
+  }
+
+  if (pathname === "/settings" || pathname === "/organization/settings") {
+    return ["global", "settings"];
   }
 
   return ["global"];
+}
+
+function hasMapViewSearch(search: unknown) {
+  return (
+    typeof search === "object" &&
+    search !== null &&
+    "view" in search &&
+    search.view === "map"
+  );
 }

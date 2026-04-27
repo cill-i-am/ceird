@@ -23,6 +23,14 @@ import {
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { requestBrowserGeolocation } from "#/lib/browser-geolocation";
 import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
@@ -819,15 +827,17 @@ function ControlGroup({ children }: { children: React.ReactNode }) {
 function ControlButton({
   onClick,
   label,
+  shortcut,
   children,
   disabled = false,
 }: {
   onClick: () => void;
   label: string;
+  shortcut?: string;
   children: React.ReactNode;
   disabled?: boolean;
 }) {
-  return (
+  const button = (
     <button
       onClick={onClick}
       aria-label={label}
@@ -843,6 +853,16 @@ function ControlButton({
     >
       {children}
     </button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent>
+        <span>{label}</span>
+        {shortcut ? <ShortcutHint hotkey={shortcut} label={label} /> : null}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -872,6 +892,10 @@ function MapControls({
   }, [map]);
 
   const handleLocate = useCallback(() => {
+    if (waitingForLocation) {
+      return;
+    }
+
     setWaitingForLocation(true);
 
     void (async () => {
@@ -899,7 +923,7 @@ function MapControls({
 
       setWaitingForLocation(false);
     })();
-  }, [map, onLocate, onLocateError]);
+  }, [map, onLocate, onLocateError, waitingForLocation]);
 
   const handleFullscreen = useCallback(() => {
     const container = map?.getContainer();
@@ -913,6 +937,22 @@ function MapControls({
     }
   }, [map]);
 
+  useAppHotkey("mapZoomIn", handleZoomIn, {
+    enabled: Boolean(map) && showZoom,
+  });
+  useAppHotkey("mapZoomOut", handleZoomOut, {
+    enabled: Boolean(map) && showZoom,
+  });
+  useAppHotkey("mapResetBearing", handleResetBearing, {
+    enabled: Boolean(map) && showCompass,
+  });
+  useAppHotkey("mapLocate", handleLocate, {
+    enabled: Boolean(map) && showLocate && !waitingForLocation,
+  });
+  useAppHotkey("mapFullscreen", handleFullscreen, {
+    enabled: Boolean(map) && showFullscreen,
+  });
+
   return (
     <div
       className={cn(
@@ -923,10 +963,18 @@ function MapControls({
     >
       {showZoom && (
         <ControlGroup>
-          <ControlButton onClick={handleZoomIn} label="Zoom in">
+          <ControlButton
+            onClick={handleZoomIn}
+            label="Zoom in"
+            shortcut={HOTKEYS.mapZoomIn.hotkey}
+          >
             <Plus className="size-4" />
           </ControlButton>
-          <ControlButton onClick={handleZoomOut} label="Zoom out">
+          <ControlButton
+            onClick={handleZoomOut}
+            label="Zoom out"
+            shortcut={HOTKEYS.mapZoomOut.hotkey}
+          >
             <Minus className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -941,6 +989,7 @@ function MapControls({
           <ControlButton
             onClick={handleLocate}
             label="Find my location"
+            shortcut={HOTKEYS.mapLocate.hotkey}
             disabled={waitingForLocation}
           >
             {waitingForLocation ? (
@@ -953,7 +1002,11 @@ function MapControls({
       )}
       {showFullscreen && (
         <ControlGroup>
-          <ControlButton onClick={handleFullscreen} label="Toggle fullscreen">
+          <ControlButton
+            onClick={handleFullscreen}
+            label="Toggle fullscreen"
+            shortcut={HOTKEYS.mapFullscreen.hotkey}
+          >
             <Maximize className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -990,7 +1043,11 @@ function CompassButton({ onClick }: { onClick: () => void }) {
   }, [map]);
 
   return (
-    <ControlButton onClick={onClick} label="Reset bearing to north">
+    <ControlButton
+      onClick={onClick}
+      label="Reset bearing to north"
+      shortcut={HOTKEYS.mapResetBearing.hotkey}
+    >
       <svg
         ref={compassRef}
         viewBox="0 0 24 24"

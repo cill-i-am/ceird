@@ -10,11 +10,19 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Spinner } from "#/components/ui/spinner";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
+import {
   getErrorText,
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 
 import type { OrganizationSummary } from "./organization-access";
@@ -39,6 +47,7 @@ export function OrganizationSettingsPage({
   const [savedOrganizationName, setSavedOrganizationName] = React.useState(
     organization.name
   );
+  const formRef = React.useRef<HTMLFormElement | null>(null);
   const previousOrganizationIdRef = React.useRef(organization.id);
 
   const form = useForm({
@@ -121,6 +130,18 @@ export function OrganizationSettingsPage({
     });
   }, [form, organization.id, organization.name]);
 
+  useAppHotkey(
+    "settingsSubmit",
+    () => {
+      if (form.state.isSubmitting || form.state.isDefaultValue) {
+        return;
+      }
+
+      formRef.current?.requestSubmit();
+    },
+    { enabled: isHydrated }
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
       <AppPageHeader
@@ -136,6 +157,7 @@ export function OrganizationSettingsPage({
           className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
         >
           <form
+            ref={formRef}
             className="flex max-w-xl flex-col gap-5"
             method="post"
             noValidate
@@ -195,17 +217,37 @@ export function OrganizationSettingsPage({
                 isSubmitting: state.isSubmitting,
               })}
             >
-              {({ isDefaultValue, isSubmitting }) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  disabled={isSubmitting || isDefaultValue || !isHydrated}
-                >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
-                  {isSubmitting ? "Saving..." : "Save changes"}
-                </Button>
-              )}
+              {({ isDefaultValue, isSubmitting }) => {
+                const canSubmit =
+                  !isSubmitting && !isDefaultValue && isHydrated;
+
+                return (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="submit"
+                          size="lg"
+                          className="w-full sm:w-auto"
+                          disabled={!canSubmit}
+                        >
+                          {isSubmitting ? (
+                            <Spinner data-icon="inline-start" />
+                          ) : null}
+                          {isSubmitting ? "Saving..." : "Save changes"}
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>
+                      <span>Save changes</span>
+                      <ShortcutHint
+                        hotkey={HOTKEYS.settingsSubmit.hotkey}
+                        label={HOTKEYS.settingsSubmit.label}
+                      />
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              }}
             </form.Subscribe>
           </form>
         </AppUtilityPanel>

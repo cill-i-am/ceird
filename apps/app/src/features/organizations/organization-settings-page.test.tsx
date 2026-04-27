@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { decodeOrganizationId } from "@task-tracker/identity-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -110,6 +111,35 @@ describe("organization settings page", () => {
     await user.type(screen.getByLabelText("Organization name"), " Labs");
 
     expect(screen.queryByText("Organization updated.")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("updates the organization name with the submit hotkey", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <OrganizationSettingsPage
+          organization={{
+            id: organizationId,
+            name: "Acme Field Ops",
+            slug: "acme-field-ops",
+          }}
+        />
+      </HotkeysProvider>
+    );
+
+    await user.clear(screen.getByLabelText("Organization name"));
+    await user.type(screen.getByLabelText("Organization name"), "Northwind");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => {
+      expect(mockedUpdateOrganization).toHaveBeenCalledWith({
+        data: {
+          name: "Northwind",
+        },
+        organizationId: "org_123",
+      });
+    });
   }, 10_000);
 
   it("does not offer a save action before the name changes", () => {
