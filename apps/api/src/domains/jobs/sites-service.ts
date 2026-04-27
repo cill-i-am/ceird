@@ -9,6 +9,7 @@ import {
   JobsRepository,
   SitesRepository,
 } from "./repositories.js";
+import { SiteGeocoder } from "./site-geocoder.js";
 
 export class SitesService extends Effect.Service<SitesService>()(
   "@task-tracker/domains/jobs/SitesService",
@@ -18,11 +19,13 @@ export class SitesService extends Effect.Service<SitesService>()(
       CurrentJobsActor.Default,
       JobsAuthorization.Default,
       JobsRepositoriesLive,
+      SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* JobsAuthorization;
       const currentJobsActor = yield* CurrentJobsActor;
       const jobsRepository = yield* JobsRepository;
+      const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
@@ -48,6 +51,8 @@ export class SitesService extends Effect.Service<SitesService>()(
           yield* Effect.annotateCurrentSpan("regionId", input.regionId);
         }
 
+        const geocodedLocation = yield* siteGeocoder.geocode(input);
+
         return yield* jobsRepository
           .withTransaction(
             Effect.gen(function* () {
@@ -55,10 +60,13 @@ export class SitesService extends Effect.Service<SitesService>()(
                 accessNotes: input.accessNotes,
                 addressLine1: input.addressLine1,
                 addressLine2: input.addressLine2,
+                country: input.country,
                 county: input.county,
                 eircode: input.eircode,
-                latitude: input.latitude,
-                longitude: input.longitude,
+                geocodedAt: geocodedLocation.geocodedAt,
+                geocodingProvider: geocodedLocation.provider,
+                latitude: geocodedLocation.latitude,
+                longitude: geocodedLocation.longitude,
                 name: input.name,
                 organizationId: actor.organizationId,
                 regionId: input.regionId,

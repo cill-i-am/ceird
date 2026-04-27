@@ -7,6 +7,7 @@ import {
   matchesTrustedOrigin,
 } from "../identity/authentication/config.js";
 import { JobsService } from "./service.js";
+import { SiteGeocoder } from "./site-geocoder.js";
 import { SitesService } from "./sites-service.js";
 
 const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
@@ -62,6 +63,7 @@ export const JobsHttpLive = HttpApiBuilder.api(JobsApi).pipe(
   ),
   Layer.provide(JobsHandlersLive),
   Layer.provide(SitesHandlersLive),
+  Layer.provide(SiteGeocoder.Default),
   Layer.provide(JobsService.Default),
   Layer.provide(SitesService.Default)
 );

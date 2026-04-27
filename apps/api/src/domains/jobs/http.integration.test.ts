@@ -256,8 +256,9 @@ describe("jobs http integration", () => {
           "/sites",
           {
             addressLine1: "1 Custom House Quay",
-            latitude: 53.3498,
-            longitude: -6.2603,
+            country: "IE",
+            county: "Dublin",
+            eircode: "D01 X2X2",
             name: "Docklands Campus",
             town: "Dublin",
           },
@@ -290,11 +291,13 @@ describe("jobs http integration", () => {
         })
       );
 
-      const invalidCoordinatesResponse = await api.handler(
+      const invalidSitePayloadResponse = await api.handler(
         makeJsonRequest(
           "/sites",
           {
-            latitude: 53.3498,
+            country: "IE",
+            county: "Dublin",
+            eircode: "D01 X2X2",
             name: "Missing Longitude",
           },
           {
@@ -302,12 +305,16 @@ describe("jobs http integration", () => {
           }
         )
       );
-      expect(invalidCoordinatesResponse.status).toBe(400);
+      expect(invalidSitePayloadResponse.status).toBe(400);
 
       const missingRegionResponse = await api.handler(
         makeJsonRequest(
           "/sites",
           {
+            addressLine1: "1 Custom House Quay",
+            country: "IE",
+            county: "Dublin",
+            eircode: "D01 X2X2",
             name: "Missing Region Site",
             regionId: "55555555-5555-4555-8555-555555555555",
           },
@@ -325,6 +332,10 @@ describe("jobs http integration", () => {
         makeJsonRequest(
           "/sites",
           {
+            addressLine1: "1 Custom House Quay",
+            country: "IE",
+            county: "Dublin",
+            eircode: "D01 X2X2",
             name: "Member Site",
           },
           {
@@ -685,6 +696,7 @@ async function withJobsEnvironment<Result>(
     CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
     DATABASE_URL: process.env.DATABASE_URL,
     PORTLESS_URL: process.env.PORTLESS_URL,
+    SITE_GEOCODER_MODE: process.env.SITE_GEOCODER_MODE,
   };
 
   process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
@@ -696,6 +708,7 @@ async function withJobsEnvironment<Result>(
   process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
   process.env.CLOUDFLARE_API_TOKEN = "test-token";
   process.env.DATABASE_URL = databaseUrl;
+  process.env.SITE_GEOCODER_MODE = "stub";
   delete process.env.PORTLESS_URL;
 
   try {
@@ -759,6 +772,12 @@ async function withJobsEnvironment<Result>(
       delete process.env.PORTLESS_URL;
     } else {
       process.env.PORTLESS_URL = previous.PORTLESS_URL;
+    }
+
+    if (previous.SITE_GEOCODER_MODE === undefined) {
+      delete process.env.SITE_GEOCODER_MODE;
+    } else {
+      process.env.SITE_GEOCODER_MODE = previous.SITE_GEOCODER_MODE;
     }
   }
 }

@@ -12,6 +12,7 @@ import {
 } from "@task-tracker/jobs-core";
 import type {
   ContactIdType as ContactId,
+  CreateSiteInput,
   Job,
   JobComment,
   JobActivity,
@@ -46,6 +47,7 @@ import {
   SitesRepository,
 } from "./repositories.js";
 import { JobsService } from "./service.js";
+import { SiteGeocoder } from "./site-geocoder.js";
 
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
@@ -59,6 +61,15 @@ const siteId = "22222222-2222-4222-8222-222222222222" as SiteId;
 const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
+const geocodedAt = "2026-04-22T10:00:00.000Z";
+const inlineSiteInput = {
+  addressLine1: "1 Custom House Quay",
+  country: "IE",
+  county: "Dublin",
+  eircode: "D01 X2X2",
+  name: "Docklands Campus",
+  town: "Dublin",
+} satisfies CreateSiteInput;
 
 function makeActor(
   role: JobsActor["role"],
@@ -104,7 +115,9 @@ interface JobsServiceHarness {
     addActivity: number;
     addVisit: number;
     create: number;
+    createSite: number;
     findByIdForUpdate: number;
+    geocode: number;
     linkContact: number;
     patch: number;
     transition: number;
@@ -123,7 +136,9 @@ function makeHarness(
     addActivity: 0,
     addVisit: 0,
     create: 0,
+    createSite: 0,
     findByIdForUpdate: 0,
+    geocode: 0,
     linkContact: 0,
     patch: 0,
     transition: 0,
@@ -262,7 +277,37 @@ function makeHarness(
   });
 
   const sitesRepository = SitesRepository.make({
-    create: (_input: unknown) => Effect.succeed(siteId),
+    create: (input: {
+      readonly addressLine1?: string;
+      readonly country: string;
+      readonly county?: string;
+      readonly eircode?: string;
+      readonly geocodedAt: string;
+      readonly geocodingProvider: string;
+      readonly latitude: number;
+      readonly longitude: number;
+      readonly name: string;
+      readonly organizationId: OrganizationId;
+      readonly town?: string;
+    }) =>
+      Effect.sync(() => {
+        calls.createSite += 1;
+        expect(input).toMatchObject({
+          addressLine1: "1 Custom House Quay",
+          country: "IE",
+          county: "Dublin",
+          eircode: "D01 X2X2",
+          geocodedAt,
+          geocodingProvider: "stub",
+          latitude: 53.3498,
+          longitude: -6.2603,
+          name: "Docklands Campus",
+          organizationId: actor.organizationId,
+          town: "Dublin",
+        });
+
+        return siteId;
+      }),
     findById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.some(siteId)),
     getOptionById: (_organizationId: OrganizationId, _siteId: SiteId) =>
@@ -289,11 +334,26 @@ function makeHarness(
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies JobOptionsResponse["contacts"]),
   });
+  const siteGeocoder = SiteGeocoder.make({
+    geocode: (input: CreateSiteInput) =>
+      Effect.sync(() => {
+        calls.geocode += 1;
+        expect(input).toStrictEqual(inlineSiteInput);
+
+        return {
+          geocodedAt,
+          latitude: 53.3498,
+          longitude: -6.2603,
+          provider: "stub" as const,
+        };
+      }),
+  });
 
   const repositoriesLayer = Layer.mergeAll(
     Layer.succeed(JobsRepository, jobsRepository),
     Layer.succeed(SitesRepository, sitesRepository),
-    Layer.succeed(ContactsRepository, contactsRepository)
+    Layer.succeed(ContactsRepository, contactsRepository),
+    Layer.succeed(SiteGeocoder, siteGeocoder)
   );
 
   const activityRecorderLayer = Layer.provide(
@@ -359,6 +419,64 @@ function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
 }
 
 describe("jobs service", () => {
+  it("geocodes inline site creation before creating the job", async () => {
+    const harness = makeHarness();
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.create({
+            site: {
+              input: inlineSiteInput,
+              kind: "create",
+            },
+            title: "Replace circulation pump",
+          });
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      siteId,
+      title: "Replace circulation pump",
+    });
+
+    expect(harness.calls.geocode).toBe(1);
+    expect(harness.calls.createSite).toBe(1);
+    expect(harness.calls.create).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+  }, 10_000);
+
+  it("does not geocode when creating a job for an existing site", async () => {
+    const harness = makeHarness();
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.create({
+            site: {
+              kind: "existing",
+              siteId,
+            },
+            title: "Replace circulation pump",
+          });
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      siteId,
+      title: "Replace circulation pump",
+    });
+
+    expect(harness.calls.geocode).toBe(0);
+    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.create).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+  }, 10_000);
+
   it("requires a blocked reason before transitioning a job to blocked", async () => {
     const harness = makeHarness({
       lockedJob: makeJob({ status: "in_progress" }),
