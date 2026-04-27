@@ -594,6 +594,16 @@ describe("jobs detail sheet", () => {
     expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
   }, 10_000);
 
+  it("does not close the detail drawer with Escape while a select is open", async () => {
+    const user = userEvent.setup();
+    renderDetailSheet(buildDetail());
+
+    await user.keyboard("s");
+    await user.keyboard("{Escape}");
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
   it(
     "logs a visit and clears the visit form",
     {

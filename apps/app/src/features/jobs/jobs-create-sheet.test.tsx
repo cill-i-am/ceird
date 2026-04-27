@@ -477,6 +477,28 @@ describe("jobs create sheet", () => {
     });
   }, 10_000);
 
+  it("does not close with Escape while a metadata picker is open", async () => {
+    const user = userEvent.setup();
+    renderCreateSheet();
+
+    await user.keyboard("p");
+    await user.keyboard("{Escape}");
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("does not submit with the submit hotkey while nested site drawers are open", async () => {
+    const user = userEvent.setup();
+    renderCreateSheet();
+
+    await user.type(screen.getByLabelText("Title"), "Fix hidden submit");
+    await choosePickerOption(user, "Site", "Create a new site");
+    await user.type(screen.getByLabelText("Site name"), "Warehouse");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(mockedCreateJob).not.toHaveBeenCalled();
+  }, 10_000);
+
   it("focuses metadata controls with create drawer hotkeys", async () => {
     const user = userEvent.setup();
     renderCreateSheet();
@@ -484,10 +506,12 @@ describe("jobs create sheet", () => {
     await user.keyboard("p");
 
     expect(screen.getByLabelText("Priority")).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "High" }));
 
     await user.keyboard("s");
 
     expect(screen.getByLabelText("Site")).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Depot" }));
 
     await user.keyboard("c");
 

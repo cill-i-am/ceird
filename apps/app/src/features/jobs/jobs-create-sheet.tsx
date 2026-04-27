@@ -90,27 +90,23 @@ const NONE_VALUE = "__none__";
 const PRIORITY_OPTIONS: readonly {
   readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly label: string;
-  readonly shortcut: string;
   readonly value: JobPriority;
 }[] = [
-  { icon: MinusSignIcon, label: "None", shortcut: "0", value: "none" },
-  { icon: AlertSquareIcon, label: "Urgent", shortcut: "1", value: "urgent" },
+  { icon: MinusSignIcon, label: "None", value: "none" },
+  { icon: AlertSquareIcon, label: "Urgent", value: "urgent" },
   {
     icon: SignalFull02Icon,
     label: "High",
-    shortcut: "2",
     value: "high",
   },
   {
     icon: SignalMedium02Icon,
     label: "Medium",
-    shortcut: "3",
     value: "medium",
   },
   {
     icon: SignalLow02Icon,
     label: "Low",
-    shortcut: "4",
     value: "low",
   },
 ];
@@ -169,20 +165,30 @@ function openMetadataSelect(
 
 function getCreateHotkeyState({
   createWaiting,
+  contactSelectOpen,
   locationDrawerOpen,
   overlayOpen,
+  prioritySelectOpen,
   siteDrawerOpen,
+  siteSelectOpen,
 }: {
+  readonly contactSelectOpen: boolean;
   readonly createWaiting: boolean;
   readonly locationDrawerOpen: boolean;
   readonly overlayOpen: boolean;
+  readonly prioritySelectOpen: boolean;
   readonly siteDrawerOpen: boolean;
+  readonly siteSelectOpen: boolean;
 }) {
+  const selectOpen = prioritySelectOpen || siteSelectOpen || contactSelectOpen;
+  const nestedDrawerOpen = siteDrawerOpen || locationDrawerOpen;
+
   return {
     canCancel:
-      overlayOpen && !createWaiting && !siteDrawerOpen && !locationDrawerOpen,
-    canOpenMetadata: overlayOpen && !siteDrawerOpen && !locationDrawerOpen,
-    canSubmit: overlayOpen && !createWaiting,
+      overlayOpen && !createWaiting && !nestedDrawerOpen && !selectOpen,
+    canOpenMetadata: overlayOpen && !nestedDrawerOpen && !selectOpen,
+    canSubmit:
+      overlayOpen && !createWaiting && !nestedDrawerOpen && !selectOpen,
   };
 }
 
@@ -257,10 +263,13 @@ export function JobsCreateSheet() {
   );
   const parsedSiteCoordinates = resolveSiteCoordinateDraft(values);
   const hotkeyState = getCreateHotkeyState({
+    contactSelectOpen,
     createWaiting: createResult.waiting,
     locationDrawerOpen,
     overlayOpen,
+    prioritySelectOpen,
     siteDrawerOpen,
+    siteSelectOpen,
   });
 
   function closeSheet({
@@ -1202,7 +1211,6 @@ function buildPrioritySelectionGroups() {
       options: PRIORITY_OPTIONS.map((priority) => ({
         icon: priority.icon,
         label: priority.label,
-        shortcut: priority.shortcut,
         value: priority.value,
       })),
     },

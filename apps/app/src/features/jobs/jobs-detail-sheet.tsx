@@ -128,6 +128,10 @@ function openSelect(
   setOpen(true);
 }
 
+function isAnySelectOpen(...openStates: readonly boolean[]) {
+  return openStates.some(Boolean);
+}
+
 function activeElementIsInside<TElement extends HTMLElement>(
   ref: React.RefObject<TElement | null>
 ) {
@@ -224,6 +228,8 @@ export function JobsDetailSheet({
   const [commentError, setCommentError] = React.useState<string | null>(null);
   const [visitDate, setVisitDate] = React.useState("");
   const [visitDurationMinutes, setVisitDurationMinutes] = React.useState("60");
+  const [visitDurationSelectOpen, setVisitDurationSelectOpen] =
+    React.useState(false);
   const [visitNote, setVisitNote] = React.useState("");
   const [visitError, setVisitError] = React.useState<string | null>(null);
   const site = detail.job.siteId
@@ -256,6 +262,7 @@ export function JobsDetailSheet({
     setCommentError(null);
     setVisitDate(getLocalDateInputValue());
     setVisitDurationMinutes("60");
+    setVisitDurationSelectOpen(false);
     setVisitNote("");
     setVisitError(null);
   }, [detail.job.siteId, detail.job.status, workItemId]);
@@ -266,7 +273,16 @@ export function JobsDetailSheet({
     });
   }
 
-  useAppHotkey("jobDetailClose", closeSheet, { ignoreInputs: true });
+  const selectOpen = isAnySelectOpen(
+    statusSelectOpen,
+    siteAssignmentSelectOpen,
+    visitDurationSelectOpen
+  );
+
+  useAppHotkey("jobDetailClose", closeSheet, {
+    enabled: !selectOpen,
+    ignoreInputs: true,
+  });
   useAppHotkey(
     "jobDetailComment",
     () => {
@@ -856,9 +872,11 @@ export function JobsDetailSheet({
                               <CommandSelect
                                 id="job-visit-duration"
                                 value={visitDurationMinutes}
+                                open={visitDurationSelectOpen}
                                 placeholder="Pick duration"
                                 emptyText="No durations found."
                                 groups={VISIT_DURATION_SELECTION_GROUPS}
+                                onOpenChange={setVisitDurationSelectOpen}
                                 onValueChange={setVisitDurationMinutes}
                               />
                             </FieldContent>
