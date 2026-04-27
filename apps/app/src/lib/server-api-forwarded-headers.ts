@@ -25,13 +25,13 @@ function readCurrentRequestOrigin(input: {
   readonly host: string | undefined;
   readonly forwardedProto: string | undefined;
 }): string | undefined {
-  const {host} = input;
+  const { host } = input;
 
   if (!host) {
     return undefined;
   }
 
-  const {forwardedProto} = input;
+  const { forwardedProto } = input;
   let protocol: "http" | "https" = "http";
 
   if (forwardedProto === "http" || forwardedProto === "https") {

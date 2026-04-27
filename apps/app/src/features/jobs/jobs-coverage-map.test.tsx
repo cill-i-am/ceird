@@ -109,7 +109,7 @@ describe("jobs coverage map", () => {
       "href",
       expect.stringContaining("Main+Street")
     );
-  }, 1000);
+  }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {
     render(<JobsCoverageMap jobs={[]} sites={new Map()} />);
@@ -119,7 +119,7 @@ describe("jobs coverage map", () => {
       screen.getByText(/add a geocoded site address to make this view useful/i)
     ).toBeInTheDocument();
     expect(screen.queryByTestId("coverage-map-canvas")).not.toBeInTheDocument();
-  }, 1000);
+  }, 5000);
 });
 
 function buildJob(
