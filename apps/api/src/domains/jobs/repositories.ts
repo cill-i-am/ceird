@@ -1,11 +1,7 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
-import { randomUUID } from "node:crypto";
-
 import { SqlClient } from "@effect/sql";
 import {
-  ActivityId as ActivityIdSchema,
-  CommentId as CommentIdSchema,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
   IsoDateTimeString as IsoDateTimeStringSchema,
@@ -29,7 +25,6 @@ import {
   RegionNotFoundError,
   SiteNotFoundError,
   SiteId as SiteIdSchema,
-  VisitId as VisitIdSchema,
   WorkItemId as WorkItemIdSchema,
 } from "@task-tracker/jobs-core";
 import type {
@@ -59,6 +54,14 @@ import type {
 import { Config, Effect, Layer, Option, Schema } from "effect";
 
 import { WorkItemOrganizationMismatchError } from "./errors.js";
+import {
+  generateActivityId,
+  generateCommentId,
+  generateContactId,
+  generateSiteId,
+  generateVisitId,
+  generateWorkItemId,
+} from "./id-generation.js";
 
 interface JobCursorState {
   readonly id: WorkItemId;
@@ -250,8 +253,6 @@ const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
   JobActivityPayloadSchema
 );
-const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
-const decodeCommentId = Schema.decodeUnknownSync(CommentIdSchema);
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
@@ -265,7 +266,6 @@ const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
 const decodeJobSiteOption = Schema.decodeUnknownSync(JobSiteOptionSchema);
 const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
-const decodeVisitId = Schema.decodeUnknownSync(VisitIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
 const decodeJobCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -661,7 +661,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               ? (input.completedByUserId ?? null)
               : null,
           created_by_user_id: input.createdByUserId,
-          id: decodeWorkItemId(randomUUID()),
+          id: generateWorkItemId(),
           kind: input.kind ?? "job",
           organization_id: input.organizationId,
           priority: input.priority ?? "none",
@@ -832,7 +832,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               author_user_id: input.authorUserId,
               body: input.body,
-              id: decodeCommentId(randomUUID()),
+              id: generateCommentId(),
               work_item_id: input.workItemId,
             })
             .returning("*")}
@@ -863,7 +863,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               actor_user_id: input.actorUserId ?? null,
               event_type: input.payload.eventType,
-              id: decodeActivityId(randomUUID()),
+              id: generateActivityId(),
               organization_id: input.organizationId,
               payload: input.payload,
               work_item_id: input.workItemId,
@@ -894,7 +894,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               author_user_id: input.authorUserId,
               duration_minutes: input.durationMinutes,
-              id: decodeVisitId(randomUUID()),
+              id: generateVisitId(),
               note: input.note,
               organization_id: input.organizationId,
               visit_date: input.visitDate,
@@ -983,7 +983,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         }
 
         const values: Record<string, unknown> = {
-          id: decodeSiteId(randomUUID()),
+          id: generateSiteId(),
           name: input.name,
           organization_id: input.organizationId,
         };
@@ -1258,7 +1258,7 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
         input: CreateContactRecordInput
       ) {
         const values: Record<string, unknown> = {
-          id: decodeContactId(randomUUID()),
+          id: generateContactId(),
           name: input.name,
           organization_id: input.organizationId,
         };

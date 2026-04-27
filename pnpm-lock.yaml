@@ -78,6 +78,9 @@ importers:
       pg:
         specifier: 8.20.0
         version: 8.20.0
+      uuid:
+        specifier: 11.1.0
+        version: 11.1.0
     devDependencies:
       '@effect/language-service':
         specifier: ^0.84.2

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type { JobActivityPayload } from "@task-tracker/jobs-core";
 import {
   JOB_ACTIVITY_EVENT_TYPES,
@@ -12,10 +10,10 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
-  doublePrecision,
   pgTable,
   primaryKey,
   text,
@@ -25,6 +23,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { organization, user } from "../identity/authentication/schema.js";
+import { generateJobDomainUuid } from "./id-generation.js";
 
 const jobsTimestamp = (name: string) =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
@@ -48,9 +47,7 @@ const activityEventTypeValuesSql = sql.raw(
 export const serviceRegion = pgTable(
   "service_regions",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -75,9 +72,7 @@ export const serviceRegion = pgTable(
 export const site = pgTable(
   "sites",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -133,9 +128,7 @@ export const site = pgTable(
 export const contact = pgTable(
   "contacts",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -183,9 +176,7 @@ export const siteContact = pgTable(
 export const workItem = pgTable(
   "work_items",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -278,9 +269,7 @@ export const workItem = pgTable(
 export const workItemComment = pgTable(
   "work_item_comments",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     workItemId: uuid("work_item_id")
       .notNull()
       .references(() => workItem.id, { onDelete: "cascade" }),
@@ -302,9 +291,7 @@ export const workItemComment = pgTable(
 export const workItemActivity = pgTable(
   "work_item_activity",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     workItemId: uuid("work_item_id")
       .notNull()
       .references(() => workItem.id, { onDelete: "cascade" }),
@@ -339,9 +326,7 @@ export const workItemActivity = pgTable(
 export const workItemVisit = pgTable(
   "work_item_visits",
   {
-    id: uuid("id")
-      .primaryKey()
-      .$defaultFn(() => randomUUID()),
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     workItemId: uuid("work_item_id")
       .notNull()
       .references(() => workItem.id, { onDelete: "cascade" }),
