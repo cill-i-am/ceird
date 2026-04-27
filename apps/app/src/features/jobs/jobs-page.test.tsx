@@ -214,11 +214,14 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Map" }));
+      await user.click(screen.getByRole("tab", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        );
       });
     }
   );
@@ -238,7 +241,7 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Map" }));
+      await user.click(screen.getByRole("tab", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
@@ -246,7 +249,7 @@ describe("jobs page", () => {
 
       expect(screen.queryByTestId("jobs-queue-panel")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "List" }));
+      await user.click(screen.getByRole("tab", { name: "List" }));
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
     }

@@ -60,7 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { cn } from "#/lib/utils";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -443,36 +443,37 @@ function ViewModeSwitch({
   readonly value: JobsViewMode;
 }) {
   return (
-    <ToggleGroup
-      aria-label="Jobs view"
-      className="rounded-full border bg-background p-0.5"
-      size="sm"
-      value={[value]}
+    <Tabs
+      className="w-fit"
+      value={value}
       onValueChange={(nextValue) => {
-        const [nextMode] = nextValue;
-
-        if (nextMode) {
-          onValueChange(nextMode as JobsViewMode);
+        if (nextValue === "list" || nextValue === "map") {
+          onValueChange(nextValue);
         }
       }}
     >
-      <ToggleGroupItem className="h-7" value="list">
-        <HugeiconsIcon
-          icon={LeftToRightListBulletIcon}
-          strokeWidth={2}
-          data-icon="inline-start"
-        />
-        List
-      </ToggleGroupItem>
-      <ToggleGroupItem className="h-7" value="map">
-        <HugeiconsIcon
-          icon={MapsSquare01Icon}
-          strokeWidth={2}
-          data-icon="inline-start"
-        />
-        Map
-      </ToggleGroupItem>
-    </ToggleGroup>
+      <TabsList
+        aria-label="Jobs view"
+        className="h-8 rounded-full border bg-background p-0.5"
+      >
+        <TabsTrigger className="h-7" value="list">
+          <HugeiconsIcon
+            icon={LeftToRightListBulletIcon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          List
+        </TabsTrigger>
+        <TabsTrigger className="h-7" value="map">
+          <HugeiconsIcon
+            icon={MapsSquare01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          Map
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   );
 }
 

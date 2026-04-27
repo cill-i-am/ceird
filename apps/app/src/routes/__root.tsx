@@ -2,6 +2,7 @@ import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 import * as React from "react";
 
 import { TooltipProvider } from "../components/ui/tooltip";
+import { useIsHydrated } from "../hooks/use-is-hydrated";
 
 import appCss from "../styles.css?url";
 
@@ -83,13 +84,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function ClientOnlyDevelopmentDevtools() {
-  const [mounted, setMounted] = React.useState(false);
+  const isHydrated = useIsHydrated();
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted || !DevelopmentDevtools) {
+  if (!isHydrated || !DevelopmentDevtools) {
     return null;
   }
 
