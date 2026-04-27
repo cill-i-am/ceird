@@ -11,6 +11,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -346,7 +347,7 @@ export const workItemVisit = pgTable(
     authorUserId: text("author_user_id")
       .notNull()
       .references(() => user.id),
-    visitDate: timestamp("visit_date", { withTimezone: true }).notNull(),
+    visitDate: date("visit_date").notNull(),
     durationMinutes: integer("duration_minutes").notNull(),
     note: text("note").notNull(),
     createdAt: jobsTimestamp("created_at"),

@@ -22,6 +22,7 @@ import {
   seedJobsOptionsState,
 } from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import { decodeJobsViewerRole } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   ensureActiveOrganizationId,
@@ -86,7 +87,7 @@ export async function loadJobsRouteData(
     list,
     options,
     viewer: {
-      role: normalizeJobsViewerRole(activeRole.role),
+      role: decodeJobsViewerRole(activeRole.role),
       userId: resolvedOrganizationAccess.currentUserId,
     } satisfies JobsViewer,
   };
@@ -153,12 +154,4 @@ function JobsRoute() {
       <Outlet />
     </JobsRouteContent>
   );
-}
-
-function normalizeJobsViewerRole(role: string): JobsViewer["role"] {
-  if (role === "owner" || role === "admin" || role === "member") {
-    return role;
-  }
-
-  throw new Error("Organization member role is not supported by Jobs.");
 }

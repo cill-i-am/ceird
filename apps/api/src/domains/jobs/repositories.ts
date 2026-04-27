@@ -108,7 +108,7 @@ interface WorkItemVisitRow {
   readonly id: string;
   readonly note: string;
   readonly organization_id: string;
-  readonly visit_date: Date;
+  readonly visit_date: Date | string;
   readonly work_item_id: string;
 }
 
@@ -882,7 +882,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               id: decodeVisitId(randomUUID()),
               note: input.note,
               organization_id: input.organizationId,
-              visit_date: parseIsoDate(input.visitDate),
+              visit_date: input.visitDate,
               work_item_id: input.workItemId,
             })
             .returning("*")}
@@ -1184,7 +1184,9 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.id as ContactId | undefined);
+        return Option.fromNullable(rows[0]?.id).pipe(
+          Option.map(decodeContactId)
+        );
       });
 
       const create = Effect.fn("ContactsRepository.create")(function* (
@@ -1212,7 +1214,7 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           insert into contacts ${sql.insert(values).returning("id")}
         `;
 
-        return getRequiredRow(rows, "inserted contact id").id as ContactId;
+        return decodeContactId(getRequiredRow(rows, "inserted contact id").id);
       });
 
       const listOptions = Effect.fn("ContactsRepository.listOptions")(
@@ -1344,14 +1346,13 @@ function mapJobContactOptions(
       contacts.set(row.id, {
         id: row.id,
         name: row.name,
-        siteIds:
-          row.site_id === null ? [] : [decodeSiteId(row.site_id as SiteId)],
+        siteIds: row.site_id === null ? [] : [decodeSiteId(row.site_id)],
       });
       continue;
     }
 
     if (row.site_id !== null) {
-      existing.siteIds.push(decodeSiteId(row.site_id as SiteId));
+      existing.siteIds.push(decodeSiteId(row.site_id));
     }
   }
 
@@ -1387,7 +1388,7 @@ function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
     durationMinutes: row.duration_minutes,
     id: row.id,
     note: row.note,
-    visitDate: row.visit_date.toISOString().slice(0, 10),
+    visitDate: formatPgDate(row.visit_date),
     workItemId: row.work_item_id,
   });
 }
@@ -1441,12 +1442,20 @@ function getRequiredRow<Value>(rows: readonly Value[], label: string): Value {
   return row;
 }
 
-function parseIsoDate(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
-}
-
 function parseIsoDateTime(value: string): Date {
   return new Date(value);
+}
+
+function formatPgDate(value: Date | string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function clampJobListLimit(limit: number): number {

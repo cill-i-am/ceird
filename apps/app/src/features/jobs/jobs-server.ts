@@ -31,10 +31,10 @@ const listCurrentServerJobsIsomorphic = createIsomorphicFn()
 
 const getCurrentServerJobDetailIsomorphic = createIsomorphicFn()
   .server((workItemId: WorkItemIdType) =>
-    getCurrentServerJobDetailDirect(workItemId as WorkItemIdType)
+    getCurrentServerJobDetailDirect(workItemId)
   )
   .client((workItemId: WorkItemIdType) =>
-    getCurrentBrowserJobDetail(workItemId as WorkItemIdType)
+    getCurrentBrowserJobDetail(workItemId)
   );
 
 const getCurrentServerJobOptionsIsomorphic = createIsomorphicFn()

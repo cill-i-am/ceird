@@ -1959,7 +1959,7 @@
         },
         "visit_date": {
           "name": "visit_date",
-          "type": "timestamp with time zone",
+          "type": "date",
           "primaryKey": false,
           "notNull": true
         },

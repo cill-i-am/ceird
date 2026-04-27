@@ -33,6 +33,14 @@ export function hasJobsElevatedAccess(role: JobsViewerRole): boolean {
   return role === "owner" || role === "admin";
 }
 
+export function decodeJobsViewerRole(role: string): JobsViewerRole {
+  if (role === "owner" || role === "admin" || role === "member") {
+    return role;
+  }
+
+  throw new Error("Organization member role is not supported by Jobs.");
+}
+
 export function hasAssignedJobAccess(
   viewer: JobsViewer,
   assigneeId: string | undefined
