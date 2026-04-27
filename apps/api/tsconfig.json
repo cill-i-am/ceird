@@ -14,5 +14,5 @@
     "types": ["node", "vitest/globals"],
     "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }
