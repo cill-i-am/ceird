@@ -156,28 +156,7 @@ export function reconcileSandboxRecord(
   record: SandboxRecord,
   options: ReconcileSandboxRecordOptions
 ): SandboxRecord {
-  const missingResources: MissingSandboxResource[] = [];
-
-  if (
-    !options.servicesPresent.has("app") ||
-    !options.portsInUse.has(record.ports.app)
-  ) {
-    missingResources.push("app");
-  }
-
-  if (
-    !options.servicesPresent.has("api") ||
-    !options.portsInUse.has(record.ports.api)
-  ) {
-    missingResources.push("api");
-  }
-
-  if (
-    !options.servicesPresent.has("postgres") ||
-    !options.portsInUse.has(record.ports.postgres)
-  ) {
-    missingResources.push("postgres");
-  }
+  const missingResources = collectMissingResources(record, options);
 
   return {
     ...record,
@@ -191,6 +170,17 @@ export function reconcileSandboxRecord(
       updatedAt: options.now,
     },
   };
+}
+
+function collectMissingResources(
+  record: SandboxRecord,
+  options: ReconcileSandboxRecordOptions
+): readonly MissingSandboxResource[] {
+  return (["app", "api", "postgres"] as const).filter(
+    (resource) =>
+      !options.servicesPresent.has(resource) ||
+      !options.portsInUse.has(record.ports[resource])
+  );
 }
 
 export function makeHealthPayload(

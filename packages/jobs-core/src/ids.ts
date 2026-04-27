@@ -5,7 +5,7 @@ import { Schema } from "effect";
 export const OrganizationId = IdentityOrganizationId;
 export type OrganizationId = OrganizationIdType;
 
-export const UserId = Schema.String.pipe(
+export const UserId = Schema.NonEmptyString.pipe(
   Schema.brand("@task-tracker/jobs-core/UserId")
 );
 export type UserId = Schema.Schema.Type<typeof UserId>;

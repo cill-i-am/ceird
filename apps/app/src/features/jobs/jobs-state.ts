@@ -17,11 +17,10 @@ import type {
   SiteIdType,
   UserIdType,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import { makeBrowserJobsClient, provideBrowserJobsHttp } from "./jobs-client";
+import { runBrowserJobsRequest } from "./jobs-client";
 import type { AppJobsError } from "./jobs-errors";
-import { normalizeJobsError } from "./jobs-errors";
 
 export type JobsStatusFilter = "active" | "all" | JobStatus;
 
@@ -227,36 +226,8 @@ export const createJobMutationAtom = Atom.fn<
       Effect.gen(function* () {
         const shouldRefreshOptions =
           input.site?.kind === "create" || input.contact?.kind === "create";
-        const listResult = yield* listAllBrowserJobs().pipe(Effect.either);
-        const optionsResult = shouldRefreshOptions
-          ? yield* getBrowserJobOptions().pipe(Effect.either)
-          : undefined;
-        const currentListState = get(jobsListStateAtom);
-        const currentOptionsState = get(jobsOptionsStateAtom);
-
-        if (listResult._tag === "Right") {
-          const list = listResult.right;
-          get.set(jobsListStateAtom, {
-            items: list.items,
-            nextCursor: list.nextCursor,
-            organizationId: currentListState.organizationId,
-          });
-        } else {
-          get.set(jobsListStateAtom, {
-            items: upsertJobListItem(currentListState.items, createdJob),
-            nextCursor: currentListState.nextCursor,
-            organizationId: currentListState.organizationId,
-          });
-        }
-
-        if (optionsResult?._tag === "Right") {
-          const options = optionsResult.right;
-
-          get.set(jobsOptionsStateAtom, {
-            data: options,
-            organizationId: currentOptionsState.organizationId,
-          });
-        }
+        yield* refreshJobListOrUpsert(get, createdJob);
+        yield* refreshJobOptionsWhen(get, shouldRefreshOptions);
 
         get.set(jobsNoticeAtom, {
           kind: "created",
@@ -308,44 +279,79 @@ export function deriveContactsForSite(
 }
 
 function listAllBrowserJobs() {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-    const items: JobListItem[] = [];
-    let cursor: JobListQuery["cursor"];
+  return runBrowserJobsRequest((client) =>
+    Effect.gen(function* () {
+      const items: JobListItem[] = [];
+      let cursor: JobListQuery["cursor"];
 
-    while (true) {
-      const page: JobListResponse = yield* client.jobs.listJobs({
-        urlParams: cursor ? { cursor } : {},
-      });
+      while (true) {
+        const page: JobListResponse = yield* client.jobs.listJobs({
+          urlParams: cursor ? { cursor } : {},
+        });
 
-      items.push(...page.items);
+        items.push(...page.items);
 
-      if (!page.nextCursor) {
-        return {
-          items,
-          nextCursor: undefined,
-        } satisfies JobListResponse;
+        if (!page.nextCursor) {
+          return {
+            items,
+            nextCursor: undefined,
+          } satisfies JobListResponse;
+        }
+
+        cursor = page.nextCursor;
       }
-
-      cursor = page.nextCursor;
-    }
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function getBrowserJobOptions() {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.getJobOptions();
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+  return runBrowserJobsRequest((client) => client.jobs.getJobOptions());
 }
 
 function createBrowserJob(input: CreateJobInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
+  return runBrowserJobsRequest((client) =>
+    client.jobs.createJob({ payload: input })
+  );
+}
 
-    return yield* client.jobs.createJob({ payload: input });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+function refreshJobListOrUpsert(get: Atom.FnContext, job: CreateJobResponse) {
+  return Effect.gen(function* () {
+    const listResult = yield* listAllBrowserJobs().pipe(Effect.option);
+    const currentListState = get(jobsListStateAtom);
+
+    const nextListState = Option.match(listResult, {
+      onNone: (): JobsListState => ({
+        items: upsertJobListItem(currentListState.items, job),
+        nextCursor: currentListState.nextCursor,
+        organizationId: currentListState.organizationId,
+      }),
+      onSome: (list): JobsListState => ({
+        items: list.items,
+        nextCursor: list.nextCursor,
+        organizationId: currentListState.organizationId,
+      }),
+    });
+
+    get.set(jobsListStateAtom, nextListState);
+  });
+}
+
+function refreshJobOptionsWhen(get: Atom.FnContext, shouldRefresh: boolean) {
+  return shouldRefresh
+    ? getBrowserJobOptions().pipe(
+        Effect.tap((options) =>
+          Effect.sync(() => {
+            const currentOptionsState = get(jobsOptionsStateAtom);
+
+            get.set(jobsOptionsStateAtom, {
+              data: options,
+              organizationId: currentOptionsState.organizationId,
+            });
+          })
+        ),
+        Effect.ignore
+      )
+    : Effect.void;
 }
 
 function isActiveStatus(status: JobStatus) {

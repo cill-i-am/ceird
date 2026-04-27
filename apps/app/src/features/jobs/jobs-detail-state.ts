@@ -15,11 +15,10 @@ import type {
   TransitionJobResponse,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import { makeBrowserJobsClient, provideBrowserJobsHttp } from "./jobs-client";
+import { runBrowserJobsRequest } from "./jobs-client";
 import type { AppJobsError } from "./jobs-errors";
-import { normalizeJobsError } from "./jobs-errors";
 import { jobsListStateAtom, upsertJobListItem } from "./jobs-state";
 
 export const jobDetailStateAtomFamily = Atom.family(
@@ -48,16 +47,7 @@ export const transitionJobMutationAtomFamily = Atom.family(
     Atom.fn<AppJobsError, TransitionJobResponse, TransitionJobInput>(
       (input, get) =>
         transitionBrowserJob(workItemId, input).pipe(
-          Effect.tap((job) =>
-            Effect.gen(function* () {
-              yield* Effect.sync(() => {
-                updateJobDetailJob(get, workItemId, job);
-                updateJobsListJob(get, job);
-              });
-
-              yield* refreshJobDetailIfPossible(get, workItemId);
-            })
-          )
+          Effect.tap((job) => syncChangedJob(get, workItemId, job))
         )
     )
 );
@@ -66,16 +56,7 @@ export const reopenJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, JobDetailResponse["job"]>((_, get) =>
       reopenBrowserJob(workItemId).pipe(
-        Effect.tap((job) =>
-          Effect.gen(function* () {
-            yield* Effect.sync(() => {
-              updateJobDetailJob(get, workItemId, job);
-              updateJobsListJob(get, job);
-            });
-
-            yield* refreshJobDetailIfPossible(get, workItemId);
-          })
-        )
+        Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
     )
 );
@@ -84,16 +65,7 @@ export const patchJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, PatchJobResponse, PatchJobInput>((input, get) =>
       patchBrowserJob(workItemId, input).pipe(
-        Effect.tap((job) =>
-          Effect.gen(function* () {
-            yield* Effect.sync(() => {
-              updateJobDetailJob(get, workItemId, job);
-              updateJobsListJob(get, job);
-            });
-
-            yield* refreshJobDetailIfPossible(get, workItemId);
-          })
-        )
+        Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
     )
 );
@@ -134,76 +106,79 @@ export const addJobVisitMutationAtomFamily = Atom.family(
 );
 
 function getBrowserJobDetail(workItemId: WorkItemIdType) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.getJobDetail({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.getJobDetail({
       path: { workItemId },
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function transitionBrowserJob(
   workItemId: WorkItemIdType,
   input: TransitionJobInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.transitionJob({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.transitionJob({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function reopenBrowserJob(workItemId: WorkItemIdType) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.reopenJob({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.reopenJob({
       path: { workItemId },
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function patchBrowserJob(workItemId: WorkItemIdType, input: PatchJobInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.patchJob({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.patchJob({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function addBrowserJobComment(
   workItemId: WorkItemIdType,
   input: AddJobCommentInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.addJobComment({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.addJobComment({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function addBrowserJobVisit(
   workItemId: WorkItemIdType,
   input: AddJobVisitInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.addJobVisit({
+  return runBrowserJobsRequest((client) =>
+    client.jobs.addJobVisit({
       path: { workItemId },
       payload: input,
+    })
+  );
+}
+
+function syncChangedJob(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  job: Job
+) {
+  return Effect.gen(function* () {
+    yield* Effect.sync(() => {
+      updateJobDetailJob(get, workItemId, job);
+      updateJobsListJob(get, job);
     });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+
+    yield* refreshJobDetailIfPossible(get, workItemId);
+  });
 }
 
 function updateJobDetailJob(
@@ -238,12 +213,14 @@ function refreshJobDetailIfPossible(
   workItemId: WorkItemIdType
 ) {
   return getBrowserJobDetail(workItemId).pipe(
-    Effect.either,
-    Effect.tap((detailResult) =>
-      Effect.sync(() => {
-        if (detailResult._tag === "Right") {
-          get.set(jobDetailStateAtomFamily(workItemId), detailResult.right);
-        }
+    Effect.option,
+    Effect.tap((detail) =>
+      Option.match(detail, {
+        onNone: () => Effect.void,
+        onSome: (freshDetail) =>
+          Effect.sync(() => {
+            get.set(jobDetailStateAtomFamily(workItemId), freshDetail);
+          }),
       })
     )
   );

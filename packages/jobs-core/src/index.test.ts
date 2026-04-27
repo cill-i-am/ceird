@@ -21,6 +21,7 @@ import {
   SitesOptionsResponseSchema,
   SitesApiGroup,
   SiteGeocodingFailedError,
+  UserId,
   VisitDurationIncrementError,
   WorkItemId,
 } from "./index.js";
@@ -32,6 +33,12 @@ describe("jobs-core", () => {
     );
     expect(ParseResult.decodeUnknownSync(JobPrioritySchema)("urgent")).toBe(
       "urgent"
+    );
+  }, 5000);
+
+  it("rejects empty user ids at DTO boundaries", () => {
+    expect(() => ParseResult.decodeUnknownSync(UserId)("")).toThrow(
+      /Expected a non empty string/
     );
   }, 5000);
 

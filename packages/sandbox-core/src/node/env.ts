@@ -50,11 +50,7 @@ export const loadSandboxSharedEnvironment = Effect.fn(
 
   const merged = {
     ...fileEnv,
-    ...Object.fromEntries(
-      Object.entries(input.processEnv ?? {}).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string"
-      )
-    ),
+    ...pickStringValues(input.processEnv ?? {}),
   };
 
   const selectedEnvironment = Object.fromEntries(
@@ -140,15 +136,21 @@ function formatParseError(parseError: ParseResult.ParseError) {
 }
 
 function parseEnvironmentFile(content: string): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(parseEnv(content)).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string"
-    )
-  );
+  return pickStringValues(parseEnv(content));
 }
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function pickStringValues(
+  input: Record<string, string | undefined>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(input).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
+  );
 }
 
 export type SharedSandboxEnvironmentInput = SharedSandboxEnvironmentType;

@@ -78,6 +78,16 @@ export function provideBrowserJobsHttp<A, E, R>(
   return effect.pipe(Effect.provide(BrowserJobsHttpClientLive));
 }
 
+export function runBrowserJobsRequest<Response>(
+  execute: (client: JobsApiClient) => Effect.Effect<Response, unknown>
+) {
+  return Effect.gen(function* () {
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* execute(client);
+  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+}
+
 export async function runJobsClient<Response>(
   options: JobsClientOptions,
   execute: (client: JobsApiClient) => Effect.Effect<Response, unknown>

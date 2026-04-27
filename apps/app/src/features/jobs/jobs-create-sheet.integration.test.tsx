@@ -11,6 +11,7 @@ import type {
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
+import type * as EffectPackage from "effect";
 import type { ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
@@ -105,10 +106,21 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock("./jobs-client", () => ({
-  makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-  provideBrowserJobsHttp: (effect: unknown) => effect,
-}));
+vi.mock("./jobs-client", async () => {
+  const { Effect: EffectModule } =
+    await vi.importActual<typeof EffectPackage>("effect");
+
+  return {
+    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
+    provideBrowserJobsHttp: (effect: unknown) => effect,
+    runBrowserJobsRequest: (execute: (client: unknown) => unknown) =>
+      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+        EffectModule.flatMap(
+          (client) => execute(client) as Effect.Effect<unknown, unknown>
+        )
+      ),
+  };
+});
 
 describe("jobs create sheet integration", () => {
   beforeEach(() => {

@@ -11,14 +11,10 @@ import type {
   UpdateSiteInput,
   UpdateSiteResponse,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import {
-  makeBrowserJobsClient,
-  provideBrowserJobsHttp,
-} from "#/features/jobs/jobs-client";
+import { runBrowserJobsRequest } from "#/features/jobs/jobs-client";
 import type { AppJobsError } from "#/features/jobs/jobs-errors";
-import { normalizeJobsError } from "#/features/jobs/jobs-errors";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
 export interface SitesNotice {
@@ -38,22 +34,7 @@ export const createSiteMutationAtom = Atom.fn<
   createBrowserSite(input).pipe(
     Effect.tap((createdSite) =>
       Effect.gen(function* () {
-        const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
-          Effect.either
-        );
-        const currentOptionsState = get(jobsOptionsStateAtom);
-        const nextOptions =
-          siteOptionsResult._tag === "Right"
-            ? mergeSiteOptions(
-                currentOptionsState.data,
-                siteOptionsResult.right
-              )
-            : upsertSiteOption(currentOptionsState.data, createdSite);
-
-        get.set(jobsOptionsStateAtom, {
-          data: nextOptions,
-          organizationId: currentOptionsState.organizationId,
-        });
+        yield* refreshSiteOptionsOrUpsert(get, createdSite);
 
         get.set(sitesNoticeAtom, {
           kind: "created",
@@ -69,22 +50,7 @@ export const updateSiteMutationAtomFamily = Atom.family((siteId: SiteIdType) =>
     updateBrowserSite(siteId, input).pipe(
       Effect.tap((updatedSite) =>
         Effect.gen(function* () {
-          const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
-            Effect.either
-          );
-          const currentOptionsState = get(jobsOptionsStateAtom);
-          const nextOptions =
-            siteOptionsResult._tag === "Right"
-              ? mergeSiteOptions(
-                  currentOptionsState.data,
-                  siteOptionsResult.right
-                )
-              : upsertSiteOption(currentOptionsState.data, updatedSite);
-
-          get.set(jobsOptionsStateAtom, {
-            data: nextOptions,
-            organizationId: currentOptionsState.organizationId,
-          });
+          yield* refreshSiteOptionsOrUpsert(get, updatedSite);
 
           get.set(sitesNoticeAtom, {
             kind: "updated",
@@ -124,30 +90,39 @@ function mergeSiteOptions(
 }
 
 function createBrowserSite(input: CreateSiteInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.sites.createSite({ payload: input });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+  return runBrowserJobsRequest((client) =>
+    client.sites.createSite({ payload: input })
+  );
 }
 
 function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.sites.updateSite({
+  return runBrowserJobsRequest((client) =>
+    client.sites.updateSite({
       path: { siteId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function getBrowserSiteOptions() {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
+  return runBrowserJobsRequest((client) => client.sites.getSiteOptions());
+}
 
-    return yield* client.sites.getSiteOptions();
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+function refreshSiteOptionsOrUpsert(get: Atom.FnContext, site: JobSiteOption) {
+  return Effect.gen(function* () {
+    const siteOptions = yield* getBrowserSiteOptions().pipe(Effect.option);
+    const currentOptionsState = get(jobsOptionsStateAtom);
+    const nextOptions = Option.match(siteOptions, {
+      onNone: () => upsertSiteOption(currentOptionsState.data, site),
+      onSome: (freshOptions) =>
+        mergeSiteOptions(currentOptionsState.data, freshOptions),
+    });
+
+    get.set(jobsOptionsStateAtom, {
+      data: nextOptions,
+      organizationId: currentOptionsState.organizationId,
+    });
+  });
 }
 
 function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {

@@ -35,15 +35,10 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       const recordPatched = Effect.fn("JobsActivityRecorder.recordPatched")(
         function* (actor: JobsActor, before: Job, after: Job) {
-          const events = collectPatchEvents(before, after);
-
-          yield* Effect.forEach(events, (payload) =>
-            repository.addActivity({
-              actorUserId: actor.userId,
-              organizationId: actor.organizationId,
-              payload,
-              workItemId: before.id,
-            })
+          yield* recordActivities(
+            actor,
+            before.id,
+            collectPatchEvents(before, after)
           );
         }
       );
@@ -51,14 +46,26 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordTransition = Effect.fn(
         "JobsActivityRecorder.recordTransition"
       )(function* (actor: JobsActor, before: Job, after: Job) {
-        const events = collectTransitionEvents(before, after);
+        yield* recordActivities(
+          actor,
+          before.id,
+          collectTransitionEvents(before, after)
+        );
+      });
 
+      const recordActivities = Effect.fn(
+        "JobsActivityRecorder.recordActivities"
+      )(function* (
+        actor: JobsActor,
+        workItemId: Job["id"],
+        events: readonly JobActivityPayload[]
+      ) {
         yield* Effect.forEach(events, (payload) =>
           repository.addActivity({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
             payload,
-            workItemId: before.id,
+            workItemId,
           })
         );
       });
