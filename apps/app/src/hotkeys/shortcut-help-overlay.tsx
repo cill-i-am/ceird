@@ -14,21 +14,29 @@ import {
 
 import { ShortcutHint } from "./hotkey-display";
 import { HOTKEYS, HOTKEY_GROUPS } from "./hotkey-registry";
-import type { HotkeyDefinition, HotkeyScope } from "./hotkey-registry";
+import type {
+  HotkeyDefinition,
+  HotkeyId,
+  HotkeyScope,
+} from "./hotkey-registry";
 import { useAppHotkey } from "./use-app-hotkey";
 
 const SHORTCUTS = Object.values(HOTKEYS);
 
+interface AppHotkeyRegistrationMeta {
+  readonly appHotkeyId?: HotkeyId;
+}
+
 function getShortcutsForScopes(
   activeScopes: readonly HotkeyScope[],
-  registeredShortcutHotkeys: ReadonlySet<string>
+  registeredShortcutIds: ReadonlySet<HotkeyId>
 ) {
   const activeScopeSet = new Set<HotkeyScope>(activeScopes);
 
   return SHORTCUTS.filter(
     (shortcut) =>
       activeScopeSet.has(shortcut.scope) &&
-      registeredShortcutHotkeys.has(shortcut.hotkey)
+      registeredShortcutIds.has(shortcut.id as HotkeyId)
   );
 }
 
@@ -59,15 +67,21 @@ export function ShortcutHelpOverlay({
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
   const { hotkeys, sequences } = useHotkeyRegistrations();
-  const registeredShortcutHotkeys = React.useMemo(() => {
-    const hotkeySet = new Set<string>();
+  const registeredShortcutIds = React.useMemo(() => {
+    const idSet = new Set<HotkeyId>();
 
     for (const registration of hotkeys) {
       if (registration.options.enabled === false) {
         continue;
       }
 
-      hotkeySet.add(registration.hotkey);
+      const meta = registration.options.meta as
+        | AppHotkeyRegistrationMeta
+        | undefined;
+
+      if (meta?.appHotkeyId) {
+        idSet.add(meta.appHotkeyId);
+      }
     }
 
     for (const registration of sequences) {
@@ -75,13 +89,19 @@ export function ShortcutHelpOverlay({
         continue;
       }
 
-      hotkeySet.add(registration.sequence.join(" "));
+      const meta = registration.options.meta as
+        | AppHotkeyRegistrationMeta
+        | undefined;
+
+      if (meta?.appHotkeyId) {
+        idSet.add(meta.appHotkeyId);
+      }
     }
 
-    return hotkeySet;
+    return idSet;
   }, [hotkeys, sequences]);
   const shortcutGroups = groupShortcuts(
-    getShortcutsForScopes(activeScopes, registeredShortcutHotkeys)
+    getShortcutsForScopes(activeScopes, registeredShortcutIds)
   );
 
   return (

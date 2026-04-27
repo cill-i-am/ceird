@@ -1,6 +1,7 @@
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import type {
   HotkeyCallback,
+  HotkeyMeta,
   HotkeySequence,
   RegisterableHotkey,
   UseHotkeyOptions,
@@ -14,11 +15,13 @@ function splitHotkeySequence(hotkey: string) {
   return hotkey.split(/\s+/).filter(Boolean);
 }
 
-function getHotkeyMeta(id: HotkeyId) {
+function getHotkeyMeta(id: HotkeyId, meta?: HotkeyMeta) {
   const definition = getHotkeyDefinition(id);
 
   return {
     description: definition.when,
+    ...meta,
+    appHotkeyId: id,
     name: definition.label,
   };
 }
@@ -38,10 +41,7 @@ export function useAppHotkey(
     preventDefault: true,
     stopPropagation: false,
     ...options,
-    meta: {
-      ...getHotkeyMeta(id),
-      ...options.meta,
-    },
+    meta: getHotkeyMeta(id, options.meta),
   });
 }
 
@@ -59,10 +59,7 @@ export function useAppHotkeySequence(
       preventDefault: true,
       stopPropagation: false,
       ...options,
-      meta: {
-        ...getHotkeyMeta(id),
-        ...options.meta,
-      },
+      meta: getHotkeyMeta(id, options.meta),
     }
   );
 }

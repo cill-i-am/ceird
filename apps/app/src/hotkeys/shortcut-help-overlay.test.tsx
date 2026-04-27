@@ -112,6 +112,26 @@ describe("shortcut help overlay", () => {
       within(dialog).queryByText("Toggle sidebar")
     ).not.toBeInTheDocument();
   }, 1000);
+
+  it("does not treat a same-key shortcut in another scope as registered", async () => {
+    const user = userEvent.setup();
+
+    renderShortcutHelpOverlay(
+      ["global", "jobs", "job-create"],
+      <RegisteredShortcut id="jobCreateContact" />
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+
+    expect(within(dialog).getByText("Open contact select")).toBeVisible();
+    expect(within(dialog).queryByText("Clear filters")).not.toBeInTheDocument();
+  }, 1000);
 });
 
 describe("shortcut intro notice", () => {
@@ -128,9 +148,9 @@ describe("shortcut intro notice", () => {
 
     render(<ShortcutIntroNotice />);
 
-    await expect(screen.findByText(
-        "Keyboard shortcuts are available. Press ? anytime."
-      )).resolves.toBeVisible();
+    await expect(
+      screen.findByText("Keyboard shortcuts are available. Press ? anytime.")
+    ).resolves.toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /got it/i }));
 
