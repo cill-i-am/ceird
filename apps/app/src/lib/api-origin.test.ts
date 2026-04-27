@@ -1,8 +1,20 @@
 import { readConfiguredServerApiOrigin, resolveApiOrigin } from "./api-origin";
 
 describe("api origin resolution", () => {
+  let originalApiOrigin: string | undefined;
+
+  beforeEach(() => {
+    originalApiOrigin = process.env.API_ORIGIN;
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (originalApiOrigin === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.API_ORIGIN;
+    } else {
+      process.env.API_ORIGIN = originalApiOrigin;
+    }
   });
 
   it("prefers an injected API origin when one is provided", () => {
@@ -53,13 +65,14 @@ describe("api origin resolution", () => {
   }, 1000);
 
   it("reads the injected server API origin", () => {
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
 
     expect(readConfiguredServerApiOrigin()).toBe("http://tt-sbx-api:4301");
   }, 1000);
 
   it("returns undefined when no server API origin is injected", () => {
-    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete process.env.API_ORIGIN;
 
     expect(readConfiguredServerApiOrigin()).toBeUndefined();
   }, 1000);

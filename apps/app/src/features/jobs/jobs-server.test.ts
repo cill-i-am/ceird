@@ -51,17 +51,29 @@ const optionsResponse: JobOptionsResponse = {
 };
 
 describe("server jobs helpers", () => {
+  let originalApiOrigin: string | undefined;
+
+  beforeEach(() => {
+    originalApiOrigin = process.env.API_ORIGIN;
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    if (originalApiOrigin === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.API_ORIGIN;
+    } else {
+      process.env.API_ORIGIN = originalApiOrigin;
+    }
   });
 
   it("forwards the current auth cookie when listing a single jobs page", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -86,7 +98,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
     const [firstItem] = listResponse.items;
 
     if (!firstItem) {
@@ -136,12 +148,12 @@ describe("server jobs helpers", () => {
     });
   }, 1000);
 
-  it("fails closed when no injected API origin exists for server jobs requests", async () => {
+  it("fails closed when no configured API origin exists for server jobs requests", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete process.env.API_ORIGIN;
 
     await expect(
       getCurrentServerJobDetail(
@@ -173,7 +185,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

@@ -35,10 +35,22 @@ vi.mock(import("@tanstack/react-start/server"), () => ({
 }));
 
 describe("server session lookup", () => {
+  let originalApiOrigin: string | undefined;
+
+  beforeEach(() => {
+    originalApiOrigin = process.env.API_ORIGIN;
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    if (originalApiOrigin === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.API_ORIGIN;
+    } else {
+      process.env.API_ORIGIN = originalApiOrigin;
+    }
   });
 
   it("returns null when the incoming request has no auth cookie", async () => {
@@ -75,7 +87,7 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -107,7 +119,7 @@ describe("server session lookup", () => {
         return "https";
       }
     });
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://127.0.0.1:3001");
+    process.env.API_ORIGIN = "http://127.0.0.1:3001";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -133,7 +145,8 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete process.env.API_ORIGIN;
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     await expect(getCurrentServerSession()).resolves.toBeNull();
