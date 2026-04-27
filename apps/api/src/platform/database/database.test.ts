@@ -7,8 +7,8 @@ import { authSchema } from "../../domains/identity/authentication/schema.js";
 import {
   AppDatabase,
   AppEffectDrizzle,
-  AppEffectDrizzleLive,
   AppEffectSqlLive,
+  makeAppDatabaseRuntimeLive,
 } from "./database.js";
 
 const IMPOSSIBLE_DATABASE_URL =
@@ -38,22 +38,30 @@ describe("shared app database effect layers", () => {
     expect(databaseUrl).toBe(SHARED_POOL_DATABASE_URL);
   }, 10_000);
 
-  it("builds the Effect Drizzle layer from the shared AppDatabase runtime", async () => {
-    const service = await Effect.runPromise(
+  it("builds the runtime database layers from the shared AppDatabase layer", async () => {
+    const pool = makeTestPool();
+    const services = await Effect.runPromise(
       Effect.scoped(
-        AppEffectDrizzle.pipe(
+        Effect.all({
+          appDatabase: AppDatabase,
+          drizzle: AppEffectDrizzle,
+          sqlClient: PgClient.PgClient,
+        }).pipe(
           Effect.provide(
-            AppEffectDrizzleLive.pipe(
-              Layer.provideMerge(AppEffectSqlLive),
-              Layer.provide(makeTestAppDatabaseLayer(makeTestPool()))
-            )
+            makeAppDatabaseRuntimeLive(makeTestAppDatabaseLayer(pool))
           ),
           Effect.withConfigProvider(makeConfigProvider())
         )
       )
     );
 
-    expect(service.db).toBeDefined();
+    const databaseUrl = services.sqlClient.config.url
+      ? Redacted.value(services.sqlClient.config.url)
+      : undefined;
+
+    expect(services.appDatabase.pool).toBe(pool);
+    expect(services.drizzle.db).toBeDefined();
+    expect(databaseUrl).toBe(SHARED_POOL_DATABASE_URL);
   }, 10_000);
 });
 

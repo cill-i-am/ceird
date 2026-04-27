@@ -3,7 +3,6 @@ import { decodeOrganizationId } from "@task-tracker/identity-core";
 import {
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
-  listCurrentServerOrganizations,
   setCurrentServerActiveOrganization,
 } from "./organization-server";
 
@@ -57,7 +56,7 @@ describe("server organization lookup", () => {
     vi.unstubAllGlobals();
   });
 
-  it("forwards the current auth cookie to the resolved auth origin", async () => {
+  it("forwards the current auth cookie when listing organizations", async () => {
     const organizations: Organization[] = [
       { id: "org_123", name: "Fallback Org", slug: "fallback-org" },
     ];
@@ -71,7 +70,7 @@ describe("server organization lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(organizations));
 
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual(
+    await expect(getCurrentServerOrganizations()).resolves.toStrictEqual(
       organizations
     );
     expect(fetchMock).toHaveBeenCalledWith(
@@ -83,50 +82,6 @@ describe("server organization lookup", () => {
         },
       }
     );
-  }, 1000);
-
-  it("returns [] from listCurrentServerOrganizations when the request has no auth cookie", async () => {
-    mockedGetRequestHeader.mockImplementation(() => "");
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  }, 1000);
-
-  it("returns [] from listCurrentServerOrganizations when auth base URL cannot be resolved", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  }, 1000);
-
-  it("returns [] from listCurrentServerOrganizations on non-ok responses", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("boom", { status: 503, statusText: "Service Unavailable" })
-    );
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
-  }, 1000);
-
-  it("returns [] from listCurrentServerOrganizations when fetch throws", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
-
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
   }, 1000);
 
   it("forwards the current auth cookie to the resolved auth origin for strict session lookup", async () => {
@@ -233,17 +188,6 @@ describe("server organization lookup", () => {
     });
   }, 1000);
 
-  it("fails closed for lenient SSR organization reads when the configured server API origin is missing", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", null);
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  }, 1000);
-
   it("returns null when strict session lookup positively resolves to no session", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
@@ -340,19 +284,6 @@ describe("server organization lookup", () => {
     expect((failure as Error).message).toContain(
       "Organization lookup returned an invalid payload."
     );
-  }, 1000);
-
-  it("returns [] when the lenient organization list payload has invalid items", async () => {
-    mockedGetRequestHeader.mockImplementation((name) =>
-      name === "cookie" ? "better-auth.session_token=session-token" : undefined
-    );
-    vi.stubGlobal("__SERVER_API_ORIGIN__", "http://tt-sbx-api:4301");
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json([{ id: 123, name: "Acme", slug: "acme" }])
-    );
-
-    await expect(listCurrentServerOrganizations()).resolves.toStrictEqual([]);
   }, 1000);
 
   it("posts the current auth cookie when syncing the active organization on the server", async () => {

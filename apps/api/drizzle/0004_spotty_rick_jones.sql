@@ -93,7 +93,7 @@ CREATE TABLE "work_item_visits" (
 	"work_item_id" uuid NOT NULL,
 	"organization_id" text NOT NULL,
 	"author_user_id" text NOT NULL,
-	"visit_date" timestamp with time zone NOT NULL,
+	"visit_date" date NOT NULL,
 	"duration_minutes" integer NOT NULL,
 	"note" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

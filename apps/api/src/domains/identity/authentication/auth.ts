@@ -16,10 +16,7 @@ import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
 
-import {
-  AppDatabase,
-  AppDatabaseLive,
-} from "../../../platform/database/database.js";
+import { AppDatabase } from "../../../platform/database/database.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import { AuthEmailPromiseBridge } from "./auth-email-promise-bridge.js";
 import type {
@@ -519,7 +516,7 @@ function withAuthenticationCors(
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",
   {
-    dependencies: [AppDatabaseLive, AuthEmailPromiseBridge.Default],
+    dependencies: [AuthEmailPromiseBridge.Default],
     effect: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
@@ -589,4 +586,4 @@ export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
       }
     );
   })
-).pipe(Layer.provide(Authentication.Default), Layer.provide(AppDatabaseLive));
+).pipe(Layer.provide(Authentication.Default));

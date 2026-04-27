@@ -89,27 +89,6 @@ export const getCurrentServerOrganizationSession = createServerOnlyFn(
   }
 );
 
-export const listCurrentServerOrganizations = createServerOnlyFn(async () => {
-  const authRequest = readServerAuthRequest();
-
-  if (!authRequest) {
-    return [] as const;
-  }
-
-  try {
-    const response = await fetchOrganizations(authRequest);
-
-    if (!response.ok) {
-      return [] as const;
-    }
-
-    const organizations = (await response.json()) as unknown;
-    return decodeOrganizationSummariesOrEmpty(organizations);
-  } catch {
-    return [] as const;
-  }
-});
-
 export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   const authRequest = readServerAuthRequestStrict();
   const response = await fetchOrganizations(authRequest);
@@ -209,22 +188,6 @@ function readServerSessionRequest(): ServerAuthRequest | null {
   };
 }
 
-function readServerAuthRequest(): ServerAuthRequest | null {
-  const cookie = getRequestHeader("cookie");
-  const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders();
-
-  if (!cookie || !authBaseURL) {
-    return null;
-  }
-
-  return {
-    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
-    authBaseURL,
-    forwardedHeaders,
-  };
-}
-
 function readServerAuthRequestStrict(): ServerAuthRequest {
   const cookie = getRequestHeader("cookie");
 
@@ -265,20 +228,6 @@ async function fetchOrganizations(authRequest: ServerAuthRequest) {
       },
     }
   );
-}
-
-function decodeOrganizationSummariesOrEmpty(
-  organizations: unknown
-): readonly OrganizationSummary[] {
-  if (!organizations) {
-    return [];
-  }
-
-  try {
-    return decodeOrganizationSummaryList(organizations);
-  } catch {
-    return [];
-  }
 }
 
 function decodeOrganizationSummariesStrict(

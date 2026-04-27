@@ -628,7 +628,7 @@ function resolveCreateContactId(
   contactsRepository: ContactsRepository
 ) {
   if (input === undefined) {
-    return Effect.sync(() => input as ContactId | undefined);
+    return Effect.succeed<ContactId | undefined>(input);
   }
 
   if (input.kind === "existing") {
@@ -650,7 +650,7 @@ function resolveCreateSiteId(
   sitesRepository: SitesRepository
 ) {
   if (input === undefined) {
-    return Effect.sync(() => input as SiteId | undefined);
+    return Effect.succeed<SiteId | undefined>(input);
   }
 
   if (input.kind === "existing") {
