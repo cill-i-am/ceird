@@ -18,6 +18,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   CONTACT_NOT_FOUND_ERROR_TAG,
+  SITE_GEOCODING_FAILED_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
 } from "@task-tracker/jobs-core";
 import type {
@@ -66,6 +67,7 @@ import {
 } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
+import { DEFAULT_SITE_COUNTRY } from "#/features/sites/site-create-defaults";
 import { cn } from "#/lib/utils";
 
 import {
@@ -304,6 +306,17 @@ export function JobsCreateSheet() {
           "That contact is no longer available. Pick another one or create a new contact.",
       }));
     }
+
+    if (
+      failure._tag === "Some" &&
+      failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+    ) {
+      setFieldErrors((current) => ({
+        ...current,
+        siteEircode: failure.value.message,
+      }));
+      setSiteDrawerOpen(true);
+    }
   }
 
   return (
@@ -322,13 +335,15 @@ export function JobsCreateSheet() {
       >
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
           {Result.builder(createResult)
-            .onError((error) => (
-              <Alert variant="destructive">
-                <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-                <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
-                <AlertDescription>{error.message}</AlertDescription>
-              </Alert>
-            ))
+            .onError((error) =>
+              isHandledCreateJobError(error) ? null : (
+                <Alert variant="destructive">
+                  <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+                  <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              )
+            )
             .render()}
 
           <FieldGroup>
@@ -1048,6 +1063,17 @@ function clearSiteSelectionFieldError(
   };
 }
 
+function isHandledCreateJobError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    (error._tag === SITE_NOT_FOUND_ERROR_TAG ||
+      error._tag === CONTACT_NOT_FOUND_ERROR_TAG ||
+      error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
+  );
+}
+
 function buildCreateJobInput(
   values: JobsCreateFormState,
   selectionIds: JobsCreateSelectionIds
@@ -1099,7 +1125,7 @@ function resolveCreateJobSiteInput(
         addressLine1: values.siteAddressLine1.trim(),
         addressLine2: toOptionalTrimmedString(values.siteAddressLine2),
         county: values.siteCounty.trim(),
-        country: "IE",
+        country: DEFAULT_SITE_COUNTRY,
         eircode: values.siteEircode.trim(),
         name: values.siteName.trim(),
         regionId:

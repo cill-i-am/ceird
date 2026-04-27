@@ -6,6 +6,7 @@ import {
   JobAccessDeniedError,
   JobSchema,
   OrganizationMemberNotFoundError,
+  RegionNotFoundError,
   VisitId,
   VisitDurationIncrementError,
   WorkItemId,
@@ -24,6 +25,7 @@ import type {
   JobSiteOption,
   JobVisit,
   OrganizationIdType as OrganizationId,
+  RegionIdType as RegionId,
   SiteIdType as SiteId,
   UserId,
 } from "@task-tracker/jobs-core";
@@ -60,6 +62,7 @@ const workItemId = decodeWorkItemId("11111111-1111-4111-8111-111111111111");
 const siteId = "22222222-2222-4222-8222-222222222222" as SiteId;
 const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
+const regionId = "99999999-9999-4999-8999-999999999999" as RegionId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const inlineSiteInput = {
@@ -107,6 +110,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
   readonly lockedJob?: Job;
+  readonly regionFailure?: RegionNotFoundError;
   readonly transactionFailure?: OrganizationMemberNotFoundError;
 }
 
@@ -116,6 +120,7 @@ interface JobsServiceHarness {
     addVisit: number;
     create: number;
     createSite: number;
+    ensureRegion: number;
     findByIdForUpdate: number;
     geocode: number;
     linkContact: number;
@@ -137,6 +142,7 @@ function makeHarness(
     addVisit: 0,
     create: 0,
     createSite: 0,
+    ensureRegion: 0,
     findByIdForUpdate: 0,
     geocode: 0,
     linkContact: 0,
@@ -288,6 +294,7 @@ function makeHarness(
       readonly longitude: number;
       readonly name: string;
       readonly organizationId: OrganizationId;
+      readonly regionId?: RegionId;
       readonly town?: string;
     }) =>
       Effect.sync(() => {
@@ -307,6 +314,21 @@ function makeHarness(
         });
 
         return siteId;
+      }),
+    ensureRegionInOrganization: (
+      organizationId: OrganizationId,
+      requestedRegionId: RegionId
+    ) =>
+      Effect.gen(function* () {
+        calls.ensureRegion += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedRegionId).toBe(regionId);
+
+        if (options.regionFailure !== undefined) {
+          return yield* Effect.fail(options.regionFailure);
+        }
+
+        return requestedRegionId;
       }),
     findById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.some(siteId)),
@@ -475,6 +497,44 @@ describe("jobs service", () => {
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.create).toBe(1);
     expect(harness.calls.addActivity).toBe(1);
+  }, 10_000);
+
+  it("validates inline site regions before geocoding", async () => {
+    const actor = makeActor("owner");
+    const failure = new RegionNotFoundError({
+      message: "Region does not exist in the organization",
+      organizationId: actor.organizationId,
+      regionId,
+    });
+    const harness = makeHarness({
+      actor,
+      regionFailure: failure,
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.create({
+          site: {
+            input: {
+              ...inlineSiteInput,
+              regionId,
+            },
+            kind: "create",
+          },
+          title: "Replace circulation pump",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(failure);
+    expect(harness.calls.ensureRegion).toBe(1);
+    expect(harness.calls.geocode).toBe(0);
+    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.create).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 
   it("requires a blocked reason before transitioning a job to blocked", async () => {

@@ -104,6 +104,19 @@ export class JobsService extends Effect.Service<JobsService>()(
       ) {
         const actor = yield* loadActor();
         yield* authorization.ensureCanCreate(actor);
+
+        if (
+          input.site?.kind === "create" &&
+          input.site.input.regionId !== undefined
+        ) {
+          yield* sitesRepository
+            .ensureRegionInOrganization(
+              actor.organizationId,
+              input.site.input.regionId
+            )
+            .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
+        }
+
         const geocodedSiteLocation =
           input.site?.kind === "create"
             ? yield* siteGeocoder.geocode(input.site.input)

@@ -28,6 +28,12 @@ const GoogleGeocodeLocationSchema = Schema.Struct({
   lng: SiteLongitudeSchema,
 });
 
+const GoogleGeocodeResultSchema = Schema.Struct({
+  geometry: Schema.Struct({
+    location: GoogleGeocodeLocationSchema,
+  }),
+});
+
 const GoogleGeocodeResponseSchema = Schema.Struct({
   results: Schema.optional(Schema.Array(Schema.Unknown)),
   status: Schema.String,
@@ -36,8 +42,8 @@ const GoogleGeocodeResponseSchema = Schema.Struct({
 const decodeGoogleGeocodeResponse = Schema.decodeUnknown(
   GoogleGeocodeResponseSchema
 );
-const decodeGoogleGeocodeLocation = Schema.decodeUnknown(
-  GoogleGeocodeLocationSchema
+const decodeGoogleGeocodeResult = Schema.decodeUnknown(
+  GoogleGeocodeResultSchema
 );
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
@@ -187,9 +193,15 @@ export function makeStubSiteGeocoder(): SiteGeocoderImplementation {
   return { geocode };
 }
 
-export function makeGoogleSiteGeocoder(options: { fetch?: typeof fetch } = {}) {
+export function makeGoogleSiteGeocoder(
+  options: {
+    readonly fetch?: typeof fetch;
+    readonly googleMapsApiKey?: string;
+  } = {}
+) {
   return Effect.gen(function* makeGoogleSiteGeocoderEffect() {
-    const googleMapsApiKey = yield* loadGoogleMapsApiKey;
+    const googleMapsApiKey =
+      options.googleMapsApiKey ?? (yield* loadGoogleMapsApiKey);
     const fetchImplementation = options.fetch ?? globalThis.fetch;
 
     const geocode = Effect.fn("SiteGeocoder.Google.geocode")(function* geocode(
@@ -263,41 +275,16 @@ export function makeGoogleSiteGeocoder(options: { fetch?: typeof fetch } = {}) {
         });
       }
 
-      const location = yield* Effect.gen(function* decodeFirstLocation() {
-        if (
-          typeof firstResult !== "object" ||
-          firstResult === null ||
-          !("geometry" in firstResult)
-        ) {
-          return yield* logAndFailSiteGeocoding(input, {
+      const location = yield* decodeGoogleGeocodeResult(firstResult).pipe(
+        Effect.map((result) => result.geometry.location),
+        Effect.catchAll((cause) =>
+          logAndFailSiteGeocoding(input, {
+            cause,
             providerStatus: decoded.status,
-            reason: "first_result_geometry_missing",
-          });
-        }
-
-        const { geometry } = firstResult;
-
-        if (
-          typeof geometry !== "object" ||
-          geometry === null ||
-          !("location" in geometry)
-        ) {
-          return yield* logAndFailSiteGeocoding(input, {
-            providerStatus: decoded.status,
-            reason: "first_result_location_missing",
-          });
-        }
-
-        return yield* decodeGoogleGeocodeLocation(geometry.location).pipe(
-          Effect.catchAll((cause) =>
-            logAndFailSiteGeocoding(input, {
-              cause,
-              providerStatus: decoded.status,
-              reason: "first_result_location_parse_failed",
-            })
-          )
-        );
-      });
+            reason: "first_result_parse_failed",
+          })
+        )
+      );
 
       return {
         geocodedAt: nowIsoString(),
@@ -322,7 +309,9 @@ export class SiteGeocoder extends Effect.Service<SiteGeocoder>()(
         return makeStubSiteGeocoder();
       }
 
-      return yield* makeGoogleSiteGeocoder();
+      return yield* makeGoogleSiteGeocoder({
+        googleMapsApiKey: config.googleMapsApiKey,
+      });
     }),
   }
 ) {

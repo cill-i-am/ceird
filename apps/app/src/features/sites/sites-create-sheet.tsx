@@ -4,7 +4,10 @@ import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { REGION_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
+import {
+  REGION_NOT_FOUND_ERROR_TAG,
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+} from "@task-tracker/jobs-core";
 import type { CreateSiteInput, JobRegionOption } from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
@@ -26,6 +29,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
+import { DEFAULT_SITE_COUNTRY } from "./site-create-defaults";
 import { createSiteMutationAtom } from "./sites-state";
 
 const NONE_VALUE = "__none__";
@@ -35,7 +39,7 @@ interface SitesCreateFormState {
   readonly addressLine1: string;
   readonly addressLine2: string;
   readonly county: string;
-  readonly country: "IE";
+  readonly country: typeof DEFAULT_SITE_COUNTRY;
   readonly eircode: string;
   readonly name: string;
   readonly regionSelection: string;
@@ -55,7 +59,7 @@ const defaultFormState: SitesCreateFormState = {
   addressLine1: "",
   addressLine2: "",
   county: "",
-  country: "IE",
+  country: DEFAULT_SITE_COUNTRY,
   eircode: "",
   name: "",
   regionSelection: NONE_VALUE,
@@ -146,6 +150,16 @@ export function SitesCreateSheet() {
         regionSelection: failure.value.message,
       }));
     }
+
+    if (
+      failure._tag === "Some" &&
+      failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+    ) {
+      setFieldErrors((current) => ({
+        ...current,
+        eircode: failure.value.message,
+      }));
+    }
   }
 
   return (
@@ -170,7 +184,7 @@ export function SitesCreateSheet() {
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(createResult)
               .onError((error) =>
-                isRegionNotFoundError(error) ? null : (
+                isHandledCreateSiteError(error) ? null : (
                   <Alert variant="destructive">
                     <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
                     <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
@@ -378,12 +392,13 @@ function buildRegionSelectionGroups(
   ] satisfies readonly CommandSelectGroup[];
 }
 
-function isRegionNotFoundError(error: unknown) {
+function isHandledCreateSiteError(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    error._tag === REGION_NOT_FOUND_ERROR_TAG
+    (error._tag === REGION_NOT_FOUND_ERROR_TAG ||
+      error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
   );
 }
 

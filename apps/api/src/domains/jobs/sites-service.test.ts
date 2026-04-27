@@ -1,6 +1,7 @@
 import { HttpServerRequest } from "@effect/platform";
 import {
   JobAccessDeniedError,
+  RegionNotFoundError,
   SiteGeocodingFailedError,
 } from "@task-tracker/jobs-core";
 import type {
@@ -61,6 +62,7 @@ function makeActor(
 interface SitesServiceHarness {
   readonly calls: {
     createSite: number;
+    ensureRegion: number;
     geocode: number;
     getOptionById: number;
   };
@@ -73,11 +75,13 @@ function makeHarness(
   options: {
     readonly actor?: JobsActor;
     readonly geocodingFailure?: SiteGeocodingFailedError;
+    readonly regionFailure?: RegionNotFoundError;
   } = {}
 ): SitesServiceHarness {
   const actor = options.actor ?? makeActor("owner");
   const calls = {
     createSite: 0,
+    ensureRegion: 0,
     geocode: 0,
     getOptionById: 0,
   };
@@ -174,6 +178,21 @@ function makeHarness(
         });
 
         return siteId;
+      }),
+    ensureRegionInOrganization: (
+      organizationId: OrganizationId,
+      requestedRegionId: typeof regionId
+    ) =>
+      Effect.gen(function* () {
+        calls.ensureRegion += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedRegionId).toBe(regionId);
+
+        if (options.regionFailure !== undefined) {
+          return yield* Effect.fail(options.regionFailure);
+        }
+
+        return requestedRegionId;
       }),
     findById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.some(siteId)),
@@ -300,6 +319,7 @@ describe("sites service", () => {
 
     expect(harness.calls.geocode).toBe(1);
     expect(harness.calls.createSite).toBe(1);
+    expect(harness.calls.ensureRegion).toBe(1);
     expect(harness.calls.getOptionById).toBe(1);
   }, 10_000);
 
@@ -319,6 +339,31 @@ describe("sites service", () => {
     expect(getFailure(exit)).toMatchObject({
       message: "Only organization owners and admins can create sites",
     });
+    expect(harness.calls.geocode).toBe(0);
+    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.ensureRegion).toBe(0);
+    expect(harness.calls.getOptionById).toBe(0);
+  }, 10_000);
+
+  it("validates stale regions before geocoding standalone sites", async () => {
+    const failure = new RegionNotFoundError({
+      message: "Region does not exist in the organization",
+      organizationId: makeActor("owner").organizationId,
+      regionId,
+    });
+    const harness = makeHarness({ regionFailure: failure });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.create(siteInput);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(failure);
+    expect(harness.calls.ensureRegion).toBe(1);
     expect(harness.calls.geocode).toBe(0);
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.getOptionById).toBe(0);
@@ -342,6 +387,7 @@ describe("sites service", () => {
     );
 
     expect(getFailure(exit)).toStrictEqual(failure);
+    expect(harness.calls.ensureRegion).toBe(1);
     expect(harness.calls.geocode).toBe(1);
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.getOptionById).toBe(0);

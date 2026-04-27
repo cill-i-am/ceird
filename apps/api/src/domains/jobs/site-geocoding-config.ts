@@ -1,20 +1,27 @@
-import { Config, Effect } from "effect";
+import {
+  SITE_GEOCODING_PROVIDERS,
+  SiteGeocodingProviderSchema,
+} from "@task-tracker/jobs-core";
+import type { SiteGeocodingProvider } from "@task-tracker/jobs-core";
+import { Config, Effect, Schema } from "effect";
 
-const SITE_GEOCODER_MODES = ["google", "stub"] as const;
+export type SiteGeocoderMode = SiteGeocodingProvider;
 
-export type SiteGeocoderMode = (typeof SITE_GEOCODER_MODES)[number];
-
-export interface SiteGeocodingConfig {
-  readonly googleMapsApiKey?: string;
-  readonly mode: SiteGeocoderMode;
-}
+export type SiteGeocodingConfig =
+  | {
+      readonly mode: "stub";
+    }
+  | {
+      readonly googleMapsApiKey: string;
+      readonly mode: "google";
+    };
 
 const siteGeocoderModeConfig = Config.string("SITE_GEOCODER_MODE").pipe(
   Config.withDefault("google"),
   Config.validate({
-    message: `SITE_GEOCODER_MODE must be one of ${SITE_GEOCODER_MODES.join(", ")}`,
+    message: `SITE_GEOCODER_MODE must be one of ${SITE_GEOCODING_PROVIDERS.join(", ")}`,
     validation: (value): value is SiteGeocoderMode =>
-      SITE_GEOCODER_MODES.includes(value as SiteGeocoderMode),
+      Schema.is(SiteGeocodingProviderSchema)(value),
   })
 );
 

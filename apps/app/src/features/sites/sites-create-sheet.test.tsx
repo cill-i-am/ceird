@@ -1,5 +1,8 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { REGION_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
+import {
+  REGION_NOT_FOUND_ERROR_TAG,
+  SiteGeocodingFailedError,
+} from "@task-tracker/jobs-core";
 import type { RegionIdType, SiteIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -253,6 +256,44 @@ describe("sites create sheet", () => {
       expect(
         screen.queryByText("We couldn't create that site.")
       ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "maps geocoding failures to the Eircode field",
+    { timeout: 10_000 },
+    async () => {
+      mockedCreateSite.mockResolvedValue(
+        Exit.fail(
+          new SiteGeocodingFailedError({
+            country: "IE",
+            eircode: "D01 X2X2",
+            message:
+              "We could not locate that site address. Check the Eircode and address details.",
+          })
+        )
+      );
+
+      const user = userEvent.setup();
+      render(<SitesCreateSheet />);
+
+      await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
+      await user.type(
+        screen.getByLabelText("Address line 1"),
+        "1 Custom House Quay"
+      );
+      await user.type(screen.getByLabelText("County"), "Dublin");
+      await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
+      await user.click(screen.getByRole("button", { name: /create site/i }));
+
+      const eircodeField = screen.getByLabelText("Eircode");
+
+      expect(
+        screen.getByText(
+          "We could not locate that site address. Check the Eircode and address details."
+        )
+      ).toBeInTheDocument();
+      expect(eircodeField).toHaveAttribute("aria-invalid", "true");
     }
   );
 

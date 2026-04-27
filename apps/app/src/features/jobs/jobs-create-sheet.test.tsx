@@ -4,7 +4,10 @@ import type {
   RegionIdType,
   SiteIdType,
 } from "@task-tracker/jobs-core";
-import { SITE_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
+import {
+  SITE_NOT_FOUND_ERROR_TAG,
+  SiteGeocodingFailedError,
+} from "@task-tracker/jobs-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
@@ -735,6 +738,47 @@ describe("jobs create sheet", () => {
           /that site is no longer available\. pick another one\./i
         )
       ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "reopens inline site details when geocoding fails",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedCreateJob.mockResolvedValue(
+        Exit.fail(
+          new SiteGeocodingFailedError({
+            country: "IE",
+            eircode: "D04 X2X2",
+            message:
+              "We could not locate that site address. Check the Eircode and address details.",
+          })
+        )
+      );
+
+      const user = userEvent.setup();
+      render(<JobsCreateSheet />);
+
+      await user.type(screen.getByLabelText("Title"), "Replace sensor");
+      await choosePickerOption(user, "Site", "Create a new site");
+      await user.type(screen.getByLabelText("Site name"), "Warehouse");
+      await user.type(screen.getByLabelText("Address line 1"), "Unit 4");
+      await user.type(screen.getByLabelText("County"), "Dublin");
+      await user.type(screen.getByLabelText("Eircode"), "D04 X2X2");
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(screen.getByRole("button", { name: /create job/i }));
+
+      const siteDrawer = getResponsiveDrawerForHeading("New site");
+      const eircodeField = within(siteDrawer).getByLabelText("Eircode");
+
+      expect(
+        within(siteDrawer).getByText(
+          "We could not locate that site address. Check the Eircode and address details."
+        )
+      ).toBeInTheDocument();
+      expect(eircodeField).toHaveAttribute("aria-invalid", "true");
     }
   );
 });

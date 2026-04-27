@@ -1170,6 +1170,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
 
       return {
         create,
+        ensureRegionInOrganization,
         findById,
         getOptionById,
         linkContact,

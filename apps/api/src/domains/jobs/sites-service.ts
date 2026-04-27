@@ -49,6 +49,9 @@ export class SitesService extends Effect.Service<SitesService>()(
 
         if (input.regionId !== undefined) {
           yield* Effect.annotateCurrentSpan("regionId", input.regionId);
+          yield* sitesRepository
+            .ensureRegionInOrganization(actor.organizationId, input.regionId)
+            .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
         }
 
         const geocodedLocation = yield* siteGeocoder.geocode(input);
