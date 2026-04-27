@@ -54,6 +54,9 @@ export class JobsCreateSheet {
   readonly title: Locator;
   readonly priority: Locator;
   readonly site: Locator;
+  readonly siteAddressLine1: Locator;
+  readonly siteCounty: Locator;
+  readonly siteEircode: Locator;
   readonly siteName: Locator;
   readonly contact: Locator;
   readonly contactName: Locator;
@@ -71,9 +74,11 @@ export class JobsCreateSheet {
     this.title = this.root.getByLabel("Title");
     this.priority = this.root.getByLabel("Priority", { exact: true });
     this.site = this.root.getByLabel("Site");
-    this.siteName = page
-      .getByRole("dialog", { name: "New site" })
-      .getByLabel("Site name");
+    const siteDialog = page.getByRole("dialog", { name: "New site" });
+    this.siteAddressLine1 = siteDialog.getByLabel("Address line 1");
+    this.siteCounty = siteDialog.getByLabel("County");
+    this.siteEircode = siteDialog.getByLabel("Eircode");
+    this.siteName = siteDialog.getByLabel("Site name");
     this.contact = this.root.getByLabel("Contact");
     this.contactName = page.getByPlaceholder("Contact");
     this.submit = this.root.getByRole("button", { name: "Create job" });
