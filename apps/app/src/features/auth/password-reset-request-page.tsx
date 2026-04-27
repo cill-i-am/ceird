@@ -175,6 +175,9 @@ export function PasswordResetRequestPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
+                        onInput={(event) =>
+                          field.handleChange(event.currentTarget.value)
+                        }
                         onChange={(event) =>
                           field.handleChange(event.target.value)
                         }
@@ -193,17 +196,26 @@ export function PasswordResetRequestPage({
               }
             </form.Subscribe>
 
-            <form.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Sending reset link..." : "Send reset link"}
-                </Button>
-              )}
+            <form.Subscribe
+              selector={(state) => ({
+                email: state.values.email,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ email, isSubmitting }) => {
+                const isEmailEmpty = email.trim().length === 0;
+
+                return (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={isSubmitting || isEmailEmpty}
+                  >
+                    {isSubmitting ? "Sending reset link..." : "Send reset link"}
+                  </Button>
+                );
+              }}
             </form.Subscribe>
           </form>
         )}

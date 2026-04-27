@@ -179,7 +179,7 @@ describe("login page", () => {
       throw new Error("Expected login schema validation issues");
     }
 
-    const expectedMessage = result.issues[0]?.message;
+    const expectedMessage = "Use at least 8 characters.";
 
     if (!expectedMessage) {
       throw new Error("Expected login schema issue message");

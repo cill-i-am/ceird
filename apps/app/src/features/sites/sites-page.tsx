@@ -84,7 +84,7 @@ export function SitesPage({
             </span>
             <span className="truncate font-medium">{notice.name}</span>
             <span className="hidden text-muted-foreground sm:inline">
-              added
+              {notice.kind === "updated" ? "updated" : "added"}
             </span>
           </div>
           <Button
@@ -112,7 +112,15 @@ export function SitesPage({
             <TableBody>
               {options.sites.map((site) => (
                 <TableRow key={site.id}>
-                  <TableCell className="font-medium">{site.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/sites/$siteId"
+                      params={{ siteId: site.id }}
+                      className="hover:underline"
+                    >
+                      {site.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     {site.regionName ? (
                       <Badge variant="secondary">{site.regionName}</Badge>

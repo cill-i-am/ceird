@@ -217,6 +217,19 @@ export interface CreateSiteRecordInput {
   readonly town?: string;
 }
 
+export interface UpdateSiteRecordInput {
+  readonly accessNotes?: string;
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly county?: string;
+  readonly eircode?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+  readonly name: string;
+  readonly regionId?: RegionId;
+  readonly town?: string;
+}
+
 export interface CreateContactRecordInput {
   readonly email?: string;
   readonly name: string;
@@ -1018,6 +1031,55 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         return decodeSiteId(getRequiredRow(rows, "inserted site id").id);
       });
 
+      const update = Effect.fn("SitesRepository.update")(function* (
+        organizationId: OrganizationId,
+        siteId: SiteId,
+        input: UpdateSiteRecordInput
+      ) {
+        if (input.regionId !== undefined) {
+          yield* ensureRegionInOrganization(organizationId, input.regionId);
+        }
+
+        const rows = yield* sql<JobSiteOptionRow>`
+          update sites
+          set ${sql.update({
+            access_notes: input.accessNotes ?? null,
+            address_line_1: input.addressLine1 ?? null,
+            address_line_2: input.addressLine2 ?? null,
+            county: input.county ?? null,
+            eircode: input.eircode ?? null,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
+            name: input.name,
+            region_id: input.regionId ?? null,
+            town: input.town ?? null,
+            updated_at: new Date(),
+          })}
+          where organization_id = ${organizationId}
+            and id = ${siteId}
+            and archived_at is null
+          returning
+            access_notes,
+            address_line_1,
+            address_line_2,
+            county,
+            eircode,
+            id,
+            latitude,
+            longitude,
+            name,
+            region_id,
+            null::text as region_name,
+            town
+        `;
+
+        if (rows[0] === undefined) {
+          return Option.none<JobSiteOption>();
+        }
+
+        return yield* getOptionById(organizationId, siteId);
+      });
+
       const listRegions = Effect.fn("SitesRepository.listRegions")(function* (
         organizationId: OrganizationId
       ) {
@@ -1162,6 +1224,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         linkContact,
         listOptions,
         listRegions,
+        update,
       };
     }),
   }

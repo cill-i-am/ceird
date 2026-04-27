@@ -38,6 +38,7 @@ export interface CommandSelectProps {
   readonly ariaLabel?: string;
   readonly ariaInvalid?: true | undefined;
   readonly className?: string;
+  readonly disabled?: boolean;
   readonly emptyText: string;
   readonly groups: readonly CommandSelectGroup[];
   readonly id: string;
@@ -54,6 +55,7 @@ export function CommandSelect({
   ariaLabel,
   ariaInvalid,
   className,
+  disabled = false,
   emptyText,
   groups,
   id,
@@ -76,6 +78,7 @@ export function CommandSelect({
       <PopoverTrigger
         type="button"
         id={id}
+        disabled={disabled}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}

@@ -20,6 +20,8 @@ import {
   SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
+  UpdateSiteInputSchema,
+  UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
   BlockedReasonRequiredError,
@@ -34,7 +36,7 @@ import {
   SiteNotFoundError,
   VisitDurationIncrementError,
 } from "./errors.js";
-import { WorkItemId } from "./ids.js";
+import { SiteId, WorkItemId } from "./ids.js";
 
 const jobsGroup = HttpApiGroup.make("jobs")
   .add(
@@ -127,6 +129,15 @@ const sitesGroup = HttpApiGroup.make("sites")
       .addSuccess(CreateSiteResponseSchema, { status: 201 })
       .addError(JobAccessDeniedError)
       .addError(RegionNotFoundError)
+  )
+  .add(
+    HttpApiEndpoint.patch("updateSite", "/sites/:siteId")
+      .setPath(Schema.Struct({ siteId: SiteId }))
+      .setPayload(UpdateSiteInputSchema)
+      .addSuccess(UpdateSiteResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(RegionNotFoundError)
+      .addError(SiteNotFoundError)
   );
 
 export const SitesApiGroup = sitesGroup;

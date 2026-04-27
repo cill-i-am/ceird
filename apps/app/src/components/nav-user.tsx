@@ -152,7 +152,7 @@ export function NavUser({
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isSigningOut}
-                onSelect={async (event) => {
+                onClick={async (event) => {
                   event.preventDefault();
 
                   if (isSigningOut) {

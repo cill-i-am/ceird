@@ -43,6 +43,12 @@ interface InvitationSummary {
   readonly status: string;
 }
 
+interface CurrentMemberSummary {
+  readonly email: string;
+  readonly name: string;
+  readonly role: string;
+}
+
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the details and try again.";
 const INVITATION_LOAD_FAILURE_MESSAGE =
@@ -70,10 +76,20 @@ function formatInvitationCount(count: number) {
   return count === 1 ? "1 open" : `${count} open`;
 }
 
+function getMemberInitial(member: CurrentMemberSummary) {
+  return (member.name || member.email).trim().charAt(0).toUpperCase() || "U";
+}
+
 export function OrganizationMembersPage({
   activeOrganizationId,
+  currentMember = {
+    email: "You",
+    name: "You",
+    role: "member",
+  },
 }: {
   readonly activeOrganizationId: OrganizationId;
+  readonly currentMember?: CurrentMemberSummary;
 }) {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [invitations, setInvitations] = React.useState<
@@ -162,106 +178,146 @@ export function OrganizationMembersPage({
       <AppPageHeader eyebrow="Organization access" title="Members" />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)]">
-        <AppUtilityPanel
-          title="Invite teammate"
-          className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
-        >
-          <form
-            className="flex flex-col gap-5"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
-            }}
+        <div className="flex flex-col gap-6">
+          <section aria-labelledby="current-members-heading">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <h2
+                id="current-members-heading"
+                className="font-heading text-lg font-medium tracking-tight"
+              >
+                Current members
+              </h2>
+              <Badge
+                variant="secondary"
+                className="w-fit rounded-full px-3 py-1"
+              >
+                1 active
+              </Badge>
+            </div>
+            <AppRowList aria-label="Current members">
+              <AppRowListItem>
+                <AppRowListLeading aria-hidden="true">
+                  {getMemberInitial(currentMember)}
+                </AppRowListLeading>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {currentMember.name || currentMember.email}
+                  </p>
+                  <p className="text-sm/6 break-all text-muted-foreground">
+                    {currentMember.email}
+                  </p>
+                </div>
+                <AppRowListMeta>
+                  <Badge variant="secondary">
+                    {formatRoleLabel(currentMember.role)}
+                  </Badge>
+                  <Badge variant="outline">You</Badge>
+                </AppRowListMeta>
+              </AppRowListItem>
+            </AppRowList>
+          </section>
+
+          <AppUtilityPanel
+            title="Invite teammate"
+            className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
           >
-            <FieldGroup>
-              <form.Field name="email">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+            <form
+              className="flex flex-col gap-5"
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void form.handleSubmit();
+              }}
+            >
+              <FieldGroup>
+                <form.Field name="email">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
 
-                  return (
-                    <AuthFormField
-                      label="Email"
-                      htmlFor="invite-email"
-                      invalid={Boolean(errorText)}
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="invite-email"
-                        name={field.name}
-                        type="email"
-                        autoComplete="email"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
-
-              <form.Field name="role">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="Role"
-                      htmlFor="invite-role"
-                      invalid={Boolean(errorText)}
-                      errorText={errorText}
-                    >
-                      <CommandSelect
-                        id="invite-role"
-                        value={field.state.value}
-                        placeholder="Pick role"
-                        emptyText="No roles found."
-                        groups={ROLE_SELECTION_GROUPS}
-                        ariaInvalid={errorText ? true : undefined}
-                        onValueChange={(nextValue) => {
-                          if (!isInviteRole(nextValue)) {
-                            return;
+                    return (
+                      <AuthFormField
+                        label="Email"
+                        htmlFor="invite-email"
+                        invalid={Boolean(errorText)}
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="invite-email"
+                          name={field.name}
+                          type="email"
+                          autoComplete="email"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            field.handleChange(event.target.value)
                           }
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </form.Field>
 
-                          field.handleChange(nextValue);
-                          field.handleBlur();
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
-            </FieldGroup>
+                <form.Field name="role">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
 
-            {errorMessage ? (
-              <p role="alert" className="text-sm text-destructive">
-                {errorMessage}
-              </p>
-            ) : null}
-            {successMessage ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                {successMessage}
-              </p>
-            ) : null}
+                    return (
+                      <AuthFormField
+                        label="Role"
+                        htmlFor="invite-role"
+                        invalid={Boolean(errorText)}
+                        errorText={errorText}
+                      >
+                        <CommandSelect
+                          id="invite-role"
+                          value={field.state.value}
+                          placeholder="Pick role"
+                          emptyText="No roles found."
+                          groups={ROLE_SELECTION_GROUPS}
+                          ariaInvalid={errorText ? true : undefined}
+                          onValueChange={(nextValue) => {
+                            if (!isInviteRole(nextValue)) {
+                              return;
+                            }
 
-            <form.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Sending invite..." : "Send invite"}
-                </Button>
-              )}
-            </form.Subscribe>
-          </form>
-        </AppUtilityPanel>
+                            field.handleChange(nextValue);
+                            field.handleBlur();
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </form.Field>
+              </FieldGroup>
+
+              {errorMessage ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage}
+                </p>
+              ) : null}
+              {successMessage ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {successMessage}
+                </p>
+              ) : null}
+
+              <form.Subscribe selector={(state) => state.isSubmitting}>
+                {(isSubmitting) => (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full sm:w-auto"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Sending invite..." : "Send invite"}
+                  </Button>
+                )}
+              </form.Subscribe>
+            </form>
+          </AppUtilityPanel>
+        </div>
 
         {shouldRenderInvitationsSection ? (
           <section

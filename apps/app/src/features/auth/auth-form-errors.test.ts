@@ -1,5 +1,6 @@
 import {
   getEmailVerificationFailureMessage,
+  getErrorText,
   getSettingsFailureMessage,
   isInvalidPasswordResetTokenError,
   getPasswordResetFailureMessage,
@@ -37,5 +38,13 @@ describe("password reset form errors", () => {
       isInvalidPasswordResetTokenError({ status: 401 }),
       isInvalidPasswordResetTokenError({ status: 429 }),
     ]).toStrictEqual([true, true, false]);
+  }, 1000);
+
+  it("normalizes raw email pattern validation messages", () => {
+    expect(
+      getErrorText([
+        'Expected a string matching the pattern ^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$, actual "not-an-email"',
+      ])
+    ).toBe("Enter a valid email address.");
   }, 1000);
 });

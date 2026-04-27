@@ -6,7 +6,10 @@ import type {
   CreateSiteResponse,
   JobOptionsResponse,
   JobSiteOption,
+  SiteIdType,
   SitesOptionsResponse,
+  UpdateSiteInput,
+  UpdateSiteResponse,
 } from "@task-tracker/jobs-core";
 import { Effect } from "effect";
 
@@ -19,7 +22,7 @@ import { normalizeJobsError } from "#/features/jobs/jobs-errors";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
 export interface SitesNotice {
-  readonly kind: "created";
+  readonly kind: "created" | "updated";
   readonly name: string;
 }
 
@@ -61,6 +64,38 @@ export const createSiteMutationAtom = Atom.fn<
   )
 );
 
+export const updateSiteMutationAtomFamily = Atom.family((siteId: SiteIdType) =>
+  Atom.fn<AppJobsError, UpdateSiteResponse, UpdateSiteInput>((input, get) =>
+    updateBrowserSite(siteId, input).pipe(
+      Effect.tap((updatedSite) =>
+        Effect.gen(function* () {
+          const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
+            Effect.either
+          );
+          const currentOptionsState = get(jobsOptionsStateAtom);
+          const nextOptions =
+            siteOptionsResult._tag === "Right"
+              ? mergeSiteOptions(
+                  currentOptionsState.data,
+                  siteOptionsResult.right
+                )
+              : upsertSiteOption(currentOptionsState.data, updatedSite);
+
+          get.set(jobsOptionsStateAtom, {
+            data: nextOptions,
+            organizationId: currentOptionsState.organizationId,
+          });
+
+          get.set(sitesNoticeAtom, {
+            kind: "updated",
+            name: updatedSite.name,
+          });
+        })
+      )
+    )
+  )
+);
+
 export function upsertSiteOption(
   options: JobOptionsResponse,
   site: JobSiteOption
@@ -93,6 +128,17 @@ function createBrowserSite(input: CreateSiteInput) {
     const client = yield* makeBrowserJobsClient();
 
     return yield* client.sites.createSite({ payload: input });
+  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+}
+
+function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
+  return Effect.gen(function* () {
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* client.sites.updateSite({
+      path: { siteId },
+      payload: input,
+    });
   }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
 }
 

@@ -148,11 +148,13 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
     )) as typeof actual.DropdownMenuGroup,
     DropdownMenuItem: (({
       children,
+      onClick,
       onSelect,
       render: renderSlot,
       ...props
     }: {
       children?: ReactNode;
+      onClick?: MouseEventHandler<HTMLButtonElement>;
       onSelect?: (event: Event) => void | Promise<void>;
       render?: ReactNode;
       disabled?: boolean;
@@ -169,12 +171,18 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
         <button
           type="button"
           {...props}
-          onClick={() => {
-            const event = new Event("select", {
+          onClick={(event) => {
+            onClick?.(event);
+
+            if (event.defaultPrevented) {
+              return;
+            }
+
+            const selectEvent = new Event("select", {
               cancelable: true,
             });
 
-            void onSelect?.(event);
+            void onSelect?.(selectEvent);
           }}
         >
           {children}

@@ -100,6 +100,8 @@ export {
   SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
+  UpdateSiteInputSchema,
+  UpdateSiteResponseSchema,
 } from "./dto.js";
 export type {
   AddJobCommentInput,
@@ -138,6 +140,8 @@ export type {
   SitesOptionsResponse,
   TransitionJobInput,
   TransitionJobResponse,
+  UpdateSiteInput,
+  UpdateSiteResponse,
   JobsContext,
 } from "./dto.js";
 export {

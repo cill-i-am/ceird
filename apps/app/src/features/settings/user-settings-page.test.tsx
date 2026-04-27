@@ -128,20 +128,33 @@ describe("user settings page", () => {
     expect(mockedRouterInvalidate).toHaveBeenCalledOnce();
   }, 10_000);
 
-  it("skips unchanged profile saves", async () => {
+  it("disables unchanged profile saves", () => {
+    render(<UserSettingsPage user={user} />);
+
+    expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
+    expect(mockedUpdateUser).not.toHaveBeenCalled();
+    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("clears stale profile status copy when profile fields change", async () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
 
+    const nameInput = screen.getByLabelText("Display name");
+    await interaction.clear(nameInput);
+    await interaction.type(nameInput, "Taylor Updated");
     await interaction.click(
       screen.getByRole("button", { name: "Save profile" })
     );
 
     await expect(
-      screen.findByText("No profile changes to save.")
+      screen.findByText("Profile updated.")
     ).resolves.toHaveAttribute("role", "status");
-    expect(mockedUpdateUser).not.toHaveBeenCalled();
-    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+
+    await interaction.type(screen.getByLabelText("Avatar image URL"), "x");
+
+    expect(screen.queryByText("Profile updated.")).not.toBeInTheDocument();
   }, 10_000);
 
   it("starts a verified email change with the settings callback URL", async () => {

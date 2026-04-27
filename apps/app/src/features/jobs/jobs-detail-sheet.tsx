@@ -11,11 +11,17 @@ import {
   Briefcase01Icon,
   CheckmarkCircle02Icon,
   Comment01Icon,
+  Location01Icon,
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import type { JobDetailResponse, JobStatus } from "@task-tracker/jobs-core";
+import type {
+  JobDetailResponse,
+  JobSiteOption,
+  JobStatus,
+  SiteIdType,
+} from "@task-tracker/jobs-core";
 import { Exit } from "effect";
 import * as React from "react";
 
@@ -62,6 +68,7 @@ import {
   addJobCommentMutationAtomFamily,
   addJobVisitMutationAtomFamily,
   jobDetailStateAtomFamily,
+  patchJobMutationAtomFamily,
   reopenJobMutationAtomFamily,
   transitionJobMutationAtomFamily,
 } from "./jobs-detail-state";
@@ -69,6 +76,7 @@ import { jobsLookupAtom } from "./jobs-state";
 import {
   getAvailableJobTransitions,
   hasAssignedJobAccess,
+  hasJobsElevatedAccess,
 } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
@@ -103,6 +111,8 @@ const VISIT_DURATION_SELECTION_GROUPS = [
   },
 ] satisfies readonly CommandSelectGroup[];
 
+const NO_SITE_VALUE = "__none__";
+
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
   readonly viewer: JobsViewer;
@@ -126,6 +136,7 @@ export function JobsDetailSheet({
     transitionJobMutationAtomFamily(workItemId)
   );
   const reopenResult = useAtomValue(reopenJobMutationAtomFamily(workItemId));
+  const patchResult = useAtomValue(patchJobMutationAtomFamily(workItemId));
   const commentResult = useAtomValue(
     addJobCommentMutationAtomFamily(workItemId)
   );
@@ -137,6 +148,9 @@ export function JobsDetailSheet({
     }
   );
   const reopenJob = useAtomSet(reopenJobMutationAtomFamily(workItemId), {
+    mode: "promiseExit",
+  });
+  const patchJob = useAtomSet(patchJobMutationAtomFamily(workItemId), {
     mode: "promiseExit",
   });
   const addJobComment = useAtomSet(
@@ -152,6 +166,7 @@ export function JobsDetailSheet({
     viewer,
     detail.job.assigneeId
   );
+  const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
@@ -165,6 +180,15 @@ export function JobsDetailSheet({
   const [transitionError, setTransitionError] = React.useState<string | null>(
     null
   );
+  const [selectedSiteId, setSelectedSiteId] = React.useState(
+    detail.job.siteId ?? NO_SITE_VALUE
+  );
+  const [siteAssignmentError, setSiteAssignmentError] = React.useState<
+    string | null
+  >(null);
+  const [siteAssignmentMessage, setSiteAssignmentMessage] = React.useState<
+    string | null
+  >(null);
   const [commentBody, setCommentBody] = React.useState("");
   const [commentError, setCommentError] = React.useState<string | null>(null);
   const [visitDate, setVisitDate] = React.useState("");
@@ -183,18 +207,27 @@ export function JobsDetailSheet({
   const coordinator = detail.job.coordinatorId
     ? lookup.memberById.get(detail.job.coordinatorId)
     : undefined;
+  const siteSelectionGroups = React.useMemo(
+    () => buildSiteSelectionGroups([...lookup.siteById.values()]),
+    [lookup.siteById]
+  );
+  const selectedSiteChanged =
+    selectedSiteId !== (detail.job.siteId ?? NO_SITE_VALUE);
 
   React.useEffect(() => {
     setSelectedStatus("");
     setBlockedReason("");
     setTransitionError(null);
+    setSelectedSiteId(detail.job.siteId ?? NO_SITE_VALUE);
+    setSiteAssignmentError(null);
+    setSiteAssignmentMessage(null);
     setCommentBody("");
     setCommentError(null);
     setVisitDate(getLocalDateInputValue());
     setVisitDurationMinutes("60");
     setVisitNote("");
     setVisitError(null);
-  }, [detail.job.status, workItemId]);
+  }, [detail.job.siteId, detail.job.status, workItemId]);
 
   function closeSheet() {
     React.startTransition(() => {
@@ -230,6 +263,37 @@ export function JobsDetailSheet({
 
   async function handleReopen() {
     await reopenJob();
+  }
+
+  async function handleUpdateSiteAssignment() {
+    if (!canEditJob) {
+      return;
+    }
+
+    const nextSiteId =
+      selectedSiteId === NO_SITE_VALUE ? null : (selectedSiteId as SiteIdType);
+
+    if (
+      selectedSiteId !== NO_SITE_VALUE &&
+      !lookup.siteById.has(selectedSiteId as SiteIdType)
+    ) {
+      setSiteAssignmentError("Pick an available site, or choose no site.");
+      return;
+    }
+
+    setSiteAssignmentError(null);
+    setSiteAssignmentMessage(null);
+
+    const exit = await patchJob({
+      contactId: null,
+      siteId: nextSiteId,
+    });
+
+    if (Exit.isSuccess(exit)) {
+      setSiteAssignmentMessage(
+        nextSiteId === null ? "Site removed." : "Site assignment updated."
+      );
+    }
   }
 
   async function handleAddComment(event: React.FormEvent<HTMLFormElement>) {
@@ -338,6 +402,14 @@ export function JobsDetailSheet({
       </Empty>
     );
   } else if (transitionOptions.length > 0 && hasAssignmentAccess) {
+    let transitionButtonLabel = "Pick a status";
+
+    if (transitionResult.waiting) {
+      transitionButtonLabel = "Updating...";
+    } else if (selectedStatus) {
+      transitionButtonLabel = "Apply status change";
+    }
+
     statusActionContent = (
       <div className="flex flex-col gap-4">
         {renderMutationError(transitionResult)}
@@ -351,9 +423,10 @@ export function JobsDetailSheet({
                 placeholder="Choose next state"
                 emptyText="No status changes available."
                 groups={transitionSelectionGroups}
-                onValueChange={(nextValue) =>
-                  setSelectedStatus(nextValue as JobStatus | "")
-                }
+                onValueChange={(nextValue) => {
+                  setSelectedStatus(nextValue as JobStatus | "");
+                  setTransitionError(null);
+                }}
               />
             </FieldContent>
           </Field>
@@ -363,7 +436,7 @@ export function JobsDetailSheet({
 
         <div className="flex flex-wrap gap-3">
           <Button
-            disabled={transitionResult.waiting}
+            disabled={transitionResult.waiting || !selectedStatus}
             onClick={handleTransition}
           >
             <HugeiconsIcon
@@ -371,7 +444,7 @@ export function JobsDetailSheet({
               strokeWidth={2}
               data-icon="inline-start"
             />
-            {transitionResult.waiting ? "Updating..." : "Apply status change"}
+            {transitionButtonLabel}
           </Button>
         </div>
       </div>
@@ -483,6 +556,72 @@ export function JobsDetailSheet({
             </Card>
 
             <JobsDetailLocation site={site} />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Site assignment</CardTitle>
+                <CardDescription>
+                  Move this job onto an existing site when the location becomes
+                  clear.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                {renderMutationError(patchResult)}
+                <FieldGroup>
+                  <Field data-invalid={Boolean(siteAssignmentError)}>
+                    <FieldLabel htmlFor="job-site-assignment">Site</FieldLabel>
+                    <FieldContent>
+                      <CommandSelect
+                        id="job-site-assignment"
+                        value={selectedSiteId}
+                        placeholder="Pick site"
+                        emptyText="No sites found."
+                        groups={siteSelectionGroups}
+                        disabled={!canEditJob || patchResult.waiting}
+                        ariaInvalid={siteAssignmentError ? true : undefined}
+                        onValueChange={(nextValue) => {
+                          setSelectedSiteId(nextValue);
+                          setSiteAssignmentError(null);
+                          setSiteAssignmentMessage(null);
+                        }}
+                      />
+                      <FieldDescription>
+                        Changing the site clears the linked contact so it cannot
+                        point at the wrong place.
+                      </FieldDescription>
+                      <FieldError>{siteAssignmentError}</FieldError>
+                    </FieldContent>
+                  </Field>
+                </FieldGroup>
+                {siteAssignmentMessage ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {siteAssignmentMessage}
+                  </p>
+                ) : null}
+                {canEditJob ? (
+                  <div className="flex">
+                    <Button
+                      type="button"
+                      className="w-full sm:w-fit"
+                      disabled={!selectedSiteChanged || patchResult.waiting}
+                      onClick={handleUpdateSiteAssignment}
+                    >
+                      <HugeiconsIcon
+                        icon={Location01Icon}
+                        strokeWidth={2}
+                        data-icon="inline-start"
+                      />
+                      {patchResult.waiting ? "Saving..." : "Save site"}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Site assignment is limited to the assignee or organization
+                    admins.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader>
@@ -840,6 +979,60 @@ function buildTransitionSelectionGroups(
       ],
     },
   ] satisfies readonly CommandSelectGroup[];
+}
+
+function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
+  const sortedSites = getSortedSites(sites);
+
+  return [
+    {
+      label: "Site",
+      options: [
+        { label: "No site", value: NO_SITE_VALUE },
+        ...sortedSites.map((site) => ({
+          label: site.regionName
+            ? `${site.name} (${site.regionName})`
+            : site.name,
+          value: site.id,
+        })),
+      ],
+    },
+  ] satisfies readonly CommandSelectGroup[];
+}
+
+function getSortedSites(sites: readonly JobSiteOption[]) {
+  let sortedSites: readonly JobSiteOption[] = [];
+
+  for (const site of sites) {
+    sortedSites = insertSortedSite(sortedSites, site);
+  }
+
+  return sortedSites;
+}
+
+function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {
+  const nameOrder = left.name.localeCompare(right.name);
+
+  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
+}
+
+function insertSortedSite(
+  sortedSites: readonly JobSiteOption[],
+  site: JobSiteOption
+) {
+  const insertIndex = sortedSites.findIndex(
+    (sortedSite) => compareSiteOptions(site, sortedSite) < 0
+  );
+
+  if (insertIndex === -1) {
+    return [...sortedSites, site];
+  }
+
+  return [
+    ...sortedSites.slice(0, insertIndex),
+    site,
+    ...sortedSites.slice(insertIndex),
+  ];
 }
 
 function renderMutationError(

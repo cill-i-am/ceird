@@ -25,6 +25,7 @@ import { Route as AppOrgSitesRouteImport } from './routes/_app._org.sites'
 import { Route as AppOrgMembersRouteImport } from './routes/_app._org.members'
 import { Route as AppOrgJobsRouteImport } from './routes/_app._org.jobs'
 import { Route as AppOrgSitesNewRouteImport } from './routes/_app._org.sites.new'
+import { Route as AppOrgSitesSiteIdRouteImport } from './routes/_app._org.sites.$siteId'
 import { Route as AppOrgOrganizationSettingsRouteImport } from './routes/_app._org.organization.settings'
 import { Route as AppOrgJobsNewRouteImport } from './routes/_app._org.jobs.new'
 import { Route as AppOrgJobsJobIdRouteImport } from './routes/_app._org.jobs.$jobId'
@@ -108,6 +109,11 @@ const AppOrgSitesNewRoute = AppOrgSitesNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AppOrgSitesRoute,
 } as any)
+const AppOrgSitesSiteIdRoute = AppOrgSitesSiteIdRouteImport.update({
+  id: '/$siteId',
+  path: '/$siteId',
+  getParentRoute: () => AppOrgSitesRoute,
+} as any)
 const AppOrgOrganizationSettingsRoute =
   AppOrgOrganizationSettingsRouteImport.update({
     id: '/organization/settings',
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/jobs/$jobId': typeof AppOrgJobsJobIdRoute
   '/jobs/new': typeof AppOrgJobsNewRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/sites/$siteId': typeof AppOrgSitesSiteIdRoute
   '/sites/new': typeof AppOrgSitesNewRoute
 }
 export interface FileRoutesByTo {
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/jobs/$jobId': typeof AppOrgJobsJobIdRoute
   '/jobs/new': typeof AppOrgJobsNewRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/sites/$siteId': typeof AppOrgSitesSiteIdRoute
   '/sites/new': typeof AppOrgSitesNewRoute
 }
 export interface FileRoutesById {
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/_app/_org/jobs/$jobId': typeof AppOrgJobsJobIdRoute
   '/_app/_org/jobs/new': typeof AppOrgJobsNewRoute
   '/_app/_org/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/_app/_org/sites/$siteId': typeof AppOrgSitesSiteIdRoute
   '/_app/_org/sites/new': typeof AppOrgSitesNewRoute
 }
 export interface FileRouteTypes {
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/jobs/$jobId'
     | '/jobs/new'
     | '/organization/settings'
+    | '/sites/$siteId'
     | '/sites/new'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/jobs/$jobId'
     | '/jobs/new'
     | '/organization/settings'
+    | '/sites/$siteId'
     | '/sites/new'
   id:
     | '__root__'
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/_app/_org/jobs/$jobId'
     | '/_app/_org/jobs/new'
     | '/_app/_org/organization/settings'
+    | '/_app/_org/sites/$siteId'
     | '/_app/_org/sites/new'
   fileRoutesById: FileRoutesById
 }
@@ -372,6 +384,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgSitesNewRouteImport
       parentRoute: typeof AppOrgSitesRoute
     }
+    '/_app/_org/sites/$siteId': {
+      id: '/_app/_org/sites/$siteId'
+      path: '/$siteId'
+      fullPath: '/sites/$siteId'
+      preLoaderRoute: typeof AppOrgSitesSiteIdRouteImport
+      parentRoute: typeof AppOrgSitesRoute
+    }
     '/_app/_org/organization/settings': {
       id: '/_app/_org/organization/settings'
       path: '/organization/settings'
@@ -411,10 +430,12 @@ const AppOrgJobsRouteWithChildren = AppOrgJobsRoute._addFileChildren(
 )
 
 interface AppOrgSitesRouteChildren {
+  AppOrgSitesSiteIdRoute: typeof AppOrgSitesSiteIdRoute
   AppOrgSitesNewRoute: typeof AppOrgSitesNewRoute
 }
 
 const AppOrgSitesRouteChildren: AppOrgSitesRouteChildren = {
+  AppOrgSitesSiteIdRoute: AppOrgSitesSiteIdRoute,
   AppOrgSitesNewRoute: AppOrgSitesNewRoute,
 }
 

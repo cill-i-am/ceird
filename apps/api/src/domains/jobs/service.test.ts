@@ -280,6 +280,11 @@ function makeHarness(
       Effect.succeed([] satisfies readonly JobSiteOption[]),
     listRegions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobRegionOption[]),
+    update: (
+      _organizationId: OrganizationId,
+      _siteId: SiteId,
+      _input: unknown
+    ) => Effect.succeed(Option.none()),
   });
 
   const contactsRepository = ContactsRepository.make({

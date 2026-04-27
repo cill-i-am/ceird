@@ -73,6 +73,7 @@ vi.mock("@hugeicons/react", () => ({
 
 vi.mock("#/components/ui/command-select", () => ({
   CommandSelect: ({
+    ariaInvalid: _ariaInvalid,
     emptyText: _emptyText,
     groups,
     id,
@@ -82,6 +83,7 @@ vi.mock("#/components/ui/command-select", () => ({
     value,
     ...props
   }: ComponentProps<"select"> & {
+    ariaInvalid?: boolean;
     emptyText?: string;
     groups: readonly {
       readonly options: readonly {

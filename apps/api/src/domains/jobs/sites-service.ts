@@ -1,4 +1,9 @@
-import type { CreateSiteInput } from "@task-tracker/jobs-core";
+import { SiteNotFoundError } from "@task-tracker/jobs-core";
+import type {
+  CreateSiteInput,
+  SiteIdType as SiteId,
+  UpdateSiteInput,
+} from "@task-tracker/jobs-core";
 import { Effect, Option } from "effect";
 
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
@@ -88,6 +93,56 @@ export class SitesService extends Effect.Service<SitesService>()(
           .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
       });
 
+      const update = Effect.fn("SitesService.update")(function* (
+        siteId: SiteId,
+        input: UpdateSiteInput
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanCreateSite(actor);
+        yield* Effect.annotateCurrentSpan("action", "update");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("siteId", siteId);
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        if (input.regionId !== undefined) {
+          yield* Effect.annotateCurrentSpan("regionId", input.regionId);
+        }
+
+        const site = yield* jobsRepository
+          .withTransaction(
+            sitesRepository
+              .update(actor.organizationId, siteId, {
+                accessNotes: input.accessNotes,
+                addressLine1: input.addressLine1,
+                addressLine2: input.addressLine2,
+                county: input.county,
+                eircode: input.eircode,
+                latitude: input.latitude,
+                longitude: input.longitude,
+                name: input.name,
+                regionId: input.regionId,
+                town: input.town,
+              })
+              .pipe(Effect.map(Option.getOrUndefined))
+          )
+          .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
+
+        if (site !== undefined) {
+          return site;
+        }
+
+        return yield* Effect.fail(
+          new SiteNotFoundError({
+            message: "Site does not exist",
+            siteId,
+          })
+        );
+      });
+
       const getOptions = Effect.fn("SitesService.getOptions")(function* () {
         const actor = yield* loadActor();
         yield* authorization.ensureCanView(actor);
@@ -113,6 +168,7 @@ export class SitesService extends Effect.Service<SitesService>()(
       return {
         create,
         getOptions,
+        update,
       };
     }),
   }

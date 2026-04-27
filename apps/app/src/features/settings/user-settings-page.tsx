@@ -232,9 +232,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setProfileMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setProfileMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -261,9 +266,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setProfileMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setProfileMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -282,13 +292,18 @@ export function UserSettingsPage({
             </profileForm.Subscribe>
             {profileMessage ? <FormStatus>{profileMessage}</FormStatus> : null}
 
-            <profileForm.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
+            <profileForm.Subscribe
+              selector={(state) => ({
+                isDefaultValue: state.isDefaultValue,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ isDefaultValue, isSubmitting }) => (
                 <Button
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isDefaultValue}
                 >
                   {isSubmitting ? "Saving profile..." : "Save profile"}
                 </Button>
@@ -339,9 +354,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setEmailMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setEmailMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -416,9 +436,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -444,9 +469,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );
@@ -472,9 +502,14 @@ export function UserSettingsPage({
                         value={field.state.value}
                         aria-invalid={Boolean(errorText) || undefined}
                         onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
+                        onInput={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.currentTarget.value);
+                        }}
+                        onChange={(event) => {
+                          setPasswordMessage(null);
+                          field.handleChange(event.target.value);
+                        }}
                       />
                     </AuthFormField>
                   );

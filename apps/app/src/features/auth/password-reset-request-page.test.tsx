@@ -154,7 +154,7 @@ describe("password reset request page", () => {
       );
     }
 
-    const expectedMessage = result.issues[0]?.message;
+    const expectedMessage = "Enter a valid email address.";
 
     if (!expectedMessage) {
       throw new Error("Expected password reset request schema issue message");

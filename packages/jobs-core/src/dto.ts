@@ -390,6 +390,14 @@ export type CreateSiteResponse = Schema.Schema.Type<
   typeof CreateSiteResponseSchema
 >;
 
+export const UpdateSiteInputSchema = CreateSiteInputSchema;
+export type UpdateSiteInput = Schema.Schema.Type<typeof UpdateSiteInputSchema>;
+
+export const UpdateSiteResponseSchema = JobSiteOptionSchema;
+export type UpdateSiteResponse = Schema.Schema.Type<
+  typeof UpdateSiteResponseSchema
+>;
+
 export const JobContactOptionSchema = Schema.Struct({
   id: ContactId,
   name: Schema.String,

@@ -1,18 +1,17 @@
 "use client";
 
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
-import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
+import { Location01Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { REGION_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
-import type { CreateSiteInput, JobRegionOption } from "@task-tracker/jobs-core";
+import type { JobSiteOption, SiteIdType } from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { CommandSelect } from "#/components/ui/command-select";
-import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   DrawerContent,
   DrawerDescription,
@@ -26,99 +25,73 @@ import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
+import { hasJobsElevatedAccess } from "#/features/jobs/jobs-viewer";
+import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 
-import { createSiteMutationAtom } from "./sites-state";
+import {
+  buildRegionSelectionGroups,
+  buildSiteInput,
+  hasSiteFieldErrors,
+  validateSiteForm,
+} from "./sites-create-sheet";
+import type {
+  SitesCreateFieldErrors,
+  SitesCreateFormState,
+} from "./sites-create-sheet";
+import { updateSiteMutationAtomFamily } from "./sites-state";
 
 const NONE_VALUE = "__none__";
 
-export interface SitesCreateFormState {
-  readonly accessNotes: string;
-  readonly addressLine1: string;
-  readonly addressLine2: string;
-  readonly county: string;
-  readonly eircode: string;
-  readonly latitude: string;
-  readonly longitude: string;
-  readonly name: string;
-  readonly regionSelection: string;
-  readonly town: string;
+interface SitesDetailSheetProps {
+  readonly initialSite: JobSiteOption | null;
+  readonly siteId: SiteIdType;
+  readonly viewer: JobsViewer;
 }
 
-export interface SitesCreateFieldErrors {
-  readonly latitude?: string;
-  readonly longitude?: string;
-  readonly name?: string;
-  readonly regionSelection?: string;
-}
-
-export const defaultSiteFormState: SitesCreateFormState = {
-  accessNotes: "",
-  addressLine1: "",
-  addressLine2: "",
-  county: "",
-  eircode: "",
-  latitude: "",
-  longitude: "",
-  name: "",
-  regionSelection: NONE_VALUE,
-  town: "",
-};
-
-export function SitesCreateSheet() {
+export function SitesDetailSheet({
+  initialSite,
+  siteId,
+  viewer,
+}: SitesDetailSheetProps) {
   const navigate = useNavigate();
   const options = useAtomValue(jobsOptionsStateAtom).data;
-  const createSite = useAtomSet(createSiteMutationAtom, {
+  const currentSite =
+    options.sites.find((site) => site.id === siteId) ?? initialSite;
+  const updateResult = useAtomValue(updateSiteMutationAtomFamily(siteId));
+  const updateSite = useAtomSet(updateSiteMutationAtomFamily(siteId), {
     mode: "promiseExit",
   });
-  const createResult = useAtomValue(createSiteMutationAtom);
-  const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
-    {}
-  );
-  const [values, setValues] =
-    React.useState<SitesCreateFormState>(defaultSiteFormState);
-  const [overlayOpen, setOverlayOpen] = React.useState(true);
-  const closeNavigationTimeout = React.useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const canEdit = hasJobsElevatedAccess(viewer.role);
   const regionGroups = React.useMemo(
     () => buildRegionSelectionGroups(options.regions),
     [options.regions]
   );
-
-  React.useEffect(
-    () => () => {
-      if (closeNavigationTimeout.current) {
-        clearTimeout(closeNavigationTimeout.current);
-      }
-    },
-    []
+  const [values, setValues] = React.useState<SitesCreateFormState>(() =>
+    currentSite ? buildFormStateFromSite(currentSite) : buildEmptySiteState()
+  );
+  const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
+    {}
   );
 
-  function closeSheet({
-    delayed = false,
-  }: { readonly delayed?: boolean } = {}) {
-    setOverlayOpen(false);
-
-    if (closeNavigationTimeout.current) {
-      clearTimeout(closeNavigationTimeout.current);
+  React.useEffect(() => {
+    if (currentSite) {
+      setValues(buildFormStateFromSite(currentSite));
+      setFieldErrors({});
     }
+  }, [currentSite]);
 
-    const navigateToSites = () => {
-      React.startTransition(() => {
-        navigate({ to: "/sites" });
-      });
-    };
-
-    if (!delayed) {
-      navigateToSites();
-      return;
-    }
-
-    closeNavigationTimeout.current = setTimeout(navigateToSites, 140);
+  function closeSheet() {
+    React.startTransition(() => {
+      navigate({ to: "/sites" });
+    });
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!canEdit) {
+      return;
+    }
 
     const nextErrors = validateSiteForm(values, options.regions);
     setFieldErrors(nextErrors);
@@ -127,13 +100,10 @@ export function SitesCreateSheet() {
       return;
     }
 
-    const payload = buildSiteInput(values, options.regions);
-    const exit = await createSite(payload);
+    const exit = await updateSite(buildSiteInput(values, options.regions));
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      setValues(defaultSiteFormState);
-      closeSheet();
       return;
     }
 
@@ -150,20 +120,33 @@ export function SitesCreateSheet() {
     }
   }
 
+  if (!currentSite) {
+    return (
+      <ResponsiveDrawer open onOpenChange={(open) => !open && closeSheet()}>
+        <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
+          <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
+            <DrawerTitle>Site not found</DrawerTitle>
+            <DrawerDescription>
+              This site is no longer available in the current organization.
+            </DrawerDescription>
+          </DrawerHeader>
+          <DrawerFooter className="border-t px-5 py-4 sm:px-6">
+            <Button type="button" onClick={closeSheet}>
+              Back to sites
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </ResponsiveDrawer>
+    );
+  }
+
   return (
-    <ResponsiveDrawer
-      open={overlayOpen}
-      onOpenChange={(open) => {
-        if (!open && !createResult.waiting) {
-          closeSheet({ delayed: true });
-        }
-      }}
-    >
+    <ResponsiveDrawer open onOpenChange={(open) => !open && closeSheet()}>
       <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
-          <DrawerTitle>New site</DrawerTitle>
+          <DrawerTitle>{currentSite.name}</DrawerTitle>
           <DrawerDescription>
-            Add the address, region, and map coordinates for dispatch.
+            Inspect and update the dispatch details for this site.
           </DrawerDescription>
         </DrawerHeader>
 
@@ -173,12 +156,12 @@ export function SitesCreateSheet() {
           onSubmit={handleSubmit}
         >
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
-            {Result.builder(createResult)
+            {Result.builder(updateResult)
               .onError((error) =>
                 isRegionNotFoundError(error) ? null : (
                   <Alert variant="destructive">
                     <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-                    <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
+                    <AlertTitle>We couldn&apos;t update that site.</AlertTitle>
                     <AlertDescription>{error.message}</AlertDescription>
                   </Alert>
                 )
@@ -188,12 +171,13 @@ export function SitesCreateSheet() {
             <FieldGroup>
               <AuthFormField
                 label="Site name"
-                htmlFor="site-name"
+                htmlFor="site-edit-name"
                 invalid={Boolean(fieldErrors.name)}
                 errorText={fieldErrors.name}
               >
                 <Input
-                  id="site-name"
+                  id="site-edit-name"
+                  disabled={!canEdit}
                   value={values.name}
                   aria-invalid={Boolean(fieldErrors.name) || undefined}
                   onChange={(event) =>
@@ -207,17 +191,18 @@ export function SitesCreateSheet() {
 
               <AuthFormField
                 label="Region"
-                htmlFor="site-region"
+                htmlFor="site-edit-region"
                 invalid={Boolean(fieldErrors.regionSelection)}
                 errorText={fieldErrors.regionSelection}
               >
                 <CommandSelect
-                  id="site-region"
+                  id="site-edit-region"
                   value={values.regionSelection}
                   placeholder="Pick region"
                   emptyText="No regions found."
                   groups={regionGroups}
                   ariaInvalid={fieldErrors.regionSelection ? true : undefined}
+                  disabled={!canEdit}
                   onValueChange={(nextValue) => {
                     setFieldErrors((current) => ({
                       ...current,
@@ -235,11 +220,12 @@ export function SitesCreateSheet() {
             <FieldGroup>
               <AuthFormField
                 label="Address line 1"
-                htmlFor="site-address-line-1"
+                htmlFor="site-edit-address-line-1"
                 invalid={false}
               >
                 <Input
-                  id="site-address-line-1"
+                  id="site-edit-address-line-1"
+                  disabled={!canEdit}
                   value={values.addressLine1}
                   onChange={(event) =>
                     setValues((current) => ({
@@ -252,11 +238,12 @@ export function SitesCreateSheet() {
 
               <AuthFormField
                 label="Address line 2"
-                htmlFor="site-address-line-2"
+                htmlFor="site-edit-address-line-2"
                 invalid={false}
               >
                 <Input
-                  id="site-address-line-2"
+                  id="site-edit-address-line-2"
+                  disabled={!canEdit}
                   value={values.addressLine2}
                   onChange={(event) =>
                     setValues((current) => ({
@@ -268,9 +255,14 @@ export function SitesCreateSheet() {
               </AuthFormField>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <AuthFormField label="Town" htmlFor="site-town" invalid={false}>
+                <AuthFormField
+                  label="Town"
+                  htmlFor="site-edit-town"
+                  invalid={false}
+                >
                   <Input
-                    id="site-town"
+                    id="site-edit-town"
+                    disabled={!canEdit}
                     value={values.town}
                     onChange={(event) =>
                       setValues((current) => ({
@@ -283,11 +275,12 @@ export function SitesCreateSheet() {
 
                 <AuthFormField
                   label="County"
-                  htmlFor="site-county"
+                  htmlFor="site-edit-county"
                   invalid={false}
                 >
                   <Input
-                    id="site-county"
+                    id="site-edit-county"
+                    disabled={!canEdit}
                     value={values.county}
                     onChange={(event) =>
                       setValues((current) => ({
@@ -301,11 +294,12 @@ export function SitesCreateSheet() {
 
               <AuthFormField
                 label="Eircode"
-                htmlFor="site-eircode"
+                htmlFor="site-edit-eircode"
                 invalid={false}
               >
                 <Input
-                  id="site-eircode"
+                  id="site-edit-eircode"
+                  disabled={!canEdit}
                   value={values.eircode}
                   onChange={(event) =>
                     setValues((current) => ({
@@ -318,11 +312,12 @@ export function SitesCreateSheet() {
 
               <AuthFormField
                 label="Access notes"
-                htmlFor="site-access-notes"
+                htmlFor="site-edit-access-notes"
                 invalid={false}
               >
                 <Textarea
-                  id="site-access-notes"
+                  id="site-edit-access-notes"
+                  disabled={!canEdit}
                   rows={3}
                   value={values.accessNotes}
                   onChange={(event) =>
@@ -338,12 +333,13 @@ export function SitesCreateSheet() {
             <div className="grid gap-4 sm:grid-cols-2">
               <AuthFormField
                 label="Latitude"
-                htmlFor="site-latitude"
+                htmlFor="site-edit-latitude"
                 invalid={Boolean(fieldErrors.latitude)}
                 errorText={fieldErrors.latitude}
               >
                 <Input
-                  id="site-latitude"
+                  id="site-edit-latitude"
+                  disabled={!canEdit}
                   inputMode="decimal"
                   value={values.latitude}
                   aria-invalid={Boolean(fieldErrors.latitude) || undefined}
@@ -358,12 +354,13 @@ export function SitesCreateSheet() {
 
               <AuthFormField
                 label="Longitude"
-                htmlFor="site-longitude"
+                htmlFor="site-edit-longitude"
                 invalid={Boolean(fieldErrors.longitude)}
                 errorText={fieldErrors.longitude}
               >
                 <Input
-                  id="site-longitude"
+                  id="site-edit-longitude"
+                  disabled={!canEdit}
                   inputMode="decimal"
                   value={values.longitude}
                   aria-invalid={Boolean(fieldErrors.longitude) || undefined}
@@ -382,19 +379,21 @@ export function SitesCreateSheet() {
             <Button
               type="button"
               variant="ghost"
-              disabled={createResult.waiting}
-              onClick={() => closeSheet({ delayed: true })}
+              disabled={updateResult.waiting}
+              onClick={closeSheet}
             >
-              Cancel
+              Close
             </Button>
-            <Button type="submit" disabled={createResult.waiting}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              {createResult.waiting ? "Creating..." : "Create site"}
-            </Button>
+            {canEdit ? (
+              <Button type="submit" disabled={updateResult.waiting}>
+                <HugeiconsIcon
+                  icon={PencilEdit02Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+                {updateResult.waiting ? "Saving..." : "Save changes"}
+              </Button>
+            ) : null}
           </DrawerFooter>
         </form>
       </DrawerContent>
@@ -402,21 +401,34 @@ export function SitesCreateSheet() {
   );
 }
 
-export function buildRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[]
-) {
-  return [
-    {
-      label: "Region",
-      options: [
-        { label: "No region yet", value: NONE_VALUE },
-        ...regions.map((region) => ({
-          label: region.name,
-          value: region.id,
-        })),
-      ],
-    },
-  ] satisfies readonly CommandSelectGroup[];
+function buildFormStateFromSite(site: JobSiteOption): SitesCreateFormState {
+  return {
+    accessNotes: site.accessNotes ?? "",
+    addressLine1: site.addressLine1 ?? "",
+    addressLine2: site.addressLine2 ?? "",
+    county: site.county ?? "",
+    eircode: site.eircode ?? "",
+    latitude: site.latitude === undefined ? "" : String(site.latitude),
+    longitude: site.longitude === undefined ? "" : String(site.longitude),
+    name: site.name,
+    regionSelection: site.regionId ?? NONE_VALUE,
+    town: site.town ?? "",
+  };
+}
+
+function buildEmptySiteState(): SitesCreateFormState {
+  return {
+    accessNotes: "",
+    addressLine1: "",
+    addressLine2: "",
+    county: "",
+    eircode: "",
+    latitude: "",
+    longitude: "",
+    name: "",
+    regionSelection: NONE_VALUE,
+    town: "",
+  };
 }
 
 function isRegionNotFoundError(error: unknown) {
@@ -426,112 +438,4 @@ function isRegionNotFoundError(error: unknown) {
     "_tag" in error &&
     error._tag === REGION_NOT_FOUND_ERROR_TAG
   );
-}
-
-export function validateSiteForm(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-): SitesCreateFieldErrors {
-  const coordinateErrors = validateCoordinates(values);
-
-  return {
-    latitude: coordinateErrors.latitude,
-    longitude: coordinateErrors.longitude,
-    name:
-      values.name.trim().length === 0
-        ? "Add a site name before creating it."
-        : undefined,
-    regionSelection:
-      values.regionSelection !== NONE_VALUE &&
-      findSelectedRegion(values, regions) === undefined
-        ? "Pick an available region, or choose no region."
-        : undefined,
-  };
-}
-
-function validateCoordinates(
-  values: SitesCreateFormState
-): Pick<SitesCreateFieldErrors, "latitude" | "longitude"> {
-  const latitudeValue = values.latitude.trim();
-  const longitudeValue = values.longitude.trim();
-
-  if (latitudeValue.length === 0 && longitudeValue.length === 0) {
-    return {};
-  }
-
-  if (latitudeValue.length === 0 || longitudeValue.length === 0) {
-    return {
-      latitude:
-        latitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-      longitude:
-        longitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-    };
-  }
-
-  const latitude = Number(latitudeValue);
-  const longitude = Number(longitudeValue);
-
-  return {
-    latitude:
-      Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
-        ? undefined
-        : "Latitude must be between -90 and 90.",
-    longitude:
-      Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
-        ? undefined
-        : "Longitude must be between -180 and 180.",
-  };
-}
-
-export function hasSiteFieldErrors(errors: SitesCreateFieldErrors) {
-  return Object.values(errors).some((value) => value !== undefined);
-}
-
-export function buildSiteInput(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-): CreateSiteInput {
-  const latitude = toOptionalCoordinate(values.latitude);
-  const longitude = toOptionalCoordinate(values.longitude);
-  const selectedRegion = findSelectedRegion(values, regions);
-
-  return {
-    accessNotes: toOptionalTrimmedString(values.accessNotes),
-    addressLine1: toOptionalTrimmedString(values.addressLine1),
-    addressLine2: toOptionalTrimmedString(values.addressLine2),
-    county: toOptionalTrimmedString(values.county),
-    eircode: toOptionalTrimmedString(values.eircode),
-    latitude,
-    longitude,
-    name: values.name.trim(),
-    regionId: selectedRegion?.id,
-    town: toOptionalTrimmedString(values.town),
-  };
-}
-
-function findSelectedRegion(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-) {
-  if (values.regionSelection === NONE_VALUE) {
-    return;
-  }
-
-  return regions.find((region) => region.id === values.regionSelection);
-}
-
-function toOptionalTrimmedString(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed.length === 0 ? undefined : trimmed;
-}
-
-function toOptionalCoordinate(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed.length === 0 ? undefined : Number(trimmed);
 }
