@@ -14,7 +14,7 @@ import {
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { JobListItem, JobPriority } from "@task-tracker/jobs-core";
 import * as React from "react";
 
@@ -61,6 +61,8 @@ import {
   TableRow,
 } from "#/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
 import { cn } from "#/lib/utils";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -125,16 +127,101 @@ export function JobsPage({
   const optionsState = useAtomValue(jobsOptionsStateAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
+  const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
 
-  function patchFilters(patch: Partial<JobsListFilters>) {
-    setFilters((current) => ({
-      ...current,
-      ...patch,
-    }));
-  }
+  const patchFilters = React.useCallback(
+    (patch: Partial<JobsListFilters>) => {
+      setFilters((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [setFilters]
+  );
+  const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
+    const actions: CommandAction[] = [
+      ...(canCreateJobs
+        ? [
+            {
+              group: "Current page",
+              icon: Add01Icon,
+              id: "jobs-create",
+              priority: 90,
+              run: () => navigate({ to: "/jobs/new" }),
+              scope: "route" as const,
+              title: "Create job",
+            },
+          ]
+        : []),
+      {
+        disabled: viewMode === "list",
+        group: "Current page",
+        icon: LeftToRightListBulletIcon,
+        id: "jobs-switch-list-view",
+        priority: 80,
+        run: () => setViewMode("list"),
+        scope: "route",
+        title: "Switch to list view",
+      },
+      {
+        disabled: viewMode === "map",
+        group: "Current page",
+        icon: MapsSquare01Icon,
+        id: "jobs-switch-map-view",
+        priority: 70,
+        run: () => setViewMode("map"),
+        scope: "route",
+        title: "Switch to map view",
+      },
+      {
+        disabled: filters.status === "active",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-active",
+        priority: 60,
+        run: () => patchFilters({ status: "active" }),
+        scope: "route",
+        title: "Show active jobs",
+      },
+      {
+        disabled: filters.status === "all",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-all",
+        priority: 50,
+        run: () => patchFilters({ status: "all" }),
+        scope: "route",
+        title: "Show all jobs",
+      },
+    ];
+
+    if (hasCustomFilters) {
+      actions.push({
+        group: "Job filters",
+        icon: Cancel01Icon,
+        id: "jobs-clear-filters",
+        priority: 90,
+        run: () => setFilters(defaultJobsListFilters),
+        scope: "route",
+        title: "Clear job filters",
+      });
+    }
+
+    return actions;
+  }, [
+    canCreateJobs,
+    filters.status,
+    hasCustomFilters,
+    navigate,
+    patchFilters,
+    setFilters,
+    viewMode,
+  ]);
+
+  useRegisterCommandActions(jobsPageCommandActions);
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">

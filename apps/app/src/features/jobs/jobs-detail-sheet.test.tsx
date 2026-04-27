@@ -7,10 +7,12 @@ import type {
   ActivityIdType,
   VisitIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
 import type { ComponentProps, ReactNode } from "react";
+
+import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { JobsDetailSheet } from "./jobs-detail-sheet";
 import type { JobsViewer } from "./jobs-viewer";
@@ -512,6 +514,40 @@ describe("jobs detail sheet", () => {
   );
 
   it(
+    "registers job detail transition actions in the command bar",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedTransitionJob.mockResolvedValue(
+        Exit.succeed({
+          ...buildDetail().job,
+          status: "completed",
+        })
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), undefined, { withCommandBar: true });
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /mark job completed/i })
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole("option", { name: /mark job completed/i })
+      );
+
+      expect(mockedTransitionJob).toHaveBeenCalledWith({
+        status: "completed",
+      });
+    }
+  );
+
+  it(
     "logs a visit and clears the visit form",
     {
       timeout: 10_000,
@@ -652,9 +688,10 @@ function buildDetail(overrides?: {
 
 function renderDetailSheet(
   initialDetail: ReturnType<typeof buildDetail>,
-  viewer?: JobsViewer
+  viewer?: JobsViewer,
+  options?: { readonly withCommandBar?: boolean }
 ) {
-  return render(
+  const sheet = (
     <JobsDetailSheet
       initialDetail={initialDetail}
       viewer={
@@ -664,5 +701,13 @@ function renderDetailSheet(
         }
       }
     />
+  );
+
+  return render(
+    options?.withCommandBar ? (
+      <CommandBarProvider>{sheet}</CommandBarProvider>
+    ) : (
+      sheet
+    )
   );
 }

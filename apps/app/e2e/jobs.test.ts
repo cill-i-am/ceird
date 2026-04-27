@@ -41,6 +41,24 @@ async function signUpAndCreateOrganization(page: Page) {
 test.describe("jobs flow", () => {
   test.setTimeout(60_000);
 
+  test("supports global and route-specific command bar actions", async ({
+    page,
+  }) => {
+    const jobsPage = new JobsPage(page);
+
+    await signUpAndCreateOrganization(page);
+    await runCommandBarAction(page, "Go to Jobs");
+
+    await jobsPage.expectLoaded();
+    await runCommandBarAction(page, "Switch to map view");
+
+    await expect(page.getByTestId("jobs-coverage-panel")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Map" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
   test("supports the core jobs happy path from intake through reopen", async ({
     page,
   }) => {
@@ -133,3 +151,10 @@ test.describe("jobs flow", () => {
     await expect(detailSheet.pickStatusChange).toBeDisabled();
   });
 });
+
+async function runCommandBarAction(page: Page, label: string) {
+  await page.keyboard.press("ControlOrMeta+K");
+  const option = page.getByRole("option", { exact: true, name: label });
+  await option.click();
+  await expect(option).toBeHidden();
+}

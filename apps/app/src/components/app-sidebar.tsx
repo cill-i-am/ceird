@@ -1,15 +1,11 @@
 "use client";
 
-import {
-  Briefcase01Icon,
-  CommandIcon,
-  ComputerTerminalIcon,
-  Location01Icon,
-} from "@hugeicons/core-free-icons";
+import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
+import { APP_PRIMARY_NAV_ITEMS } from "#/components/app-navigation";
 import { NavMain } from "#/components/nav-main";
 import { NavUser } from "#/components/nav-user";
 import type { NavUserAccount } from "#/components/nav-user";
@@ -22,32 +18,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
-
-const data = {
-  navMain: [
-    {
-      title: "Home",
-      url: "/",
-      icon: <HugeiconsIcon icon={ComputerTerminalIcon} strokeWidth={2} />,
-      isActive: true,
-    },
-    {
-      title: "Jobs",
-      url: "/jobs",
-      icon: <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />,
-    },
-    {
-      title: "Sites",
-      url: "/sites",
-      icon: <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />,
-    },
-    {
-      title: "Members",
-      url: "/members",
-      icon: <HugeiconsIcon icon={CommandIcon} strokeWidth={2} />,
-    },
-  ],
-};
 
 export function AppSidebar({
   user,
@@ -87,7 +57,13 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="px-1 pb-2">
-        <NavMain items={data.navMain} />
+        <NavMain
+          items={APP_PRIMARY_NAV_ITEMS.map((item) => ({
+            icon: <HugeiconsIcon icon={item.icon} strokeWidth={2} />,
+            title: item.title,
+            url: item.url,
+          }))}
+        />
       </SidebarContent>
       {user ? (
         <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-2.5">

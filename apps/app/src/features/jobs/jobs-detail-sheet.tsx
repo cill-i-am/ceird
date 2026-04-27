@@ -56,6 +56,8 @@ import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
 
 import { JobsDetailLocation } from "./jobs-detail-location";
 import {
@@ -116,7 +118,7 @@ export function JobsDetailSheet({
   initialDetail,
   viewer,
 }: JobsDetailSheetProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/jobs/$jobId" });
   const workItemId = initialDetail.job.id;
 
   useAtomInitialValues([
@@ -223,11 +225,11 @@ export function JobsDetailSheet({
     setVisitError(null);
   }, [detail.job.siteId, detail.job.status, workItemId]);
 
-  function closeSheet() {
+  const closeSheet = React.useCallback(() => {
     React.startTransition(() => {
       navigate({ to: "/jobs" });
     });
-  }
+  }, [navigate]);
 
   async function handleTransition() {
     if (!selectedStatus) {
@@ -255,9 +257,78 @@ export function JobsDetailSheet({
     }
   }
 
-  async function handleReopen() {
+  const handleReopen = React.useCallback(async () => {
     await reopenJob();
-  }
+  }, [reopenJob]);
+
+  const jobDetailCommandActions = React.useMemo<
+    readonly CommandAction[]
+  >(() => {
+    const actions: CommandAction[] = [
+      {
+        group: "Current job",
+        icon: Briefcase01Icon,
+        id: `job-${workItemId}-close`,
+        priority: 100,
+        run: closeSheet,
+        scope: "detail",
+        title: "Close job details",
+      },
+    ];
+
+    if (detail.job.status === "completed" && canReopen) {
+      actions.push({
+        disabled: reopenResult.waiting,
+        group: "Current job",
+        icon: CheckmarkCircle02Icon,
+        id: `job-${workItemId}-reopen`,
+        priority: 90,
+        run: handleReopen,
+        scope: "detail",
+        title: "Reopen job",
+      });
+    }
+
+    if (detail.job.status !== "completed" && hasAssignmentAccess) {
+      for (const status of transitionOptions) {
+        actions.push({
+          disabled: transitionResult.waiting,
+          group: "Current job",
+          icon: CheckmarkCircle02Icon,
+          id: `job-${workItemId}-transition-${status}`,
+          keywords: [STATUS_LABELS[status]],
+          priority: status === "completed" ? 90 : 80,
+          run: () => {
+            setTransitionError(null);
+
+            if (status === "blocked") {
+              setSelectedStatus("blocked");
+              return;
+            }
+
+            void transitionJob({ status });
+          },
+          scope: "detail",
+          title: getStatusCommandLabel(status),
+        });
+      }
+    }
+
+    return actions;
+  }, [
+    canReopen,
+    closeSheet,
+    detail.job.status,
+    handleReopen,
+    hasAssignmentAccess,
+    reopenResult.waiting,
+    transitionOptions,
+    transitionJob,
+    transitionResult.waiting,
+    workItemId,
+  ]);
+
+  useRegisterCommandActions(jobDetailCommandActions);
 
   async function handleUpdateSiteAssignment() {
     if (!canEditJob) {
@@ -991,6 +1062,18 @@ function buildTransitionSelectionGroups(
       ],
     },
   ] satisfies readonly CommandSelectGroup[];
+}
+
+function getStatusCommandLabel(status: JobStatus) {
+  if (status === "blocked") {
+    return "Prepare blocked status";
+  }
+
+  if (status === "canceled") {
+    return "Cancel job";
+  }
+
+  return `Mark job ${STATUS_LABELS[status].toLowerCase()}`;
 }
 
 function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {

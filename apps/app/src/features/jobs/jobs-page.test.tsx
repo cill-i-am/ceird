@@ -8,9 +8,17 @@ import type {
   UserIdType,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
+
+import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { JobsPage } from "./jobs-page";
 import {
@@ -29,6 +37,10 @@ const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
 const organizationId = decodeOrganizationId("org_123");
 const originalInnerWidth = window.innerWidth;
+
+const { mockedNavigate } = vi.hoisted(() => ({
+  mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
+}));
 
 const initialList: JobListResponse = {
   items: [
@@ -161,12 +173,14 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
 describe("jobs page", () => {
   afterEach(() => {
     setViewportWidth(originalInnerWidth);
+    vi.clearAllMocks();
   });
 
   it(
@@ -268,6 +282,46 @@ describe("jobs page", () => {
       await user.click(screen.getByRole("tab", { name: "List" }));
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
+    }
+  );
+
+  it(
+    "registers jobs page actions in the command bar",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({ withCommandBar: true, viewportWidth: 1280 });
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /create job/i })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("option", { name: /switch to map view/i })
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole("option", { name: /switch to map view/i })
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
+        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        );
+      });
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+      await user.click(screen.getByRole("option", { name: /create job/i }));
+
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs/new" });
     }
   );
 
@@ -417,10 +471,10 @@ function getPrimaryQueuePanel() {
 function renderJobsPage(options?: {
   readonly viewer?: JobsViewer;
   readonly viewportWidth?: number;
+  readonly withCommandBar?: boolean;
 }) {
   setViewportWidth(options?.viewportWidth ?? 1440);
-
-  return render(
+  const page = (
     <RegistryProvider
       initialValues={[
         [jobsListStateAtom, seedJobsListState(organizationId, initialList)],
@@ -440,6 +494,14 @@ function renderJobsPage(options?: {
         }
       />
     </RegistryProvider>
+  );
+
+  return render(
+    options?.withCommandBar ? (
+      <CommandBarProvider>{page}</CommandBarProvider>
+    ) : (
+      page
+    )
   );
 }
 

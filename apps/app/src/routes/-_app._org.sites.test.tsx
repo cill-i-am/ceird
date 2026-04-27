@@ -11,10 +11,12 @@ const {
   mockedEnsureActiveOrganizationId,
   mockedGetCurrentOrganizationMemberRole,
   mockedGetCurrentServerSiteOptions,
+  mockedNavigate,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerSiteOptions: vi.fn<AsyncLoaderMock>(),
+  mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -31,6 +33,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 

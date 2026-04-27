@@ -4,6 +4,7 @@ import {
   useRouteContext,
 } from "@tanstack/react-router";
 
+import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
 import { requireOrganizationAccess } from "#/features/organizations/organization-access";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 
@@ -28,6 +29,7 @@ function OrganizationRouteComponent() {
     <OrganizationActiveSyncBoundary
       activeOrganizationSync={activeOrganizationSync}
     >
+      <AppOrganizationCommandActions />
       <Outlet />
     </OrganizationActiveSyncBoundary>
   );

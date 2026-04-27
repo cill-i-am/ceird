@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { memo } from "react";
 import type { ComponentProps, ReactElement } from "react";
 
@@ -54,12 +54,17 @@ const { mockedAppSidebar, mockedEmailVerificationBanner, mockedSidebarInset } =
     )),
   }));
 
+const { mockedNavigate } = vi.hoisted(() => ({
+  mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
+}));
+
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
 
   return {
     ...actual,
     Outlet: memo(() => <div data-testid="app-layout-outlet" />),
+    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
@@ -161,6 +166,43 @@ describe("app layout", () => {
       expect(mockedEmailVerificationBanner).not.toHaveBeenCalled();
       expect(
         screen.queryByTestId("email-verification-banner")
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "does not expose organization commands from the app shell",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      render(
+        <AppLayout
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: true,
+            image: null,
+          }}
+        />
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /open user settings/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByRole("option", { name: /go to jobs/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to sites/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /open organization settings/i })
       ).not.toBeInTheDocument();
     }
   );
