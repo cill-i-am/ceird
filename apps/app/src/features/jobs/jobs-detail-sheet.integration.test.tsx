@@ -102,7 +102,7 @@ vi.mock("#/components/ui/command-select", () => ({
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
-        ))
+        )),
       )}
     </select>
   ),
@@ -159,7 +159,7 @@ describe("jobs detail sheet integration", () => {
           reopenJob: mockedReopenJob,
           transitionJob: mockedTransitionJob,
         },
-      })
+      }),
     );
   });
 
@@ -180,10 +180,10 @@ describe("jobs detail sheet integration", () => {
           completedByUserId: actorUserId,
           status: "completed",
           updatedAt: "2026-04-24T10:00:00.000Z",
-        })
+        }),
       );
       mockedGetJobDetail.mockReturnValue(
-        Effect.fail(new Error("refresh failed"))
+        Effect.fail(new Error("refresh failed")),
       );
       mockedListJobs.mockReturnValue(Effect.fail(new Error("refresh failed")));
 
@@ -192,32 +192,32 @@ describe("jobs detail sheet integration", () => {
 
       await user.selectOptions(
         screen.getByLabelText("Next status"),
-        "completed"
+        "completed",
       );
       await user.click(
-        screen.getByRole("button", { name: /apply status change/i })
+        screen.getByRole("button", { name: /apply status change/i }),
       );
 
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: /reopen job/i })
+          screen.getByRole("button", { name: /reopen job/i }),
         ).toBeInTheDocument();
       });
 
       expect(screen.getByText("Completed")).toBeInTheDocument();
       expect(
-        screen.getByText("Use reception and the south gate.")
+        screen.getByText("Use reception and the south gate."),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: /open in google maps/i })
+        screen.getByRole("link", { name: /open in google maps/i }),
       ).toBeInTheDocument();
       expect(screen.getByTestId("list-statuses")).toHaveTextContent(
-        "completed"
+        "completed",
       );
       expect(
-        screen.queryByText(/that update didn't land/i)
+        screen.queryByText(/that update didn't land/i),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -233,10 +233,10 @@ describe("jobs detail sheet integration", () => {
           createdAt: "2026-04-24T11:00:00.000Z",
           id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as CommentIdType,
           workItemId,
-        })
+        }),
       );
       mockedGetJobDetail.mockReturnValue(
-        Effect.fail(new Error("refresh failed"))
+        Effect.fail(new Error("refresh failed")),
       );
 
       const user = userEvent.setup();
@@ -244,17 +244,17 @@ describe("jobs detail sheet integration", () => {
 
       await user.type(
         screen.getByLabelText("Add a comment"),
-        "Crew returning first thing tomorrow."
+        "Crew returning first thing tomorrow.",
       );
       await user.click(screen.getByRole("button", { name: /add comment/i }));
 
       await expect(
-        screen.findByText("Crew returning first thing tomorrow.")
+        screen.findByText("Crew returning first thing tomorrow."),
       ).resolves.toBeInTheDocument();
       expect(
-        screen.queryByText(/that update didn't land/i)
+        screen.queryByText(/that update didn't land/i),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 });
 
@@ -310,6 +310,7 @@ function renderDetailSheet() {
                 addressLine1: "1 Custom House Quay",
                 addressLine2: "North Dock",
                 county: "Dublin",
+                country: "IE",
                 eircode: "D01 X2X2",
                 latitude: 53.3498,
                 id: siteId,
@@ -332,7 +333,7 @@ function renderDetailSheet() {
         }}
       />
       <JobsListProbe />
-    </RegistryProvider>
+    </RegistryProvider>,
   );
 }
 

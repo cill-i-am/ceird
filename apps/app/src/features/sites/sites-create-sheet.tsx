@@ -35,17 +35,17 @@ interface SitesCreateFormState {
   readonly addressLine1: string;
   readonly addressLine2: string;
   readonly county: string;
+  readonly country: "IE";
   readonly eircode: string;
-  readonly latitude: string;
-  readonly longitude: string;
   readonly name: string;
   readonly regionSelection: string;
   readonly town: string;
 }
 
 interface SitesCreateFieldErrors {
-  readonly latitude?: string;
-  readonly longitude?: string;
+  readonly addressLine1?: string;
+  readonly county?: string;
+  readonly eircode?: string;
   readonly name?: string;
   readonly regionSelection?: string;
 }
@@ -55,9 +55,8 @@ const defaultFormState: SitesCreateFormState = {
   addressLine1: "",
   addressLine2: "",
   county: "",
+  country: "IE",
   eircode: "",
-  latitude: "",
-  longitude: "",
   name: "",
   regionSelection: NONE_VALUE,
   town: "",
@@ -71,7 +70,7 @@ export function SitesCreateSheet() {
   });
   const createResult = useAtomValue(createSiteMutationAtom);
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
-    {}
+    {},
   );
   const [values, setValues] =
     React.useState<SitesCreateFormState>(defaultFormState);
@@ -81,7 +80,7 @@ export function SitesCreateSheet() {
   > | null>(null);
   const regionGroups = React.useMemo(
     () => buildRegionSelectionGroups(options.regions),
-    [options.regions]
+    [options.regions],
   );
 
   React.useEffect(
@@ -90,7 +89,7 @@ export function SitesCreateSheet() {
         clearTimeout(closeNavigationTimeout.current);
       }
     },
-    []
+    [],
   );
 
   function closeSheet({
@@ -177,7 +176,7 @@ export function SitesCreateSheet() {
                     <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
                     <AlertDescription>{error.message}</AlertDescription>
                   </Alert>
-                )
+                ),
               )
               .render()}
 
@@ -232,11 +231,13 @@ export function SitesCreateSheet() {
               <AuthFormField
                 label="Address line 1"
                 htmlFor="site-address-line-1"
-                invalid={false}
+                invalid={Boolean(fieldErrors.addressLine1)}
+                errorText={fieldErrors.addressLine1}
               >
                 <Input
                   id="site-address-line-1"
                   value={values.addressLine1}
+                  aria-invalid={Boolean(fieldErrors.addressLine1) || undefined}
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
@@ -280,11 +281,13 @@ export function SitesCreateSheet() {
                 <AuthFormField
                   label="County"
                   htmlFor="site-county"
-                  invalid={false}
+                  invalid={Boolean(fieldErrors.county)}
+                  errorText={fieldErrors.county}
                 >
                   <Input
                     id="site-county"
                     value={values.county}
+                    aria-invalid={Boolean(fieldErrors.county) || undefined}
                     onChange={(event) =>
                       setValues((current) => ({
                         ...current,
@@ -298,11 +301,13 @@ export function SitesCreateSheet() {
               <AuthFormField
                 label="Eircode"
                 htmlFor="site-eircode"
-                invalid={false}
+                invalid={Boolean(fieldErrors.eircode)}
+                errorText={fieldErrors.eircode}
               >
                 <Input
                   id="site-eircode"
                   value={values.eircode}
+                  aria-invalid={Boolean(fieldErrors.eircode) || undefined}
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
@@ -330,48 +335,6 @@ export function SitesCreateSheet() {
                 />
               </AuthFormField>
             </FieldGroup>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <AuthFormField
-                label="Latitude"
-                htmlFor="site-latitude"
-                invalid={Boolean(fieldErrors.latitude)}
-                errorText={fieldErrors.latitude}
-              >
-                <Input
-                  id="site-latitude"
-                  inputMode="decimal"
-                  value={values.latitude}
-                  aria-invalid={Boolean(fieldErrors.latitude) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      latitude: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Longitude"
-                htmlFor="site-longitude"
-                invalid={Boolean(fieldErrors.longitude)}
-                errorText={fieldErrors.longitude}
-              >
-                <Input
-                  id="site-longitude"
-                  inputMode="decimal"
-                  value={values.longitude}
-                  aria-invalid={Boolean(fieldErrors.longitude) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      longitude: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-            </div>
           </div>
 
           <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
@@ -399,7 +362,7 @@ export function SitesCreateSheet() {
 }
 
 function buildRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[]
+  regions: readonly { readonly id: string; readonly name: string }[],
 ) {
   return [
     {
@@ -426,13 +389,15 @@ function isRegionNotFoundError(error: unknown) {
 
 function validate(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
+  regions: readonly JobRegionOption[],
 ): SitesCreateFieldErrors {
-  const coordinateErrors = validateCoordinates(values);
-
   return {
-    latitude: coordinateErrors.latitude,
-    longitude: coordinateErrors.longitude,
+    addressLine1:
+      values.addressLine1.trim().length === 0
+        ? "Add address line 1."
+        : undefined,
+    county: values.county.trim().length === 0 ? "Add county." : undefined,
+    eircode: values.eircode.trim().length === 0 ? "Add Eircode." : undefined,
     name:
       values.name.trim().length === 0
         ? "Add a site name before creating it."
@@ -445,64 +410,23 @@ function validate(
   };
 }
 
-function validateCoordinates(
-  values: SitesCreateFormState
-): Pick<SitesCreateFieldErrors, "latitude" | "longitude"> {
-  const latitudeValue = values.latitude.trim();
-  const longitudeValue = values.longitude.trim();
-
-  if (latitudeValue.length === 0 && longitudeValue.length === 0) {
-    return {};
-  }
-
-  if (latitudeValue.length === 0 || longitudeValue.length === 0) {
-    return {
-      latitude:
-        latitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-      longitude:
-        longitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-    };
-  }
-
-  const latitude = Number(latitudeValue);
-  const longitude = Number(longitudeValue);
-
-  return {
-    latitude:
-      Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
-        ? undefined
-        : "Latitude must be between -90 and 90.",
-    longitude:
-      Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
-        ? undefined
-        : "Longitude must be between -180 and 180.",
-  };
-}
-
 function hasFieldErrors(errors: SitesCreateFieldErrors) {
   return Object.values(errors).some((value) => value !== undefined);
 }
 
 function buildCreateSiteInput(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
+  regions: readonly JobRegionOption[],
 ): CreateSiteInput {
-  const latitude = toOptionalCoordinate(values.latitude);
-  const longitude = toOptionalCoordinate(values.longitude);
   const selectedRegion = findSelectedRegion(values, regions);
 
   return {
     accessNotes: toOptionalTrimmedString(values.accessNotes),
-    addressLine1: toOptionalTrimmedString(values.addressLine1),
+    addressLine1: values.addressLine1.trim(),
     addressLine2: toOptionalTrimmedString(values.addressLine2),
-    county: toOptionalTrimmedString(values.county),
-    eircode: toOptionalTrimmedString(values.eircode),
-    latitude,
-    longitude,
+    county: values.county.trim(),
+    country: values.country,
+    eircode: values.eircode.trim(),
     name: values.name.trim(),
     regionId: selectedRegion?.id,
     town: toOptionalTrimmedString(values.town),
@@ -511,7 +435,7 @@ function buildCreateSiteInput(
 
 function findSelectedRegion(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
+  regions: readonly JobRegionOption[],
 ) {
   if (values.regionSelection === NONE_VALUE) {
     return;
@@ -524,10 +448,4 @@ function toOptionalTrimmedString(value: string) {
   const trimmed = value.trim();
 
   return trimmed.length === 0 ? undefined : trimmed;
-}
-
-function toOptionalCoordinate(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed.length === 0 ? undefined : Number(trimmed);
 }

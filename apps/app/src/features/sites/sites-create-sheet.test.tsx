@@ -24,7 +24,7 @@ const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
     mockedNavigate: vi.fn<NavigateMock>(),
     mockedUseAtomSet: vi.fn<AtomSetterMock>(),
     mockedUseAtomValue: vi.fn<AtomValueMock>(),
-  })
+  }),
 );
 
 const mockedCreateSite = vi.fn<AsyncMutationMock>();
@@ -143,56 +143,61 @@ describe("sites create sheet", () => {
         Exit.succeed({
           id: siteId,
           name: "Docklands Campus",
-        })
+        }),
       );
 
       const user = userEvent.setup();
       render(<SitesCreateSheet />);
+
+      expect(
+        screen.queryByLabelText(new RegExp(`^Lat${"itude"}$`)),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(new RegExp(`^Long${"itude"}$`)),
+      ).not.toBeInTheDocument();
 
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
       await user.click(screen.getByLabelText("Region"));
       await user.click(screen.getByRole("option", { name: "Dublin" }));
       await user.type(
         screen.getByLabelText("Address line 1"),
-        "1 Custom House Quay"
+        "1 Custom House Quay",
       );
       await user.type(screen.getByLabelText("Town"), "Dublin");
-      await user.type(screen.getByLabelText("Latitude"), "53.3498");
-      await user.type(screen.getByLabelText("Longitude"), "-6.2603");
+      await user.type(screen.getByLabelText("County"), "Dublin");
+      await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
       await user.click(screen.getByRole("button", { name: /create site/i }));
 
       expect(mockedCreateSite).toHaveBeenCalledWith({
         addressLine1: "1 Custom House Quay",
-        latitude: 53.3498,
-        longitude: -6.2603,
+        county: "Dublin",
+        country: "IE",
+        eircode: "D01 X2X2",
         name: "Docklands Campus",
         regionId,
         town: "Dublin",
       });
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
-    }
+    },
   );
 
   it(
-    "validates the required name and coordinate pair before submitting",
+    "validates the required name and address details before submitting",
     { timeout: 10_000 },
     async () => {
       const user = userEvent.setup();
       render(<SitesCreateSheet />);
 
-      await user.type(screen.getByLabelText("Latitude"), "53.3498");
       await user.click(screen.getByRole("button", { name: /create site/i }));
 
       expect(
-        screen.getByText("Add a site name before creating it.")
+        screen.getByText("Add a site name before creating it."),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          "Add both latitude and longitude, or leave both blank."
-        )
-      ).toBeInTheDocument();
+      expect(screen.getByText("Add address line 1.")).toBeInTheDocument();
+      expect(screen.getByText("Add county.")).toBeInTheDocument();
+      expect(screen.getByText("Add Eircode.")).toBeInTheDocument();
       expect(mockedCreateSite).not.toHaveBeenCalled();
-    }
+    },
   );
 
   it(
@@ -207,7 +212,7 @@ describe("sites create sheet", () => {
 
       expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
       expect(screen.getByRole("button", { name: /creating/i })).toBeDisabled();
-    }
+    },
   );
 
   it(
@@ -218,7 +223,7 @@ describe("sites create sheet", () => {
         Exit.fail({
           _tag: REGION_NOT_FOUND_ERROR_TAG,
           message: "Region is no longer available.",
-        })
+        }),
       );
 
       const user = userEvent.setup();
@@ -227,22 +232,28 @@ describe("sites create sheet", () => {
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
       await user.click(screen.getByLabelText("Region"));
       await user.click(screen.getByRole("option", { name: "Dublin" }));
+      await user.type(
+        screen.getByLabelText("Address line 1"),
+        "1 Custom House Quay",
+      );
+      await user.type(screen.getByLabelText("County"), "Dublin");
+      await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
       await user.click(screen.getByRole("button", { name: /create site/i }));
 
       const regionControl = screen.getByLabelText("Region");
 
       expect(
-        screen.getByText("Region is no longer available.")
+        screen.getByText("Region is no longer available."),
       ).toBeInTheDocument();
       expect(regionControl).toHaveAttribute("aria-invalid", "true");
       expect(regionControl).toHaveAttribute(
         "aria-describedby",
-        "site-region-error"
+        "site-region-error",
       );
       expect(
-        screen.queryByText("We couldn't create that site.")
+        screen.queryByText("We couldn't create that site."),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -260,8 +271,8 @@ describe("sites create sheet", () => {
       render(<SitesCreateSheet />);
 
       expect(
-        screen.queryByText("We couldn't create that site.")
+        screen.queryByText("We couldn't create that site."),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 });

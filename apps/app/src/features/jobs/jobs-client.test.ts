@@ -56,6 +56,9 @@ const detailResponse: JobDetailResponse = {
 
 const createSiteResponse: CreateSiteResponse = {
   addressLine1: "1 Custom House Quay",
+  county: "Dublin",
+  country: "IE",
+  eircode: "D01 X2X2",
   id: "33333333-3333-4333-8333-333333333333" as SiteIdType,
   name: "Docklands Campus",
   town: "Dublin",
@@ -83,14 +86,14 @@ describe("jobs client", () => {
           requestOrigin: "https://agent-one.app.task-tracker.localhost:1355",
           cookie: "better-auth.session_token=session-token",
         },
-        (client) => client.jobs.listJobs({ urlParams: {} })
-      )
+        (client) => client.jobs.listJobs({ urlParams: {} }),
+      ),
     ).resolves.toStrictEqual(listResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe(
-      "https://agent-one.api.task-tracker.localhost:1355/jobs"
+      "https://agent-one.api.task-tracker.localhost:1355/jobs",
     );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
@@ -105,7 +108,7 @@ describe("jobs client", () => {
 
     const client = await makeBrowserJobsClient("http://127.0.0.1:3000").pipe(
       provideBrowserJobsHttp,
-      Effect.runPromise
+      Effect.runPromise,
     );
 
     await expect(
@@ -116,13 +119,13 @@ describe("jobs client", () => {
               "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
           },
         })
-        .pipe(provideBrowserJobsHttp, Effect.runPromise)
+        .pipe(provideBrowserJobsHttp, Effect.runPromise),
     ).resolves.toStrictEqual(detailResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe(
-      "http://127.0.0.1:3001/jobs/11111111-1111-4111-8111-111111111111"
+      "http://127.0.0.1:3001/jobs/11111111-1111-4111-8111-111111111111",
     );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.credentials).toBe("include");
@@ -142,11 +145,14 @@ describe("jobs client", () => {
           client.sites.createSite({
             payload: {
               addressLine1: "1 Custom House Quay",
+              country: "IE",
+              county: "Dublin",
+              eircode: "D01 X2X2",
               name: "Docklands Campus",
               town: "Dublin",
             },
-          })
-      )
+          }),
+      ),
     ).resolves.toStrictEqual(createSiteResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
@@ -165,8 +171,8 @@ describe("jobs client", () => {
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
-        (client) => client.sites.getSiteOptions()
-      )
+        (client) => client.sites.getSiteOptions(),
+      ),
     ).resolves.toStrictEqual(siteOptionsResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
@@ -179,10 +185,10 @@ describe("jobs client", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     const capturedError = await runJobsClient({}, (client) =>
-      client.jobs.listJobs({ urlParams: {} })
+      client.jobs.listJobs({ urlParams: {} }),
     ).then(
       () => {},
-      (rejectedError) => rejectedError
+      (rejectedError) => rejectedError,
     );
 
     expect(capturedError).toMatchObject({
@@ -199,10 +205,10 @@ describe("jobs client", () => {
       {
         requestOrigin: "http://127.0.0.1:3000",
       },
-      (client) => client.jobs.listJobs({ urlParams: {} })
+      (client) => client.jobs.listJobs({ urlParams: {} }),
     ).then(
       () => {},
-      (rejectedError) => rejectedError
+      (rejectedError) => rejectedError,
     );
 
     expect(capturedError).toMatchObject({
