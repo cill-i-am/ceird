@@ -124,6 +124,7 @@ export class JobDetailSheet {
   readonly visitItems: Locator;
   readonly statusSelect: Locator;
   readonly blockedReason: Locator;
+  readonly pickStatusChange: Locator;
   readonly applyStatusChange: Locator;
   readonly commentBody: Locator;
   readonly addComment: Locator;
@@ -140,6 +141,9 @@ export class JobDetailSheet {
     this.visitItems = this.root.locator("li");
     this.statusSelect = this.root.locator("#job-transition-status");
     this.blockedReason = this.root.getByLabel("Why is it blocked?");
+    this.pickStatusChange = this.root.getByRole("button", {
+      name: "Pick a status",
+    });
     this.applyStatusChange = this.root.getByRole("button", {
       name: "Apply status change",
     });
