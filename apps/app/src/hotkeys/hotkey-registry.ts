@@ -338,7 +338,7 @@ export const HOTKEYS = {
   },
   mapZoomIn: {
     group: "Map",
-    hotkey: "+",
+    hotkey: "Shift+=",
     id: "mapZoomIn",
     label: "Zoom in",
     scope: "map",

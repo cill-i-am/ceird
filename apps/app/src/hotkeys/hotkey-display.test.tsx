@@ -1,6 +1,8 @@
+import { validateHotkey } from "@tanstack/react-hotkeys";
 import { render, screen, within } from "@testing-library/react";
 
 import { ShortcutHint } from "./hotkey-display";
+import { HOTKEYS } from "./hotkey-registry";
 
 describe("shortcut hint", () => {
   it(
@@ -45,6 +47,25 @@ describe("shortcut hint", () => {
       ).toBeVisible();
       expect(screen.getByText("G")).toBeVisible();
       expect(screen.getByText("J")).toBeVisible();
+    }
+  );
+});
+
+describe("hotkey registry", () => {
+  it(
+    "only contains valid TanStack hotkey chords",
+    {
+      timeout: 1000,
+    },
+    () => {
+      for (const definition of Object.values(HOTKEYS)) {
+        for (const chord of definition.hotkey.split(/\s+/)) {
+          expect(validateHotkey(chord)).toMatchObject({
+            errors: [],
+            valid: true,
+          });
+        }
+      }
     }
   );
 });
