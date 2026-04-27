@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
-import { Effect, Schema } from "effect";
+import { Effect, ParseResult, Schema } from "effect";
 
 import { SharedSandboxEnvironment } from "../runtime-spec.js";
 import type { SharedSandboxEnvironment as SharedSandboxEnvironmentType } from "../runtime-spec.js";
@@ -116,7 +116,7 @@ const decodeSandboxSharedEnvironment = Effect.fn("SandboxEnv.decodeShared")(
     return yield* Schema.decodeUnknown(SharedSandboxEnvironment)(
       input.environment
     ).pipe(
-      Effect.mapError(() => {
+      Effect.mapError((parseError) => {
         const missing = input.requiredKeys.filter((key) => {
           const value = input.environment[key];
 
@@ -126,7 +126,7 @@ const decodeSandboxSharedEnvironment = Effect.fn("SandboxEnv.decodeShared")(
         return new SandboxEnvironmentError({
           message:
             missing.length === 0
-              ? "Sandbox shared env is invalid."
+              ? `Sandbox shared env is invalid: ${formatParseError(parseError)}`
               : `Missing required sandbox env vars: ${missing.join(", ")}. Add them to .env or .env.local at the repo root, or export them in the shell before running the sandbox CLI.`,
           missing,
         });
@@ -134,6 +134,10 @@ const decodeSandboxSharedEnvironment = Effect.fn("SandboxEnv.decodeShared")(
     );
   }
 );
+
+function formatParseError(parseError: ParseResult.ParseError) {
+  return ParseResult.TreeFormatter.formatErrorSync(parseError);
+}
 
 function parseEnvironmentFile(content: string): Record<string, string> {
   return Object.fromEntries(

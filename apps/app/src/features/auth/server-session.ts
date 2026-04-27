@@ -1,8 +1,7 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
 
-import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
 import type { createTaskTrackerAuthClient } from "#/lib/auth-client";
+import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
@@ -13,9 +12,13 @@ type ServerAuthSession = Awaited<
 >["data"];
 
 export const getCurrentServerSession = createServerOnlyFn(async () => {
+  const { getRequestHeader } = await import("@tanstack/react-start/server");
   const cookie = getRequestHeader("cookie");
   const authBaseURL = resolveConfiguredServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders();
+  const forwardedHeaders = readServerApiForwardedHeaders({
+    host: getRequestHeader("host"),
+    forwardedProto: getRequestHeader("x-forwarded-proto"),
+  });
 
   if (!cookie || !authBaseURL) {
     return null;

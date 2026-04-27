@@ -3,11 +3,7 @@ import type { PublicInvitationPreview } from "@task-tracker/identity-core";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
-import {
-  readConfiguredApiOrigin,
-  readConfiguredServerApiOrigin,
-  resolveApiOrigin,
-} from "./api-origin";
+import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
 
 export const API_BASE_PATH = "/api";
 export const AUTH_BASE_PATH = "/api/auth";
@@ -31,10 +27,6 @@ export function resolveAuthBaseURL(
   }
 
   return new URL(AUTH_BASE_PATH, apiOrigin).toString();
-}
-
-export function resolveConfiguredServerAuthBaseURL(): string | undefined {
-  return resolveAuthBaseURL(undefined, readConfiguredServerApiOrigin());
 }
 
 export function resolveApiBaseURL(

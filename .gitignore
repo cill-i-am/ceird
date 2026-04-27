@@ -40,3 +40,5 @@ yarn-error.log*
 *.pem
 .worktrees/
 node-compile-cache/
+
+.auto-research/

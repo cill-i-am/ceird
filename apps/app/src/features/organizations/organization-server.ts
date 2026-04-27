@@ -1,5 +1,4 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
 import {
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummaryList,
@@ -12,7 +11,7 @@ import type {
 } from "@task-tracker/identity-core";
 import { Schema } from "effect";
 
-import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
+import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
@@ -58,7 +57,8 @@ interface ServerAuthRequest {
 
 export const getCurrentServerOrganizationSession = createServerOnlyFn(
   async (): Promise<OrganizationAccessSession | null> => {
-    const authRequest = readServerSessionRequest();
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const authRequest = readServerSessionRequest(getRequestHeader);
 
     if (!authRequest) {
       return null;
@@ -90,7 +90,8 @@ export const getCurrentServerOrganizationSession = createServerOnlyFn(
 );
 
 export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
-  const authRequest = readServerAuthRequestStrict();
+  const { getRequestHeader } = await import("@tanstack/react-start/server");
+  const authRequest = readServerAuthRequestStrict(getRequestHeader);
   const response = await fetchOrganizations(authRequest);
 
   if (!response.ok) {
@@ -112,7 +113,8 @@ export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
   async (
     organizationId: OrganizationIdType
   ): Promise<OrganizationMemberRole> => {
-    const authRequest = readServerAuthRequestStrict();
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const authRequest = readServerAuthRequestStrict(getRequestHeader);
     const response = await fetch(
       new URL(
         `organization/get-active-member-role?organizationId=${encodeURIComponent(
@@ -142,7 +144,8 @@ export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
 
 export const setCurrentServerActiveOrganization = createServerOnlyFn(
   async (organizationId: OrganizationIdType): Promise<void> => {
-    const authRequest = readServerAuthRequestStrict();
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const authRequest = readServerAuthRequestStrict(getRequestHeader);
     const response = await fetch(
       new URL("organization/set-active", `${authRequest.authBaseURL}/`),
       {
@@ -165,7 +168,9 @@ export const setCurrentServerActiveOrganization = createServerOnlyFn(
   }
 );
 
-function readServerSessionRequest(): ServerAuthRequest | null {
+function readServerSessionRequest(
+  getRequestHeader: (name: string) => string | undefined
+): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
 
   if (!cookie) {
@@ -173,7 +178,10 @@ function readServerSessionRequest(): ServerAuthRequest | null {
   }
 
   const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders();
+  const forwardedHeaders = readServerApiForwardedHeaders({
+    host: getRequestHeader("host"),
+    forwardedProto: getRequestHeader("x-forwarded-proto"),
+  });
 
   if (!authBaseURL) {
     throw new Error(
@@ -188,7 +196,9 @@ function readServerSessionRequest(): ServerAuthRequest | null {
   };
 }
 
-function readServerAuthRequestStrict(): ServerAuthRequest {
+function readServerAuthRequestStrict(
+  getRequestHeader: (name: string) => string | undefined
+): ServerAuthRequest {
   const cookie = getRequestHeader("cookie");
 
   if (!cookie) {
@@ -198,7 +208,10 @@ function readServerAuthRequestStrict(): ServerAuthRequest {
   }
 
   const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders();
+  const forwardedHeaders = readServerApiForwardedHeaders({
+    host: getRequestHeader("host"),
+    forwardedProto: getRequestHeader("x-forwarded-proto"),
+  });
 
   if (!authBaseURL) {
     throw new Error(

@@ -1,4 +1,3 @@
-import { getRequestHeader } from "@tanstack/react-start/server";
 import type {
   JobDetailResponse,
   JobListItem,
@@ -9,7 +8,7 @@ import type {
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
 
-import { readConfiguredServerApiOrigin } from "#/lib/api-origin";
+import { readConfiguredServerApiOrigin } from "#/lib/api-origin.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
@@ -24,10 +23,37 @@ interface ServerJobsRequest {
   readonly forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
 }
 
+async function readServerJobsRequestStrict(): Promise<ServerJobsRequest> {
+  const { getRequestHeader } = await import("@tanstack/react-start/server");
+  const cookie = getRequestHeader("cookie");
+  const apiOrigin = readConfiguredServerApiOrigin();
+
+  if (!cookie) {
+    throw new JobsRequestError({
+      message: "Cannot query jobs without the current auth cookie.",
+    });
+  }
+
+  if (!apiOrigin) {
+    throw new JobsRequestError({
+      message: "Cannot resolve the jobs API origin for server jobs requests.",
+    });
+  }
+
+  return {
+    apiOrigin,
+    cookie: normalizeServerApiCookieHeader(cookie, apiOrigin),
+    forwardedHeaders: readServerApiForwardedHeaders({
+      host: getRequestHeader("host"),
+      forwardedProto: getRequestHeader("x-forwarded-proto"),
+    }),
+  };
+}
+
 export async function listCurrentServerJobsDirect(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
-  const request = readServerJobsRequestStrict();
+  const request = await readServerJobsRequestStrict();
 
   return await runJobsClient(request, (client) =>
     client.jobs.listJobs({
@@ -39,7 +65,7 @@ export async function listCurrentServerJobsDirect(
 export async function listAllCurrentServerJobsDirect(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
-  const request = readServerJobsRequestStrict();
+  const request = await readServerJobsRequestStrict();
   const items: JobListItem[] = [];
   const { cursor: initialCursor, ...staticQuery } = query;
   let cursor = initialCursor;
@@ -68,7 +94,7 @@ export async function listAllCurrentServerJobsDirect(
 export async function getCurrentServerJobDetailDirect(
   workItemId: WorkItemIdType
 ): Promise<JobDetailResponse> {
-  const request = readServerJobsRequestStrict();
+  const request = await readServerJobsRequestStrict();
 
   return await runJobsClient(request, (client) =>
     client.jobs.getJobDetail({ path: { workItemId } })
@@ -76,38 +102,15 @@ export async function getCurrentServerJobDetailDirect(
 }
 
 export async function getCurrentServerJobOptionsDirect(): Promise<JobOptionsResponse> {
-  const request = readServerJobsRequestStrict();
+  const request = await readServerJobsRequestStrict();
 
   return await runJobsClient(request, (client) => client.jobs.getJobOptions());
 }
 
 export async function getCurrentServerSiteOptionsDirect(): Promise<SitesOptionsResponse> {
-  const request = readServerJobsRequestStrict();
+  const request = await readServerJobsRequestStrict();
 
   return await runJobsClient(request, (client) =>
     client.sites.getSiteOptions()
   );
-}
-
-function readServerJobsRequestStrict(): ServerJobsRequest {
-  const cookie = getRequestHeader("cookie");
-  const apiOrigin = readConfiguredServerApiOrigin();
-
-  if (!cookie) {
-    throw new JobsRequestError({
-      message: "Cannot query jobs without the current auth cookie.",
-    });
-  }
-
-  if (!apiOrigin) {
-    throw new JobsRequestError({
-      message: "Cannot resolve the jobs API origin for server jobs requests.",
-    });
-  }
-
-  return {
-    apiOrigin,
-    cookie: normalizeServerApiCookieHeader(cookie, apiOrigin),
-    forwardedHeaders: readServerApiForwardedHeaders(),
-  };
 }

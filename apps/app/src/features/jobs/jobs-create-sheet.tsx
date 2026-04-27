@@ -960,7 +960,10 @@ function resolveCreateJobContactInput(
 
   return {
     kind: "existing",
-    contactId: selectionIds.contactId as ContactIdType,
+    contactId: expectDefined(
+      selectionIds.contactId,
+      "Expected contactId for existing contact selection."
+    ),
   };
 }
 
@@ -982,7 +985,10 @@ function resolveCreateJobSiteInput(
 
   return {
     kind: "existing",
-    siteId: selectionIds.siteId as SiteIdType,
+    siteId: expectDefined(
+      selectionIds.siteId,
+      "Expected siteId for existing site selection."
+    ),
   };
 }
 
@@ -1017,4 +1023,15 @@ function resolveSelectedOptionId<Id extends string>(
   value: string
 ): Id | undefined {
   return options.find((option) => option.id === value)?.id;
+}
+
+function expectDefined<Value>(
+  value: Value | undefined,
+  message: string
+): Value {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
 }

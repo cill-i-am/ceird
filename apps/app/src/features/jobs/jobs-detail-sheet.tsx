@@ -16,13 +16,14 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
+import { SiteId } from "@task-tracker/jobs-core";
 import type {
   JobDetailResponse,
   JobSiteOption,
   JobStatus,
   SiteIdType,
 } from "@task-tracker/jobs-core";
-import { Exit } from "effect";
+import { Exit, Schema } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -108,6 +109,7 @@ const VISIT_DURATION_SELECTION_GROUPS = [
 ] satisfies readonly CommandSelectGroup[];
 
 const NO_SITE_VALUE = "__none__";
+const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
@@ -176,9 +178,9 @@ export function JobsDetailSheet({
   const [transitionError, setTransitionError] = React.useState<string | null>(
     null
   );
-  const [selectedSiteId, setSelectedSiteId] = React.useState(
-    detail.job.siteId ?? NO_SITE_VALUE
-  );
+  const [selectedSiteId, setSelectedSiteId] = React.useState<
+    SiteIdType | typeof NO_SITE_VALUE
+  >(detail.job.siteId ?? NO_SITE_VALUE);
   const [siteAssignmentError, setSiteAssignmentError] = React.useState<
     string | null
   >(null);
@@ -335,12 +337,11 @@ export function JobsDetailSheet({
       return;
     }
 
-    const nextSiteId =
-      selectedSiteId === NO_SITE_VALUE ? null : (selectedSiteId as SiteIdType);
+    const nextSiteId = selectedSiteId === NO_SITE_VALUE ? null : selectedSiteId;
 
     if (
       selectedSiteId !== NO_SITE_VALUE &&
-      !lookup.siteById.has(selectedSiteId as SiteIdType)
+      !lookup.siteById.has(selectedSiteId)
     ) {
       setSiteAssignmentError("Pick an available site, or choose no site.");
       return;
@@ -636,7 +637,15 @@ export function JobsDetailSheet({
                         disabled={!canEditJob || patchResult.waiting}
                         ariaInvalid={siteAssignmentError ? true : undefined}
                         onValueChange={(nextValue) => {
-                          setSelectedSiteId(nextValue);
+                          if (nextValue === NO_SITE_VALUE) {
+                            setSelectedSiteId(NO_SITE_VALUE);
+                          } else {
+                            try {
+                              setSelectedSiteId(decodeSiteId(nextValue));
+                            } catch {
+                              setSelectedSiteId(NO_SITE_VALUE);
+                            }
+                          }
                           setSiteAssignmentError(null);
                           setSiteAssignmentMessage(null);
                         }}
