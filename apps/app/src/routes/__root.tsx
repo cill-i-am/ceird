@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -74,9 +75,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="font-sans [overflow-wrap:anywhere] antialiased selection:bg-primary/20">
         <TooltipProvider>
-          {children}
-          <ClientOnlyDevelopmentDevtools />
-          <Scripts />
+          <HotkeysProvider>
+            {children}
+            <ClientOnlyDevelopmentDevtools />
+            <Scripts />
+          </HotkeysProvider>
         </TooltipProvider>
       </body>
     </html>
