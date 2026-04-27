@@ -143,6 +143,7 @@ describe("sites page", () => {
         options: {
           ...options,
           sites: Array.from({ length: 26 }, (_, index) => ({
+            ...options.sites[0],
             id: `55555555-5555-4555-8555-${String(index).padStart(12, "0")}` as SiteIdType,
             name: `Site ${String(index + 1).padStart(2, "0")}`,
           })),
