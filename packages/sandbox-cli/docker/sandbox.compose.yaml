@@ -30,6 +30,7 @@ services:
       PNPM_STORE_DIR: /pnpm/store
       PORT: ${API_HOST_PORT}
       SANDBOX_ID: ${SANDBOX_ID}
+      SITE_GEOCODER_MODE: ${SITE_GEOCODER_MODE}
       TASK_TRACKER_SANDBOX: ${TASK_TRACKER_SANDBOX}
     volumes:
       - ${SANDBOX_WORKTREE_PATH}:/workspace

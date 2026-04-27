@@ -39,6 +39,7 @@ export default defineConfig({
           CLOUDFLARE_ACCOUNT_ID: playwrightCloudflareAccountId,
           CLOUDFLARE_API_TOKEN: playwrightCloudflareApiToken,
           PORT: "3001",
+          SITE_GEOCODER_MODE: "stub",
         },
         port: 4173,
         reuseExistingServer: false,

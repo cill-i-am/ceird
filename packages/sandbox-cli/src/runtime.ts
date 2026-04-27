@@ -1448,6 +1448,7 @@ export function buildComposeFallbackEnvironmentOverrides(
     SANDBOX_NODE_MODULES_VOLUME: record.runtimeAssets.nodeModulesVolume,
     SANDBOX_NAME: record.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: record.runtimeAssets.pnpmStoreVolume,
+    SITE_GEOCODER_MODE: "stub",
     TASK_TRACKER_SANDBOX: "1",
     VITE_API_ORIGIN: urls.fallbackApi,
   };

@@ -83,6 +83,7 @@ const BaseSandboxRuntimeOverrides = Schema.Struct({
   SANDBOX_NODE_MODULES_VOLUME: SandboxDockerVolumeName,
   SANDBOX_NAME: SandboxNameSchema,
   SANDBOX_PNPM_STORE_VOLUME: SandboxDockerVolumeName,
+  SITE_GEOCODER_MODE: Schema.Literal("stub"),
   TASK_TRACKER_SANDBOX: Schema.Literal("1"),
   VITE_API_ORIGIN: SandboxHttpUrl,
 });
@@ -127,6 +128,7 @@ export function buildSandboxRuntimeOverrides(input: {
     SANDBOX_NODE_MODULES_VOLUME: input.runtimeAssets.nodeModulesVolume,
     SANDBOX_NAME: input.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
+    SITE_GEOCODER_MODE: "stub",
     TASK_TRACKER_SANDBOX: "1",
     VITE_API_ORIGIN: input.urls.fallbackApi,
   });

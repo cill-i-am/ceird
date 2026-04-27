@@ -65,6 +65,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         SANDBOX_NODE_MODULES_VOLUME:
           "tt-sbx-node-modules-123456789abc-def456789abc",
         SANDBOX_PNPM_STORE_VOLUME: "tt-sbx-pnpm-store",
+        SITE_GEOCODER_MODE: "stub",
         TASK_TRACKER_SANDBOX: "1",
         AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
         BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
