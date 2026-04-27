@@ -62,6 +62,7 @@ function MockPopup() {
 vi.mock(import("maplibre-gl"), () => {
   class MockMap {
     private bearing = 0;
+    private readonly canvas: HTMLCanvasElement;
     private readonly container: HTMLElement;
     private pitch = 0;
     private zoom: number;
@@ -70,6 +71,9 @@ vi.mock(import("maplibre-gl"), () => {
       this.container = options.container;
       this.zoom = options.zoom ?? 0;
       this.container.requestFullscreen = mockedRequestFullscreen;
+      this.canvas = document.createElement("canvas");
+      this.canvas.tabIndex = 0;
+      this.container.append(this.canvas);
     }
 
     easeTo() {
@@ -96,6 +100,10 @@ vi.mock(import("maplibre-gl"), () => {
     getCenter() {
       void this.container;
       return { lat: 0, lng: 0 };
+    }
+
+    getCanvas() {
+      return this.canvas;
     }
 
     getContainer() {
@@ -196,31 +204,40 @@ describe("map controls hotkeys", () => {
     vi.clearAllMocks();
   });
 
+  function getMapCanvas() {
+    const mapRegion = screen.getByRole("region", {
+      name: "Interactive map",
+    });
+    const canvas = mapRegion.querySelector("canvas");
+
+    expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+
+    return canvas as HTMLCanvasElement;
+  }
+
   it("runs visible map controls from their hotkeys and lists them in shortcut help", async () => {
     const user = userEvent.setup();
 
     const { rerender } = render(
       <HotkeysProvider>
         <Map center={[0, 0]} zoom={3}>
-          <MapControls showZoom showCompass showLocate showFullscreen />
+          <MapControls controls={["zoom", "compass", "locate", "fullscreen"]} />
         </Map>
       </HotkeysProvider>
     );
 
     await screen.findByRole("button", { name: "Zoom in" });
-    const mapRegion = screen.getByRole("application", {
-      name: "Interactive map",
-    });
+    const mapCanvas = getMapCanvas();
 
     fireEvent.keyDown(document, { key: "=", shiftKey: true });
     expect(mockedZoomTo).not.toHaveBeenCalled();
 
-    mapRegion.focus();
-    fireEvent.keyDown(mapRegion, { key: "=", shiftKey: true });
-    fireEvent.keyDown(mapRegion, { key: "-" });
-    fireEvent.keyDown(mapRegion, { key: "0" });
-    fireEvent.keyDown(mapRegion, { key: "l" });
-    fireEvent.keyDown(mapRegion, { key: "f" });
+    mapCanvas.focus();
+    fireEvent.keyDown(mapCanvas, { key: "=", shiftKey: true });
+    fireEvent.keyDown(mapCanvas, { key: "-" });
+    fireEvent.keyDown(mapCanvas, { key: "0" });
+    fireEvent.keyDown(mapCanvas, { key: "l" });
+    fireEvent.keyDown(mapCanvas, { key: "f" });
 
     expect(mockedZoomTo).toHaveBeenNthCalledWith(1, 4, { duration: 300 });
     expect(mockedZoomTo).toHaveBeenNthCalledWith(2, 3, { duration: 300 });
@@ -237,7 +254,7 @@ describe("map controls hotkeys", () => {
     rerender(
       <HotkeysProvider>
         <Map center={[0, 0]} zoom={3}>
-          <MapControls showZoom showCompass showLocate showFullscreen />
+          <MapControls controls={["zoom", "compass", "locate", "fullscreen"]} />
           <ShortcutHelpOverlay activeScopes={["map"]} />
         </Map>
       </HotkeysProvider>
@@ -264,28 +281,21 @@ describe("map controls hotkeys", () => {
     render(
       <HotkeysProvider>
         <Map center={[0, 0]} zoom={3}>
-          <MapControls
-            showZoom={false}
-            showCompass={false}
-            showLocate={false}
-            showFullscreen={false}
-          />
+          <MapControls controls={[]} />
           <ShortcutHelpOverlay activeScopes={["map"]} />
         </Map>
       </HotkeysProvider>
     );
 
     await screen.findByRole("button", { name: /keyboard shortcuts/i });
-    const mapRegion = screen.getByRole("application", {
-      name: "Interactive map",
-    });
+    const mapCanvas = getMapCanvas();
 
-    mapRegion.focus();
-    fireEvent.keyDown(mapRegion, { key: "=", shiftKey: true });
-    fireEvent.keyDown(mapRegion, { key: "-" });
-    fireEvent.keyDown(mapRegion, { key: "0" });
-    fireEvent.keyDown(mapRegion, { key: "l" });
-    fireEvent.keyDown(mapRegion, { key: "f" });
+    mapCanvas.focus();
+    fireEvent.keyDown(mapCanvas, { key: "=", shiftKey: true });
+    fireEvent.keyDown(mapCanvas, { key: "-" });
+    fireEvent.keyDown(mapCanvas, { key: "0" });
+    fireEvent.keyDown(mapCanvas, { key: "l" });
+    fireEvent.keyDown(mapCanvas, { key: "f" });
 
     expect(mockedZoomTo).not.toHaveBeenCalled();
     expect(mockedResetNorthPitch).not.toHaveBeenCalled();

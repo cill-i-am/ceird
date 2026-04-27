@@ -81,8 +81,7 @@ export function JobsSitePinPickerCanvas(props: {
           />
           <MapControls
             position="bottom-right"
-            showLocate
-            showZoom
+            controls={["locate", "zoom"]}
             onLocate={handleLocate}
             onLocateError={handleLocateError}
           />

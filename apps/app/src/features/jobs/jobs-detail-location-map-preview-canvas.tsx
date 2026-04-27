@@ -47,7 +47,7 @@ export function JobsDetailLocationMapPreviewCanvas({
           pitchWithRotate={false}
           touchPitch={false}
         >
-          <MapControls position="bottom-right" showZoom />
+          <MapControls position="bottom-right" controls={["zoom"]} />
           <MapMarker latitude={site.latitude} longitude={site.longitude}>
             <MarkerContent>
               <div className="flex size-10 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-lg">

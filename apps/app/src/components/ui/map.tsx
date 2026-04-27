@@ -1,8 +1,8 @@
 "use client";
 
-/* oxlint-disable eqeqeq, no-eq-null, no-inline-comments, prefer-destructuring, react/jsx-no-constructed-context-values, eslint-plugin-jsx-a11y/no-noninteractive-tabindex */
+/* oxlint-disable eqeqeq, no-eq-null, no-inline-comments, prefer-destructuring, react/jsx-no-constructed-context-values */
 
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
@@ -10,9 +10,8 @@ import MapLibreGL from "maplibre-gl";
 import type { PopupOptions, MarkerOptions } from "maplibre-gl";
 import {
   createContext,
-  forwardRef,
+  use,
   useCallback,
-  useContext,
   useEffect,
   useId,
   useImperativeHandle,
@@ -20,7 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -115,7 +114,7 @@ interface MapContextValue {
 const MapContext = createContext<MapContextValue | null>(null);
 
 function useMap() {
-  const context = useContext(MapContext);
+  const context = use(MapContext);
   if (!context) {
     throw new Error("useMap must be used within a Map component");
   }
@@ -140,6 +139,7 @@ type MapRef = MapLibreGL.Map;
 
 type MapProps = {
   children?: ReactNode;
+  ref?: Ref<MapRef>;
   /** Additional CSS classes for the map container */
   className?: string;
   /**
@@ -191,20 +191,18 @@ function getViewport(map: MapLibreGL.Map): MapViewport {
   };
 }
 
-const Map = forwardRef<MapRef, MapProps>(function Map(
-  {
-    children,
-    className,
-    theme: themeProp,
-    styles,
-    projection,
-    viewport,
-    onViewportChange,
-    loading = false,
-    ...props
-  },
-  ref
-) {
+function Map({
+  children,
+  className,
+  ref,
+  theme: themeProp,
+  styles,
+  projection,
+  viewport,
+  onViewportChange,
+  loading = false,
+  ...props
+}: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<MapLibreGL.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -364,8 +362,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
         ref={containerRef}
         aria-label="Interactive map"
         className={cn("relative h-full w-full", className)}
-        role="application"
-        tabIndex={0}
+        role="region"
       >
         {(!isLoaded || loading) && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}
@@ -373,7 +370,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       </div>
     </MapContext.Provider>
   );
-});
+}
 
 interface MarkerContextValue {
   marker: MapLibreGL.Marker;
@@ -383,7 +380,7 @@ interface MarkerContextValue {
 const MarkerContext = createContext<MarkerContextValue | null>(null);
 
 function useMarkerContext() {
-  const context = useContext(MarkerContext);
+  const context = use(MarkerContext);
   if (!context) {
     throw new Error("Marker components must be used within MapMarker");
   }
@@ -796,14 +793,8 @@ function MarkerLabel({
 interface MapControlsProps {
   /** Position of the controls on the map (default: "bottom-right") */
   position?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
-  /** Show zoom in/out buttons (default: true) */
-  showZoom?: boolean;
-  /** Show compass button to reset bearing (default: false) */
-  showCompass?: boolean;
-  /** Show locate button to find user's location (default: false) */
-  showLocate?: boolean;
-  /** Show fullscreen toggle button (default: false) */
-  showFullscreen?: boolean;
+  /** Controls to render (default: ["zoom"]) */
+  controls?: readonly MapControl[];
   /** Additional CSS classes for the controls container */
   className?: string;
   /** Callback with user coordinates when located */
@@ -811,6 +802,10 @@ interface MapControlsProps {
   /** Callback when browser geolocation fails */
   onLocateError?: (error: BrowserGeolocationError) => void;
 }
+
+type MapControl = "zoom" | "compass" | "locate" | "fullscreen";
+
+const DEFAULT_MAP_CONTROLS = ["zoom"] as const satisfies readonly MapControl[];
 
 const positionClasses = {
   "top-left": "top-2 left-2",
@@ -871,16 +866,17 @@ function ControlButton({
 
 function MapControls({
   position = "bottom-right",
-  showZoom = true,
-  showCompass = false,
-  showLocate = false,
-  showFullscreen = false,
+  controls = DEFAULT_MAP_CONTROLS,
   className,
   onLocate,
   onLocateError,
 }: MapControlsProps) {
   const { map } = useMap();
   const [waitingForLocation, setWaitingForLocation] = useState(false);
+  const showZoom = controls.includes("zoom");
+  const showCompass = controls.includes("compass");
+  const showLocate = controls.includes("locate");
+  const showFullscreen = controls.includes("fullscreen");
 
   const handleZoomIn = useCallback(() => {
     map?.zoomTo(map.getZoom() + 1, { duration: 300 });
@@ -919,9 +915,10 @@ function MapControls({
       } else {
         const failure = Cause.failureOption(exit.cause);
 
-        if (failure._tag === "Some") {
-          onLocateError?.(failure.value);
-        }
+        Option.match(failure, {
+          onNone: () => null,
+          onSome: (error) => onLocateError?.(error),
+        });
       }
 
       setWaitingForLocation(false);
@@ -939,7 +936,7 @@ function MapControls({
       container.requestFullscreen();
     }
   }, [map]);
-  const mapHotkeyTarget = map?.getContainer() ?? null;
+  const mapHotkeyTarget = map?.getCanvas() ?? null;
 
   useAppHotkey("mapZoomIn", handleZoomIn, {
     enabled: Boolean(map) && showZoom,
