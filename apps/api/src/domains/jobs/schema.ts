@@ -88,10 +88,13 @@ export const site = pgTable(
     addressLine2: text("address_line_2"),
     town: text("town"),
     county: text("county"),
+    country: text("country").notNull().default("IE"),
     eircode: text("eircode"),
     accessNotes: text("access_notes"),
     latitude: doublePrecision("latitude"),
     longitude: doublePrecision("longitude"),
+    geocodingProvider: text("geocoding_provider"),
+    geocodedAt: timestamp("geocoded_at", { withTimezone: true }),
     createdAt: jobsTimestamp("created_at"),
     updatedAt: jobsTimestamp("updated_at"),
     archivedAt: archivedAtColumn("archived_at"),
@@ -114,9 +117,18 @@ export const site = pgTable(
         table.id
       )
       .where(sql`${table.archivedAt} is null`),
+    check("sites_country_chk", sql`${table.country} in ('IE', 'GB')`),
+    check(
+      "sites_geocoding_provider_chk",
+      sql`${table.geocodingProvider} is null or ${table.geocodingProvider} in ('google', 'stub')`
+    ),
     check(
       "sites_coordinates_pair_check",
       sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`
+    ),
+    check(
+      "sites_geocoding_metadata_check",
+      sql`(${table.latitude} is null and ${table.longitude} is null and ${table.geocodingProvider} is null and ${table.geocodedAt} is null) or (${table.latitude} is not null and ${table.longitude} is not null and ${table.geocodingProvider} is not null and ${table.geocodedAt} is not null)`
     ),
     check(
       "sites_latitude_range_check",

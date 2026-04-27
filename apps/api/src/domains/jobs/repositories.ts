@@ -49,8 +49,11 @@ import type {
   JobSiteOption,
   JobTitle,
   JobVisit,
+  IsoDateTimeStringType as IsoDateTimeString,
   OrganizationIdType as OrganizationId,
   RegionIdType as RegionId,
+  SiteCountry,
+  SiteGeocodingProvider,
   SiteIdType as SiteId,
   UserIdType as UserId,
   WorkItemIdType as WorkItemId,
@@ -131,8 +134,11 @@ interface JobSiteOptionRow {
   readonly access_notes: string | null;
   readonly address_line_1: string | null;
   readonly address_line_2: string | null;
+  readonly country: string;
   readonly county: string | null;
   readonly eircode: string | null;
+  readonly geocoded_at: Date | null;
+  readonly geocoding_provider: string | null;
   readonly id: string;
   readonly latitude: number | null;
   readonly longitude: number | null;
@@ -206,13 +212,16 @@ export interface CreateSiteRecordInput {
   readonly accessNotes?: string;
   readonly addressLine1?: string;
   readonly addressLine2?: string;
+  readonly country: SiteCountry;
   readonly county?: string;
   readonly eircode?: string;
-  readonly latitude?: number;
+  readonly geocodedAt: IsoDateTimeString;
+  readonly geocodingProvider: SiteGeocodingProvider;
+  readonly latitude: number;
   readonly name: string;
   readonly organizationId: OrganizationId;
   readonly regionId?: RegionId;
-  readonly longitude?: number;
+  readonly longitude: number;
   readonly town?: string;
 }
 
@@ -252,6 +261,9 @@ const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeVisitId = Schema.decodeUnknownSync(VisitIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
+const decodeIsoDateTimeString = Schema.decodeUnknownSync(
+  IsoDateTimeStringSchema
+);
 const decodeJobCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
     id: WorkItemIdSchema,
@@ -968,7 +980,12 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         }
 
         const values: Record<string, unknown> = {
+          country: input.country,
+          geocoded_at: isoDateTimeStringToDate(input.geocodedAt),
+          geocoding_provider: input.geocodingProvider,
           id: decodeSiteId(randomUUID()),
+          latitude: input.latitude,
+          longitude: input.longitude,
           name: input.name,
           organization_id: input.organizationId,
         };
@@ -1001,14 +1018,6 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           values.access_notes = input.accessNotes;
         }
 
-        if (input.latitude !== undefined) {
-          values.latitude = input.latitude;
-        }
-
-        if (input.longitude !== undefined) {
-          values.longitude = input.longitude;
-        }
-
         const rows = yield* sql<IdRow>`
           insert into sites ${sql.insert(values).returning("id")}
         `;
@@ -1038,8 +1047,11 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
             sites.access_notes,
             sites.address_line_1,
             sites.address_line_2,
+            sites.country,
             sites.county,
             sites.eircode,
+            sites.geocoded_at,
+            sites.geocoding_provider,
             sites.id,
             sites.latitude,
             sites.longitude,
@@ -1064,8 +1076,11 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
               sites.access_notes,
               sites.address_line_1,
               sites.address_line_2,
+              sites.country,
               sites.county,
               sites.eircode,
+              sites.geocoded_at,
+              sites.geocoding_provider,
               sites.id,
               sites.latitude,
               sites.longitude,
@@ -1313,8 +1328,11 @@ function mapJobSiteOptionRow(row: JobSiteOptionRow): JobSiteOption {
     accessNotes: nullableToUndefined(row.access_notes),
     addressLine1: nullableToUndefined(row.address_line_1),
     addressLine2: nullableToUndefined(row.address_line_2),
+    country: row.country,
     county: nullableToUndefined(row.county),
     eircode: nullableToUndefined(row.eircode),
+    geocodedAt: nullableDateToIsoString(row.geocoded_at),
+    geocodingProvider: nullableToUndefined(row.geocoding_provider),
     id: row.id,
     name: normalizeOptionName(row.name, "Untitled site"),
     latitude: nullableToUndefined(row.latitude),
@@ -1421,6 +1439,14 @@ function decodeCursor(cursor: JobListCursor): {
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {
   return value === null ? undefined : value;
+}
+
+function nullableDateToIsoString(value: Date | null): string | undefined {
+  return value === null ? undefined : value.toISOString();
+}
+
+function isoDateTimeStringToDate(value: IsoDateTimeString): Date {
+  return new Date(decodeIsoDateTimeString(value));
 }
 
 function normalizeOptionName(value: string | null, fallback: string): string {
