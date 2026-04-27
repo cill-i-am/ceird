@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import type {
   ContactIdType,
@@ -5,10 +6,16 @@ import type {
   SiteIdType,
 } from "@task-tracker/jobs-core";
 import { SITE_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
-import { render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
 import { createJobMutationAtom, jobsOptionsStateAtom } from "./jobs-state";
@@ -195,14 +202,34 @@ vi.mock("#/components/ui/popover", () => ({
   PopoverTrigger: ({
     children,
     id,
+    ref,
     render: _render,
     ...props
   }: ComponentProps<"button"> & {
     children?: ReactNode;
+    ref?: Ref<HTMLButtonElement>;
     render?: unknown;
   }) => (
-    <button type="button" id={id} {...props}>
+    <button ref={ref} type="button" id={id} {...props}>
       {children}
+    </button>
+  ),
+}));
+
+vi.mock("#/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  TooltipTrigger: ({
+    children,
+    render: renderElement,
+  }: {
+    children?: ReactNode;
+    render?: { props?: ComponentProps<"button"> };
+  }) => (
+    <button type="button" {...renderElement?.props}>
+      {children ?? renderElement?.props?.children}
     </button>
   ),
 }));
@@ -308,6 +335,14 @@ function getResponsiveDrawerForHeading(name: string) {
   return drawer as HTMLElement;
 }
 
+function renderCreateSheet() {
+  return render(
+    <HotkeysProvider>
+      <JobsCreateSheet />
+    </HotkeysProvider>
+  );
+}
+
 describe("jobs create sheet", () => {
   beforeEach(() => {
     mockedNavigate.mockReset();
@@ -381,7 +416,7 @@ describe("jobs create sheet", () => {
       mockedCreateJob.mockResolvedValue(Exit.succeed({ title: "Fix boiler" }));
 
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await user.type(screen.getByLabelText("Title"), "Fix boiler");
       await choosePickerOption(user, "Priority", "High");
@@ -405,6 +440,60 @@ describe("jobs create sheet", () => {
     }
   );
 
+  it("submits the create form with the submit hotkey", async () => {
+    mockedCreateJob.mockResolvedValue(Exit.succeed({ title: "Fix fan" }));
+
+    const user = userEvent.setup();
+    renderCreateSheet();
+
+    await user.type(screen.getByLabelText("Title"), "Fix fan");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(mockedCreateJob).toHaveBeenCalledWith({
+      contact: undefined,
+      priority: undefined,
+      site: undefined,
+      title: "Fix fan",
+    });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
+    });
+  }, 10_000);
+
+  it("closes with Escape only when text editing is not active", async () => {
+    const user = userEvent.setup();
+    renderCreateSheet();
+
+    await user.click(screen.getByLabelText("Title"));
+    await user.keyboard("{Escape}");
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
+
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
+    });
+  }, 10_000);
+
+  it("focuses metadata controls with create drawer hotkeys", async () => {
+    const user = userEvent.setup();
+    renderCreateSheet();
+
+    await user.keyboard("p");
+
+    expect(screen.getByLabelText("Priority")).toHaveFocus();
+
+    await user.keyboard("s");
+
+    expect(screen.getByLabelText("Site")).toHaveFocus();
+
+    await user.keyboard("c");
+
+    expect(screen.getByLabelText("Contact")).toHaveFocus();
+  }, 10_000);
+
   it(
     "supports inline site and contact creation with the minimal intake payload",
     {
@@ -416,7 +505,7 @@ describe("jobs create sheet", () => {
       );
 
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await user.type(screen.getByLabelText("Title"), "Replace sensor");
       await choosePickerOption(user, "Site", "Create a new site");
@@ -451,7 +540,7 @@ describe("jobs create sheet", () => {
     },
     async () => {
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await choosePickerOption(user, "Site", "Create a new site");
 
@@ -475,7 +564,7 @@ describe("jobs create sheet", () => {
     },
     async () => {
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await choosePickerOption(user, "Site", "Create a new site");
 
@@ -513,7 +602,7 @@ describe("jobs create sheet", () => {
     });
 
     const user = userEvent.setup();
-    render(<JobsCreateSheet />);
+    renderCreateSheet();
 
     await user.click(screen.getByLabelText("Site"));
 
@@ -552,7 +641,7 @@ describe("jobs create sheet", () => {
       );
 
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await user.type(
         screen.getByLabelText("Title"),
@@ -618,7 +707,7 @@ describe("jobs create sheet", () => {
     },
     async () => {
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await choosePickerOption(user, "Site", "Create a new site");
       await user.click(screen.getByRole("button", { name: "Done" }));
@@ -649,7 +738,7 @@ describe("jobs create sheet", () => {
       );
 
       const user = userEvent.setup();
-      render(<JobsCreateSheet />);
+      renderCreateSheet();
 
       await user.type(screen.getByLabelText("Title"), "Fix boiler");
       await choosePickerOption(user, "Site", "Depot");

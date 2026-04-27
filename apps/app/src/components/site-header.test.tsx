@@ -4,11 +4,16 @@ import type { ComponentProps } from "react";
 
 import { SiteHeader } from "./site-header";
 
-const { mockedNavigate, mockedUseMatches } = vi.hoisted(() => ({
-  mockedNavigate: vi.fn<() => Promise<void>>(),
-  mockedUseMatches:
-    vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
-}));
+const { mockedActiveScopes, mockedNavigate, mockedPathname, mockedUseMatches } =
+  vi.hoisted(() => ({
+    mockedActiveScopes: [] as unknown[],
+    mockedNavigate: vi.fn<() => Promise<void>>(),
+    mockedPathname: {
+      value: "/jobs",
+    },
+    mockedUseMatches:
+      vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
+  }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -31,7 +36,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     }) => {
       const state = {
         location: {
-          pathname: "/jobs",
+          pathname: mockedPathname.value,
         },
       };
 
@@ -42,6 +47,18 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
 vi.mock(import("#/components/ThemeToggle"), () => ({
   default: () => <button type="button">Theme mode</button>,
+}));
+
+vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
+  ShortcutHelpOverlay: ({
+    activeScopes,
+  }: {
+    activeScopes: readonly string[];
+  }) => {
+    mockedActiveScopes.push(activeScopes);
+
+    return <button type="button">Keyboard shortcuts</button>;
+  },
 }));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
@@ -65,6 +82,8 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 describe("site header", () => {
   beforeEach(() => {
+    mockedActiveScopes.length = 0;
+    mockedPathname.value = "/jobs";
     mockedUseMatches.mockImplementation(({ select }) =>
       select([
         { id: "__root__", staticData: {} },
@@ -115,6 +134,46 @@ describe("site header", () => {
       expect(
         screen.getByRole("button", { name: /keyboard shortcuts/i })
       ).toBeInTheDocument();
+    }
+  );
+
+  it(
+    "activates job drawer shortcut scopes for job drawer routes",
+    { timeout: 10_000 },
+    () => {
+      mockedPathname.value = "/jobs/new";
+
+      const { rerender } = render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(
+        screen.getByRole("button", { name: /keyboard shortcuts/i })
+      ).toBeInTheDocument();
+      expect(mockedActiveScopes.at(-1)).toStrictEqual([
+        "global",
+        "jobs",
+        "job-create",
+      ]);
+
+      mockedPathname.value = "/jobs/11111111-1111-4111-8111-111111111111";
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(
+        screen.getByRole("button", { name: /keyboard shortcuts/i })
+      ).toBeInTheDocument();
+      expect(mockedActiveScopes.at(-1)).toStrictEqual([
+        "global",
+        "jobs",
+        "job-detail",
+      ]);
     }
   );
 });

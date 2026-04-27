@@ -56,6 +56,14 @@ import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 
 import { JobsDetailLocation } from "./jobs-detail-location";
 import {
@@ -110,6 +118,25 @@ const NO_SITE_VALUE = "__none__";
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
   readonly viewer: JobsViewer;
+}
+
+function openSelect(
+  trigger: React.RefObject<HTMLButtonElement | null>,
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+) {
+  trigger.current?.focus();
+  setOpen(true);
+}
+
+function activeElementIsInside<TElement extends HTMLElement>(
+  ref: React.RefObject<TElement | null>
+) {
+  const { activeElement } = document;
+
+  return (
+    activeElement instanceof HTMLElement &&
+    ref.current?.contains(activeElement) === true
+  );
 }
 
 export function JobsDetailSheet({
@@ -167,9 +194,17 @@ export function JobsDetailSheet({
   const transitionSelectionGroups =
     buildTransitionSelectionGroups(transitionOptions);
 
+  const statusSelectRef = React.useRef<HTMLButtonElement | null>(null);
+  const siteAssignmentSelectRef = React.useRef<HTMLButtonElement | null>(null);
+  const commentFormRef = React.useRef<HTMLFormElement | null>(null);
+  const commentTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const visitFormRef = React.useRef<HTMLFormElement | null>(null);
+  const visitDateRef = React.useRef<HTMLInputElement | null>(null);
+  const visitNoteRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [selectedStatus, setSelectedStatus] = React.useState<JobStatus | "">(
     ""
   );
+  const [statusSelectOpen, setStatusSelectOpen] = React.useState(false);
   const [blockedReason, setBlockedReason] = React.useState("");
   const [transitionError, setTransitionError] = React.useState<string | null>(
     null
@@ -177,6 +212,8 @@ export function JobsDetailSheet({
   const [selectedSiteId, setSelectedSiteId] = React.useState(
     detail.job.siteId ?? NO_SITE_VALUE
   );
+  const [siteAssignmentSelectOpen, setSiteAssignmentSelectOpen] =
+    React.useState(false);
   const [siteAssignmentError, setSiteAssignmentError] = React.useState<
     string | null
   >(null);
@@ -228,6 +265,63 @@ export function JobsDetailSheet({
       navigate({ to: "/jobs" });
     });
   }
+
+  useAppHotkey("jobDetailClose", closeSheet, { ignoreInputs: true });
+  useAppHotkey(
+    "jobDetailComment",
+    () => {
+      commentTextareaRef.current?.focus();
+    },
+    { ignoreInputs: true }
+  );
+  useAppHotkey(
+    "jobDetailSubmit",
+    () => {
+      if (!commentResult.waiting && activeElementIsInside(commentFormRef)) {
+        commentFormRef.current?.requestSubmit();
+        return;
+      }
+
+      if (
+        canAddVisit &&
+        !visitResult.waiting &&
+        activeElementIsInside(visitFormRef)
+      ) {
+        visitFormRef.current?.requestSubmit();
+      }
+    },
+    { ignoreInputs: false }
+  );
+  useAppHotkey(
+    "jobDetailStatus",
+    () => openSelect(statusSelectRef, setStatusSelectOpen),
+    {
+      enabled:
+        detail.job.status !== "completed" &&
+        transitionOptions.length > 0 &&
+        hasAssignmentAccess,
+      ignoreInputs: true,
+    }
+  );
+  useAppHotkey(
+    "jobDetailSite",
+    () => openSelect(siteAssignmentSelectRef, setSiteAssignmentSelectOpen),
+    {
+      enabled: canEditJob && !patchResult.waiting,
+      ignoreInputs: true,
+    }
+  );
+  useAppHotkey(
+    "jobDetailVisit",
+    () => {
+      const visitTarget =
+        visitNote.trim().length > 0
+          ? visitNoteRef.current
+          : visitDateRef.current;
+      visitTarget?.focus();
+    },
+    { enabled: canAddVisit, ignoreInputs: true }
+  );
 
   async function handleTransition() {
     if (!selectedStatus) {
@@ -413,9 +507,12 @@ export function JobsDetailSheet({
               <CommandSelect
                 id="job-transition-status"
                 value={selectedStatus}
+                open={statusSelectOpen}
                 placeholder="Choose next state"
                 emptyText="No status changes available."
                 groups={transitionSelectionGroups}
+                triggerRef={statusSelectRef}
+                onOpenChange={setStatusSelectOpen}
                 onValueChange={(nextValue) => {
                   setSelectedStatus(nextValue as JobStatus | "");
                   setTransitionError(null);
@@ -559,11 +656,14 @@ export function JobsDetailSheet({
                       <CommandSelect
                         id="job-site-assignment"
                         value={selectedSiteId}
+                        open={siteAssignmentSelectOpen}
                         placeholder="Pick site"
                         emptyText="No sites found."
                         groups={siteSelectionGroups}
                         disabled={!canEditJob || patchResult.waiting}
                         ariaInvalid={siteAssignmentError ? true : undefined}
+                        triggerRef={siteAssignmentSelectRef}
+                        onOpenChange={setSiteAssignmentSelectOpen}
                         onValueChange={(nextValue) => {
                           setSelectedSiteId(nextValue);
                           setSiteAssignmentError(null);
@@ -619,6 +719,7 @@ export function JobsDetailSheet({
               <div className="flex flex-col gap-5">
                 {renderMutationError(commentResult)}
                 <form
+                  ref={commentFormRef}
                   className="flex flex-col gap-4"
                   method="post"
                   onSubmit={handleAddComment}
@@ -630,6 +731,7 @@ export function JobsDetailSheet({
                       </FieldLabel>
                       <FieldContent>
                         <Textarea
+                          ref={commentTextareaRef}
                           id="job-comment-body"
                           value={commentBody}
                           aria-invalid={Boolean(commentError) || undefined}
@@ -711,6 +813,7 @@ export function JobsDetailSheet({
                   <>
                     {renderMutationError(visitResult)}
                     <form
+                      ref={visitFormRef}
                       className="flex flex-col gap-4"
                       method="post"
                       onSubmit={handleAddVisit}
@@ -728,6 +831,7 @@ export function JobsDetailSheet({
                             </FieldLabel>
                             <FieldContent>
                               <Input
+                                ref={visitDateRef}
                                 id="job-visit-date"
                                 type="date"
                                 value={visitDate}
@@ -771,6 +875,7 @@ export function JobsDetailSheet({
                           </FieldLabel>
                           <FieldContent>
                             <Textarea
+                              ref={visitNoteRef}
                               id="job-visit-note"
                               value={visitNote}
                               aria-invalid={
@@ -901,9 +1006,22 @@ export function JobsDetailSheet({
           </div>
 
           <DrawerFooter className="border-t">
-            <Button type="button" variant="ghost" onClick={closeSheet}>
-              Close
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button type="button" variant="ghost" onClick={closeSheet}>
+                    Close
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                <span>Close</span>
+                <ShortcutHint
+                  hotkey={HOTKEYS.jobDetailClose.hotkey}
+                  label={HOTKEYS.jobDetailClose.label}
+                />
+              </TooltipContent>
+            </Tooltip>
           </DrawerFooter>
         </div>
       </DrawerContent>

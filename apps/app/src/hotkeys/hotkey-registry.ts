@@ -190,7 +190,7 @@ export const HOTKEYS = {
   },
   jobCreatePriorityLow: {
     group: "Job drawer",
-    hotkey: "1",
+    hotkey: "4",
     id: "jobCreatePriorityLow",
     label: "Set low priority",
     scope: "job-create",
@@ -198,7 +198,7 @@ export const HOTKEYS = {
   },
   jobCreatePriorityMedium: {
     group: "Job drawer",
-    hotkey: "2",
+    hotkey: "3",
     id: "jobCreatePriorityMedium",
     label: "Set medium priority",
     scope: "job-create",
@@ -206,7 +206,7 @@ export const HOTKEYS = {
   },
   jobCreatePriorityHigh: {
     group: "Job drawer",
-    hotkey: "3",
+    hotkey: "2",
     id: "jobCreatePriorityHigh",
     label: "Set high priority",
     scope: "job-create",
@@ -214,7 +214,7 @@ export const HOTKEYS = {
   },
   jobCreatePriorityUrgent: {
     group: "Job drawer",
-    hotkey: "4",
+    hotkey: "1",
     id: "jobCreatePriorityUrgent",
     label: "Set urgent priority",
     scope: "job-create",

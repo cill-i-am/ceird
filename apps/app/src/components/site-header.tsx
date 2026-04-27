@@ -100,6 +100,14 @@ export function SiteHeader() {
 }
 
 function getActiveShortcutScopes(pathname: string): readonly HotkeyScope[] {
+  if (pathname === "/jobs/new") {
+    return ["global", "jobs", "job-create"];
+  }
+
+  if (pathname.startsWith("/jobs/")) {
+    return ["global", "jobs", "job-detail"];
+  }
+
   if (pathname === "/jobs" || pathname.startsWith("/jobs/")) {
     return ["global", "jobs"];
   }

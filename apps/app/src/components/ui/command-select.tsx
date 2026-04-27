@@ -44,10 +44,13 @@ export interface CommandSelectProps {
   readonly groups: readonly CommandSelectGroup[];
   readonly id: string;
   readonly onValueChange: (value: string) => void;
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly open?: boolean;
   readonly placeholder: string;
   readonly prefix?: React.ReactNode;
   readonly searchPlaceholder?: string;
   readonly showGroupHeadings?: boolean;
+  readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly value: string;
 }
 
@@ -61,22 +64,37 @@ export function CommandSelect({
   groups,
   id,
   onValueChange,
+  onOpenChange,
+  open: controlledOpen,
   placeholder,
   prefix,
   searchPlaceholder = placeholder,
   showGroupHeadings = true,
+  triggerRef,
   value,
 }: CommandSelectProps) {
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
   const visibleGroups = groups.filter((group) => group.options.length > 0);
   const selectedOption =
     visibleGroups
       .flatMap((group) => group.options)
       .find((option) => option.value === value) ?? null;
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(nextOpen);
+      }
+
+      onOpenChange?.(nextOpen);
+    },
+    [controlledOpen, onOpenChange]
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
+        ref={triggerRef}
         type="button"
         id={id}
         disabled={disabled}

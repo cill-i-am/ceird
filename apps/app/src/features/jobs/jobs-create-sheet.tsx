@@ -66,7 +66,15 @@ import {
 } from "#/components/ui/responsive-drawer";
 import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { AuthFormField } from "#/features/auth/auth-form-field";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
 import { JobsSitePinPicker } from "./jobs-site-pin-picker";
@@ -151,6 +159,33 @@ const defaultFormState: JobsCreateFormState = {
   title: "",
 };
 
+function openMetadataSelect(
+  trigger: React.RefObject<HTMLButtonElement | null>,
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+) {
+  trigger.current?.focus();
+  setOpen(true);
+}
+
+function getCreateHotkeyState({
+  createWaiting,
+  locationDrawerOpen,
+  overlayOpen,
+  siteDrawerOpen,
+}: {
+  readonly createWaiting: boolean;
+  readonly locationDrawerOpen: boolean;
+  readonly overlayOpen: boolean;
+  readonly siteDrawerOpen: boolean;
+}) {
+  return {
+    canCancel:
+      overlayOpen && !createWaiting && !siteDrawerOpen && !locationDrawerOpen,
+    canOpenMetadata: overlayOpen && !siteDrawerOpen && !locationDrawerOpen,
+    canSubmit: overlayOpen && !createWaiting,
+  };
+}
+
 export function JobsCreateSheet() {
   const navigate = useNavigate();
   const options = useAtomValue(jobsOptionsStateAtom).data;
@@ -166,6 +201,13 @@ export function JobsCreateSheet() {
   const [overlayOpen, setOverlayOpen] = React.useState(true);
   const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
   const [locationDrawerOpen, setLocationDrawerOpen] = React.useState(false);
+  const [prioritySelectOpen, setPrioritySelectOpen] = React.useState(false);
+  const [siteSelectOpen, setSiteSelectOpen] = React.useState(false);
+  const [contactSelectOpen, setContactSelectOpen] = React.useState(false);
+  const formRef = React.useRef<HTMLFormElement | null>(null);
+  const prioritySelectRef = React.useRef<HTMLButtonElement | null>(null);
+  const siteSelectRef = React.useRef<HTMLButtonElement | null>(null);
+  const contactSelectRef = React.useRef<HTMLButtonElement | null>(null);
   const closeNavigationTimeout = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -214,6 +256,12 @@ export function JobsCreateSheet() {
     []
   );
   const parsedSiteCoordinates = resolveSiteCoordinateDraft(values);
+  const hotkeyState = getCreateHotkeyState({
+    createWaiting: createResult.waiting,
+    locationDrawerOpen,
+    overlayOpen,
+    siteDrawerOpen,
+  });
 
   function closeSheet({
     delayed = false,
@@ -237,6 +285,39 @@ export function JobsCreateSheet() {
 
     closeNavigationTimeout.current = setTimeout(navigateToJobs, 140);
   }
+
+  useAppHotkey(
+    "jobCreateSubmit",
+    () => {
+      formRef.current?.requestSubmit();
+    },
+    { enabled: hotkeyState.canSubmit }
+  );
+  useAppHotkey(
+    "jobCreateCancel",
+    () => {
+      closeSheet({ delayed: true });
+    },
+    {
+      enabled: hotkeyState.canCancel,
+      ignoreInputs: true,
+    }
+  );
+  useAppHotkey(
+    "jobCreatePriority",
+    () => openMetadataSelect(prioritySelectRef, setPrioritySelectOpen),
+    { enabled: hotkeyState.canOpenMetadata }
+  );
+  useAppHotkey(
+    "jobCreateSite",
+    () => openMetadataSelect(siteSelectRef, setSiteSelectOpen),
+    { enabled: hotkeyState.canOpenMetadata }
+  );
+  useAppHotkey(
+    "jobCreateContact",
+    () => openMetadataSelect(contactSelectRef, setContactSelectOpen),
+    { enabled: hotkeyState.canOpenMetadata }
+  );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -319,6 +400,7 @@ export function JobsCreateSheet() {
       }}
     >
       <form
+        ref={formRef}
         className="flex min-h-0 flex-1 flex-col"
         method="post"
         noValidate
@@ -362,12 +444,15 @@ export function JobsCreateSheet() {
                 id="job-priority"
                 label="Priority"
                 value={values.priority}
+                open={prioritySelectOpen}
                 placeholder="Priority"
                 emptyText="No priorities found."
                 groups={prioritySelectionGroups}
                 icon={Flag01Icon}
+                triggerRef={prioritySelectRef}
                 searchPlaceholder="Set priority to..."
                 showGroupHeadings={false}
+                onOpenChange={setPrioritySelectOpen}
                 onValueChange={(nextValue) =>
                   setValues((current) => ({
                     ...current,
@@ -379,11 +464,14 @@ export function JobsCreateSheet() {
                 id="job-site"
                 label="Site"
                 value={values.siteSelection}
+                open={siteSelectOpen}
                 placeholder="Site"
                 emptyText="No sites found."
                 groups={siteSelectionGroups}
                 icon={Location01Icon}
                 errorText={fieldErrors.siteName}
+                triggerRef={siteSelectRef}
+                onOpenChange={setSiteSelectOpen}
                 onValueChange={(nextValue) => {
                   setValues((current) => ({
                     ...current,
@@ -399,8 +487,11 @@ export function JobsCreateSheet() {
                 id="job-contact"
                 value={values.contactSelection}
                 contactName={values.contactName}
+                open={contactSelectOpen}
                 groups={contactSelectionGroups}
                 errorText={fieldErrors.contactName}
+                triggerRef={contactSelectRef}
+                onOpenChange={setContactSelectOpen}
                 onValueChange={(nextValue) =>
                   setValues((current) => ({
                     ...current,
@@ -455,25 +546,51 @@ export function JobsCreateSheet() {
         </div>
 
         <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => closeSheet({ delayed: true })}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={createResult.waiting}>
-            {createResult.waiting ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => closeSheet({ delayed: true })}
+                >
+                  Cancel
+                </Button>
+              }
+            />
+            <TooltipContent>
+              <span>Cancel</span>
+              <ShortcutHint
+                hotkey={HOTKEYS.jobCreateCancel.hotkey}
+                label={HOTKEYS.jobCreateCancel.label}
               />
-            )}
-            {createResult.waiting ? "Creating..." : "Create job"}
-          </Button>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button type="submit" disabled={createResult.waiting}>
+                  {createResult.waiting ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <HugeiconsIcon
+                      icon={Add01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                  )}
+                  {createResult.waiting ? "Creating..." : "Create job"}
+                </Button>
+              }
+            />
+            <TooltipContent>
+              <span>Create job</span>
+              <ShortcutHint
+                hotkey={HOTKEYS.jobCreateSubmit.hotkey}
+                label={HOTKEYS.jobCreateSubmit.label}
+              />
+            </TooltipContent>
+          </Tooltip>
         </DrawerFooter>
       </form>
 
@@ -800,10 +917,13 @@ function LinearMetadataSelect({
   icon,
   id,
   label,
+  onOpenChange,
   onValueChange,
+  open,
   placeholder,
   searchPlaceholder,
   showGroupHeadings,
+  triggerRef,
   value,
 }: {
   readonly emptyText: string;
@@ -812,10 +932,13 @@ function LinearMetadataSelect({
   readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly id: string;
   readonly label: string;
+  readonly onOpenChange?: (open: boolean) => void;
   readonly onValueChange: (value: string) => void;
+  readonly open?: boolean;
   readonly placeholder: string;
   readonly searchPlaceholder?: string;
   readonly showGroupHeadings?: boolean;
+  readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly value: string;
 }) {
   const selectedOption =
@@ -838,9 +961,12 @@ function LinearMetadataSelect({
         ariaLabel={label}
         ariaInvalid={errorText ? true : undefined}
         className="h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
+        open={open}
         prefix={<HugeiconsIcon icon={triggerIcon} strokeWidth={2} />}
         searchPlaceholder={searchPlaceholder}
         showGroupHeadings={showGroupHeadings}
+        triggerRef={triggerRef}
+        onOpenChange={onOpenChange}
         onValueChange={onValueChange}
       />
     </div>
@@ -852,20 +978,27 @@ function LinearContactSelect({
   errorText,
   groups,
   id,
+  onOpenChange,
   onCreateContact,
   onValueChange,
+  open: controlledOpen,
+  triggerRef,
   value,
 }: {
   readonly contactName: string;
   readonly errorText?: string;
   readonly groups: readonly CommandSelectGroup[];
   readonly id: string;
+  readonly onOpenChange?: (open: boolean) => void;
   readonly onCreateContact: (contactName: string) => void;
   readonly onValueChange: (value: string) => void;
+  readonly open?: boolean;
+  readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly value: string;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const open = controlledOpen ?? uncontrolledOpen;
   const selectedOption =
     groups
       .flatMap((group) => group.options)
@@ -875,6 +1008,16 @@ function LinearContactSelect({
   const triggerLabel = createdContactName || selectedOption?.label || "Contact";
   const createContactName = query.trim();
   const visibleGroups = groups.filter((group) => group.options.length > 0);
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(nextOpen);
+      }
+
+      onOpenChange?.(nextOpen);
+    },
+    [controlledOpen, onOpenChange]
+  );
 
   return (
     <div>
@@ -889,6 +1032,7 @@ function LinearContactSelect({
         }}
       >
         <PopoverTrigger
+          ref={triggerRef}
           type="button"
           id={id}
           aria-label="Contact"
