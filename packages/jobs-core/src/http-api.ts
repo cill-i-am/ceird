@@ -20,6 +20,8 @@ import {
   SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
+  UpdateSiteInputSchema,
+  UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
   BlockedReasonRequiredError,
@@ -29,13 +31,14 @@ import {
   JobAccessDeniedError,
   JobListCursorInvalidError,
   JobNotFoundError,
+  JobStorageError,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
   SiteGeocodingFailedError,
   SiteNotFoundError,
   VisitDurationIncrementError,
 } from "./errors.js";
-import { WorkItemId } from "./ids.js";
+import { SiteId, WorkItemId } from "./ids.js";
 
 const jobsGroup = HttpApiGroup.make("jobs")
   .add(
@@ -44,11 +47,13 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addSuccess(JobListResponseSchema)
       .addError(JobListCursorInvalidError)
       .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.get("getJobOptions", "/jobs/options")
       .addSuccess(JobOptionsResponseSchema)
       .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("createJob", "/jobs")
@@ -59,6 +64,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
       .addError(ContactNotFoundError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.get("getJobDetail", "/jobs/:workItemId")
@@ -66,6 +72,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addSuccess(JobDetailResponseSchema)
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.patch("patchJob", "/jobs/:workItemId")
@@ -78,6 +85,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(OrganizationMemberNotFoundError)
       .addError(SiteNotFoundError)
       .addError(ContactNotFoundError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("transitionJob", "/jobs/:workItemId/transitions")
@@ -88,6 +96,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobAccessDeniedError)
       .addError(InvalidJobTransitionError)
       .addError(BlockedReasonRequiredError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("reopenJob", "/jobs/:workItemId/reopen")
@@ -96,6 +105,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(InvalidJobTransitionError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("addJobComment", "/jobs/:workItemId/comments")
@@ -104,6 +114,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addSuccess(AddJobCommentResponseSchema, { status: 201 })
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("addJobVisit", "/jobs/:workItemId/visits")
@@ -113,6 +124,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(VisitDurationIncrementError)
+      .addError(JobStorageError)
   );
 
 export const JobsApiGroup = jobsGroup;
@@ -122,6 +134,7 @@ const sitesGroup = HttpApiGroup.make("sites")
     HttpApiEndpoint.get("getSiteOptions", "/sites/options")
       .addSuccess(SitesOptionsResponseSchema)
       .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("createSite", "/sites")
@@ -130,6 +143,18 @@ const sitesGroup = HttpApiGroup.make("sites")
       .addError(JobAccessDeniedError)
       .addError(RegionNotFoundError)
       .addError(SiteGeocodingFailedError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.patch("updateSite", "/sites/:siteId")
+      .setPath(Schema.Struct({ siteId: SiteId }))
+      .setPayload(UpdateSiteInputSchema)
+      .addSuccess(UpdateSiteResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(RegionNotFoundError)
+      .addError(SiteNotFoundError)
+      .addError(SiteGeocodingFailedError)
+      .addError(JobStorageError)
   );
 
 export const SitesApiGroup = sitesGroup;

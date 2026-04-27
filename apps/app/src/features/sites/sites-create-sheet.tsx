@@ -15,11 +15,13 @@ import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import {
   DrawerContent,
+  DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "#/components/ui/drawer";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
+import { Spinner } from "#/components/ui/spinner";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
 import {
@@ -32,9 +34,18 @@ import {
 } from "./site-create-form";
 import type {
   SiteCreateDraft,
-  SiteCreateFieldErrors,
+  SiteCreateFieldErrors as SiteCreateDraftFieldErrors,
 } from "./site-create-form";
 import { createSiteMutationAtom } from "./sites-state";
+
+export type SitesCreateFormState = SiteCreateDraft;
+export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
+
+export const defaultSiteFormState = defaultSiteCreateDraft;
+export const buildRegionSelectionGroups = buildSiteRegionSelectionGroups;
+export const validateSiteForm = validateSiteCreateDraft;
+export const hasSiteFieldErrors = hasSiteCreateFieldErrors;
+export const buildSiteInput = buildCreateSiteInputFromDraft;
 
 export function SitesCreateSheet() {
   const navigate = useNavigate();
@@ -43,7 +54,7 @@ export function SitesCreateSheet() {
     mode: "promiseExit",
   });
   const createResult = useAtomValue(createSiteMutationAtom);
-  const [fieldErrors, setFieldErrors] = React.useState<SiteCreateFieldErrors>(
+  const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
   );
   const [values, setValues] = React.useState<SiteCreateDraft>(
@@ -145,10 +156,14 @@ export function SitesCreateSheet() {
       <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New site</DrawerTitle>
+          <DrawerDescription>
+            Add the address and region for dispatch.
+          </DrawerDescription>
         </DrawerHeader>
 
         <form
           className="flex min-h-0 flex-1 flex-col"
+          method="post"
           noValidate
           onSubmit={handleSubmit}
         >
@@ -194,11 +209,15 @@ export function SitesCreateSheet() {
               Cancel
             </Button>
             <Button type="submit" disabled={createResult.waiting}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
+              {createResult.waiting ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <HugeiconsIcon
+                  icon={Add01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+              )}
               {createResult.waiting ? "Creating..." : "Create site"}
             </Button>
           </DrawerFooter>

@@ -1,5 +1,15 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
+import {
+  decodeOrganizationMemberRoleResponse,
+  decodeOrganizationSummaryList,
+  OrganizationId,
+} from "@task-tracker/identity-core";
+import type {
+  OrganizationId as OrganizationIdType,
+  OrganizationMemberRoleResponse,
+  OrganizationSummary,
+} from "@task-tracker/identity-core";
 import { Schema } from "effect";
 
 import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client";
@@ -8,18 +18,8 @@ import {
   readServerApiForwardedHeaders,
 } from "#/lib/server-api-forwarded-headers";
 
-const OrganizationSummarySchema = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  slug: Schema.String,
-});
-
-const OrganizationSummaryListSchema = Schema.Array(OrganizationSummarySchema);
-
 const NullableString = Schema.NullOr(Schema.String);
-const OrganizationMemberRoleSchema = Schema.Struct({
-  role: Schema.String,
-});
+const NullableOrganizationId = Schema.NullOr(OrganizationId);
 
 const OrganizationAccessSessionSchema = Schema.Struct({
   session: Schema.Struct({
@@ -31,7 +31,7 @@ const OrganizationAccessSessionSchema = Schema.Struct({
     token: Schema.String,
     ipAddress: Schema.optional(NullableString),
     userAgent: Schema.optional(NullableString),
-    activeOrganizationId: Schema.optional(NullableString),
+    activeOrganizationId: Schema.optional(NullableOrganizationId),
   }),
   user: Schema.Struct({
     id: Schema.String,
@@ -44,17 +44,11 @@ const OrganizationAccessSessionSchema = Schema.Struct({
   }),
 });
 
-export type OrganizationSummary = Schema.Schema.Type<
-  typeof OrganizationSummarySchema
->;
-
 export type OrganizationAccessSession = Schema.Schema.Type<
   typeof OrganizationAccessSessionSchema
 >;
 
-export type OrganizationMemberRole = Schema.Schema.Type<
-  typeof OrganizationMemberRoleSchema
->;
+export type OrganizationMemberRole = OrganizationMemberRoleResponse;
 
 interface ServerAuthRequest {
   cookie: string;
@@ -95,27 +89,6 @@ export const getCurrentServerOrganizationSession = createServerOnlyFn(
   }
 );
 
-export const listCurrentServerOrganizations = createServerOnlyFn(async () => {
-  const authRequest = readServerAuthRequest();
-
-  if (!authRequest) {
-    return [] as const;
-  }
-
-  try {
-    const response = await fetchOrganizations(authRequest);
-
-    if (!response.ok) {
-      return [] as const;
-    }
-
-    const organizations = (await response.json()) as unknown;
-    return decodeOrganizationSummariesOrEmpty(organizations);
-  } catch {
-    return [] as const;
-  }
-});
-
 export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   const authRequest = readServerAuthRequestStrict();
   const response = await fetchOrganizations(authRequest);
@@ -136,7 +109,9 @@ export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
 });
 
 export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
-  async (organizationId: string): Promise<OrganizationMemberRole> => {
+  async (
+    organizationId: OrganizationIdType
+  ): Promise<OrganizationMemberRole> => {
     const authRequest = readServerAuthRequestStrict();
     const response = await fetch(
       new URL(
@@ -166,7 +141,7 @@ export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
 );
 
 export const setCurrentServerActiveOrganization = createServerOnlyFn(
-  async (organizationId: string): Promise<void> => {
+  async (organizationId: OrganizationIdType): Promise<void> => {
     const authRequest = readServerAuthRequestStrict();
     const response = await fetch(
       new URL("organization/set-active", `${authRequest.authBaseURL}/`),
@@ -204,22 +179,6 @@ function readServerSessionRequest(): ServerAuthRequest | null {
     throw new Error(
       "Cannot resolve the auth base URL for organization auth requests."
     );
-  }
-
-  return {
-    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
-    authBaseURL,
-    forwardedHeaders,
-  };
-}
-
-function readServerAuthRequest(): ServerAuthRequest | null {
-  const cookie = getRequestHeader("cookie");
-  const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders();
-
-  if (!cookie || !authBaseURL) {
-    return null;
   }
 
   return {
@@ -271,29 +230,11 @@ async function fetchOrganizations(authRequest: ServerAuthRequest) {
   );
 }
 
-function decodeOrganizationSummariesOrEmpty(
-  organizations: unknown
-): readonly OrganizationSummary[] {
-  if (!organizations) {
-    return [];
-  }
-
-  try {
-    return Schema.decodeUnknownSync(OrganizationSummaryListSchema)(
-      organizations
-    );
-  } catch {
-    return [];
-  }
-}
-
 function decodeOrganizationSummariesStrict(
   organizations: unknown
 ): readonly OrganizationSummary[] {
   try {
-    return Schema.decodeUnknownSync(OrganizationSummaryListSchema)(
-      organizations
-    );
+    return decodeOrganizationSummaryList(organizations);
   } catch {
     throw new Error("Organization lookup returned an invalid payload.");
   }
@@ -313,7 +254,7 @@ export function decodeOrganizationMemberRole(
   role: unknown
 ): OrganizationMemberRole {
   try {
-    return Schema.decodeUnknownSync(OrganizationMemberRoleSchema)(role);
+    return decodeOrganizationMemberRoleResponse(role);
   } catch {
     throw new Error(
       "Organization member role lookup returned an invalid payload."

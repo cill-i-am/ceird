@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORGANIZATION_ROLES } from "@task-tracker/identity-core";
 import { relations, sql } from "drizzle-orm";
 import {
   check,
@@ -12,6 +13,10 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+const organizationRoleValuesSql = sql.raw(
+  ORGANIZATION_ROLES.map((value) => `'${value}'`).join(", ")
+);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -52,10 +57,14 @@ export const member = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role").notNull(),
+    role: text("role", { enum: ORGANIZATION_ROLES }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
+    check(
+      "member_role_chk",
+      sql`${table.role} in (${organizationRoleValuesSql})`
+    ),
     index("member_organization_id_idx").on(table.organizationId),
     index("member_user_id_idx").on(table.userId),
     uniqueIndex("member_organization_id_user_id_idx").on(
@@ -73,7 +82,7 @@ export const invitation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    role: text("role").notNull(),
+    role: text("role", { enum: ORGANIZATION_ROLES }).notNull(),
     status: text("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -82,6 +91,10 @@ export const invitation = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
+    check(
+      "invitation_role_chk",
+      sql`${table.role} in (${organizationRoleValuesSql})`
+    ),
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
   ]

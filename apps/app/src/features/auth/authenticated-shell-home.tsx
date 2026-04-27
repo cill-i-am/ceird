@@ -42,7 +42,7 @@ export function AuthenticatedShellHome() {
       >
         <h2
           id="workspace-next-actions-heading"
-          className="font-heading text-lg font-medium tracking-tight"
+          className="font-heading text-lg font-medium"
         >
           Next actions
         </h2>

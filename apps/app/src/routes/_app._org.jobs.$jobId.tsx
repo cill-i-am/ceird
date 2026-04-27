@@ -3,10 +3,11 @@ import { WorkItemId } from "@task-tracker/jobs-core";
 import type { WorkItemIdType } from "@task-tracker/jobs-core";
 import { Schema } from "effect";
 
-import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
-import { JobsDetailSheet } from "#/features/jobs/jobs-detail-sheet";
+import {
+  JobsCreateRouteContent,
+  JobsDetailRouteContent,
+} from "#/features/jobs/jobs-route-content";
 import { getCurrentServerJobDetail } from "#/features/jobs/jobs-server";
-import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import { requireOrganizationAdministrationAccess } from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 
@@ -61,19 +62,6 @@ export const Route = createFileRoute("/_app/_org/jobs/$jobId")({
   component: JobsDetailRoute,
 });
 
-export function JobsDetailRouteContent({
-  initialDetail,
-  viewer,
-}: {
-  readonly initialDetail: Exclude<
-    JobDetailRouteData,
-    null | typeof CREATE_JOB_ROUTE_DATA
-  >;
-  readonly viewer: JobsViewer;
-}) {
-  return <JobsDetailSheet initialDetail={initialDetail} viewer={viewer} />;
-}
-
 function JobsDetailRoute() {
   const initialDetail = Route.useLoaderData();
   const { viewer } = jobsRouteApi.useLoaderData();
@@ -83,7 +71,7 @@ function JobsDetailRoute() {
   }
 
   if (isCreateJobRouteData(initialDetail)) {
-    return <JobsCreateSheet />;
+    return <JobsCreateRouteContent />;
   }
 
   return (

@@ -3,6 +3,55 @@ import { ParseResult, Schema } from "effect";
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const OrganizationId = Schema.NonEmptyString.pipe(
+  Schema.brand("@task-tracker/identity-core/OrganizationId")
+);
+export type OrganizationId = Schema.Schema.Type<typeof OrganizationId>;
+
+export const ORGANIZATION_ROLES = ["owner", "admin", "member"] as const;
+export const ADMINISTRATIVE_ORGANIZATION_ROLES = ["owner", "admin"] as const;
+export const INVITABLE_ORGANIZATION_ROLES = ["admin", "member"] as const;
+
+export const OrganizationRole = Schema.Literal(...ORGANIZATION_ROLES);
+export type OrganizationRole = Schema.Schema.Type<typeof OrganizationRole>;
+
+export const AdministrativeOrganizationRole = Schema.Literal(
+  ...ADMINISTRATIVE_ORGANIZATION_ROLES
+);
+export type AdministrativeOrganizationRole = Schema.Schema.Type<
+  typeof AdministrativeOrganizationRole
+>;
+
+export const InvitableOrganizationRole = Schema.Literal(
+  ...INVITABLE_ORGANIZATION_ROLES
+);
+export type InvitableOrganizationRole = Schema.Schema.Type<
+  typeof InvitableOrganizationRole
+>;
+
+export const OrganizationMemberRoleResponseSchema = Schema.Struct({
+  role: OrganizationRole,
+});
+export type OrganizationMemberRoleResponse = Schema.Schema.Type<
+  typeof OrganizationMemberRoleResponseSchema
+>;
+
+export const OrganizationSummarySchema = Schema.Struct({
+  id: OrganizationId,
+  name: Schema.String,
+  slug: Schema.String,
+});
+export type OrganizationSummary = Schema.Schema.Type<
+  typeof OrganizationSummarySchema
+>;
+
+export const OrganizationSummaryListSchema = Schema.Array(
+  OrganizationSummarySchema
+);
+export type OrganizationSummaryList = Schema.Schema.Type<
+  typeof OrganizationSummaryListSchema
+>;
+
 export const OrganizationNameSchema = Schema.Trim.pipe(
   Schema.minLength(ORGANIZATION_NAME_MIN_LENGTH)
 );
@@ -32,7 +81,7 @@ export type UpdateOrganizationInput = Schema.Schema.Type<
 export const PublicInvitationPreviewSchema = Schema.Struct({
   email: Schema.String,
   organizationName: Schema.String,
-  role: Schema.String,
+  role: OrganizationRole,
 });
 
 export type PublicInvitationPreview = Schema.Schema.Type<
@@ -57,4 +106,40 @@ export function decodePublicInvitationPreview(
   input: unknown
 ): PublicInvitationPreview {
   return ParseResult.decodeUnknownSync(PublicInvitationPreviewSchema)(input);
+}
+
+export function decodeOrganizationId(input: unknown): OrganizationId {
+  return ParseResult.decodeUnknownSync(OrganizationId)(input);
+}
+
+export function decodeOrganizationRole(input: unknown): OrganizationRole {
+  return ParseResult.decodeUnknownSync(OrganizationRole)(input);
+}
+
+const administrativeOrganizationRoleSet = new Set<OrganizationRole>(
+  ADMINISTRATIVE_ORGANIZATION_ROLES
+);
+
+export function isAdministrativeOrganizationRole(
+  role: OrganizationRole
+): boolean {
+  return administrativeOrganizationRoleSet.has(role);
+}
+
+export function decodeOrganizationMemberRoleResponse(
+  input: unknown
+): OrganizationMemberRoleResponse {
+  return ParseResult.decodeUnknownSync(OrganizationMemberRoleResponseSchema)(
+    input
+  );
+}
+
+export function decodeOrganizationSummary(input: unknown): OrganizationSummary {
+  return ParseResult.decodeUnknownSync(OrganizationSummarySchema)(input);
+}
+
+export function decodeOrganizationSummaryList(
+  input: unknown
+): OrganizationSummaryList {
+  return ParseResult.decodeUnknownSync(OrganizationSummaryListSchema)(input);
 }

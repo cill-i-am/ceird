@@ -1,6 +1,8 @@
+import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import type { JobStatus } from "@task-tracker/jobs-core";
 
-export type JobsViewerRole = "owner" | "admin" | "member";
+export type JobsViewerRole = OrganizationRole;
 
 export interface JobsViewer {
   readonly role: JobsViewerRole;
@@ -30,7 +32,7 @@ export const MEMBER_TRANSITION_OPTIONS: Readonly<
 };
 
 export function hasJobsElevatedAccess(role: JobsViewerRole): boolean {
-  return role === "owner" || role === "admin";
+  return isAdministrativeOrganizationRole(role);
 }
 
 export function hasAssignedJobAccess(

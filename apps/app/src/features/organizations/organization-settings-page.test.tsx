@@ -1,9 +1,13 @@
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OrganizationSettingsPage } from "./organization-settings-page";
+
+const organizationId = decodeOrganizationId("org_123");
+const nextOrganizationId = decodeOrganizationId("org_456");
 
 const { mockedInvalidate, mockedUpdateOrganization } = vi.hoisted(() => ({
   mockedInvalidate: vi.fn<() => Promise<void>>(),
@@ -55,7 +59,7 @@ describe("organization settings page", () => {
     render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -77,7 +81,7 @@ describe("organization settings page", () => {
     render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -112,7 +116,7 @@ describe("organization settings page", () => {
     render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -137,7 +141,7 @@ describe("organization settings page", () => {
     render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -162,7 +166,7 @@ describe("organization settings page", () => {
     render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -185,7 +189,7 @@ describe("organization settings page", () => {
     const { rerender } = render(
       <OrganizationSettingsPage
         organization={{
-          id: "org_123",
+          id: organizationId,
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
@@ -195,7 +199,7 @@ describe("organization settings page", () => {
     rerender(
       <OrganizationSettingsPage
         organization={{
-          id: "org_456",
+          id: nextOrganizationId,
           name: "Northwind Field Ops",
           slug: "northwind-field-ops",
         }}

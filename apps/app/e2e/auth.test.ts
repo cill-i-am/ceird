@@ -125,9 +125,7 @@ test.describe("auth pages", () => {
     await loginPage.password.blur();
     await loginPage.submit.click();
 
-    await expect(loginPage.alerts).toContainText(
-      "Expected a string at least 8 character(s) long"
-    );
+    await expect(loginPage.alerts).toContainText("Use at least 8 characters.");
   });
 
   test("signup shows password mismatch inline", async ({ page }) => {

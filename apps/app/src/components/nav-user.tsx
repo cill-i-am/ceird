@@ -127,7 +127,7 @@ export function NavUser({
                     <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="text-[0.68rem] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                    <span className="text-[0.68rem] font-medium text-muted-foreground uppercase">
                       Signed in
                     </span>
                     <span className="truncate font-medium">{user.name}</span>
@@ -152,7 +152,7 @@ export function NavUser({
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isSigningOut}
-                onSelect={async (event) => {
+                onClick={async (event) => {
                   event.preventDefault();
 
                   if (isSigningOut) {

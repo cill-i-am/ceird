@@ -1,9 +1,17 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 
 import type * as OrganizationAccess from "#/features/organizations/organization-access";
 
-type RoleLookupMock = (organizationId: string) => Promise<{ role: string }>;
+type RoleLookupMock = (
+  organizationId: OrganizationId
+) => Promise<{ role: OrganizationRole }>;
+const organizationId = decodeOrganizationId("org_123");
 
 const { mockedGetCurrentOrganizationMemberRole } = vi.hoisted(() => ({
   mockedGetCurrentOrganizationMemberRole: vi.fn<RoleLookupMock>(),
@@ -25,7 +33,7 @@ describe("settings route loader", () => {
     vi.clearAllMocks();
   });
 
-  it.each(["owner", "admin"])(
+  it.each<OrganizationRole>(["owner", "admin"])(
     "allows %s users to load organization settings",
     {
       timeout: 10_000,
@@ -40,15 +48,15 @@ describe("settings route loader", () => {
 
       await expect(
         loadSettingsRoute({
-          activeOrganizationId: "org_123",
+          activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: false,
-            targetOrganizationId: "org_123",
+            targetOrganizationId: organizationId,
           },
         })
       ).resolves.toBeUndefined();
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        "org_123"
+        organizationId
       );
     }
   );
@@ -66,10 +74,10 @@ describe("settings route loader", () => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
       const result = loadSettingsRoute({
-        activeOrganizationId: "org_123",
+        activeOrganizationId: organizationId,
         activeOrganizationSync: {
           required: false,
-          targetOrganizationId: "org_123",
+          targetOrganizationId: organizationId,
         },
       });
 
@@ -91,10 +99,10 @@ describe("settings route loader", () => {
 
       await expect(
         loadSettingsRoute({
-          activeOrganizationId: "org_123",
+          activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: true,
-            targetOrganizationId: "org_123",
+            targetOrganizationId: organizationId,
           },
         })
       ).resolves.toBeUndefined();

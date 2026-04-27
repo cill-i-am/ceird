@@ -390,6 +390,7 @@ describe("jobs-core", () => {
       "/jobs/{workItemId}/visits",
       "/sites/options",
       "/sites",
+      "/sites/{siteId}",
     ]);
 
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");

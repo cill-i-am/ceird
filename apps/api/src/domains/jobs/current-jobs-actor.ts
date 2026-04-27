@@ -1,6 +1,12 @@
 import { HttpServerRequest } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
-import { OrganizationId, UserId } from "@task-tracker/jobs-core";
+import { OrganizationRole as OrganizationRoleSchema } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
+import {
+  JobStorageError,
+  OrganizationId,
+  UserId,
+} from "@task-tracker/jobs-core";
 import type { OrganizationIdType, UserIdType } from "@task-tracker/jobs-core";
 import { Effect, Schema } from "effect";
 
@@ -25,7 +31,7 @@ interface CurrentJobsActorSession {
   };
 }
 
-export type JobsActorRole = "owner" | "admin" | "member";
+export type JobsActorRole = OrganizationRole;
 
 export interface JobsActor {
   readonly organizationId: OrganizationIdType;
@@ -35,6 +41,7 @@ export interface JobsActor {
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const isOrganizationRole = Schema.is(OrganizationRoleSchema);
 
 export const resolveCurrentJobsActor = Effect.fn("CurrentJobsActor.resolve")(
   function* (options: {
@@ -45,7 +52,7 @@ export const resolveCurrentJobsActor = Effect.fn("CurrentJobsActor.resolve")(
     readonly loadMembershipRoles: (
       organizationId: OrganizationIdType,
       userId: UserIdType
-    ) => Effect.Effect<readonly MembershipRoleRow[], never>;
+    ) => Effect.Effect<readonly MembershipRoleRow[], JobStorageError>;
   }) {
     const session = yield* Effect.promise(() =>
       options.getSession(options.headers)
@@ -127,7 +134,9 @@ export class CurrentJobsActor extends Effect.Service<CurrentJobsActor>()(
               where organization_id = ${organizationId}
                 and user_id = ${userId}
               limit 1
-            `.pipe(Effect.catchTag("SqlError", (error) => Effect.die(error))),
+            `.pipe(
+              Effect.catchTag("SqlError", failCurrentJobsActorStorageError)
+            ),
         });
       });
 
@@ -138,27 +147,19 @@ export class CurrentJobsActor extends Effect.Service<CurrentJobsActor>()(
   }
 ) {}
 
+function failCurrentJobsActorStorageError(
+  error: unknown
+): Effect.Effect<never, JobStorageError> {
+  return Effect.fail(
+    new JobStorageError({
+      cause: error instanceof Error ? error.message : String(error),
+      message: "Jobs actor storage lookup failed",
+    })
+  );
+}
+
 function normalizeJobsActorRole(
   membershipRole: string
 ): JobsActorRole | undefined {
-  const roles = new Set(
-    membershipRole
-      .split(",")
-      .map((role) => role.trim())
-      .filter((role) => role.length > 0)
-  );
-
-  if (roles.has("owner")) {
-    return "owner";
-  }
-
-  if (roles.has("admin")) {
-    return "admin";
-  }
-
-  if (roles.has("member")) {
-    return "member";
-  }
-
-  return undefined;
+  return isOrganizationRole(membershipRole) ? membershipRole : undefined;
 }

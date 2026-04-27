@@ -1,4 +1,4 @@
-import { isRedirect, redirect } from "@tanstack/react-router";
+import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
@@ -16,19 +16,11 @@ async function getCurrentSession() {
 }
 
 export async function requireAuthenticatedSession() {
-  try {
-    const session = await getCurrentSession();
+  const session = await getCurrentSession();
 
-    if (session) {
-      return session;
-    }
-
-    throw redirect(getLoginNavigationTarget());
-  } catch (error) {
-    if (isRedirect(error)) {
-      throw error;
-    }
-
+  if (!session) {
     throw redirect(getLoginNavigationTarget());
   }
+
+  return session;
 }

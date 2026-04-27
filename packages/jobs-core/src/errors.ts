@@ -47,6 +47,17 @@ export class JobListCursorInvalidError extends Schema.TaggedError<JobListCursorI
   HttpApiSchema.annotations({ status: 400 })
 ) {}
 
+export const JOB_STORAGE_ERROR_TAG =
+  "@task-tracker/jobs-core/JobStorageError" as const;
+export class JobStorageError extends Schema.TaggedError<JobStorageError>()(
+  JOB_STORAGE_ERROR_TAG,
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.String),
+  },
+  HttpApiSchema.annotations({ status: 503 })
+) {}
+
 export const INVALID_JOB_TRANSITION_ERROR_TAG =
   "@task-tracker/jobs-core/InvalidJobTransitionError" as const;
 export class InvalidJobTransitionError extends Schema.TaggedError<InvalidJobTransitionError>()(
@@ -158,6 +169,7 @@ export type JobsError =
   | JobNotFoundError
   | JobAccessDeniedError
   | JobListCursorInvalidError
+  | JobStorageError
   | InvalidJobTransitionError
   | BlockedReasonRequiredError
   | CoordinatorMatchesAssigneeError

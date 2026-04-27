@@ -1,9 +1,11 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type { WorkItemIdType } from "@task-tracker/jobs-core";
 import { render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
+const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedEnsureActiveOrganizationId,
@@ -69,10 +71,10 @@ describe("jobs route loader", () => {
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
       mockedGetCurrentServerJobOptions.mockResolvedValue(options);
       mockedEnsureActiveOrganizationId.mockResolvedValue({
-        activeOrganizationId: "org_123",
+        activeOrganizationId: organizationId,
         activeOrganizationSync: {
           required: false,
-          targetOrganizationId: "org_123",
+          targetOrganizationId: organizationId,
         },
         currentUserId: "user_123",
         session: {
@@ -110,10 +112,10 @@ describe("jobs route loader", () => {
 
       await expect(
         loadJobsRouteData({
-          activeOrganizationId: "org_123",
+          activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: true,
-            targetOrganizationId: "org_123",
+            targetOrganizationId: organizationId,
           },
           currentUserId: "user_123",
         })
@@ -145,11 +147,12 @@ describe("jobs route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { JobsRouteContent } = await import("./_app._org.jobs");
+      const { JobsRouteContent } =
+        await import("#/features/jobs/jobs-route-content");
 
       render(
         <JobsRouteContent
-          activeOrganizationId="org_123"
+          activeOrganizationId={organizationId}
           activeOrganizationName="Acme Field Ops"
           list={{
             items: [

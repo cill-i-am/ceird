@@ -1,4 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { decodeOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { Alert, AlertDescription } from "#/components/ui/alert";
@@ -22,7 +24,7 @@ import { signOut } from "../auth/sign-out";
 interface InvitationPreviewDetails {
   readonly email: string;
   readonly organizationName: string;
-  readonly role: string;
+  readonly role: OrganizationRole;
 }
 
 interface InvitationDetails extends InvitationPreviewDetails {
@@ -135,8 +137,8 @@ function InvitationContextContent({
   if (!invitation) {
     return (
       <div className="flex flex-col gap-8">
-        <div className="space-y-3">
-          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase">
             Continue the invitation
           </p>
           <p className="max-w-[48ch] text-sm/7 text-foreground/90">
@@ -163,8 +165,8 @@ function InvitationContextContent({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="space-y-3">
-        <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase">
           Invitation details
         </p>
         <p className="max-w-[48ch] text-sm/7 text-foreground/90">
@@ -175,8 +177,8 @@ function InvitationContextContent({
       </div>
 
       <dl className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-1 border-t border-border/60 pt-4">
-          <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+          <dt className="text-xs font-medium text-muted-foreground uppercase">
             Organization
           </dt>
           <dd className="text-sm/6 text-muted-foreground">
@@ -184,8 +186,8 @@ function InvitationContextContent({
           </dd>
         </div>
 
-        <div className="space-y-1 border-t border-border/60 pt-4">
-          <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+          <dt className="text-xs font-medium text-muted-foreground uppercase">
             Invited email
           </dt>
           <dd className="text-sm/6 text-muted-foreground">
@@ -193,16 +195,16 @@ function InvitationContextContent({
           </dd>
         </div>
 
-        <div className="space-y-1 border-t border-border/60 pt-4">
-          <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+          <dt className="text-xs font-medium text-muted-foreground uppercase">
             Role
           </dt>
           <dd className="text-sm/6 text-muted-foreground">{invitation.role}</dd>
         </div>
 
         {"inviterEmail" in invitation ? (
-          <div className="space-y-1 border-t border-border/60 pt-4">
-            <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+          <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+            <dt className="text-xs font-medium text-muted-foreground uppercase">
               Invited by
             </dt>
             <dd className="text-sm/6 text-muted-foreground">
@@ -284,7 +286,10 @@ export function AcceptInvitationPage({
 
       setState({
         status: "ready",
-        invitation: invitation.data,
+        invitation: {
+          ...invitation.data,
+          role: decodeOrganizationRole(invitation.data.role),
+        },
       });
     }
 

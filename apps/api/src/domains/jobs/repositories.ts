@@ -1,11 +1,7 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
-import { randomUUID } from "node:crypto";
-
 import { SqlClient } from "@effect/sql";
 import {
-  ActivityId as ActivityIdSchema,
-  CommentId as CommentIdSchema,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
   IsoDateTimeString as IsoDateTimeStringSchema,
@@ -24,11 +20,11 @@ import {
   JobSchema,
   JobSiteOptionSchema,
   JobVisitSchema,
+  OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
   SiteNotFoundError,
   SiteId as SiteIdSchema,
-  VisitId as VisitIdSchema,
   WorkItemId as WorkItemIdSchema,
 } from "@task-tracker/jobs-core";
 import type {
@@ -61,6 +57,14 @@ import type {
 import { Config, Effect, Layer, Option, Schema } from "effect";
 
 import { WorkItemOrganizationMismatchError } from "./errors.js";
+import {
+  generateActivityId,
+  generateCommentId,
+  generateContactId,
+  generateSiteId,
+  generateVisitId,
+  generateWorkItemId,
+} from "./id-generation.js";
 
 interface JobCursorState {
   readonly id: WorkItemId;
@@ -111,7 +115,7 @@ interface WorkItemVisitRow {
   readonly id: string;
   readonly note: string;
   readonly organization_id: string;
-  readonly visit_date: Date;
+  readonly visit_date: Date | string;
   readonly work_item_id: string;
 }
 
@@ -225,6 +229,22 @@ export interface CreateSiteRecordInput {
   readonly town?: string;
 }
 
+export interface UpdateSiteRecordInput {
+  readonly accessNotes?: string;
+  readonly addressLine1: string;
+  readonly addressLine2?: string;
+  readonly country: SiteCountry;
+  readonly county: string;
+  readonly eircode?: string;
+  readonly geocodedAt: IsoDateTimeString;
+  readonly geocodingProvider: SiteGeocodingProvider;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly name: string;
+  readonly regionId?: RegionId;
+  readonly town?: string;
+}
+
 export interface CreateContactRecordInput {
   readonly email?: string;
   readonly name: string;
@@ -245,9 +265,8 @@ const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
   JobActivityPayloadSchema
 );
-const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
-const decodeCommentId = Schema.decodeUnknownSync(CommentIdSchema);
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
+const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
@@ -259,7 +278,6 @@ const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
 const decodeJobSiteOption = Schema.decodeUnknownSync(JobSiteOptionSchema);
 const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
-const decodeVisitId = Schema.decodeUnknownSync(VisitIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
@@ -377,8 +395,8 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(
-          rows[0]?.organization_id as OrganizationId | undefined
+        return Option.fromNullable(rows[0]?.organization_id).pipe(
+          Option.map(decodeOrganizationId)
         );
       });
 
@@ -658,7 +676,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               ? (input.completedByUserId ?? null)
               : null,
           created_by_user_id: input.createdByUserId,
-          id: decodeWorkItemId(randomUUID()),
+          id: generateWorkItemId(),
           kind: input.kind ?? "job",
           organization_id: input.organizationId,
           priority: input.priority ?? "none",
@@ -829,7 +847,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               author_user_id: input.authorUserId,
               body: input.body,
-              id: decodeCommentId(randomUUID()),
+              id: generateCommentId(),
               work_item_id: input.workItemId,
             })
             .returning("*")}
@@ -860,7 +878,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               actor_user_id: input.actorUserId ?? null,
               event_type: input.payload.eventType,
-              id: decodeActivityId(randomUUID()),
+              id: generateActivityId(),
               organization_id: input.organizationId,
               payload: input.payload,
               work_item_id: input.workItemId,
@@ -891,10 +909,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             .insert({
               author_user_id: input.authorUserId,
               duration_minutes: input.durationMinutes,
-              id: decodeVisitId(randomUUID()),
+              id: generateVisitId(),
               note: input.note,
               organization_id: input.organizationId,
-              visit_date: parseIsoDate(input.visitDate),
+              visit_date: input.visitDate,
               work_item_id: input.workItemId,
             })
             .returning("*")}
@@ -985,7 +1003,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           county: input.county,
           geocoded_at: isoDateTimeStringToDate(input.geocodedAt),
           geocoding_provider: input.geocodingProvider,
-          id: decodeSiteId(randomUUID()),
+          id: generateSiteId(),
           latitude: input.latitude,
           longitude: input.longitude,
           name: input.name,
@@ -1017,6 +1035,58 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         `;
 
         return decodeSiteId(getRequiredRow(rows, "inserted site id").id);
+      });
+
+      const update = Effect.fn("SitesRepository.update")(function* (
+        organizationId: OrganizationId,
+        siteId: SiteId,
+        input: UpdateSiteRecordInput
+      ) {
+        if (input.regionId !== undefined) {
+          yield* ensureRegionInOrganization(organizationId, input.regionId);
+        }
+
+        const rows = yield* sql<JobSiteOptionRow>`
+          update sites
+          set ${sql.update({
+            access_notes: input.accessNotes ?? null,
+            address_line_1: input.addressLine1,
+            address_line_2: input.addressLine2 ?? null,
+            country: input.country,
+            county: input.county,
+            eircode: input.eircode ?? null,
+            geocoded_at: isoDateTimeStringToDate(input.geocodedAt),
+            geocoding_provider: input.geocodingProvider,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            name: input.name,
+            region_id: input.regionId ?? null,
+            town: input.town ?? null,
+            updated_at: new Date(),
+          })}
+          where organization_id = ${organizationId}
+            and id = ${siteId}
+            and archived_at is null
+          returning
+            access_notes,
+            address_line_1,
+            address_line_2,
+            county,
+            eircode,
+            id,
+            latitude,
+            longitude,
+            name,
+            region_id,
+            null::text as region_name,
+            town
+        `;
+
+        if (rows[0] === undefined) {
+          return Option.none<JobSiteOption>();
+        }
+
+        return yield* getOptionById(organizationId, siteId);
       });
 
       const listRegions = Effect.fn("SitesRepository.listRegions")(function* (
@@ -1170,6 +1240,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         linkContact,
         listOptions,
         listRegions,
+        update,
       };
     }),
   }
@@ -1194,14 +1265,16 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.id as ContactId | undefined);
+        return Option.fromNullable(rows[0]?.id).pipe(
+          Option.map(decodeContactId)
+        );
       });
 
       const create = Effect.fn("ContactsRepository.create")(function* (
         input: CreateContactRecordInput
       ) {
         const values: Record<string, unknown> = {
-          id: decodeContactId(randomUUID()),
+          id: generateContactId(),
           name: input.name,
           organization_id: input.organizationId,
         };
@@ -1222,7 +1295,7 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           insert into contacts ${sql.insert(values).returning("id")}
         `;
 
-        return getRequiredRow(rows, "inserted contact id").id as ContactId;
+        return decodeContactId(getRequiredRow(rows, "inserted contact id").id);
       });
 
       const listOptions = Effect.fn("ContactsRepository.listOptions")(
@@ -1357,14 +1430,13 @@ function mapJobContactOptions(
       contacts.set(row.id, {
         id: row.id,
         name: row.name,
-        siteIds:
-          row.site_id === null ? [] : [decodeSiteId(row.site_id as SiteId)],
+        siteIds: row.site_id === null ? [] : [decodeSiteId(row.site_id)],
       });
       continue;
     }
 
     if (row.site_id !== null) {
-      existing.siteIds.push(decodeSiteId(row.site_id as SiteId));
+      existing.siteIds.push(decodeSiteId(row.site_id));
     }
   }
 
@@ -1400,7 +1472,7 @@ function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
     durationMinutes: row.duration_minutes,
     id: row.id,
     note: row.note,
-    visitDate: row.visit_date.toISOString().slice(0, 10),
+    visitDate: formatPgDate(row.visit_date),
     workItemId: row.work_item_id,
   });
 }
@@ -1462,12 +1534,20 @@ function getRequiredRow<Value>(rows: readonly Value[], label: string): Value {
   return row;
 }
 
-function parseIsoDate(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
-}
-
 function parseIsoDateTime(value: string): Date {
   return new Date(value);
+}
+
+function formatPgDate(value: Date | string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function clampJobListLimit(limit: number): number {

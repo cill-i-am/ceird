@@ -1,5 +1,5 @@
 {
-  "id": "31f1cd3f-17fa-4ba3-a76d-60ebce33b2b4",
+  "id": "66f16b5b-c86d-4679-9095-4dd35a1a76e0",
   "prevId": "1299b3cd-5082-46a1-a750-6536c06f2f94",
   "version": "7",
   "dialect": "postgresql",
@@ -376,7 +376,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "invitation_role_chk": {
+          "name": "invitation_role_chk",
+          "value": "\"invitation\".\"role\" in ('owner', 'admin', 'member')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.member": {
@@ -491,7 +496,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "member_role_chk": {
+          "name": "member_role_chk",
+          "value": "\"member\".\"role\" in ('owner', 'admin', 'member')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.organization": {
@@ -879,13 +889,13 @@
           "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "address_line_1": {
           "name": "address_line_1",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "address_line_2": {
           "name": "address_line_2",
@@ -903,14 +913,7 @@
           "name": "county",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
-        },
-        "country": {
-          "name": "country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'IE'"
+          "notNull": false
         },
         "eircode": {
           "name": "eircode",
@@ -928,25 +931,13 @@
           "name": "latitude",
           "type": "double precision",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "longitude": {
           "name": "longitude",
           "type": "double precision",
           "primaryKey": false,
-          "notNull": true
-        },
-        "geocoding_provider": {
-          "name": "geocoding_provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "geocoded_at": {
-          "name": "geocoded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1077,25 +1068,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "sites_country_chk": {
-          "name": "sites_country_chk",
-          "value": "\"sites\".\"country\" in ('IE', 'GB')"
-        },
-        "sites_ie_eircode_required_chk": {
-          "name": "sites_ie_eircode_required_chk",
-          "value": "\"sites\".\"country\" <> 'IE' or \"sites\".\"eircode\" is not null"
-        },
-        "sites_geocoding_provider_chk": {
-          "name": "sites_geocoding_provider_chk",
-          "value": "\"sites\".\"geocoding_provider\" is null or \"sites\".\"geocoding_provider\" in ('google', 'stub')"
-        },
         "sites_coordinates_pair_check": {
           "name": "sites_coordinates_pair_check",
           "value": "(\"sites\".\"latitude\" is null and \"sites\".\"longitude\" is null) or (\"sites\".\"latitude\" is not null and \"sites\".\"longitude\" is not null)"
-        },
-        "sites_geocoding_metadata_check": {
-          "name": "sites_geocoding_metadata_check",
-          "value": "(\"sites\".\"latitude\" is null and \"sites\".\"longitude\" is null and \"sites\".\"geocoding_provider\" is null and \"sites\".\"geocoded_at\" is null) or (\"sites\".\"latitude\" is not null and \"sites\".\"longitude\" is not null and \"sites\".\"geocoding_provider\" is not null and \"sites\".\"geocoded_at\" is not null)"
         },
         "sites_latitude_range_check": {
           "name": "sites_latitude_range_check",

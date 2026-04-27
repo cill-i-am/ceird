@@ -11,24 +11,23 @@ import {
   Briefcase01Icon,
   CheckmarkCircle02Icon,
   Comment01Icon,
+  Location01Icon,
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import type { JobDetailResponse, JobStatus } from "@task-tracker/jobs-core";
+import type {
+  JobDetailResponse,
+  JobSiteOption,
+  JobStatus,
+  SiteIdType,
+} from "@task-tracker/jobs-core";
 import { Exit } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { Button, buttonVariants } from "#/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
+import { Button } from "#/components/ui/button";
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
@@ -55,6 +54,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
+import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
 
 import { JobsDetailLocation } from "./jobs-detail-location";
@@ -62,6 +62,7 @@ import {
   addJobCommentMutationAtomFamily,
   addJobVisitMutationAtomFamily,
   jobDetailStateAtomFamily,
+  patchJobMutationAtomFamily,
   reopenJobMutationAtomFamily,
   transitionJobMutationAtomFamily,
 } from "./jobs-detail-state";
@@ -69,6 +70,7 @@ import { jobsLookupAtom } from "./jobs-state";
 import {
   getAvailableJobTransitions,
   hasAssignedJobAccess,
+  hasJobsElevatedAccess,
 } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
@@ -103,6 +105,8 @@ const VISIT_DURATION_SELECTION_GROUPS = [
   },
 ] satisfies readonly CommandSelectGroup[];
 
+const NO_SITE_VALUE = "__none__";
+
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
   readonly viewer: JobsViewer;
@@ -126,6 +130,7 @@ export function JobsDetailSheet({
     transitionJobMutationAtomFamily(workItemId)
   );
   const reopenResult = useAtomValue(reopenJobMutationAtomFamily(workItemId));
+  const patchResult = useAtomValue(patchJobMutationAtomFamily(workItemId));
   const commentResult = useAtomValue(
     addJobCommentMutationAtomFamily(workItemId)
   );
@@ -137,6 +142,9 @@ export function JobsDetailSheet({
     }
   );
   const reopenJob = useAtomSet(reopenJobMutationAtomFamily(workItemId), {
+    mode: "promiseExit",
+  });
+  const patchJob = useAtomSet(patchJobMutationAtomFamily(workItemId), {
     mode: "promiseExit",
   });
   const addJobComment = useAtomSet(
@@ -152,6 +160,7 @@ export function JobsDetailSheet({
     viewer,
     detail.job.assigneeId
   );
+  const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
@@ -165,6 +174,15 @@ export function JobsDetailSheet({
   const [transitionError, setTransitionError] = React.useState<string | null>(
     null
   );
+  const [selectedSiteId, setSelectedSiteId] = React.useState(
+    detail.job.siteId ?? NO_SITE_VALUE
+  );
+  const [siteAssignmentError, setSiteAssignmentError] = React.useState<
+    string | null
+  >(null);
+  const [siteAssignmentMessage, setSiteAssignmentMessage] = React.useState<
+    string | null
+  >(null);
   const [commentBody, setCommentBody] = React.useState("");
   const [commentError, setCommentError] = React.useState<string | null>(null);
   const [visitDate, setVisitDate] = React.useState("");
@@ -183,18 +201,27 @@ export function JobsDetailSheet({
   const coordinator = detail.job.coordinatorId
     ? lookup.memberById.get(detail.job.coordinatorId)
     : undefined;
+  const siteSelectionGroups = React.useMemo(
+    () => buildSiteSelectionGroups([...lookup.siteById.values()]),
+    [lookup.siteById]
+  );
+  const selectedSiteChanged =
+    selectedSiteId !== (detail.job.siteId ?? NO_SITE_VALUE);
 
   React.useEffect(() => {
     setSelectedStatus("");
     setBlockedReason("");
     setTransitionError(null);
+    setSelectedSiteId(detail.job.siteId ?? NO_SITE_VALUE);
+    setSiteAssignmentError(null);
+    setSiteAssignmentMessage(null);
     setCommentBody("");
     setCommentError(null);
     setVisitDate(getLocalDateInputValue());
     setVisitDurationMinutes("60");
     setVisitNote("");
     setVisitError(null);
-  }, [detail.job.status, workItemId]);
+  }, [detail.job.siteId, detail.job.status, workItemId]);
 
   function closeSheet() {
     React.startTransition(() => {
@@ -230,6 +257,37 @@ export function JobsDetailSheet({
 
   async function handleReopen() {
     await reopenJob();
+  }
+
+  async function handleUpdateSiteAssignment() {
+    if (!canEditJob) {
+      return;
+    }
+
+    const nextSiteId =
+      selectedSiteId === NO_SITE_VALUE ? null : (selectedSiteId as SiteIdType);
+
+    if (
+      selectedSiteId !== NO_SITE_VALUE &&
+      !lookup.siteById.has(selectedSiteId as SiteIdType)
+    ) {
+      setSiteAssignmentError("Pick an available site, or choose no site.");
+      return;
+    }
+
+    setSiteAssignmentError(null);
+    setSiteAssignmentMessage(null);
+
+    const exit = await patchJob({
+      contactId: null,
+      siteId: nextSiteId,
+    });
+
+    if (Exit.isSuccess(exit)) {
+      setSiteAssignmentMessage(
+        nextSiteId === null ? "Site removed." : "Site assignment updated."
+      );
+    }
   }
 
   async function handleAddComment(event: React.FormEvent<HTMLFormElement>) {
@@ -318,26 +376,33 @@ export function JobsDetailSheet({
           disabled={reopenResult.waiting}
           onClick={handleReopen}
         >
-          <HugeiconsIcon
-            icon={CheckmarkCircle02Icon}
-            strokeWidth={2}
-            data-icon="inline-start"
-          />
+          {reopenResult.waiting ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <HugeiconsIcon
+              icon={CheckmarkCircle02Icon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+          )}
           {reopenResult.waiting ? "Reopening..." : "Reopen job"}
         </Button>
       </div>
     ) : (
-      <Empty className="min-h-[180px] bg-muted/20">
-        <EmptyHeader>
-          <EmptyTitle>This completed job is view-only for you.</EmptyTitle>
-          <EmptyDescription>
-            Members can only reopen completed jobs when they are assigned to
-            them.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <DetailEmpty
+        title="This completed job is view-only for you."
+        description="Members can only reopen completed jobs when they are assigned to them."
+      />
     );
   } else if (transitionOptions.length > 0 && hasAssignmentAccess) {
+    let transitionButtonLabel = "Pick a status";
+
+    if (transitionResult.waiting) {
+      transitionButtonLabel = "Updating...";
+    } else if (selectedStatus) {
+      transitionButtonLabel = "Apply status change";
+    }
+
     statusActionContent = (
       <div className="flex flex-col gap-4">
         {renderMutationError(transitionResult)}
@@ -351,9 +416,10 @@ export function JobsDetailSheet({
                 placeholder="Choose next state"
                 emptyText="No status changes available."
                 groups={transitionSelectionGroups}
-                onValueChange={(nextValue) =>
-                  setSelectedStatus(nextValue as JobStatus | "")
-                }
+                onValueChange={(nextValue) => {
+                  setSelectedStatus(nextValue as JobStatus | "");
+                  setTransitionError(null);
+                }}
               />
             </FieldContent>
           </Field>
@@ -363,35 +429,37 @@ export function JobsDetailSheet({
 
         <div className="flex flex-wrap gap-3">
           <Button
-            disabled={transitionResult.waiting}
+            disabled={transitionResult.waiting || !selectedStatus}
             onClick={handleTransition}
           >
-            <HugeiconsIcon
-              icon={CheckmarkCircle02Icon}
-              strokeWidth={2}
-              data-icon="inline-start"
-            />
-            {transitionResult.waiting ? "Updating..." : "Apply status change"}
+            {transitionResult.waiting ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <HugeiconsIcon
+                icon={CheckmarkCircle02Icon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+            )}
+            {transitionButtonLabel}
           </Button>
         </div>
       </div>
     );
   } else {
     statusActionContent = (
-      <Empty className="min-h-[180px] bg-muted/20">
-        <EmptyHeader>
-          <EmptyTitle>
-            {hasAssignmentAccess
-              ? "No further status action here yet."
-              : "Status changes open once this job is assigned to you."}
-          </EmptyTitle>
-          <EmptyDescription>
-            {hasAssignmentAccess
-              ? "This job is already at the end of the v1 workflow."
-              : "Members can comment freely, but only the assignee can move the queue forward from here."}
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <DetailEmpty
+        title={
+          hasAssignmentAccess
+            ? "No further status action here yet."
+            : "Status changes open once this job is assigned to you."
+        }
+        description={
+          hasAssignmentAccess
+            ? "This job is already at the end of the v1 workflow."
+            : "Members can comment freely, but only the assignee can move the queue forward from here."
+        }
+      />
     );
   }
 
@@ -427,13 +495,13 @@ export function JobsDetailSheet({
               context, and log the site visits that matter.
             </DrawerDescription>
           </div>
-          <div className="grid gap-2 pt-1 sm:grid-cols-2">
-            <HeaderMetaCard
+          <div className="grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2">
+            <HeaderMetaItem
               label="Site"
               value={site?.name ?? "No site yet"}
               supporting={site?.regionName ?? "No region yet"}
             />
-            <HeaderMetaCard
+            <HeaderMetaItem
               label="Assignee"
               value={assignee?.name ?? "Unassigned"}
               supporting={
@@ -442,7 +510,7 @@ export function JobsDetailSheet({
                   : "No coordinator"
               }
             />
-            <HeaderMetaCard
+            <HeaderMetaItem
               label="Contact"
               value={contact?.name ?? "No contact yet"}
               supporting={
@@ -451,7 +519,7 @@ export function JobsDetailSheet({
                   : "Add one when the customer context is clear"
               }
             />
-            <HeaderMetaCard
+            <HeaderMetaItem
               label="Updated"
               value={formatDateTime(detail.job.updatedAt)}
               supporting={`Created ${formatDate(detail.job.createdAt)}`}
@@ -460,41 +528,99 @@ export function JobsDetailSheet({
         </DrawerHeader>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
+          <div className="flex flex-1 flex-col overflow-y-auto px-6">
             {detail.job.blockedReason ? (
-              <Alert>
+              <Alert className="my-5">
                 <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
                 <AlertTitle>Blocked reason</AlertTitle>
                 <AlertDescription>{detail.job.blockedReason}</AlertDescription>
               </Alert>
             ) : null}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Move the job forward</CardTitle>
-                <CardDescription>
-                  Keep the status honest. Use blocked only when something is
-                  truly waiting on an unblock.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {statusActionContent}
-              </CardContent>
-            </Card>
+            <DetailSection
+              title="Move forward"
+              description="Keep the status honest. Use blocked only when something is truly waiting on an unblock."
+            >
+              <div className="flex flex-col gap-4">{statusActionContent}</div>
+            </DetailSection>
 
             <JobsDetailLocation site={site} />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Comments</CardTitle>
-                <CardDescription>
-                  Keep the narrative in comments instead of hiding it in fields.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
+            <DetailSection
+              title="Site assignment"
+              description="Move this job onto an existing site when the location becomes clear."
+            >
+              <div className="flex flex-col gap-4">
+                {renderMutationError(patchResult)}
+                <FieldGroup>
+                  <Field data-invalid={Boolean(siteAssignmentError)}>
+                    <FieldLabel htmlFor="job-site-assignment">Site</FieldLabel>
+                    <FieldContent>
+                      <CommandSelect
+                        id="job-site-assignment"
+                        value={selectedSiteId}
+                        placeholder="Pick site"
+                        emptyText="No sites found."
+                        groups={siteSelectionGroups}
+                        disabled={!canEditJob || patchResult.waiting}
+                        ariaInvalid={siteAssignmentError ? true : undefined}
+                        onValueChange={(nextValue) => {
+                          setSelectedSiteId(nextValue);
+                          setSiteAssignmentError(null);
+                          setSiteAssignmentMessage(null);
+                        }}
+                      />
+                      <FieldDescription>
+                        Changing the site clears the linked contact so it cannot
+                        point at the wrong place.
+                      </FieldDescription>
+                      <FieldError>{siteAssignmentError}</FieldError>
+                    </FieldContent>
+                  </Field>
+                </FieldGroup>
+                {siteAssignmentMessage ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {siteAssignmentMessage}
+                  </p>
+                ) : null}
+                {canEditJob ? (
+                  <div className="flex">
+                    <Button
+                      type="button"
+                      className="w-full sm:w-fit"
+                      disabled={!selectedSiteChanged || patchResult.waiting}
+                      onClick={handleUpdateSiteAssignment}
+                    >
+                      {patchResult.waiting ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <HugeiconsIcon
+                          icon={Location01Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                      )}
+                      {patchResult.waiting ? "Saving..." : "Save site"}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Site assignment is limited to the assignee or organization
+                    admins.
+                  </p>
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection
+              title="Comments"
+              description="Keep the narrative in comments instead of hiding it in fields."
+            >
+              <div className="flex flex-col gap-5">
                 {renderMutationError(commentResult)}
                 <form
                   className="flex flex-col gap-4"
+                  method="post"
                   onSubmit={handleAddComment}
                 >
                   <FieldGroup>
@@ -524,11 +650,15 @@ export function JobsDetailSheet({
                       disabled={commentResult.waiting}
                       className="w-full sm:w-fit"
                     >
-                      <HugeiconsIcon
-                        icon={Comment01Icon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
+                      {commentResult.waiting ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <HugeiconsIcon
+                          icon={Comment01Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                      )}
                       {commentResult.waiting ? "Adding..." : "Add comment"}
                     </Button>
                   </div>
@@ -537,14 +667,10 @@ export function JobsDetailSheet({
                 <Separator />
 
                 {detail.comments.length === 0 ? (
-                  <Empty className="min-h-[180px] bg-muted/20">
-                    <EmptyHeader>
-                      <EmptyTitle>No comments yet.</EmptyTitle>
-                      <EmptyDescription>
-                        The job is ready for its first bit of real context.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
+                  <DetailEmpty
+                    title="No comments yet."
+                    description="The job is ready for its first bit of real context."
+                  />
                 ) : (
                   <ul className="flex flex-col gap-3">
                     {detail.comments.map((comment) => {
@@ -555,7 +681,7 @@ export function JobsDetailSheet({
                       return (
                         <li
                           key={comment.id}
-                          className="rounded-3xl border bg-muted/20 p-4"
+                          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
                         >
                           <div className="flex flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -573,23 +699,20 @@ export function JobsDetailSheet({
                     })}
                   </ul>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </DetailSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Visits</CardTitle>
-                <CardDescription>
-                  Log the site visits that explain the real effort behind the
-                  work.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
+            <DetailSection
+              title="Visits"
+              description="Log the site visits that explain the real effort behind the work."
+            >
+              <div className="flex flex-col gap-5">
                 {canAddVisit ? (
                   <>
                     {renderMutationError(visitResult)}
                     <form
                       className="flex flex-col gap-4"
+                      method="post"
                       onSubmit={handleAddVisit}
                     >
                       <FieldGroup>
@@ -675,11 +798,15 @@ export function JobsDetailSheet({
                           disabled={visitResult.waiting}
                           className="w-full sm:w-fit"
                         >
-                          <HugeiconsIcon
-                            icon={Time04Icon}
-                            strokeWidth={2}
-                            data-icon="inline-start"
-                          />
+                          {visitResult.waiting ? (
+                            <Spinner data-icon="inline-start" />
+                          ) : (
+                            <HugeiconsIcon
+                              icon={Time04Icon}
+                              strokeWidth={2}
+                              data-icon="inline-start"
+                            />
+                          )}
                           {visitResult.waiting ? "Logging..." : "Log visit"}
                         </Button>
                       </div>
@@ -698,15 +825,10 @@ export function JobsDetailSheet({
                 <Separator />
 
                 {detail.visits.length === 0 ? (
-                  <Empty className="min-h-[180px] bg-muted/20">
-                    <EmptyHeader>
-                      <EmptyTitle>No visits logged yet.</EmptyTitle>
-                      <EmptyDescription>
-                        Add the field work once the crew starts showing up on
-                        site.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
+                  <DetailEmpty
+                    title="No visits logged yet."
+                    description="Add the field work once the crew starts showing up on site."
+                  />
                 ) : (
                   <ul className="flex flex-col gap-3">
                     {detail.visits.map((visit) => {
@@ -715,7 +837,7 @@ export function JobsDetailSheet({
                       return (
                         <li
                           key={visit.id}
-                          className="rounded-3xl border bg-muted/20 p-4"
+                          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
                         >
                           <div className="flex flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -736,26 +858,19 @@ export function JobsDetailSheet({
                     })}
                   </ul>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </DetailSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Activity</CardTitle>
-                <CardDescription>
-                  System activity stays separate from narrative comments.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <DetailSection
+              title="Activity"
+              description="System activity stays separate from narrative comments."
+            >
+              <div>
                 {detail.activity.length === 0 ? (
-                  <Empty className="min-h-[180px] bg-muted/20">
-                    <EmptyHeader>
-                      <EmptyTitle>No activity yet.</EmptyTitle>
-                      <EmptyDescription>
-                        The history will fill in as the job moves.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
+                  <DetailEmpty
+                    title="No activity yet."
+                    description="The history will fill in as the job moves."
+                  />
                 ) : (
                   <ul className="flex flex-col gap-3">
                     {detail.activity.map((event) => {
@@ -766,7 +881,7 @@ export function JobsDetailSheet({
                       return (
                         <li
                           key={event.id}
-                          className="rounded-3xl border bg-muted/20 p-4"
+                          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
                         >
                           <div className="flex flex-col gap-2">
                             <p className="text-sm leading-7">
@@ -781,17 +896,12 @@ export function JobsDetailSheet({
                     })}
                   </ul>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </DetailSection>
           </div>
 
           <DrawerFooter className="border-t">
-            <Button
-              type="button"
-              variant="ghost"
-              className={buttonVariants({ variant: "ghost" })}
-              onClick={closeSheet}
-            >
+            <Button type="button" variant="ghost" onClick={closeSheet}>
               Close
             </Button>
           </DrawerFooter>
@@ -801,7 +911,48 @@ export function JobsDetailSheet({
   );
 }
 
-function HeaderMetaCard({
+function DetailSection({
+  children,
+  description,
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly description: string;
+  readonly title: string;
+}) {
+  return (
+    <section className="border-b py-5 last:border-b-0">
+      <div className="grid gap-4 md:grid-cols-[9.5rem_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-foreground">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+        <div className="min-w-0">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function DetailEmpty({
+  description,
+  title,
+}: {
+  readonly description: string;
+  readonly title: string;
+}) {
+  return (
+    <Empty className="min-h-0 items-start border-0 bg-transparent p-0 text-left">
+      <EmptyHeader className="items-start text-left">
+        <EmptyTitle className="text-base">{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  );
+}
+
+function HeaderMetaItem({
   label,
   supporting,
   value,
@@ -811,8 +962,8 @@ function HeaderMetaCard({
   readonly value: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-muted/15 px-3 py-3 text-left">
-      <p className="text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+    <div className="min-w-0 text-left">
+      <p className="text-[11px] font-medium text-muted-foreground uppercase">
         {label}
       </p>
       <p className="mt-1 truncate text-sm font-medium text-foreground">
@@ -840,6 +991,60 @@ function buildTransitionSelectionGroups(
       ],
     },
   ] satisfies readonly CommandSelectGroup[];
+}
+
+function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
+  const sortedSites = getSortedSites(sites);
+
+  return [
+    {
+      label: "Site",
+      options: [
+        { label: "No site", value: NO_SITE_VALUE },
+        ...sortedSites.map((site) => ({
+          label: site.regionName
+            ? `${site.name} (${site.regionName})`
+            : site.name,
+          value: site.id,
+        })),
+      ],
+    },
+  ] satisfies readonly CommandSelectGroup[];
+}
+
+function getSortedSites(sites: readonly JobSiteOption[]) {
+  let sortedSites: readonly JobSiteOption[] = [];
+
+  for (const site of sites) {
+    sortedSites = insertSortedSite(sortedSites, site);
+  }
+
+  return sortedSites;
+}
+
+function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {
+  const nameOrder = left.name.localeCompare(right.name);
+
+  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
+}
+
+function insertSortedSite(
+  sortedSites: readonly JobSiteOption[],
+  site: JobSiteOption
+) {
+  const insertIndex = sortedSites.findIndex(
+    (sortedSite) => compareSiteOptions(site, sortedSite) < 0
+  );
+
+  if (insertIndex === -1) {
+    return [...sortedSites, site];
+  }
+
+  return [
+    ...sortedSites.slice(0, insertIndex),
+    site,
+    ...sortedSites.slice(insertIndex),
+  ];
 }
 
 function renderMutationError(

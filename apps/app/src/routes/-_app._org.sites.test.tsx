@@ -1,9 +1,11 @@
-import type { SiteIdType } from "@task-tracker/jobs-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
+import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type { SiteIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
+const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedEnsureActiveOrganizationId,
@@ -56,10 +58,10 @@ describe("sites route loader", () => {
       };
 
       mockedEnsureActiveOrganizationId.mockResolvedValue({
-        activeOrganizationId: "org_123",
+        activeOrganizationId: organizationId,
         activeOrganizationSync: {
           required: false,
-          targetOrganizationId: "org_123",
+          targetOrganizationId: organizationId,
         },
         session: {
           user: {
@@ -87,7 +89,7 @@ describe("sites route loader", () => {
         },
       });
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        "org_123"
+        organizationId
       );
       expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
     }
@@ -97,11 +99,12 @@ describe("sites route loader", () => {
     "renders sites from loader-seeded atom state on the first paint",
     { timeout: 10_000 },
     async () => {
-      const { SitesRouteContent } = await import("./_app._org.sites");
+      const { SitesRouteContent } =
+        await import("#/features/sites/sites-route-content");
 
       render(
         <SitesRouteContent
-          activeOrganizationId="org_123"
+          activeOrganizationId={organizationId}
           options={{
             contacts: [],
             members: [],

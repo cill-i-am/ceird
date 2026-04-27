@@ -9,7 +9,7 @@ export function getErrorText(
 
   for (const error of errors) {
     if (typeof error === "string" && error.length > 0) {
-      return error;
+      return normalizeValidationMessage(error);
     }
 
     if (
@@ -19,11 +19,53 @@ export function getErrorText(
       typeof error.message === "string" &&
       error.message.length > 0
     ) {
-      return error.message;
+      return normalizeValidationMessage(error.message);
     }
   }
 
   return undefined;
+}
+
+function normalizeValidationMessage(message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("expected a non empty string") ||
+    normalized.includes("non-empty string") ||
+    normalized.includes("non empty string")
+  ) {
+    return "This field is required.";
+  }
+
+  if (
+    normalized.includes("email") &&
+    (normalized.includes("valid") || normalized.includes("format"))
+  ) {
+    return "Enter a valid email address.";
+  }
+
+  if (
+    normalized.includes("matching the pattern") &&
+    message.includes("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")
+  ) {
+    return "Enter a valid email address.";
+  }
+
+  if (
+    normalized.includes("at least 8") ||
+    normalized.includes("minimum of 8")
+  ) {
+    return "Use at least 8 characters.";
+  }
+
+  if (
+    normalized.includes("at least 2") ||
+    normalized.includes("minimum of 2")
+  ) {
+    return "Use at least 2 characters.";
+  }
+
+  return message;
 }
 
 type AuthFailureAction = "signIn" | "signUp";

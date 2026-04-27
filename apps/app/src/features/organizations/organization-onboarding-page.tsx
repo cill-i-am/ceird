@@ -5,12 +5,14 @@ import { Schema } from "effect";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { Spinner } from "#/components/ui/spinner";
 import {
   getErrorText,
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
+import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -23,6 +25,7 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
 
 export function OrganizationOnboardingPage() {
   const navigate = useNavigate();
+  const isHydrated = useIsHydrated();
   const form = useForm({
     defaultValues: {
       name: "",
@@ -66,8 +69,8 @@ export function OrganizationOnboardingPage() {
         description="Create the organization once, then move straight into inviting the rest of the team."
         supportingContent={
           <div className="flex flex-col gap-8">
-            <div className="space-y-3">
-              <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase">
                 Workspace details
               </p>
               <p className="max-w-[48ch] text-sm/7 text-foreground/90">
@@ -78,8 +81,8 @@ export function OrganizationOnboardingPage() {
             </div>
 
             <dl className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-1 border-t border-border/60 pt-4">
-                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+                <dt className="text-xs font-medium text-muted-foreground uppercase">
                   Organization name
                 </dt>
                 <dd className="text-sm/6 text-muted-foreground">
@@ -88,8 +91,8 @@ export function OrganizationOnboardingPage() {
                 </dd>
               </div>
 
-              <div className="space-y-1 border-t border-border/60 pt-4">
-                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
+                <dt className="text-xs font-medium text-muted-foreground uppercase">
                   Organization slug
                 </dt>
                 <dd className="text-sm/6 text-muted-foreground">
@@ -97,8 +100,8 @@ export function OrganizationOnboardingPage() {
                 </dd>
               </div>
 
-              <div className="space-y-1 border-t border-border/60 pt-4 sm:col-span-2">
-                <dt className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              <div className="flex flex-col gap-1 border-t border-border/60 pt-4 sm:col-span-2">
+                <dt className="text-xs font-medium text-muted-foreground uppercase">
                   After this step
                 </dt>
                 <dd className="text-sm/6 text-muted-foreground">
@@ -118,6 +121,7 @@ export function OrganizationOnboardingPage() {
         >
           <form
             className="flex flex-col gap-6"
+            method="post"
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -198,8 +202,9 @@ export function OrganizationOnboardingPage() {
                   type="submit"
                   size="lg"
                   className="w-full"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isHydrated}
                 >
+                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting
                     ? "Creating organization..."
                     : "Create organization"}

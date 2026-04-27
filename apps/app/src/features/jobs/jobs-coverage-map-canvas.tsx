@@ -64,7 +64,11 @@ export function JobsCoverageMapCanvas({
                   {group.site.name ?? "Mapped site"}
                 </MarkerLabel>
               </MarkerContent>
-              <MarkerPopup closeButton>
+              <MarkerPopup
+                closeButton
+                className="max-h-[min(28rem,calc(100vh-10rem))] overflow-y-auto overscroll-contain"
+                offset={24}
+              >
                 <div className="flex w-72 flex-col gap-3">
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +107,7 @@ export function JobsCoverageMapCanvas({
                     {group.jobs.slice(0, 3).map((job) => (
                       <li
                         key={job.id}
-                        className="rounded-2xl border bg-muted/20 p-3"
+                        className="rounded-lg border bg-muted/20 p-3"
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-2">

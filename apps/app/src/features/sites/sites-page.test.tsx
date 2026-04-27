@@ -1,4 +1,5 @@
 import { RegistryProvider } from "@effect-atom/atom-react";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   JobOptionsResponse,
   RegionIdType,
@@ -16,6 +17,7 @@ import { SitesPage } from "./sites-page";
 
 const regionId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
+const organizationId = decodeOrganizationId("org_123");
 
 const options: JobOptionsResponse = {
   contacts: [],
@@ -107,7 +109,7 @@ function renderSitesPage({
   render(
     <RegistryProvider
       initialValues={[
-        [jobsOptionsStateAtom, seedJobsOptionsState("org_123", options)],
+        [jobsOptionsStateAtom, seedJobsOptionsState(organizationId, options)],
       ]}
     >
       <SitesPage viewer={{ role, userId: "user_123" }} />

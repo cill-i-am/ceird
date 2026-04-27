@@ -43,7 +43,10 @@ const SitesHandlersLive = HttpApiBuilder.group(JobsApi, "sites", (handlers) =>
 
     return handlers
       .handle("getSiteOptions", () => sitesService.getOptions())
-      .handle("createSite", ({ payload }) => sitesService.create(payload));
+      .handle("createSite", ({ payload }) => sitesService.create(payload))
+      .handle("updateSite", ({ path, payload }) =>
+        sitesService.update(path.siteId, payload)
+      );
   })
 );
 

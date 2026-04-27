@@ -1,3 +1,4 @@
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -6,6 +7,9 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 import { OrganizationMembersPage } from "./organization-members-page";
 
 type ListInvitationsResult = Awaited<ReturnType<typeof mockedListInvitations>>;
+const organizationId = decodeOrganizationId("org_123");
+const organizationOneId = decodeOrganizationId("org_1");
+const organizationTwoId = decodeOrganizationId("org_2");
 
 const { mockedInviteMember, mockedListInvitations } = vi.hoisted(() => ({
   mockedInviteMember: vi.fn<
@@ -122,7 +126,7 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
     expect(screen.getByRole("heading", { name: "Members" })).toBeVisible();
     await expect(
@@ -171,7 +175,7 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
     await expect(screen.findByText("ops@example.com")).resolves.toBeVisible();
     expect(screen.getAllByText("1 open")).toHaveLength(1);
@@ -221,7 +225,7 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
     await user.type(screen.getByLabelText("Email"), "member@example.com");
     await user.click(screen.getByRole("button", { name: "Send invite" }));
@@ -243,7 +247,7 @@ describe("organization members page", () => {
       },
     });
 
-    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
     await expect(
       screen.findByText(
@@ -253,6 +257,29 @@ describe("organization members page", () => {
     expect(
       screen.queryByText("No pending invitations yet.")
     ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows a load error when invitation payload roles violate the app contract", async () => {
+    mockedListInvitations.mockResolvedValue({
+      data: [
+        {
+          email: "bad-role@example.com",
+          id: "inv_bad_role",
+          role: "admin,member",
+          status: "pending",
+        },
+      ],
+      error: null,
+    });
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByText(
+        "We couldn't load invitations right now. Please try again."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("bad-role@example.com")).not.toBeInTheDocument();
   }, 10_000);
 
   it("clears stale pending invitations while another organization loads", async () => {
@@ -273,14 +300,16 @@ describe("organization members page", () => {
       .mockReturnValueOnce(orgTwoInvitations.promise);
 
     const { rerender } = render(
-      <OrganizationMembersPage activeOrganizationId="org_1" />
+      <OrganizationMembersPage activeOrganizationId={organizationOneId} />
     );
 
     await expect(
       screen.findByText("old-org@example.com")
     ).resolves.toBeVisible();
 
-    rerender(<OrganizationMembersPage activeOrganizationId="org_2" />);
+    rerender(
+      <OrganizationMembersPage activeOrganizationId={organizationTwoId} />
+    );
 
     await waitFor(() => {
       expect(screen.queryByText("old-org@example.com")).not.toBeInTheDocument();
@@ -316,7 +345,7 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId="org_123" />);
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
     await waitFor(() => {
       expect(mockedListInvitations).toHaveBeenCalledOnce();

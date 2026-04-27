@@ -1,4 +1,9 @@
 import { isRedirect } from "@tanstack/react-router";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 
 import {
   ensureActiveOrganizationId,
@@ -38,10 +43,11 @@ interface Organization {
   slug: string;
 }
 
+const serverOrganizationId = decodeOrganizationId("org_server");
+
 const {
   mockedGetStrictServerSession,
   mockedGetServerOrganizationMemberRole,
-  mockedListServerOrganizations,
   mockedGetStrictServerOrganizations,
   mockedGetClientActiveMemberRole,
   mockedGetSession,
@@ -51,9 +57,9 @@ const {
 } = vi.hoisted(() => ({
   mockedGetStrictServerSession: vi.fn<() => Promise<Session | null>>(),
   mockedGetServerOrganizationMemberRole:
-    vi.fn<(organizationId: string) => Promise<{ role: string }>>(),
-  mockedListServerOrganizations:
-    vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
+    vi.fn<
+      (organizationId: OrganizationId) => Promise<{ role: OrganizationRole }>
+    >(),
   mockedGetStrictServerOrganizations:
     vi.fn<() => Promise<readonly OrganizationSummary[]>>(),
   mockedGetClientActiveMemberRole: vi.fn<
@@ -87,8 +93,6 @@ vi.mock(import("./organization-server"), async (importActual) => {
       mockedGetServerOrganizationMemberRole as typeof actual.getCurrentServerOrganizationMemberRole,
     getCurrentServerOrganizationSession:
       mockedGetStrictServerSession as typeof actual.getCurrentServerOrganizationSession,
-    listCurrentServerOrganizations:
-      mockedListServerOrganizations as typeof actual.listCurrentServerOrganizations,
     getCurrentServerOrganizations:
       mockedGetStrictServerOrganizations as typeof actual.getCurrentServerOrganizations,
   };
@@ -149,20 +153,19 @@ describe("organization access helpers", () => {
     await expect(listOrganizations()).resolves.toStrictEqual([
       { id: "org_123", name: "Acme", slug: "acme" },
     ]);
-    expect(mockedListServerOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
-  it("uses the plan-shaped server list helper during SSR", async () => {
+  it("uses the strict server list helper during SSR", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
-    mockedListServerOrganizations.mockResolvedValue([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+    mockedGetStrictServerOrganizations.mockResolvedValue([
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
 
     await expect(listOrganizations()).resolves.toStrictEqual([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
-    expect(mockedListServerOrganizations).toHaveBeenCalledOnce();
-    expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetStrictServerOrganizations).toHaveBeenCalledOnce();
   }, 1000);
 
   it("rethrows client organization lookup failures", async () => {
@@ -214,7 +217,7 @@ describe("organization access helpers", () => {
     expect({ redirectFailure }).toStrictEqual({ redirectFailure: false });
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("server session down");
-    expect(mockedListServerOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
   it("rethrows invalid non-null SSR session payloads during access checks", async () => {
@@ -384,7 +387,7 @@ describe("organization access helpers", () => {
     expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
-  it("rethrows SSR organization lookup failures when list helper returns an ambiguous empty list", async () => {
+  it("rethrows SSR organization lookup failures during access checks", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
     mockedGetStrictServerSession.mockResolvedValue({
       session: {
@@ -407,7 +410,6 @@ describe("organization access helpers", () => {
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
     });
-    mockedListServerOrganizations.mockResolvedValue([]);
     mockedGetStrictServerOrganizations.mockRejectedValue(
       new Error("upstream unavailable")
     );
@@ -424,7 +426,7 @@ describe("organization access helpers", () => {
     expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
-  it("uses the strict SSR organization fallback when the lenient list is empty", async () => {
+  it("uses the strict SSR organization list during access checks", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
     mockedGetStrictServerSession.mockResolvedValue({
       session: {
@@ -447,9 +449,8 @@ describe("organization access helpers", () => {
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
     });
-    mockedListServerOrganizations.mockResolvedValue([]);
     mockedGetStrictServerOrganizations.mockResolvedValue([
-      { id: "org_server", name: "Server Org", slug: "server-org" },
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
 
     await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
@@ -653,7 +654,7 @@ describe("organization access helpers", () => {
     expect({ redirectFailure }).toStrictEqual({ redirectFailure: false });
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain("server session down");
-    expect(mockedListServerOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
   it("redirects onboarding users away when organization access is already ready", async () => {

@@ -65,6 +65,7 @@ import {
   ResponsiveDrawer,
   ResponsiveNestedDrawer,
 } from "#/components/ui/responsive-drawer";
+import { Spinner } from "#/components/ui/spinner";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import {
   SiteCreateFields,
@@ -319,6 +320,7 @@ export function JobsCreateSheet() {
     >
       <form
         className="flex min-h-0 flex-1 flex-col"
+        method="post"
         noValidate
         onSubmit={handleSubmit}
       >
@@ -469,11 +471,15 @@ export function JobsCreateSheet() {
             Cancel
           </Button>
           <Button type="submit" disabled={createResult.waiting}>
-            <HugeiconsIcon
-              icon={Add01Icon}
-              strokeWidth={2}
-              data-icon="inline-start"
-            />
+            {createResult.waiting ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <HugeiconsIcon
+                icon={Add01Icon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+            )}
             {createResult.waiting ? "Creating..." : "Create job"}
           </Button>
         </DrawerFooter>
@@ -754,6 +760,9 @@ function ResponsiveCreateOverlay({
       <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(56rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New job</DrawerTitle>
+          <DrawerDescription>
+            Capture the work, then add assignment and location context.
+          </DrawerDescription>
         </DrawerHeader>
         {children}
       </DrawerContent>

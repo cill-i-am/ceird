@@ -106,6 +106,8 @@ export {
   SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
+  UpdateSiteInputSchema,
+  UpdateSiteResponseSchema,
 } from "./dto.js";
 export type {
   AddJobCommentInput,
@@ -144,6 +146,8 @@ export type {
   SitesOptionsResponse,
   TransitionJobInput,
   TransitionJobResponse,
+  UpdateSiteInput,
+  UpdateSiteResponse,
   JobsContext,
 } from "./dto.js";
 export {
@@ -154,6 +158,7 @@ export {
   JOB_ACCESS_DENIED_ERROR_TAG,
   JOB_LIST_CURSOR_INVALID_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
+  JOB_STORAGE_ERROR_TAG,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
   REGION_NOT_FOUND_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
@@ -166,6 +171,7 @@ export {
   JobAccessDeniedError,
   JobListCursorInvalidError,
   JobNotFoundError,
+  JobStorageError,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
   SiteGeocodingFailedError,

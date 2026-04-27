@@ -11,6 +11,7 @@ import {
   AppDatabaseLive,
 } from "../../../platform/database/database.js";
 import {
+  applyAllMigrations,
   applyMigration,
   canConnect,
   createTestDatabase as createPlatformTestDatabase,
@@ -49,10 +50,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = databaseUrl;
@@ -135,10 +133,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -334,10 +329,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -458,10 +450,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -560,10 +549,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -615,6 +601,186 @@ describe("authentication integration", () => {
     });
   }, 30_000);
 
+  it("rejects multi-role organization writes before persistence", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping organization role validation coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const sentInvitationEmails: unknown[] = [];
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: (input) => {
+        sentInvitationEmails.push(input);
+        return Promise.resolve();
+      },
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const ownerCookieJar = new Map<string, string>();
+    const ownerSignUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "role-owner@example.com",
+        name: "Role Owner",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(ownerCookieJar, ownerSignUpResponse);
+    expect(ownerSignUpResponse.status).toBe(200);
+
+    const organizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Role Contract Organization",
+          slug: "role-contract-organization",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    updateCookieJar(ownerCookieJar, organizationResponse);
+    expect(organizationResponse.status).toBe(200);
+    const createdOrganization =
+      (await organizationResponse.json()) as CreatedOrganizationResponse;
+
+    const invalidInviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "multi-role-invite@example.com",
+          role: ["admin", "member"],
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+
+    expect(invalidInviteResponse.status).toBe(400);
+    await expect(invalidInviteResponse.json()).resolves.toMatchObject({
+      code: "INVALID_ORGANIZATION_ROLE",
+    });
+    expect(sentInvitationEmails).toHaveLength(0);
+
+    const invalidInvitationRows = await adminPool.query<{ count: number }>(
+      `select count(*)::int as count from invitation where email = $1`,
+      ["multi-role-invite@example.com"]
+    );
+    expect(invalidInvitationRows.rows[0]?.count).toBe(0);
+
+    const validInviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "role-member@example.com",
+          role: "member",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(validInviteResponse.status).toBe(200);
+    const validInvitation = (await validInviteResponse.json()) as {
+      readonly id: string;
+    };
+
+    const memberCookieJar = new Map<string, string>();
+    const memberSignUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "role-member@example.com",
+        name: "Role Member",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(memberCookieJar, memberSignUpResponse);
+    expect(memberSignUpResponse.status).toBe(200);
+
+    const acceptInvitationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/accept-invitation",
+        {
+          invitationId: validInvitation.id,
+        },
+        {
+          cookieJar: memberCookieJar,
+        }
+      )
+    );
+    expect(acceptInvitationResponse.status).toBe(200);
+
+    const memberRows = await adminPool.query<{
+      id: string;
+      role: string;
+    }>(
+      `select member.id, member.role
+       from member
+       inner join "user" on "user".id = member.user_id
+       where member.organization_id = $1 and "user".email = $2`,
+      [createdOrganization.id, "role-member@example.com"]
+    );
+    expect(memberRows.rows).toStrictEqual([
+      {
+        id: expect.any(String),
+        role: "member",
+      },
+    ]);
+
+    const invalidMemberRoleResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/update-member-role",
+        {
+          memberId: memberRows.rows[0]?.id,
+          organizationId: createdOrganization.id,
+          role: ["admin", "member"],
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+
+    expect(invalidMemberRoleResponse.status).toBe(400);
+    await expect(invalidMemberRoleResponse.json()).resolves.toMatchObject({
+      code: "INVALID_ORGANIZATION_ROLE",
+    });
+
+    const unchangedMemberRows = await adminPool.query<{ role: string }>(
+      `select role from member where id = $1`,
+      [memberRows.rows[0]?.id]
+    );
+    expect(unchangedMemberRows.rows).toStrictEqual([{ role: "member" }]);
+  }, 30_000);
+
   it("sends an invitation email and activates the invited organization on acceptance", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -631,10 +797,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -795,10 +958,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -960,6 +1120,10 @@ describe("authentication integration", () => {
 
     await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
     await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyMigration(databaseUrl, "0004_spotty_rick_jones.sql");
+    await applyMigration(databaseUrl, "0005_add-site-coordinates.sql");
+    await applyMigration(databaseUrl, "0006_careless_william_stryker.sql");
+    await applyMigration(databaseUrl, "0007_organization_role_contracts.sql");
 
     const migrationRows = await adminPool.query<{
       id: string;
@@ -1219,10 +1383,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
@@ -1291,10 +1452,7 @@ describe("authentication integration", () => {
       );
     }
 
-    await applyMigration(databaseUrl, "0000_careless_anita_blake.sql");
-    await applyMigration(databaseUrl, "0001_giant_speedball.sql");
-    await applyMigration(databaseUrl, "0002_slippery_hulk.sql");
-    await applyMigration(databaseUrl, "0003_organizations.sql");
+    await applyAllMigrations(databaseUrl);
 
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());

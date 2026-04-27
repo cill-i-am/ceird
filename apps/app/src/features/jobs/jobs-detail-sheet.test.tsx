@@ -43,6 +43,7 @@ const { jobsLookupAtomToken } = vi.hoisted(() => ({
 
 const mockedTransitionJob = vi.fn<AsyncMutationMock>();
 const mockedReopenJob = vi.fn<AsyncMutationMock>();
+const mockedPatchJob = vi.fn<AsyncMutationMock>();
 const mockedAddComment = vi.fn<AsyncMutationMock>();
 const mockedAddVisit = vi.fn<AsyncMutationMock>();
 
@@ -144,6 +145,7 @@ vi.mock("#/components/ui/card", () => ({
 
 vi.mock("#/components/ui/command-select", () => ({
   CommandSelect: ({
+    ariaInvalid: _ariaInvalid,
     emptyText: _emptyText,
     groups,
     id,
@@ -153,6 +155,7 @@ vi.mock("#/components/ui/command-select", () => ({
     value,
     ...props
   }: ComponentProps<"select"> & {
+    ariaInvalid?: boolean;
     emptyText?: string;
     groups: readonly {
       readonly options: readonly {
@@ -257,6 +260,7 @@ vi.mock("./jobs-detail-state", () => ({
   addJobCommentMutationAtomFamily: (id: string) => `comment:${id}`,
   addJobVisitMutationAtomFamily: (id: string) => `visit:${id}`,
   jobDetailStateAtomFamily: (id: string) => `detail:${id}`,
+  patchJobMutationAtomFamily: (id: string) => `patch:${id}`,
   reopenJobMutationAtomFamily: (id: string) => `reopen:${id}`,
   transitionJobMutationAtomFamily: (id: string) => `transition:${id}`,
 }));
@@ -277,6 +281,7 @@ describe("jobs detail sheet", () => {
     mockedUseAtomInitialValues.mockReset();
     mockedTransitionJob.mockReset();
     mockedReopenJob.mockReset();
+    mockedPatchJob.mockReset();
     mockedAddComment.mockReset();
     mockedAddVisit.mockReset();
 
@@ -300,6 +305,9 @@ describe("jobs detail sheet", () => {
       if (atom === `visit:${workItemId}`) {
         return { waiting: false };
       }
+      if (atom === `patch:${workItemId}`) {
+        return { waiting: false };
+      }
 
       if (atom === jobsLookupAtomToken) {
         return {
@@ -315,6 +323,7 @@ describe("jobs detail sheet", () => {
                 addressLine2: "North Dock",
                 county: "Dublin",
                 eircode: "D01 X2X2",
+                id: siteId,
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Docklands Campus",
@@ -336,6 +345,10 @@ describe("jobs detail sheet", () => {
 
       if (atom === `reopen:${workItemId}`) {
         return mockedReopenJob;
+      }
+
+      if (atom === `patch:${workItemId}`) {
+        return mockedPatchJob;
       }
 
       if (atom === `comment:${workItemId}`) {

@@ -11,6 +11,8 @@ import {
 } from "#/components/ui/empty";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { Spinner } from "#/components/ui/spinner";
+import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -35,6 +37,7 @@ interface PasswordResetPageProps {
 
 export function PasswordResetPage({ search }: PasswordResetPageProps) {
   const navigate = useNavigate();
+  const isHydrated = useIsHydrated();
   const normalizedSearch: PasswordResetSearch = decodePasswordResetSearch(
     search ?? {}
   );
@@ -101,8 +104,8 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
         title="This reset link isn't valid anymore."
         description="Request a fresh reset link."
         supportingContent={
-          <div className="space-y-3">
-            <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase">
               Link expired
             </p>
             <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
@@ -157,8 +160,8 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
       title="Choose a new password."
       description="Save it to continue."
       supportingContent={
-        <div className="space-y-3">
-          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase">
             Recovery
           </p>
           <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
@@ -186,6 +189,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
       >
         <form
           className="flex flex-col gap-6"
+          method="post"
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
@@ -266,8 +270,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !isHydrated}
               >
+                {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                 {isSubmitting ? "Resetting password..." : "Reset password"}
               </Button>
             )}

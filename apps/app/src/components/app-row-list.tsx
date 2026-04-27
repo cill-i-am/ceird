@@ -70,9 +70,12 @@ export function AppRowListBody({
   ...props
 }: AppRowListBodyProps) {
   return (
-    <div className={cn("min-w-0 flex-1 space-y-1", className)} {...props}>
+    <div
+      className={cn("flex min-w-0 flex-1 flex-col gap-1", className)}
+      {...props}
+    >
       {eyebrow ? (
-        <p className="text-[0.68rem] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+        <p className="text-[0.68rem] font-medium text-muted-foreground uppercase">
           {eyebrow}
         </p>
       ) : null}

@@ -9,6 +9,8 @@ import type {
   AddJobVisitResponse,
   Job,
   JobDetailResponse,
+  PatchJobInput,
+  PatchJobResponse,
   TransitionJobInput,
   TransitionJobResponse,
   WorkItemIdType,
@@ -64,6 +66,24 @@ export const reopenJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, JobDetailResponse["job"]>((_, get) =>
       reopenBrowserJob(workItemId).pipe(
+        Effect.tap((job) =>
+          Effect.gen(function* () {
+            yield* Effect.sync(() => {
+              updateJobDetailJob(get, workItemId, job);
+              updateJobsListJob(get, job);
+            });
+
+            yield* refreshJobDetailIfPossible(get, workItemId);
+          })
+        )
+      )
+    )
+);
+
+export const patchJobMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, PatchJobResponse, PatchJobInput>((input, get) =>
+      patchBrowserJob(workItemId, input).pipe(
         Effect.tap((job) =>
           Effect.gen(function* () {
             yield* Effect.sync(() => {
@@ -143,6 +163,17 @@ function reopenBrowserJob(workItemId: WorkItemIdType) {
 
     return yield* client.jobs.reopenJob({
       path: { workItemId },
+    });
+  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+}
+
+function patchBrowserJob(workItemId: WorkItemIdType, input: PatchJobInput) {
+  return Effect.gen(function* () {
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* client.jobs.patchJob({
+      path: { workItemId },
+      payload: input,
     });
   }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
 }

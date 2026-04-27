@@ -1,0 +1,4 @@
+ALTER TABLE "work_items" DROP CONSTRAINT "work_items_completed_at_matches_status_chk";--> statement-breakpoint
+ALTER TABLE "work_item_visits" ALTER COLUMN "visit_date" SET DATA TYPE date;--> statement-breakpoint
+ALTER TABLE "work_items" ADD CONSTRAINT "work_items_completed_by_matches_status_chk" CHECK (("work_items"."status" = 'completed' and "work_items"."completed_by_user_id" is not null) or ("work_items"."status" <> 'completed' and "work_items"."completed_by_user_id" is null));--> statement-breakpoint
+ALTER TABLE "work_items" ADD CONSTRAINT "work_items_completed_at_matches_status_chk" CHECK (("work_items"."status" = 'completed' and "work_items"."completed_at" is not null) or ("work_items"."status" <> 'completed' and "work_items"."completed_at" is null));

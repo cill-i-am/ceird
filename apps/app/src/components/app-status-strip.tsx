@@ -52,11 +52,11 @@ export function AppStatusStripItem({
       )}
       {...props}
     >
-      <div className="min-w-0 space-y-1.5">
-        <p className="text-[0.68rem] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="text-[0.68rem] font-medium text-muted-foreground uppercase">
           {label}
         </p>
-        <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <p className="text-sm leading-5 font-medium [overflow-wrap:anywhere] text-foreground">
             {value}
           </p>

@@ -14,6 +14,16 @@ function createTestSlug(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
 }
 
+async function expectAuthenticatedHome(page: Page) {
+  const workspaceHome = page.getByRole("main", { name: "Workspace home" });
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(workspaceHome).toBeVisible();
+  await expect(
+    workspaceHome.getByRole("link", { name: "Open jobs" })
+  ).toBeVisible();
+}
+
 async function openAccountMenu(page: Page) {
   await page.getByRole("button", { name: /settings owner/i }).click();
 }
@@ -45,6 +55,7 @@ test("an organization admin can update the organization name from account settin
   await createOrganizationPage.name.fill(initialOrganizationName);
   await createOrganizationPage.slug.fill(createTestSlug("acme-field-ops"));
   await createOrganizationPage.submit.click();
+  await expectAuthenticatedHome(page);
 
   await openSettingsFromAccountMenu(page);
   await expect(

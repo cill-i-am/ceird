@@ -1,4 +1,5 @@
 import { RegistryProvider } from "@effect-atom/atom-react";
+import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   JobListResponse,
   JobOptionsResponse,
@@ -26,6 +27,7 @@ const regionNorthId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
 const regionWestId = "44444444-4444-4444-8444-444444444444" as RegionIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
+const organizationId = decodeOrganizationId("org_123");
 const originalInnerWidth = window.innerWidth;
 
 const initialList: JobListResponse = {
@@ -228,11 +230,14 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Map" }));
+      await user.click(screen.getByRole("tab", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        );
       });
     }
   );
@@ -252,7 +257,7 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Map" }));
+      await user.click(screen.getByRole("tab", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
@@ -260,7 +265,7 @@ describe("jobs page", () => {
 
       expect(screen.queryByTestId("jobs-queue-panel")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "List" }));
+      await user.click(screen.getByRole("tab", { name: "List" }));
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
     }
@@ -418,8 +423,11 @@ function renderJobsPage(options?: {
   return render(
     <RegistryProvider
       initialValues={[
-        [jobsListStateAtom, seedJobsListState("org_123", initialList)],
-        [jobsOptionsStateAtom, seedJobsOptionsState("org_123", initialOptions)],
+        [jobsListStateAtom, seedJobsListState(organizationId, initialList)],
+        [
+          jobsOptionsStateAtom,
+          seedJobsOptionsState(organizationId, initialOptions),
+        ],
       ]}
     >
       <JobsPage

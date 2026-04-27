@@ -18,6 +18,12 @@ import { Link } from "@tanstack/react-router";
 import type { JobListItem, JobPriority } from "@task-tracker/jobs-core";
 import * as React from "react";
 
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
@@ -54,6 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { cn } from "#/lib/utils";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -138,7 +145,7 @@ export function JobsPage({
               <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
             </span>
             <div className="min-w-0">
-              <h1 className="truncate font-heading text-xl font-medium tracking-tight">
+              <h1 className="truncate font-heading text-xl font-medium">
                 Jobs
               </h1>
             </div>
@@ -168,28 +175,25 @@ export function JobsPage({
       </header>
 
       {notice ? (
-        <div
+        <Alert
           role="status"
-          className="flex min-w-0 items-center justify-between gap-3 rounded-xl border bg-background px-3 py-2 text-sm shadow-xs"
+          variant="success"
+          className="animate-in py-2 pr-24 duration-150 fade-in-0 slide-in-from-top-1 motion-reduce:animate-none"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-            </span>
-            <span className="truncate font-medium">{notice.title}</span>
-            <span className="hidden text-muted-foreground sm:inline">
-              added
-            </span>
-          </div>
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            onClick={() => setNotice(null)}
-          >
-            Dismiss
-          </Button>
-        </div>
+          <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+          <AlertTitle className="truncate">{notice.title}</AlertTitle>
+          <AlertDescription>Job added to the queue.</AlertDescription>
+          <AlertAction>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={() => setNotice(null)}
+            >
+              Dismiss
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
 
       {hasCustomFilters ? (
@@ -395,7 +399,7 @@ function CommandFilter({
             size="sm"
             variant="outline"
             className="shrink-0 bg-background"
-            aria-label={`${label} filter`}
+            aria-label={`${label} filter: ${selected?.label ?? label}`}
           />
         }
       >
@@ -439,38 +443,37 @@ function ViewModeSwitch({
   readonly value: JobsViewMode;
 }) {
   return (
-    <div className="flex items-center rounded-full border bg-background p-0.5">
-      <Button
-        type="button"
-        size="sm"
-        variant={value === "list" ? "secondary" : "ghost"}
-        className="h-7 rounded-full px-2"
-        aria-pressed={value === "list"}
-        onClick={() => onValueChange("list")}
+    <Tabs
+      className="w-fit"
+      value={value}
+      onValueChange={(nextValue) => {
+        if (nextValue === "list" || nextValue === "map") {
+          onValueChange(nextValue);
+        }
+      }}
+    >
+      <TabsList
+        aria-label="Jobs view"
+        className="h-8 rounded-full border bg-background p-0.5"
       >
-        <HugeiconsIcon
-          icon={LeftToRightListBulletIcon}
-          strokeWidth={2}
-          data-icon="inline-start"
-        />
-        List
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant={value === "map" ? "secondary" : "ghost"}
-        className="h-7 rounded-full px-2"
-        aria-pressed={value === "map"}
-        onClick={() => onValueChange("map")}
-      >
-        <HugeiconsIcon
-          icon={MapsSquare01Icon}
-          strokeWidth={2}
-          data-icon="inline-start"
-        />
-        Map
-      </Button>
-    </div>
+        <TabsTrigger className="h-7" value="list">
+          <HugeiconsIcon
+            icon={LeftToRightListBulletIcon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          List
+        </TabsTrigger>
+        <TabsTrigger className="h-7" value="map">
+          <HugeiconsIcon
+            icon={MapsSquare01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          Map
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   );
 }
 
@@ -497,7 +500,7 @@ function ActiveFilterBar({
           {filter.label}
           <button
             type="button"
-            className="inline-flex rounded-full text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             aria-label={`Remove ${filter.label}`}
             onClick={() => onRemove(filter.key)}
           >
@@ -593,7 +596,7 @@ function JobIssueTableRow({
         <Link
           to="/jobs/$jobId"
           params={{ jobId: job.id }}
-          className="flex min-w-0 items-center gap-3"
+          className="flex min-w-0 items-center gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <span className="flex size-5 items-center justify-center text-muted-foreground">
             <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
@@ -647,6 +650,7 @@ function JobIssueRow({
       params={{ jobId: job.id }}
       className={cn(
         "group flex min-w-0 items-center gap-3 border-b px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/30",
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         compact ? "items-start" : "items-center"
       )}
     >

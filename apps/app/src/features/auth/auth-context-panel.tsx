@@ -34,7 +34,7 @@ export function AuthContextPanel(props: AuthContextPanelProps) {
             {kicker ? (
               <Badge
                 variant="secondary"
-                className="rounded-full px-3 py-1 text-[0.7rem] tracking-[0.18em] uppercase"
+                className="rounded-full px-3 py-1 text-[0.7rem] uppercase"
               >
                 {kicker}
               </Badge>
@@ -51,7 +51,7 @@ export function AuthContextPanel(props: AuthContextPanelProps) {
           data-slot="auth-context-panel-header"
           className="flex max-w-2xl flex-col gap-3"
         >
-          <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="font-heading text-3xl font-medium sm:text-4xl lg:text-[2.75rem]">
             {title}
           </h1>
           {description ? (

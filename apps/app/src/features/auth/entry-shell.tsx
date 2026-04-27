@@ -124,15 +124,13 @@ export function EntrySurfaceCard(props: EntrySurfaceCardProps) {
     >
       <CardHeader className="flex flex-col gap-4 border-b border-border/70 pb-6">
         {badge ? (
-          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+          <p className="text-xs font-medium text-muted-foreground uppercase">
             {badge}
           </p>
         ) : null}
 
         <div className="flex flex-col gap-2">
-          <CardTitle className="text-2xl tracking-tight sm:text-[1.75rem]">
-            {title}
-          </CardTitle>
+          <CardTitle className="text-2xl sm:text-[1.75rem]">{title}</CardTitle>
           <CardDescription className="max-w-[52ch] text-sm/6 sm:text-base/7">
             {description}
           </CardDescription>
@@ -176,9 +174,7 @@ export function EntrySupportPanel(props: EntrySupportPanelProps) {
       )}
     >
       <div className="flex flex-col gap-2">
-        <p className="font-heading text-base font-medium tracking-tight">
-          {title}
-        </p>
+        <p className="font-heading text-base font-medium">{title}</p>
         {description ? (
           <p className="text-sm/6 text-muted-foreground">{description}</p>
         ) : null}

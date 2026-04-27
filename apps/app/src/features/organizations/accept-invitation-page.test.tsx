@@ -1,3 +1,7 @@
+import type {
+  OrganizationRole,
+  PublicInvitationPreview,
+} from "@task-tracker/identity-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
@@ -37,7 +41,7 @@ const {
         id: string;
         inviterEmail: string;
         organizationName: string;
-        role: string;
+        role: OrganizationRole;
       } | null;
       error: {
         message: string;
@@ -46,13 +50,8 @@ const {
       } | null;
     }>
   >(),
-  mockedGetPublicInvitationPreview: vi.fn<
-    (invitationId: string) => Promise<{
-      email: string;
-      organizationName: string;
-      role: string;
-    } | null>
-  >(),
+  mockedGetPublicInvitationPreview:
+    vi.fn<(invitationId: string) => Promise<PublicInvitationPreview | null>>(),
   mockedGetSession: vi.fn<
     () => Promise<{
       data: {

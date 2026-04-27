@@ -1,24 +1,19 @@
-import { RegistryProvider } from "@effect-atom/atom-react";
 import {
   Outlet,
   createFileRoute,
   useRouteContext,
 } from "@tanstack/react-router";
+import type { OrganizationId } from "@task-tracker/identity-core";
 import type { JobOptionsResponse } from "@task-tracker/jobs-core";
-import * as React from "react";
 
 import { getCurrentServerSiteOptions } from "#/features/jobs/jobs-server";
-import {
-  jobsOptionsStateAtom,
-  seedJobsOptionsState,
-} from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
-import { SitesPage } from "#/features/sites/sites-page";
+import { SitesRouteContent } from "#/features/sites/sites-route-content";
 
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
@@ -28,7 +23,7 @@ const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 };
 
 interface SitesRouteOrganizationAccess {
-  readonly activeOrganizationId: string;
+  readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentUserId: string;
 }
@@ -60,10 +55,12 @@ export async function loadSitesRouteData(
     };
   }
 
-  const activeRole = await getCurrentOrganizationMemberRole(
-    resolvedOrganizationAccess.activeOrganizationId
-  );
-  const siteOptions = await getCurrentServerSiteOptions();
+  const [activeRole, siteOptions] = await Promise.all([
+    getCurrentOrganizationMemberRole(
+      resolvedOrganizationAccess.activeOrganizationId
+    ),
+    getCurrentServerSiteOptions(),
+  ]);
 
   return {
     options: {
@@ -73,7 +70,7 @@ export async function loadSitesRouteData(
       sites: siteOptions.sites,
     },
     viewer: {
-      role: normalizeSitesViewerRole(activeRole.role),
+      role: activeRole.role,
       userId: resolvedOrganizationAccess.currentUserId,
     } satisfies JobsViewer,
   };
@@ -90,32 +87,6 @@ export const Route = createFileRoute("/_app/_org/sites")({
   component: SitesRoute,
 });
 
-export function SitesRouteContent({
-  activeOrganizationId,
-  children,
-  options,
-  viewer,
-}: {
-  readonly activeOrganizationId: string;
-  readonly children?: React.ReactNode;
-  readonly options: JobOptionsResponse;
-  readonly viewer: JobsViewer;
-}) {
-  return (
-    <RegistryProvider
-      key={activeOrganizationId}
-      initialValues={[
-        [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(activeOrganizationId, options),
-        ],
-      ]}
-    >
-      <SitesPage viewer={viewer}>{children}</SitesPage>
-    </RegistryProvider>
-  );
-}
-
 function SitesRoute() {
   const { activeOrganizationId } = useRouteContext({
     from: "/_app/_org",
@@ -131,12 +102,4 @@ function SitesRoute() {
       <Outlet />
     </SitesRouteContent>
   );
-}
-
-function normalizeSitesViewerRole(role: string): JobsViewer["role"] {
-  if (role === "owner" || role === "admin" || role === "member") {
-    return role;
-  }
-
-  throw new Error("Organization member role is not supported by Sites.");
 }

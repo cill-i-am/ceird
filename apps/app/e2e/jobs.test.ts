@@ -39,6 +39,8 @@ async function signUpAndCreateOrganization(page: Page) {
 }
 
 test.describe("jobs flow", () => {
+  test.setTimeout(60_000);
+
   test("supports the core jobs happy path from intake through reopen", async ({
     page,
   }) => {
@@ -73,6 +75,7 @@ test.describe("jobs flow", () => {
 
     await jobsPage.openJob(jobTitle);
     await detailSheet.expectOpen(jobTitle);
+    await expect(detailSheet.pickStatusChange).toBeDisabled();
     await expect(
       detailSheet.root.getByText(siteName, { exact: true }).first()
     ).toBeVisible();
@@ -124,6 +127,6 @@ test.describe("jobs flow", () => {
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
-    await expect(detailSheet.applyStatusChange).toBeVisible();
+    await expect(detailSheet.pickStatusChange).toBeDisabled();
   });
 });

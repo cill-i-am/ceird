@@ -171,10 +171,15 @@ describe("auth route redirect guard", () => {
     expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 
-  it("treats session lookup failures as unauthenticated", async () => {
+  it("rethrows session lookup failures instead of treating them as unauthenticated", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockRejectedValue(new Error("network down"));
 
-    await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
+    const failure = await redirectIfAuthenticated().catch(
+      (caughtError) => caughtError
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe("network down");
   }, 1000);
 });

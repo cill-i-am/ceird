@@ -152,21 +152,16 @@ describe("authenticated-session requirement", () => {
     expect(mockedGetServerAuthSession).not.toHaveBeenCalled();
   }, 1000);
 
-  it("redirects to /login when session lookup throws an unexpected error", async () => {
+  it("rethrows session lookup failures instead of redirecting", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockRejectedValue(new Error("network down"));
 
-    const result = requireAuthenticatedSession();
+    const failure = await requireAuthenticatedSession().catch(
+      (caughtError) => caughtError
+    );
 
-    await expect(result).rejects.toMatchObject({
-      options: {
-        search: {
-          invitation: undefined,
-        },
-        to: "/login",
-      },
-    });
-    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe("network down");
     expect(mockedGetServerAuthSession).not.toHaveBeenCalled();
   }, 1000);
 });

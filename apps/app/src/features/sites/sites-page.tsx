@@ -10,6 +10,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
@@ -57,9 +63,7 @@ export function SitesPage({
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
           </span>
-          <h1 className="truncate font-heading text-xl font-medium tracking-tight">
-            Sites
-          </h1>
+          <h1 className="truncate font-heading text-xl font-medium">Sites</h1>
         </div>
         {canCreateSites ? (
           <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
@@ -74,28 +78,27 @@ export function SitesPage({
       </header>
 
       {notice ? (
-        <div
+        <Alert
           role="status"
-          className="flex min-w-0 items-center justify-between gap-3 rounded-xl border bg-background px-3 py-2 text-sm shadow-xs"
+          variant="success"
+          className="animate-in py-2 pr-24 duration-150 fade-in-0 slide-in-from-top-1 motion-reduce:animate-none"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-            </span>
-            <span className="truncate font-medium">{notice.name}</span>
-            <span className="hidden text-muted-foreground sm:inline">
-              added
-            </span>
-          </div>
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            onClick={() => setNotice(null)}
-          >
-            Dismiss
-          </Button>
-        </div>
+          <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+          <AlertTitle className="truncate">{notice.name}</AlertTitle>
+          <AlertDescription>
+            Site {notice.kind === "updated" ? "updated" : "added"}.
+          </AlertDescription>
+          <AlertAction>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={() => setNotice(null)}
+            >
+              Dismiss
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
 
       {options.sites.length > 0 ? (
@@ -112,7 +115,15 @@ export function SitesPage({
             <TableBody>
               {options.sites.map((site) => (
                 <TableRow key={site.id}>
-                  <TableCell className="font-medium">{site.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/sites/$siteId"
+                      params={{ siteId: site.id }}
+                      className="rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      {site.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     {site.regionName ? (
                       <Badge variant="secondary">{site.regionName}</Badge>
@@ -136,7 +147,7 @@ export function SitesPage({
           </Table>
         </section>
       ) : (
-        <Empty className="min-h-[24rem] rounded-xl border bg-background">
+        <Empty className="min-h-[24rem] border-transparent bg-transparent">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <HugeiconsIcon icon={MapsSquare01Icon} strokeWidth={2} />
