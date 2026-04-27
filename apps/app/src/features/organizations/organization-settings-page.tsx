@@ -8,7 +8,6 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import {
   getErrorText,
   getFormErrorText,
@@ -200,9 +199,9 @@ export function OrganizationSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || isDefaultValue || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={isDefaultValue || !isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting ? "Saving..." : "Save changes"}
                 </Button>
               )}

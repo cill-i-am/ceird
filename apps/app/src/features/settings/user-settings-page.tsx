@@ -8,7 +8,6 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import {
   getErrorText,
   getFormErrorText,
@@ -307,9 +306,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || isDefaultValue || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={isDefaultValue || !isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting ? "Saving profile..." : "Save profile"}
                 </Button>
               )}
@@ -398,9 +397,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={!isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting
                     ? "Sending verification..."
                     : "Send verification email"}
@@ -544,9 +543,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={!isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting ? "Updating password..." : "Update password"}
                 </Button>
               )}

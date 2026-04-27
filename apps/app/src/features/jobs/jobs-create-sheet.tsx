@@ -65,7 +65,6 @@ import {
   ResponsiveDrawer,
   ResponsiveNestedDrawer,
 } from "#/components/ui/responsive-drawer";
-import { Spinner } from "#/components/ui/spinner";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import {
   SiteCreateFields,
@@ -466,21 +465,24 @@ export function JobsCreateSheet() {
           <Button
             type="button"
             variant="ghost"
+            disabled={createResult.waiting}
             onClick={() => closeSheet({ delayed: true })}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={createResult.waiting}>
+          <Button type="submit" loading={createResult.waiting}>
             {createResult.waiting ? (
-              <Spinner data-icon="inline-start" />
+              "Creating..."
             ) : (
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
+              <>
+                <HugeiconsIcon
+                  icon={Add01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+                Create job
+              </>
             )}
-            {createResult.waiting ? "Creating..." : "Create job"}
           </Button>
         </DrawerFooter>
       </form>

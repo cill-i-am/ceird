@@ -2,6 +2,8 @@ import { useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
+import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
+
 import type { ActiveOrganizationSync } from "./organization-access";
 import { synchronizeClientActiveOrganization } from "./organization-access";
 
@@ -59,8 +61,8 @@ export function OrganizationActiveSyncBoundary({
 
   if (syncState === "syncing") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground">
-        Loading your organization...
+      <main className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center">
+        <DotMatrixLoadingState label="Loading your organization" />
       </main>
     );
   }

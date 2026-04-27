@@ -11,6 +11,7 @@ import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { DotMatrixButtonLoader } from "#/components/ui/dot-matrix-loader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -151,6 +152,7 @@ export function NavUser({
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem
+                aria-busy={isSigningOut || undefined}
                 disabled={isSigningOut}
                 onClick={async (event) => {
                   event.preventDefault();
@@ -169,7 +171,11 @@ export function NavUser({
                   }
                 }}
               >
-                <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} />
+                {isSigningOut ? (
+                  <DotMatrixButtonLoader />
+                ) : (
+                  <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} />
+                )}
                 {isSigningOut ? "Signing out..." : "Sign out"}
               </DropdownMenuItem>
             </DropdownMenuGroup>

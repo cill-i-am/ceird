@@ -81,11 +81,13 @@ vi.mock("#/components/ui/badge", () => ({
 vi.mock("#/components/ui/button", () => ({
   Button: ({
     children,
+    loading: _loading,
     type,
     variant: _variant,
     size: _size,
     ...props
   }: ComponentProps<"button"> & {
+    loading?: boolean;
     variant?: string;
     size?: string;
   }) => {

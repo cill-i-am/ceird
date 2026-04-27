@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Button, buttonVariants } from "#/components/ui/button";
+import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 import {
   Empty,
   EmptyDescription,
@@ -374,6 +375,7 @@ export function AcceptInvitationPage({
   const shellCopy = getInvitationShellCopy(state, invitation);
   const cardCopy = getInvitationCardCopy(state, invitation);
   const isAcceptingInvitation = state.status === "submitting";
+  const isSwitchingAccount = state.status === "switching-account";
   const showsAcceptInvitationCta =
     (state.status === "ready" ||
       state.status === "error" ||
@@ -402,7 +404,7 @@ export function AcceptInvitationPage({
             <Button
               className="w-full"
               size="lg"
-              disabled={isAcceptingInvitation}
+              loading={isAcceptingInvitation}
               onClick={() => {
                 void handleAcceptInvitation();
               }}
@@ -422,6 +424,7 @@ export function AcceptInvitationPage({
                 We&rsquo;re checking the workspace details now.
               </EmptyDescription>
             </EmptyHeader>
+            <DotMatrixLoadingState label="Checking workspace details" />
           </Empty>
         ) : null}
 
@@ -453,15 +456,19 @@ export function AcceptInvitationPage({
           </Alert>
         ) : null}
 
-        {state.status === "error" && state.canSwitchAccount ? (
+        {(state.status === "error" && state.canSwitchAccount) ||
+        isSwitchingAccount ? (
           <Button
             className="w-full"
             variant="outline"
+            loading={isSwitchingAccount}
             onClick={() => {
               void handleSwitchAccount();
             }}
           >
-            Sign out and try another account
+            {isSwitchingAccount
+              ? "Signing out..."
+              : "Sign out and try another account"}
           </Button>
         ) : null}
       </EntrySurfaceCard>

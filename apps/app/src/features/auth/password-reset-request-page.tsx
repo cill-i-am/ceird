@@ -12,7 +12,6 @@ import {
 } from "#/components/ui/empty";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient, buildPasswordResetRedirectTo } from "#/lib/auth-client";
 
@@ -214,9 +213,9 @@ export function PasswordResetRequestPage({
                     type="submit"
                     size="lg"
                     className="w-full"
-                    disabled={isSubmitting || isEmailEmpty || !isHydrated}
+                    loading={isSubmitting}
+                    disabled={isEmailEmpty || !isHydrated}
                   >
-                    {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                     {isSubmitting ? "Sending reset link..." : "Send reset link"}
                   </Button>
                 );

@@ -5,7 +5,7 @@
 import { Cause, Effect, Exit } from "effect";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
+import { X, Minus, Plus, Locate, Maximize } from "lucide-react";
 import MapLibreGL from "maplibre-gl";
 import type { PopupOptions, MarkerOptions } from "maplibre-gl";
 import {
@@ -26,6 +26,8 @@ import { createPortal } from "react-dom";
 import { requestBrowserGeolocation } from "#/lib/browser-geolocation";
 import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
+
+import { DotMatrixButtonLoader } from "./dot-matrix-loader";
 
 const defaultStyles = {
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
@@ -820,17 +822,20 @@ function ControlButton({
   onClick,
   label,
   children,
+  busy = false,
   disabled = false,
 }: {
   onClick: () => void;
   label: string;
   children: React.ReactNode;
+  busy?: boolean;
   disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       aria-label={label}
+      aria-busy={busy || undefined}
       type="button"
       className={cn(
         "flex size-8 items-center justify-center transition-all",
@@ -941,10 +946,11 @@ function MapControls({
           <ControlButton
             onClick={handleLocate}
             label="Find my location"
+            busy={waitingForLocation}
             disabled={waitingForLocation}
           >
             {waitingForLocation ? (
-              <Loader2 className="size-4 animate-spin" />
+              <DotMatrixButtonLoader />
             ) : (
               <Locate className="size-4" />
             )}
