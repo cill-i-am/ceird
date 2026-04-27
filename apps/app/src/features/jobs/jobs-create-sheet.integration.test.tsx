@@ -123,7 +123,7 @@ describe("jobs create sheet integration", () => {
           getJobOptions: mockedGetJobOptions,
           listJobs: mockedListJobs,
         },
-      }),
+      })
     );
   });
 
@@ -142,7 +142,7 @@ describe("jobs create sheet integration", () => {
       mockedCreateJob.mockReturnValue(Effect.succeed(createdJob));
       mockedListJobs.mockReturnValue(Effect.fail(new Error("refresh failed")));
       mockedGetJobOptions.mockReturnValue(
-        Effect.fail(new Error("refresh failed")),
+        Effect.fail(new Error("refresh failed"))
       );
 
       const user = userEvent.setup();
@@ -156,15 +156,15 @@ describe("jobs create sheet integration", () => {
       });
 
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
-        "Replace air valve | Existing queue job",
+        "Replace air valve | Existing queue job"
       );
       expect(screen.getByTestId("notice-title")).toHaveTextContent(
-        "Replace air valve",
+        "Replace air valve"
       );
       expect(
-        screen.queryByText(/we couldn't create that job/i),
+        screen.queryByText(/we couldn't create that job/i)
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -190,10 +190,10 @@ describe("jobs create sheet integration", () => {
             },
           ],
           nextCursor: undefined,
-        }),
+        })
       );
       mockedGetJobOptions.mockReturnValue(
-        Effect.fail(new Error("refresh failed")),
+        Effect.fail(new Error("refresh failed"))
       );
 
       const user = userEvent.setup();
@@ -207,12 +207,12 @@ describe("jobs create sheet integration", () => {
       });
 
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
-        "Canonical queue title",
+        "Canonical queue title"
       );
       expect(
-        screen.queryByText(/we couldn't create that job/i),
+        screen.queryByText(/we couldn't create that job/i)
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -230,11 +230,11 @@ describe("jobs create sheet integration", () => {
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       await expect(
-        screen.findByText(/we couldn't create that job/i),
+        screen.findByText(/we couldn't create that job/i)
       ).resolves.toBeInTheDocument();
       expect(screen.getByText("API down")).toBeInTheDocument();
       expect(mockedNavigate).not.toHaveBeenCalled();
-    },
+    }
   );
 });
 
@@ -286,7 +286,7 @@ function renderCreateSheet() {
     >
       <JobsCreateSheet />
       <JobsStateProbe />
-    </RegistryProvider>,
+    </RegistryProvider>
   );
 }
 

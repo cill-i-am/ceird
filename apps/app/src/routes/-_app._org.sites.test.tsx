@@ -87,10 +87,10 @@ describe("sites route loader", () => {
         },
       });
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        "org_123",
+        "org_123"
       );
       expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
-    },
+    }
   );
 
   it(
@@ -118,10 +118,10 @@ describe("sites route loader", () => {
             role: "owner",
             userId: "user_123",
           }}
-        />,
+        />
       );
 
       expect(screen.getByText("Docklands Campus")).toBeInTheDocument();
-    },
+    }
   );
 });

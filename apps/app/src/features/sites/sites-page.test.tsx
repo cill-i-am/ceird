@@ -64,17 +64,17 @@ describe("sites page", () => {
       renderSitesPage();
 
       expect(
-        screen.getByRole("heading", { name: "Sites" }),
+        screen.getByRole("heading", { name: "Sites" })
       ).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /new site/i })).toHaveAttribute(
         "href",
-        "/sites/new",
+        "/sites/new"
       );
 
       const row = screen.getByRole("row", { name: /docklands campus/i });
       expect(within(row).getByText("Dublin")).toBeInTheDocument();
       expect(within(row).getByText(/1 Custom House Quay/)).toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -84,10 +84,10 @@ describe("sites page", () => {
       renderSitesPage({ role: "member" });
 
       expect(
-        screen.queryByRole("link", { name: /new site/i }),
+        screen.queryByRole("link", { name: /new site/i })
       ).not.toBeInTheDocument();
       expect(screen.getByText("Docklands Campus")).toBeInTheDocument();
-    },
+    }
   );
 });
 
@@ -101,6 +101,6 @@ function renderSitesPage({
       ]}
     >
       <SitesPage viewer={{ role, userId: "user_123" }} />
-    </RegistryProvider>,
+    </RegistryProvider>
   );
 }

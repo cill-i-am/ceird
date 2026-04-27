@@ -154,7 +154,7 @@ export function JobsCreateSheet() {
   });
   const createResult = useAtomValue(createJobMutationAtom);
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
-    {},
+    {}
   );
   const [values, setValues] =
     React.useState<JobsCreateFormState>(defaultFormState);
@@ -172,7 +172,7 @@ export function JobsCreateSheet() {
   const contactGroups = deriveContactsForSite(options.contacts, selectedSiteId);
   const prioritySelectionGroups = buildPrioritySelectionGroups();
   const siteRegionSelectionGroups = buildSiteRegionSelectionGroups(
-    options.regions,
+    options.regions
   );
   const siteSelectionGroups = buildSiteSelectionGroups(options.sites);
   const contactSelectionGroups = buildContactSelectionGroups(contactGroups);
@@ -209,7 +209,7 @@ export function JobsCreateSheet() {
         clearTimeout(closeNavigationTimeout.current);
       }
     },
-    [],
+    []
   );
 
   function closeSheet({
@@ -760,7 +760,7 @@ function LinearContactSelect({
           aria-invalid={errorText ? true : undefined}
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs",
+            "h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
           )}
         >
           <HugeiconsIcon
@@ -928,7 +928,7 @@ function buildPrioritySelectionGroups() {
 }
 
 function buildSiteRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[],
+  regions: readonly { readonly id: string; readonly name: string }[]
 ) {
   return [
     {
@@ -945,7 +945,7 @@ function buildSiteRegionSelectionGroups(
 }
 
 function buildContactSelectionGroups(
-  contactGroups: ReturnType<typeof deriveContactsForSite>,
+  contactGroups: ReturnType<typeof deriveContactsForSite>
 ) {
   const hasExistingContacts =
     contactGroups.linked.length > 0 || contactGroups.others.length > 0;
@@ -1028,7 +1028,7 @@ function hasFieldErrors(errors: JobsCreateFieldErrors) {
 }
 
 function clearInlineSiteFieldErrors(
-  current: JobsCreateFieldErrors,
+  current: JobsCreateFieldErrors
 ): JobsCreateFieldErrors {
   return {
     ...current,
@@ -1040,7 +1040,7 @@ function clearInlineSiteFieldErrors(
 }
 
 function clearSiteSelectionFieldError(
-  current: JobsCreateFieldErrors,
+  current: JobsCreateFieldErrors
 ): JobsCreateFieldErrors {
   return {
     ...current,
@@ -1050,7 +1050,7 @@ function clearSiteSelectionFieldError(
 
 function buildCreateJobInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput {
   return {
     contact: resolveCreateJobContactInput(values, selectionIds),
@@ -1062,7 +1062,7 @@ function buildCreateJobInput(
 
 function resolveCreateJobContactInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput["contact"] {
   if (values.contactSelection === NONE_VALUE) {
     return undefined;
@@ -1085,7 +1085,7 @@ function resolveCreateJobContactInput(
 
 function resolveCreateJobSiteInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput["site"] {
   if (values.siteSelection === NONE_VALUE) {
     return undefined;
@@ -1127,7 +1127,7 @@ function resolveCreateSelectionIds(
   options: {
     readonly contacts: readonly JobContactOption[];
     readonly sites: readonly JobSiteOption[];
-  },
+  }
 ): JobsCreateSelectionIds {
   return {
     contactId:
@@ -1145,7 +1145,7 @@ function resolveCreateSelectionIds(
 
 function resolveSelectedOptionId<Id extends string>(
   options: readonly { readonly id: Id }[],
-  value: string,
+  value: string
 ): Id | undefined {
   return options.find((option) => option.id === value)?.id;
 }

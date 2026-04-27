@@ -69,10 +69,12 @@ interface SitesServiceHarness {
   >;
 }
 
-function makeHarness(options: {
-  readonly actor?: JobsActor;
-  readonly geocodingFailure?: SiteGeocodingFailedError;
-} = {}): SitesServiceHarness {
+function makeHarness(
+  options: {
+    readonly actor?: JobsActor;
+    readonly geocodingFailure?: SiteGeocodingFailedError;
+  } = {}
+): SitesServiceHarness {
   const actor = options.actor ?? makeActor("owner");
   const calls = {
     createSite: 0,

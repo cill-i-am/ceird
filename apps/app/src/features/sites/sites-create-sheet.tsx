@@ -70,7 +70,7 @@ export function SitesCreateSheet() {
   });
   const createResult = useAtomValue(createSiteMutationAtom);
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
-    {},
+    {}
   );
   const [values, setValues] =
     React.useState<SitesCreateFormState>(defaultFormState);
@@ -80,7 +80,7 @@ export function SitesCreateSheet() {
   > | null>(null);
   const regionGroups = React.useMemo(
     () => buildRegionSelectionGroups(options.regions),
-    [options.regions],
+    [options.regions]
   );
 
   React.useEffect(
@@ -89,7 +89,7 @@ export function SitesCreateSheet() {
         clearTimeout(closeNavigationTimeout.current);
       }
     },
-    [],
+    []
   );
 
   function closeSheet({
@@ -176,7 +176,7 @@ export function SitesCreateSheet() {
                     <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
                     <AlertDescription>{error.message}</AlertDescription>
                   </Alert>
-                ),
+                )
               )
               .render()}
 
@@ -362,7 +362,7 @@ export function SitesCreateSheet() {
 }
 
 function buildRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[],
+  regions: readonly { readonly id: string; readonly name: string }[]
 ) {
   return [
     {
@@ -389,7 +389,7 @@ function isRegionNotFoundError(error: unknown) {
 
 function validate(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[],
+  regions: readonly JobRegionOption[]
 ): SitesCreateFieldErrors {
   return {
     addressLine1:
@@ -416,7 +416,7 @@ function hasFieldErrors(errors: SitesCreateFieldErrors) {
 
 function buildCreateSiteInput(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[],
+  regions: readonly JobRegionOption[]
 ): CreateSiteInput {
   const selectedRegion = findSelectedRegion(values, regions);
 
@@ -435,7 +435,7 @@ function buildCreateSiteInput(
 
 function findSelectedRegion(
   values: SitesCreateFormState,
-  regions: readonly JobRegionOption[],
+  regions: readonly JobRegionOption[]
 ) {
   if (values.regionSelection === NONE_VALUE) {
     return;

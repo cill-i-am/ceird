@@ -45,16 +45,20 @@ function responseWithJson(payload: unknown, ok = true): Response {
   } as Response;
 }
 
-describe("SiteGeocoder", () => {
+describe("site geocoder", () => {
   it("stub mode resolves deterministic coordinates without Google key", async () => {
     const config = new Map([["SITE_GEOCODER_MODE", "stub"]]);
 
     const first = await runWithConfig(
-      SiteGeocoder.geocode(siteInput).pipe(Effect.provide(SiteGeocoder.Default)),
+      SiteGeocoder.geocode(siteInput).pipe(
+        Effect.provide(SiteGeocoder.Default)
+      ),
       config
     );
     const second = await runWithConfig(
-      SiteGeocoder.geocode(siteInput).pipe(Effect.provide(SiteGeocoder.Default)),
+      SiteGeocoder.geocode(siteInput).pipe(
+        Effect.provide(SiteGeocoder.Default)
+      ),
       config
     );
 
@@ -63,32 +67,34 @@ describe("SiteGeocoder", () => {
       longitude: second.longitude,
       provider: "stub",
     });
-    expect(first.geocodedAt).toEqual(expect.any(String));
-    expect(Number.isNaN(Date.parse(first.geocodedAt))).toBe(false);
+    expect(first.geocodedAt).toStrictEqual(expect.any(String));
+    expect(Date.parse(first.geocodedAt)).not.toBeNaN();
     expect(first.latitude).toBeGreaterThanOrEqual(-90);
     expect(first.latitude).toBeLessThanOrEqual(90);
     expect(first.longitude).toBeGreaterThanOrEqual(-180);
     expect(first.longitude).toBeLessThanOrEqual(180);
-  });
+  }, 10_000);
 
   it("successful Google response maps to latitude/longitude/provider/geocodedAt", async () => {
     let requestedUrl: URL | undefined;
-    const fetchImplementation = (async (url: URL) => {
+    const fetchImplementation = ((url: URL) => {
       requestedUrl = url;
 
-      return responseWithJson({
-        results: [
-          {
-            geometry: {
-              location: {
-                lat: 53.3498,
-                lng: -6.2603,
+      return Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 53.3498,
+                  lng: -6.2603,
+                },
               },
             },
-          },
-        ],
-        status: "OK",
-      });
+          ],
+          status: "OK",
+        })
+      );
     }) as typeof fetch;
 
     const location = await runWithConfig(
@@ -103,8 +109,8 @@ describe("SiteGeocoder", () => {
       longitude: -6.2603,
       provider: "google",
     });
-    expect(location.geocodedAt).toEqual(expect.any(String));
-    expect(Number.isNaN(Date.parse(location.geocodedAt))).toBe(false);
+    expect(location.geocodedAt).toStrictEqual(expect.any(String));
+    expect(Date.parse(location.geocodedAt)).not.toBeNaN();
     expect(requestedUrl).toBeDefined();
     if (requestedUrl === undefined) {
       return;
@@ -118,26 +124,28 @@ describe("SiteGeocoder", () => {
     );
     expect(requestedUrl.searchParams.get("region")).toBe("ie");
     expect(requestedUrl.searchParams.get("key")).toBe("test-google-key");
-  });
+  }, 10_000);
 
-  it("Google request maps GB to uk region bias and United Kingdom address", async () => {
+  it("google request maps GB to uk region bias and United Kingdom address", async () => {
     let requestedUrl: URL | undefined;
-    const fetchImplementation = (async (url: URL) => {
+    const fetchImplementation = ((url: URL) => {
       requestedUrl = url;
 
-      return responseWithJson({
-        results: [
-          {
-            geometry: {
-              location: {
-                lat: 51.5034,
-                lng: -0.1276,
+      return Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 51.5034,
+                  lng: -0.1276,
+                },
               },
             },
-          },
-        ],
-        status: "OK",
-      });
+          ],
+          status: "OK",
+        })
+      );
     }) as typeof fetch;
 
     await runWithConfig(
@@ -156,17 +164,19 @@ describe("SiteGeocoder", () => {
       "10 Downing Street, London, Greater London, United Kingdom"
     );
     expect(requestedUrl.searchParams.get("region")).toBe("uk");
-  });
+  }, 10_000);
 
-  it("explicit Google factory requires a key even when default mode is stub", async () => {
+  it("explicit google factory requires a key even when default mode is stub", async () => {
     let fetchCalls = 0;
-    const fetchImplementation = (async () => {
+    const fetchImplementation = (() => {
       fetchCalls += 1;
 
-      return responseWithJson({
-        results: [],
-        status: "ZERO_RESULTS",
-      });
+      return Promise.resolve(
+        responseWithJson({
+          results: [],
+          status: "ZERO_RESULTS",
+        })
+      );
     }) as typeof fetch;
 
     const result = await runWithConfig(
@@ -178,31 +188,33 @@ describe("SiteGeocoder", () => {
 
     expect(result._tag).toBe("Left");
     expect(fetchCalls).toBe(0);
-  });
+  }, 10_000);
 
-  it("successful Google response ignores malformed later results", async () => {
-    const fetchImplementation = (async () =>
-      responseWithJson({
-        results: [
-          {
-            geometry: {
-              location: {
-                lat: 53.3498,
-                lng: -6.2603,
+  it("successful google response ignores malformed later results", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 53.3498,
+                  lng: -6.2603,
+                },
               },
             },
-          },
-          {
-            geometry: {
-              location: {
-                lat: 123,
-                lng: "not-a-number",
+            {
+              geometry: {
+                location: {
+                  lat: 123,
+                  lng: "not-a-number",
+                },
               },
             },
-          },
-        ],
-        status: "OK",
-      })) as typeof fetch;
+          ],
+          status: "OK",
+        })
+      )) as typeof fetch;
 
     const location = await runWithConfig(
       makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
@@ -216,14 +228,16 @@ describe("SiteGeocoder", () => {
       longitude: -6.2603,
       provider: "google",
     });
-  });
+  }, 10_000);
 
-  it("ZERO_RESULTS fails with SiteGeocodingFailedError", async () => {
-    const fetchImplementation = (async () =>
-      responseWithJson({
-        results: [],
-        status: "ZERO_RESULTS",
-      })) as typeof fetch;
+  it("zero results fails with SiteGeocodingFailedError", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          results: [],
+          status: "ZERO_RESULTS",
+        })
+      )) as typeof fetch;
 
     const result = await runWithConfig(
       makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
@@ -244,23 +258,25 @@ describe("SiteGeocoder", () => {
       eircode: "D01 W2R1",
       message: FAILED_MESSAGE,
     });
-  });
+  }, 10_000);
 
   it("malformed response fails with SiteGeocodingFailedError", async () => {
-    const fetchImplementation = (async () =>
-      responseWithJson({
-        results: [
-          {
-            geometry: {
-              location: {
-                lat: 123,
-                lng: -6.2603,
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 123,
+                  lng: -6.2603,
+                },
               },
             },
-          },
-        ],
-        status: "OK",
-      })) as typeof fetch;
+          ],
+          status: "OK",
+        })
+      )) as typeof fetch;
 
     const result = await runWithConfig(
       makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
@@ -277,12 +293,11 @@ describe("SiteGeocoder", () => {
 
     expect(result.left).toBeInstanceOf(SiteGeocodingFailedError);
     expect(result.left.message).toBe(FAILED_MESSAGE);
-  });
+  }, 10_000);
 
   it("provider request failure fails with SiteGeocodingFailedError", async () => {
-    const fetchImplementation = (async () => {
-      throw new Error("upstream timeout");
-    }) as typeof fetch;
+    const fetchImplementation = (() =>
+      Promise.reject(new Error("upstream timeout"))) as typeof fetch;
 
     const result = await runWithConfig(
       makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
@@ -303,5 +318,5 @@ describe("SiteGeocoder", () => {
       eircode: "D01 W2R1",
       message: FAILED_MESSAGE,
     });
-  });
+  }, 10_000);
 });

@@ -86,10 +86,10 @@ describe("job detail route", () => {
         await import("./_app._org.jobs.$jobId");
 
       await expect(loadJobDetailRouteData(workItemId)).resolves.toStrictEqual(
-        detail,
+        detail
       );
       expect(mockedGetCurrentServerJobDetail).toHaveBeenCalledWith(workItemId);
-    },
+    }
   );
 
   it(
@@ -102,10 +102,10 @@ describe("job detail route", () => {
         await import("./_app._org.jobs.$jobId");
 
       expect(() =>
-        loadJobDetailRouteData("not-a-job-id" as WorkItemIdType),
+        loadJobDetailRouteData("not-a-job-id" as WorkItemIdType)
       ).toThrow(/Universally Unique Identifier/);
       expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -123,10 +123,10 @@ describe("job detail route", () => {
             required: true,
             targetOrganizationId: "org_123",
           },
-        }),
+        })
       ).resolves.toBeNull();
       expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -202,19 +202,19 @@ describe("job detail route", () => {
               userId: actorUserId,
             }}
           />
-        </JobsRouteContent>,
+        </JobsRouteContent>
       );
 
       expect(
-        screen.getByRole("heading", { name: "Inspect boiler" }),
+        screen.getByRole("heading", { name: "Inspect boiler" })
       ).toBeInTheDocument();
       expect(screen.getAllByText("Taylor Owner").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Depot").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Pat Contact").length).toBeGreaterThan(0);
       expect(
-        screen.getByText("Checked the burner and reset the controls."),
+        screen.getByText("Checked the burner and reset the controls.")
       ).toBeInTheDocument();
-    },
+    }
   );
 });
 

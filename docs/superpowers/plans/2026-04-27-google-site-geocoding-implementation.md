@@ -75,6 +75,7 @@
 ### Task 1: Update Shared Site Contracts
 
 **Files:**
+
 - Modify: `packages/jobs-core/src/domain.ts`
 - Modify: `packages/jobs-core/src/dto.ts`
 - Modify: `packages/jobs-core/src/errors.ts`
@@ -237,8 +238,8 @@ Add `SiteGeocodingFailedError` to the `JobsError` union.
 In `packages/jobs-core/src/http-api.ts`, import `SiteGeocodingFailedError` and add `.addError(SiteGeocodingFailedError)` to:
 
 ```ts
-HttpApiEndpoint.post("createJob", "/jobs")
-HttpApiEndpoint.post("createSite", "/sites")
+HttpApiEndpoint.post("createJob", "/jobs");
+HttpApiEndpoint.post("createSite", "/sites");
 ```
 
 - [ ] **Step 7: Export the new public contract pieces**
@@ -279,6 +280,7 @@ git commit -m "feat: make site coordinates server-derived"
 ### Task 2: Add Google Geocoding Boundary
 
 **Files:**
+
 - Create: `apps/api/src/domains/jobs/site-geocoding-config.ts`
 - Create: `apps/api/src/domains/jobs/site-geocoder.ts`
 - Test: `apps/api/src/domains/jobs/site-geocoder.test.ts`
@@ -294,10 +296,7 @@ import {
 } from "@task-tracker/jobs-core";
 import { ConfigProvider, Effect, Either } from "effect";
 
-import {
-  makeGoogleSiteGeocoder,
-  SiteGeocoder,
-} from "./site-geocoder.js";
+import { makeGoogleSiteGeocoder, SiteGeocoder } from "./site-geocoder.js";
 
 const input = {
   name: "Docklands Campus",
@@ -311,9 +310,7 @@ const input = {
 describe("SiteGeocoder", () => {
   it("resolves local stub coordinates without a Google key", async () => {
     const result = await Effect.runPromise(
-      SiteGeocoder.geocode(input).pipe(
-        Effect.provide(SiteGeocoder.Stub)
-      )
+      SiteGeocoder.geocode(input).pipe(Effect.provide(SiteGeocoder.Stub))
     );
 
     expect(result).toStrictEqual({
@@ -342,13 +339,15 @@ describe("SiteGeocoder", () => {
     );
 
     const result = await Effect.runPromise(
-      makeGoogleSiteGeocoder({ fetch }).geocode(input).pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([["GOOGLE_MAPS_API_KEY", "key_123"]])
+      makeGoogleSiteGeocoder({ fetch })
+        .geocode(input)
+        .pipe(
+          Effect.withConfigProvider(
+            ConfigProvider.fromMap(
+              new Map([["GOOGLE_MAPS_API_KEY", "key_123"]])
+            )
           )
         )
-      )
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -371,14 +370,16 @@ describe("SiteGeocoder", () => {
     );
 
     const result = await Effect.runPromise(
-      makeGoogleSiteGeocoder({ fetch }).geocode(input).pipe(
-        Effect.either,
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([["GOOGLE_MAPS_API_KEY", "key_123"]])
+      makeGoogleSiteGeocoder({ fetch })
+        .geocode(input)
+        .pipe(
+          Effect.either,
+          Effect.withConfigProvider(
+            ConfigProvider.fromMap(
+              new Map([["GOOGLE_MAPS_API_KEY", "key_123"]])
+            )
           )
         )
-      )
     );
 
     expect(Either.isLeft(result)).toBe(true);
@@ -511,8 +512,7 @@ export function makeGoogleSiteGeocoder(options?: {
         const url = buildGoogleGeocodingUrl(input, config.googleMapsApiKey);
         const response = yield* Effect.tryPromise({
           try: () => requestFetch(url.toString(), { method: "GET" }),
-          catch: (cause) =>
-            makeSiteGeocodingFailedError(input, String(cause)),
+          catch: (cause) => makeSiteGeocodingFailedError(input, String(cause)),
         });
 
         if (!response.ok) {
@@ -526,8 +526,7 @@ export function makeGoogleSiteGeocoder(options?: {
 
         const payload = yield* Effect.tryPromise({
           try: () => response.json(),
-          catch: (cause) =>
-            makeSiteGeocodingFailedError(input, String(cause)),
+          catch: (cause) => makeSiteGeocodingFailedError(input, String(cause)),
         });
 
         return yield* decodeGoogleGeocodingPayload(input, payload);
@@ -660,6 +659,7 @@ git commit -m "feat: add site geocoding service"
 ### Task 3: Persist Geocoding Metadata
 
 **Files:**
+
 - Modify: `apps/api/src/domains/jobs/schema.ts`
 - Add: `apps/api/drizzle/0007_site-geocoding.sql`
 - Modify: `apps/api/drizzle/meta/_journal.json`
@@ -822,6 +822,7 @@ git commit -m "feat: persist site geocoding metadata"
 ### Task 4: Geocode Before Site Creation
 
 **Files:**
+
 - Modify: `apps/api/src/domains/jobs/sites-service.ts`
 - Modify: `apps/api/src/domains/jobs/service.ts`
 - Modify: `apps/api/src/domains/jobs/http.ts`
@@ -929,13 +930,13 @@ dependencies: [
 Load it inside the service:
 
 ```ts
-const siteGeocoder = yield* SiteGeocoder;
+const siteGeocoder = yield * SiteGeocoder;
 ```
 
 Before `jobsRepository.withTransaction`, run:
 
 ```ts
-const geocodedLocation = yield* siteGeocoder.geocode(input);
+const geocodedLocation = yield * siteGeocoder.geocode(input);
 ```
 
 Pass derived fields to `sitesRepository.create`:
@@ -953,7 +954,7 @@ longitude: geocodedLocation.longitude,
 In `apps/api/src/domains/jobs/service.ts`, import `SiteGeocoder`, add `SiteGeocoder.Default` to dependencies, and load it:
 
 ```ts
-const siteGeocoder = yield* SiteGeocoder;
+const siteGeocoder = yield * SiteGeocoder;
 ```
 
 Before `jobsRepository.withTransaction`, resolve inline geocoding:
@@ -961,7 +962,7 @@ Before `jobsRepository.withTransaction`, resolve inline geocoding:
 ```ts
 const geocodedInlineSite =
   input.site?.kind === "create"
-    ? yield* siteGeocoder.geocode(input.site.input)
+    ? yield * siteGeocoder.geocode(input.site.input)
     : undefined;
 ```
 
@@ -973,7 +974,7 @@ function resolveCreateSiteId(
   input: CreateJobSiteInput | undefined,
   geocodedInlineSite: GeocodedSiteLocation | undefined,
   sitesRepository: SitesRepository
-)
+);
 ```
 
 When `input.kind === "create"`, require `geocodedInlineSite` and pass its values to the repository create call:
@@ -1037,6 +1038,7 @@ git commit -m "feat: geocode sites on create"
 ### Task 5: Update Local, Sandbox, and Playwright Runtime
 
 **Files:**
+
 - Modify: `scripts/dev.mjs`
 - Modify: `apps/app/playwright.config.ts`
 - Modify: `packages/sandbox-core/src/runtime-spec.ts`
@@ -1137,6 +1139,7 @@ git commit -m "chore: use stub site geocoding in dev"
 ### Task 6: Remove Frontend Manual Coordinates
 
 **Files:**
+
 - Modify: `apps/app/src/features/sites/sites-create-sheet.tsx`
 - Modify: `apps/app/src/features/sites/sites-create-sheet.test.tsx`
 - Modify: `apps/app/src/features/jobs/jobs-create-sheet.tsx`
@@ -1336,6 +1339,7 @@ git commit -m "feat: remove manual site pin entry"
 ### Task 7: Polish Map Copy and Docs
 
 **Files:**
+
 - Modify: `apps/app/src/features/jobs/jobs-coverage-map.tsx`
 - Modify: `apps/app/src/features/jobs/jobs-coverage-map.test.tsx`
 - Modify: `docs/architecture/jobs-v1-spec.md`
@@ -1396,8 +1400,7 @@ fields for a site, with Ireland as the current default country. Irish sites
 require `addressLine1`, `county`, `country: "IE"`, and `eircode`.
 
 The API geocodes the address before writing the site. If geocoding fails, the
-site is not created and the API returns `SiteGeocodingFailedError` with HTTP
-422. The frontend never accepts manual latitude or longitude values in normal
+site is not created and the API returns `SiteGeocodingFailedError` with HTTP 422. The frontend never accepts manual latitude or longitude values in normal
 site/job creation flows.
 
 Stored `latitude` and `longitude` values are read-only to the UI and are used
@@ -1429,6 +1432,7 @@ git commit -m "docs: describe geocoded site locations"
 ### Task 8: Full Verification
 
 **Files:**
+
 - No new file edits unless verification reveals a defect.
 
 - [ ] **Step 1: Run package-level tests touched by this plan**
