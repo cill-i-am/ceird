@@ -7,24 +7,28 @@ import { Button } from "#/components/ui/button";
 const SHORTCUT_INTRO_STORAGE_KEY = "task-tracker-shortcut-intro-seen";
 
 function getShortcutIntroSeen() {
-  if (typeof window.localStorage.getItem !== "function") {
-    return false;
-  }
-
   try {
-    return window.localStorage.getItem(SHORTCUT_INTRO_STORAGE_KEY) === "1";
+    const { localStorage } = window;
+
+    if (typeof localStorage.getItem !== "function") {
+      return false;
+    }
+
+    return localStorage.getItem(SHORTCUT_INTRO_STORAGE_KEY) === "1";
   } catch {
     return false;
   }
 }
 
 function setShortcutIntroSeen() {
-  if (typeof window.localStorage.setItem === "function") {
-    try {
-      window.localStorage.setItem(SHORTCUT_INTRO_STORAGE_KEY, "1");
-    } catch {
-      // The notice still hides for this session when storage is unavailable.
+  try {
+    const { localStorage } = window;
+
+    if (typeof localStorage.setItem === "function") {
+      localStorage.setItem(SHORTCUT_INTRO_STORAGE_KEY, "1");
     }
+  } catch {
+    // The notice still hides for this session when storage is unavailable.
   }
 }
 

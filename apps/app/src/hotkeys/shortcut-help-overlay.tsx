@@ -1,5 +1,6 @@
 "use client";
 
+import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
@@ -16,11 +17,18 @@ import { HOTKEYS, HOTKEY_GROUPS } from "./hotkey-registry";
 import type { HotkeyDefinition, HotkeyScope } from "./hotkey-registry";
 import { useAppHotkey } from "./use-app-hotkey";
 
-function getShortcutsForScopes(activeScopes: readonly HotkeyScope[]) {
+const SHORTCUTS = Object.values(HOTKEYS);
+
+function getShortcutsForScopes(
+  activeScopes: readonly HotkeyScope[],
+  registeredShortcutHotkeys: ReadonlySet<string>
+) {
   const activeScopeSet = new Set<HotkeyScope>(activeScopes);
 
-  return Object.values(HOTKEYS).filter((shortcut) =>
-    activeScopeSet.has(shortcut.scope)
+  return SHORTCUTS.filter(
+    (shortcut) =>
+      activeScopeSet.has(shortcut.scope) &&
+      registeredShortcutHotkeys.has(shortcut.hotkey)
   );
 }
 
@@ -31,19 +39,54 @@ function groupShortcuts(shortcuts: readonly HotkeyDefinition[]) {
   })).filter(({ shortcuts: groupedShortcuts }) => groupedShortcuts.length > 0);
 }
 
+const ShortcutHelpHotkeys = React.memo(function ShortcutHelpHotkeys({
+  setIsOpen,
+}: {
+  readonly setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const openHelp = React.useCallback(() => setIsOpen(true), [setIsOpen]);
+
+  useAppHotkey("help", openHelp);
+  useAppHotkey("helpAlternate", openHelp);
+
+  return null;
+});
+
 export function ShortcutHelpOverlay({
   activeScopes,
 }: {
   readonly activeScopes: readonly HotkeyScope[];
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const shortcutGroups = groupShortcuts(getShortcutsForScopes(activeScopes));
+  const { hotkeys, sequences } = useHotkeyRegistrations();
+  const registeredShortcutHotkeys = React.useMemo(() => {
+    const hotkeySet = new Set<string>();
 
-  useAppHotkey("help", () => setIsOpen(true));
-  useAppHotkey("helpAlternate", () => setIsOpen(true));
+    for (const registration of hotkeys) {
+      if (registration.options.enabled === false) {
+        continue;
+      }
+
+      hotkeySet.add(registration.hotkey);
+    }
+
+    for (const registration of sequences) {
+      if (registration.options.enabled === false) {
+        continue;
+      }
+
+      hotkeySet.add(registration.sequence.join(" "));
+    }
+
+    return hotkeySet;
+  }, [hotkeys, sequences]);
+  const shortcutGroups = groupShortcuts(
+    getShortcutsForScopes(activeScopes, registeredShortcutHotkeys)
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <ShortcutHelpHotkeys setIsOpen={setIsOpen} />
       <Button
         type="button"
         variant="outline"
