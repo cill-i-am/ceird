@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auto Research"
+  short_description: "Run bounded autonomous improvement loops"
+  default_prompt: "Use $auto-research to iteratively improve this codebase toward a measurable goal."
