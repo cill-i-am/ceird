@@ -146,6 +146,11 @@ interface JobLabelAssignmentRow extends JobLabelRow {
   readonly work_item_id: string | null;
 }
 
+interface ArchivedJobLabel {
+  readonly label: JobLabel;
+  readonly removedWorkItemIds: readonly WorkItemId[];
+}
+
 interface WorkItemLabelRow {
   readonly created_at: Date;
   readonly label_id: string;
@@ -314,6 +319,8 @@ export interface JobLabelAssignmentResult {
   readonly changed: boolean;
   readonly label: JobLabel;
 }
+
+export type ArchiveJobLabelResult = ArchivedJobLabel;
 
 const decodeJob = Schema.decodeUnknownSync(JobSchema);
 const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
@@ -560,6 +567,18 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         }
 
         return labelsByWorkItemId;
+      });
+
+      const mapJobRowWithLabels = Effect.fn(
+        "JobsRepository.mapJobRowWithLabels"
+      )(function* (organizationId: OrganizationId, row: WorkItemRow) {
+        const workItemId = decodeWorkItemId(row.id);
+        const labelsByWorkItemId = yield* listLabelsForWorkItems(
+          organizationId,
+          [workItemId]
+        );
+
+        return mapJobRow(row, labelsByWorkItemId.get(workItemId) ?? []);
       });
 
       const list = Effect.fn("JobsRepository.list")(function* (
@@ -887,7 +906,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const transition = Effect.fn("JobsRepository.transition")(function* (
@@ -933,7 +956,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const reopen = Effect.fn("JobsRepository.reopen")(function* (
@@ -954,7 +981,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const addComment = Effect.fn("JobsRepository.addComment")(function* (
@@ -1629,20 +1660,22 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             );
 
             if (Option.isNone(label)) {
-              return label;
+              return Option.none<ArchivedJobLabel>();
             }
 
-            yield* sql`
+            const removedRows = yield* sql<IdRow>`
               delete from work_item_labels
-              using job_labels, work_items
-              where work_item_labels.label_id = job_labels.id
-                and work_item_labels.work_item_id = work_items.id
-                and job_labels.organization_id = ${organizationId}
-                and job_labels.id = ${labelId}
-                and work_items.organization_id = ${organizationId}
+              where organization_id = ${organizationId}
+                and label_id = ${labelId}
+              returning work_item_id as id
             `;
 
-            return label;
+            return Option.some({
+              label: label.value,
+              removedWorkItemIds: removedRows.map((row) =>
+                decodeWorkItemId(row.id)
+              ),
+            });
           })
         );
       });
@@ -1656,7 +1689,7 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
               where organization_id = ${input.organizationId}
                 and id = ${input.labelId}
                 and archived_at is null
-              for update
+              for share
             ),
             organization_work_item as (
               select id

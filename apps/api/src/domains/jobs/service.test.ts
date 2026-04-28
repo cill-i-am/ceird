@@ -118,6 +118,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
+  readonly archiveRemovedWorkItemIds?: readonly WorkItemId[];
   readonly assignLabelChanged?: boolean;
   readonly lockedJob?: Job;
   readonly regionFailure?: RegionNotFoundError | SqlError.SqlError;
@@ -416,7 +417,10 @@ function makeHarness(
         expect(organizationId).toBe(actor.organizationId);
         expect(requestedLabelId).toBe(labelId);
 
-        return Option.some(jobLabel);
+        return Option.some({
+          label: jobLabel,
+          removedWorkItemIds: options.archiveRemovedWorkItemIds ?? [],
+        });
       }),
     assignToJob: (input: {
       readonly labelId: JobLabel["id"];
@@ -656,6 +660,33 @@ describe("jobs service", () => {
         labelId,
         labelName: "Waiting on PO",
       },
+      {
+        eventType: "label_removed",
+        labelId,
+        labelName: "Waiting on PO",
+      },
+    ]);
+  }, 10_000);
+
+  it("records label removal activity for jobs affected by archived labels", async () => {
+    const harness = makeHarness({
+      archiveRemovedWorkItemIds: [workItemId],
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.archiveJobLabel(labelId);
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({ id: labelId, name: "Waiting on PO" });
+
+    expect(harness.calls.archiveLabel).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+    expect(harness.activityPayloads).toStrictEqual([
       {
         eventType: "label_removed",
         labelId,

@@ -170,23 +170,59 @@ export class JobsService extends Effect.Service<JobsService>()(
           const actor = yield* loadActor();
           yield* authorization.ensureCanManageLabels(actor);
 
-          const label = yield* jobLabelsRepository
-            .archive(actor.organizationId, labelId)
-            .pipe(
-              Effect.catchTag("SqlError", failJobsStorageError),
-              Effect.map(Option.getOrUndefined)
+          const result = yield* Effect.gen(function* () {
+            const archived = yield* jobLabelsRepository
+              .archive(actor.organizationId, labelId)
+              .pipe(Effect.map(Option.getOrUndefined));
+
+            if (archived === undefined) {
+              return yield* Effect.fail(
+                new JobLabelNotFoundError({
+                  labelId,
+                  message: "Job label does not exist in the organization",
+                })
+              );
+            }
+
+            yield* Effect.all(
+              archived.removedWorkItemIds.map((workItemId) =>
+                activityRecorder.recordLabelRemovedFromWorkItem(
+                  actor,
+                  workItemId,
+                  archived.label
+                )
+              )
             );
 
-          if (label !== undefined) {
-            return label;
+            return archived.label;
+          }).pipe(Effect.either);
+
+          if (Either.isRight(result)) {
+            return result.right;
           }
 
-          return yield* Effect.fail(
-            new JobLabelNotFoundError({
-              labelId,
-              message: "Job label does not exist in the organization",
-            })
-          );
+          switch (result.left._tag) {
+            case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+              return yield* result.left.userId === actor.userId
+                ? Effect.fail(
+                    new JobAccessDeniedError({
+                      message:
+                        "Your organization access changed while the request was running",
+                    })
+                  )
+                : Effect.die(result.left);
+            }
+            case JOB_NOT_FOUND_ERROR_TAG:
+            case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+              return yield* Effect.die(result.left);
+            }
+            case "SqlError": {
+              return yield* failJobsStorageError(result.left);
+            }
+            default: {
+              return yield* Effect.fail(result.left);
+            }
+          }
         }
       );
 
@@ -372,7 +408,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -458,7 +498,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -530,7 +574,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -651,18 +699,16 @@ export class JobsService extends Effect.Service<JobsService>()(
                   assignment.label
                 );
               }
-
-              return yield* loadJobDetailOrFail(
-                actor.organizationId,
-                workItemId,
-                jobsRepository
-              );
             })
           )
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobDetailOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -726,18 +772,16 @@ export class JobsService extends Effect.Service<JobsService>()(
                   assignment.label
                 );
               }
-
-              return yield* loadJobDetailOrFail(
-                actor.organizationId,
-                workItemId,
-                jobsRepository
-              );
             })
           )
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobDetailOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -881,6 +925,16 @@ function loadJobDetailOrFail(
       })
     );
   });
+}
+
+function loadJobOrFail(
+  organizationId: OrganizationId,
+  workItemId: WorkItemId,
+  jobsRepository: JobsRepository
+): Effect.Effect<Job, JobNotFoundError | JobStorageError> {
+  return loadJobDetailOrFail(organizationId, workItemId, jobsRepository).pipe(
+    Effect.map((detail) => detail.job)
+  );
 }
 
 function failJobsStorageError(

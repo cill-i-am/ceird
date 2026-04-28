@@ -6,6 +6,8 @@ import {
   JobLabelResponseSchema,
   JobLabelsResponseSchema,
   JobListResponseSchema,
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+  JOB_LABEL_NOT_FOUND_ERROR_TAG,
   REGION_NOT_FOUND_ERROR_TAG,
   SitesOptionsResponseSchema,
 } from "@task-tracker/jobs-core";
@@ -452,6 +454,22 @@ describe("jobs http integration", () => {
         JobLabelResponseSchema
       )(await createLabelResponse.json());
 
+      const duplicateCreateLabelResponse = await api.handler(
+        makeJsonRequest(
+          "/job-labels",
+          {
+            name: " waiting po ",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(duplicateCreateLabelResponse.status).toBe(409);
+      await expect(duplicateCreateLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+      });
+
       const updateLabelResponse = await api.handler(
         makeJsonRequest(
           `/job-labels/${createdLabel.id}`,
@@ -471,6 +489,39 @@ describe("jobs http integration", () => {
       expect(updatedLabel).toMatchObject({
         id: createdLabel.id,
         name: "Waiting on PO",
+      });
+
+      const conflictingLabelResponse = await api.handler(
+        makeJsonRequest(
+          "/job-labels",
+          {
+            name: "Callback needed",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(conflictingLabelResponse.status).toBe(201);
+      const conflictingLabel = ParseResult.decodeUnknownSync(
+        JobLabelResponseSchema
+      )(await conflictingLabelResponse.json());
+
+      const duplicateUpdateLabelResponse = await api.handler(
+        makeJsonRequest(
+          `/job-labels/${conflictingLabel.id}`,
+          {
+            name: " waiting on po ",
+          },
+          {
+            cookieJar: ownerCookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(duplicateUpdateLabelResponse.status).toBe(409);
+      await expect(duplicateUpdateLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
       });
 
       const labelsResponse = await api.handler(
@@ -587,7 +638,62 @@ describe("jobs http integration", () => {
       const labelsAfterArchive = ParseResult.decodeUnknownSync(
         JobLabelsResponseSchema
       )(await labelsAfterArchiveResponse.json());
-      expect(labelsAfterArchive.labels).toStrictEqual([]);
+      expect(labelsAfterArchive.labels).toStrictEqual([conflictingLabel]);
+
+      const updateArchivedLabelResponse = await api.handler(
+        makeJsonRequest(
+          `/job-labels/${updatedLabel.id}`,
+          {
+            name: "Archived label",
+          },
+          {
+            cookieJar: ownerCookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(updateArchivedLabelResponse.status).toBe(404);
+      await expect(updateArchivedLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+      });
+
+      const assignArchivedLabelResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${createdJob.id}/labels`,
+          {
+            labelId: updatedLabel.id,
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(assignArchivedLabelResponse.status).toBe(404);
+      await expect(assignArchivedLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+      });
+
+      const removeArchivedLabelResponse = await api.handler(
+        makeRequest(`/jobs/${createdJob.id}/labels/${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+          method: "DELETE",
+        })
+      );
+      expect(removeArchivedLabelResponse.status).toBe(404);
+      await expect(removeArchivedLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+      });
+
+      const archiveMissingLabelResponse = await api.handler(
+        makeRequest(`/job-labels/${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+          method: "DELETE",
+        })
+      );
+      expect(archiveMissingLabelResponse.status).toBe(404);
+      await expect(archiveMissingLabelResponse.json()).resolves.toMatchObject({
+        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+      });
 
       const memberDetailResponse = await api.handler(
         makeRequest(`/jobs/${createdJob.id}`, {

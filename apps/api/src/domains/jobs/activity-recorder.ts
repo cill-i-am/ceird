@@ -102,6 +102,12 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordLabelRemoved = Effect.fn(
         "JobsActivityRecorder.recordLabelRemoved"
       )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+        yield* recordLabelRemovedFromWorkItem(actor, job.id, label);
+      });
+
+      const recordLabelRemovedFromWorkItem = Effect.fn(
+        "JobsActivityRecorder.recordLabelRemovedFromWorkItem"
+      )(function* (actor: JobsActor, workItemId: Job["id"], label: JobLabel) {
         yield* repository.addActivity({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
@@ -110,7 +116,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
             labelId: label.id,
             labelName: label.name,
           },
-          workItemId: job.id,
+          workItemId,
         });
       });
 
@@ -138,6 +144,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
         recordCreated,
         recordLabelAssigned,
         recordLabelRemoved,
+        recordLabelRemovedFromWorkItem,
         recordPatched,
         recordReopened,
         recordTransition,

@@ -7,7 +7,9 @@ CREATE TABLE "job_labels" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
   "archived_at" timestamp with time zone,
   CONSTRAINT "job_labels_name_not_empty_chk" CHECK (length(trim("job_labels"."name")) > 0),
-  CONSTRAINT "job_labels_normalized_name_not_empty_chk" CHECK (length(trim("job_labels"."normalized_name")) > 0)
+  CONSTRAINT "job_labels_name_max_length_chk" CHECK (length(trim("job_labels"."name")) <= 48),
+  CONSTRAINT "job_labels_normalized_name_not_empty_chk" CHECK (length(trim("job_labels"."normalized_name")) > 0),
+  CONSTRAINT "job_labels_normalized_name_max_length_chk" CHECK (length(trim("job_labels"."normalized_name")) <= 48)
 );
 --> statement-breakpoint
 CREATE TABLE "work_item_labels" (
@@ -35,8 +37,6 @@ CREATE UNIQUE INDEX "job_labels_organization_normalized_active_idx" ON "job_labe
 CREATE INDEX "job_labels_organization_name_idx" ON "job_labels" USING btree ("organization_id","name","id") WHERE "job_labels"."archived_at" is null;
 --> statement-breakpoint
 CREATE INDEX "work_item_labels_label_work_item_idx" ON "work_item_labels" USING btree ("organization_id","label_id","work_item_id");
---> statement-breakpoint
-CREATE INDEX "work_item_labels_work_item_idx" ON "work_item_labels" USING btree ("work_item_id");
 --> statement-breakpoint
 ALTER TABLE "work_item_activity" DROP CONSTRAINT "work_item_activity_event_type_chk";
 --> statement-breakpoint

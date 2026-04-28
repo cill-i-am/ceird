@@ -525,9 +525,17 @@
           "name": "job_labels_name_not_empty_chk",
           "value": "length(trim(\"job_labels\".\"name\")) > 0"
         },
+        "job_labels_name_max_length_chk": {
+          "name": "job_labels_name_max_length_chk",
+          "value": "length(trim(\"job_labels\".\"name\")) <= 48"
+        },
         "job_labels_normalized_name_not_empty_chk": {
           "name": "job_labels_normalized_name_not_empty_chk",
           "value": "length(trim(\"job_labels\".\"normalized_name\")) > 0"
+        },
+        "job_labels_normalized_name_max_length_chk": {
+          "name": "job_labels_normalized_name_max_length_chk",
+          "value": "length(trim(\"job_labels\".\"normalized_name\")) <= 48"
         }
       },
       "isRLSEnabled": false
@@ -2193,21 +2201,6 @@
               "asc": true,
               "nulls": "last"
             },
-            {
-              "expression": "work_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "work_item_labels_work_item_idx": {
-          "name": "work_item_labels_work_item_idx",
-          "columns": [
             {
               "expression": "work_item_id",
               "isExpression": false,

@@ -44,6 +44,7 @@ const kindValuesSql = sql.raw(
 const activityEventTypeValuesSql = sql.raw(
   JOB_ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
 );
+const jobLabelNameMaxLength = 48;
 
 export const serviceRegion = pgTable(
   "service_regions",
@@ -198,8 +199,16 @@ export const jobLabel = pgTable(
       sql`length(trim(${table.name})) > 0`
     ),
     check(
+      "job_labels_name_max_length_chk",
+      sql`length(trim(${table.name})) <= ${jobLabelNameMaxLength}`
+    ),
+    check(
       "job_labels_normalized_name_not_empty_chk",
       sql`length(trim(${table.normalizedName})) > 0`
+    ),
+    check(
+      "job_labels_normalized_name_max_length_chk",
+      sql`length(trim(${table.normalizedName})) <= ${jobLabelNameMaxLength}`
     ),
   ]
 );
@@ -349,7 +358,6 @@ export const workItemLabel = pgTable(
       table.labelId,
       table.workItemId
     ),
-    index("work_item_labels_work_item_idx").on(table.workItemId),
   ]
 );
 
