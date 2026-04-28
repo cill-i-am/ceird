@@ -2,6 +2,7 @@
 import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type { WorkItemIdType } from "@task-tracker/jobs-core";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
@@ -142,6 +143,23 @@ describe("jobs route loader", () => {
   );
 
   it(
+    "normalizes unknown jobs view search values to list mode",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { decodeJobsSearch } = await import("./_app._org.jobs");
+
+      expect(decodeJobsSearch({ view: "bogus" })).toStrictEqual({
+        view: undefined,
+      });
+      expect(decodeJobsSearch({ view: "map" })).toStrictEqual({
+        view: "map",
+      });
+    }
+  );
+
+  it(
     "renders the jobs queue from loader-seeded atom state on the first paint",
     {
       timeout: 10_000,
@@ -187,6 +205,58 @@ describe("jobs route loader", () => {
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
+    }
+  );
+
+  it(
+    "keeps list hotkeys enabled when the routed jobs outlet is present",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const { JobsRouteContent } =
+        await import("#/features/jobs/jobs-route-content");
+
+      render(
+        <JobsRouteContent
+          activeOrganizationId={organizationId}
+          activeOrganizationName="Acme Field Ops"
+          list={{
+            items: [
+              {
+                createdAt: "2026-04-23T11:00:00.000Z",
+                id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+                kind: "job",
+                priority: "none",
+                status: "new",
+                title: "Inspect boiler",
+                updatedAt: "2026-04-23T12:00:00.000Z",
+              },
+            ],
+            nextCursor: undefined,
+          }}
+          listHotkeysEnabled
+          options={{
+            contacts: [],
+            members: [],
+            regions: [],
+            sites: [],
+          }}
+          viewer={{
+            role: "owner",
+            userId: "user_123",
+          }}
+        >
+          <div data-testid="jobs-outlet-placeholder" />
+        </JobsRouteContent>
+      );
+
+      await user.keyboard("/");
+
+      expect(
+        screen.getByRole("textbox", { name: /search jobs/i })
+      ).toHaveFocus();
     }
   );
 });

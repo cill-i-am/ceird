@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { cn } from "#/lib/utils";
 
 export interface CommandSelectOption {
@@ -43,10 +44,13 @@ export interface CommandSelectProps {
   readonly groups: readonly CommandSelectGroup[];
   readonly id: string;
   readonly onValueChange: (value: string) => void;
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly open?: boolean;
   readonly placeholder: string;
   readonly prefix?: React.ReactNode;
   readonly searchPlaceholder?: string;
   readonly showGroupHeadings?: boolean;
+  readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly value: string;
 }
 
@@ -60,22 +64,37 @@ export function CommandSelect({
   groups,
   id,
   onValueChange,
+  onOpenChange,
+  open: controlledOpen,
   placeholder,
   prefix,
   searchPlaceholder = placeholder,
   showGroupHeadings = true,
+  triggerRef,
   value,
 }: CommandSelectProps) {
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
   const visibleGroups = groups.filter((group) => group.options.length > 0);
   const selectedOption =
     visibleGroups
       .flatMap((group) => group.options)
       .find((option) => option.value === value) ?? null;
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(nextOpen);
+      }
+
+      onOpenChange?.(nextOpen);
+    },
+    [controlledOpen, onOpenChange]
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
+        ref={triggerRef}
         type="button"
         id={id}
         disabled={disabled}
@@ -143,11 +162,15 @@ export function CommandSelect({
                           className="text-muted-foreground"
                         />
                       ) : null}
-                      <span className="truncate">{option.label}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {option.label}
+                      </span>
                       {option.shortcut ? (
-                        <span className="order-3 text-muted-foreground tabular-nums">
-                          {option.shortcut}
-                        </span>
+                        <ShortcutHint
+                          className="order-3 shrink-0 tabular-nums"
+                          hotkey={option.shortcut}
+                          label={option.label}
+                        />
                       ) : null}
                     </CommandItem>
                   ))}

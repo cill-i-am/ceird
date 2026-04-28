@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -281,6 +282,69 @@ describe("user settings page", () => {
     await expect(
       screen.findByText("Password updated.")
     ).resolves.toHaveAttribute("role", "status");
+  }, 10_000);
+
+  it("submits only the focused settings form with the submit hotkey", async () => {
+    const interaction = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <UserSettingsPage user={user} />
+      </HotkeysProvider>
+    );
+
+    await interaction.clear(screen.getByLabelText("Display name"));
+    await interaction.type(
+      screen.getByLabelText("Display name"),
+      "Taylor Hotkey"
+    );
+    await interaction.type(
+      screen.getByLabelText("New email"),
+      "hotkey@example.com"
+    );
+    await interaction.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => {
+      expect(mockedChangeEmail).toHaveBeenCalledWith({
+        newEmail: "hotkey@example.com",
+        callbackURL: "http://localhost:3000/settings?emailChange=complete",
+      });
+    });
+    expect(mockedUpdateUser).not.toHaveBeenCalled();
+    expect(mockedChangePassword).not.toHaveBeenCalled();
+
+    await interaction.click(screen.getByLabelText("Display name"));
+    await interaction.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => {
+      expect(mockedUpdateUser).toHaveBeenCalledWith({
+        name: "Taylor Hotkey",
+        image: null,
+      });
+    });
+    expect(mockedChangePassword).not.toHaveBeenCalled();
+
+    await interaction.type(
+      screen.getByLabelText("Current password"),
+      "old-password"
+    );
+    await interaction.type(
+      screen.getByLabelText("New password"),
+      "new-password"
+    );
+    await interaction.type(
+      screen.getByLabelText("Confirm new password"),
+      "new-password"
+    );
+    await interaction.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => {
+      expect(mockedChangePassword).toHaveBeenCalledWith({
+        currentPassword: "old-password",
+        newPassword: "new-password",
+        revokeOtherSessions: true,
+      });
+    });
   }, 10_000);
 
   it("rejects unchanged password submissions before calling Better Auth", async () => {

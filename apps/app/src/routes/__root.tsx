@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   ClientOnly,
   HeadContent,
@@ -78,9 +79,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="font-sans [overflow-wrap:anywhere] antialiased selection:bg-primary/20">
         <TooltipProvider>
-          {children}
-          <DevelopmentDevtoolsIsland />
-          <Scripts />
+          <HotkeysProvider>
+            {children}
+            <DevelopmentDevtoolsIsland />
+            <Scripts />
+          </HotkeysProvider>
         </TooltipProvider>
       </body>
     </html>

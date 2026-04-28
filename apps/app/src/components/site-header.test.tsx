@@ -1,9 +1,24 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { SiteHeader } from "./site-header";
 
-const { mockedUseMatches } = vi.hoisted(() => ({
+const {
+  mockedActiveScopes,
+  mockedNavigate,
+  mockedPathname,
+  mockedSearch,
+  mockedUseMatches,
+} = vi.hoisted(() => ({
+  mockedActiveScopes: [] as unknown[],
+  mockedNavigate: vi.fn<() => Promise<void>>(),
+  mockedPathname: {
+    value: "/jobs",
+  },
+  mockedSearch: {
+    value: {} as Record<string, unknown>,
+  },
   mockedUseMatches:
     vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
 }));
@@ -22,12 +37,37 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: () => mockedNavigate,
     useMatches: mockedUseMatches as typeof actual.useMatches,
+    useRouterState: ((options?: {
+      select?: (state: { location: { pathname: string } }) => unknown;
+    }) => {
+      const state = {
+        location: {
+          pathname: mockedPathname.value,
+          search: mockedSearch.value,
+        },
+      };
+
+      return options?.select ? options.select(state) : state;
+    }) as typeof actual.useRouterState,
   };
 });
 
 vi.mock(import("#/components/ThemeToggle"), () => ({
   default: () => <button type="button">Theme mode</button>,
+}));
+
+vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
+  ShortcutHelpOverlay: ({
+    activeScopes,
+  }: {
+    activeScopes: readonly string[];
+  }) => {
+    mockedActiveScopes.push(activeScopes);
+
+    return <button type="button">Keyboard shortcuts</button>;
+  },
 }));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
@@ -51,6 +91,9 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 describe("site header", () => {
   beforeEach(() => {
+    mockedActiveScopes.length = 0;
+    mockedPathname.value = "/jobs";
+    mockedSearch.value = {};
     mockedUseMatches.mockImplementation(({ select }) =>
       select([
         { id: "__root__", staticData: {} },
@@ -69,6 +112,9 @@ describe("site header", () => {
   });
 
   afterEach(() => {
+    if (typeof window.localStorage.clear === "function") {
+      window.localStorage.clear();
+    }
     vi.clearAllMocks();
   });
 
@@ -78,7 +124,11 @@ describe("site header", () => {
       timeout: 10_000,
     },
     () => {
-      render(<SiteHeader />);
+      render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
 
       expect(
         screen.getByRole("button", { name: /toggle navigation/i })
@@ -91,6 +141,110 @@ describe("site header", () => {
       expect(
         screen.getByRole("button", { name: /theme mode/i })
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /keyboard shortcuts/i })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it(
+    "activates job drawer shortcut scopes for job drawer routes",
+    { timeout: 10_000 },
+    () => {
+      mockedPathname.value = "/jobs/new";
+
+      const { rerender } = render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(
+        screen.getByRole("button", { name: /keyboard shortcuts/i })
+      ).toBeInTheDocument();
+      expect(mockedActiveScopes.at(-1)).toStrictEqual([
+        "global",
+        "jobs",
+        "job-create",
+      ]);
+
+      mockedPathname.value = "/jobs/11111111-1111-4111-8111-111111111111";
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(
+        screen.getByRole("button", { name: /keyboard shortcuts/i })
+      ).toBeInTheDocument();
+      expect(mockedActiveScopes.at(-1)).toStrictEqual([
+        "global",
+        "jobs",
+        "job-detail",
+      ]);
+    }
+  );
+
+  it(
+    "activates members, settings, and map shortcut scopes on matching routes",
+    { timeout: 10_000 },
+    () => {
+      mockedPathname.value = "/members";
+
+      const { rerender } = render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "members"]);
+
+      mockedPathname.value = "/settings";
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "settings"]);
+
+      mockedPathname.value = "/organization/settings";
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "settings"]);
+
+      mockedPathname.value = "/jobs";
+      mockedSearch.value = { view: "map" };
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual([
+        "global",
+        "jobs",
+        "map",
+      ]);
+
+      mockedSearch.value = {};
+
+      rerender(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "jobs"]);
     }
   );
 });

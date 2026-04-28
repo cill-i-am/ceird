@@ -39,3 +39,12 @@ Model runtime and type safety according to the boundary the code is crossing.
 - Prefer inferred types from `Schema` for shared DTOs and domain payloads that cross module or service boundaries.
 - Keep plain TypeScript interfaces and types for simple internal computed objects that stay inside a trusted local implementation and do not need runtime decoding.
 - Do not add runtime schemas for internal shapes unless they provide a clear boundary-level benefit such as decoding, validation, serialization, or contract sharing.
+
+## Hotkeys And UI Actions
+
+When adding or changing app UI, treat keyboard access as part of the feature.
+
+- Any new route, primary navigation target, workflow action, repeated list action, drawer/form action, command/menu item, or icon-only control should either have a hotkey or an explicit reason why a hotkey would be harmful or unnecessary.
+- Register shortcuts through the app hotkey layer rather than ad hoc `keydown` listeners.
+- Show discoverability with the shared shortcut UI, such as keycaps in command rows, menu rows, tooltips, and the keyboard shortcuts help overlay.
+- Keep shortcuts context-aware. Avoid global single-key shortcuts while the user is typing or when the action is unavailable.

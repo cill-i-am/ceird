@@ -1,7 +1,9 @@
 import {
   Outlet,
   createFileRoute,
+  useNavigate,
   useRouteContext,
+  useRouterState,
 } from "@tanstack/react-router";
 import type { OrganizationId } from "@task-tracker/identity-core";
 import type {
@@ -10,6 +12,7 @@ import type {
 } from "@task-tracker/jobs-core";
 
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
+import { decodeJobsSearch } from "#/features/jobs/jobs-search";
 import {
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
@@ -20,6 +23,8 @@ import {
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
+
+export { decodeJobsSearch };
 
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
@@ -92,6 +97,7 @@ export const Route = createFileRoute("/_app/_org/jobs")({
       to: "/jobs",
     },
   },
+  validateSearch: decodeJobsSearch,
   loader: ({ context }) => loadJobsRouteData(context),
   component: JobsRoute,
 });
@@ -101,13 +107,28 @@ function JobsRoute() {
     from: "/_app/_org",
   });
   const { list, options, viewer } = Route.useLoaderData();
+  const navigate = useNavigate({ from: "/jobs" });
+  const search = Route.useSearch();
+  const listHotkeysEnabled = useRouterState({
+    select: (state) => state.location.pathname === "/jobs",
+  });
 
   return (
     <JobsRouteContent
       activeOrganizationName={activeOrganization.name}
       activeOrganizationId={activeOrganizationId}
+      listHotkeysEnabled={listHotkeysEnabled}
       list={list}
+      onViewModeChange={(viewMode) => {
+        navigate({
+          search: (current) => ({
+            ...current,
+            view: viewMode === "list" ? undefined : viewMode,
+          }),
+        });
+      }}
       options={options}
+      viewMode={search.view ?? "list"}
       viewer={viewer}
     >
       <Outlet />

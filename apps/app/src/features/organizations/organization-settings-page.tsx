@@ -14,6 +14,7 @@ import {
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 
 import type { OrganizationSummary } from "./organization-access";
@@ -38,6 +39,7 @@ export function OrganizationSettingsPage({
   const [savedOrganizationName, setSavedOrganizationName] = React.useState(
     organization.name
   );
+  const formRef = React.useRef<HTMLFormElement | null>(null);
   const previousOrganizationIdRef = React.useRef(organization.id);
 
   const form = useForm({
@@ -120,6 +122,18 @@ export function OrganizationSettingsPage({
     });
   }, [form, organization.id, organization.name]);
 
+  useAppHotkey(
+    "settingsSubmit",
+    () => {
+      if (form.state.isSubmitting || form.state.isDefaultValue) {
+        return;
+      }
+
+      formRef.current?.requestSubmit();
+    },
+    { enabled: isHydrated }
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
       <AppPageHeader
@@ -135,6 +149,7 @@ export function OrganizationSettingsPage({
           className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
         >
           <form
+            ref={formRef}
             className="flex max-w-xl flex-col gap-5"
             method="post"
             noValidate

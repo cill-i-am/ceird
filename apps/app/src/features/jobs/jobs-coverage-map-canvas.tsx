@@ -43,7 +43,10 @@ export function JobsCoverageMapCanvas({
         touchPitch={false}
       >
         <FitMapToGroups groups={groups} />
-        <MapControls position="bottom-right" showZoom showFullscreen />
+        <MapControls
+          position="bottom-right"
+          controls={["zoom", "fullscreen"]}
+        />
         {groups.map((group) => {
           const googleMapsUrl = buildGoogleMapsUrl(group.site);
 

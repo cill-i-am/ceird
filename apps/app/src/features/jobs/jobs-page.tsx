@@ -61,8 +61,16 @@ import {
   TableRow,
 } from "#/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -73,6 +81,7 @@ import {
   jobsLookupAtom,
   jobsNoticeAtom,
   jobsOptionsStateAtom,
+  refreshJobsListAtom,
   visibleJobsAtom,
 } from "./jobs-state";
 import type { JobsListFilters } from "./jobs-state";
@@ -113,22 +122,32 @@ const STATUS_LABELS = {
 
 export function JobsPage({
   children,
+  listHotkeysEnabled = true,
+  onViewModeChange,
+  viewMode: controlledViewMode,
   viewer,
 }: {
   readonly activeOrganizationName: string;
   readonly children?: React.ReactNode;
+  readonly listHotkeysEnabled?: boolean;
+  readonly onViewModeChange?: (value: JobsViewMode) => void;
+  readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
-  const [viewMode, setViewMode] = React.useState<JobsViewMode>("list");
+  const [uncontrolledViewMode, setUncontrolledViewMode] =
+    React.useState<JobsViewMode>("list");
+  const viewMode = controlledViewMode ?? uncontrolledViewMode;
   const filters = useAtomValue(jobsListFiltersAtom);
   const jobs = useAtomValue(visibleJobsAtom);
   const lookup = useAtomValue(jobsLookupAtom);
   const notice = useAtomValue(jobsNoticeAtom);
   const optionsState = useAtomValue(jobsOptionsStateAtom);
+  const refreshJobs = useAtomSet(refreshJobsListAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
   const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
 
@@ -141,6 +160,22 @@ export function JobsPage({
     },
     [setFilters]
   );
+
+  const setViewMode = React.useCallback(
+    (nextViewMode: JobsViewMode) => {
+      if (nextViewMode === viewMode) {
+        return;
+      }
+
+      if (controlledViewMode === undefined) {
+        setUncontrolledViewMode(nextViewMode);
+      }
+
+      onViewModeChange?.(nextViewMode);
+    },
+    [controlledViewMode, onViewModeChange, viewMode]
+  );
+
   const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
     const actions: CommandAction[] = [
       ...(canCreateJobs
@@ -219,9 +254,46 @@ export function JobsPage({
     patchFilters,
     setFilters,
     viewMode,
+    setViewMode,
   ]);
 
   useRegisterCommandActions(jobsPageCommandActions);
+  useAppHotkey(
+    "jobsSearch",
+    () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+    { enabled: listHotkeysEnabled }
+  );
+  useAppHotkey(
+    "jobsCreate",
+    () => {
+      navigate({ to: "/jobs/new" });
+    },
+    { enabled: listHotkeysEnabled && canCreateJobs }
+  );
+  useAppHotkey(
+    "jobsRefresh",
+    () => {
+      refreshJobs();
+    },
+    { enabled: listHotkeysEnabled }
+  );
+  useAppHotkeySequence(
+    "jobsListView",
+    () => {
+      setViewMode("list");
+    },
+    { enabled: listHotkeysEnabled }
+  );
+  useAppHotkeySequence(
+    "jobsMapView",
+    () => {
+      setViewMode("map");
+    },
+    { enabled: listHotkeysEnabled }
+  );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -239,16 +311,7 @@ export function JobsPage({
           </div>
           <div className="flex items-center gap-2">
             <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
-            {canCreateJobs ? (
-              <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
-                <HugeiconsIcon
-                  icon={Add01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                New job
-              </Link>
-            ) : null}
+            {canCreateJobs ? <NewJobLink /> : null}
           </div>
         </div>
 
@@ -258,6 +321,7 @@ export function JobsPage({
           optionsState={optionsState.data}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
           onFiltersChange={patchFilters}
+          searchInputRef={searchInputRef}
         />
       </header>
 
@@ -312,6 +376,7 @@ function JobsCommandToolbar({
   onClearFilters,
   onFiltersChange,
   optionsState,
+  searchInputRef,
 }: {
   readonly filters: JobsListFilters;
   readonly hasCustomFilters: boolean;
@@ -326,6 +391,7 @@ function JobsCommandToolbar({
       readonly regionId?: string | undefined;
     }[];
   };
+  readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -337,6 +403,7 @@ function JobsCommandToolbar({
           <InputGroupInput
             aria-label="Search jobs"
             placeholder="Search jobs"
+            ref={searchInputRef}
             value={filters.query}
             onChange={(event) => onFiltersChange({ query: event.target.value })}
           />
@@ -786,18 +853,37 @@ function JobsEmptyState({
         </EmptyHeader>
         {canCreateJobs ? (
           <EmptyContent>
-            <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New job
-            </Link>
+            <NewJobLink />
           </EmptyContent>
         ) : null}
       </Empty>
     </section>
+  );
+}
+
+function NewJobLink() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link to="/jobs/new" className={buttonVariants({ size: "sm" })} />
+        }
+      >
+        <HugeiconsIcon
+          icon={Add01Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        New job
+      </TooltipTrigger>
+      <TooltipContent>
+        <span>New job</span>
+        <ShortcutHint
+          hotkey={HOTKEYS.jobsCreate.hotkey}
+          label={HOTKEYS.jobsCreate.label}
+        />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
