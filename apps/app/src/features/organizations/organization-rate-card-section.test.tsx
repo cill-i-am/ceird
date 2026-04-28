@@ -19,6 +19,8 @@ const standardRateCardId =
 const alternateRateCardId =
   "33333333-3333-4333-8333-333333333333" as RateCardIdType;
 const lineId = "44444444-4444-4444-8444-444444444444" as RateCardLineIdType;
+const secondLineId =
+  "55555555-5555-4555-8555-555555555555" as RateCardLineIdType;
 
 const {
   mockedCreateRateCard,
@@ -162,6 +164,62 @@ describe("organization rate card section", () => {
     expect(screen.queryByLabelText("Rate card")).not.toBeInTheDocument();
   });
 
+  it("removes a Standard card line and renumbers the update payload", async () => {
+    mockedListRateCards.mockReturnValue(
+      Effect.succeed({
+        items: [
+          buildRateCard("Standard", standardRateCardId, [
+            buildRateCardLine({
+              id: lineId,
+              kind: "custom",
+              name: "Parking",
+              position: 1,
+              unit: "visit",
+              value: 20,
+            }),
+            buildRateCardLine({
+              id: secondLineId,
+              kind: "labour",
+              name: "Labour",
+              position: 2,
+              unit: "hour",
+              value: 85,
+            }),
+          ]),
+        ],
+      })
+    );
+    const user = userEvent.setup();
+    renderRateCardSection();
+
+    await screen.findByDisplayValue("Parking");
+    await user.click(screen.getByRole("button", { name: "Remove line 1" }));
+    expect(screen.queryByDisplayValue("Parking")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Name for line 1")).toHaveValue("Labour");
+    await user.click(screen.getByRole("button", { name: "Save rate card" }));
+
+    await waitFor(() => {
+      expect(mockedUpdateRateCard).toHaveBeenCalledWith({
+        path: {
+          rateCardId: standardRateCardId,
+        },
+        payload: {
+          lines: [
+            {
+              kind: "labour",
+              name: "Labour",
+              position: 1,
+              unit: "hour",
+              value: 85,
+            },
+          ],
+          name: "Standard",
+        },
+      });
+    });
+    expect(mockedCreateRateCard).not.toHaveBeenCalled();
+  });
+
   it("shows validation errors for blank line names and negative values", async () => {
     const user = userEvent.setup();
     renderRateCardSection();
@@ -204,15 +262,20 @@ function renderRateCardSection() {
   );
 }
 
-function buildRateCard(name: string, id: RateCardIdType): RateCard {
+function buildRateCard(
+  name: string,
+  id: RateCardIdType,
+  lines?: RateCard["lines"]
+): RateCard {
   return {
     createdAt: "2026-04-28T09:00:00.000Z",
     id,
     lines:
-      name === "Standard"
+      lines ??
+      (name === "Standard"
         ? []
         : [
-            {
+            buildRateCardLine({
               id: lineId,
               kind: "custom",
               name: "Parking",
@@ -220,9 +283,34 @@ function buildRateCard(name: string, id: RateCardIdType): RateCard {
               rateCardId: id,
               unit: "visit",
               value: 20,
-            },
-          ],
+            }),
+          ]),
     name,
     updatedAt: "2026-04-28T09:00:00.000Z",
+  };
+}
+
+function buildRateCardLine({
+  id,
+  kind,
+  name,
+  position,
+  rateCardId = standardRateCardId,
+  unit,
+  value,
+}: Pick<
+  RateCard["lines"][number],
+  "id" | "kind" | "name" | "position" | "unit" | "value"
+> & {
+  readonly rateCardId?: RateCardIdType;
+}): RateCard["lines"][number] {
+  return {
+    id,
+    kind,
+    name,
+    position,
+    rateCardId,
+    unit,
+    value,
   };
 }

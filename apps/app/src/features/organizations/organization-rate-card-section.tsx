@@ -2,6 +2,8 @@
 
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import type { Result } from "@effect-atom/atom-react";
+import { Delete02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   RateCard,
   RateCardLine,
@@ -15,6 +17,11 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 
 import {
   createRateCardMutationAtom,
@@ -197,6 +204,15 @@ function RateCardForm({
     ]);
   }
 
+  function removeLine(lineId: string) {
+    setLines((current) => current.filter((line) => line.id !== lineId));
+    setLineErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id]) => id !== lineId)
+      )
+    );
+  }
+
   return (
     <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
       {lines.length > 0 ? (
@@ -212,6 +228,7 @@ function RateCardForm({
                   current.map((item) => (item.id === line.id ? nextLine : item))
                 )
               }
+              onRemove={() => removeLine(line.id)}
             />
           ))}
         </div>
@@ -245,11 +262,13 @@ function RateCardLineRow({
   index,
   line,
   onChange,
+  onRemove,
 }: {
   readonly errors: RateCardLineErrors;
   readonly index: number;
   readonly line: EditableRateCardLine;
   readonly onChange: (line: EditableRateCardLine) => void;
+  readonly onRemove: () => void;
 }) {
   const lineNumber = index + 1;
   const kindId = React.useId();
@@ -258,7 +277,7 @@ function RateCardLineRow({
   const unitId = React.useId();
 
   return (
-    <div className="grid gap-3 py-3 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)]">
+    <div className="grid gap-3 py-3 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">
       <label
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={kindId}
@@ -345,6 +364,24 @@ function RateCardLineRow({
         />
         <FieldError>{errors.unit}</FieldError>
       </label>
+      <div className="flex items-end">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label={`Remove line ${lineNumber}`}
+                onClick={onRemove}
+              />
+            }
+          >
+            <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+          </TooltipTrigger>
+          <TooltipContent>Remove line {lineNumber}</TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }
