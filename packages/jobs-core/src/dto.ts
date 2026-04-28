@@ -204,7 +204,12 @@ export const OrganizationActivityItemSchema = Schema.Struct({
   eventType: JobActivityEventTypeSchema,
   payload: JobActivityPayloadSchema,
   createdAt: IsoDateTimeString,
-});
+}).pipe(
+  Schema.filter(({ eventType, payload }) => eventType === payload.eventType),
+  Schema.annotations({
+    message: () => "eventType must match payload.eventType",
+  })
+);
 export type OrganizationActivityItem = Schema.Schema.Type<
   typeof OrganizationActivityItemSchema
 >;

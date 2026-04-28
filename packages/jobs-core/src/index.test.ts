@@ -433,6 +433,27 @@ describe("jobs-core", () => {
     ).toThrow(/lessThanOrEqualTo/);
   }, 5000);
 
+  it("rejects organization activity items whose event type differs from the payload", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            eventType: "status_changed",
+            payload: {
+              eventType: "priority_changed",
+              fromPriority: "none",
+              toPriority: "high",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+      })
+    ).toThrow(/eventType/);
+  }, 5000);
+
   it("keeps site options rich enough for maps and links", () => {
     const siteOption = {
       id: "550e8400-e29b-41d4-a716-446655440010",
