@@ -378,9 +378,20 @@ export const AddJobCostLineInputSchema = Schema.Struct({
   quantity: JobCostLineQuantitySchema,
   unitPriceMinor: JobCostLineUnitPriceMinorSchema,
   taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
-}).annotations({
-  parseOptions: { onExcessProperty: "error" },
-});
+}).pipe(
+  Schema.filter((input) =>
+    Number.isSafeInteger(
+      calculateJobCostLineTotalMinor({
+        quantity: input.quantity,
+        unitPriceMinor: input.unitPriceMinor,
+      })
+    )
+  ),
+  Schema.annotations({
+    message: () => "Expected a safe integer line total",
+    parseOptions: { onExcessProperty: "error" },
+  })
+);
 export type AddJobCostLineInput = Schema.Schema.Type<
   typeof AddJobCostLineInputSchema
 >;

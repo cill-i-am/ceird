@@ -453,6 +453,15 @@ describe("jobs-core", () => {
     expect(() =>
       decode({
         description: "Install replacement valve",
+        quantity: 9_999_999_999.99,
+        type: "labour",
+        unitPriceMinor: 2_147_483_647,
+      })
+    ).toThrow(/safe integer line total/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
         quantity: 1,
         taxRateBasisPoints: 10_001,
         type: "labour",
