@@ -62,12 +62,26 @@ export function OrganizationRateCardSection() {
   const loadRateCards = useAtomSet(listRateCardsAtom, {
     mode: "promiseExit",
   });
+  const [rateCardsLoaded, setRateCardsLoaded] = React.useState(false);
   const standardRateCard =
     rateCards.find((rateCard) => rateCard.name === STANDARD_RATE_CARD_NAME) ??
     null;
 
   React.useEffect(() => {
-    void loadRateCards();
+    let active = true;
+    setRateCardsLoaded(false);
+
+    void (async () => {
+      const exit = await loadRateCards();
+
+      if (active && Exit.isSuccess(exit)) {
+        setRateCardsLoaded(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, [loadRateCards]);
 
   return (
@@ -92,13 +106,37 @@ export function OrganizationRateCardSection() {
 
       <AsyncResultError result={listResult} />
 
-      {standardRateCard ? (
-        <ExistingStandardRateCardEditor rateCard={standardRateCard} />
-      ) : (
-        <DraftStandardRateCardEditor />
-      )}
+      <RateCardEditorSlot
+        listFailed={listResult._tag === "Failure"}
+        rateCardsLoaded={rateCardsLoaded}
+        standardRateCard={standardRateCard}
+      />
     </AppUtilityPanel>
   );
+}
+
+function RateCardEditorSlot({
+  listFailed,
+  rateCardsLoaded,
+  standardRateCard,
+}: {
+  readonly listFailed: boolean;
+  readonly rateCardsLoaded: boolean;
+  readonly standardRateCard: RateCard | null;
+}) {
+  if (standardRateCard) {
+    return <ExistingStandardRateCardEditor rateCard={standardRateCard} />;
+  }
+
+  if (rateCardsLoaded) {
+    return <DraftStandardRateCardEditor />;
+  }
+
+  if (listFailed) {
+    return null;
+  }
+
+  return <p className="text-sm text-muted-foreground">Loading rate card...</p>;
 }
 
 function ExistingStandardRateCardEditor({

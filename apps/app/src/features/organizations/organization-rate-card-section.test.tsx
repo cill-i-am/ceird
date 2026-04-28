@@ -5,7 +5,7 @@ import type {
   RateCardIdType,
   RateCardLineIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
@@ -115,6 +115,33 @@ describe("organization rate card section", () => {
     });
     expect(mockedUpdateRateCard).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Rate card")).not.toBeInTheDocument();
+  });
+
+  it("hides the draft save action until rate cards finish loading", async () => {
+    const rateCardsResponse = createDeferredRateCardsResponse();
+    mockedListRateCards.mockReturnValue(
+      Effect.promise(() => rateCardsResponse.promise)
+    );
+
+    renderRateCardSection();
+
+    await expect(
+      screen.findByText("Loading rate card...")
+    ).resolves.toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Save rate card" })
+    ).not.toBeInTheDocument();
+    expect(mockedCreateRateCard).not.toHaveBeenCalled();
+
+    act(() => {
+      rateCardsResponse.resolve({
+        items: [buildRateCard("Standard", standardRateCardId)],
+      });
+    });
+
+    await expect(
+      screen.findByRole("button", { name: "Save rate card" })
+    ).resolves.toBeVisible();
   });
 
   it("edits the existing Standard card and sends the entered line payload", async () => {
@@ -260,6 +287,20 @@ function renderRateCardSection() {
       <OrganizationRateCardSection />
     </RegistryProvider>
   );
+}
+
+function createDeferredRateCardsResponse() {
+  const { promise, resolve } = (
+    Promise as unknown as {
+      withResolvers: <Value>() => {
+        promise: Promise<Value>;
+        reject: (reason?: unknown) => void;
+        resolve: (value: Value) => void;
+      };
+    }
+  ).withResolvers<{ readonly items: readonly RateCard[] }>();
+
+  return { promise, resolve };
 }
 
 function buildRateCard(
