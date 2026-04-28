@@ -192,8 +192,12 @@ function updateJobDetailJob(
     return;
   }
 
+  const { contact, ...detailWithoutContact } = currentDetail;
+  const matchingContact = contact?.id === job.contactId ? { contact } : {};
+
   get.set(jobDetailStateAtomFamily(workItemId), {
-    ...currentDetail,
+    ...detailWithoutContact,
+    ...matchingContact,
     job,
   });
 }
