@@ -39,25 +39,20 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async (role) => {
-      mockedGetCurrentOrganizationMemberRole.mockResolvedValue({
-        role,
-      });
-
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
 
-      await expect(
+      expect(
         loadSettingsRoute({
           activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: false,
             targetOrganizationId: organizationId,
           },
+          currentOrganizationRole: role,
         })
-      ).resolves.toBeUndefined();
-      expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        organizationId
-      );
+      ).toBeUndefined();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
     }
   );
 
@@ -67,24 +62,27 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      mockedGetCurrentOrganizationMemberRole.mockResolvedValue({
-        role: "member",
-      });
-
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
-      const result = loadSettingsRoute({
-        activeOrganizationId: organizationId,
-        activeOrganizationSync: {
-          required: false,
-          targetOrganizationId: organizationId,
-        },
-      });
+      let result: unknown;
 
-      await expect(result).rejects.toMatchObject({
+      try {
+        loadSettingsRoute({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "member",
+        });
+      } catch (error) {
+        result = error;
+      }
+
+      expect(result).toMatchObject({
         options: { to: "/" },
       });
-      await expect(result).rejects.toSatisfy(isRedirect);
+      expect(result).toSatisfy(isRedirect);
     }
   );
 
@@ -97,15 +95,16 @@ describe("settings route loader", () => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
 
-      await expect(
+      expect(
         loadSettingsRoute({
           activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: true,
             targetOrganizationId: organizationId,
           },
+          currentOrganizationRole: undefined,
         })
-      ).resolves.toBeUndefined();
+      ).toBeUndefined();
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
     }
   );

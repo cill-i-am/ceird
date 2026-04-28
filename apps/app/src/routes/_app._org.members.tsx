@@ -1,9 +1,8 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 
-import {
-  getCurrentOrganizationMemberRole,
-  requireOrganizationAdministrationAccess,
-} from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import { OrganizationMembersPage } from "#/features/organizations/organization-members-page";
 
 export const Route = createFileRoute("/_app/_org/members")({
@@ -13,18 +12,20 @@ export const Route = createFileRoute("/_app/_org/members")({
       to: "/members",
     },
   },
-  beforeLoad: async () => {
-    const organizationAccess = await requireOrganizationAdministrationAccess();
-    const role = await getCurrentOrganizationMemberRole(
-      organizationAccess.activeOrganizationId
-    );
-
-    return {
-      currentMemberRole: role.role,
-    };
-  },
+  beforeLoad: ({ context }) => loadMembersRouteData(context),
   component: MembersRoute,
 });
+
+export function loadMembersRouteData(context: {
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  assertOrganizationAdministrationRouteContext(context);
+
+  return {
+    currentMemberRole: context.currentOrganizationRole,
+  };
+}
 
 function MembersRoute() {
   const { activeOrganizationId } = useRouteContext({ from: "/_app/_org" });
@@ -37,7 +38,7 @@ function MembersRoute() {
       currentMember={{
         email: session.user.email,
         name: session.user.name,
-        role: currentMemberRole,
+        role: currentMemberRole ?? "member",
       }}
     />
   );

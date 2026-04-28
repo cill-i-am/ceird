@@ -78,6 +78,13 @@
       "when": 1777387276679,
       "tag": "0010_strange_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777388946201,
+      "tag": "0011_glorious_george_stacy",
+      "breakpoints": true
     }
   ]
 }

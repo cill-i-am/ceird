@@ -279,6 +279,10 @@ export const workItem = pgTable(
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
+    index("work_items_title_trgm_idx").using(
+      "gin",
+      table.title.op("gin_trgm_ops")
+    ),
   ]
 );
 

@@ -5,7 +5,10 @@ import {
   useRouteContext,
   useRouterState,
 } from "@tanstack/react-router";
-import type { OrganizationId } from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 import type {
   JobListResponse,
   JobOptionsResponse,
@@ -41,6 +44,7 @@ const EMPTY_JOBS_LIST: JobListResponse = {
 interface JobsRouteOrganizationAccess {
   readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly currentUserId: string;
 }
 
@@ -73,9 +77,7 @@ export async function loadJobsRouteData(
   }
 
   const [activeRole, list, options] = await Promise.all([
-    getCurrentOrganizationMemberRole(
-      resolvedOrganizationAccess.activeOrganizationId
-    ),
+    resolveJobsRouteOrganizationRole(resolvedOrganizationAccess),
     listAllCurrentServerJobs({}),
     getCurrentServerJobOptions(),
   ]);
@@ -84,10 +86,24 @@ export async function loadJobsRouteData(
     list,
     options,
     viewer: {
-      role: activeRole.role,
+      role: activeRole,
       userId: resolvedOrganizationAccess.currentUserId,
     } satisfies JobsViewer,
   };
+}
+
+async function resolveJobsRouteOrganizationRole(
+  organizationAccess: JobsRouteOrganizationAccess
+) {
+  if (organizationAccess.currentOrganizationRole !== undefined) {
+    return organizationAccess.currentOrganizationRole;
+  }
+
+  const role = await getCurrentOrganizationMemberRole(
+    organizationAccess.activeOrganizationId
+  );
+
+  return role.role;
 }
 
 export const Route = createFileRoute("/_app/_org/jobs")({
