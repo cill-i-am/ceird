@@ -11,6 +11,7 @@ import {
   check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -185,11 +186,13 @@ export const jobLabel = pgTable(
     uniqueIndex("job_labels_organization_normalized_active_idx")
       .on(table.organizationId, table.normalizedName)
       .where(sql`${table.archivedAt} is null`),
-    index("job_labels_organization_name_idx").on(
-      table.organizationId,
-      table.name,
-      table.id
+    uniqueIndex("job_labels_id_organization_idx").on(
+      table.id,
+      table.organizationId
     ),
+    index("job_labels_organization_name_idx")
+      .on(table.organizationId, table.name, table.id)
+      .where(sql`${table.archivedAt} is null`),
     check(
       "job_labels_name_not_empty_chk",
       sql`length(trim(${table.name})) > 0`
@@ -309,6 +312,10 @@ export const workItem = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
+    uniqueIndex("work_items_id_organization_idx").on(
+      table.id,
+      table.organizationId
+    ),
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
@@ -318,12 +325,8 @@ export const workItem = pgTable(
 export const workItemLabel = pgTable(
   "work_item_labels",
   {
-    workItemId: uuid("work_item_id")
-      .notNull()
-      .references(() => workItem.id, { onDelete: "cascade" }),
-    labelId: uuid("label_id")
-      .notNull()
-      .references(() => jobLabel.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    labelId: uuid("label_id").notNull(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -331,6 +334,16 @@ export const workItemLabel = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.workItemId, table.labelId] }),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_labels_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.labelId, table.organizationId],
+      foreignColumns: [jobLabel.id, jobLabel.organizationId],
+      name: "work_item_labels_label_org_fk",
+    }).onDelete("cascade"),
     index("work_item_labels_label_work_item_idx").on(
       table.organizationId,
       table.labelId,

@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
 import { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql";
 import {
   ContactId as ContactIdSchema,
   ContactNotFoundError,
@@ -1966,7 +1967,10 @@ function normalizeOptionName(value: string | null, fallback: string): string {
   return fallback;
 }
 
-function mapJobLabelNameConflict(error: unknown, name: JobLabelName) {
+function mapJobLabelNameConflict(
+  error: SqlError.SqlError,
+  name: JobLabelName
+): Effect.Effect<never, JobLabelNameConflictError | SqlError.SqlError> {
   if (
     isUniqueConstraintError(
       error,

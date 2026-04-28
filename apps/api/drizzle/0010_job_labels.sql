@@ -20,15 +20,19 @@ CREATE TABLE "work_item_labels" (
 --> statement-breakpoint
 ALTER TABLE "job_labels" ADD CONSTRAINT "job_labels_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "work_item_labels" ADD CONSTRAINT "work_item_labels_work_item_id_work_items_id_fk" FOREIGN KEY ("work_item_id") REFERENCES "public"."work_items"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "work_item_labels" ADD CONSTRAINT "work_item_labels_label_id_job_labels_id_fk" FOREIGN KEY ("label_id") REFERENCES "public"."job_labels"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
 ALTER TABLE "work_item_labels" ADD CONSTRAINT "work_item_labels_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "job_labels_id_organization_idx" ON "job_labels" USING btree ("id","organization_id");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "work_items_id_organization_idx" ON "work_items" USING btree ("id","organization_id");
+--> statement-breakpoint
+ALTER TABLE "work_item_labels" ADD CONSTRAINT "work_item_labels_work_item_org_fk" FOREIGN KEY ("work_item_id","organization_id") REFERENCES "public"."work_items"("id","organization_id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "work_item_labels" ADD CONSTRAINT "work_item_labels_label_org_fk" FOREIGN KEY ("label_id","organization_id") REFERENCES "public"."job_labels"("id","organization_id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "job_labels_organization_normalized_active_idx" ON "job_labels" USING btree ("organization_id","normalized_name") WHERE "job_labels"."archived_at" is null;
 --> statement-breakpoint
-CREATE INDEX "job_labels_organization_name_idx" ON "job_labels" USING btree ("organization_id","name","id");
+CREATE INDEX "job_labels_organization_name_idx" ON "job_labels" USING btree ("organization_id","name","id") WHERE "job_labels"."archived_at" is null;
 --> statement-breakpoint
 CREATE INDEX "work_item_labels_label_work_item_idx" ON "work_item_labels" USING btree ("organization_id","label_id","work_item_id");
 --> statement-breakpoint

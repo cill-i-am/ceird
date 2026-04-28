@@ -481,6 +481,28 @@
           "isUnique": false,
           "concurrently": false,
           "method": "btree",
+          "with": {},
+          "where": "\"job_labels\".\"archived_at\" is null"
+        },
+        "job_labels_id_organization_idx": {
+          "name": "job_labels_id_organization_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
           "with": {}
         }
       },
@@ -1767,6 +1789,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "work_items_id_organization_idx": {
+          "name": "work_items_id_organization_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2179,30 +2222,30 @@
         }
       },
       "foreignKeys": {
-        "work_item_labels_work_item_id_work_items_id_fk": {
-          "name": "work_item_labels_work_item_id_work_items_id_fk",
-          "tableFrom": "work_item_labels",
-          "tableTo": "work_items",
-          "columnsFrom": ["work_item_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "work_item_labels_label_id_job_labels_id_fk": {
-          "name": "work_item_labels_label_id_job_labels_id_fk",
-          "tableFrom": "work_item_labels",
-          "tableTo": "job_labels",
-          "columnsFrom": ["label_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "work_item_labels_organization_id_organization_id_fk": {
           "name": "work_item_labels_organization_id_organization_id_fk",
           "tableFrom": "work_item_labels",
           "tableTo": "organization",
           "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "work_item_labels_work_item_org_fk": {
+          "name": "work_item_labels_work_item_org_fk",
+          "tableFrom": "work_item_labels",
+          "tableTo": "work_items",
+          "columnsFrom": ["work_item_id", "organization_id"],
+          "columnsTo": ["id", "organization_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "work_item_labels_label_org_fk": {
+          "name": "work_item_labels_label_org_fk",
+          "tableFrom": "work_item_labels",
+          "tableTo": "job_labels",
+          "columnsFrom": ["label_id", "organization_id"],
+          "columnsTo": ["id", "organization_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

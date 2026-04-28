@@ -3,7 +3,6 @@ import {
   CoordinatorMatchesAssigneeError,
   JobLabelNotFoundError,
   InvalidJobTransitionError,
-  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
   JobAccessDeniedError,
   JobNotFoundError,
@@ -30,7 +29,6 @@ import type {
   TransitionJobInput,
   UpdateJobLabelInput,
   WorkItemIdType as WorkItemId,
-  JobLabelNameConflictError,
 } from "@task-tracker/jobs-core";
 import { Effect, Either, Option } from "effect";
 
@@ -136,7 +134,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             name: input.name,
             organizationId: actor.organizationId,
           })
-          .pipe(Effect.catchAll(mapJobLabelMutationError));
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
       });
 
       const updateJobLabel = Effect.fn("JobsService.updateJobLabel")(function* (
@@ -151,7 +149,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             name: input.name,
           })
           .pipe(
-            Effect.catchAll(mapJobLabelMutationError),
+            Effect.catchTag("SqlError", failJobsStorageError),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -896,32 +894,6 @@ function makeJobsStorageError(error: unknown): JobStorageError {
     cause: error instanceof Error ? error.message : String(error),
     message: "Jobs storage operation failed",
   });
-}
-
-function mapJobLabelMutationError(
-  error: unknown
-): Effect.Effect<never, JobStorageError | JobLabelNameConflictError> {
-  if (hasErrorTag(error, "SqlError")) {
-    return failJobsStorageError(error);
-  }
-
-  if (hasErrorTag(error, JOB_LABEL_NAME_CONFLICT_ERROR_TAG)) {
-    return Effect.fail(error as JobLabelNameConflictError);
-  }
-
-  return Effect.die(error);
-}
-
-function hasErrorTag<Tag extends string>(
-  error: unknown,
-  tag: Tag
-): error is { readonly _tag: Tag } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === tag
-  );
 }
 
 function ensureCoordinatorDiffersFromAssignee(input: {
