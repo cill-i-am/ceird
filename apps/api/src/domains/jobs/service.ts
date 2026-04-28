@@ -29,8 +29,8 @@ import type {
   TransitionJobInput,
   UpdateJobLabelInput,
   WorkItemIdType as WorkItemId,
-
-  JobLabelNameConflictError} from "@task-tracker/jobs-core";
+  JobLabelNameConflictError,
+} from "@task-tracker/jobs-core";
 import { Effect, Either, Option } from "effect";
 
 import { JobsActivityRecorder } from "./activity-recorder.js";
@@ -206,7 +206,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               actor.organizationId,
               input.site.input.regionId
             )
-            .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
+            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
         }
 
         const geocodedSiteLocation =
@@ -620,7 +620,6 @@ export class JobsService extends Effect.Service<JobsService>()(
         input: AssignJobLabelInput
       ) {
         const actor = yield* loadActor(workItemId);
-        yield* authorization.ensureCanPatch(actor, workItemId);
 
         const result = yield* jobsRepository
           .withTransaction(
@@ -638,13 +637,21 @@ export class JobsService extends Effect.Service<JobsService>()(
                 );
               }
 
-              const label = yield* jobLabelsRepository.assignToJob({
+              yield* authorization.ensureCanAssignLabels(actor, job);
+
+              const assignment = yield* jobLabelsRepository.assignToJob({
                 labelId: input.labelId,
                 organizationId: actor.organizationId,
                 workItemId,
               });
 
-              yield* activityRecorder.recordLabelAssigned(actor, job, label);
+              if (assignment.changed) {
+                yield* activityRecorder.recordLabelAssigned(
+                  actor,
+                  job,
+                  assignment.label
+                );
+              }
 
               return yield* loadJobDetailOrFail(
                 actor.organizationId,
@@ -688,7 +695,6 @@ export class JobsService extends Effect.Service<JobsService>()(
         labelId: JobLabelId
       ) {
         const actor = yield* loadActor(workItemId);
-        yield* authorization.ensureCanPatch(actor, workItemId);
 
         const result = yield* jobsRepository
           .withTransaction(
@@ -706,13 +712,21 @@ export class JobsService extends Effect.Service<JobsService>()(
                 );
               }
 
-              const label = yield* jobLabelsRepository.removeFromJob({
+              yield* authorization.ensureCanAssignLabels(actor, job);
+
+              const assignment = yield* jobLabelsRepository.removeFromJob({
                 labelId,
                 organizationId: actor.organizationId,
                 workItemId,
               });
 
-              yield* activityRecorder.recordLabelRemoved(actor, job, label);
+              if (assignment.changed) {
+                yield* activityRecorder.recordLabelRemoved(
+                  actor,
+                  job,
+                  assignment.label
+                );
+              }
 
               return yield* loadJobDetailOrFail(
                 actor.organizationId,

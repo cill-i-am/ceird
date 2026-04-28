@@ -547,7 +547,10 @@ describe("jobs repositories integration", () => {
       })
     );
 
-    expect(assigned).toStrictEqual(updatedLabel);
+    expect(assigned).toStrictEqual({
+      changed: true,
+      label: updatedLabel,
+    });
 
     const duplicateAssigned = await runJobsEffect(
       databaseUrl,
@@ -558,7 +561,10 @@ describe("jobs repositories integration", () => {
       })
     );
 
-    expect(duplicateAssigned).toStrictEqual(updatedLabel);
+    expect(duplicateAssigned).toStrictEqual({
+      changed: false,
+      label: updatedLabel,
+    });
 
     const detail = expectSome(
       await runJobsEffect(
@@ -586,7 +592,10 @@ describe("jobs repositories integration", () => {
         workItemId: createdJob.id,
       })
     );
-    expect(removed).toStrictEqual(updatedLabel);
+    expect(removed).toStrictEqual({
+      changed: true,
+      label: updatedLabel,
+    });
 
     const secondRemoved = await runJobsEffect(
       databaseUrl,
@@ -596,7 +605,10 @@ describe("jobs repositories integration", () => {
         workItemId: createdJob.id,
       })
     );
-    expect(secondRemoved).toStrictEqual(updatedLabel);
+    expect(secondRemoved).toStrictEqual({
+      changed: false,
+      label: updatedLabel,
+    });
 
     const detailAfterSecondRemove = expectSome(
       await runJobsEffect(

@@ -73,6 +73,19 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
             )
       );
 
+      const ensureCanAssignLabels = Effect.fn(
+        "JobsAuthorization.ensureCanAssignLabels"
+      )((actor: JobsActor, job: Job) =>
+        hasElevatedAccess(actor) || job.assigneeId === actor.userId
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Members can only assign labels on jobs assigned to them",
+                job.id
+              )
+            )
+      );
+
       const ensureCanComment = Effect.fn("JobsAuthorization.ensureCanComment")(
         (actor: JobsActor) => ensureCanView(actor)
       );
@@ -132,6 +145,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       return {
         ensureCanAddVisit,
+        ensureCanAssignLabels,
         ensureCanComment,
         ensureCanCreate,
         ensureCanCreateSite,

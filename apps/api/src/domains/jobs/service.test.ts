@@ -1,4 +1,5 @@
 import { HttpServerRequest } from "@effect/platform";
+import { SqlError } from "@effect/sql";
 import {
   ActivityId,
   BlockedReasonRequiredError,
@@ -6,6 +7,7 @@ import {
   JobLabelId,
   JobAccessDeniedError,
   JobSchema,
+  JobStorageError,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
   VisitId,
@@ -116,8 +118,10 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
+  readonly assignLabelChanged?: boolean;
   readonly lockedJob?: Job;
-  readonly regionFailure?: RegionNotFoundError;
+  readonly regionFailure?: RegionNotFoundError | SqlError.SqlError;
+  readonly removeLabelChanged?: boolean;
   readonly transactionFailure?: OrganizationMemberNotFoundError;
 }
 
@@ -427,7 +431,10 @@ function makeHarness(
           workItemId,
         });
 
-        return jobLabel;
+        return {
+          changed: options.assignLabelChanged ?? true,
+          label: jobLabel,
+        };
       }),
     create: (input: {
       readonly name: JobLabel["name"];
@@ -466,7 +473,10 @@ function makeHarness(
           workItemId,
         });
 
-        return jobLabel;
+        return {
+          changed: options.removeLabelChanged ?? true,
+          label: jobLabel,
+        };
       }),
     update: (
       organizationId: OrganizationId,
@@ -654,6 +664,68 @@ describe("jobs service", () => {
     ]);
   }, 10_000);
 
+  it("lets assigned members assign and remove labels on their jobs", async () => {
+    const actor = makeActor("member");
+    const harness = makeHarness({
+      actor,
+      lockedJob: makeJob({ assigneeId: actor.userId }),
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          const assigned = yield* jobs.assignJobLabel(workItemId, { labelId });
+          const removed = yield* jobs.removeJobLabel(workItemId, labelId);
+
+          return { assigned, removed };
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      assigned: {
+        job: {
+          id: workItemId,
+        },
+      },
+      removed: {
+        job: {
+          id: workItemId,
+        },
+      },
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(2);
+    expect(harness.calls.assignLabel).toBe(1);
+    expect(harness.calls.removeLabel).toBe(1);
+  }, 10_000);
+
+  it("does not record label activity when assignment state does not change", async () => {
+    const harness = makeHarness({
+      assignLabelChanged: false,
+      lockedJob: makeJob({ labels: [] }),
+      removeLabelChanged: false,
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          yield* jobs.assignJobLabel(workItemId, { labelId });
+          yield* jobs.removeJobLabel(workItemId, labelId);
+        }),
+        harness
+      )
+    ).resolves.toBeUndefined();
+
+    expect(harness.calls.assignLabel).toBe(1);
+    expect(harness.calls.removeLabel).toBe(1);
+    expect(harness.calls.addActivity).toBe(0);
+    expect(harness.activityPayloads).toStrictEqual([]);
+  }, 10_000);
+
   it("geocodes inline site creation before creating the job", async () => {
     const harness = makeHarness();
 
@@ -743,6 +815,39 @@ describe("jobs service", () => {
     );
 
     expect(getFailure(exit)).toStrictEqual(failure);
+    expect(harness.calls.ensureRegion).toBe(1);
+    expect(harness.calls.geocode).toBe(0);
+    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.create).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("maps inline site region lookup storage failures before geocoding", async () => {
+    const harness = makeHarness({
+      regionFailure: new SqlError.SqlError({
+        message: "region lookup failed",
+      }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.create({
+          site: {
+            input: {
+              ...inlineSiteInput,
+              regionId,
+            },
+            kind: "create",
+          },
+          title: "Replace circulation pump",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobStorageError);
     expect(harness.calls.ensureRegion).toBe(1);
     expect(harness.calls.geocode).toBe(0);
     expect(harness.calls.createSite).toBe(0);

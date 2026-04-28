@@ -34,6 +34,7 @@ function makeJob(overrides: Partial<Job> = {}) {
     createdByUserId: "user_creator" as UserId,
     id: decodeWorkItemId(randomUUID()),
     kind: "job",
+    labels: [],
     priority: "none",
     siteId: undefined,
     status: "in_progress",
@@ -66,6 +67,8 @@ describe("jobs authorization", () => {
           const authorization = yield* JobsAuthorization;
           yield* authorization.ensureCanCreate(owner);
           yield* authorization.ensureCanCreateSite(owner);
+          yield* authorization.ensureCanManageLabels(owner);
+          yield* authorization.ensureCanAssignLabels(owner, assignedJob);
           yield* authorization.ensureCanPatch(owner, assignedJob.id);
           yield* authorization.ensureCanTransition(
             owner,
@@ -75,6 +78,37 @@ describe("jobs authorization", () => {
         })
       )
     ).resolves.toBeUndefined();
+
+    await expect(
+      runAuthorization(
+        Effect.gen(function* () {
+          const authorization = yield* JobsAuthorization;
+          yield* authorization.ensureCanManageLabels(member);
+        })
+      )
+    ).rejects.toMatchObject({
+      message: "Only organization owners and admins can manage job labels",
+    });
+
+    await expect(
+      runAuthorization(
+        Effect.gen(function* () {
+          const authorization = yield* JobsAuthorization;
+          yield* authorization.ensureCanAssignLabels(member, assignedJob);
+        })
+      )
+    ).resolves.toBeUndefined();
+
+    await expect(
+      runAuthorization(
+        Effect.gen(function* () {
+          const authorization = yield* JobsAuthorization;
+          yield* authorization.ensureCanAssignLabels(member, unassignedJob);
+        })
+      )
+    ).rejects.toMatchObject({
+      message: "Members can only assign labels on jobs assigned to them",
+    });
 
     await expect(
       runAuthorization(

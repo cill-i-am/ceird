@@ -140,6 +140,7 @@ interface JobLabelRow {
 }
 
 interface JobLabelAssignmentRow extends JobLabelRow {
+  readonly inserted_count: number;
   readonly work_item_id: string | null;
 }
 
@@ -305,6 +306,11 @@ export interface AssignJobLabelRecordInput {
   readonly labelId: JobLabelId;
   readonly organizationId: OrganizationId;
   readonly workItemId: WorkItemId;
+}
+
+export interface JobLabelAssignmentResult {
+  readonly changed: boolean;
+  readonly label: JobLabel;
 }
 
 const decodeJob = Schema.decodeUnknownSync(JobSchema);
@@ -1698,7 +1704,10 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             );
           }
 
-          return mapJobLabelRow(row);
+          return {
+            changed: row.inserted_count > 0,
+            label: mapJobLabelRow(row),
+          };
         }
       );
 
@@ -1713,7 +1722,7 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             input.workItemId
           );
 
-          yield* sql`
+          const rows = yield* sql<IdRow>`
             delete from work_item_labels
             using job_labels, work_items
             where work_item_labels.label_id = job_labels.id
@@ -1722,9 +1731,13 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
               and job_labels.id = ${input.labelId}
               and work_items.organization_id = ${input.organizationId}
               and work_items.id = ${input.workItemId}
+            returning work_item_labels.label_id as id
           `;
 
-          return label;
+          return {
+            changed: rows.length > 0,
+            label,
+          };
         }
       );
 
