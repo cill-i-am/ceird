@@ -2,6 +2,7 @@ import { HttpServerRequest } from "@effect/platform";
 import {
   ActivityId,
   BlockedReasonRequiredError,
+  calculateJobCostLineTotalMinor,
   CommentId,
   CostLineId,
   JobAccessDeniedError,
@@ -207,7 +208,10 @@ function makeHarness(
               createdAt: "2026-04-22T14:00:00.000Z",
               description: input.description,
               id: costLineId,
-              lineTotalMinor: Math.round(input.quantity * input.unitPriceMinor),
+              lineTotalMinor: calculateJobCostLineTotalMinor({
+                quantity: input.quantity,
+                unitPriceMinor: input.unitPriceMinor,
+              }),
               quantity: input.quantity,
               taxRateBasisPoints: input.taxRateBasisPoints,
               type: input.type,

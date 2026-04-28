@@ -3,6 +3,7 @@
 import { Briefcase01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  calculateJobCostLineTotalMinor,
   MAX_JOB_COST_LINE_QUANTITY,
   MAX_JOB_COST_LINE_UNIT_PRICE_MINOR,
 } from "@task-tracker/jobs-core";
@@ -120,9 +121,10 @@ export function JobCostsSection({
       return;
     }
 
-    const lineTotalMinor = Math.round(
-      quantityResult.quantity * unitPriceResult.unitPriceMinor
-    );
+    const lineTotalMinor = calculateJobCostLineTotalMinor({
+      quantity: quantityResult.quantity,
+      unitPriceMinor: unitPriceResult.unitPriceMinor,
+    });
 
     if (!Number.isSafeInteger(lineTotalMinor)) {
       setCostError("Line total is too large to submit safely.");

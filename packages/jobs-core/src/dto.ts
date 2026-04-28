@@ -405,7 +405,29 @@ export function calculateJobCostLineTotalMinor(input: {
   readonly quantity: number;
   readonly unitPriceMinor: number;
 }): number {
-  return Math.round(input.quantity * input.unitPriceMinor);
+  const quantityParts = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(input.quantity));
+
+  if (!quantityParts) {
+    return Number.NaN;
+  }
+
+  const quantityHundredths =
+    Number(quantityParts[1]) * 100 +
+    Number((quantityParts[2] ?? "").padEnd(2, "0"));
+
+  if (
+    !Number.isSafeInteger(quantityHundredths) ||
+    !Number.isSafeInteger(input.unitPriceMinor)
+  ) {
+    return Number.NaN;
+  }
+
+  const totalHundredthMinor =
+    BigInt(quantityHundredths) * BigInt(input.unitPriceMinor);
+  const roundedTotalMinor =
+    totalHundredthMinor / 100n + (totalHundredthMinor % 100n >= 50n ? 1n : 0n);
+
+  return Number(roundedTotalMinor);
 }
 
 export function calculateJobCostSummary(

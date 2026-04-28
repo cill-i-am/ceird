@@ -478,6 +478,12 @@ describe("jobs-core", () => {
         unitPriceMinor: 6500,
       })
     ).toBe(9750);
+    expect(
+      calculateJobCostLineTotalMinor({
+        quantity: 0.29,
+        unitPriceMinor: 50,
+      })
+    ).toBe(15);
 
     expect(
       calculateJobCostSummary([

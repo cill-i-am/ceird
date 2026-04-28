@@ -543,6 +543,93 @@ describe("jobs repositories integration", () => {
     });
   }, 30_000);
 
+  it("uses canonical decimal line totals when checking the job subtotal limit", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository decimal subtotal coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const createdJob = await runJobsEffect(
+      databaseUrl,
+      withJobsTransaction(
+        Effect.gen(function* () {
+          const job = yield* JobsRepository.create({
+            createdByUserId: identity.ownerUserId,
+            organizationId: identity.organizationId,
+            title: "Replace plant room equipment",
+          });
+
+          yield* JobsRepository.addCostLine({
+            authorUserId: identity.ownerUserId,
+            description: "Major equipment package",
+            organizationId: identity.organizationId,
+            quantity: 4_194_304,
+            type: "material",
+            unitPriceMinor: 2_147_483_647,
+            workItemId: job.id,
+          });
+          yield* JobsRepository.addCostLine({
+            authorUserId: identity.ownerUserId,
+            description: "Final safe subtotal line",
+            organizationId: identity.organizationId,
+            quantity: 1,
+            type: "material",
+            unitPriceMinor: 4_194_289,
+            workItemId: job.id,
+          });
+
+          return job;
+        })
+      )
+    );
+
+    const fractionalOverflowExit = await runJobsEffectExit(
+      databaseUrl,
+      withJobsTransaction(
+        JobsRepository.addCostLine({
+          authorUserId: identity.ownerUserId,
+          description: "Fractional line that rounds over the limit",
+          organizationId: identity.organizationId,
+          quantity: 0.29,
+          type: "material",
+          unitPriceMinor: 50,
+          workItemId: createdJob.id,
+        })
+      )
+    );
+
+    expectFailureTag(
+      fractionalOverflowExit,
+      JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG
+    );
+
+    const detail = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.getDetail(identity.organizationId, createdJob.id)
+    );
+    const detailValue = expectSome(detail);
+
+    expect(detailValue.costLines).toHaveLength(2);
+    expect(detailValue.costSummary.subtotalMinor).toBe(
+      Number.MAX_SAFE_INTEGER - 14
+    );
+  }, 30_000);
+
   it("rejects foreign-organization references on writes", async (context: {
     skip: (note?: string) => never;
   }) => {

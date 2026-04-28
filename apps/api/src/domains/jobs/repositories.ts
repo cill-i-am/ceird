@@ -1006,7 +1006,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             );
 
             const subtotalRows = yield* sql<WorkItemCostLineSubtotalRow>`
-              select sum(round(quantity * unit_price_minor))::text as subtotal_minor
+              select sum(floor(((quantity * 100) * unit_price_minor + 50) / 100))::text as subtotal_minor
               from work_item_cost_lines
               where work_item_id = ${input.workItemId}
             `;
