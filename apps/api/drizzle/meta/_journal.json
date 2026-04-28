@@ -71,6 +71,13 @@
       "when": 1777313943609,
       "tag": "0009_slow_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777386617498,
+      "tag": "0010_job_labels",
+      "breakpoints": true
     }
   ]
 }

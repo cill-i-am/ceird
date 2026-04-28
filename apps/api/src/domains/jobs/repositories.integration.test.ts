@@ -6,6 +6,7 @@ import {
   SiteId,
   UserId,
   WorkItemId,
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
 } from "@task-tracker/jobs-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Cause, ConfigProvider, Effect, Exit, Option, Schema } from "effect";
@@ -27,6 +28,7 @@ import {
 } from "../../platform/database/test-database.js";
 import {
   ContactsRepository,
+  JobLabelsRepository,
   JobsRepositoriesLive,
   JobsRepository,
   SitesRepository,
@@ -435,6 +437,120 @@ describe("jobs repositories integration", () => {
     ]);
     expect(bySite.items.map((item) => item.id)).toStrictEqual([middleJobId]);
     expect(byStatus.items.map((item) => item.id)).toStrictEqual([middleJobId]);
+  }, 30_000);
+
+  it("creates, assigns, removes, archives, and filters organization job labels", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_labels" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping label coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+    const identity = await seedIdentityRecords(databaseUrl);
+    const foreignIdentity = await seedIdentityRecords(databaseUrl);
+
+    const createdJob = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        title: "Replace lock cylinder",
+      })
+    );
+
+    const label = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Waiting on PO",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    const sameNameInOtherOrg = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Waiting on PO",
+        organizationId: foreignIdentity.organizationId,
+      })
+    );
+
+    expect(label.name).toBe("Waiting on PO");
+    expect(sameNameInOtherOrg.name).toBe("Waiting on PO");
+
+    const duplicateLabelExit = await runJobsEffectExit(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: " waiting on po ",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    expectFailureTag(duplicateLabelExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+
+    const assigned = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+
+    expect(assigned).toStrictEqual(label);
+
+    const detail = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(detail.job.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Waiting on PO",
+    ]);
+
+    const filtered = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { labelId: label.id })
+    );
+    expect(filtered.items.map((item) => item.id)).toStrictEqual([
+      createdJob.id,
+    ]);
+
+    const removed = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.removeFromJob({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+    expect(removed).toStrictEqual(label);
+
+    const archived = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.archive(identity.organizationId, label.id)
+    );
+    expect(Option.getOrUndefined(archived)?.id).toBe(label.id);
+
+    const labelsAfterArchive = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.list(identity.organizationId)
+    );
+    expect(labelsAfterArchive.map((jobLabel) => jobLabel.id)).not.toContain(
+      label.id
+    );
   }, 30_000);
 
   it("rejects foreign-organization references on writes", async (context: {

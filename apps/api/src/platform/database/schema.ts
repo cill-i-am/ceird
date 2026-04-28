@@ -21,6 +21,8 @@ export {
 export {
   contact,
   contactRelations,
+  jobLabel,
+  jobLabelRelations,
   jobsSchema,
   serviceRegion,
   serviceRegionRelations,
@@ -33,6 +35,8 @@ export {
   workItemActivityRelations,
   workItemComment,
   workItemCommentRelations,
+  workItemLabel,
+  workItemLabelRelations,
   workItemRelations,
   workItemVisit,
   workItemVisitRelations,
