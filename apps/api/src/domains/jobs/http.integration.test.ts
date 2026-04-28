@@ -485,6 +485,27 @@ describe("jobs http integration", () => {
       );
       expect(validVisitResponse.status).toBe(201);
 
+      const costLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${createdJob.id}/cost-lines`,
+          {
+            description: "Replacement expansion vessel",
+            quantity: 1,
+            taxRateBasisPoints: 2300,
+            type: "material",
+            unitPriceMinor: 18_500,
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(costLineResponse.status).toBe(201);
+      const costLine = (await costLineResponse.json()) as {
+        readonly lineTotalMinor: number;
+      };
+      expect(costLine.lineTotalMinor).toBe(18_500);
+
       const startedTransitionResponse = await api.handler(
         makeJsonRequest(
           `/jobs/${createdJob.id}/transitions`,
@@ -587,6 +608,10 @@ describe("jobs http integration", () => {
       const finalDetail = (await finalDetailResponse.json()) as {
         readonly activity: readonly unknown[];
         readonly comments: readonly unknown[];
+        readonly costLines: readonly unknown[];
+        readonly costSummary: {
+          readonly subtotalMinor: number;
+        };
         readonly job: {
           readonly completedAt?: string;
           readonly status: string;
@@ -596,8 +621,10 @@ describe("jobs http integration", () => {
       expect(finalDetail.job.status).toBe("in_progress");
       expect(finalDetail.job.completedAt).toBeUndefined();
       expect(finalDetail.comments).toHaveLength(1);
+      expect(finalDetail.costLines).toHaveLength(1);
+      expect(finalDetail.costSummary.subtotalMinor).toBe(18_500);
       expect(finalDetail.visits).toHaveLength(1);
-      expect(finalDetail.activity.length).toBeGreaterThanOrEqual(7);
+      expect(finalDetail.activity.length).toBeGreaterThanOrEqual(8);
     });
   }, 30_000);
 });

@@ -78,6 +78,19 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
             )
       );
 
+      const ensureCanAddCostLine = Effect.fn(
+        "JobsAuthorization.ensureCanAddCostLine"
+      )((actor: JobsActor, job: Job) =>
+        hasElevatedAccess(actor) || job.assigneeId === actor.userId
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Members can only add cost lines on jobs assigned to them",
+                job.id
+              )
+            )
+      );
+
       const ensureCanTransition = Effect.fn(
         "JobsAuthorization.ensureCanTransition"
       )((actor: JobsActor, job: Job, nextStatus: JobStatus) => {
@@ -119,6 +132,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       );
 
       return {
+        ensureCanAddCostLine,
         ensureCanAddVisit,
         ensureCanComment,
         ensureCanCreate,

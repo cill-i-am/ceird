@@ -3,6 +3,7 @@ import {
   ActivityId,
   BlockedReasonRequiredError,
   CommentId,
+  CostLineId,
   JobAccessDeniedError,
   JobSchema,
   OrganizationMemberNotFoundError,
@@ -16,6 +17,7 @@ import type {
   CreateSiteInput,
   Job,
   JobComment,
+  JobCostLine,
   JobActivity,
   JobActivityPayload,
   JobListResponse,
@@ -54,6 +56,7 @@ import { SiteGeocoder } from "./site-geocoder.js";
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
+const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
 const undefinedValue = undefined as undefined;
@@ -64,6 +67,7 @@ const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
 const regionId = "99999999-9999-4999-8999-999999999999" as RegionId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
+const costLineId = decodeCostLineId("99999999-9999-4999-8999-999999999998");
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const inlineSiteInput = {
   addressLine1: "1 Custom House Quay",
@@ -117,6 +121,7 @@ interface JobsServiceHarnessOptions {
 interface JobsServiceHarness {
   readonly calls: {
     addActivity: number;
+    addCostLine: number;
     addVisit: number;
     create: number;
     createSite: number;
@@ -139,6 +144,7 @@ function makeHarness(
   const lockedJob = options.lockedJob ?? makeJob();
   const calls = {
     addActivity: 0,
+    addCostLine: 0,
     addVisit: 0,
     create: 0,
     createSite: 0,
@@ -180,8 +186,32 @@ function makeHarness(
         id: decodeCommentId("77777777-7777-4777-8777-777777777777"),
         workItemId: input.workItemId,
       } satisfies JobComment),
-    addCostLine: (_input: unknown) =>
-      Effect.die(new Error("Unexpected repository call: addCostLine")),
+    addCostLine: (input: {
+      readonly authorUserId: UserId;
+      readonly description: string;
+      readonly organizationId: OrganizationId;
+      readonly quantity: number;
+      readonly taxRateBasisPoints?: number;
+      readonly type: "labour" | "material";
+      readonly unitPriceMinor: number;
+      readonly workItemId: Job["id"];
+    }) =>
+      Effect.sync(() => {
+        calls.addCostLine += 1;
+
+        return {
+          authorUserId: input.authorUserId,
+          createdAt: "2026-04-22T14:00:00.000Z",
+          description: input.description,
+          id: costLineId,
+          lineTotalMinor: Math.round(input.quantity * input.unitPriceMinor),
+          quantity: input.quantity,
+          taxRateBasisPoints: input.taxRateBasisPoints,
+          type: input.type,
+          unitPriceMinor: input.unitPriceMinor,
+          workItemId: input.workItemId,
+        } satisfies JobCostLine;
+      }),
     addVisit: (input: {
       readonly authorUserId: UserId;
       readonly durationMinutes: number;
@@ -587,6 +617,68 @@ describe("jobs service", () => {
 
     expect(harness.calls.findByIdForUpdate).toBe(0);
     expect(harness.calls.addVisit).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("adds a job cost line and records activity for the assigned user", async () => {
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      lockedJob: makeJob({
+        assigneeId: actorUserId,
+      }),
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.addCostLine(workItemId, {
+            description: "Replacement valve",
+            quantity: 1.5,
+            taxRateBasisPoints: 2300,
+            type: "material",
+            unitPriceMinor: 4200,
+          });
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      description: "Replacement valve",
+      lineTotalMinor: 6300,
+      type: "material",
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+  }, 10_000);
+
+  it("rejects cost line creation for unassigned regular members", async () => {
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      lockedJob: makeJob({
+        assigneeId: "unassigned_user" as UserId,
+      }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addCostLine(workItemId, {
+          description: "Replacement valve",
+          quantity: 1,
+          type: "material",
+          unitPriceMinor: 4200,
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 
