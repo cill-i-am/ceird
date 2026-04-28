@@ -58,6 +58,17 @@ export class JobStorageError extends Schema.TaggedError<JobStorageError>()(
   HttpApiSchema.annotations({ status: 503 })
 ) {}
 
+export const JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCostSummaryLimitExceededError" as const;
+export class JobCostSummaryLimitExceededError extends Schema.TaggedError<JobCostSummaryLimitExceededError>()(
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
+  {
+    message: Schema.String,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 422 })
+) {}
+
 export const INVALID_JOB_TRANSITION_ERROR_TAG =
   "@task-tracker/jobs-core/InvalidJobTransitionError" as const;
 export class InvalidJobTransitionError extends Schema.TaggedError<InvalidJobTransitionError>()(
@@ -170,6 +181,7 @@ export type JobsError =
   | JobAccessDeniedError
   | JobListCursorInvalidError
   | JobStorageError
+  | JobCostSummaryLimitExceededError
   | InvalidJobTransitionError
   | BlockedReasonRequiredError
   | CoordinatorMatchesAssigneeError

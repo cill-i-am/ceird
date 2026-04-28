@@ -78,6 +78,13 @@
       "when": 1777330000000,
       "tag": "0010_job_cost_lines",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777386879793,
+      "tag": "0011_rapid_lord_tyger",
+      "breakpoints": true
     }
   ]
 }

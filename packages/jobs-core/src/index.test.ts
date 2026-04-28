@@ -21,6 +21,7 @@ import {
   JobsApi,
   JobsApiGroup,
   JobsContextSchema,
+  JobCostSummaryLimitExceededError,
   JobTitleSchema,
   PatchJobInputSchema,
   SitesOptionsResponseSchema,
@@ -578,14 +579,20 @@ describe("jobs-core", () => {
     expect(
       spec.paths["/jobs/{workItemId}/visits"]?.post?.responses["400"]
     ).toBeDefined();
-    expect(spec.paths["/jobs/{workItemId}/cost-lines"]?.post?.operationId).toBe(
-      "jobs.addJobCostLine"
-    );
     expect(spec.paths["/jobs"]?.post?.responses["422"]).toBeDefined();
     expect(spec.paths["/sites/options"]?.get?.operationId).toBe(
       "sites.getSiteOptions"
     );
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
+  }, 5000);
+
+  it("surfaces the job cost line api contract", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const addCostLine =
+      spec.paths["/jobs/{workItemId}/cost-lines"]?.post ?? null;
+
+    expect(addCostLine?.operationId).toBe("jobs.addJobCostLine");
+    expect(addCostLine?.responses["422"]).toBeDefined();
   }, 5000);
 
   it("documents standalone site creation responses", () => {
@@ -701,6 +708,17 @@ describe("jobs-core", () => {
       "@task-tracker/jobs-core/SiteGeocodingFailedError"
     );
     expect(geocodingError.country).toBe("IE");
+
+    const costSummaryError = new JobCostSummaryLimitExceededError({
+      message: "Job cost summary subtotal would exceed a safe integer",
+      workItemId: Schema.decodeUnknownSync(WorkItemId)(
+        "550e8400-e29b-41d4-a716-446655440000"
+      ),
+    });
+
+    expect(costSummaryError._tag).toBe(
+      "@task-tracker/jobs-core/JobCostSummaryLimitExceededError"
+    );
   }, 5000);
 
   it("keeps title schema trimming strict", () => {

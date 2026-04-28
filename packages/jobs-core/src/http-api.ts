@@ -31,6 +31,7 @@ import {
   CoordinatorMatchesAssigneeError,
   InvalidJobTransitionError,
   JobAccessDeniedError,
+  JobCostSummaryLimitExceededError,
   JobListCursorInvalidError,
   JobNotFoundError,
   JobStorageError,
@@ -135,6 +136,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addSuccess(AddJobCostLineResponseSchema, { status: 201 })
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
+      .addError(JobCostSummaryLimitExceededError)
       .addError(JobStorageError)
   );
 

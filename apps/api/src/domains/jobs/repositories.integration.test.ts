@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   calculateJobCostLineTotalMinor,
-  JOB_STORAGE_ERROR_TAG,
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   OrganizationId,
   RegionId,
   SiteId,
@@ -526,7 +526,10 @@ describe("jobs repositories integration", () => {
       )
     );
 
-    expectFailureTag(overflowingLineExit, JOB_STORAGE_ERROR_TAG);
+    expectFailureTag(
+      overflowingLineExit,
+      JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG
+    );
 
     const detail = await runJobsEffect(
       databaseUrl,
@@ -664,6 +667,35 @@ describe("jobs repositories integration", () => {
         workItemId: primaryJob.id,
       })
     );
+
+    await expect(
+      withPool(databaseUrl, async (pool) => {
+        await pool.query(
+          `
+          insert into work_item_cost_lines (
+            id,
+            work_item_id,
+            organization_id,
+            author_user_id,
+            type,
+            description,
+            quantity,
+            unit_price_minor
+          )
+          values ($1, $2, $3, $4, 'material', 'Cross-org material', 1, 100)
+          `,
+          [
+            randomUUID(),
+            primaryJob.id,
+            foreignIdentity.organizationId,
+            foreignIdentity.ownerUserId,
+          ]
+        );
+      })
+    ).rejects.toMatchObject({
+      code: "23503",
+      constraint: "work_item_cost_lines_work_item_organization_fk",
+    });
 
     expectFailureTag(
       createWithForeignContactExit,

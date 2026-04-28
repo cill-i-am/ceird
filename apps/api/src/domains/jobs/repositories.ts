@@ -10,6 +10,7 @@ import {
   JobCommentSchema,
   JobCostLineSchema,
   JobCostLineQuantitySchema,
+  JobCostSummaryLimitExceededError,
   JobContactOptionSchema,
   JobDetailSchema,
   JobListCursor as JobListCursorSchema,
@@ -21,7 +22,6 @@ import {
   JobNotFoundError,
   JobSchema,
   JobSiteOptionSchema,
-  JobStorageError,
   JobVisitSchema,
   OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
@@ -140,9 +140,8 @@ interface WorkItemCostLineRow {
   readonly work_item_id: string;
 }
 
-interface WorkItemCostLineTotalRow {
-  readonly quantity: string;
-  readonly unit_price_minor: number;
+interface WorkItemCostLineSubtotalRow {
+  readonly subtotal_minor: string | null;
 }
 
 interface IdRow {
@@ -1006,8 +1005,8 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               }
             );
 
-            const existingCostLines = yield* sql<WorkItemCostLineTotalRow>`
-              select quantity, unit_price_minor
+            const subtotalRows = yield* sql<WorkItemCostLineSubtotalRow>`
+              select sum(round(quantity * unit_price_minor))::text as subtotal_minor
               from work_item_cost_lines
               where work_item_id = ${input.workItemId}
             `;
@@ -1015,29 +1014,22 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               quantity: input.quantity,
               unitPriceMinor: input.unitPriceMinor,
             });
+            const currentSubtotalMinor = Number(
+              getRequiredRow(subtotalRows, "work item cost line subtotal")
+                .subtotal_minor ?? 0
+            );
 
-            try {
-              calculateJobCostSummary([
-                ...existingCostLines.map((costLine) => ({
-                  lineTotalMinor: calculateJobCostLineTotalMinor({
-                    quantity: Number(costLine.quantity),
-                    unitPriceMinor: costLine.unit_price_minor,
-                  }),
-                })),
-                { lineTotalMinor },
-              ]);
-            } catch (error) {
-              if (error instanceof RangeError) {
-                return yield* Effect.fail(
-                  new JobStorageError({
-                    cause: error.message,
-                    message:
-                      "Job cost summary subtotal would exceed a safe integer",
-                  })
-                );
-              }
-
-              throw error;
+            if (
+              !Number.isSafeInteger(currentSubtotalMinor) ||
+              !Number.isSafeInteger(currentSubtotalMinor + lineTotalMinor)
+            ) {
+              return yield* Effect.fail(
+                new JobCostSummaryLimitExceededError({
+                  message:
+                    "Job cost summary subtotal would exceed a safe integer",
+                  workItemId: input.workItemId,
+                })
+              );
             }
 
             const rows = yield* sql<WorkItemCostLineRow>`

@@ -13,6 +13,7 @@ import {
   check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -48,6 +49,9 @@ const activityEventTypeValuesSql = sql.raw(
 );
 const costLineTypeValuesSql = sql.raw(
   JOB_COST_LINE_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const maxJobCostLineTaxRateBasisPointsSql = sql.raw(
+  String(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
 );
 
 export const serviceRegion = pgTable(
@@ -285,6 +289,10 @@ export const workItem = pgTable(
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
+    uniqueIndex("work_items_id_organization_id_idx").on(
+      table.id,
+      table.organizationId
+    ),
   ]
 );
 
@@ -420,8 +428,13 @@ export const workItemCostLine = pgTable(
     ),
     check(
       "work_item_cost_lines_tax_rate_range_chk",
-      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS})`
+      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${maxJobCostLineTaxRateBasisPointsSql})`
     ),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_cost_lines_work_item_organization_fk",
+    }).onDelete("cascade"),
     index("work_item_cost_lines_work_item_created_at_idx").on(
       table.workItemId,
       table.createdAt.desc(),

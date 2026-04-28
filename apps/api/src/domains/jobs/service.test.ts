@@ -5,6 +5,7 @@ import {
   CommentId,
   CostLineId,
   JobAccessDeniedError,
+  JobCostSummaryLimitExceededError,
   JobSchema,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
@@ -113,6 +114,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
+  readonly costLineFailure?: JobCostSummaryLimitExceededError;
   readonly lockedJob?: Job;
   readonly regionFailure?: RegionNotFoundError;
   readonly transactionFailure?: OrganizationMemberNotFoundError;
@@ -196,22 +198,24 @@ function makeHarness(
       readonly unitPriceMinor: number;
       readonly workItemId: Job["id"];
     }) =>
-      Effect.sync(() => {
-        calls.addCostLine += 1;
+      options.costLineFailure === undefined
+        ? Effect.sync(() => {
+            calls.addCostLine += 1;
 
-        return {
-          authorUserId: input.authorUserId,
-          createdAt: "2026-04-22T14:00:00.000Z",
-          description: input.description,
-          id: costLineId,
-          lineTotalMinor: Math.round(input.quantity * input.unitPriceMinor),
-          quantity: input.quantity,
-          taxRateBasisPoints: input.taxRateBasisPoints,
-          type: input.type,
-          unitPriceMinor: input.unitPriceMinor,
-          workItemId: input.workItemId,
-        } satisfies JobCostLine;
-      }),
+            return {
+              authorUserId: input.authorUserId,
+              createdAt: "2026-04-22T14:00:00.000Z",
+              description: input.description,
+              id: costLineId,
+              lineTotalMinor: Math.round(input.quantity * input.unitPriceMinor),
+              quantity: input.quantity,
+              taxRateBasisPoints: input.taxRateBasisPoints,
+              type: input.type,
+              unitPriceMinor: input.unitPriceMinor,
+              workItemId: input.workItemId,
+            } satisfies JobCostLine;
+          })
+        : Effect.fail(options.costLineFailure),
     addVisit: (input: {
       readonly authorUserId: UserId;
       readonly durationMinutes: number;
@@ -677,6 +681,39 @@ describe("jobs service", () => {
     );
 
     expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("surfaces the cost summary limit error without recording activity", async () => {
+    const failure = new JobCostSummaryLimitExceededError({
+      message: "Job cost summary subtotal would exceed a safe integer",
+      workItemId,
+    });
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      costLineFailure: failure,
+      lockedJob: makeJob({
+        assigneeId: actorUserId,
+      }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addCostLine(workItemId, {
+          description: "Replacement valve",
+          quantity: 1,
+          type: "material",
+          unitPriceMinor: 4200,
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(failure);
     expect(harness.calls.findByIdForUpdate).toBe(1);
     expect(harness.calls.addCostLine).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
