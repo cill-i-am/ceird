@@ -5,7 +5,12 @@ import type {
   OrganizationId,
   OrganizationRole,
 } from "@task-tracker/identity-core";
+import type {
+  JobLabelIdType,
+  JobOptionsResponse,
+} from "@task-tracker/jobs-core";
 
+import type * as JobsServer from "#/features/jobs/jobs-server";
 import type * as OrganizationAccess from "#/features/organizations/organization-access";
 
 type RoleLookupMock = (
@@ -13,8 +18,12 @@ type RoleLookupMock = (
 ) => Promise<{ role: OrganizationRole }>;
 const organizationId = decodeOrganizationId("org_123");
 
-const { mockedGetCurrentOrganizationMemberRole } = vi.hoisted(() => ({
+const {
+  mockedGetCurrentOrganizationMemberRole,
+  mockedGetCurrentServerJobOptions,
+} = vi.hoisted(() => ({
   mockedGetCurrentOrganizationMemberRole: vi.fn<RoleLookupMock>(),
+  mockedGetCurrentServerJobOptions: vi.fn<() => Promise<JobOptionsResponse>>(),
 }));
 
 vi.mock(import("#/features/organizations/organization-access"), async () => {
@@ -28,7 +37,37 @@ vi.mock(import("#/features/organizations/organization-access"), async () => {
   };
 });
 
+vi.mock(import("#/features/jobs/jobs-server"), async () => {
+  const actual = await vi.importActual<typeof JobsServer>(
+    "#/features/jobs/jobs-server"
+  );
+
+  return {
+    ...actual,
+    getCurrentServerJobOptions: mockedGetCurrentServerJobOptions,
+  };
+});
+
 describe("settings route loader", () => {
+  beforeEach(() => {
+    const jobOptions: JobOptionsResponse = {
+      contacts: [],
+      labels: [
+        {
+          id: "11111111-1111-4111-8111-111111111111" as JobLabelIdType,
+          name: "Urgent",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      members: [],
+      regions: [],
+      sites: [],
+    };
+
+    mockedGetCurrentServerJobOptions.mockResolvedValue(jobOptions);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -54,10 +93,17 @@ describe("settings route loader", () => {
             targetOrganizationId: organizationId,
           },
         })
-      ).resolves.toBeUndefined();
+      ).resolves.toStrictEqual({
+        jobLabels: [
+          expect.objectContaining({
+            name: "Urgent",
+          }),
+        ],
+      });
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
         organizationId
       );
+      expect(mockedGetCurrentServerJobOptions).toHaveBeenCalledOnce();
     }
   );
 
@@ -105,8 +151,11 @@ describe("settings route loader", () => {
             targetOrganizationId: organizationId,
           },
         })
-      ).resolves.toBeUndefined();
+      ).resolves.toStrictEqual({
+        jobLabels: [],
+      });
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
     }
   );
 });

@@ -1,6 +1,7 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import type { OrganizationId } from "@task-tracker/identity-core";
 
+import { getCurrentServerJobOptions } from "#/features/jobs/jobs-server";
 import {
   assertOrganizationAdministrationRole,
   getCurrentOrganizationMemberRole,
@@ -26,7 +27,9 @@ export async function loadSettingsRoute(context: {
   };
 }) {
   if (context.activeOrganizationSync.required) {
-    return;
+    return {
+      jobLabels: [],
+    };
   }
 
   const role = await getCurrentOrganizationMemberRole(
@@ -34,14 +37,26 @@ export async function loadSettingsRoute(context: {
   );
 
   assertOrganizationAdministrationRole(role);
+
+  const options = await getCurrentServerJobOptions();
+
+  return {
+    jobLabels: options.labels,
+  };
 }
 
 function SettingsRoute() {
   const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
+  const { jobLabels } = Route.useRouteContext();
 
   if (!activeOrganization) {
     throw new Error("Organization settings require an active organization.");
   }
 
-  return <OrganizationSettingsPage organization={activeOrganization} />;
+  return (
+    <OrganizationSettingsPage
+      jobLabels={jobLabels}
+      organization={activeOrganization}
+    />
+  );
 }
