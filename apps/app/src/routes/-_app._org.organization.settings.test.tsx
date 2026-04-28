@@ -7,7 +7,7 @@ import type {
 } from "@task-tracker/identity-core";
 import type {
   JobLabelIdType,
-  JobOptionsResponse,
+  JobLabelsResponse,
 } from "@task-tracker/jobs-core";
 
 import type * as JobsServer from "#/features/jobs/jobs-server";
@@ -20,10 +20,10 @@ const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedGetCurrentOrganizationMemberRole,
-  mockedGetCurrentServerJobOptions,
+  mockedGetCurrentServerJobLabels,
 } = vi.hoisted(() => ({
   mockedGetCurrentOrganizationMemberRole: vi.fn<RoleLookupMock>(),
-  mockedGetCurrentServerJobOptions: vi.fn<() => Promise<JobOptionsResponse>>(),
+  mockedGetCurrentServerJobLabels: vi.fn<() => Promise<JobLabelsResponse>>(),
 }));
 
 vi.mock(import("#/features/organizations/organization-access"), async () => {
@@ -44,14 +44,13 @@ vi.mock(import("#/features/jobs/jobs-server"), async () => {
 
   return {
     ...actual,
-    getCurrentServerJobOptions: mockedGetCurrentServerJobOptions,
+    getCurrentServerJobLabels: mockedGetCurrentServerJobLabels,
   };
 });
 
 describe("settings route loader", () => {
   beforeEach(() => {
-    const jobOptions: JobOptionsResponse = {
-      contacts: [],
+    const jobLabels: JobLabelsResponse = {
       labels: [
         {
           id: "11111111-1111-4111-8111-111111111111" as JobLabelIdType,
@@ -60,12 +59,9 @@ describe("settings route loader", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
-      members: [],
-      regions: [],
-      sites: [],
     };
 
-    mockedGetCurrentServerJobOptions.mockResolvedValue(jobOptions);
+    mockedGetCurrentServerJobLabels.mockResolvedValue(jobLabels);
   });
 
   afterEach(() => {
@@ -103,7 +99,7 @@ describe("settings route loader", () => {
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
         organizationId
       );
-      expect(mockedGetCurrentServerJobOptions).toHaveBeenCalledOnce();
+      expect(mockedGetCurrentServerJobLabels).toHaveBeenCalledOnce();
     }
   );
 
@@ -155,7 +151,7 @@ describe("settings route loader", () => {
         jobLabels: [],
       });
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
-      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerJobLabels).not.toHaveBeenCalled();
     }
   );
 });

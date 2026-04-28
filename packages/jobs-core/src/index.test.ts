@@ -29,6 +29,7 @@ import {
   UserId,
   VisitDurationIncrementError,
   WorkItemId,
+  normalizeJobLabelName,
 } from "./index.js";
 
 describe("jobs-core", () => {
@@ -312,6 +313,7 @@ describe("jobs-core", () => {
     expect(
       ParseResult.decodeUnknownSync(JobLabelNameSchema)("  Waiting on PO  ")
     ).toBe("Waiting on PO");
+    expect(normalizeJobLabelName("  Waiting   on PO  ")).toBe("waiting on po");
 
     expect(() =>
       ParseResult.decodeUnknownSync(JobLabelNameSchema)(" ".repeat(4))

@@ -7,7 +7,10 @@ import type {
   JobLabelIdType,
   UpdateJobLabelInput,
 } from "@task-tracker/jobs-core";
-import { JobLabelNameSchema } from "@task-tracker/jobs-core";
+import {
+  JobLabelNameSchema,
+  normalizeJobLabelName,
+} from "@task-tracker/jobs-core";
 import { Effect, Schema } from "effect";
 import { Archive, Check, Pencil, Plus, X } from "lucide-react";
 import * as React from "react";
@@ -700,10 +703,6 @@ function compareJobLabels(left: JobLabel, right: JobLabel) {
   const nameOrder = left.name.localeCompare(right.name);
 
   return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
-}
-
-function normalizeJobLabelName(name: string) {
-  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en");
 }
 
 function getJobLabelsKey(labels: readonly JobLabel[]) {

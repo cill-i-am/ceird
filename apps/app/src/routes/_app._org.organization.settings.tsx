@@ -1,7 +1,7 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import type { OrganizationId } from "@task-tracker/identity-core";
 
-import { getCurrentServerJobOptions } from "#/features/jobs/jobs-server";
+import { getCurrentServerJobLabels } from "#/features/jobs/jobs-server";
 import {
   assertOrganizationAdministrationRole,
   getCurrentOrganizationMemberRole,
@@ -38,10 +38,10 @@ export async function loadSettingsRoute(context: {
 
   assertOrganizationAdministrationRole(role);
 
-  const options = await getCurrentServerJobOptions();
+  const labels = await getCurrentServerJobLabels();
 
   return {
-    jobLabels: options.labels,
+    jobLabels: labels.labels,
   };
 }
 

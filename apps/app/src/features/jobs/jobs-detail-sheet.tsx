@@ -19,8 +19,13 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { SiteId } from "@task-tracker/jobs-core";
+import {
+  JobLabelNameSchema,
+  SiteId,
+  normalizeJobLabelName,
+} from "@task-tracker/jobs-core";
 import type {
+  CreateJobLabelInput,
   JobDetailResponse,
   JobLabel,
   JobLabelIdType,
@@ -214,7 +219,8 @@ export function JobsDetailSheet({
     detail.job.assigneeId
   );
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
-  const canAssignLabels = hasAssignmentAccess;
+  const canAssignLabels =
+    hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canCreateLabels = hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
@@ -486,15 +492,20 @@ export function JobsDetailSheet({
       return;
     }
 
-    const trimmedName = name.trim();
+    const decodedName = validateLabelName(name);
 
-    if (trimmedName.length === 0) {
+    if (decodedName.kind === "empty") {
       setLabelError("Type a label name before creating it.");
       return;
     }
 
+    if (decodedName.kind === "invalid") {
+      setLabelError("Keep label names between 1 and 48 characters.");
+      return;
+    }
+
     setLabelError(null);
-    await createAndAssignJobLabel({ name: trimmedName });
+    await createAndAssignJobLabel({ name: decodedName.name });
   }
 
   async function handleRemoveLabel(labelId: JobLabelIdType) {
@@ -1274,13 +1285,15 @@ function JobLabelPicker({
   const [query, setQuery] = React.useState("");
   const createLabelName = query.trim();
   const normalizedCreateName = normalizeJobLabelName(createLabelName);
+  const canCreateLabelName =
+    validateLabelName(createLabelName).kind === "valid";
   const hasExistingLabelName =
     normalizedCreateName.length > 0 &&
     organizationLabels.some(
       (label) => normalizeJobLabelName(label.name) === normalizedCreateName
     );
   const showCreate =
-    canCreateLabels && createLabelName.length > 0 && !hasExistingLabelName;
+    canCreateLabels && canCreateLabelName && !hasExistingLabelName;
 
   return (
     <Popover
@@ -1498,8 +1511,26 @@ function insertSortedJobLabel(
   ];
 }
 
-function normalizeJobLabelName(name: string) {
-  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase();
+const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
+
+function validateLabelName(
+  input: string
+):
+  | { readonly kind: "empty" }
+  | { readonly kind: "invalid" }
+  | { readonly kind: "valid"; readonly name: CreateJobLabelInput["name"] } {
+  if (input.trim().length === 0) {
+    return { kind: "empty" };
+  }
+
+  try {
+    return {
+      kind: "valid",
+      name: decodeJobLabelName(input),
+    };
+  } catch {
+    return { kind: "invalid" };
+  }
 }
 
 function renderMutationError(

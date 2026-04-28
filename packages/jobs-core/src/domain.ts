@@ -138,3 +138,7 @@ export const JobLabelNameSchema = Schema.Trim.pipe(
   Schema.maxLength(48)
 );
 export type JobLabelName = Schema.Schema.Type<typeof JobLabelNameSchema>;
+
+export function normalizeJobLabelName(name: string): string {
+  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en");
+}

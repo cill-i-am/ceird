@@ -541,6 +541,30 @@ describe("jobs detail sheet", () => {
   );
 
   it(
+    "does not offer invalid label names for inline creation",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(
+        screen.getByPlaceholderText("Search labels"),
+        "x".repeat(49)
+      );
+
+      expect(
+        screen.queryByRole("option", {
+          name: `Create new label: "${"x".repeat(49)}"`,
+        })
+      ).not.toBeInTheDocument();
+      expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
     "removes an assigned label from the detail header",
     {
       timeout: 10_000,
@@ -557,6 +581,36 @@ describe("jobs detail sheet", () => {
         })
       );
 
+      expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+    }
+  );
+
+  it(
+    "lets elevated users assign and remove labels even when they are not assigned",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+      mockedRemoveLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), {
+        role: "admin",
+        userId: "99999999-9999-4999-8999-999999999999",
+      });
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.click(screen.getByRole("option", { name: "Access" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove urgent callout label/i,
+        })
+      );
+
+      expect(mockedAssignLabel).toHaveBeenCalledWith({
+        labelId: accessLabelId,
+      });
       expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
     }
   );

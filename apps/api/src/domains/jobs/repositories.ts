@@ -32,6 +32,7 @@ import {
   SiteNotFoundError,
   SiteId as SiteIdSchema,
   WorkItemId as WorkItemIdSchema,
+  normalizeJobLabelName,
 } from "@task-tracker/jobs-core";
 import type {
   ContactIdType as ContactId,
@@ -1686,7 +1687,7 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             limit 1
           `;
 
-          const row = rows[0];
+          const [row] = rows;
 
           if (row === undefined) {
             return yield* Effect.fail(
@@ -1963,10 +1964,6 @@ function normalizeOptionName(value: string | null, fallback: string): string {
   }
 
   return fallback;
-}
-
-function normalizeJobLabelName(name: string): string {
-  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en");
 }
 
 function mapJobLabelNameConflict(error: unknown, name: JobLabelName) {

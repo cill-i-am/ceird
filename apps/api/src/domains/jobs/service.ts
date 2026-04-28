@@ -3,6 +3,7 @@ import {
   CoordinatorMatchesAssigneeError,
   JobLabelNotFoundError,
   InvalidJobTransitionError,
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
   JobAccessDeniedError,
   JobNotFoundError,
@@ -135,7 +136,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             name: input.name,
             organizationId: actor.organizationId,
           })
-          .pipe(Effect.mapError(mapJobLabelMutationError));
+          .pipe(Effect.catchAll(mapJobLabelMutationError));
       });
 
       const updateJobLabel = Effect.fn("JobsService.updateJobLabel")(function* (
@@ -150,7 +151,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             name: input.name,
           })
           .pipe(
-            Effect.mapError(mapJobLabelMutationError),
+            Effect.catchAll(mapJobLabelMutationError),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -899,12 +900,16 @@ function makeJobsStorageError(error: unknown): JobStorageError {
 
 function mapJobLabelMutationError(
   error: unknown
-): JobStorageError | JobLabelNameConflictError {
+): Effect.Effect<never, JobStorageError | JobLabelNameConflictError> {
   if (hasErrorTag(error, "SqlError")) {
-    return makeJobsStorageError(error);
+    return failJobsStorageError(error);
   }
 
-  return error as JobLabelNameConflictError;
+  if (hasErrorTag(error, JOB_LABEL_NAME_CONFLICT_ERROR_TAG)) {
+    return Effect.fail(error as JobLabelNameConflictError);
+  }
+
+  return Effect.die(error);
 }
 
 function hasErrorTag<Tag extends string>(

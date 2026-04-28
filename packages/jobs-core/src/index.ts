@@ -44,6 +44,7 @@ export {
   SiteGeocodingProviderSchema,
   SiteLatitudeSchema,
   SiteLongitudeSchema,
+  normalizeJobLabelName,
 } from "./domain.js";
 export type {
   JobActivityEventType,
