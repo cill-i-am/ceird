@@ -30,7 +30,12 @@ vi.mock(import("#/lib/auth-client"), () => ({
 
 vi.mock(import("./organization-service-areas-section"), () => ({
   OrganizationServiceAreasSection: () => (
-    <section aria-label="Service areas test section" />
+    <section aria-label="Service areas test section">
+      <label>
+        Section field
+        <input />
+      </label>
+    </section>
   ),
 }));
 
@@ -154,6 +159,29 @@ describe("organization settings page", () => {
     });
   }, 10_000);
 
+  it("does not submit the organization name hotkey while focus is outside the general form", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <OrganizationSettingsPage
+          organization={{
+            id: organizationId,
+            name: "Acme Field Ops",
+            slug: "acme-field-ops",
+          }}
+        />
+      </HotkeysProvider>
+    );
+
+    await user.clear(screen.getByLabelText("Organization name"));
+    await user.type(screen.getByLabelText("Organization name"), "Northwind");
+    await user.click(screen.getByLabelText("Section field"));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(mockedUpdateOrganization).not.toHaveBeenCalled();
+  }, 10_000);
+
   it("does not offer a save action before the name changes", () => {
     render(
       <OrganizationSettingsPage
@@ -252,5 +280,63 @@ describe("organization settings page", () => {
       "Northwind Field Ops"
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  }, 10_000);
+
+  it("refreshes a pristine organization name when the same organization changes remotely", () => {
+    const { rerender } = render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    rerender(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Services",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Organization name")).toHaveValue(
+      "Acme Field Services"
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  }, 10_000);
+
+  it("preserves dirty organization name edits when same-organization props refresh", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    await user.clear(screen.getByLabelText("Organization name"));
+    await user.type(screen.getByLabelText("Organization name"), "Local edit");
+
+    rerender(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Remote edit",
+          slug: "acme-field-ops",
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Organization name")).toHaveValue(
+      "Local edit"
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
   }, 10_000);
 });

@@ -43,7 +43,10 @@ export function OrganizationSettingsPage({
     organization.name
   );
   const formRef = React.useRef<HTMLFormElement | null>(null);
-  const previousOrganizationIdRef = React.useRef(organization.id);
+  const previousOrganizationRef = React.useRef({
+    id: organization.id,
+    name: organization.name,
+  });
 
   const form = useForm({
     defaultValues: {
@@ -113,22 +116,44 @@ export function OrganizationSettingsPage({
   });
 
   React.useEffect(() => {
-    if (previousOrganizationIdRef.current === organization.id) {
+    const previousOrganization = previousOrganizationRef.current;
+    const isNewOrganization = previousOrganization.id !== organization.id;
+    const isSameOrganizationRemoteNameChange =
+      previousOrganization.id === organization.id &&
+      previousOrganization.name !== organization.name;
+
+    previousOrganizationRef.current = {
+      id: organization.id,
+      name: organization.name,
+    };
+
+    if (!isNewOrganization && !isSameOrganizationRemoteNameChange) {
       return;
     }
 
-    previousOrganizationIdRef.current = organization.id;
-    setSuccessMessage(null);
     setSavedOrganizationName(organization.name);
-    form.reset({
-      name: organization.name,
-    });
+
+    if (isNewOrganization || form.state.isDefaultValue) {
+      setSuccessMessage(null);
+      form.reset({
+        name: organization.name,
+      });
+    }
   }, [form, organization.id, organization.name]);
 
   useAppHotkey(
     "settingsSubmit",
     () => {
-      if (form.state.isSubmitting || form.state.isDefaultValue) {
+      const { activeElement } = document;
+      const focusIsInsideGeneralForm =
+        activeElement instanceof Node &&
+        Boolean(formRef.current?.contains(activeElement));
+
+      if (
+        !focusIsInsideGeneralForm ||
+        form.state.isSubmitting ||
+        form.state.isDefaultValue
+      ) {
         return;
       }
 

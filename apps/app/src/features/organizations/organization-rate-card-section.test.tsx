@@ -178,6 +178,22 @@ describe("organization rate card section", () => {
     expect(mockedCreateRateCard).not.toHaveBeenCalled();
     expect(mockedUpdateRateCard).not.toHaveBeenCalled();
   });
+
+  it("shows a validation error for blank line values instead of saving zero", async () => {
+    const user = userEvent.setup();
+    renderRateCardSection();
+
+    await screen.findByText("Standard");
+    await user.click(screen.getByRole("button", { name: "Add line" }));
+    await user.type(screen.getByLabelText("Name for line 1"), "labour");
+    await user.clear(screen.getByLabelText("Value for line 1"));
+    await user.type(screen.getByLabelText("Unit for line 1"), "hour");
+    await user.click(screen.getByRole("button", { name: "Save rate card" }));
+
+    expect(screen.getByText("Add a value.")).toBeVisible();
+    expect(mockedCreateRateCard).not.toHaveBeenCalled();
+    expect(mockedUpdateRateCard).not.toHaveBeenCalled();
+  });
 });
 
 function renderRateCardSection() {

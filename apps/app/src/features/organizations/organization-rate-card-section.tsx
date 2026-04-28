@@ -268,12 +268,18 @@ function RateCardLineRow({
           id={kindId}
           className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
           value={line.kind}
-          onChange={(event) =>
+          onChange={(event) => {
+            const kind = resolveRateCardLineKind(event.target.value);
+
+            if (!kind) {
+              return;
+            }
+
             onChange({
               ...line,
-              kind: event.target.value as RateCardLineKind,
-            })
-          }
+              kind,
+            });
+          }}
         >
           {RATE_CARD_KIND_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -361,7 +367,7 @@ function buildRateCardLinePayload(lines: readonly EditableRateCardLine[]) {
     const lineErrors: RateCardLineErrors = {};
     const name = line.name.trim();
     const unit = line.unit.trim();
-    const value = Number(line.value);
+    const rawValue = line.value.trim();
 
     if (!name) {
       lineErrors.name = "Add a line name.";
@@ -371,16 +377,24 @@ function buildRateCardLinePayload(lines: readonly EditableRateCardLine[]) {
       lineErrors.unit = "Add a unit.";
     }
 
-    if (!Number.isFinite(value)) {
+    if (rawValue) {
+      const value = Number(rawValue);
+
+      if (!Number.isFinite(value)) {
+        lineErrors.value = "Add a value.";
+      } else if (value < 0) {
+        lineErrors.value = "Use zero or a positive value.";
+      }
+    } else {
       lineErrors.value = "Add a value.";
-    } else if (value < 0) {
-      lineErrors.value = "Use zero or a positive value.";
     }
 
     if (Object.keys(lineErrors).length > 0) {
       errors[line.id] = lineErrors;
       continue;
     }
+
+    const value = Number(rawValue);
 
     payload.push({
       kind: line.kind,
@@ -395,6 +409,13 @@ function buildRateCardLinePayload(lines: readonly EditableRateCardLine[]) {
     errors,
     lines: payload,
   };
+}
+
+function resolveRateCardLineKind(value: string): RateCardLineKind | null {
+  return (
+    RATE_CARD_KIND_OPTIONS.find((option) => option.value === value)?.value ??
+    null
+  );
 }
 
 function AsyncResultError({
