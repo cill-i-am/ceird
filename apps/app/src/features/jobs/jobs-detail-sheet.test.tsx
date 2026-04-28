@@ -22,6 +22,7 @@ type AtomSetterMock = (atom: unknown) => unknown;
 type AtomValueMock = (atom: unknown) => unknown;
 type InitialValuesMock = (values: (readonly [unknown, unknown])[]) => void;
 type NavigateMock = (...args: unknown[]) => unknown;
+type AppHotkeyMock = (...args: unknown[]) => void;
 
 const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
@@ -29,11 +30,13 @@ const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 
 const {
   mockedNavigate,
+  mockedUseAppHotkey,
   mockedUseAtomInitialValues,
   mockedUseAtomSet,
   mockedUseAtomValue,
 } = vi.hoisted(() => ({
   mockedNavigate: vi.fn<NavigateMock>(),
+  mockedUseAppHotkey: vi.fn<AppHotkeyMock>(),
   mockedUseAtomInitialValues: vi.fn<InitialValuesMock>(),
   mockedUseAtomSet: vi.fn<AtomSetterMock>(),
   mockedUseAtomValue: vi.fn<AtomValueMock>(),
@@ -262,7 +265,7 @@ vi.mock("#/components/ui/textarea", () => ({
 }));
 
 vi.mock("#/hotkeys/use-app-hotkey", () => ({
-  useAppHotkey: vi.fn<() => void>(),
+  useAppHotkey: mockedUseAppHotkey,
 }));
 
 vi.mock("./jobs-detail-state", () => ({
@@ -295,6 +298,7 @@ describe("jobs detail sheet", () => {
     mockedAddComment.mockReset();
     mockedAddVisit.mockReset();
     mockedAddCostLine.mockReset();
+    mockedUseAppHotkey.mockReset();
 
     mockedUseAtomValue.mockImplementation((atom: unknown) => {
       if (atom === `detail:${workItemId}`) {
@@ -561,6 +565,134 @@ describe("jobs detail sheet", () => {
 
       expect(mockedTransitionJob).toHaveBeenCalledWith({
         status: "completed",
+      });
+    }
+  );
+
+  it("registers the cost hotkey only when the viewer can add costs", () => {
+    renderDetailSheet(buildDetail(), {
+      role: "member",
+      userId: actorUserId,
+    });
+
+    expect(mockedUseAppHotkey).toHaveBeenCalledWith(
+      "jobDetailCost",
+      expect.any(Function),
+      { enabled: true }
+    );
+
+    mockedUseAppHotkey.mockClear();
+
+    renderDetailSheet(buildDetail(), {
+      role: "member",
+      userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
+    });
+
+    expect(mockedUseAppHotkey).toHaveBeenCalledWith(
+      "jobDetailCost",
+      expect.any(Function),
+      { enabled: false }
+    );
+  }, 1000);
+
+  it(
+    "rejects invalid cost form values before submitting",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.type(screen.getByLabelText("Cost description"), "Install kit");
+      await user.clear(screen.getByLabelText("Quantity"));
+      await user.type(screen.getByLabelText("Quantity"), "1");
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(screen.getByText("Enter a unit price.")).toBeInTheDocument();
+      expect(mockedAddCostLine).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Unit price"), {
+        target: { value: "1.234" },
+      });
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(
+        screen.getByText("Unit price can use at most 2 decimal places.")
+      ).toBeInTheDocument();
+      expect(mockedAddCostLine).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Unit price"), {
+        target: { value: "21474836.48" },
+      });
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(
+        screen.getByText("Unit price must be no more than €21,474,836.47.")
+      ).toBeInTheDocument();
+      expect(mockedAddCostLine).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Unit price"), {
+        target: { value: "1" },
+      });
+      fireEvent.change(screen.getByLabelText("Quantity"), {
+        target: { value: "1.234" },
+      });
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(
+        screen.getByText("Quantity can use at most 2 decimal places.")
+      ).toBeInTheDocument();
+      expect(mockedAddCostLine).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Quantity"), {
+        target: { value: "10000000000" },
+      });
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(
+        screen.getByText("Quantity must be no more than 9,999,999,999.99.")
+      ).toBeInTheDocument();
+      expect(mockedAddCostLine).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "submits valid cost form values with exact minor-unit conversion",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAddCostLine.mockResolvedValue(
+        Exit.succeed({
+          authorUserId: actorUserId,
+          createdAt: "2026-04-23T12:00:00.000Z",
+          description: "Install kit",
+          id: "99999999-9999-4999-8999-999999999999",
+          lineTotalMinor: 136,
+          quantity: 1.7,
+          type: "material",
+          unitPriceMinor: 80,
+          workItemId,
+        })
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.selectOptions(screen.getByLabelText("Cost type"), "material");
+      await user.type(screen.getByLabelText("Cost description"), "Install kit");
+      await user.clear(screen.getByLabelText("Quantity"));
+      await user.type(screen.getByLabelText("Quantity"), "1.70");
+      await user.clear(screen.getByLabelText("Unit price"));
+      await user.type(screen.getByLabelText("Unit price"), "0.80");
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      expect(mockedAddCostLine).toHaveBeenCalledWith({
+        description: "Install kit",
+        quantity: 1.7,
+        type: "material",
+        unitPriceMinor: 80,
       });
     }
   );

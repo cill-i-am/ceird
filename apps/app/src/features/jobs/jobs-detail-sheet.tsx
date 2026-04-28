@@ -114,6 +114,8 @@ const COST_LINE_TYPE_LABELS = {
   material: "Material",
 } as const;
 
+type CostLineType = JobDetailResponse["costLines"][number]["type"];
+
 const COST_LINE_TYPE_SELECTION_GROUPS = [
   {
     label: "Cost type",
@@ -125,6 +127,9 @@ const COST_LINE_TYPE_SELECTION_GROUPS = [
 ] satisfies readonly CommandSelectGroup[];
 
 const NO_SITE_VALUE = "__none__";
+const MAX_COST_LINE_QUANTITY = 9_999_999_999.99;
+const MAX_COST_LINE_UNIT_PRICE_MINOR = 2_147_483_647;
+const MAX_COST_LINE_UNIT_PRICE_MAJOR = 21_474_836.47;
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 
 interface JobsDetailSheetProps {
@@ -221,7 +226,7 @@ export function JobsDetailSheet({
   const [visitError, setVisitError] = React.useState<string | null>(null);
   const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const [costLineType, setCostLineType] =
-    React.useState<JobDetailResponse["costLines"][number]["type"]>("labour");
+    React.useState<CostLineType>("labour");
   const [costDescription, setCostDescription] = React.useState("");
   const [costQuantity, setCostQuantity] = React.useState("1");
   const [costUnitPrice, setCostUnitPrice] = React.useState("");
@@ -458,30 +463,40 @@ export function JobsDetailSheet({
   async function handleAddCostLine(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const quantity = Number(costQuantity);
-    const unitPriceMajor = Number(costUnitPrice);
-
     if (costDescription.trim().length === 0) {
       setCostError("Add a short cost description.");
       return;
     }
 
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      setCostError("Quantity must be greater than zero.");
+    const quantityResult = parseCostLineQuantity(costQuantity);
+
+    if (!quantityResult.ok) {
+      setCostError(quantityResult.error);
       return;
     }
 
-    if (!Number.isFinite(unitPriceMajor) || unitPriceMajor < 0) {
-      setCostError("Unit price must be zero or more.");
+    const unitPriceResult = parseCostLineUnitPriceMinor(costUnitPrice);
+
+    if (!unitPriceResult.ok) {
+      setCostError(unitPriceResult.error);
+      return;
+    }
+
+    const lineTotalMinor = Math.round(
+      quantityResult.quantity * unitPriceResult.unitPriceMinor
+    );
+
+    if (!Number.isSafeInteger(lineTotalMinor)) {
+      setCostError("Line total is too large to submit safely.");
       return;
     }
 
     setCostError(null);
     const exit = await addJobCostLine({
       description: costDescription.trim(),
-      quantity,
+      quantity: quantityResult.quantity,
       type: costLineType,
-      unitPriceMinor: Math.round(unitPriceMajor * 100),
+      unitPriceMinor: unitPriceResult.unitPriceMinor,
     });
 
     if (Exit.isSuccess(exit)) {
@@ -897,6 +912,7 @@ export function JobsDetailSheet({
                     <form
                       className="flex flex-col gap-4"
                       method="post"
+                      noValidate
                       onSubmit={handleAddCostLine}
                     >
                       <FieldGroup>
@@ -912,11 +928,13 @@ export function JobsDetailSheet({
                                 placeholder="Pick type"
                                 emptyText="No cost types found."
                                 groups={COST_LINE_TYPE_SELECTION_GROUPS}
-                                onValueChange={(nextValue) =>
-                                  setCostLineType(
-                                    nextValue as JobDetailResponse["costLines"][number]["type"]
-                                  )
-                                }
+                                onValueChange={(nextValue) => {
+                                  const decoded = decodeCostLineType(nextValue);
+
+                                  if (decoded) {
+                                    setCostLineType(decoded);
+                                  }
+                                }}
                               />
                             </FieldContent>
                           </Field>
@@ -924,8 +942,7 @@ export function JobsDetailSheet({
                           <Field
                             data-invalid={
                               Boolean(costError) &&
-                              (!Number.isFinite(Number(costQuantity)) ||
-                                Number(costQuantity) <= 0)
+                              !parseCostLineQuantity(costQuantity).ok
                             }
                           >
                             <FieldLabel htmlFor="job-cost-quantity">
@@ -941,8 +958,7 @@ export function JobsDetailSheet({
                                 value={costQuantity}
                                 aria-invalid={
                                   Boolean(costError) &&
-                                  (!Number.isFinite(Number(costQuantity)) ||
-                                    Number(costQuantity) <= 0)
+                                  !parseCostLineQuantity(costQuantity).ok
                                     ? true
                                     : undefined
                                 }
@@ -956,8 +972,7 @@ export function JobsDetailSheet({
                           <Field
                             data-invalid={
                               Boolean(costError) &&
-                              (!Number.isFinite(Number(costUnitPrice)) ||
-                                Number(costUnitPrice) < 0)
+                              !parseCostLineUnitPriceMinor(costUnitPrice).ok
                             }
                           >
                             <FieldLabel htmlFor="job-cost-unit-price">
@@ -973,8 +988,7 @@ export function JobsDetailSheet({
                                 value={costUnitPrice}
                                 aria-invalid={
                                   Boolean(costError) &&
-                                  (!Number.isFinite(Number(costUnitPrice)) ||
-                                    Number(costUnitPrice) < 0)
+                                  !parseCostLineUnitPriceMinor(costUnitPrice).ok
                                     ? true
                                     : undefined
                                 }
@@ -1414,6 +1428,125 @@ function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
       ],
     },
   ] satisfies readonly CommandSelectGroup[];
+}
+
+function decodeCostLineType(value: string): CostLineType | null {
+  return value === "labour" || value === "material" ? value : null;
+}
+
+function parseCostLineQuantity(
+  value: string
+):
+  | { readonly ok: true; readonly quantity: number }
+  | { readonly ok: false; readonly error: string } {
+  const trimmedValue = value.trim();
+
+  if (trimmedValue.length === 0) {
+    return { error: "Enter a quantity.", ok: false };
+  }
+
+  const quantity = Number(trimmedValue);
+
+  if (Number.isFinite(quantity) && quantity <= 0) {
+    return { error: "Quantity must be greater than zero.", ok: false };
+  }
+
+  const decimalParts = getDecimalParts(trimmedValue);
+
+  if (!decimalParts) {
+    return { error: "Enter a valid quantity.", ok: false };
+  }
+
+  if (decimalParts.fractional.length > 2) {
+    return {
+      error: "Quantity can use at most 2 decimal places.",
+      ok: false,
+    };
+  }
+
+  if (!Number.isFinite(quantity)) {
+    return { error: "Enter a valid quantity.", ok: false };
+  }
+
+  if (quantity > MAX_COST_LINE_QUANTITY) {
+    return {
+      error: "Quantity must be no more than 9,999,999,999.99.",
+      ok: false,
+    };
+  }
+
+  return { ok: true, quantity };
+}
+
+function parseCostLineUnitPriceMinor(
+  value: string
+):
+  | { readonly ok: true; readonly unitPriceMinor: number }
+  | { readonly ok: false; readonly error: string } {
+  const trimmedValue = value.trim();
+
+  if (trimmedValue.length === 0) {
+    return { error: "Enter a unit price.", ok: false };
+  }
+
+  const unitPriceMajor = Number(trimmedValue);
+
+  if (Number.isFinite(unitPriceMajor) && unitPriceMajor < 0) {
+    return { error: "Unit price must be zero or more.", ok: false };
+  }
+
+  const decimalParts = getDecimalParts(trimmedValue);
+
+  if (!decimalParts) {
+    return { error: "Enter a valid unit price.", ok: false };
+  }
+
+  if (decimalParts.fractional.length > 2) {
+    return {
+      error: "Unit price can use at most 2 decimal places.",
+      ok: false,
+    };
+  }
+
+  if (!Number.isFinite(unitPriceMajor)) {
+    return { error: "Enter a valid unit price.", ok: false };
+  }
+
+  if (unitPriceMajor > MAX_COST_LINE_UNIT_PRICE_MAJOR) {
+    return {
+      error: "Unit price must be no more than €21,474,836.47.",
+      ok: false,
+    };
+  }
+
+  const unitPriceMinor =
+    Number(decimalParts.whole) * 100 +
+    Number(decimalParts.fractional.padEnd(2, "0"));
+
+  if (
+    !Number.isSafeInteger(unitPriceMinor) ||
+    unitPriceMinor > MAX_COST_LINE_UNIT_PRICE_MINOR
+  ) {
+    return {
+      error: "Unit price must be no more than €21,474,836.47.",
+      ok: false,
+    };
+  }
+
+  return { ok: true, unitPriceMinor };
+}
+
+function getDecimalParts(value: string) {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    fractional: match[2] ?? "",
+    whole: match[1],
+  };
 }
 
 function getSortedSites(sites: readonly JobSiteOption[]) {
