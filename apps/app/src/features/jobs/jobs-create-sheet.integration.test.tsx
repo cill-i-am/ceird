@@ -8,7 +8,7 @@ import type {
   UserIdType,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
@@ -289,6 +289,40 @@ describe("jobs create sheet integration", () => {
       expect(mockedNavigate).not.toHaveBeenCalled();
     }
   );
+
+  it(
+    "validates constrained fields before submitting",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderCreateSheet();
+
+      await user.type(screen.getByLabelText("Title"), "Replace air valve");
+      fireEvent.change(screen.getByLabelText("External reference"), {
+        target: { value: "R".repeat(121) },
+      });
+      await createInlineContact(user, "Alex Caller");
+      await user.type(screen.getByLabelText("Contact email"), "not-an-email");
+      fireEvent.change(screen.getByLabelText("Contact notes"), {
+        target: { value: "N".repeat(2001) },
+      });
+      await user.click(screen.getByRole("button", { name: /create job/i }));
+
+      expect(mockedCreateJob).not.toHaveBeenCalled();
+      expect(mockedNavigate).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("Use 120 characters or fewer.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Enter a valid email address.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Use 2,000 characters or fewer.")
+      ).toBeInTheDocument();
+    }
+  );
 });
 
 function renderCreateSheet() {
@@ -320,7 +354,6 @@ function renderCreateSheet() {
                 email: "pat@example.com",
                 id: depotContactId,
                 name: "Pat Contact",
-                notes: "Use email for routine updates.",
                 phone: "+353 87 765 4321",
                 siteIds: [depotSiteId],
               },

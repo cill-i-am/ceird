@@ -18,6 +18,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { SiteId } from "@task-tracker/jobs-core";
 import type {
+  JobContactDetail,
   JobContactOption,
   JobDetailResponse,
   JobSiteOption,
@@ -196,9 +197,11 @@ export function JobsDetailSheet({
   const site = detail.job.siteId
     ? lookup.siteById.get(detail.job.siteId)
     : undefined;
-  const contact = detail.job.contactId
-    ? lookup.contactById.get(detail.job.contactId)
-    : undefined;
+  const contact =
+    detail.contact ??
+    (detail.job.contactId
+      ? lookup.contactById.get(detail.job.contactId)
+      : undefined);
   const assignee = detail.job.assigneeId
     ? lookup.memberById.get(detail.job.assigneeId)
     : undefined;
@@ -1057,7 +1060,7 @@ function DetailEmpty({
 function JobsDetailContact({
   contact,
 }: {
-  readonly contact: JobContactOption | undefined;
+  readonly contact: JobContactDetail | JobContactOption | undefined;
 }) {
   if (!contact) {
     return (
@@ -1068,6 +1071,8 @@ function JobsDetailContact({
     );
   }
 
+  const notes = "notes" in contact ? contact.notes : undefined;
+
   return (
     <div className="grid gap-3 text-sm">
       <HeaderMetaItem label="Name" value={contact.name} />
@@ -1077,13 +1082,13 @@ function JobsDetailContact({
       {contact.phone ? (
         <HeaderMetaItem label="Phone" value={contact.phone} />
       ) : null}
-      {contact.notes ? (
+      {notes ? (
         <div className="min-w-0 text-left">
           <p className="text-[11px] font-medium text-muted-foreground uppercase">
             Notes
           </p>
           <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">
-            {contact.notes}
+            {notes}
           </p>
         </div>
       ) : null}

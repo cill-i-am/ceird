@@ -8,6 +8,7 @@ import {
   JobActivityPayloadSchema,
   JobActivitySchema,
   JobCommentSchema,
+  JobContactDetailSchema,
   JobContactOptionSchema,
   JobDetailSchema,
   JobListCursor as JobListCursorSchema,
@@ -33,6 +34,7 @@ import type {
   JobActivity,
   JobActivityPayload,
   JobComment,
+  JobContactDetail,
   JobContactOption,
   JobDetail,
   JobExternalReference,
@@ -158,9 +160,16 @@ interface JobContactOptionRow {
   readonly email: string | null;
   readonly id: string;
   readonly name: string;
-  readonly notes: string | null;
   readonly phone: string | null;
   readonly site_id: string | null;
+}
+
+interface JobContactDetailRow {
+  readonly email: string | null;
+  readonly id: string;
+  readonly name: string;
+  readonly notes: string | null;
+  readonly phone: string | null;
 }
 
 export interface CreateJobRecordInput {
@@ -275,6 +284,7 @@ const decodeJobActivityPayload = Schema.decodeUnknownSync(
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
+const decodeJobContactDetail = Schema.decodeUnknownSync(JobContactDetailSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
@@ -639,14 +649,41 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             order by visit_date desc, id desc
           `,
         ]);
+        const contact =
+          job.contactId === undefined
+            ? undefined
+            : yield* findContactDetailById(organizationId, job.contactId);
 
         return Option.some(
           decodeJobDetail({
             activity: activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
+            contact,
             job,
             visits: visits.map(mapJobVisitRow),
           })
+        );
+      });
+
+      const findContactDetailById = Effect.fn(
+        "JobsRepository.findContactDetailById"
+      )(function* (organizationId: OrganizationId, contactId: ContactId) {
+        const rows = yield* sql<JobContactDetailRow>`
+          select
+            id,
+            name,
+            email,
+            phone,
+            notes
+          from contacts
+          where organization_id = ${organizationId}
+            and id = ${contactId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(
+          Option.map(mapJobContactDetailRow),
+          Option.getOrUndefined
         );
       });
 
@@ -1318,7 +1355,6 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
             contacts.id,
             contacts.name,
             contacts.email,
-            contacts.notes,
             contacts.phone,
             site_contacts.site_id
           from contacts
@@ -1438,7 +1474,6 @@ function mapJobContactOptions(
       readonly email?: string;
       readonly id: string;
       readonly name: string;
-      readonly notes?: string;
       readonly phone?: string;
       readonly siteIds: SiteId[];
     }
@@ -1452,7 +1487,6 @@ function mapJobContactOptions(
         email: nullableToUndefined(row.email),
         id: row.id,
         name: row.name,
-        notes: nullableToUndefined(row.notes),
         phone: nullableToUndefined(row.phone),
         siteIds: row.site_id === null ? [] : [decodeSiteId(row.site_id)],
       });
@@ -1467,6 +1501,16 @@ function mapJobContactOptions(
   return Array.from(contacts.values(), (contact) =>
     decodeJobContactOption(contact)
   );
+}
+
+function mapJobContactDetailRow(row: JobContactDetailRow): JobContactDetail {
+  return decodeJobContactDetail({
+    email: nullableToUndefined(row.email),
+    id: row.id,
+    name: row.name,
+    notes: nullableToUndefined(row.notes),
+    phone: nullableToUndefined(row.phone),
+  });
 }
 
 function mapJobCommentRow(row: WorkItemCommentRow): JobComment {

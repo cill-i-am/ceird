@@ -385,7 +385,6 @@ describe("jobs http integration", () => {
         readonly contacts: readonly {
           readonly email?: string;
           readonly name: string;
-          readonly notes?: string;
           readonly phone?: string;
         }[];
       };
@@ -393,10 +392,10 @@ describe("jobs http integration", () => {
         expect.objectContaining({
           email: "alex@example.com",
           name: "Alex Contact",
-          notes: "Prefers morning calls.",
           phone: "+353 87 123 4567",
         })
       );
+      expect(optionsAfterJob.contacts[0]).not.toHaveProperty("notes");
 
       const patchAssigneeResponse = await api.handler(
         makeJsonRequest(
@@ -462,6 +461,12 @@ describe("jobs http integration", () => {
       expect(memberDetailResponse.status).toBe(200);
       const memberDetail = (await memberDetailResponse.json()) as {
         readonly comments: readonly unknown[];
+        readonly contact?: {
+          readonly email?: string;
+          readonly name: string;
+          readonly notes?: string;
+          readonly phone?: string;
+        };
         readonly job: {
           readonly assigneeId?: string;
           readonly completedAt?: string;
@@ -623,6 +628,12 @@ describe("jobs http integration", () => {
       const finalDetail = (await finalDetailResponse.json()) as {
         readonly activity: readonly unknown[];
         readonly comments: readonly unknown[];
+        readonly contact?: {
+          readonly email?: string;
+          readonly name: string;
+          readonly notes?: string;
+          readonly phone?: string;
+        };
         readonly job: {
           readonly completedAt?: string;
           readonly externalReference?: string;
@@ -633,6 +644,12 @@ describe("jobs http integration", () => {
       expect(finalDetail.job.status).toBe("in_progress");
       expect(finalDetail.job.completedAt).toBeUndefined();
       expect(finalDetail.job.externalReference).toBe("CLAIM-2026-0042");
+      expect(finalDetail.contact).toMatchObject({
+        email: "alex@example.com",
+        name: "Alex Contact",
+        notes: "Prefers morning calls.",
+        phone: "+353 87 123 4567",
+      });
       expect(finalDetail.comments).toHaveLength(1);
       expect(finalDetail.visits).toHaveLength(1);
       expect(finalDetail.activity.length).toBeGreaterThanOrEqual(7);

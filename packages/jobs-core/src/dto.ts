@@ -348,8 +348,20 @@ export type AddJobVisitResponse = Schema.Schema.Type<
   typeof AddJobVisitResponseSchema
 >;
 
+export const JobContactDetailSchema = Schema.Struct({
+  id: ContactId,
+  name: ContactNameSchema,
+  email: Schema.optional(ContactEmailSchema),
+  phone: Schema.optional(ContactPhoneSchema),
+  notes: Schema.optional(ContactNotesSchema),
+});
+export type JobContactDetail = Schema.Schema.Type<
+  typeof JobContactDetailSchema
+>;
+
 export const JobDetailSchema = Schema.Struct({
   job: JobSchema,
+  contact: Schema.optional(JobContactDetailSchema),
   comments: Schema.Array(JobCommentSchema),
   activity: Schema.Array(JobActivitySchema),
   visits: Schema.Array(JobVisitSchema),
@@ -411,7 +423,6 @@ export const JobContactOptionSchema = Schema.Struct({
   name: ContactNameSchema,
   email: Schema.optional(ContactEmailSchema),
   phone: Schema.optional(ContactPhoneSchema),
-  notes: Schema.optional(ContactNotesSchema),
   siteIds: Schema.Array(SiteId),
 });
 export type JobContactOption = Schema.Schema.Type<

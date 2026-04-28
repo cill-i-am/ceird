@@ -17,7 +17,11 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  ContactEmailSchema,
+  ContactNameSchema,
+  ContactNotesSchema,
   CONTACT_NOT_FOUND_ERROR_TAG,
+  JobExternalReferenceSchema,
   SITE_GEOCODING_FAILED_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
 } from "@task-tracker/jobs-core";
@@ -30,7 +34,7 @@ import type {
   JobSiteOption,
   SiteIdType,
 } from "@task-tracker/jobs-core";
-import { Cause, Exit } from "effect";
+import { Cause, Exit, ParseResult } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -133,11 +137,21 @@ interface JobsCreateFormState {
 }
 
 interface JobsCreateFieldErrors {
+  readonly contactEmail?: string;
   readonly contactName?: string;
+  readonly contactNotes?: string;
+  readonly externalReference?: string;
   readonly site?: SiteCreateFieldErrors;
   readonly siteSelection?: string;
   readonly title?: string;
 }
+
+const decodeContactEmail = ParseResult.decodeUnknownSync(ContactEmailSchema);
+const decodeContactName = ParseResult.decodeUnknownSync(ContactNameSchema);
+const decodeContactNotes = ParseResult.decodeUnknownSync(ContactNotesSchema);
+const decodeJobExternalReference = ParseResult.decodeUnknownSync(
+  JobExternalReferenceSchema
+);
 
 const defaultFormState: JobsCreateFormState = {
   contactEmail: "",
@@ -371,11 +385,15 @@ export function JobsCreateSheet() {
             <AuthFormField
               label="External reference"
               htmlFor="job-external-reference"
-              invalid={false}
+              invalid={Boolean(fieldErrors.externalReference)}
+              errorText={fieldErrors.externalReference}
             >
               <Input
                 id="job-external-reference"
                 value={values.externalReference}
+                aria-invalid={
+                  Boolean(fieldErrors.externalReference) || undefined
+                }
                 onChange={(event) =>
                   setValues((current) => ({
                     ...current,
@@ -471,12 +489,14 @@ export function JobsCreateSheet() {
               <AuthFormField
                 label="Contact email"
                 htmlFor="job-contact-email"
-                invalid={false}
+                invalid={Boolean(fieldErrors.contactEmail)}
+                errorText={fieldErrors.contactEmail}
               >
                 <Input
                   id="job-contact-email"
                   type="email"
                   value={values.contactEmail}
+                  aria-invalid={Boolean(fieldErrors.contactEmail) || undefined}
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
@@ -504,11 +524,13 @@ export function JobsCreateSheet() {
               <AuthFormField
                 label="Contact notes"
                 htmlFor="job-contact-notes"
-                invalid={false}
+                invalid={Boolean(fieldErrors.contactNotes)}
+                errorText={fieldErrors.contactNotes}
               >
                 <Textarea
                   id="job-contact-notes"
                   value={values.contactNotes}
+                  aria-invalid={Boolean(fieldErrors.contactNotes) || undefined}
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
@@ -950,6 +972,7 @@ function validate(
   regions: readonly JobRegionOption[]
 ): JobsCreateFieldErrors {
   const validateInlineSite = values.siteSelection === INLINE_CREATE_VALUE;
+  const validateInlineContact = values.contactSelection === INLINE_CREATE_VALUE;
   const siteErrors = validateInlineSite
     ? validateSiteCreateDraft(values.siteDraft, regions, {
         nameRequiredMessage: "Add the site name or pick an existing site.",
@@ -957,11 +980,30 @@ function validate(
     : undefined;
 
   return {
+    contactEmail: validateInlineContact
+      ? validateOptionalBoundaryField(
+          values.contactEmail,
+          decodeContactEmail,
+          "Enter a valid email address."
+        )
+      : undefined,
     contactName:
-      values.contactSelection === INLINE_CREATE_VALUE &&
-      values.contactName.trim().length === 0
+      validateInlineContact &&
+      !isValidBoundaryValue(values.contactName, decodeContactName)
         ? "Add the contact name or pick an existing contact."
         : undefined,
+    contactNotes: validateInlineContact
+      ? validateOptionalBoundaryField(
+          values.contactNotes,
+          decodeContactNotes,
+          "Use 2,000 characters or fewer."
+        )
+      : undefined,
+    externalReference: validateOptionalBoundaryField(
+      values.externalReference,
+      decodeJobExternalReference,
+      "Use 120 characters or fewer."
+    ),
     site:
       siteErrors && hasSiteCreateFieldErrors(siteErrors)
         ? siteErrors
@@ -979,11 +1021,39 @@ function hasInlineSiteDraft(values: JobsCreateFormState) {
 
 function hasFieldErrors(errors: JobsCreateFieldErrors) {
   return (
+    errors.contactEmail !== undefined ||
     errors.contactName !== undefined ||
+    errors.contactNotes !== undefined ||
+    errors.externalReference !== undefined ||
     errors.siteSelection !== undefined ||
     errors.title !== undefined ||
     (errors.site !== undefined && hasSiteCreateFieldErrors(errors.site))
   );
+}
+
+function validateOptionalBoundaryField(
+  value: string,
+  decode: (value: unknown) => unknown,
+  errorText: string
+) {
+  const trimmedValue = toOptionalTrimmedString(value);
+
+  return trimmedValue === undefined ||
+    isValidBoundaryValue(trimmedValue, decode)
+    ? undefined
+    : errorText;
+}
+
+function isValidBoundaryValue(
+  value: unknown,
+  decode: (value: unknown) => unknown
+) {
+  try {
+    decode(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function clearInlineSiteFieldErrors(

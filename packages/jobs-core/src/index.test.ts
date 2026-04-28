@@ -144,7 +144,6 @@ describe("jobs-core", () => {
         name: "Alex Contact",
         email: "alex@example.com",
         phone: "+353 87 123 4567",
-        notes: "Prefers morning calls.",
         siteIds: [],
       })
     ).toStrictEqual({
@@ -152,7 +151,6 @@ describe("jobs-core", () => {
       name: "Alex Contact",
       email: "alex@example.com",
       phone: "+353 87 123 4567",
-      notes: "Prefers morning calls.",
       siteIds: [],
     });
   }, 5000);

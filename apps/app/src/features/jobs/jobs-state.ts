@@ -414,7 +414,6 @@ function buildJobSearchText(item: JobListItem, lookup: VisibleJobsLookup) {
     contact?.name ?? "",
     contact?.email ?? "",
     contact?.phone ?? "",
-    contact?.notes ?? "",
   ]
     .join(" ")
     .toLowerCase();

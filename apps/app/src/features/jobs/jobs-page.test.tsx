@@ -115,7 +115,6 @@ const initialOptions: JobOptionsResponse = {
       email: "contact.search@example.com",
       id: contactOneId,
       name: "Primary Contact",
-      notes: "Use gantry access for search coverage",
       phone: "+353 1 555 0199",
       siteIds: [siteDepotId],
     },
@@ -374,7 +373,7 @@ describe("jobs page", () => {
   );
 
   it(
-    "searches jobs by linked contact name, email, phone, and notes",
+    "searches jobs by linked contact name, email, and phone",
     {
       timeout: 10_000,
     },
@@ -389,7 +388,6 @@ describe("jobs page", () => {
         "Primary Contact",
         "contact.search@example.com",
         "+353 1 555 0199",
-        "gantry access",
       ]) {
         await user.clear(searchInput);
         await user.type(searchInput, query);

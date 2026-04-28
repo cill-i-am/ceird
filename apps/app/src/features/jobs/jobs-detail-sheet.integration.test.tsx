@@ -367,7 +367,6 @@ function renderDetailSheet() {
                 email: "pat@example.com",
                 id: contactId,
                 name: "Pat Contact",
-                notes: "Use email for routine updates.",
                 phone: "+353 87 765 4321",
                 siteIds: [siteId],
               },
@@ -454,6 +453,13 @@ function buildDetail(): JobDetailResponse {
         workItemId,
       },
     ],
+    contact: {
+      email: "pat@example.com",
+      id: contactId,
+      name: "Pat Contact",
+      notes: "Use email for routine updates.",
+      phone: "+353 87 765 4321",
+    },
     job: {
       assigneeId: actorUserId,
       contactId,

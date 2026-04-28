@@ -187,6 +187,13 @@ describe("jobs repositories integration", () => {
     expect(detailValue.job.externalReference).toBe("PO-4471");
     expect(detailValue.job.siteId).toBe(createdSiteId);
     expect(detailValue.job.contactId).toBe(createdContactId);
+    expect(detailValue.contact).toMatchObject({
+      email: "site-contact@example.com",
+      id: createdContactId,
+      name: "Aoife Byrne",
+      notes: "Prefers morning calls.",
+      phone: "+353871234567",
+    });
     expect(detailValue.comments).toHaveLength(1);
     expect(detailValue.comments[0]?.body).toContain("water ingress");
     expect(detailValue.activity).toHaveLength(1);
@@ -259,10 +266,10 @@ describe("jobs repositories integration", () => {
       email: "site-contact@example.com",
       id: createdContactId,
       name: "Aoife Byrne",
-      notes: "Prefers morning calls.",
       phone: "+353871234567",
       siteIds: expect.arrayContaining([createdSiteId, overflowSiteId]),
     });
+    expect(createdContactOption).not.toHaveProperty("notes");
     expect(Option.getOrUndefined(foundSiteId)).toBe(createdSiteId);
     expect(Option.getOrUndefined(foundContactId)).toBe(createdContactId);
   }, 30_000);
