@@ -219,7 +219,7 @@ test("organization settings service areas and rate cards feed sites and job filt
 
   await runCommandBarAction(page, "Go to Sites");
   await expect(page).toHaveURL(/\/sites$/);
-  await page.getByRole("link", { name: "New site" }).click();
+  await runCommandBarAction(page, "Create site");
   await expect(page).toHaveURL(/\/sites\/new$/);
   await expect(page.getByRole("dialog", { name: "New site" })).toBeVisible();
   await page.getByLabel("Site name").fill(siteName);
