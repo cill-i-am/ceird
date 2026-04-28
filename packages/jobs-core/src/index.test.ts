@@ -492,6 +492,19 @@ describe("jobs-core", () => {
     });
   }, 5000);
 
+  it("rejects job cost summaries with unsafe aggregate subtotals", () => {
+    expect(() =>
+      calculateJobCostSummary([
+        {
+          lineTotalMinor: Number.MAX_SAFE_INTEGER,
+        },
+        {
+          lineTotalMinor: 1,
+        },
+      ])
+    ).toThrow(/safe integer job cost subtotal/);
+  }, 5000);
+
   it("keeps site options rich enough for maps and links", () => {
     const siteOption = {
       id: "550e8400-e29b-41d4-a716-446655440010",

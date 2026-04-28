@@ -411,11 +411,18 @@ export function calculateJobCostLineTotalMinor(input: {
 export function calculateJobCostSummary(
   costLines: readonly Pick<JobCostLine, "lineTotalMinor">[]
 ): JobCostSummary {
+  let subtotalMinor = 0;
+
+  for (const costLine of costLines) {
+    subtotalMinor += costLine.lineTotalMinor;
+
+    if (!Number.isSafeInteger(subtotalMinor)) {
+      throw new RangeError("Expected a safe integer job cost subtotal");
+    }
+  }
+
   return {
-    subtotalMinor: costLines.reduce(
-      (subtotal, costLine) => subtotal + costLine.lineTotalMinor,
-      0
-    ),
+    subtotalMinor,
   };
 }
 

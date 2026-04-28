@@ -21,6 +21,7 @@ import {
   JobNotFoundError,
   JobSchema,
   JobSiteOptionSchema,
+  JobStorageError,
   JobVisitSchema,
   OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
@@ -137,6 +138,11 @@ interface WorkItemCostLineRow {
   readonly type: string;
   readonly unit_price_minor: number;
   readonly work_item_id: string;
+}
+
+interface WorkItemCostLineTotalRow {
+  readonly quantity: string;
+  readonly unit_price_minor: number;
 }
 
 interface IdRow {
@@ -422,12 +428,20 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const lookupWorkItemOrganization = Effect.fn(
         "JobsRepository.lookupWorkItemOrganization"
-      )(function* (workItemId: WorkItemId) {
+      )(function* (
+        workItemId: WorkItemId,
+        options?: {
+          readonly forUpdate?: boolean;
+        }
+      ) {
+        const lockClause =
+          options?.forUpdate === true ? sql`for update` : sql``;
         const rows = yield* sql<{ readonly organization_id: string }>`
           select organization_id
           from work_items
           where id = ${workItemId}
           limit 1
+          ${lockClause}
         `;
 
         return Option.fromNullable(rows[0]?.organization_id).pipe(
@@ -437,9 +451,17 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const ensureWorkItemOrganizationMatches = Effect.fn(
         "JobsRepository.ensureWorkItemOrganizationMatches"
-      )(function* (organizationId: OrganizationId, workItemId: WorkItemId) {
-        const workItemOrganizationId =
-          yield* lookupWorkItemOrganization(workItemId);
+      )(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        options?: {
+          readonly forUpdate?: boolean;
+        }
+      ) {
+        const workItemOrganizationId = yield* lookupWorkItemOrganization(
+          workItemId,
+          options
+        );
 
         if (Option.isNone(workItemOrganizationId)) {
           return yield* Effect.fail(
@@ -969,36 +991,75 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
       const addCostLine = Effect.fn("JobsRepository.addCostLine")(function* (
         input: AddJobCostLineRecordInput
       ) {
-        yield* ensureWorkItemOrganizationMatches(
-          input.organizationId,
-          input.workItemId
-        );
-        yield* ensureOrganizationMember(
-          input.organizationId,
-          input.authorUserId,
-          {
-            forUpdate: true,
-          }
-        );
+        return yield* withTransaction(
+          Effect.gen(function* () {
+            yield* ensureWorkItemOrganizationMatches(
+              input.organizationId,
+              input.workItemId,
+              { forUpdate: true }
+            );
+            yield* ensureOrganizationMember(
+              input.organizationId,
+              input.authorUserId,
+              {
+                forUpdate: true,
+              }
+            );
 
-        const rows = yield* sql<WorkItemCostLineRow>`
-          insert into work_item_cost_lines ${sql
-            .insert({
-              author_user_id: input.authorUserId,
-              description: input.description,
-              id: generateCostLineId(),
-              organization_id: input.organizationId,
-              quantity: String(decodeJobCostLineQuantity(input.quantity)),
-              tax_rate_basis_points: input.taxRateBasisPoints ?? null,
-              type: input.type,
-              unit_price_minor: input.unitPriceMinor,
-              work_item_id: input.workItemId,
-            })
-            .returning("*")}
-        `;
+            const existingCostLines = yield* sql<WorkItemCostLineTotalRow>`
+              select quantity, unit_price_minor
+              from work_item_cost_lines
+              where work_item_id = ${input.workItemId}
+            `;
+            const lineTotalMinor = calculateJobCostLineTotalMinor({
+              quantity: input.quantity,
+              unitPriceMinor: input.unitPriceMinor,
+            });
 
-        return mapJobCostLineRow(
-          getRequiredRow(rows, "inserted work item cost line")
+            try {
+              calculateJobCostSummary([
+                ...existingCostLines.map((costLine) => ({
+                  lineTotalMinor: calculateJobCostLineTotalMinor({
+                    quantity: Number(costLine.quantity),
+                    unitPriceMinor: costLine.unit_price_minor,
+                  }),
+                })),
+                { lineTotalMinor },
+              ]);
+            } catch (error) {
+              if (error instanceof RangeError) {
+                return yield* Effect.fail(
+                  new JobStorageError({
+                    cause: error.message,
+                    message:
+                      "Job cost summary subtotal would exceed a safe integer",
+                  })
+                );
+              }
+
+              throw error;
+            }
+
+            const rows = yield* sql<WorkItemCostLineRow>`
+              insert into work_item_cost_lines ${sql
+                .insert({
+                  author_user_id: input.authorUserId,
+                  description: input.description,
+                  id: generateCostLineId(),
+                  organization_id: input.organizationId,
+                  quantity: String(decodeJobCostLineQuantity(input.quantity)),
+                  tax_rate_basis_points: input.taxRateBasisPoints ?? null,
+                  type: input.type,
+                  unit_price_minor: input.unitPriceMinor,
+                  work_item_id: input.workItemId,
+                })
+                .returning("*")}
+            `;
+
+            return mapJobCostLineRow(
+              getRequiredRow(rows, "inserted work item cost line")
+            );
+          })
         );
       });
 
