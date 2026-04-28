@@ -33,6 +33,9 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       )
       .handle("addJobVisit", ({ path, payload }) =>
         jobsService.addVisit(path.workItemId, payload)
+      )
+      .handle("addJobCostLine", ({ path, payload }) =>
+        jobsService.addCostLine(path.workItemId, payload)
       );
   })
 );

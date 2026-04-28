@@ -31,6 +31,8 @@ export {
   workItem,
   workItemActivity,
   workItemActivityRelations,
+  workItemCostLine,
+  workItemCostLineRelations,
   workItemComment,
   workItemCommentRelations,
   workItemRelations,

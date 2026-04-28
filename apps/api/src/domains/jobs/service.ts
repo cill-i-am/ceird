@@ -11,6 +11,7 @@ import {
 } from "@task-tracker/jobs-core";
 import type {
   AddJobCommentInput,
+  AddJobCostLineInput,
   AddJobVisitInput,
   ContactIdType as ContactId,
   CreateJobContactInput,
@@ -609,8 +610,83 @@ export class JobsService extends Effect.Service<JobsService>()(
         }
       });
 
+      const addCostLine = Effect.fn("JobsService.addCostLine")(function* (
+        workItemId: WorkItemId,
+        input: AddJobCostLineInput
+      ) {
+        const actor = yield* loadActor(workItemId);
+
+        const result = yield* jobsRepository
+          .withTransaction(
+            Effect.gen(function* () {
+              const job = yield* jobsRepository
+                .findByIdForUpdate(actor.organizationId, workItemId)
+                .pipe(Effect.map(Option.getOrUndefined));
+
+              if (job === undefined) {
+                return yield* Effect.fail(
+                  new JobNotFoundError({
+                    message: "Job does not exist",
+                    workItemId,
+                  })
+                );
+              }
+
+              yield* authorization.ensureCanAddCostLine(actor, job);
+
+              const costLine = yield* jobsRepository.addCostLine({
+                authorUserId: actor.userId,
+                description: input.description,
+                organizationId: actor.organizationId,
+                quantity: input.quantity,
+                taxRateBasisPoints: input.taxRateBasisPoints,
+                type: input.type,
+                unitPriceMinor: input.unitPriceMinor,
+                workItemId,
+              });
+
+              yield* activityRecorder.recordCostLineAdded(actor, {
+                costLineId: costLine.id,
+                costLineType: costLine.type,
+                workItemId,
+              });
+
+              return costLine;
+            })
+          )
+          .pipe(Effect.either);
+
+        if (Either.isRight(result)) {
+          return result.right;
+        }
+
+        switch (result.left._tag) {
+          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+            return yield* result.left.userId === actor.userId
+              ? Effect.fail(
+                  new JobAccessDeniedError({
+                    message:
+                      "Your organization access changed while the request was running",
+                    workItemId,
+                  })
+                )
+              : Effect.die(result.left);
+          }
+          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+            return yield* Effect.die(result.left);
+          }
+          case "SqlError": {
+            return yield* failJobsStorageError(result.left);
+          }
+          default: {
+            return yield* Effect.fail(result.left);
+          }
+        }
+      });
+
       return {
         addComment,
+        addCostLine,
         addVisit,
         create,
         getDetail,

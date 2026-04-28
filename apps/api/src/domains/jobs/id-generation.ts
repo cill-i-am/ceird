@@ -2,6 +2,7 @@ import {
   ActivityId,
   CommentId,
   ContactId,
+  CostLineId,
   RegionId,
   SiteId,
   VisitId,
@@ -11,6 +12,7 @@ import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
+  CostLineIdType,
   RegionIdType,
   SiteIdType,
   VisitIdType,
@@ -22,6 +24,7 @@ import { v7 as uuidv7 } from "uuid";
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeContactId = Schema.decodeUnknownSync(ContactId);
+const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeRegionId = Schema.decodeUnknownSync(RegionId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
@@ -41,6 +44,10 @@ export function generateCommentId(): CommentIdType {
 
 export function generateContactId(): ContactIdType {
   return decodeContactId(generateJobDomainUuid());
+}
+
+export function generateCostLineId(): CostLineIdType {
+  return decodeCostLineId(generateJobDomainUuid());
 }
 
 export function generateRegionId(): RegionIdType {

@@ -1,7 +1,9 @@
 /* oxlint-disable unicorn/no-array-method-this-argument */
 import type {
+  CostLineId as CostLineIdType,
   Job,
   JobActivityPayload,
+  JobCostLineType,
   VisitIdType as VisitId,
 } from "@task-tracker/jobs-core";
 import { Effect } from "effect";
@@ -103,7 +105,30 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
         });
       });
 
+      const recordCostLineAdded = Effect.fn(
+        "JobsActivityRecorder.recordCostLineAdded"
+      )(function* (
+        actor: JobsActor,
+        input: {
+          readonly costLineId: CostLineIdType;
+          readonly costLineType: JobCostLineType;
+          readonly workItemId: Job["id"];
+        }
+      ) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            costLineId: input.costLineId,
+            costLineType: input.costLineType,
+            eventType: "cost_line_added",
+          },
+          workItemId: input.workItemId,
+        });
+      });
+
       return {
+        recordCostLineAdded,
         recordCreated,
         recordPatched,
         recordReopened,

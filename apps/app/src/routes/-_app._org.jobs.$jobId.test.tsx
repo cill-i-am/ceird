@@ -260,6 +260,10 @@ function buildDetail() {
         workItemId,
       },
     ],
+    costLines: [],
+    costSummary: {
+      subtotalMinor: 0,
+    },
     contact: {
       email: "pat@example.com",
       id: contactId,

@@ -78,6 +78,13 @@
       "when": 1777375292124,
       "tag": "0010_spicy_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777390092832,
+      "tag": "0011_mature_vertigo",
+      "breakpoints": true
     }
   ]
 }

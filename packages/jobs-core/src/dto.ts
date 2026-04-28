@@ -9,6 +9,12 @@ import {
   IsoDateTimeString,
   JobBlockedReasonSchema,
   JobCommentBodySchema,
+  JobCostLineDescriptionSchema,
+  JobCostLineQuantitySchema,
+  JobCostLineTaxRateBasisPointsSchema,
+  JobCostLineTotalMinorSchema,
+  JobCostLineTypeSchema,
+  JobCostLineUnitPriceMinorSchema,
   JobExternalReferenceSchema,
   JobKindSchema,
   JobPrioritySchema,
@@ -24,6 +30,7 @@ import {
   ActivityId,
   CommentId,
   ContactId,
+  CostLineId,
   OrganizationId,
   RegionId,
   SiteId,
@@ -143,6 +150,12 @@ export const JobActivityVisitLoggedPayloadSchema = Schema.Struct({
   visitId: VisitId,
 });
 
+export const JobActivityCostLineAddedPayloadSchema = Schema.Struct({
+  eventType: Schema.Literal("cost_line_added"),
+  costLineId: CostLineId,
+  costLineType: JobCostLineTypeSchema,
+});
+
 export const JobActivityPayloadSchema = Schema.Union(
   JobActivityJobCreatedPayloadSchema,
   JobActivityStatusChangedPayloadSchema,
@@ -153,7 +166,8 @@ export const JobActivityPayloadSchema = Schema.Union(
   JobActivitySiteChangedPayloadSchema,
   JobActivityContactChangedPayloadSchema,
   JobActivityReopenedPayloadSchema,
-  JobActivityVisitLoggedPayloadSchema
+  JobActivityVisitLoggedPayloadSchema,
+  JobActivityCostLineAddedPayloadSchema
 );
 export type JobActivityPayload = Schema.Schema.Type<
   typeof JobActivityPayloadSchema
@@ -178,6 +192,25 @@ export const JobVisitSchema = Schema.Struct({
   createdAt: IsoDateTimeString,
 });
 export type JobVisit = Schema.Schema.Type<typeof JobVisitSchema>;
+
+export const JobCostLineSchema = Schema.Struct({
+  id: CostLineId,
+  workItemId: WorkItemId,
+  authorUserId: UserId,
+  type: JobCostLineTypeSchema,
+  description: JobCostLineDescriptionSchema,
+  quantity: JobCostLineQuantitySchema,
+  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
+  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
+  lineTotalMinor: JobCostLineTotalMinorSchema,
+  createdAt: IsoDateTimeString,
+});
+export type JobCostLine = Schema.Schema.Type<typeof JobCostLineSchema>;
+
+export const JobCostSummarySchema = Schema.Struct({
+  subtotalMinor: JobCostLineTotalMinorSchema,
+});
+export type JobCostSummary = Schema.Schema.Type<typeof JobCostSummarySchema>;
 
 export const JobListQuerySchema = Schema.Struct({
   cursor: Schema.optional(JobListCursor),
@@ -348,6 +381,82 @@ export type AddJobVisitResponse = Schema.Schema.Type<
   typeof AddJobVisitResponseSchema
 >;
 
+export const AddJobCostLineInputSchema = Schema.Struct({
+  type: JobCostLineTypeSchema,
+  description: JobCostLineDescriptionSchema,
+  quantity: JobCostLineQuantitySchema,
+  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
+  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
+}).pipe(
+  Schema.filter((input) =>
+    Number.isSafeInteger(
+      calculateJobCostLineTotalMinor({
+        quantity: input.quantity,
+        unitPriceMinor: input.unitPriceMinor,
+      })
+    )
+  ),
+  Schema.annotations({
+    message: () => "Expected a safe integer line total",
+    parseOptions: { onExcessProperty: "error" },
+  })
+);
+export type AddJobCostLineInput = Schema.Schema.Type<
+  typeof AddJobCostLineInputSchema
+>;
+
+export const AddJobCostLineResponseSchema = JobCostLineSchema;
+export type AddJobCostLineResponse = Schema.Schema.Type<
+  typeof AddJobCostLineResponseSchema
+>;
+
+export function calculateJobCostLineTotalMinor(input: {
+  readonly quantity: number;
+  readonly unitPriceMinor: number;
+}): number {
+  const quantityParts = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(input.quantity));
+
+  if (!quantityParts) {
+    return Number.NaN;
+  }
+
+  const quantityHundredths =
+    Number(quantityParts[1]) * 100 +
+    Number((quantityParts[2] ?? "").padEnd(2, "0"));
+
+  if (
+    !Number.isSafeInteger(quantityHundredths) ||
+    !Number.isSafeInteger(input.unitPriceMinor)
+  ) {
+    return Number.NaN;
+  }
+
+  const totalHundredthMinor =
+    BigInt(quantityHundredths) * BigInt(input.unitPriceMinor);
+  const roundedTotalMinor =
+    totalHundredthMinor / 100n + (totalHundredthMinor % 100n >= 50n ? 1n : 0n);
+
+  return Number(roundedTotalMinor);
+}
+
+export function calculateJobCostSummary(
+  costLines: readonly Pick<JobCostLine, "lineTotalMinor">[]
+): JobCostSummary {
+  let subtotalMinor = 0;
+
+  for (const costLine of costLines) {
+    subtotalMinor += costLine.lineTotalMinor;
+
+    if (!Number.isSafeInteger(subtotalMinor)) {
+      throw new RangeError("Expected a safe integer job cost subtotal");
+    }
+  }
+
+  return {
+    subtotalMinor,
+  };
+}
+
 export const JobContactDetailSchema = Schema.Struct({
   id: ContactId,
   name: ContactNameSchema,
@@ -365,6 +474,8 @@ export const JobDetailSchema = Schema.Struct({
   comments: Schema.Array(JobCommentSchema),
   activity: Schema.Array(JobActivitySchema),
   visits: Schema.Array(JobVisitSchema),
+  costLines: Schema.Array(JobCostLineSchema),
+  costSummary: JobCostSummarySchema,
 });
 export type JobDetail = Schema.Schema.Type<typeof JobDetailSchema>;
 

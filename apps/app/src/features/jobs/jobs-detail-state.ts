@@ -3,6 +3,8 @@
 
 import { Atom } from "@effect-atom/atom-react";
 import type {
+  AddJobCostLineInput,
+  AddJobCostLineResponse,
   AddJobCommentInput,
   AddJobCommentResponse,
   AddJobVisitInput,
@@ -105,6 +107,24 @@ export const addJobVisitMutationAtomFamily = Atom.family(
     )
 );
 
+export const addJobCostLineMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, AddJobCostLineResponse, AddJobCostLineInput>(
+      (input, get) =>
+        addBrowserJobCostLine(workItemId, input).pipe(
+          Effect.tap((costLine) =>
+            Effect.gen(function* () {
+              yield* Effect.sync(() => {
+                insertJobCostLine(get, workItemId, costLine);
+              });
+
+              yield* refreshJobDetailIfPossible(get, workItemId);
+            })
+          )
+        )
+    )
+);
+
 function getBrowserJobDetail(workItemId: WorkItemIdType) {
   return runBrowserJobsRequest("JobsBrowser.getJobDetail", (client) =>
     client.jobs.getJobDetail({
@@ -160,6 +180,18 @@ function addBrowserJobVisit(
 ) {
   return runBrowserJobsRequest("JobsBrowser.addJobVisit", (client) =>
     client.jobs.addJobVisit({
+      path: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function addBrowserJobCostLine(
+  workItemId: WorkItemIdType,
+  input: AddJobCostLineInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.addJobCostLine", (client) =>
+    client.jobs.addJobCostLine({
       path: { workItemId },
       payload: input,
     })
@@ -279,5 +311,39 @@ function insertJobVisit(
         ? String(right.id).localeCompare(String(left.id))
         : dateOrder;
     }),
+  });
+}
+
+function insertJobCostLine(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  costLine: AddJobCostLineResponse
+) {
+  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
+
+  if (currentDetail === null) {
+    return;
+  }
+
+  const costLines = [
+    costLine,
+    ...currentDetail.costLines.filter((current) => current.id !== costLine.id),
+  ].sort((left, right) => {
+    const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+
+    return createdAtOrder === 0
+      ? String(right.id).localeCompare(String(left.id))
+      : createdAtOrder;
+  });
+
+  get.set(jobDetailStateAtomFamily(workItemId), {
+    ...currentDetail,
+    costLines,
+    costSummary: {
+      subtotalMinor: costLines.reduce(
+        (subtotal, current) => subtotal + current.lineTotalMinor,
+        0
+      ),
+    },
   });
 }

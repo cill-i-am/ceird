@@ -5,6 +5,7 @@ import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
+  CostLineIdType,
   JobDetailResponse,
   RegionIdType,
   SiteIdType,
@@ -37,6 +38,7 @@ const regionId = "55555555-5555-4555-8555-555555555555" as RegionIdType;
 const organizationId = decodeOrganizationId("org_123");
 
 const {
+  mockedAddJobCostLine,
   mockedAddJobComment,
   mockedAddJobVisit,
   mockedGetJobDetail,
@@ -47,6 +49,7 @@ const {
   mockedReopenJob,
   mockedTransitionJob,
 } = vi.hoisted(() => ({
+  mockedAddJobCostLine: vi.fn<EffectClientMock>(),
   mockedAddJobComment: vi.fn<EffectClientMock>(),
   mockedAddJobVisit: vi.fn<EffectClientMock>(),
   mockedGetJobDetail: vi.fn<EffectClientMock>(),
@@ -164,6 +167,7 @@ vi.mock("./jobs-client", async () => {
 
 describe("jobs detail sheet integration", () => {
   beforeEach(() => {
+    mockedAddJobCostLine.mockReset();
     mockedAddJobComment.mockReset();
     mockedAddJobVisit.mockReset();
     mockedGetJobDetail.mockReset();
@@ -177,6 +181,7 @@ describe("jobs detail sheet integration", () => {
     mockedMakeBrowserJobsClient.mockImplementation(() =>
       Effect.succeed({
         jobs: {
+          addJobCostLine: mockedAddJobCostLine,
           addJobComment: mockedAddJobComment,
           addJobVisit: mockedAddJobVisit,
           getJobDetail: mockedGetJobDetail,
@@ -338,6 +343,56 @@ describe("jobs detail sheet integration", () => {
   );
 
   it(
+    "shows cost totals and keeps a newly added cost line visible when refresh fails",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAddJobCostLine.mockReturnValue(
+        Effect.succeed({
+          authorUserId: actorUserId,
+          createdAt: "2026-04-24T13:00:00.000Z",
+          description: "Two hours install labour",
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab" as CostLineIdType,
+          lineTotalMinor: 13_000,
+          quantity: 2,
+          type: "labour",
+          unitPriceMinor: 6500,
+          workItemId,
+        })
+      );
+      mockedGetJobDetail.mockReturnValue(
+        Effect.fail(new Error("refresh failed"))
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet();
+
+      expect(screen.getByText("Cost total")).toBeInTheDocument();
+      expect(screen.getByText("€45.00")).toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText("Cost type"), "labour");
+      await user.type(
+        screen.getByLabelText("Cost description"),
+        "Two hours install labour"
+      );
+      await user.clear(screen.getByLabelText("Quantity"));
+      await user.type(screen.getByLabelText("Quantity"), "2");
+      await user.clear(screen.getByLabelText("Unit price"));
+      await user.type(screen.getByLabelText("Unit price"), "65");
+      await user.click(screen.getByRole("button", { name: /add cost line/i }));
+
+      await expect(
+        screen.findByText("Two hours install labour")
+      ).resolves.toBeInTheDocument();
+      expect(screen.getByText("€175.00")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/that update didn't land/i)
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
     "clears stale rich contact detail when site reassignment clears the contact and refresh fails",
     {
       timeout: 10_000,
@@ -491,6 +546,22 @@ function buildDetail(): JobDetailResponse {
         workItemId,
       },
     ],
+    costLines: [
+      {
+        authorUserId: actorUserId,
+        createdAt: "2026-04-23T12:00:00.000Z",
+        description: "Replacement relay",
+        id: "99999999-9999-4999-8999-999999999999" as CostLineIdType,
+        lineTotalMinor: 4500,
+        quantity: 1,
+        type: "material",
+        unitPriceMinor: 4500,
+        workItemId,
+      },
+    ],
+    costSummary: {
+      subtotalMinor: 4500,
+    },
     contact: {
       email: "pat@example.com",
       id: contactId,

@@ -111,6 +111,7 @@ function makeHarness(
       readonly workItemId: WorkItemId;
     }) => unexpected("addActivity"),
     addComment: (_input: unknown) => unexpected("addComment"),
+    addCostLine: (_input: unknown) => unexpected("addCostLine"),
     addVisit: (_input: unknown) => unexpected("addVisit"),
     create: (_input: unknown) => unexpected("create"),
     findById: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>

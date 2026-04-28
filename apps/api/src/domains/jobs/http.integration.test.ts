@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   CreateSiteResponseSchema,
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   REGION_NOT_FOUND_ERROR_TAG,
   SitesOptionsResponseSchema,
 } from "@task-tracker/jobs-core";
@@ -526,6 +527,109 @@ describe("jobs http integration", () => {
       );
       expect(validVisitResponse.status).toBe(201);
 
+      const costLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${createdJob.id}/cost-lines`,
+          {
+            description: "Replacement expansion vessel",
+            quantity: 1,
+            taxRateBasisPoints: 2300,
+            type: "material",
+            unitPriceMinor: 18_500,
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(costLineResponse.status).toBe(201);
+      const costLine = (await costLineResponse.json()) as {
+        readonly lineTotalMinor: number;
+      };
+      expect(costLine.lineTotalMinor).toBe(18_500);
+
+      const overflowJobResponse = await api.handler(
+        makeJsonRequest(
+          "/jobs",
+          {
+            priority: "medium",
+            title: "Replace plant room equipment",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(overflowJobResponse.status).toBe(201);
+      const overflowJob = (await overflowJobResponse.json()) as {
+        readonly id: string;
+      };
+
+      const patchOverflowAssigneeResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${overflowJob.id}`,
+          {
+            assigneeId: memberUserId,
+          },
+          {
+            cookieJar: ownerCookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(patchOverflowAssigneeResponse.status).toBe(200);
+
+      const majorCostLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${overflowJob.id}/cost-lines`,
+          {
+            description: "Major equipment package",
+            quantity: 4_194_304,
+            type: "material",
+            unitPriceMinor: 2_147_483_647,
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(majorCostLineResponse.status).toBe(201);
+
+      const safeSubtotalLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${overflowJob.id}/cost-lines`,
+          {
+            description: "Final safe subtotal line",
+            quantity: 1,
+            type: "material",
+            unitPriceMinor: 4_194_289,
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(safeSubtotalLineResponse.status).toBe(201);
+
+      const overflowingCostLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${overflowJob.id}/cost-lines`,
+          {
+            description: "Fractional line that rounds over the limit",
+            quantity: 0.29,
+            type: "material",
+            unitPriceMinor: 50,
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(overflowingCostLineResponse.status).toBe(422);
+      await expect(overflowingCostLineResponse.json()).resolves.toMatchObject({
+        _tag: JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
+      });
+
       const startedTransitionResponse = await api.handler(
         makeJsonRequest(
           `/jobs/${createdJob.id}/transitions`,
@@ -628,6 +732,10 @@ describe("jobs http integration", () => {
       const finalDetail = (await finalDetailResponse.json()) as {
         readonly activity: readonly unknown[];
         readonly comments: readonly unknown[];
+        readonly costLines: readonly unknown[];
+        readonly costSummary: {
+          readonly subtotalMinor: number;
+        };
         readonly contact?: {
           readonly email?: string;
           readonly name: string;
@@ -651,8 +759,10 @@ describe("jobs http integration", () => {
         phone: "+353 87 123 4567",
       });
       expect(finalDetail.comments).toHaveLength(1);
+      expect(finalDetail.costLines).toHaveLength(1);
+      expect(finalDetail.costSummary.subtotalMinor).toBe(18_500);
       expect(finalDetail.visits).toHaveLength(1);
-      expect(finalDetail.activity.length).toBeGreaterThanOrEqual(7);
+      expect(finalDetail.activity.length).toBeGreaterThanOrEqual(8);
     });
   }, 30_000);
 });

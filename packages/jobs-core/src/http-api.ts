@@ -2,6 +2,8 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
 import { Schema } from "effect";
 
 import {
+  AddJobCostLineInputSchema,
+  AddJobCostLineResponseSchema,
   AddJobCommentInputSchema,
   AddJobCommentResponseSchema,
   AddJobVisitInputSchema,
@@ -29,6 +31,7 @@ import {
   CoordinatorMatchesAssigneeError,
   InvalidJobTransitionError,
   JobAccessDeniedError,
+  JobCostSummaryLimitExceededError,
   JobListCursorInvalidError,
   JobNotFoundError,
   JobStorageError,
@@ -124,6 +127,16 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(VisitDurationIncrementError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines")
+      .setPath(Schema.Struct({ workItemId: WorkItemId }))
+      .setPayload(AddJobCostLineInputSchema)
+      .addSuccess(AddJobCostLineResponseSchema, { status: 201 })
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
+      .addError(JobCostSummaryLimitExceededError)
       .addError(JobStorageError)
   );
 

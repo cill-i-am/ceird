@@ -1,9 +1,11 @@
 import type { JobActivityPayload } from "@task-tracker/jobs-core";
 import {
   JOB_ACTIVITY_EVENT_TYPES,
+  JOB_COST_LINE_TYPES,
   JOB_KINDS,
   JOB_PRIORITIES,
   JOB_STATUSES,
+  MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
 } from "@task-tracker/jobs-core";
 import { relations, sql } from "drizzle-orm";
 import {
@@ -11,9 +13,11 @@ import {
   check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -42,6 +46,12 @@ const kindValuesSql = sql.raw(
 );
 const activityEventTypeValuesSql = sql.raw(
   JOB_ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const costLineTypeValuesSql = sql.raw(
+  JOB_COST_LINE_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const maxJobCostLineTaxRateBasisPointsSql = sql.raw(
+  String(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
 );
 
 export const serviceRegion = pgTable(
@@ -280,6 +290,10 @@ export const workItem = pgTable(
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
+    uniqueIndex("work_items_id_organization_id_idx").on(
+      table.id,
+      table.organizationId
+    ),
   ]
 );
 
@@ -380,6 +394,61 @@ export const workItemVisit = pgTable(
   ]
 );
 
+export const workItemCostLine = pgTable(
+  "work_item_cost_lines",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    workItemId: uuid("work_item_id")
+      .notNull()
+      .references(() => workItem.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id),
+    type: text("type").notNull(),
+    description: text("description").notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    taxRateBasisPoints: integer("tax_rate_basis_points"),
+    createdAt: jobsTimestamp("created_at"),
+  },
+  (table) => [
+    check(
+      "work_item_cost_lines_type_chk",
+      sql`${table.type} in (${costLineTypeValuesSql})`
+    ),
+    check(
+      "work_item_cost_lines_quantity_positive_chk",
+      sql`${table.quantity} > 0`
+    ),
+    check(
+      "work_item_cost_lines_unit_price_non_negative_chk",
+      sql`${table.unitPriceMinor} >= 0`
+    ),
+    check(
+      "work_item_cost_lines_tax_rate_range_chk",
+      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${maxJobCostLineTaxRateBasisPointsSql})`
+    ),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_cost_lines_work_item_organization_fk",
+    }).onDelete("cascade"),
+    index("work_item_cost_lines_work_item_created_at_idx").on(
+      table.workItemId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("work_item_cost_lines_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+  ]
+);
+
 export const serviceRegionRelations = relations(
   serviceRegion,
   ({ many, one }) => ({
@@ -431,6 +500,7 @@ export const workItemRelations = relations(workItem, ({ many, one }) => ({
     fields: [workItem.contactId],
     references: [contact.id],
   }),
+  costLines: many(workItemCostLine),
   site: one(site, {
     fields: [workItem.siteId],
     references: [site.id],
@@ -485,6 +555,24 @@ export const workItemVisitRelations = relations(workItemVisit, ({ one }) => ({
   }),
 }));
 
+export const workItemCostLineRelations = relations(
+  workItemCostLine,
+  ({ one }) => ({
+    author: one(user, {
+      fields: [workItemCostLine.authorUserId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [workItemCostLine.organizationId],
+      references: [organization.id],
+    }),
+    workItem: one(workItem, {
+      fields: [workItemCostLine.workItemId],
+      references: [workItem.id],
+    }),
+  })
+);
+
 export const jobsSchema = {
   contact,
   serviceRegion,
@@ -492,6 +580,7 @@ export const jobsSchema = {
   siteContact,
   workItem,
   workItemActivity,
+  workItemCostLine,
   workItemComment,
   workItemVisit,
 };
