@@ -23,6 +23,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#/components/ui/tooltip";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { OrganizationAsyncResultError } from "./organization-async-result-error";
 import {
@@ -210,6 +214,7 @@ function RateCardForm({
     lines: readonly RateCardLineInput[]
   ) => Promise<Exit.Exit<unknown, unknown>>;
 }) {
+  const formRef = React.useRef<HTMLFormElement | null>(null);
   const nextLineIdRef = React.useRef(0);
   const [lines, setLines] = React.useState<readonly EditableRateCardLine[]>(
     () => initialLines.map(toEditableLine)
@@ -225,6 +230,11 @@ function RateCardForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (mutationResult.waiting) {
+      return;
+    }
+
     const result = buildRateCardLinePayload(lines);
     setLineErrors(result.errors);
 
@@ -262,8 +272,36 @@ function RateCardForm({
     );
   }
 
+  const commandActions = React.useMemo<readonly CommandAction[]>(
+    () => [
+      {
+        disabled: mutationResult.waiting,
+        group: "Current page",
+        id: "rate-card-add-line",
+        run: addLine,
+        scope: "route",
+        title: "Add rate-card line",
+      },
+      {
+        disabled: mutationResult.waiting,
+        group: "Current page",
+        id: "rate-card-save",
+        run: () => formRef.current?.requestSubmit(),
+        scope: "route",
+        title: "Save rate card",
+      },
+    ],
+    [mutationResult.waiting]
+  );
+  useRegisterCommandActions(commandActions);
+
   return (
-    <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
+    <form
+      ref={formRef}
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={handleSubmit}
+    >
       {lines.length > 0 ? (
         <div className="flex flex-col divide-y divide-border/60 border-y border-border/60">
           {lines.map((line, index) => (
@@ -300,6 +338,13 @@ function RateCardForm({
         </Button>
         <Button type="submit" loading={mutationResult.waiting}>
           Save rate card
+          <span aria-hidden="true">
+            <ShortcutHint
+              className="ml-1"
+              hotkey={HOTKEYS.settingsSubmit.hotkey}
+              label="Save rate card"
+            />
+          </span>
         </Button>
       </div>
     </form>
@@ -324,6 +369,19 @@ function RateCardLineRow({
   const nameId = React.useId();
   const valueId = React.useId();
   const unitId = React.useId();
+  const commandActions = React.useMemo<readonly CommandAction[]>(
+    () => [
+      {
+        group: "Current page",
+        id: `rate-card-remove-line-${line.id}`,
+        run: onRemove,
+        scope: "route",
+        title: `Remove rate-card line ${lineNumber}: ${line.name || "Untitled"}`,
+      },
+    ],
+    [line.id, line.name, lineNumber, onRemove]
+  );
+  useRegisterCommandActions(commandActions);
 
   return (
     <div className="grid gap-3 py-3 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">

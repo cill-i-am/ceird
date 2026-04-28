@@ -32,6 +32,16 @@ import {
 
 const JobVisitDurationMinutesSchema = Schema.Int.pipe(Schema.positive());
 const NonEmptyTrimmedString = Schema.Trim.pipe(Schema.minLength(1));
+const ConfigurationNameSchema = NonEmptyTrimmedString.pipe(
+  Schema.maxLength(120)
+);
+const ConfigurationDescriptionSchema = NonEmptyTrimmedString.pipe(
+  Schema.maxLength(500)
+);
+const RateCardLineNameSchema = NonEmptyTrimmedString.pipe(
+  Schema.maxLength(120)
+);
+const RateCardLineUnitSchema = NonEmptyTrimmedString.pipe(Schema.maxLength(40));
 const RateCardLineValueSchema = Schema.Number.pipe(
   Schema.finite(),
   Schema.greaterThanOrEqualTo(0)
@@ -51,14 +61,22 @@ export type JobListCursor = Schema.Schema.Type<typeof JobListCursor>;
 
 export const ServiceAreaSchema = Schema.Struct({
   id: ServiceAreaId,
-  name: NonEmptyTrimmedString,
-  description: Schema.optional(NonEmptyTrimmedString),
+  name: ConfigurationNameSchema,
+  description: Schema.optional(ConfigurationDescriptionSchema),
 });
 export type ServiceArea = Schema.Schema.Type<typeof ServiceAreaSchema>;
 
+export const ServiceAreaOptionSchema = Schema.Struct({
+  id: ServiceAreaId,
+  name: ConfigurationNameSchema,
+});
+export type ServiceAreaOption = Schema.Schema.Type<
+  typeof ServiceAreaOptionSchema
+>;
+
 export const CreateServiceAreaInputSchema = Schema.Struct({
-  name: NonEmptyTrimmedString,
-  description: Schema.optional(NonEmptyTrimmedString),
+  name: ConfigurationNameSchema,
+  description: Schema.optional(ConfigurationDescriptionSchema),
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -72,8 +90,8 @@ export type CreateServiceAreaResponse = Schema.Schema.Type<
 >;
 
 export const UpdateServiceAreaInputSchema = Schema.Struct({
-  name: Schema.optional(NonEmptyTrimmedString),
-  description: Schema.optional(Schema.NullOr(NonEmptyTrimmedString)),
+  name: Schema.optional(ConfigurationNameSchema),
+  description: Schema.optional(Schema.NullOr(ConfigurationDescriptionSchema)),
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -97,16 +115,16 @@ export const RateCardLineSchema = Schema.Struct({
   id: RateCardLineId,
   rateCardId: RateCardId,
   kind: RateCardLineKindSchema,
-  name: NonEmptyTrimmedString,
+  name: RateCardLineNameSchema,
   position: RateCardLinePositionSchema,
-  unit: NonEmptyTrimmedString,
+  unit: RateCardLineUnitSchema,
   value: RateCardLineValueSchema,
 });
 export type RateCardLine = Schema.Schema.Type<typeof RateCardLineSchema>;
 
 export const RateCardSchema = Schema.Struct({
   id: RateCardId,
-  name: NonEmptyTrimmedString,
+  name: ConfigurationNameSchema,
   lines: Schema.Array(RateCardLineSchema),
   createdAt: IsoDateTimeString,
   updatedAt: IsoDateTimeString,
@@ -115,9 +133,9 @@ export type RateCard = Schema.Schema.Type<typeof RateCardSchema>;
 
 export const RateCardLineInputSchema = Schema.Struct({
   kind: RateCardLineKindSchema,
-  name: NonEmptyTrimmedString,
+  name: RateCardLineNameSchema,
   position: RateCardLinePositionSchema,
-  unit: NonEmptyTrimmedString,
+  unit: RateCardLineUnitSchema,
   value: RateCardLineValueSchema,
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
@@ -127,6 +145,7 @@ export type RateCardLineInput = Schema.Schema.Type<
 >;
 
 const RateCardLineInputListSchema = Schema.Array(RateCardLineInputSchema).pipe(
+  Schema.maxItems(50),
   Schema.filter(hasUniqueRateCardLinePositions),
   Schema.annotations({
     message: () => "Rate card line positions must be unique",
@@ -134,7 +153,7 @@ const RateCardLineInputListSchema = Schema.Array(RateCardLineInputSchema).pipe(
 );
 
 export const CreateRateCardInputSchema = Schema.Struct({
-  name: NonEmptyTrimmedString,
+  name: ConfigurationNameSchema,
   lines: RateCardLineInputListSchema,
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
@@ -149,7 +168,7 @@ export type CreateRateCardResponse = Schema.Schema.Type<
 >;
 
 export const UpdateRateCardInputSchema = Schema.Struct({
-  name: Schema.optional(NonEmptyTrimmedString),
+  name: Schema.optional(ConfigurationNameSchema),
   lines: Schema.optional(RateCardLineInputListSchema),
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
@@ -537,7 +556,7 @@ export type JobContactOption = Schema.Schema.Type<
 
 export const JobOptionsResponseSchema = Schema.Struct({
   members: Schema.Array(JobMemberOptionSchema),
-  serviceAreas: Schema.Array(ServiceAreaSchema),
+  serviceAreas: Schema.Array(ServiceAreaOptionSchema),
   sites: Schema.Array(JobSiteOptionSchema),
   contacts: Schema.Array(JobContactOptionSchema),
 });
@@ -546,7 +565,7 @@ export type JobOptionsResponse = Schema.Schema.Type<
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({
-  serviceAreas: Schema.Array(ServiceAreaSchema),
+  serviceAreas: Schema.Array(ServiceAreaOptionSchema),
   sites: Schema.Array(JobSiteOptionSchema),
 });
 export type SitesOptionsResponse = Schema.Schema.Type<

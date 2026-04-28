@@ -4,6 +4,7 @@ import {
   CreateRateCardResponseSchema,
   CreateServiceAreaResponseSchema,
   CreateSiteResponseSchema,
+  JobOptionsResponseSchema,
   RateCardListResponseSchema,
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   ServiceAreaListResponseSchema,
@@ -330,6 +331,18 @@ describe("jobs http integration", () => {
       );
       expect(memberListServiceAreasResponse.status).toBe(403);
 
+      const memberOptionsBeforeSiteResponse = await api.handler(
+        makeRequest("/jobs/options", {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(memberOptionsBeforeSiteResponse.status).toBe(200);
+      await expect(
+        memberOptionsBeforeSiteResponse.json()
+      ).resolves.toMatchObject({
+        serviceAreas: [],
+      });
+
       const duplicateRateCardPositionResponse = await api.handler(
         makeJsonRequest(
           "/rate-cards",
@@ -450,6 +463,30 @@ describe("jobs http integration", () => {
           id: createdSite.id,
           name: "Docklands Campus",
         })
+      );
+      expect(siteOptionsAfterSite.serviceAreas).toContainEqual({
+        id: createdServiceArea.id,
+        name: "Dublin",
+      });
+      expect(JSON.stringify(siteOptionsAfterSite.serviceAreas)).not.toContain(
+        "description"
+      );
+
+      const memberOptionsAfterSiteResponse = await api.handler(
+        makeRequest("/jobs/options", {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(memberOptionsAfterSiteResponse.status).toBe(200);
+      const memberOptionsAfterSite = ParseResult.decodeUnknownSync(
+        JobOptionsResponseSchema
+      )(await memberOptionsAfterSiteResponse.json());
+      expect(memberOptionsAfterSite.serviceAreas).toContainEqual({
+        id: createdServiceArea.id,
+        name: "Dublin",
+      });
+      expect(JSON.stringify(memberOptionsAfterSite.serviceAreas)).not.toContain(
+        "description"
       );
 
       const invalidSitePayloadResponse = await api.handler(

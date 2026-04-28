@@ -127,6 +127,17 @@ function makeHarness(
 
         return [serviceArea] satisfies readonly ServiceArea[];
       }),
+    listServiceAreaOptions: (organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        expect(organizationId).toBe(actor.organizationId);
+
+        return [
+          {
+            id: serviceArea.id,
+            name: serviceArea.name,
+          },
+        ];
+      }),
     updateServiceArea: (
       organizationId: OrganizationId,
       requestedServiceAreaId: ServiceAreaIdType,

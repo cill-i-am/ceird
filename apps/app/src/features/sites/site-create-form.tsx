@@ -2,7 +2,7 @@
 
 import type {
   CreateSiteInput,
-  ServiceArea,
+  ServiceAreaOption,
   SiteCountry,
 } from "@task-tracker/jobs-core";
 
@@ -67,7 +67,7 @@ export function buildSiteServiceAreaSelectionGroups(
 
 export function validateSiteCreateDraft(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceArea[],
+  serviceAreas: readonly ServiceAreaOption[],
   options: {
     readonly nameRequiredMessage?: string;
   } = {}
@@ -97,7 +97,7 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 
 export function buildCreateSiteInputFromDraft(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceArea[]
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateSiteInput {
   const selectedServiceArea = findSelectedServiceArea(values, serviceAreas);
 
@@ -276,7 +276,7 @@ export function SiteCreateFields({
 
 function findSelectedServiceArea(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceArea[]
+  serviceAreas: readonly ServiceAreaOption[]
 ) {
   if (values.serviceAreaSelection === SITE_CREATE_NONE_VALUE) {
     return;

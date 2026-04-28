@@ -20,6 +20,7 @@ import type {
   JobListQuery,
   OrganizationIdType as OrganizationId,
   PatchJobInput,
+  ServiceAreaOption,
   SiteIdType as SiteId,
   TransitionJobInput,
   WorkItemIdType as WorkItemId,
@@ -87,12 +88,16 @@ export class JobsService extends Effect.Service<JobsService>()(
         const actor = yield* loadActor();
         yield* authorization.ensureCanView(actor);
 
-        const [members, serviceAreas, sites, contacts] = yield* Effect.all([
+        const [members, sites, contacts] = yield* Effect.all([
           jobsRepository.listMemberOptions(actor.organizationId),
-          configurationRepository.listServiceAreas(actor.organizationId),
           sitesRepository.listOptions(actor.organizationId),
           contactsRepository.listOptions(actor.organizationId),
         ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
+        const serviceAreas = hasElevatedAccess(actor)
+          ? yield* configurationRepository
+              .listServiceAreaOptions(actor.organizationId)
+              .pipe(Effect.catchTag("SqlError", failJobsStorageError))
+          : deriveServiceAreaOptionsFromSites(sites);
 
         return {
           contacts,
@@ -726,6 +731,49 @@ function resolveCreateSiteId(
     serviceAreaId: input.input.serviceAreaId,
     town: input.input.town,
   });
+}
+
+function hasElevatedAccess(actor: { readonly role: string }): boolean {
+  return actor.role === "owner" || actor.role === "admin";
+}
+
+function deriveServiceAreaOptionsFromSites(
+  sites: readonly {
+    readonly serviceAreaId?: ServiceAreaOption["id"] | undefined;
+    readonly serviceAreaName?: string | undefined;
+  }[]
+): readonly ServiceAreaOption[] {
+  const serviceAreasById = new Map<
+    ServiceAreaOption["id"],
+    ServiceAreaOption
+  >();
+
+  for (const site of sites) {
+    if (
+      site.serviceAreaId === undefined ||
+      site.serviceAreaName === undefined
+    ) {
+      continue;
+    }
+
+    serviceAreasById.set(site.serviceAreaId, {
+      id: site.serviceAreaId,
+      name: site.serviceAreaName,
+    });
+  }
+
+  return [...serviceAreasById.values()].toSorted(compareServiceAreaOptions);
+}
+
+function compareServiceAreaOptions(
+  left: ServiceAreaOption,
+  right: ServiceAreaOption
+): number {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
 }
 
 function resolvePatchedOptionalValue<Value>(

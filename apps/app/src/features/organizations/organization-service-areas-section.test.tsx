@@ -1,7 +1,7 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { RegistryProvider } from "@effect-atom/atom-react";
 import type { ServiceArea, ServiceAreaIdType } from "@task-tracker/jobs-core";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
@@ -12,6 +12,8 @@ type EffectClientMock = (...args: unknown[]) => unknown;
 
 const serviceAreaId =
   "11111111-1111-4111-8111-111111111111" as ServiceAreaIdType;
+const secondServiceAreaId =
+  "22222222-2222-4222-8222-222222222222" as ServiceAreaIdType;
 
 const {
   mockedCreateServiceArea,
@@ -113,6 +115,42 @@ describe("organization service areas section", () => {
     });
   });
 
+  it("keeps local service area mutations when an older list response resolves later", async () => {
+    const serviceAreasResponse = createDeferredServiceAreasResponse();
+    mockedListServiceAreas.mockReturnValue(
+      Effect.promise(() => serviceAreasResponse.promise)
+    );
+    mockedCreateServiceArea.mockReturnValue(
+      Effect.succeed(
+        buildServiceArea("Northside", "Emergency coverage", secondServiceAreaId)
+      )
+    );
+    const user = userEvent.setup();
+    renderServiceAreasSection();
+
+    await screen.findByRole("heading", { name: "Service areas" });
+    await user.type(
+      screen.getByLabelText("New service area name"),
+      "Northside"
+    );
+    await user.type(
+      screen.getByLabelText("New service area description"),
+      "Emergency coverage"
+    );
+    await user.click(screen.getByRole("button", { name: /Add service area/ }));
+
+    await expect(screen.findByText("Northside")).resolves.toBeVisible();
+
+    act(() => {
+      serviceAreasResponse.resolve({
+        items: [buildServiceArea("Dublin", "North and city centre")],
+      });
+    });
+
+    await expect(screen.findByText("Dublin")).resolves.toBeVisible();
+    expect(screen.getByText("Northside")).toBeVisible();
+  });
+
   it("edits a service area through the jobs client group", async () => {
     const user = userEvent.setup();
     renderServiceAreasSection();
@@ -179,13 +217,28 @@ function renderServiceAreasSection() {
   );
 }
 
+function createDeferredServiceAreasResponse() {
+  const { promise, resolve } = (
+    Promise as unknown as {
+      withResolvers: <Value>() => {
+        promise: Promise<Value>;
+        reject: (reason?: unknown) => void;
+        resolve: (value: Value) => void;
+      };
+    }
+  ).withResolvers<{ readonly items: readonly ServiceArea[] }>();
+
+  return { promise, resolve };
+}
+
 function buildServiceArea(
   name: string,
-  description?: string | undefined
+  description?: string | undefined,
+  id: ServiceAreaIdType = serviceAreaId
 ): ServiceArea {
   return {
     description,
-    id: serviceAreaId,
+    id,
     name,
   };
 }

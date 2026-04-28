@@ -42,6 +42,7 @@ export function OrganizationSettingsPage({
   const [savedOrganizationName, setSavedOrganizationName] = React.useState(
     organization.name
   );
+  const settingsRootRef = React.useRef<HTMLDivElement | null>(null);
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const previousOrganizationRef = React.useRef({
     id: organization.id,
@@ -145,15 +146,25 @@ export function OrganizationSettingsPage({
     "settingsSubmit",
     () => {
       const { activeElement } = document;
+      const focusedForm =
+        activeElement instanceof Element ? activeElement.closest("form") : null;
       const focusIsInsideGeneralForm =
         activeElement instanceof Node &&
         Boolean(formRef.current?.contains(activeElement));
+      const focusIsInsideSettings =
+        activeElement instanceof Node &&
+        Boolean(settingsRootRef.current?.contains(activeElement));
 
-      if (
-        !focusIsInsideGeneralForm ||
-        form.state.isSubmitting ||
-        form.state.isDefaultValue
-      ) {
+      if (!focusIsInsideSettings) {
+        return;
+      }
+
+      if (!focusIsInsideGeneralForm) {
+        focusedForm?.requestSubmit();
+        return;
+      }
+
+      if (form.state.isSubmitting || form.state.isDefaultValue) {
         return;
       }
 
@@ -164,7 +175,10 @@ export function OrganizationSettingsPage({
 
   return (
     <RegistryProvider key={organization.id}>
-      <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
+      <div
+        ref={settingsRootRef}
+        className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8"
+      >
         <AppPageHeader
           eyebrow="Organization"
           title="Organization settings"

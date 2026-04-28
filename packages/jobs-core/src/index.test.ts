@@ -26,6 +26,7 @@ import {
   RateCardSchema,
   RateCardsApiGroup,
   ServiceAreasApiGroup,
+  ServiceAreaOptionSchema,
   ServiceAreaSchema,
   SitesOptionsResponseSchema,
   SitesApiGroup,
@@ -80,6 +81,22 @@ describe("jobs-core", () => {
       description: null,
       name: "Retail Core",
     });
+
+    expect(
+      Schema.decodeUnknownSync(ServiceAreaOptionSchema)({
+        id: serviceArea.id,
+        name: serviceArea.name,
+      })
+    ).toStrictEqual({
+      id: serviceArea.id,
+      name: serviceArea.name,
+    });
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
+        name: "A".repeat(121),
+      })
+    ).toThrow(/maxLength/);
   }, 5000);
 
   it("decodes rate card input contracts", () => {
@@ -143,6 +160,34 @@ describe("jobs-core", () => {
         name: "Standard",
       })
     ).toThrow(/positions must be unique/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: Array.from({ length: 51 }, (_, index) => ({
+          kind: "custom",
+          name: `Line ${index + 1}`,
+          position: index + 1,
+          unit: "each",
+          value: index + 1,
+        })),
+        name: "Standard",
+      })
+    ).toThrow(/maxItems/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: [
+          {
+            kind: "custom",
+            name: "A".repeat(121),
+            position: 1,
+            unit: "each",
+            value: 1,
+          },
+        ],
+        name: "Standard",
+      })
+    ).toThrow(/maxLength/);
   }, 5000);
 
   it("decodes rate card response contracts", () => {

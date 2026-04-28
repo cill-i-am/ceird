@@ -25,6 +25,7 @@ import {
   RateCardNotFoundError,
   RateCardSchema,
   ServiceAreaNotFoundError,
+  ServiceAreaOptionSchema,
   ServiceAreaSchema,
   SiteNotFoundError,
   SiteId as SiteIdSchema,
@@ -54,6 +55,7 @@ import type {
   OrganizationIdType as OrganizationId,
   ServiceArea,
   ServiceAreaIdType as ServiceAreaId,
+  ServiceAreaOption,
   SiteCountry,
   SiteGeocodingProvider,
   SiteIdType as SiteId,
@@ -140,6 +142,11 @@ interface JobMemberOptionRow {
 
 interface ServiceAreaRow {
   readonly description: string | null;
+  readonly id: string;
+  readonly name: string;
+}
+
+interface ServiceAreaOptionRow {
   readonly id: string;
   readonly name: string;
 }
@@ -327,6 +334,9 @@ const decodeJobSiteOption = Schema.decodeUnknownSync(JobSiteOptionSchema);
 const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeRateCard = Schema.decodeUnknownSync(RateCardSchema);
 const decodeServiceArea = Schema.decodeUnknownSync(ServiceAreaSchema);
+const decodeServiceAreaOption = Schema.decodeUnknownSync(
+  ServiceAreaOptionSchema
+);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(
@@ -1302,6 +1312,20 @@ export class ConfigurationRepository extends Effect.Service<ConfigurationReposit
         return rows.map(mapServiceAreaRow);
       });
 
+      const listServiceAreaOptions = Effect.fn(
+        "ConfigurationRepository.listServiceAreaOptions"
+      )(function* (organizationId: OrganizationId) {
+        const rows = yield* sql<ServiceAreaOptionRow>`
+          select id, name
+          from service_areas
+          where organization_id = ${organizationId}
+            and archived_at is null
+          order by name asc, id asc
+        `;
+
+        return rows.map(mapServiceAreaOptionRow);
+      });
+
       const createServiceArea = Effect.fn(
         "ConfigurationRepository.createServiceArea"
       )(function* (input: CreateServiceAreaRecordInput) {
@@ -1366,6 +1390,7 @@ export class ConfigurationRepository extends Effect.Service<ConfigurationReposit
 
       return {
         createServiceArea,
+        listServiceAreaOptions,
         listServiceAreas,
         updateServiceArea,
       };
@@ -1704,6 +1729,13 @@ function mapJobMemberOptionRow(row: JobMemberOptionRow): JobMemberOption {
 function mapServiceAreaRow(row: ServiceAreaRow): ServiceArea {
   return decodeServiceArea({
     description: nullableToUndefined(row.description),
+    id: row.id,
+    name: row.name,
+  });
+}
+
+function mapServiceAreaOptionRow(row: ServiceAreaOptionRow): ServiceAreaOption {
+  return decodeServiceAreaOption({
     id: row.id,
     name: row.name,
   });

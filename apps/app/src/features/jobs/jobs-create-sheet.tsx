@@ -26,7 +26,7 @@ import type {
   CreateJobInput,
   JobPriority,
   JobContactOption,
-  ServiceArea,
+  ServiceAreaOption,
   JobSiteOption,
   SiteIdType,
 } from "@task-tracker/jobs-core";
@@ -865,7 +865,7 @@ function buildContactSelectionGroups(
 
 function validate(
   values: JobsCreateFormState,
-  serviceAreas: readonly ServiceArea[]
+  serviceAreas: readonly ServiceAreaOption[]
 ): JobsCreateFieldErrors {
   const validateInlineSite = values.siteSelection === INLINE_CREATE_VALUE;
   const siteErrors = validateInlineSite
@@ -937,7 +937,7 @@ function isHandledCreateJobError(error: unknown) {
 function buildCreateJobInput(
   values: JobsCreateFormState,
   selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceArea[]
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateJobInput {
   return {
     contact: resolveCreateJobContactInput(values, selectionIds),
@@ -976,7 +976,7 @@ function resolveCreateJobContactInput(
 function resolveCreateJobSiteInput(
   values: JobsCreateFormState,
   selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceArea[]
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateJobInput["site"] {
   if (values.siteSelection === NONE_VALUE) {
     return undefined;

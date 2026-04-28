@@ -363,6 +363,8 @@ function makeHarness(
   const configurationRepository = ConfigurationRepository.make({
     createServiceArea: (_input: unknown) =>
       Effect.die(new Error("Unexpected repository call: createServiceArea")),
+    listServiceAreaOptions: (_organizationId: OrganizationId) =>
+      Effect.succeed([] satisfies JobOptionsResponse["serviceAreas"]),
     listServiceAreas: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly ServiceArea[]),
     updateServiceArea: (

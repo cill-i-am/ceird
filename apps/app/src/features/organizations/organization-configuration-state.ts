@@ -1,3 +1,5 @@
+/* oxlint-disable unicorn/no-array-sort */
+
 "use client";
 
 import { Atom } from "@effect-atom/atom-react";
@@ -38,7 +40,10 @@ export const listServiceAreasAtom = Atom.fn<
   listBrowserServiceAreas().pipe(
     Effect.tap((response) =>
       Effect.sync(() => {
-        get.set(organizationServiceAreasStateAtom, response);
+        get.set(
+          organizationServiceAreasStateAtom,
+          mergeServiceAreaList(response, get(organizationServiceAreasStateAtom))
+        );
       })
     )
   )
@@ -86,7 +91,10 @@ export const listRateCardsAtom = Atom.fn<AppJobsError, RateCardListResponse>(
     listBrowserRateCards().pipe(
       Effect.tap((response) =>
         Effect.sync(() => {
-          get.set(organizationRateCardsStateAtom, response);
+          get.set(
+            organizationRateCardsStateAtom,
+            mergeRateCardList(response, get(organizationRateCardsStateAtom))
+          );
         })
       )
     )
@@ -206,10 +214,43 @@ function upsertRateCard(
   };
 }
 
+function mergeServiceAreaList(
+  response: ServiceAreaListResponse,
+  current: ServiceAreaListResponse
+): ServiceAreaListResponse {
+  return {
+    items: mergeByIdSortedByName(response.items, current.items),
+  };
+}
+
+function mergeRateCardList(
+  response: RateCardListResponse,
+  current: RateCardListResponse
+): RateCardListResponse {
+  return {
+    items: mergeByIdSortedByName(response.items, current.items),
+  };
+}
+
 function upsertByIdSortedByName<
   Item extends { readonly id: string; readonly name: string },
 >(items: readonly Item[], item: Item) {
   const next = [item, ...items.filter((current) => current.id !== item.id)];
+  next.sort(compareByNameThenId);
+
+  return next;
+}
+
+function mergeByIdSortedByName<
+  Item extends { readonly id: string; readonly name: string },
+>(base: readonly Item[], overrides: readonly Item[]) {
+  const nextById = new Map(base.map((item) => [item.id, item]));
+
+  for (const item of overrides) {
+    nextById.set(item.id, item);
+  }
+
+  const next = [...nextById.values()];
   next.sort(compareByNameThenId);
 
   return next;

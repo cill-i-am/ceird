@@ -10,6 +10,10 @@ import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { OrganizationAsyncResultError } from "./organization-async-result-error";
 import {
@@ -39,6 +43,8 @@ export function OrganizationServiceAreasSection() {
     name: "",
   });
   const [nameError, setNameError] = React.useState<string | null>(null);
+  const createFormRef = React.useRef<HTMLFormElement | null>(null);
+  const newNameInputRef = React.useRef<HTMLInputElement | null>(null);
   const nameId = React.useId();
   const descriptionId = React.useId();
 
@@ -48,6 +54,11 @@ export function OrganizationServiceAreasSection() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (createResult.waiting) {
+      return;
+    }
+
     const payload = buildCreateServiceAreaPayload(values);
 
     if (!payload) {
@@ -63,6 +74,30 @@ export function OrganizationServiceAreasSection() {
     }
   }
 
+  const commandActions = React.useMemo<readonly CommandAction[]>(
+    () => [
+      {
+        disabled: createResult.waiting,
+        group: "Current page",
+        id: "service-area-create",
+        run: () => {
+          if (values.name.trim()) {
+            createFormRef.current?.requestSubmit();
+            return;
+          }
+
+          newNameInputRef.current?.focus();
+        },
+        scope: "route",
+        title: values.name.trim()
+          ? "Add service area"
+          : "Focus new service area",
+      },
+    ],
+    [createResult.waiting, values.name]
+  );
+  useRegisterCommandActions(commandActions);
+
   return (
     <AppUtilityPanel
       title="Service areas"
@@ -70,6 +105,7 @@ export function OrganizationServiceAreasSection() {
       className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
     >
       <form
+        ref={createFormRef}
         className="grid gap-3 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_auto]"
         method="post"
         noValidate
@@ -81,6 +117,7 @@ export function OrganizationServiceAreasSection() {
         >
           New service area name
           <Input
+            ref={newNameInputRef}
             id={nameId}
             value={values.name}
             aria-invalid={Boolean(nameError) || undefined}
@@ -117,6 +154,13 @@ export function OrganizationServiceAreasSection() {
             loading={createResult.waiting}
           >
             Add service area
+            <span aria-hidden="true">
+              <ShortcutHint
+                className="ml-1"
+                hotkey={HOTKEYS.settingsSubmit.hotkey}
+                label="Add service area"
+              />
+            </span>
           </Button>
         </div>
       </form>
@@ -184,6 +228,8 @@ function ServiceAreaRow({
     name: serviceArea.name,
   }));
   const [nameError, setNameError] = React.useState<string | null>(null);
+  const editNameInputRef = React.useRef<HTMLInputElement | null>(null);
+  const editFormRef = React.useRef<HTMLFormElement | null>(null);
   const nameId = React.useId();
   const descriptionId = React.useId();
 
@@ -197,7 +243,17 @@ function ServiceAreaRow({
     }
   }, [isEditing, serviceArea.description, serviceArea.name]);
 
+  React.useEffect(() => {
+    if (isEditing) {
+      editNameInputRef.current?.focus();
+    }
+  }, [isEditing]);
+
   async function handleSave() {
+    if (updateResult.waiting) {
+      return;
+    }
+
     const payload = buildUpdateServiceAreaPayload(values);
 
     if (!payload) {
@@ -213,72 +269,108 @@ function ServiceAreaRow({
     }
   }
 
+  const commandActions = React.useMemo<readonly CommandAction[]>(
+    () => [
+      {
+        disabled: updateResult.waiting,
+        group: "Current page",
+        id: `service-area-${serviceArea.id}-${isEditing ? "save" : "edit"}`,
+        run: () => {
+          if (isEditing) {
+            editFormRef.current?.requestSubmit();
+            return;
+          }
+
+          setIsEditing(true);
+        },
+        scope: "route",
+        title: isEditing
+          ? `Save service area: ${serviceArea.name}`
+          : `Edit service area: ${serviceArea.name}`,
+      },
+    ],
+    [isEditing, serviceArea.id, serviceArea.name, updateResult.waiting]
+  );
+  useRegisterCommandActions(commandActions);
+
   return (
     <article
       aria-label={`Service area ${serviceArea.name}`}
       className="flex flex-col gap-3"
     >
       {isEditing ? (
-        <FieldGroup className="gap-3">
-          <div className="grid gap-3 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_auto]">
-            <label
-              className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
-              htmlFor={nameId}
-            >
-              Area name for {serviceArea.name}
-              <Input
-                id={nameId}
-                value={values.name}
-                aria-invalid={Boolean(nameError) || undefined}
-                onChange={(event) => {
-                  setNameError(null);
-                  setValues((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }));
-                }}
-              />
-            </label>
-            <label
-              className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
-              htmlFor={descriptionId}
-            >
-              Description for {serviceArea.name}
-              <Textarea
-                id={descriptionId}
-                className="min-h-9 py-2"
-                value={values.description}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <Button
-                type="button"
-                size="sm"
-                loading={updateResult.waiting}
-                onClick={() => void handleSave()}
+        <form
+          ref={editFormRef}
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSave();
+          }}
+        >
+          <FieldGroup className="gap-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_auto]">
+              <label
+                className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
+                htmlFor={nameId}
               >
-                Save {serviceArea.name}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={updateResult.waiting}
-                onClick={() => setIsEditing(false)}
+                Area name for {serviceArea.name}
+                <Input
+                  ref={editNameInputRef}
+                  id={nameId}
+                  value={values.name}
+                  aria-invalid={Boolean(nameError) || undefined}
+                  onChange={(event) => {
+                    setNameError(null);
+                    setValues((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }));
+                  }}
+                />
+              </label>
+              <label
+                className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
+                htmlFor={descriptionId}
               >
-                Cancel
-              </Button>
+                Description for {serviceArea.name}
+                <Textarea
+                  id={descriptionId}
+                  className="min-h-9 py-2"
+                  value={values.description}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <Button type="submit" size="sm" loading={updateResult.waiting}>
+                  Save {serviceArea.name}
+                  <span aria-hidden="true">
+                    <ShortcutHint
+                      className="ml-1"
+                      hotkey={HOTKEYS.settingsSubmit.hotkey}
+                      label={`Save ${serviceArea.name}`}
+                    />
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={updateResult.waiting}
+                  onClick={() => setIsEditing(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-          {nameError ? <FieldError>{nameError}</FieldError> : null}
-          <OrganizationAsyncResultError result={updateResult} />
-        </FieldGroup>
+            {nameError ? <FieldError>{nameError}</FieldError> : null}
+            <OrganizationAsyncResultError result={updateResult} />
+          </FieldGroup>
+        </form>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">

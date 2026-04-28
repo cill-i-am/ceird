@@ -13,6 +13,7 @@ import type {
   JobListResponse,
   JobMemberOption,
   ServiceArea,
+  SitesOptionsResponse,
   JobSiteOption,
   OrganizationIdType as OrganizationId,
   SiteIdType as SiteId,
@@ -230,6 +231,8 @@ function makeHarness(
   const configurationRepository = ConfigurationRepository.make({
     createServiceArea: (_input: unknown) =>
       unexpected("configuration.createServiceArea"),
+    listServiceAreaOptions: (_organizationId: OrganizationId) =>
+      Effect.succeed([] satisfies SitesOptionsResponse["serviceAreas"]),
     listServiceAreas: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly ServiceArea[]),
     updateServiceArea: (
