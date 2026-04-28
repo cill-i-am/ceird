@@ -45,7 +45,7 @@ export class ConfigurationService extends Effect.Service<ConfigurationService>()
         "ConfigurationService.listServiceAreas"
       )(function* () {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanView(actor);
+        yield* authorization.ensureCanManageConfiguration(actor);
 
         const items = yield* configurationRepository
           .listServiceAreas(actor.organizationId)
@@ -86,7 +86,7 @@ export class ConfigurationService extends Effect.Service<ConfigurationService>()
       const listRateCards = Effect.fn("ConfigurationService.listRateCards")(
         function* () {
           const actor = yield* loadActor();
-          yield* authorization.ensureCanView(actor);
+          yield* authorization.ensureCanManageConfiguration(actor);
 
           const items = yield* rateCardsRepository
             .list(actor.organizationId)

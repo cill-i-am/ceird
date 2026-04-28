@@ -250,8 +250,8 @@ function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
 }
 
 describe("configuration service", () => {
-  it("lists service areas and rate cards for organization members", async () => {
-    const harness = makeHarness({ actor: makeActor("member") });
+  it("lists service areas and rate cards for owners", async () => {
+    const harness = makeHarness();
 
     await expect(
       runConfigurationService(
@@ -350,10 +350,26 @@ describe("configuration service", () => {
     expect(harness.calls.updateRateCard).toBe(1);
   }, 10_000);
 
-  it("blocks members from managing configuration", async () => {
+  it("blocks members from listing or managing configuration", async () => {
     const harness = makeHarness({ actor: makeActor("member") });
 
-    const exit = await runConfigurationServiceExit(
+    const listServiceAreasExit = await runConfigurationServiceExit(
+      Effect.gen(function* () {
+        const configuration = yield* ConfigurationService;
+
+        return yield* configuration.listServiceAreas();
+      }),
+      harness
+    );
+    const listRateCardsExit = await runConfigurationServiceExit(
+      Effect.gen(function* () {
+        const configuration = yield* ConfigurationService;
+
+        return yield* configuration.listRateCards();
+      }),
+      harness
+    );
+    const createRateCardExit = await runConfigurationServiceExit(
       Effect.gen(function* () {
         const configuration = yield* ConfigurationService;
 
@@ -365,7 +381,13 @@ describe("configuration service", () => {
       harness
     );
 
-    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(listServiceAreasExit)).toBeInstanceOf(
+      JobAccessDeniedError
+    );
+    expect(getFailure(listRateCardsExit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(createRateCardExit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.listServiceAreas).toBe(0);
+    expect(harness.calls.listRateCards).toBe(0);
     expect(harness.calls.createRateCard).toBe(0);
   }, 10_000);
 });

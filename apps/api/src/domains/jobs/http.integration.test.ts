@@ -323,6 +323,13 @@ describe("jobs http integration", () => {
       );
       expect(memberCreateServiceAreaResponse.status).toBe(403);
 
+      const memberListServiceAreasResponse = await api.handler(
+        makeRequest("/service-areas", {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(memberListServiceAreasResponse.status).toBe(403);
+
       const createRateCardResponse = await api.handler(
         makeJsonRequest(
           "/rate-cards",
@@ -365,6 +372,13 @@ describe("jobs http integration", () => {
         RateCardListResponseSchema
       )(await listRateCardsResponse.json());
       expect(rateCards.items).toContainEqual(createdRateCard);
+
+      const memberListRateCardsResponse = await api.handler(
+        makeRequest("/rate-cards", {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(memberListRateCardsResponse.status).toBe(403);
 
       const createSiteResponse = await api.handler(
         makeJsonRequest(
