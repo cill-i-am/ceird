@@ -489,6 +489,14 @@ describe("jobs repositories integration", () => {
     expect(label.name).toBe("Waiting on PO");
     expect(sameNameInOtherOrg.name).toBe("Waiting on PO");
 
+    const conflictingLabel = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Needs Review",
+        organizationId: identity.organizationId,
+      })
+    );
+
     const duplicateLabelExit = await runJobsEffectExit(
       databaseUrl,
       JobLabelsRepository.create({
@@ -499,16 +507,47 @@ describe("jobs repositories integration", () => {
 
     expectFailureTag(duplicateLabelExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
 
+    const updatedLabel = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobLabelsRepository.update(identity.organizationId, label.id, {
+          name: "Awaiting PO",
+        })
+      )
+    );
+    expect(updatedLabel).toMatchObject({
+      id: label.id,
+      name: "Awaiting PO",
+    });
+
+    const updateConflictExit = await runJobsEffectExit(
+      databaseUrl,
+      JobLabelsRepository.update(identity.organizationId, conflictingLabel.id, {
+        name: " awaiting po ",
+      })
+    );
+
+    expectFailureTag(updateConflictExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+
+    const activeLabels = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.list(identity.organizationId)
+    );
+    expect(activeLabels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Awaiting PO",
+      "Needs Review",
+    ]);
+
     const assigned = await runJobsEffect(
       databaseUrl,
       JobLabelsRepository.assignToJob({
-        labelId: label.id,
+        labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
       })
     );
 
-    expect(assigned).toStrictEqual(label);
+    expect(assigned).toStrictEqual(updatedLabel);
 
     const detail = expectSome(
       await runJobsEffect(
@@ -517,12 +556,12 @@ describe("jobs repositories integration", () => {
       )
     );
     expect(detail.job.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
-      "Waiting on PO",
+      "Awaiting PO",
     ]);
 
     const filtered = await runJobsEffect(
       databaseUrl,
-      JobsRepository.list(identity.organizationId, { labelId: label.id })
+      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
     );
     expect(filtered.items.map((item) => item.id)).toStrictEqual([
       createdJob.id,
@@ -531,25 +570,48 @@ describe("jobs repositories integration", () => {
     const removed = await runJobsEffect(
       databaseUrl,
       JobLabelsRepository.removeFromJob({
-        labelId: label.id,
+        labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
       })
     );
-    expect(removed).toStrictEqual(label);
+    expect(removed).toStrictEqual(updatedLabel);
+
+    await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
 
     const archived = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.archive(identity.organizationId, label.id)
+      JobLabelsRepository.archive(identity.organizationId, updatedLabel.id)
     );
-    expect(Option.getOrUndefined(archived)?.id).toBe(label.id);
+    expect(Option.getOrUndefined(archived)?.id).toBe(updatedLabel.id);
+
+    const detailAfterArchive = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(detailAfterArchive.job.labels).toStrictEqual([]);
+
+    const filteredAfterArchive = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+    );
+    expect(filteredAfterArchive.items).toStrictEqual([]);
 
     const labelsAfterArchive = await runJobsEffect(
       databaseUrl,
       JobLabelsRepository.list(identity.organizationId)
     );
     expect(labelsAfterArchive.map((jobLabel) => jobLabel.id)).not.toContain(
-      label.id
+      updatedLabel.id
     );
   }, 30_000);
 
