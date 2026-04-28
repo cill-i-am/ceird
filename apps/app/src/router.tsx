@@ -23,6 +23,7 @@ declare module "@tanstack/react-router" {
       readonly label: string;
       readonly to?:
         | "/"
+        | "/activity"
         | "/jobs"
         | "/jobs/new"
         | "/members"
