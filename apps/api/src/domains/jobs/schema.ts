@@ -198,6 +198,7 @@ export const workItem = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     title: text("title").notNull(),
+    externalReference: text("external_reference"),
     status: text("status").notNull(),
     priority: text("priority").notNull().default("none"),
     siteId: uuid("site_id").references(() => site.id, { onDelete: "set null" }),
@@ -257,6 +258,10 @@ export const workItem = pgTable(
       table.status,
       table.updatedAt.desc(),
       table.id.desc()
+    ),
+    index("work_items_organization_external_reference_idx").on(
+      table.organizationId,
+      table.externalReference
     ),
     index("work_items_organization_assignee_updated_at_idx").on(
       table.organizationId,

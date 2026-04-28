@@ -107,6 +107,7 @@ describe("jobs repositories integration", () => {
       ContactsRepository.create({
         email: "site-contact@example.com",
         name: "Aoife Byrne",
+        notes: "Prefers morning calls.",
         organizationId: identity.organizationId,
         phone: "+353871234567",
       })
@@ -137,6 +138,7 @@ describe("jobs repositories integration", () => {
           const job = yield* JobsRepository.create({
             contactId: createdContactId,
             createdByUserId: identity.ownerUserId,
+            externalReference: "PO-4471",
             organizationId: identity.organizationId,
             priority: "high",
             siteId: createdSiteId,
@@ -182,6 +184,7 @@ describe("jobs repositories integration", () => {
 
     expect(detailValue.job.kind).toBe("job");
     expect(detailValue.job.title).toBe("Replace damaged window seal");
+    expect(detailValue.job.externalReference).toBe("PO-4471");
     expect(detailValue.job.siteId).toBe(createdSiteId);
     expect(detailValue.job.contactId).toBe(createdContactId);
     expect(detailValue.comments).toHaveLength(1);
@@ -225,6 +228,17 @@ describe("jobs repositories integration", () => {
       createdSiteOption
     );
 
+    const list = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, {})
+    );
+    expect(list.items).toContainEqual(
+      expect.objectContaining({
+        externalReference: "PO-4471",
+        id: createdJob.id,
+      })
+    );
+
     const foundSiteId = await runJobsEffect(
       databaseUrl,
       SitesRepository.findById(identity.organizationId, createdSiteId)
@@ -242,8 +256,11 @@ describe("jobs repositories integration", () => {
     );
 
     expect(createdContactOption).toMatchObject({
+      email: "site-contact@example.com",
       id: createdContactId,
       name: "Aoife Byrne",
+      notes: "Prefers morning calls.",
+      phone: "+353871234567",
       siteIds: expect.arrayContaining([createdSiteId, overflowSiteId]),
     });
     expect(Option.getOrUndefined(foundSiteId)).toBe(createdSiteId);

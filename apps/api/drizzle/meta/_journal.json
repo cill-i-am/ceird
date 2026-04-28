@@ -71,6 +71,13 @@
       "when": 1777313943609,
       "tag": "0009_slow_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777375292124,
+      "tag": "0010_spicy_boomerang",
+      "breakpoints": true
     }
   ]
 }

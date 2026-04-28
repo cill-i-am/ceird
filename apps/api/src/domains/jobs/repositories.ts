@@ -80,6 +80,7 @@ interface WorkItemRow {
   readonly coordinator_id: string | null;
   readonly created_at: Date;
   readonly created_by_user_id: string;
+  readonly external_reference: string | null;
   readonly id: string;
   readonly kind: string;
   readonly organization_id: string;
@@ -153,8 +154,11 @@ interface JobSiteOptionRow {
 }
 
 interface JobContactOptionRow {
+  readonly email: string | null;
   readonly id: string;
   readonly name: string;
+  readonly notes: string | null;
+  readonly phone: string | null;
   readonly site_id: string | null;
 }
 
@@ -166,6 +170,7 @@ export interface CreateJobRecordInput {
   readonly contactId?: ContactId;
   readonly coordinatorId?: UserId;
   readonly createdByUserId: UserId;
+  readonly externalReference?: string;
   readonly kind?: JobKind;
   readonly organizationId: OrganizationId;
   readonly priority?: JobPriority;
@@ -178,6 +183,7 @@ export interface PatchJobRecordInput {
   readonly assigneeId?: UserId | null;
   readonly contactId?: ContactId | null;
   readonly coordinatorId?: UserId | null;
+  readonly externalReference?: string | null;
   readonly priority?: JobPriority;
   readonly siteId?: SiteId | null;
   readonly title?: JobTitle;
@@ -518,6 +524,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             work_items.id,
             work_items.kind,
             work_items.title,
+            work_items.external_reference,
             work_items.status,
             work_items.priority,
             work_items.site_id,
@@ -676,6 +683,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               ? (input.completedByUserId ?? null)
               : null,
           created_by_user_id: input.createdByUserId,
+          external_reference: input.externalReference ?? null,
           id: generateWorkItemId(),
           kind: input.kind ?? "job",
           organization_id: input.organizationId,
@@ -724,6 +732,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
         if (input.priority !== undefined) {
           values.priority = input.priority;
+        }
+
+        if (input.externalReference !== undefined) {
+          values.external_reference = input.externalReference;
         }
 
         if (input.siteId !== undefined) {
@@ -1304,6 +1316,9 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           select
             contacts.id,
             contacts.name,
+            contacts.email,
+            contacts.notes,
+            contacts.phone,
             site_contacts.site_id
           from contacts
           left join site_contacts on site_contacts.contact_id = contacts.id
@@ -1351,6 +1366,7 @@ function mapJobRow(row: WorkItemRow): Job {
     coordinatorId: nullableToUndefined(row.coordinator_id),
     createdAt: row.created_at.toISOString(),
     createdByUserId: row.created_by_user_id,
+    externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
     priority: row.priority,
@@ -1367,6 +1383,7 @@ function mapJobListItemRow(row: WorkItemRow) {
     contactId: nullableToUndefined(row.contact_id),
     coordinatorId: nullableToUndefined(row.coordinator_id),
     createdAt: row.created_at.toISOString(),
+    externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
     priority: row.priority,
@@ -1417,8 +1434,11 @@ function mapJobContactOptions(
   const contacts = new Map<
     string,
     {
+      readonly email?: string;
       readonly id: string;
       readonly name: string;
+      readonly notes?: string;
+      readonly phone?: string;
       readonly siteIds: SiteId[];
     }
   >();
@@ -1428,8 +1448,11 @@ function mapJobContactOptions(
 
     if (existing === undefined) {
       contacts.set(row.id, {
+        email: nullableToUndefined(row.email),
         id: row.id,
         name: row.name,
+        notes: nullableToUndefined(row.notes),
+        phone: nullableToUndefined(row.phone),
         siteIds: row.site_id === null ? [] : [decodeSiteId(row.site_id)],
       });
       continue;
