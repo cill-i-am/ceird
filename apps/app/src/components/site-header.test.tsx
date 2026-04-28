@@ -1,5 +1,6 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { SiteHeader } from "./site-header";
@@ -8,6 +9,7 @@ const {
   mockedActiveScopes,
   mockedNavigate,
   mockedPathname,
+  mockedRole,
   mockedSearch,
   mockedUseMatches,
 } = vi.hoisted(() => ({
@@ -16,12 +18,42 @@ const {
   mockedPathname: {
     value: "/jobs",
   },
+  mockedRole: {
+    value: undefined as "owner" | "admin" | "member" | undefined,
+  },
   mockedSearch: {
     value: {} as Record<string, unknown>,
   },
   mockedUseMatches:
     vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
 }));
+
+function setOrgMatches(currentOrganizationRole?: "owner" | "admin" | "member") {
+  mockedRole.value = currentOrganizationRole;
+  mockedUseMatches.mockImplementation(({ select }) =>
+    select([
+      { id: "__root__", staticData: {} },
+      { id: "/_app", staticData: {} },
+      {
+        context: {
+          currentOrganizationRole,
+        },
+        id: "/_app/_org",
+        routeId: "/_app/_org",
+        staticData: {},
+      },
+      {
+        id: "/_app/_org/jobs",
+        staticData: {
+          breadcrumb: {
+            label: "Jobs",
+            to: "/jobs",
+          },
+        },
+      },
+    ])
+  );
+}
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -37,6 +69,24 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useMatch: ((options?: {
+      select?: (match: {
+        context: { currentOrganizationRole?: "owner" | "admin" | "member" };
+        id?: string;
+        routeId?: string;
+      }) => unknown;
+      shouldThrow?: boolean;
+    }) => {
+      const match = {
+        context: {
+          currentOrganizationRole: mockedRole.value,
+        },
+        id: "/_app/_org",
+        routeId: "/_app/_org",
+      };
+
+      return options?.select ? options.select(match) : match;
+    }) as typeof actual.useMatch,
     useNavigate: () => mockedNavigate,
     useMatches: mockedUseMatches as typeof actual.useMatches,
     useRouterState: ((options?: {
@@ -94,21 +144,7 @@ describe("site header", () => {
     mockedActiveScopes.length = 0;
     mockedPathname.value = "/jobs";
     mockedSearch.value = {};
-    mockedUseMatches.mockImplementation(({ select }) =>
-      select([
-        { id: "__root__", staticData: {} },
-        { id: "/_app", staticData: {} },
-        {
-          id: "/_app/_org/jobs",
-          staticData: {
-            breadcrumb: {
-              label: "Jobs",
-              to: "/jobs",
-            },
-          },
-        },
-      ])
-    );
+    setOrgMatches();
   });
 
   afterEach(() => {
@@ -245,6 +281,69 @@ describe("site header", () => {
       );
 
       expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "jobs"]);
+    }
+  );
+
+  it(
+    "uses only global shortcut scope on the activity route",
+    { timeout: 10_000 },
+    () => {
+      mockedPathname.value = "/activity";
+
+      render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global"]);
+    }
+  );
+
+  it.each(["owner", "admin"] as const)(
+    "enables the activity route hotkey for %s role",
+    { timeout: 10_000 },
+    async (role) => {
+      const user = userEvent.setup();
+      setOrgMatches(role);
+
+      render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      await user.keyboard("ga");
+
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          actorUserId: undefined,
+          eventType: undefined,
+          fromDate: undefined,
+          jobTitle: undefined,
+          toDate: undefined,
+        },
+        to: "/activity",
+      });
+    }
+  );
+
+  it.each(["member", undefined] as const)(
+    "does not enable the activity route hotkey for %s role",
+    { timeout: 10_000 },
+    async (role) => {
+      const user = userEvent.setup();
+      setOrgMatches(role);
+
+      render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      await user.keyboard("ga");
+
+      expect(mockedNavigate).not.toHaveBeenCalled();
     }
   );
 });

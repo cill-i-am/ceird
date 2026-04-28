@@ -1,10 +1,22 @@
 import { Schema } from "effect";
 
 import {
+  ContactEmailSchema,
+  ContactNameSchema,
+  ContactNotesSchema,
+  ContactPhoneSchema,
   IsoDateString,
   IsoDateTimeString,
+  JobActivityEventTypeSchema,
   JobBlockedReasonSchema,
   JobCommentBodySchema,
+  JobCostLineDescriptionSchema,
+  JobCostLineQuantitySchema,
+  JobCostLineTaxRateBasisPointsSchema,
+  JobCostLineTotalMinorSchema,
+  JobCostLineTypeSchema,
+  JobCostLineUnitPriceMinorSchema,
+  JobExternalReferenceSchema,
   JobKindSchema,
   JobPrioritySchema,
   JobStatusSchema,
@@ -20,6 +32,7 @@ import {
   ActivityId,
   CommentId,
   ContactId,
+  CostLineId,
   OrganizationId,
   RateCardId,
   RateCardLineId,
@@ -195,6 +208,7 @@ export const JobSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -214,6 +228,7 @@ export const JobListItemSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -290,6 +305,12 @@ export const JobActivityVisitLoggedPayloadSchema = Schema.Struct({
   visitId: VisitId,
 });
 
+export const JobActivityCostLineAddedPayloadSchema = Schema.Struct({
+  eventType: Schema.Literal("cost_line_added"),
+  costLineId: CostLineId,
+  costLineType: JobCostLineTypeSchema,
+});
+
 export const JobActivityPayloadSchema = Schema.Union(
   JobActivityJobCreatedPayloadSchema,
   JobActivityStatusChangedPayloadSchema,
@@ -300,7 +321,8 @@ export const JobActivityPayloadSchema = Schema.Union(
   JobActivitySiteChangedPayloadSchema,
   JobActivityContactChangedPayloadSchema,
   JobActivityReopenedPayloadSchema,
-  JobActivityVisitLoggedPayloadSchema
+  JobActivityVisitLoggedPayloadSchema,
+  JobActivityCostLineAddedPayloadSchema
 );
 export type JobActivityPayload = Schema.Schema.Type<
   typeof JobActivityPayloadSchema
@@ -315,6 +337,67 @@ export const JobActivitySchema = Schema.Struct({
 });
 export type JobActivity = Schema.Schema.Type<typeof JobActivitySchema>;
 
+export const OrganizationActivityCursor = Schema.String.pipe(
+  Schema.brand("@task-tracker/jobs-core/OrganizationActivityCursor")
+);
+export type OrganizationActivityCursor = Schema.Schema.Type<
+  typeof OrganizationActivityCursor
+>;
+
+export const OrganizationActivityQuerySchema = Schema.Struct({
+  actorUserId: Schema.optional(UserId),
+  cursor: Schema.optional(OrganizationActivityCursor),
+  eventType: Schema.optional(JobActivityEventTypeSchema),
+  fromDate: Schema.optional(IsoDateString),
+  jobTitle: Schema.optional(NonEmptyTrimmedString),
+  limit: Schema.optional(
+    Schema.NumberFromString.pipe(
+      Schema.int(),
+      Schema.positive(),
+      Schema.lessThanOrEqualTo(100)
+    )
+  ),
+  toDate: Schema.optional(IsoDateString),
+});
+export type OrganizationActivityQuery = Schema.Schema.Type<
+  typeof OrganizationActivityQuerySchema
+>;
+
+export const OrganizationActivityActorSchema = Schema.Struct({
+  id: UserId,
+  name: Schema.String,
+  email: Schema.String,
+});
+export type OrganizationActivityActor = Schema.Schema.Type<
+  typeof OrganizationActivityActorSchema
+>;
+
+export const OrganizationActivityItemSchema = Schema.Struct({
+  id: ActivityId,
+  workItemId: WorkItemId,
+  jobTitle: JobTitleSchema,
+  actor: Schema.optional(OrganizationActivityActorSchema),
+  eventType: JobActivityEventTypeSchema,
+  payload: JobActivityPayloadSchema,
+  createdAt: IsoDateTimeString,
+}).pipe(
+  Schema.filter(({ eventType, payload }) => eventType === payload.eventType),
+  Schema.annotations({
+    message: () => "eventType must match payload.eventType",
+  })
+);
+export type OrganizationActivityItem = Schema.Schema.Type<
+  typeof OrganizationActivityItemSchema
+>;
+
+export const OrganizationActivityListResponseSchema = Schema.Struct({
+  items: Schema.Array(OrganizationActivityItemSchema),
+  nextCursor: Schema.optional(OrganizationActivityCursor),
+});
+export type OrganizationActivityListResponse = Schema.Schema.Type<
+  typeof OrganizationActivityListResponseSchema
+>;
+
 export const JobVisitSchema = Schema.Struct({
   id: VisitId,
   workItemId: WorkItemId,
@@ -325,6 +408,25 @@ export const JobVisitSchema = Schema.Struct({
   createdAt: IsoDateTimeString,
 });
 export type JobVisit = Schema.Schema.Type<typeof JobVisitSchema>;
+
+export const JobCostLineSchema = Schema.Struct({
+  id: CostLineId,
+  workItemId: WorkItemId,
+  authorUserId: UserId,
+  type: JobCostLineTypeSchema,
+  description: JobCostLineDescriptionSchema,
+  quantity: JobCostLineQuantitySchema,
+  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
+  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
+  lineTotalMinor: JobCostLineTotalMinorSchema,
+  createdAt: IsoDateTimeString,
+});
+export type JobCostLine = Schema.Schema.Type<typeof JobCostLineSchema>;
+
+export const JobCostSummarySchema = Schema.Struct({
+  subtotalMinor: JobCostLineTotalMinorSchema,
+});
+export type JobCostSummary = Schema.Schema.Type<typeof JobCostSummarySchema>;
 
 export const JobListQuerySchema = Schema.Struct({
   cursor: Schema.optional(JobListCursor),
@@ -403,10 +505,10 @@ export type CreateJobContactExistingInput = Schema.Schema.Type<
 export const CreateJobContactInlineInputSchema = Schema.Struct({
   kind: Schema.Literal("create"),
   input: Schema.Struct({
-    name: Schema.Trim.pipe(Schema.minLength(1)),
-    email: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
-    phone: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
-    notes: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
+    name: ContactNameSchema,
+    email: Schema.optional(ContactEmailSchema),
+    phone: Schema.optional(ContactPhoneSchema),
+    notes: Schema.optional(ContactNotesSchema),
   }),
 });
 export type CreateJobContactInlineInput = Schema.Schema.Type<
@@ -423,6 +525,7 @@ export type CreateJobContactInput = Schema.Schema.Type<
 
 export const CreateJobInputSchema = Schema.Struct({
   title: JobTitleSchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   priority: Schema.optional(JobPrioritySchema),
   site: Schema.optional(CreateJobSiteInputSchema),
   contact: Schema.optional(CreateJobContactInputSchema),
@@ -436,6 +539,7 @@ export type CreateJobResponse = Schema.Schema.Type<
 
 export const PatchJobInputSchema = Schema.Struct({
   title: Schema.optional(JobTitleSchema),
+  externalReference: Schema.optional(Schema.NullOr(JobExternalReferenceSchema)),
   priority: Schema.optional(JobPrioritySchema),
   siteId: Schema.optional(Schema.NullOr(SiteId)),
   contactId: Schema.optional(Schema.NullOr(ContactId)),
@@ -493,11 +597,101 @@ export type AddJobVisitResponse = Schema.Schema.Type<
   typeof AddJobVisitResponseSchema
 >;
 
+export const AddJobCostLineInputSchema = Schema.Struct({
+  type: JobCostLineTypeSchema,
+  description: JobCostLineDescriptionSchema,
+  quantity: JobCostLineQuantitySchema,
+  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
+  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
+}).pipe(
+  Schema.filter((input) =>
+    Number.isSafeInteger(
+      calculateJobCostLineTotalMinor({
+        quantity: input.quantity,
+        unitPriceMinor: input.unitPriceMinor,
+      })
+    )
+  ),
+  Schema.annotations({
+    message: () => "Expected a safe integer line total",
+    parseOptions: { onExcessProperty: "error" },
+  })
+);
+export type AddJobCostLineInput = Schema.Schema.Type<
+  typeof AddJobCostLineInputSchema
+>;
+
+export const AddJobCostLineResponseSchema = JobCostLineSchema;
+export type AddJobCostLineResponse = Schema.Schema.Type<
+  typeof AddJobCostLineResponseSchema
+>;
+
+export function calculateJobCostLineTotalMinor(input: {
+  readonly quantity: number;
+  readonly unitPriceMinor: number;
+}): number {
+  const quantityParts = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(input.quantity));
+
+  if (!quantityParts) {
+    return Number.NaN;
+  }
+
+  const quantityHundredths =
+    Number(quantityParts[1]) * 100 +
+    Number((quantityParts[2] ?? "").padEnd(2, "0"));
+
+  if (
+    !Number.isSafeInteger(quantityHundredths) ||
+    !Number.isSafeInteger(input.unitPriceMinor)
+  ) {
+    return Number.NaN;
+  }
+
+  const totalHundredthMinor =
+    BigInt(quantityHundredths) * BigInt(input.unitPriceMinor);
+  const roundedTotalMinor =
+    totalHundredthMinor / 100n + (totalHundredthMinor % 100n >= 50n ? 1n : 0n);
+
+  return Number(roundedTotalMinor);
+}
+
+export function calculateJobCostSummary(
+  costLines: readonly Pick<JobCostLine, "lineTotalMinor">[]
+): JobCostSummary {
+  let subtotalMinor = 0;
+
+  for (const costLine of costLines) {
+    subtotalMinor += costLine.lineTotalMinor;
+
+    if (!Number.isSafeInteger(subtotalMinor)) {
+      throw new RangeError("Expected a safe integer job cost subtotal");
+    }
+  }
+
+  return {
+    subtotalMinor,
+  };
+}
+
+export const JobContactDetailSchema = Schema.Struct({
+  id: ContactId,
+  name: ContactNameSchema,
+  email: Schema.optional(ContactEmailSchema),
+  phone: Schema.optional(ContactPhoneSchema),
+  notes: Schema.optional(ContactNotesSchema),
+});
+export type JobContactDetail = Schema.Schema.Type<
+  typeof JobContactDetailSchema
+>;
+
 export const JobDetailSchema = Schema.Struct({
   job: JobSchema,
+  contact: Schema.optional(JobContactDetailSchema),
   comments: Schema.Array(JobCommentSchema),
   activity: Schema.Array(JobActivitySchema),
   visits: Schema.Array(JobVisitSchema),
+  costLines: Schema.Array(JobCostLineSchema),
+  costSummary: JobCostSummarySchema,
 });
 export type JobDetail = Schema.Schema.Type<typeof JobDetailSchema>;
 
@@ -547,7 +741,9 @@ export type UpdateSiteResponse = Schema.Schema.Type<
 
 export const JobContactOptionSchema = Schema.Struct({
   id: ContactId,
-  name: Schema.String,
+  name: ContactNameSchema,
+  email: Schema.optional(ContactEmailSchema),
+  phone: Schema.optional(ContactPhoneSchema),
   siteIds: Schema.Array(SiteId),
 });
 export type JobContactOption = Schema.Schema.Type<
@@ -562,6 +758,13 @@ export const JobOptionsResponseSchema = Schema.Struct({
 });
 export type JobOptionsResponse = Schema.Schema.Type<
   typeof JobOptionsResponseSchema
+>;
+
+export const JobMemberOptionsResponseSchema = Schema.Struct({
+  members: Schema.Array(JobMemberOptionSchema),
+});
+export type JobMemberOptionsResponse = Schema.Schema.Type<
+  typeof JobMemberOptionsResponseSchema
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({

@@ -24,6 +24,7 @@ import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
 
 const NAVIGATION_SHORTCUTS_BY_URL: Partial<Record<string, HotkeyDefinition>> = {
+  "/activity": HOTKEYS.goActivity,
   "/jobs": HOTKEYS.goJobs,
   "/members": HOTKEYS.goMembers,
   "/sites": HOTKEYS.goSites,

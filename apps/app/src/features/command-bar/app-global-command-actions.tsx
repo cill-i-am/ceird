@@ -2,9 +2,11 @@
 
 import { Settings02Icon } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
+import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
-import { APP_PRIMARY_NAV_ITEMS } from "#/components/app-navigation";
+import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
 
 import { useRegisterCommandActions } from "./command-bar";
 import type { CommandAction } from "./command-bar";
@@ -32,32 +34,45 @@ export function AppGlobalCommandActions() {
   return null;
 }
 
-export function AppOrganizationCommandActions() {
+export function AppOrganizationCommandActions({
+  currentOrganizationRole,
+}: {
+  currentOrganizationRole?: OrganizationRole;
+}) {
   const navigate = useNavigate({ from: "/" });
+  const canUseAdministratorCommands =
+    currentOrganizationRole !== undefined &&
+    isAdministrativeOrganizationRole(currentOrganizationRole);
   const actions = React.useMemo<readonly CommandAction[]>(
     () => [
-      ...APP_PRIMARY_NAV_ITEMS.map((item, index) => ({
-        group: "Navigation",
-        icon: item.icon,
-        id: `global-go-${item.id}`,
-        keywords: item.keywords,
-        priority: 80 - index * 10,
-        run: () => navigate({ to: item.url }),
-        scope: "org" as const,
-        title: `Go to ${item.title}`,
-      })),
-      {
-        group: "Settings",
-        icon: Settings02Icon,
-        id: "global-go-organization-settings",
-        keywords: ["organization", "workspace"],
-        priority: 30,
-        run: () => navigate({ to: "/organization/settings" }),
-        scope: "org",
-        title: "Open organization settings",
-      },
+      ...getPrimaryNavItemsForRole(currentOrganizationRole).map(
+        (item, index) => ({
+          group: "Navigation",
+          icon: item.icon,
+          id: `global-go-${item.id}`,
+          keywords: item.keywords,
+          priority: 80 - index * 10,
+          run: () => navigate({ to: item.url }),
+          scope: "org" as const,
+          title: `Go to ${item.title}`,
+        })
+      ),
+      ...(canUseAdministratorCommands
+        ? [
+            {
+              group: "Settings",
+              icon: Settings02Icon,
+              id: "global-go-organization-settings",
+              keywords: ["organization", "workspace"],
+              priority: 30,
+              run: () => navigate({ to: "/organization/settings" }),
+              scope: "org" as const,
+              title: "Open organization settings",
+            },
+          ]
+        : []),
     ],
-    [navigate]
+    [canUseAdministratorCommands, currentOrganizationRole, navigate]
   );
 
   useRegisterCommandActions(actions);

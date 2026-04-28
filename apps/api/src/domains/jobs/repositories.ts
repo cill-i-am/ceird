@@ -2,23 +2,32 @@
 
 import { SqlClient } from "@effect/sql";
 import {
+  ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
   IsoDateTimeString as IsoDateTimeStringSchema,
   JobActivityPayloadSchema,
   JobActivitySchema,
   JobCommentSchema,
+  JobCostLineSchema,
+  JobCostLineQuantitySchema,
+  JobCostSummaryLimitExceededError,
+  JobContactDetailSchema,
   JobContactOptionSchema,
   JobDetailSchema,
   JobListCursor as JobListCursorSchema,
   JobListCursorInvalidError,
   JobListItemSchema,
   JobMemberOptionSchema,
+  OrganizationActivityCursorInvalidError,
   JobListResponseSchema,
   JobNotFoundError,
   JobSchema,
   JobSiteOptionSchema,
   JobVisitSchema,
+  OrganizationActivityCursor as OrganizationActivityCursorSchema,
+  OrganizationActivityItemSchema,
+  OrganizationActivityListResponseSchema,
   OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
   RATE_CARD_NOT_FOUND_ERROR_TAG,
@@ -30,15 +39,22 @@ import {
   SiteNotFoundError,
   SiteId as SiteIdSchema,
   WorkItemId as WorkItemIdSchema,
+  calculateJobCostLineTotalMinor,
+  calculateJobCostSummary,
 } from "@task-tracker/jobs-core";
 import type {
+  ActivityIdType as ActivityId,
   ContactIdType as ContactId,
   Job,
   JobActivity,
   JobActivityPayload,
   JobComment,
+  JobCostLine,
+  JobCostLineType,
+  JobContactDetail,
   JobContactOption,
   JobDetail,
+  JobExternalReference,
   JobKind,
   JobListCursorType as JobListCursor,
   JobListQuery,
@@ -52,6 +68,10 @@ import type {
   JobTitle,
   JobVisit,
   IsoDateTimeStringType as IsoDateTimeString,
+  OrganizationActivityCursorType as OrganizationActivityCursor,
+  OrganizationActivityItem,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   ServiceArea,
   ServiceAreaIdType as ServiceAreaId,
@@ -69,6 +89,7 @@ import {
   generateActivityId,
   generateCommentId,
   generateContactId,
+  generateCostLineId,
   generateRateCardId,
   generateRateCardLineId,
   generateServiceAreaId,
@@ -91,6 +112,7 @@ interface WorkItemRow {
   readonly coordinator_id: string | null;
   readonly created_at: Date;
   readonly created_by_user_id: string;
+  readonly external_reference: string | null;
   readonly id: string;
   readonly kind: string;
   readonly organization_id: string;
@@ -119,6 +141,17 @@ interface WorkItemActivityRow {
   readonly work_item_id: string;
 }
 
+interface OrganizationActivityRow extends WorkItemActivityRow {
+  readonly actor_email: string | null;
+  readonly actor_name: string | null;
+  readonly job_title: string;
+}
+
+interface OrganizationActivityCursorState {
+  readonly id: ActivityId;
+  readonly createdAt: string;
+}
+
 interface WorkItemVisitRow {
   readonly author_user_id: string;
   readonly created_at: Date;
@@ -128,6 +161,23 @@ interface WorkItemVisitRow {
   readonly organization_id: string;
   readonly visit_date: Date | string;
   readonly work_item_id: string;
+}
+
+interface WorkItemCostLineRow {
+  readonly author_user_id: string;
+  readonly created_at: Date;
+  readonly description: string;
+  readonly id: string;
+  readonly organization_id: string;
+  readonly quantity: string;
+  readonly tax_rate_basis_points: number | null;
+  readonly type: string;
+  readonly unit_price_minor: number;
+  readonly work_item_id: string;
+}
+
+interface WorkItemCostLineSubtotalRow {
+  readonly subtotal_minor: string | null;
 }
 
 interface IdRow {
@@ -187,9 +237,19 @@ interface JobSiteOptionRow {
 }
 
 interface JobContactOptionRow {
+  readonly email: string | null;
   readonly id: string;
   readonly name: string;
+  readonly phone: string | null;
   readonly site_id: string | null;
+}
+
+interface JobContactDetailRow {
+  readonly email: string | null;
+  readonly id: string;
+  readonly name: string;
+  readonly notes: string | null;
+  readonly phone: string | null;
 }
 
 export interface CreateJobRecordInput {
@@ -200,6 +260,7 @@ export interface CreateJobRecordInput {
   readonly contactId?: ContactId;
   readonly coordinatorId?: UserId;
   readonly createdByUserId: UserId;
+  readonly externalReference?: JobExternalReference;
   readonly kind?: JobKind;
   readonly organizationId: OrganizationId;
   readonly priority?: JobPriority;
@@ -212,6 +273,7 @@ export interface PatchJobRecordInput {
   readonly assigneeId?: UserId | null;
   readonly contactId?: ContactId | null;
   readonly coordinatorId?: UserId | null;
+  readonly externalReference?: JobExternalReference | null;
   readonly priority?: JobPriority;
   readonly siteId?: SiteId | null;
   readonly title?: JobTitle;
@@ -243,6 +305,17 @@ export interface AddJobVisitRecordInput {
   readonly note: string;
   readonly organizationId: OrganizationId;
   readonly visitDate: string;
+  readonly workItemId: WorkItemId;
+}
+
+export interface AddJobCostLineRecordInput {
+  readonly authorUserId: UserId;
+  readonly description: string;
+  readonly organizationId: OrganizationId;
+  readonly quantity: number;
+  readonly taxRateBasisPoints?: number;
+  readonly type: JobCostLineType;
+  readonly unitPriceMinor: number;
   readonly workItemId: WorkItemId;
 }
 
@@ -321,9 +394,24 @@ const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
   JobActivityPayloadSchema
 );
+const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
+const decodeOrganizationActivityCursor = Schema.decodeUnknownSync(
+  OrganizationActivityCursorSchema
+);
+const decodeOrganizationActivityItem = Schema.decodeUnknownSync(
+  OrganizationActivityItemSchema
+);
+const decodeOrganizationActivityListResponse = Schema.decodeUnknownSync(
+  OrganizationActivityListResponseSchema
+);
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
+const decodeJobCostLine = Schema.decodeUnknownSync(JobCostLineSchema);
+const decodeJobCostLineQuantity = Schema.decodeUnknownSync(
+  JobCostLineQuantitySchema
+);
+const decodeJobContactDetail = Schema.decodeUnknownSync(JobContactDetailSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
@@ -346,6 +434,12 @@ const decodeJobCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
     id: WorkItemIdSchema,
     updatedAt: IsoDateTimeStringSchema,
+  })
+);
+const decodeOrganizationActivityCursorState = Schema.decodeUnknownSync(
+  Schema.Struct({
+    id: ActivityIdSchema,
+    createdAt: IsoDateTimeStringSchema,
   })
 );
 
@@ -447,12 +541,20 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const lookupWorkItemOrganization = Effect.fn(
         "JobsRepository.lookupWorkItemOrganization"
-      )(function* (workItemId: WorkItemId) {
+      )(function* (
+        workItemId: WorkItemId,
+        options?: {
+          readonly forUpdate?: boolean;
+        }
+      ) {
+        const lockClause =
+          options?.forUpdate === true ? sql`for update` : sql``;
         const rows = yield* sql<{ readonly organization_id: string }>`
           select organization_id
           from work_items
           where id = ${workItemId}
           limit 1
+          ${lockClause}
         `;
 
         return Option.fromNullable(rows[0]?.organization_id).pipe(
@@ -462,9 +564,17 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const ensureWorkItemOrganizationMatches = Effect.fn(
         "JobsRepository.ensureWorkItemOrganizationMatches"
-      )(function* (organizationId: OrganizationId, workItemId: WorkItemId) {
-        const workItemOrganizationId =
-          yield* lookupWorkItemOrganization(workItemId);
+      )(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        options?: {
+          readonly forUpdate?: boolean;
+        }
+      ) {
+        const workItemOrganizationId = yield* lookupWorkItemOrganization(
+          workItemId,
+          options
+        );
 
         if (Option.isNone(workItemOrganizationId)) {
           return yield* Effect.fail(
@@ -578,6 +688,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             work_items.id,
             work_items.kind,
             work_items.title,
+            work_items.external_reference,
             work_items.status,
             work_items.priority,
             work_items.site_id,
@@ -604,6 +715,97 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
 
         return decodeJobListResponse({ items, nextCursor });
+      });
+
+      const listOrganizationActivity = Effect.fn(
+        "JobsRepository.listOrganizationActivity"
+      )(function* (
+        organizationId: OrganizationId,
+        query: OrganizationActivityQuery
+      ) {
+        const limit = clampJobListLimit(query.limit ?? boundedDefaultListLimit);
+        const clauses = [
+          sql`work_item_activity.organization_id = ${organizationId}`,
+          sql`work_items.organization_id = ${organizationId}`,
+        ];
+
+        if (query.actorUserId !== undefined) {
+          clauses.push(
+            sql`work_item_activity.actor_user_id = ${query.actorUserId}`
+          );
+        }
+
+        if (query.eventType !== undefined) {
+          clauses.push(sql`work_item_activity.event_type = ${query.eventType}`);
+        }
+
+        if (query.fromDate !== undefined) {
+          clauses.push(
+            sql`work_item_activity.created_at >= ${isoDateToUtcStartDate(
+              query.fromDate
+            )}`
+          );
+        }
+
+        if (query.toDate !== undefined) {
+          clauses.push(
+            sql`work_item_activity.created_at < ${getExclusiveDateUpperBound(
+              query.toDate
+            )}`
+          );
+        }
+
+        if (query.jobTitle !== undefined) {
+          clauses.push(sql`work_items.title ilike ${`%${query.jobTitle}%`}`);
+        }
+
+        if (query.cursor !== undefined) {
+          const encodedCursor = query.cursor;
+          const cursor = yield* Effect.try({
+            try: () => decodeOrganizationActivityCursorValue(encodedCursor),
+            catch: () =>
+              new OrganizationActivityCursorInvalidError({
+                cursor: encodedCursor,
+                message: "Organization activity cursor is invalid",
+              }),
+          });
+
+          clauses.push(sql`(
+            work_item_activity.created_at < ${cursor.createdAt}
+            or (
+              work_item_activity.created_at = ${cursor.createdAt}
+              and work_item_activity.id < ${cursor.id}
+            )
+          )`);
+        }
+
+        const rows = yield* sql<OrganizationActivityRow>`
+          select
+            work_item_activity.*,
+            work_items.title as job_title,
+            "user".name as actor_name,
+            "user".email as actor_email
+          from work_item_activity
+          join work_items on work_items.id = work_item_activity.work_item_id
+          left join "user" on "user".id = work_item_activity.actor_user_id
+          where ${sql.and(clauses)}
+          order by work_item_activity.created_at desc, work_item_activity.id desc
+          limit ${limit + 1}
+        `;
+
+        const items = rows.slice(0, limit).map(mapOrganizationActivityRow);
+        const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
+
+        const response: OrganizationActivityListResponse =
+          decodeOrganizationActivityListResponse({
+            items,
+            nextCursor:
+              nextCursorRow === undefined
+                ? undefined
+                : encodeOrganizationActivityCursor(nextCursorRow),
+          });
+
+        return response;
       });
 
       const listMemberOptions = Effect.fn("JobsRepository.listMemberOptions")(
@@ -671,7 +873,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           return Option.none<JobDetail>();
         }
 
-        const [comments, activity, visits] = yield* Effect.all([
+        const [comments, activity, visits, costLines] = yield* Effect.all([
           sql<WorkItemCommentRow>`
             select *
             from work_item_comments
@@ -690,15 +892,52 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             where work_item_id = ${workItemId}
             order by visit_date desc, id desc
           `,
+          sql<WorkItemCostLineRow>`
+            select *
+            from work_item_cost_lines
+            where work_item_id = ${workItemId}
+            order by created_at desc, id desc
+          `,
         ]);
+        const contact =
+          job.contactId === undefined
+            ? undefined
+            : yield* findContactDetailById(organizationId, job.contactId);
+
+        const mappedCostLines = costLines.map(mapJobCostLineRow);
 
         return Option.some(
           decodeJobDetail({
             activity: activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
+            contact,
+            costLines: mappedCostLines,
+            costSummary: calculateJobCostSummary(mappedCostLines),
             job,
             visits: visits.map(mapJobVisitRow),
           })
+        );
+      });
+
+      const findContactDetailById = Effect.fn(
+        "JobsRepository.findContactDetailById"
+      )(function* (organizationId: OrganizationId, contactId: ContactId) {
+        const rows = yield* sql<JobContactDetailRow>`
+          select
+            id,
+            name,
+            email,
+            phone,
+            notes
+          from contacts
+          where organization_id = ${organizationId}
+            and id = ${contactId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(
+          Option.map(mapJobContactDetailRow),
+          Option.getOrUndefined
         );
       });
 
@@ -736,6 +975,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               ? (input.completedByUserId ?? null)
               : null,
           created_by_user_id: input.createdByUserId,
+          external_reference: input.externalReference ?? null,
           id: generateWorkItemId(),
           kind: input.kind ?? "job",
           organization_id: input.organizationId,
@@ -786,6 +1026,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
         if (input.priority !== undefined) {
           values.priority = input.priority;
+        }
+
+        if (input.externalReference !== undefined) {
+          values.external_reference = input.externalReference;
         }
 
         if (input.siteId !== undefined) {
@@ -985,15 +1229,91 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         return mapJobVisitRow(row);
       });
 
+      const addCostLine = Effect.fn("JobsRepository.addCostLine")(function* (
+        input: AddJobCostLineRecordInput
+      ) {
+        return yield* withTransaction(
+          Effect.gen(function* () {
+            yield* ensureWorkItemOrganizationMatches(
+              input.organizationId,
+              input.workItemId,
+              { forUpdate: true }
+            );
+            yield* ensureOrganizationMember(
+              input.organizationId,
+              input.authorUserId,
+              {
+                forUpdate: true,
+              }
+            );
+
+            const subtotalRows = yield* sql<WorkItemCostLineSubtotalRow>`
+              select sum(floor(((quantity * 100) * unit_price_minor + 50) / 100))::text as subtotal_minor
+              from work_item_cost_lines
+              where work_item_id = ${input.workItemId}
+            `;
+            const lineTotalMinor = calculateJobCostLineTotalMinor({
+              quantity: input.quantity,
+              unitPriceMinor: input.unitPriceMinor,
+            });
+            const subtotalRow = yield* getRequiredRow(
+              subtotalRows,
+              "work item cost line subtotal"
+            );
+            const currentSubtotalMinor = Number(
+              subtotalRow.subtotal_minor ?? 0
+            );
+
+            if (
+              !Number.isSafeInteger(currentSubtotalMinor) ||
+              !Number.isSafeInteger(currentSubtotalMinor + lineTotalMinor)
+            ) {
+              return yield* Effect.fail(
+                new JobCostSummaryLimitExceededError({
+                  message:
+                    "Job cost summary subtotal would exceed a safe integer",
+                  workItemId: input.workItemId,
+                })
+              );
+            }
+
+            const rows = yield* sql<WorkItemCostLineRow>`
+              insert into work_item_cost_lines ${sql
+                .insert({
+                  author_user_id: input.authorUserId,
+                  description: input.description,
+                  id: generateCostLineId(),
+                  organization_id: input.organizationId,
+                  quantity: String(decodeJobCostLineQuantity(input.quantity)),
+                  tax_rate_basis_points: input.taxRateBasisPoints ?? null,
+                  type: input.type,
+                  unit_price_minor: input.unitPriceMinor,
+                  work_item_id: input.workItemId,
+                })
+                .returning("*")}
+            `;
+
+            const row = yield* getRequiredRow(
+              rows,
+              "inserted work item cost line"
+            );
+
+            return mapJobCostLineRow(row);
+          })
+        );
+      });
+
       return {
         addActivity,
         addComment,
+        addCostLine,
         addVisit,
         create,
         findById,
         findByIdForUpdate,
         getDetail,
         list,
+        listOrganizationActivity,
         listMemberOptions,
         patch,
         reopen,
@@ -1644,6 +1964,8 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           select
             contacts.id,
             contacts.name,
+            contacts.email,
+            contacts.phone,
             site_contacts.site_id
           from contacts
           left join site_contacts on site_contacts.contact_id = contacts.id
@@ -1693,6 +2015,7 @@ function mapJobRow(row: WorkItemRow): Job {
     coordinatorId: nullableToUndefined(row.coordinator_id),
     createdAt: row.created_at.toISOString(),
     createdByUserId: row.created_by_user_id,
+    externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
     priority: row.priority,
@@ -1709,6 +2032,7 @@ function mapJobListItemRow(row: WorkItemRow) {
     contactId: nullableToUndefined(row.contact_id),
     coordinatorId: nullableToUndefined(row.coordinator_id),
     createdAt: row.created_at.toISOString(),
+    externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
     priority: row.priority,
@@ -1804,8 +2128,10 @@ function mapJobContactOptions(
   const contacts = new Map<
     string,
     {
+      readonly email?: string;
       readonly id: string;
       readonly name: string;
+      readonly phone?: string;
       readonly siteIds: SiteId[];
     }
   >();
@@ -1815,8 +2141,10 @@ function mapJobContactOptions(
 
     if (existing === undefined) {
       contacts.set(row.id, {
+        email: nullableToUndefined(row.email),
         id: row.id,
         name: row.name,
+        phone: nullableToUndefined(row.phone),
         siteIds: row.site_id === null ? [] : [decodeSiteId(row.site_id)],
       });
       continue;
@@ -1830,6 +2158,16 @@ function mapJobContactOptions(
   return Array.from(contacts.values(), (contact) =>
     decodeJobContactOption(contact)
   );
+}
+
+function mapJobContactDetailRow(row: JobContactDetailRow): JobContactDetail {
+  return decodeJobContactDetail({
+    email: nullableToUndefined(row.email),
+    id: row.id,
+    name: row.name,
+    notes: nullableToUndefined(row.notes),
+    phone: nullableToUndefined(row.phone),
+  });
 }
 
 function mapJobCommentRow(row: WorkItemCommentRow): JobComment {
@@ -1852,6 +2190,30 @@ function mapJobActivityRow(row: WorkItemActivityRow): JobActivity {
   });
 }
 
+function mapOrganizationActivityRow(
+  row: OrganizationActivityRow
+): OrganizationActivityItem {
+  return decodeOrganizationActivityItem({
+    actor:
+      row.actor_user_id === null
+        ? undefined
+        : {
+            email: row.actor_email ?? "",
+            id: row.actor_user_id,
+            name: normalizeOptionName(
+              row.actor_name,
+              row.actor_email ?? "Team member"
+            ),
+          },
+    createdAt: row.created_at.toISOString(),
+    eventType: row.event_type,
+    id: row.id,
+    jobTitle: row.job_title,
+    payload: decodeJobActivityPayload(row.payload),
+    workItemId: row.work_item_id,
+  });
+}
+
 function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
   return decodeJobVisit({
     authorUserId: row.author_user_id,
@@ -1864,16 +2226,36 @@ function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
   });
 }
 
+function mapJobCostLineRow(row: WorkItemCostLineRow): JobCostLine {
+  const quantity = Number(row.quantity);
+  const unitPriceMinor = row.unit_price_minor;
+
+  return decodeJobCostLine({
+    authorUserId: row.author_user_id,
+    createdAt: row.created_at.toISOString(),
+    description: row.description,
+    id: row.id,
+    lineTotalMinor: calculateJobCostLineTotalMinor({
+      quantity,
+      unitPriceMinor,
+    }),
+    quantity,
+    taxRateBasisPoints: nullableToUndefined(row.tax_rate_basis_points),
+    type: row.type,
+    unitPriceMinor,
+    workItemId: row.work_item_id,
+  });
+}
+
 function encodeCursor(
   row: Pick<WorkItemRow, "id" | "updated_at">
 ): JobListCursor {
-  return decodeJobListCursor(
-    Buffer.from(
-      JSON.stringify({
-        id: decodeWorkItemId(row.id),
-        updatedAt: row.updated_at.toISOString(),
-      } satisfies JobCursorState)
-    ).toString("base64url")
+  return encodeJsonCursor(
+    {
+      id: decodeWorkItemId(row.id),
+      updatedAt: row.updated_at.toISOString(),
+    } satisfies JobCursorState,
+    decodeJobListCursor
   );
 }
 
@@ -1881,14 +2263,48 @@ function decodeCursor(cursor: JobListCursor): {
   readonly id: WorkItemId;
   readonly updatedAt: Date;
 } {
-  const value = decodeJobCursorState(
-    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
-  ) as JobCursorState;
+  const value = decodeJsonCursor(cursor, decodeJobCursorState);
 
   return {
     id: value.id,
     updatedAt: new Date(value.updatedAt),
   };
+}
+
+function encodeOrganizationActivityCursor(
+  row: Pick<OrganizationActivityRow, "id" | "created_at">
+): OrganizationActivityCursor {
+  return encodeJsonCursor(
+    {
+      id: decodeActivityId(row.id),
+      createdAt: row.created_at.toISOString(),
+    } satisfies OrganizationActivityCursorState,
+    decodeOrganizationActivityCursor
+  );
+}
+
+function decodeOrganizationActivityCursorValue(
+  cursor: OrganizationActivityCursor
+): OrganizationActivityCursorState {
+  return decodeJsonCursor(cursor, decodeOrganizationActivityCursorState);
+}
+
+function encodeJsonCursor<Cursor extends string>(
+  value: unknown,
+  decodeCursorValue: (value: string) => Cursor
+): Cursor {
+  return decodeCursorValue(
+    Buffer.from(JSON.stringify(value)).toString("base64url")
+  );
+}
+
+function decodeJsonCursor<State>(
+  cursor: string,
+  decodeState: (value: unknown) => State
+): State {
+  return decodeState(
+    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
+  );
 }
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {
@@ -1936,6 +2352,22 @@ function getRequiredRow<Value>(
 
 function parseIsoDateTime(value: string): Date {
   return new Date(value);
+}
+
+function isoDateToUtcStartDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function getExclusiveDateUpperBound(value: string): Date {
+  const start = isoDateToUtcStartDate(value);
+
+  return new Date(
+    Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth(),
+      start.getUTCDate() + 1
+    )
+  );
 }
 
 function formatPgDate(value: Date | string): string {

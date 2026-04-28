@@ -52,6 +52,10 @@ const detailResponse: JobDetailResponse = {
   },
   comments: [],
   activity: [],
+  costLines: [],
+  costSummary: {
+    subtotalMinor: 0,
+  },
   visits: [],
 };
 

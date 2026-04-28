@@ -54,3 +54,8 @@ export const VisitId = Schema.UUID.pipe(
   Schema.brand("@task-tracker/jobs-core/VisitId")
 );
 export type VisitId = Schema.Schema.Type<typeof VisitId>;
+
+export const CostLineId = Schema.UUID.pipe(
+  Schema.brand("@task-tracker/jobs-core/CostLineId")
+);
+export type CostLineId = Schema.Schema.Type<typeof CostLineId>;

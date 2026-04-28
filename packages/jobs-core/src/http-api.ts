@@ -2,6 +2,8 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
 import { Schema } from "effect";
 
 import {
+  AddJobCostLineInputSchema,
+  AddJobCostLineResponseSchema,
   AddJobCommentInputSchema,
   AddJobCommentResponseSchema,
   AddJobVisitInputSchema,
@@ -15,9 +17,12 @@ import {
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
   JobDetailResponseSchema,
+  JobMemberOptionsResponseSchema,
   JobListQuerySchema,
   JobOptionsResponseSchema,
   JobListResponseSchema,
+  OrganizationActivityListResponseSchema,
+  OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   PatchJobResponseSchema,
   RateCardListResponseSchema,
@@ -39,9 +44,11 @@ import {
   CoordinatorMatchesAssigneeError,
   InvalidJobTransitionError,
   JobAccessDeniedError,
+  JobCostSummaryLimitExceededError,
   JobListCursorInvalidError,
   JobNotFoundError,
   JobStorageError,
+  OrganizationActivityCursorInvalidError,
   OrganizationMemberNotFoundError,
   RateCardNotFoundError,
   ServiceAreaNotFoundError,
@@ -67,6 +74,12 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobStorageError)
   )
   .add(
+    HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options")
+      .addSuccess(JobMemberOptionsResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
+  )
+  .add(
     HttpApiEndpoint.post("createJob", "/jobs")
       .setPayload(CreateJobInputSchema)
       .addSuccess(CreateJobResponseSchema, { status: 201 })
@@ -75,6 +88,14 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
       .addError(ContactNotFoundError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.get("listOrganizationActivity", "/activity")
+      .setUrlParams(OrganizationActivityQuerySchema)
+      .addSuccess(OrganizationActivityListResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(OrganizationActivityCursorInvalidError)
       .addError(JobStorageError)
   )
   .add(
@@ -135,6 +156,16 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(VisitDurationIncrementError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines")
+      .setPath(Schema.Struct({ workItemId: WorkItemId }))
+      .setPayload(AddJobCostLineInputSchema)
+      .addSuccess(AddJobCostLineResponseSchema, { status: 201 })
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
+      .addError(JobCostSummaryLimitExceededError)
       .addError(JobStorageError)
   );
 

@@ -123,6 +123,23 @@ export function assertOrganizationAdministrationRole(input: {
   }
 }
 
+export function assertOrganizationAdministrationRouteContext(context: {
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  if (context.activeOrganizationSync.required) {
+    return;
+  }
+
+  const role = context.currentOrganizationRole;
+
+  if (role === undefined) {
+    throw redirect({ to: "/" });
+  }
+
+  assertOrganizationAdministrationRole({ role });
+}
+
 export async function redirectIfOrganizationReady() {
   const session = await getCurrentSession();
 

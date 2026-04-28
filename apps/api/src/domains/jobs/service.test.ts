@@ -3,8 +3,11 @@ import { SqlError } from "@effect/sql/SqlError";
 import {
   ActivityId,
   BlockedReasonRequiredError,
+  calculateJobCostLineTotalMinor,
   CommentId,
+  CostLineId,
   JobAccessDeniedError,
+  JobCostSummaryLimitExceededError,
   JobSchema,
   JobStorageError,
   OrganizationMemberNotFoundError,
@@ -18,6 +21,7 @@ import type {
   CreateSiteInput,
   Job,
   JobComment,
+  JobCostLine,
   JobActivity,
   JobActivityPayload,
   JobListResponse,
@@ -26,6 +30,8 @@ import type {
   ServiceArea,
   JobSiteOption,
   JobVisit,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   ServiceAreaIdType as ServiceAreaId,
   SiteIdType as SiteId,
@@ -57,6 +63,7 @@ import { SiteGeocoder } from "./site-geocoder.js";
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
+const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
 const undefinedValue = undefined as undefined;
@@ -67,6 +74,7 @@ const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
 const serviceAreaId = "99999999-9999-4999-8999-999999999999" as ServiceAreaId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
+const costLineId = decodeCostLineId("99999999-9999-4999-8999-999999999998");
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const inlineSiteInput = {
   addressLine1: "1 Custom House Quay",
@@ -112,6 +120,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
+  readonly costLineFailure?: JobCostSummaryLimitExceededError;
   readonly lockedJob?: Job;
   readonly serviceAreaFailure?: ServiceAreaNotFoundError;
   readonly serviceAreaStorageFailure?: SqlError;
@@ -121,6 +130,7 @@ interface JobsServiceHarnessOptions {
 interface JobsServiceHarness {
   readonly calls: {
     addActivity: number;
+    addCostLine: number;
     addVisit: number;
     create: number;
     createSite: number;
@@ -128,6 +138,7 @@ interface JobsServiceHarness {
     findByIdForUpdate: number;
     geocode: number;
     linkContact: number;
+    listOrganizationActivity: number;
     patch: number;
     transition: number;
   };
@@ -143,6 +154,7 @@ function makeHarness(
   const lockedJob = options.lockedJob ?? makeJob();
   const calls = {
     addActivity: 0,
+    addCostLine: 0,
     addVisit: 0,
     create: 0,
     createSite: 0,
@@ -150,6 +162,7 @@ function makeHarness(
     findByIdForUpdate: 0,
     geocode: 0,
     linkContact: 0,
+    listOrganizationActivity: 0,
     patch: 0,
     transition: 0,
   };
@@ -184,6 +197,37 @@ function makeHarness(
         id: decodeCommentId("77777777-7777-4777-8777-777777777777"),
         workItemId: input.workItemId,
       } satisfies JobComment),
+    addCostLine: (input: {
+      readonly authorUserId: UserId;
+      readonly description: string;
+      readonly organizationId: OrganizationId;
+      readonly quantity: number;
+      readonly taxRateBasisPoints?: number;
+      readonly type: "labour" | "material";
+      readonly unitPriceMinor: number;
+      readonly workItemId: Job["id"];
+    }) =>
+      options.costLineFailure === undefined
+        ? Effect.sync(() => {
+            calls.addCostLine += 1;
+
+            return {
+              authorUserId: input.authorUserId,
+              createdAt: "2026-04-22T14:00:00.000Z",
+              description: input.description,
+              id: costLineId,
+              lineTotalMinor: calculateJobCostLineTotalMinor({
+                quantity: input.quantity,
+                unitPriceMinor: input.unitPriceMinor,
+              }),
+              quantity: input.quantity,
+              taxRateBasisPoints: input.taxRateBasisPoints,
+              type: input.type,
+              unitPriceMinor: input.unitPriceMinor,
+              workItemId: input.workItemId,
+            } satisfies JobCostLine;
+          })
+        : Effect.fail(options.costLineFailure),
     addVisit: (input: {
       readonly authorUserId: UserId;
       readonly durationMinutes: number;
@@ -244,6 +288,18 @@ function makeHarness(
       } satisfies JobListResponse),
     listMemberOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobMemberOption[]),
+    listOrganizationActivity: (
+      _organizationId: OrganizationId,
+      _query: OrganizationActivityQuery
+    ) =>
+      Effect.sync(() => {
+        calls.listOrganizationActivity += 1;
+
+        return {
+          items: [],
+          nextCursor: undefined,
+        } satisfies OrganizationActivityListResponse;
+      }),
     patch: (
       _organizationId: OrganizationId,
       _workItemId: Job["id"],
@@ -467,6 +523,42 @@ function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
 }
 
 describe("jobs service", () => {
+  it("lets owners list organization activity", async () => {
+    const harness = makeHarness({ actor: makeActor("owner") });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.listOrganizationActivity({});
+        }),
+        harness
+      )
+    ).resolves.toStrictEqual({
+      items: [],
+      nextCursor: undefined,
+    });
+
+    expect(harness.calls.listOrganizationActivity).toBe(1);
+  }, 10_000);
+
+  it("denies members listing organization activity", async () => {
+    const harness = makeHarness({ actor: makeActor("member") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.listOrganizationActivity({});
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.listOrganizationActivity).toBe(0);
+  }, 10_000);
+
   it("geocodes inline site creation before creating the job", async () => {
     const harness = makeHarness();
 
@@ -643,6 +735,101 @@ describe("jobs service", () => {
 
     expect(harness.calls.findByIdForUpdate).toBe(0);
     expect(harness.calls.addVisit).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("adds a job cost line and records activity for the assigned user", async () => {
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      lockedJob: makeJob({
+        assigneeId: actorUserId,
+      }),
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.addCostLine(workItemId, {
+            description: "Replacement valve",
+            quantity: 1.5,
+            taxRateBasisPoints: 2300,
+            type: "material",
+            unitPriceMinor: 4200,
+          });
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      description: "Replacement valve",
+      lineTotalMinor: 6300,
+      type: "material",
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+  }, 10_000);
+
+  it("rejects cost line creation for unassigned regular members", async () => {
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      lockedJob: makeJob({
+        assigneeId: "unassigned_user" as UserId,
+      }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addCostLine(workItemId, {
+          description: "Replacement valve",
+          quantity: 1,
+          type: "material",
+          unitPriceMinor: 4200,
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("surfaces the cost summary limit error without recording activity", async () => {
+    const failure = new JobCostSummaryLimitExceededError({
+      message: "Job cost summary subtotal would exceed a safe integer",
+      workItemId,
+    });
+    const harness = makeHarness({
+      actor: makeActor("member"),
+      costLineFailure: failure,
+      lockedJob: makeJob({
+        assigneeId: actorUserId,
+      }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addCostLine(workItemId, {
+          description: "Replacement valve",
+          quantity: 1,
+          type: "material",
+          unitPriceMinor: 4200,
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(failure);
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.addCostLine).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 

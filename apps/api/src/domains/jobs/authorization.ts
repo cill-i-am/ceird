@@ -61,6 +61,18 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
             )
       );
 
+      const ensureCanViewOrganizationActivity = Effect.fn(
+        "JobsAuthorization.ensureCanViewOrganizationActivity"
+      )((actor: JobsActor) =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can view organization activity"
+              )
+            )
+      );
+
       const ensureCanPatch = Effect.fn("JobsAuthorization.ensureCanPatch")(
         (actor: JobsActor, workItemId: WorkItemId) =>
           hasElevatedAccess(actor)
@@ -85,6 +97,19 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
           : Effect.fail(
               makeAccessDenied(
                 "Members can only log visits on jobs assigned to them",
+                job.id
+              )
+            )
+      );
+
+      const ensureCanAddCostLine = Effect.fn(
+        "JobsAuthorization.ensureCanAddCostLine"
+      )((actor: JobsActor, job: Job) =>
+        hasElevatedAccess(actor) || job.assigneeId === actor.userId
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Members can only add cost lines on jobs assigned to them",
                 job.id
               )
             )
@@ -131,6 +156,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       );
 
       return {
+        ensureCanAddCostLine,
         ensureCanAddVisit,
         ensureCanComment,
         ensureCanCreate,
@@ -140,6 +166,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
         ensureCanReopen,
         ensureCanTransition,
         ensureCanView,
+        ensureCanViewOrganizationActivity,
       };
     }),
   }

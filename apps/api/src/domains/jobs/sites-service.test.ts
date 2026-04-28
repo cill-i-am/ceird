@@ -12,6 +12,8 @@ import type {
   JobActivityPayload,
   JobListResponse,
   JobMemberOption,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   ServiceArea,
   SitesOptionsResponse,
   JobSiteOption,
@@ -116,6 +118,7 @@ function makeHarness(
       readonly workItemId: WorkItemId;
     }) => unexpected("addActivity"),
     addComment: (_input: unknown) => unexpected("addComment"),
+    addCostLine: (_input: unknown) => unexpected("addCostLine"),
     addVisit: (_input: unknown) => unexpected("addVisit"),
     create: (_input: unknown) => unexpected("create"),
     findById: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>
@@ -133,6 +136,14 @@ function makeHarness(
       } satisfies JobListResponse),
     listMemberOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobMemberOption[]),
+    listOrganizationActivity: (
+      _organizationId: OrganizationId,
+      _query: OrganizationActivityQuery
+    ) =>
+      Effect.succeed({
+        items: [],
+        nextCursor: undefined,
+      } satisfies OrganizationActivityListResponse),
     patch: (
       _organizationId: OrganizationId,
       _workItemId: WorkItemId,

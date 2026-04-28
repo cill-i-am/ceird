@@ -18,6 +18,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { SiteId } from "@task-tracker/jobs-core";
 import type {
+  JobContactDetail,
+  JobContactOption,
   JobDetailResponse,
   JobSiteOption,
   JobStatus,
@@ -39,12 +41,6 @@ import {
   DrawerTitle,
 } from "#/components/ui/drawer";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "#/components/ui/empty";
-import {
   Field,
   FieldContent,
   FieldDescription,
@@ -56,11 +52,20 @@ import { Input } from "#/components/ui/input";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
+import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 
-import { JobsDetailLocation } from "./jobs-detail-location";
 import {
+  formatJobDateTime,
+  JOB_PRIORITY_LABELS as PRIORITY_LABELS,
+  JOB_STATUS_LABELS as STATUS_LABELS,
+} from "./job-display";
+import { JobCostsSection } from "./jobs-detail-costs-section";
+import { JobsDetailLocation } from "./jobs-detail-location";
+import { DetailEmpty, DetailSection } from "./jobs-detail-section";
+import {
+  addJobCostLineMutationAtomFamily,
   addJobCommentMutationAtomFamily,
   addJobVisitMutationAtomFamily,
   jobDetailStateAtomFamily,
@@ -75,23 +80,6 @@ import {
   hasJobsElevatedAccess,
 } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
-
-const PRIORITY_LABELS = {
-  none: "No priority",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  urgent: "Urgent",
-} as const;
-
-const STATUS_LABELS = {
-  blocked: "Blocked",
-  canceled: "Canceled",
-  completed: "Completed",
-  in_progress: "In progress",
-  new: "New",
-  triaged: "Triaged",
-} as const;
 
 const VISIT_DURATION_OPTIONS = [
   { label: "1 hour", value: "60" },
@@ -138,6 +126,9 @@ export function JobsDetailSheet({
     addJobCommentMutationAtomFamily(workItemId)
   );
   const visitResult = useAtomValue(addJobVisitMutationAtomFamily(workItemId));
+  const costLineResult = useAtomValue(
+    addJobCostLineMutationAtomFamily(workItemId)
+  );
   const transitionJob = useAtomSet(
     transitionJobMutationAtomFamily(workItemId),
     {
@@ -159,12 +150,19 @@ export function JobsDetailSheet({
   const addJobVisit = useAtomSet(addJobVisitMutationAtomFamily(workItemId), {
     mode: "promiseExit",
   });
+  const addJobCostLine = useAtomSet(
+    addJobCostLineMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
     detail.job.assigneeId
   );
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
+  const canAddCostLine = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
   const transitionSelectionGroups =
@@ -195,9 +193,11 @@ export function JobsDetailSheet({
   const site = detail.job.siteId
     ? lookup.siteById.get(detail.job.siteId)
     : undefined;
-  const contact = detail.job.contactId
-    ? lookup.contactById.get(detail.job.contactId)
-    : undefined;
+  const contact =
+    detail.contact ??
+    (detail.job.contactId
+      ? lookup.contactById.get(detail.job.contactId)
+      : undefined);
   const assignee = detail.job.assigneeId
     ? lookup.memberById.get(detail.job.assigneeId)
     : undefined;
@@ -590,10 +590,13 @@ export function JobsDetailSheet({
               label="Contact"
               value={contact?.name ?? "No contact yet"}
               supporting={
-                detail.job.siteId && contact
-                  ? "Linked through the selected site"
-                  : "Add one when the customer context is clear"
+                contact?.email ?? contact?.phone ?? "No contact details yet"
               }
+            />
+            <HeaderMetaItem
+              label="Reference"
+              value={detail.job.externalReference ?? "No external reference"}
+              supporting="Optional reference from outside this workspace"
             />
             <HeaderMetaItem
               label="Updated"
@@ -621,6 +624,13 @@ export function JobsDetailSheet({
             </DetailSection>
 
             <JobsDetailLocation site={site} />
+
+            <DetailSection
+              title="Contact"
+              description="Useful details for the person or organization connected to this work."
+            >
+              <JobsDetailContact contact={contact} />
+            </DetailSection>
 
             <DetailSection
               title="Site assignment"
@@ -790,6 +800,15 @@ export function JobsDetailSheet({
                 )}
               </div>
             </DetailSection>
+
+            <JobCostsSection
+              addJobCostLine={addJobCostLine}
+              canAddCostLine={canAddCostLine}
+              detail={detail}
+              mutationError={renderMutationError(costLineResult)}
+              waiting={costLineResult.waiting}
+              workItemId={workItemId}
+            />
 
             <DetailSection
               title="Visits"
@@ -976,7 +995,7 @@ export function JobsDetailSheet({
                         >
                           <div className="flex flex-col gap-2">
                             <p className="text-sm leading-7">
-                              {describeActivity(actor?.name, event.payload)}
+                              {describeJobActivity(actor?.name, event.payload)}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {formatDateTime(event.createdAt)}
@@ -1002,44 +1021,42 @@ export function JobsDetailSheet({
   );
 }
 
-function DetailSection({
-  children,
-  description,
-  title,
+function JobsDetailContact({
+  contact,
 }: {
-  readonly children: React.ReactNode;
-  readonly description: string;
-  readonly title: string;
+  readonly contact: JobContactDetail | JobContactOption | undefined;
 }) {
+  if (!contact) {
+    return (
+      <DetailEmpty
+        title="No contact yet."
+        description="Add one when there is a clear related person or organization."
+      />
+    );
+  }
+
+  const notes = "notes" in contact ? contact.notes : undefined;
+
   return (
-    <section className="border-b py-5 last:border-b-0">
-      <div className="grid gap-4 md:grid-cols-[9.5rem_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-foreground">{title}</h3>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {description}
+    <div className="grid gap-3 text-sm">
+      <HeaderMetaItem label="Name" value={contact.name} />
+      {contact.email ? (
+        <HeaderMetaItem label="Email" value={contact.email} />
+      ) : null}
+      {contact.phone ? (
+        <HeaderMetaItem label="Phone" value={contact.phone} />
+      ) : null}
+      {notes ? (
+        <div className="min-w-0 text-left">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase">
+            Notes
+          </p>
+          <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">
+            {notes}
           </p>
         </div>
-        <div className="min-w-0">{children}</div>
-      </div>
-    </section>
-  );
-}
-
-function DetailEmpty({
-  description,
-  title,
-}: {
-  readonly description: string;
-  readonly title: string;
-}) {
-  return (
-    <Empty className="min-h-0 items-start border-0 bg-transparent p-0 text-left">
-      <EmptyHeader className="items-start text-left">
-        <EmptyTitle className="text-base">{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+      ) : null}
+    </div>
   );
 }
 
@@ -1049,7 +1066,7 @@ function HeaderMetaItem({
   value,
 }: {
   readonly label: string;
-  readonly supporting: string;
+  readonly supporting?: string;
   readonly value: string;
 }) {
   return (
@@ -1060,9 +1077,11 @@ function HeaderMetaItem({
       <p className="mt-1 truncate text-sm font-medium text-foreground">
         {value}
       </p>
-      <p className="mt-1 truncate text-xs text-muted-foreground">
-        {supporting}
-      </p>
+      {supporting ? (
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {supporting}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1182,63 +1201,10 @@ function formatDate(value: string) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(value));
+  return formatJobDateTime(value);
 }
 
 function formatDuration(durationMinutes: number) {
   const hours = durationMinutes / 60;
   return `${hours}h logged`;
-}
-
-function describeActivity(
-  actorName: string | undefined,
-  payload: JobDetailResponse["activity"][number]["payload"]
-) {
-  const actorPrefix = actorName ? `${actorName} ` : "";
-
-  switch (payload.eventType) {
-    case "assignee_changed": {
-      return `${actorPrefix}updated the assignee.`;
-    }
-    case "blocked_reason_changed": {
-      return `${actorPrefix}updated the blocked reason.`;
-    }
-    case "contact_changed": {
-      return `${actorPrefix}updated the contact.`;
-    }
-    case "coordinator_changed": {
-      return `${actorPrefix}updated the coordinator.`;
-    }
-    case "job_created": {
-      return `${actorPrefix}created the job.`;
-    }
-    case "job_reopened": {
-      return `${actorPrefix}reopened the job.`;
-    }
-    case "priority_changed": {
-      return `${actorPrefix}changed priority from ${PRIORITY_LABELS[payload.fromPriority]} to ${PRIORITY_LABELS[payload.toPriority]}.`;
-    }
-    case "site_changed": {
-      return `${actorPrefix}updated the site.`;
-    }
-    case "status_changed": {
-      return `${actorPrefix}changed status from ${STATUS_LABELS[payload.fromStatus]} to ${STATUS_LABELS[payload.toStatus]}.`;
-    }
-    case "visit_logged": {
-      return `${actorPrefix}logged a visit.`;
-    }
-    default: {
-      return assertNever(payload);
-    }
-  }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled job activity payload: ${JSON.stringify(value)}`);
 }

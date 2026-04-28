@@ -1,5 +1,5 @@
 {
-  "id": "0eab9333-5910-4de6-b0aa-44ed35b077ed",
+  "id": "12b163f0-a9df-4c34-ae90-5c2d284353ac",
   "prevId": "d13b3f3f-8399-4b24-b02e-ce9ea420b90b",
   "version": "7",
   "dialect": "postgresql",
@@ -575,216 +575,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.rate_cards": {
-      "name": "rate_cards",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "rate_cards_organization_updated_at_idx": {
-          "name": "rate_cards_organization_updated_at_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "updated_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "rate_cards_organization_name_idx": {
-          "name": "rate_cards_organization_name_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "rate_cards_organization_id_organization_id_fk": {
-          "name": "rate_cards_organization_id_organization_id_fk",
-          "tableFrom": "rate_cards",
-          "tableTo": "organization",
-          "columnsFrom": ["organization_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.rate_card_lines": {
-      "name": "rate_card_lines",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "rate_card_id": {
-          "name": "rate_card_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unit": {
-          "name": "unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value": {
-          "name": "value",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "rate_card_lines_rate_card_position_unique_idx": {
-          "name": "rate_card_lines_rate_card_position_unique_idx",
-          "columns": [
-            {
-              "expression": "rate_card_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "rate_card_lines_rate_card_id_rate_cards_id_fk": {
-          "name": "rate_card_lines_rate_card_id_rate_cards_id_fk",
-          "tableFrom": "rate_card_lines",
-          "tableTo": "rate_cards",
-          "columnsFrom": ["rate_card_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "rate_card_lines_value_non_negative_chk": {
-          "name": "rate_card_lines_value_non_negative_chk",
-          "value": "\"rate_card_lines\".\"value\" >= 0"
-        },
-        "rate_card_lines_position_positive_chk": {
-          "name": "rate_card_lines_position_positive_chk",
-          "value": "\"rate_card_lines\".\"position\" > 0"
-        },
-        "rate_card_lines_kind_chk": {
-          "name": "rate_card_lines_kind_chk",
-          "value": "\"rate_card_lines\".\"kind\" in ('labour', 'callout', 'material_markup', 'custom')"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.rate_limit": {
       "name": "rate_limit",
       "schema": "",
@@ -838,8 +628,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.service_areas": {
-      "name": "service_areas",
+    "public.service_regions": {
+      "name": "service_regions",
       "schema": "",
       "columns": {
         "id": {
@@ -859,12 +649,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "slug": {
           "name": "slug",
@@ -894,8 +678,8 @@
         }
       },
       "indexes": {
-        "service_areas_organization_slug_idx": {
-          "name": "service_areas_organization_slug_idx",
+        "service_regions_organization_slug_idx": {
+          "name": "service_regions_organization_slug_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -915,8 +699,8 @@
           "method": "btree",
           "with": {}
         },
-        "service_areas_organization_name_idx": {
-          "name": "service_areas_organization_name_idx",
+        "service_regions_organization_name_idx": {
+          "name": "service_regions_organization_name_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -938,9 +722,9 @@
         }
       },
       "foreignKeys": {
-        "service_areas_organization_id_organization_id_fk": {
-          "name": "service_areas_organization_id_organization_id_fk",
-          "tableFrom": "service_areas",
+        "service_regions_organization_id_organization_id_fk": {
+          "name": "service_regions_organization_id_organization_id_fk",
+          "tableFrom": "service_regions",
           "tableTo": "organization",
           "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],
@@ -1095,8 +879,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "service_area_id": {
-          "name": "service_area_id",
+        "region_id": {
+          "name": "region_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -1223,8 +1007,8 @@
           "method": "btree",
           "with": {}
         },
-        "sites_organization_service_area_idx": {
-          "name": "sites_organization_service_area_idx",
+        "sites_organization_region_idx": {
+          "name": "sites_organization_region_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -1233,7 +1017,7 @@
               "nulls": "last"
             },
             {
-              "expression": "service_area_id",
+              "expression": "region_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1289,11 +1073,11 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "sites_service_area_id_service_areas_id_fk": {
-          "name": "sites_service_area_id_service_areas_id_fk",
+        "sites_region_id_service_regions_id_fk": {
+          "name": "sites_region_id_service_regions_id_fk",
           "tableFrom": "sites",
-          "tableTo": "service_areas",
-          "columnsFrom": ["service_area_id"],
+          "tableTo": "service_regions",
+          "columnsFrom": ["region_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
@@ -1593,6 +1377,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_reference": {
+          "name": "external_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",

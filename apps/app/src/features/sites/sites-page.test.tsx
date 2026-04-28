@@ -4,6 +4,7 @@ import type {
   JobOptionsResponse,
   ServiceAreaIdType,
   SiteIdType,
+  UserIdType,
 } from "@task-tracker/jobs-core";
 import {
   fireEvent,
@@ -26,6 +27,7 @@ import { SitesPage } from "./sites-page";
 const serviceAreaId =
   "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
+const userId = "user_123" as UserIdType;
 const organizationId = decodeOrganizationId("org_123");
 
 const options: JobOptionsResponse = {
@@ -196,7 +198,7 @@ function renderSitesPage({
         ],
       ]}
     >
-      <SitesPage viewer={{ role, userId: "user_123" }} />
+      <SitesPage viewer={{ role, userId }} />
     </RegistryProvider>
   );
 

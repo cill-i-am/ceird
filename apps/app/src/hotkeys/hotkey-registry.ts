@@ -68,6 +68,13 @@ export const HOTKEYS = {
     label: "Go to Sites",
     scope: "global",
   },
+  goActivity: {
+    group: "Navigation",
+    hotkey: "G A",
+    id: "goActivity",
+    label: "Go to Activity",
+    scope: "global",
+  },
   goMembers: {
     group: "Navigation",
     hotkey: "G M",
@@ -123,6 +130,13 @@ export const HOTKEYS = {
     hotkey: "V M",
     id: "jobsMapView",
     label: "Map view",
+    scope: "jobs",
+  },
+  jobsSavedViews: {
+    group: "Jobs",
+    hotkey: "V S",
+    id: "jobsSavedViews",
+    label: "Saved views",
     scope: "jobs",
   },
   jobsClearFilters: {
@@ -196,6 +210,13 @@ export const HOTKEYS = {
     hotkey: "C",
     id: "jobDetailComment",
     label: "Focus comment",
+    scope: "job-detail",
+  },
+  jobDetailCost: {
+    group: "Job drawer",
+    hotkey: "X",
+    id: "jobDetailCost",
+    label: "Focus cost line",
     scope: "job-detail",
   },
   jobDetailVisit: {

@@ -11,13 +11,16 @@ import {
 } from "@task-tracker/jobs-core";
 import type {
   AddJobCommentInput,
+  AddJobCostLineInput,
   AddJobVisitInput,
   ContactIdType as ContactId,
   CreateJobContactInput,
   CreateJobInput,
   CreateJobSiteInput,
   Job,
+  JobMemberOptionsResponse,
   JobListQuery,
+  OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   PatchJobInput,
   ServiceAreaOption,
@@ -107,6 +110,32 @@ export class JobsService extends Effect.Service<JobsService>()(
         } as const;
       });
 
+      const getMemberOptions = Effect.fn("JobsService.getMemberOptions")(
+        function* () {
+          const actor = yield* loadActor();
+          yield* authorization.ensureCanView(actor);
+
+          const members = yield* jobsRepository
+            .listMemberOptions(actor.organizationId)
+            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+
+          return {
+            members,
+          } satisfies JobMemberOptionsResponse;
+        }
+      );
+
+      const listOrganizationActivity = Effect.fn(
+        "JobsService.listOrganizationActivity"
+      )(function* (query: OrganizationActivityQuery) {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanViewOrganizationActivity(actor);
+
+        return yield* jobsRepository
+          .listOrganizationActivity(actor.organizationId, query)
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+      });
+
       const create = Effect.fn("JobsService.create")(function* (
         input: CreateJobInput
       ) {
@@ -156,6 +185,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               const job = yield* jobsRepository.create({
                 contactId,
                 createdByUserId: actor.userId,
+                externalReference: input.externalReference,
                 organizationId: actor.organizationId,
                 priority: input.priority,
                 siteId,
@@ -615,13 +645,90 @@ export class JobsService extends Effect.Service<JobsService>()(
         }
       });
 
+      const addCostLine = Effect.fn("JobsService.addCostLine")(function* (
+        workItemId: WorkItemId,
+        input: AddJobCostLineInput
+      ) {
+        const actor = yield* loadActor(workItemId);
+
+        const result = yield* jobsRepository
+          .withTransaction(
+            Effect.gen(function* () {
+              const job = yield* jobsRepository
+                .findByIdForUpdate(actor.organizationId, workItemId)
+                .pipe(Effect.map(Option.getOrUndefined));
+
+              if (job === undefined) {
+                return yield* Effect.fail(
+                  new JobNotFoundError({
+                    message: "Job does not exist",
+                    workItemId,
+                  })
+                );
+              }
+
+              yield* authorization.ensureCanAddCostLine(actor, job);
+
+              const costLine = yield* jobsRepository.addCostLine({
+                authorUserId: actor.userId,
+                description: input.description,
+                organizationId: actor.organizationId,
+                quantity: input.quantity,
+                taxRateBasisPoints: input.taxRateBasisPoints,
+                type: input.type,
+                unitPriceMinor: input.unitPriceMinor,
+                workItemId,
+              });
+
+              yield* activityRecorder.recordCostLineAdded(actor, {
+                costLineId: costLine.id,
+                costLineType: costLine.type,
+                workItemId,
+              });
+
+              return costLine;
+            })
+          )
+          .pipe(Effect.either);
+
+        if (Either.isRight(result)) {
+          return result.right;
+        }
+
+        switch (result.left._tag) {
+          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+            return yield* result.left.userId === actor.userId
+              ? Effect.fail(
+                  new JobAccessDeniedError({
+                    message:
+                      "Your organization access changed while the request was running",
+                    workItemId,
+                  })
+                )
+              : Effect.die(result.left);
+          }
+          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+            return yield* Effect.die(result.left);
+          }
+          case "SqlError": {
+            return yield* failJobsStorageError(result.left);
+          }
+          default: {
+            return yield* Effect.fail(result.left);
+          }
+        }
+      });
+
       return {
         addComment,
+        addCostLine,
         addVisit,
         create,
         getDetail,
+        getMemberOptions,
         getOptions,
         list,
+        listOrganizationActivity,
         patch,
         reopen,
         transition,
@@ -669,6 +776,7 @@ function hasPatchChanges(input: PatchJobInput): boolean {
     input.assigneeId !== undefined ||
     input.contactId !== undefined ||
     input.coordinatorId !== undefined ||
+    input.externalReference !== undefined ||
     input.priority !== undefined ||
     input.siteId !== undefined ||
     input.title !== undefined

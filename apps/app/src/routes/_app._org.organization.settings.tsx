@@ -1,10 +1,10 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
-import type { OrganizationId } from "@task-tracker/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 
-import {
-  assertOrganizationAdministrationRole,
-  getCurrentOrganizationMemberRole,
-} from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
 import { OrganizationSettingsPage } from "#/features/organizations/organization-settings-page";
 
 export const Route = createFileRoute("/_app/_org/organization/settings")({
@@ -18,22 +18,15 @@ export const Route = createFileRoute("/_app/_org/organization/settings")({
   component: SettingsRoute,
 });
 
-export async function loadSettingsRoute(context: {
+export function loadSettingsRoute(context: {
   readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: {
     readonly required: boolean;
     readonly targetOrganizationId: OrganizationId | null;
   };
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
 }) {
-  if (context.activeOrganizationSync.required) {
-    return;
-  }
-
-  const role = await getCurrentOrganizationMemberRole(
-    context.activeOrganizationId
-  );
-
-  assertOrganizationAdministrationRole(role);
+  assertOrganizationAdministrationRouteContext(context);
 }
 
 function SettingsRoute() {

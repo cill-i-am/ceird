@@ -151,6 +151,7 @@ describe("job detail route", () => {
                 assigneeId: actorUserId,
                 contactId,
                 createdAt: "2026-04-23T10:00:00.000Z",
+                externalReference: "PO-4471",
                 id: workItemId,
                 kind: "job",
                 priority: "medium",
@@ -165,8 +166,10 @@ describe("job detail route", () => {
           options={{
             contacts: [
               {
+                email: "pat@example.com",
                 id: contactId,
                 name: "Pat Contact",
+                phone: "+353 87 765 4321",
                 siteIds: [siteId],
               },
             ],
@@ -220,6 +223,12 @@ describe("job detail route", () => {
       expect(screen.getAllByText("Taylor Owner").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Depot").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Pat Contact").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("PO-4471").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("pat@example.com").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("+353 87 765 4321").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("Use email for routine updates.").length
+      ).toBeGreaterThan(0);
       expect(
         screen.getByText("Checked the burner and reset the controls.")
       ).toBeInTheDocument();
@@ -252,11 +261,23 @@ function buildDetail() {
         workItemId,
       },
     ],
+    costLines: [],
+    costSummary: {
+      subtotalMinor: 0,
+    },
+    contact: {
+      email: "pat@example.com",
+      id: contactId,
+      name: "Pat Contact",
+      notes: "Use email for routine updates.",
+      phone: "+353 87 765 4321",
+    },
     job: {
       assigneeId: actorUserId,
       contactId,
       createdAt: "2026-04-23T10:00:00.000Z",
       createdByUserId: actorUserId,
+      externalReference: "PO-4471",
       id: workItemId,
       kind: "job" as const,
       priority: "medium" as const,

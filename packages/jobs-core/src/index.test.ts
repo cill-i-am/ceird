@@ -1,9 +1,13 @@
 import { OpenApi } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
+import * as Vitest from "vitest";
 
 import {
+  AddJobCostLineInputSchema,
   AddJobCommentInputSchema,
   AddJobVisitInputSchema,
+  calculateJobCostLineTotalMinor,
+  calculateJobCostSummary,
   CreateJobInputSchema,
   CreateRateCardInputSchema,
   CreateServiceAreaInputSchema,
@@ -13,7 +17,9 @@ import {
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
   JobDetailResponseSchema,
+  JobContactOptionSchema,
   JobListQuerySchema,
+  JobMemberOptionsResponseSchema,
   JobPrioritySchema,
   JobOptionsResponseSchema,
   JobSiteOptionSchema,
@@ -21,7 +27,12 @@ import {
   JobsApi,
   JobsApiGroup,
   JobsContextSchema,
+  JobCostSummaryLimitExceededError,
   JobTitleSchema,
+  OrganizationActivityCursor,
+  OrganizationActivityCursorInvalidError,
+  OrganizationActivityListResponseSchema,
+  OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   RateCardSchema,
   RateCardsApiGroup,
@@ -37,6 +48,8 @@ import {
   VisitDurationIncrementError,
   WorkItemId,
 } from "./index.js";
+
+const { describe, expect, it } = Vitest;
 
 describe("jobs-core", () => {
   it("decodes service area contracts", () => {
@@ -231,6 +244,10 @@ describe("jobs-core", () => {
       ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
         activity: [],
         comments: [],
+        costLines: [],
+        costSummary: {
+          subtotalMinor: 0,
+        },
         job: {
           createdAt: "2026-04-23T11:00:00.000Z",
           createdByUserId: "",
@@ -294,6 +311,65 @@ describe("jobs-core", () => {
     ).toStrictEqual({
       body: "Confirmed on site",
     });
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        title: "  Replace boiler  ",
+        externalReference: "  PO-4471  ",
+        contact: {
+          kind: "create",
+          input: {
+            name: "  Alex Contact  ",
+            email: "  alex@example.com  ",
+            phone: "  +353 87 123 4567  ",
+            notes: "  Prefers morning calls.  ",
+          },
+        },
+      })
+    ).toStrictEqual({
+      title: "Replace boiler",
+      externalReference: "PO-4471",
+      contact: {
+        kind: "create",
+        input: {
+          name: "Alex Contact",
+          email: "alex@example.com",
+          phone: "+353 87 123 4567",
+          notes: "Prefers morning calls.",
+        },
+      },
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(JobContactOptionSchema)({
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Alex Contact",
+        email: "alex@example.com",
+        phone: "+353 87 123 4567",
+        siteIds: [],
+      })
+    ).toStrictEqual({
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      name: "Alex Contact",
+      email: "alex@example.com",
+      phone: "+353 87 123 4567",
+      siteIds: [],
+    });
+  }, 5000);
+
+  it("rejects invalid contact emails at DTO boundaries", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        title: "Replace boiler",
+        contact: {
+          kind: "create",
+          input: {
+            name: "Alex Contact",
+            email: "not-an-email",
+          },
+        },
+      })
+    ).toThrow(/a valid email/);
   }, 5000);
 
   it("rejects coordinates when creating a site", () => {
@@ -543,6 +619,263 @@ describe("jobs-core", () => {
     });
   }, 5000);
 
+  it("exports organization activity query and response DTOs", () => {
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        actorUserId: "user_123",
+        cursor: "activity_cursor_1",
+        eventType: "status_changed",
+        fromDate: "2026-04-01",
+        jobTitle: "  Replace boiler  ",
+        limit: "25",
+        toDate: "2026-04-28",
+      })
+    ).toStrictEqual({
+      actorUserId: "user_123",
+      cursor: "activity_cursor_1",
+      eventType: "status_changed",
+      fromDate: "2026-04-01",
+      jobTitle: "Replace boiler",
+      limit: 25,
+      toDate: "2026-04-28",
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            actor: {
+              id: "user_123",
+              name: "Ada Lovelace",
+              email: "ada@example.com",
+            },
+            eventType: "status_changed",
+            payload: {
+              eventType: "status_changed",
+              fromStatus: "new",
+              toStatus: "in_progress",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+        nextCursor: "activity_cursor_2",
+      })
+    ).toStrictEqual({
+      items: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440020",
+          workItemId: "550e8400-e29b-41d4-a716-446655440000",
+          jobTitle: "Replace boiler",
+          actor: {
+            id: "user_123",
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+          },
+          eventType: "status_changed",
+          payload: {
+            eventType: "status_changed",
+            fromStatus: "new",
+            toStatus: "in_progress",
+          },
+          createdAt: "2026-04-23T11:00:00.000Z",
+        },
+      ],
+      nextCursor: "activity_cursor_2",
+    });
+
+    expect(OrganizationActivityCursor).toBeDefined();
+    expect(
+      ParseResult.decodeUnknownSync(JobMemberOptionsResponseSchema)({
+        members: [
+          {
+            id: "user_123",
+            name: "Ada Lovelace",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      members: [
+        {
+          id: "user_123",
+          name: "Ada Lovelace",
+        },
+      ],
+    });
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        limit: "101",
+      })
+    ).toThrow(/lessThanOrEqualTo/);
+  }, 5000);
+
+  it("rejects organization activity items whose event type differs from the payload", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            eventType: "status_changed",
+            payload: {
+              eventType: "priority_changed",
+              fromPriority: "none",
+              toPriority: "high",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+      })
+    ).toThrow(/eventType/);
+  }, 5000);
+
+  it("validates add cost line input at the boundary", () => {
+    const decode = ParseResult.decodeUnknownSync(AddJobCostLineInputSchema);
+
+    expect(
+      decode({
+        description: "Install replacement valve",
+        quantity: 1.23,
+        taxRateBasisPoints: 2300,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toStrictEqual({
+      description: "Install replacement valve",
+      quantity: 1.23,
+      taxRateBasisPoints: 2300,
+      type: "labour",
+      unitPriceMinor: 6500,
+    });
+
+    expect(() =>
+      decode({
+        description: "",
+        quantity: 0,
+        type: "material",
+        unitPriceMinor: -1,
+      })
+    ).toThrow(/Expected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 6500,
+        unexpected: true,
+      })
+    ).toThrow(/unexpected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: Number.POSITIVE_INFINITY,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/positive finite quantity/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1.234,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/at most two decimal places/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 10_000_000_000,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 9999999999.99/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 65.5,
+      })
+    ).toThrow(/Expected an integer/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 2_147_483_648,
+      })
+    ).toThrow(/less than or equal to 2147483647/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 9_999_999_999.99,
+        type: "labour",
+        unitPriceMinor: 2_147_483_647,
+      })
+    ).toThrow(/safe integer line total/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        taxRateBasisPoints: 10_001,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 10000/);
+  }, 5000);
+
+  it("calculates line totals and job cost summaries in minor units", () => {
+    expect(
+      calculateJobCostLineTotalMinor({
+        quantity: 1.5,
+        unitPriceMinor: 6500,
+      })
+    ).toBe(9750);
+    expect(
+      calculateJobCostLineTotalMinor({
+        quantity: 0.29,
+        unitPriceMinor: 50,
+      })
+    ).toBe(15);
+
+    expect(
+      calculateJobCostSummary([
+        {
+          lineTotalMinor: 9750,
+        },
+        {
+          lineTotalMinor: 2599,
+        },
+      ])
+    ).toStrictEqual({
+      subtotalMinor: 12_349,
+    });
+  }, 5000);
+
+  it("rejects job cost summaries with unsafe aggregate subtotals", () => {
+    expect(() =>
+      calculateJobCostSummary([
+        {
+          lineTotalMinor: Number.MAX_SAFE_INTEGER,
+        },
+        {
+          lineTotalMinor: 1,
+        },
+      ])
+    ).toThrow(/safe integer job cost subtotal/);
+  }, 5000);
+
   it("keeps site options rich enough for maps and links", () => {
     const siteOption = {
       id: "550e8400-e29b-41d4-a716-446655440010",
@@ -594,11 +927,14 @@ describe("jobs-core", () => {
     expect(Object.keys(spec.paths)).toStrictEqual([
       "/jobs",
       "/jobs/options",
+      "/jobs/member-options",
+      "/activity",
       "/jobs/{workItemId}",
       "/jobs/{workItemId}/transitions",
       "/jobs/{workItemId}/reopen",
       "/jobs/{workItemId}/comments",
       "/jobs/{workItemId}/visits",
+      "/jobs/{workItemId}/cost-lines",
       "/service-areas",
       "/service-areas/{serviceAreaId}",
       "/rate-cards",
@@ -660,6 +996,15 @@ describe("jobs-core", () => {
     expect(
       spec.paths["/service-areas/{serviceAreaId}"]?.patch?.responses["404"]
     ).toBeDefined();
+  }, 5000);
+
+  it("surfaces the job cost line api contract", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const addCostLine =
+      spec.paths["/jobs/{workItemId}/cost-lines"]?.post ?? null;
+
+    expect(addCostLine?.operationId).toBe("jobs.addJobCostLine");
+    expect(addCostLine?.responses["422"]).toBeDefined();
   }, 5000);
 
   it("documents standalone site creation responses", () => {
@@ -833,6 +1178,26 @@ describe("jobs-core", () => {
       "@task-tracker/jobs-core/SiteGeocodingFailedError"
     );
     expect(geocodingError.country).toBe("IE");
+
+    const costSummaryError = new JobCostSummaryLimitExceededError({
+      message: "Job cost summary subtotal would exceed a safe integer",
+      workItemId: Schema.decodeUnknownSync(WorkItemId)(
+        "550e8400-e29b-41d4-a716-446655440000"
+      ),
+    });
+
+    expect(costSummaryError._tag).toBe(
+      "@task-tracker/jobs-core/JobCostSummaryLimitExceededError"
+    );
+
+    const activityCursorError = new OrganizationActivityCursorInvalidError({
+      cursor: "bad-cursor",
+      message: "Organization activity cursor is invalid",
+    });
+
+    expect(activityCursorError._tag).toBe(
+      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
+    );
   }, 5000);
 
   it("keeps title schema trimming strict", () => {
