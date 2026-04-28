@@ -614,7 +614,7 @@ describe("jobs detail sheet", () => {
   it("hides transition and visit actions from unassigned members", () => {
     renderDetailSheet(buildDetail(), {
       role: "member",
-      userId: "99999999-9999-4999-8999-999999999999",
+      userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
     });
 
     expect(

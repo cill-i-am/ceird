@@ -25,8 +25,13 @@ import type { AppJobsError } from "./jobs-errors";
 
 export type JobsStatusFilter = "active" | "all" | JobStatus;
 
+export type JobsAssigneeFilter =
+  | { readonly kind: "all" }
+  | { readonly kind: "unassigned" }
+  | { readonly kind: "user"; readonly userId: UserIdType };
+
 export interface JobsListFilters {
-  readonly assigneeId: UserIdType | "all";
+  readonly assigneeId: JobsAssigneeFilter;
   readonly coordinatorId: UserIdType | "all";
   readonly priority: JobPriority | "all";
   readonly query: string;
@@ -59,7 +64,7 @@ export const emptyJobOptions: JobOptionsResponse = {
 };
 
 export const defaultJobsListFilters: JobsListFilters = {
-  assigneeId: "all",
+  assigneeId: { kind: "all" },
   coordinatorId: "all",
   priority: "all",
   query: "",
@@ -110,10 +115,7 @@ export const visibleJobsAtom = Atom.make((get) => {
       return false;
     }
 
-    if (
-      filters.assigneeId !== "all" &&
-      item.assigneeId !== filters.assigneeId
-    ) {
+    if (!matchesAssigneeFilter(item.assigneeId, filters.assigneeId)) {
       return false;
     }
 
@@ -378,6 +380,34 @@ function isActiveStatus(status: JobStatus) {
     status === "in_progress" ||
     status === "blocked"
   );
+}
+
+function matchesAssigneeFilter(
+  assigneeId: UserIdType | undefined,
+  filter: JobsAssigneeFilter
+) {
+  if (filter.kind === "all") {
+    return true;
+  }
+
+  if (filter.kind === "unassigned") {
+    return assigneeId === undefined;
+  }
+
+  return assigneeId === filter.userId;
+}
+
+export function isJobsAssigneeFilterEqual(
+  left: JobsAssigneeFilter,
+  right: JobsAssigneeFilter
+) {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+
+  return left.kind === "user" && right.kind === "user"
+    ? left.userId === right.userId
+    : true;
 }
 
 function matchesStatusFilter(status: JobStatus, filter: JobsStatusFilter) {

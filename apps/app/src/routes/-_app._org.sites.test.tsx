@@ -1,11 +1,12 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { SiteIdType } from "@task-tracker/jobs-core";
+import type { SiteIdType, UserIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
+const userId = "user_123" as UserIdType;
 
 const {
   mockedEnsureActiveOrganizationId,
@@ -88,7 +89,7 @@ describe("sites route loader", () => {
         },
         viewer: {
           role: "owner",
-          userId: "user_123",
+          userId,
         },
       });
       expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
@@ -129,7 +130,7 @@ describe("sites route loader", () => {
           }}
           viewer={{
             role: "owner",
-            userId: "user_123",
+            userId,
           }}
         />
       );

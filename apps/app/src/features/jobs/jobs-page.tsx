@@ -15,7 +15,11 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { JobListItem, JobPriority } from "@task-tracker/jobs-core";
+import type {
+  JobListItem,
+  JobPriority,
+  UserIdType,
+} from "@task-tracker/jobs-core";
 import * as React from "react";
 
 import {
@@ -34,6 +38,8 @@ import {
   CommandItem,
   CommandList,
 } from "#/components/ui/command";
+import { CommandSelect } from "#/components/ui/command-select";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   Empty,
   EmptyContent,
@@ -76,7 +82,13 @@ import { cn } from "#/lib/utils";
 import { JobsCoverageMap } from "./jobs-coverage-map";
 import { hasSiteCoordinates } from "./jobs-location";
 import {
+  buildJobSavedViews,
+  findMatchingJobSavedView,
+} from "./jobs-saved-views";
+import type { JobSavedView } from "./jobs-saved-views";
+import {
   defaultJobsListFilters,
+  isJobsAssigneeFilterEqual,
   jobsListFiltersAtom,
   jobsLookupAtom,
   jobsNoticeAtom,
@@ -84,7 +96,7 @@ import {
   refreshJobsListAtom,
   visibleJobsAtom,
 } from "./jobs-state";
-import type { JobsListFilters } from "./jobs-state";
+import type { JobsAssigneeFilter, JobsListFilters } from "./jobs-state";
 import { hasJobsElevatedAccess } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
@@ -147,9 +159,15 @@ export function JobsPage({
   const setNotice = useAtomSet(jobsNoticeAtom);
   const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
+  const [savedViewsOpen, setSavedViewsOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
+  const savedViews = React.useMemo(
+    () => buildJobSavedViews(viewer.userId),
+    [viewer.userId]
+  );
+  const activeSavedView = findMatchingJobSavedView(filters, savedViews);
 
   const patchFilters = React.useCallback(
     (patch: Partial<JobsListFilters>) => {
@@ -176,6 +194,13 @@ export function JobsPage({
     [controlledViewMode, onViewModeChange, viewMode]
   );
 
+  const applySavedView = React.useCallback(
+    (savedView: JobSavedView) => {
+      setFilters(savedView.filters);
+    },
+    [setFilters]
+  );
+
   const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
     const actions: CommandAction[] = [
       ...(canCreateJobs
@@ -191,6 +216,16 @@ export function JobsPage({
             },
           ]
         : []),
+      ...savedViews.map((savedView, index) => ({
+        disabled: savedView.id === activeSavedView?.id,
+        group: "Job views",
+        icon: FilterHorizontalIcon,
+        id: `jobs-saved-view-${savedView.id}`,
+        priority: 65 - index,
+        run: () => applySavedView(savedView),
+        scope: "route" as const,
+        title: `Apply ${savedView.label} view`,
+      })),
       {
         disabled: viewMode === "list",
         group: "Current page",
@@ -247,12 +282,15 @@ export function JobsPage({
 
     return actions;
   }, [
+    activeSavedView?.id,
+    applySavedView,
     canCreateJobs,
     filters.status,
     hasCustomFilters,
     navigate,
     patchFilters,
     setFilters,
+    savedViews,
     viewMode,
     setViewMode,
   ]);
@@ -294,6 +332,13 @@ export function JobsPage({
     },
     { enabled: listHotkeysEnabled }
   );
+  useAppHotkeySequence(
+    "jobsSavedViews",
+    () => {
+      setSavedViewsOpen(true);
+    },
+    { enabled: listHotkeysEnabled }
+  );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -316,11 +361,16 @@ export function JobsPage({
         </div>
 
         <JobsCommandToolbar
+          activeSavedView={activeSavedView}
           filters={filters}
           hasCustomFilters={hasCustomFilters}
+          onSavedViewSelect={applySavedView}
+          onSavedViewsOpenChange={setSavedViewsOpen}
           optionsState={optionsState.data}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
           onFiltersChange={patchFilters}
+          savedViews={savedViews}
+          savedViewsOpen={savedViewsOpen}
           searchInputRef={searchInputRef}
         />
       </header>
@@ -371,19 +421,30 @@ export function JobsPage({
 }
 
 function JobsCommandToolbar({
+  activeSavedView,
   filters,
   hasCustomFilters,
   onClearFilters,
   onFiltersChange,
+  onSavedViewSelect,
+  onSavedViewsOpenChange,
   optionsState,
+  savedViews,
+  savedViewsOpen,
   searchInputRef,
 }: {
+  readonly activeSavedView: JobSavedView | undefined;
   readonly filters: JobsListFilters;
   readonly hasCustomFilters: boolean;
   readonly onClearFilters: () => void;
   readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly onSavedViewsOpenChange: (open: boolean) => void;
   readonly optionsState: {
-    readonly members: readonly { readonly id: string; readonly name: string }[];
+    readonly members: readonly {
+      readonly id: UserIdType;
+      readonly name: string;
+    }[];
     readonly regions: readonly { readonly id: string; readonly name: string }[];
     readonly sites: readonly {
       readonly id: string;
@@ -391,11 +452,20 @@ function JobsCommandToolbar({
       readonly regionId?: string | undefined;
     }[];
   };
+  readonly savedViews: readonly JobSavedView[];
+  readonly savedViewsOpen: boolean;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+        <SavedViewsControl
+          activeSavedView={activeSavedView}
+          onOpenChange={onSavedViewsOpenChange}
+          onSavedViewSelect={onSavedViewSelect}
+          open={savedViewsOpen}
+          savedViews={savedViews}
+        />
         <InputGroup className="h-8 bg-background xl:max-w-72">
           <InputGroupAddon>
             <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
@@ -420,17 +490,24 @@ function JobsCommandToolbar({
           />
           <CommandFilter
             label="Assignee"
-            value={filters.assigneeId}
+            value={formatJobsAssigneeFilterValue(filters.assigneeId)}
             options={[
               { label: "All assignees", value: "all" },
+              { label: "Unassigned", value: "unassigned" },
               ...optionsState.members.map((member) => ({
                 label: member.name,
-                value: member.id,
+                value: formatJobsAssigneeFilterValue({
+                  kind: "user",
+                  userId: member.id,
+                }),
               })),
             ]}
             onValueChange={(value) =>
               onFiltersChange({
-                assigneeId: value as JobsListFilters["assigneeId"],
+                assigneeId: parseJobsAssigneeFilterValue(
+                  value,
+                  optionsState.members
+                ),
               })
             }
           />
@@ -521,6 +598,58 @@ function JobsCommandToolbar({
         </div>
       </div>
     </div>
+  );
+}
+
+function SavedViewsControl({
+  activeSavedView,
+  onOpenChange,
+  onSavedViewSelect,
+  open,
+  savedViews,
+}: {
+  readonly activeSavedView: JobSavedView | undefined;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly open: boolean;
+  readonly savedViews: readonly JobSavedView[];
+}) {
+  const label = activeSavedView?.label ?? "Custom view";
+  const groups = React.useMemo(
+    () =>
+      [
+        {
+          label: "Saved views",
+          options: savedViews.map((savedView) => ({
+            label: savedView.label,
+            value: savedView.id,
+          })),
+        },
+      ] satisfies readonly CommandSelectGroup[],
+    [savedViews]
+  );
+
+  return (
+    <CommandSelect
+      id="jobs-saved-view"
+      value={activeSavedView?.id ?? ""}
+      placeholder="Custom view"
+      emptyText="No views."
+      groups={groups}
+      open={open}
+      onOpenChange={onOpenChange}
+      onValueChange={(value) => {
+        const savedView = savedViews.find((view) => view.id === value);
+
+        if (savedView) {
+          onSavedViewSelect(savedView);
+        }
+      }}
+      ariaLabel={`Saved view: ${label}`}
+      className="h-8 w-full shrink-0 bg-background xl:w-44"
+      prefix={<HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />}
+      searchPlaceholder="Switch saved view"
+    />
   );
 }
 
@@ -954,10 +1083,15 @@ function buildActiveFilterBadges(
     });
   }
 
-  if (filters.assigneeId !== defaultJobsListFilters.assigneeId) {
+  if (
+    !isJobsAssigneeFilterEqual(
+      filters.assigneeId,
+      defaultJobsListFilters.assigneeId
+    )
+  ) {
     badges.push({
       key: "assigneeId",
-      label: `Assignee: ${lookup.memberById.get(filters.assigneeId)?.name ?? "Unknown"}`,
+      label: buildAssigneeFilterBadgeLabel(filters.assigneeId, lookup),
     });
   }
 
@@ -993,4 +1127,52 @@ function buildActiveFilterBadges(
   }
 
   return badges;
+}
+
+function buildAssigneeFilterBadgeLabel(
+  assigneeId: JobsAssigneeFilter,
+  lookup: {
+    readonly memberById: ReadonlyMap<string, { readonly name: string }>;
+  }
+) {
+  if (assigneeId.kind === "unassigned") {
+    return "Assignee: Unassigned";
+  }
+
+  if (assigneeId.kind === "all") {
+    return "Assignee: All";
+  }
+
+  return `Assignee: ${lookup.memberById.get(assigneeId.userId)?.name ?? "Unknown"}`;
+}
+
+function formatJobsAssigneeFilterValue(filter: JobsAssigneeFilter): string {
+  if (filter.kind === "user") {
+    return `user:${filter.userId}`;
+  }
+
+  return filter.kind;
+}
+
+function parseJobsAssigneeFilterValue(
+  value: string,
+  members: readonly { readonly id: UserIdType }[]
+): JobsAssigneeFilter {
+  if (value === "all") {
+    return { kind: "all" };
+  }
+
+  if (value === "unassigned") {
+    return { kind: "unassigned" };
+  }
+
+  const member = members.find(
+    (candidate) =>
+      formatJobsAssigneeFilterValue({
+        kind: "user",
+        userId: candidate.id,
+      }) === value
+  );
+
+  return member ? { kind: "user", userId: member.id } : { kind: "all" };
 }

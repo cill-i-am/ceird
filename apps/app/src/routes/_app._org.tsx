@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router";
 
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
+import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import { requireOrganizationAccess } from "#/features/organizations/organization-access";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/_app/_org")({
       activeOrganization: organizationAccess.activeOrganization,
       activeOrganizationId: organizationAccess.activeOrganizationId,
       activeOrganizationSync: organizationAccess.activeOrganizationSync,
-      currentUserId: organizationAccess.session.user.id,
+      currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
     };
   },
   component: OrganizationRouteComponent,

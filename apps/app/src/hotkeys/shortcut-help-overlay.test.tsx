@@ -79,7 +79,10 @@ describe("shortcut help overlay", () => {
   it("includes shortcuts for every active scope", async () => {
     renderShortcutHelpOverlay(
       ["global", "jobs"],
-      <RegisteredShortcut id="jobsSearch" />
+      <>
+        <RegisteredShortcut id="jobsSearch" />
+        <RegisteredShortcutSequence id="jobsSavedViews" />
+      </>
     );
 
     fireEvent.click(
@@ -91,6 +94,7 @@ describe("shortcut help overlay", () => {
     });
 
     expect(within(dialog).getByText("Search jobs")).toBeVisible();
+    expect(within(dialog).getByText("Saved views")).toBeVisible();
     expect(within(dialog).queryByText("Create job")).not.toBeInTheDocument();
   }, 1000);
 
