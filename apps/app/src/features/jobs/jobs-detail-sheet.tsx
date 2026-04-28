@@ -575,7 +575,7 @@ export function JobsDetailSheet({
             <HeaderMetaItem
               label="Site"
               value={site?.name ?? "No site yet"}
-              supporting={site?.regionName ?? "No region yet"}
+              supporting={site?.serviceAreaName ?? "No service area yet"}
             />
             <HeaderMetaItem
               label="Assignee"
@@ -1105,8 +1105,8 @@ function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
       options: [
         { label: "No site", value: NO_SITE_VALUE },
         ...sortedSites.map((site) => ({
-          label: site.regionName
-            ? `${site.name} (${site.regionName})`
+          label: site.serviceAreaName
+            ? `${site.name} (${site.serviceAreaName})`
             : site.name,
           value: site.id,
         })),

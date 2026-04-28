@@ -3,7 +3,7 @@ import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
   JobListResponse,
   JobOptionsResponse,
-  RegionIdType,
+  ServiceAreaIdType,
   SiteIdType,
   UserIdType,
   WorkItemIdType,
@@ -31,8 +31,10 @@ import type { JobsViewer } from "./jobs-viewer";
 
 const memberOneId = "11111111-1111-4111-8111-111111111111" as UserIdType;
 const memberTwoId = "22222222-2222-4222-8222-222222222222" as UserIdType;
-const regionNorthId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
-const regionWestId = "44444444-4444-4444-8444-444444444444" as RegionIdType;
+const serviceAreaNorthId =
+  "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
+const serviceAreaWestId =
+  "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
 const organizationId = decodeOrganizationId("org_123");
@@ -117,13 +119,13 @@ const initialOptions: JobOptionsResponse = {
       name: "Casey Member",
     },
   ],
-  regions: [
+  serviceAreas: [
     {
-      id: regionNorthId,
+      id: serviceAreaNorthId,
       name: "North",
     },
     {
-      id: regionWestId,
+      id: serviceAreaWestId,
       name: "West",
     },
   ],
@@ -139,8 +141,8 @@ const initialOptions: JobOptionsResponse = {
       latitude: 53.3498,
       longitude: -6.2603,
       name: "Depot",
-      regionId: regionNorthId,
-      regionName: "North",
+      serviceAreaId: serviceAreaNorthId,
+      serviceAreaName: "North",
     },
     {
       addressLine1: "School Road",
@@ -153,8 +155,8 @@ const initialOptions: JobOptionsResponse = {
       latitude: 53.2734,
       longitude: -9.0511,
       name: "School",
-      regionId: regionWestId,
-      regionName: "West",
+      serviceAreaId: serviceAreaWestId,
+      serviceAreaName: "West",
     },
   ],
 };
@@ -204,6 +206,10 @@ describe("jobs page", () => {
       expect(
         within(queuePanel).getAllByText("Finalize snag list").length
       ).toBeGreaterThan(0);
+      expect(within(queuePanel).getAllByText("North").length).toBeGreaterThan(
+        0
+      );
+      expect(within(queuePanel).getAllByText("West").length).toBeGreaterThan(0);
       expect(
         within(queuePanel).queryByText("Closed inspection")
       ).not.toBeInTheDocument();
@@ -391,7 +397,7 @@ describe("jobs page", () => {
   );
 
   it(
-    "filters by coordinator, region, and site with the seeded options data",
+    "filters by coordinator, service area, and site with the seeded options data",
     {
       timeout: 10_000,
     },
@@ -417,7 +423,7 @@ describe("jobs page", () => {
         within(queuePanel).getAllByText("Finalize snag list").length
       ).toBeGreaterThan(0);
 
-      await chooseCommandFilter(user, /more filter/i, "Region: North");
+      await chooseCommandFilter(user, /more filter/i, "Service area: North");
 
       expect(screen.getByText(/no jobs here/i)).toBeInTheDocument();
 

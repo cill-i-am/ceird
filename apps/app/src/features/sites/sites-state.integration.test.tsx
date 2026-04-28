@@ -98,7 +98,7 @@ describe("sites state integration", () => {
       );
       mockedGetSiteOptions.mockReturnValue(
         Effect.succeed({
-          regions: [],
+          serviceAreas: [],
           sites: [
             buildSite(existingSiteId, "Existing Site"),
             buildSite(createdSiteId, "Canonical Site"),
@@ -163,7 +163,7 @@ function renderSitesStateProbe() {
           seedJobsOptionsState(organizationId, {
             contacts: [],
             members: [],
-            regions: [],
+            serviceAreas: [],
             sites: [buildSite(existingSiteId, "Existing Site")],
           }),
         ],

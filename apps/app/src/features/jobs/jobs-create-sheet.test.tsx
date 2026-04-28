@@ -1,7 +1,7 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import type {
   ContactIdType,
-  RegionIdType,
+  ServiceAreaIdType,
   SiteIdType,
 } from "@task-tracker/jobs-core";
 import {
@@ -24,7 +24,8 @@ type NavigateMock = (...args: unknown[]) => unknown;
 const depotSiteId = "11111111-1111-4111-8111-111111111111" as SiteIdType;
 const schoolSiteId = "22222222-2222-4222-8222-222222222222" as SiteIdType;
 const depotContactId = "33333333-3333-4333-8333-333333333333" as ContactIdType;
-const northRegionId = "44444444-4444-4444-8444-444444444444" as RegionIdType;
+const northServiceAreaId =
+  "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType;
 
 const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
   () => ({
@@ -344,9 +345,9 @@ describe("jobs create sheet", () => {
               },
             ],
             members: [],
-            regions: [
+            serviceAreas: [
               {
-                id: northRegionId,
+                id: northServiceAreaId,
                 name: "North",
               },
             ],
@@ -362,8 +363,8 @@ describe("jobs create sheet", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Depot",
-                regionId: undefined,
-                regionName: undefined,
+                serviceAreaId: undefined,
+                serviceAreaName: undefined,
               },
               {
                 addressLine1: "School Road",
@@ -376,8 +377,8 @@ describe("jobs create sheet", () => {
                 latitude: 53.2734,
                 longitude: -9.0511,
                 name: "School",
-                regionId: undefined,
-                regionName: undefined,
+                serviceAreaId: undefined,
+                serviceAreaName: undefined,
               },
             ],
           },
@@ -467,7 +468,7 @@ describe("jobs create sheet", () => {
             country: "IE",
             eircode: "D04 X2X2",
             name: "Warehouse",
-            regionId: undefined,
+            serviceAreaId: undefined,
             town: undefined,
           },
         },
@@ -512,7 +513,7 @@ describe("jobs create sheet", () => {
       await choosePickerOption(user, "Site", "Create a new site");
 
       expect(
-        screen.queryByText("Name, region, and location")
+        screen.queryByText("Name, service area, and location")
       ).not.toBeInTheDocument();
 
       await user.type(screen.getByLabelText("Site name"), "Warehouse");
@@ -534,7 +535,7 @@ describe("jobs create sheet", () => {
           data: {
             contacts: [],
             members: [],
-            regions: [],
+            serviceAreas: [],
             sites: [],
           },
           organizationId: "org_123",
@@ -592,7 +593,7 @@ describe("jobs create sheet", () => {
       );
       await choosePickerOption(user, "Site", "Create a new site");
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
-      await choosePickerOption(user, "Region", "North");
+      await choosePickerOption(user, "Service area", "North");
       await user.type(
         screen.getByLabelText("Address line 1"),
         "1 Custom House Quay"
@@ -624,7 +625,7 @@ describe("jobs create sheet", () => {
             country: "IE",
             eircode: "D01 X2X2",
             name: "Docklands Campus",
-            regionId: northRegionId,
+            serviceAreaId: northServiceAreaId,
             town: "Dublin",
           },
         },

@@ -84,7 +84,7 @@ function mergeSiteOptions(
 ): JobOptionsResponse {
   return {
     ...options,
-    regions: siteOptions.regions,
+    serviceAreas: siteOptions.serviceAreas,
     sites: siteOptions.sites,
   };
 }

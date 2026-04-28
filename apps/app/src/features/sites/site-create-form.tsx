@@ -2,7 +2,7 @@
 
 import type {
   CreateSiteInput,
-  JobRegionOption,
+  ServiceArea,
   SiteCountry,
 } from "@task-tracker/jobs-core";
 
@@ -24,7 +24,7 @@ export interface SiteCreateDraft {
   readonly country: typeof DEFAULT_SITE_COUNTRY;
   readonly eircode: string;
   readonly name: string;
-  readonly regionSelection: string;
+  readonly serviceAreaSelection: string;
   readonly town: string;
 }
 
@@ -33,7 +33,7 @@ export interface SiteCreateFieldErrors {
   readonly county?: string;
   readonly eircode?: string;
   readonly name?: string;
-  readonly regionSelection?: string;
+  readonly serviceAreaSelection?: string;
 }
 
 export const defaultSiteCreateDraft: SiteCreateDraft = {
@@ -44,21 +44,21 @@ export const defaultSiteCreateDraft: SiteCreateDraft = {
   country: DEFAULT_SITE_COUNTRY,
   eircode: "",
   name: "",
-  regionSelection: SITE_CREATE_NONE_VALUE,
+  serviceAreaSelection: SITE_CREATE_NONE_VALUE,
   town: "",
 };
 
-export function buildSiteRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[]
+export function buildSiteServiceAreaSelectionGroups(
+  serviceAreas: readonly { readonly id: string; readonly name: string }[]
 ) {
   return [
     {
-      label: "Region",
+      label: "Service area",
       options: [
-        { label: "No region yet", value: SITE_CREATE_NONE_VALUE },
-        ...regions.map((region) => ({
-          label: region.name,
-          value: region.id,
+        { label: "No service area yet", value: SITE_CREATE_NONE_VALUE },
+        ...serviceAreas.map((serviceArea) => ({
+          label: serviceArea.name,
+          value: serviceArea.id,
         })),
       ],
     },
@@ -67,7 +67,7 @@ export function buildSiteRegionSelectionGroups(
 
 export function validateSiteCreateDraft(
   values: SiteCreateDraft,
-  regions: readonly JobRegionOption[],
+  serviceAreas: readonly ServiceArea[],
   options: {
     readonly nameRequiredMessage?: string;
   } = {}
@@ -83,10 +83,10 @@ export function validateSiteCreateDraft(
       values.name.trim().length === 0
         ? (options.nameRequiredMessage ?? "Add a site name before creating it.")
         : undefined,
-    regionSelection:
-      values.regionSelection !== SITE_CREATE_NONE_VALUE &&
-      findSelectedRegion(values, regions) === undefined
-        ? "Pick an available region, or choose no region."
+    serviceAreaSelection:
+      values.serviceAreaSelection !== SITE_CREATE_NONE_VALUE &&
+      findSelectedServiceArea(values, serviceAreas) === undefined
+        ? "Pick an available service area, or choose no service area."
         : undefined,
   };
 }
@@ -97,9 +97,9 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 
 export function buildCreateSiteInputFromDraft(
   values: SiteCreateDraft,
-  regions: readonly JobRegionOption[]
+  serviceAreas: readonly ServiceArea[]
 ): CreateSiteInput {
-  const selectedRegion = findSelectedRegion(values, regions);
+  const selectedServiceArea = findSelectedServiceArea(values, serviceAreas);
 
   return {
     accessNotes: toOptionalTrimmedString(values.accessNotes),
@@ -109,7 +109,7 @@ export function buildCreateSiteInputFromDraft(
     country: values.country,
     eircode: values.eircode.trim(),
     name: values.name.trim(),
-    regionId: selectedRegion?.id,
+    serviceAreaId: selectedServiceArea?.id,
     town: toOptionalTrimmedString(values.town),
   };
 }
@@ -125,8 +125,8 @@ interface SiteCreateFieldsProps {
   readonly errors: SiteCreateFieldErrors;
   readonly idPrefix: string;
   readonly onDraftChange: (draft: SiteCreateDraft) => void;
-  readonly onRegionSelectionChange?: (nextValue: string) => void;
-  readonly regionGroups: readonly CommandSelectGroup[];
+  readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
+  readonly serviceAreaGroups: readonly CommandSelectGroup[];
 }
 
 export function SiteCreateFields({
@@ -134,8 +134,8 @@ export function SiteCreateFields({
   errors,
   idPrefix,
   onDraftChange,
-  onRegionSelectionChange,
-  regionGroups,
+  onServiceAreaSelectionChange,
+  serviceAreaGroups,
 }: SiteCreateFieldsProps) {
   const updateDraft = (patch: Partial<SiteCreateDraft>) => {
     onDraftChange({
@@ -162,21 +162,21 @@ export function SiteCreateFields({
         </AuthFormField>
 
         <AuthFormField
-          label="Region"
-          htmlFor={`${idPrefix}-region`}
-          invalid={Boolean(errors.regionSelection)}
-          errorText={errors.regionSelection}
+          label="Service area"
+          htmlFor={`${idPrefix}-service-area`}
+          invalid={Boolean(errors.serviceAreaSelection)}
+          errorText={errors.serviceAreaSelection}
         >
           <CommandSelect
-            id={`${idPrefix}-region`}
-            value={draft.regionSelection}
-            placeholder="Pick region"
-            emptyText="No regions found."
-            groups={regionGroups}
-            ariaInvalid={errors.regionSelection ? true : undefined}
+            id={`${idPrefix}-service-area`}
+            value={draft.serviceAreaSelection}
+            placeholder="Pick service area"
+            emptyText="No service areas found."
+            groups={serviceAreaGroups}
+            ariaInvalid={errors.serviceAreaSelection ? true : undefined}
             onValueChange={
-              onRegionSelectionChange ??
-              ((nextValue) => updateDraft({ regionSelection: nextValue }))
+              onServiceAreaSelectionChange ??
+              ((nextValue) => updateDraft({ serviceAreaSelection: nextValue }))
             }
           />
         </AuthFormField>
@@ -274,13 +274,15 @@ export function SiteCreateFields({
   );
 }
 
-function findSelectedRegion(
+function findSelectedServiceArea(
   values: SiteCreateDraft,
-  regions: readonly JobRegionOption[]
+  serviceAreas: readonly ServiceArea[]
 ) {
-  if (values.regionSelection === SITE_CREATE_NONE_VALUE) {
+  if (values.serviceAreaSelection === SITE_CREATE_NONE_VALUE) {
     return;
   }
 
-  return regions.find((region) => region.id === values.regionSelection);
+  return serviceAreas.find(
+    (serviceArea) => serviceArea.id === values.serviceAreaSelection
+  );
 }

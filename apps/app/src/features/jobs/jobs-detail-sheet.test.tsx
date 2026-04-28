@@ -317,7 +317,7 @@ describe("jobs detail sheet", () => {
         return {
           contactById: new Map(),
           memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
-          regionById: new Map(),
+          serviceAreaById: new Map(),
           siteById: new Map([
             [
               siteId,
@@ -331,7 +331,7 @@ describe("jobs detail sheet", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Docklands Campus",
-                regionName: "Dublin",
+                serviceAreaName: "Dublin",
                 town: "Dublin",
               },
             ],

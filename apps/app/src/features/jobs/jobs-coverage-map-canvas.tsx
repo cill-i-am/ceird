@@ -83,9 +83,9 @@ export function JobsCoverageMapCanvas({
                         {group.jobs.length === 1 ? "" : "s"}
                       </Badge>
                     </div>
-                    {group.site.regionName ? (
+                    {group.site.serviceAreaName ? (
                       <p className="text-sm text-muted-foreground">
-                        {group.site.regionName}
+                        {group.site.serviceAreaName}
                       </p>
                     ) : null}
                     {buildSiteAddressLines(group.site).map((line) => (

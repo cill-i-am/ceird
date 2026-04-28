@@ -1,9 +1,9 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import {
-  REGION_NOT_FOUND_ERROR_TAG,
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SiteGeocodingFailedError,
 } from "@task-tracker/jobs-core";
-import type { RegionIdType, SiteIdType } from "@task-tracker/jobs-core";
+import type { ServiceAreaIdType, SiteIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
@@ -19,7 +19,8 @@ type AtomSetterMock = (atom: unknown) => unknown;
 type AtomValueMock = (atom: unknown) => unknown;
 type NavigateMock = (...args: unknown[]) => unknown;
 
-const regionId = "33333333-3333-4333-8333-333333333333" as RegionIdType;
+const serviceAreaId =
+  "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 
 const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
@@ -121,9 +122,9 @@ describe("sites create sheet", () => {
           data: {
             contacts: [],
             members: [],
-            regions: [
+            serviceAreas: [
               {
-                id: regionId,
+                id: serviceAreaId,
                 name: "Dublin",
               },
             ],
@@ -163,7 +164,7 @@ describe("sites create sheet", () => {
       ).not.toBeInTheDocument();
 
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
-      await user.click(screen.getByLabelText("Region"));
+      await user.click(screen.getByLabelText("Service area"));
       await user.click(screen.getByRole("option", { name: "Dublin" }));
       await user.type(
         screen.getByLabelText("Address line 1"),
@@ -180,7 +181,7 @@ describe("sites create sheet", () => {
         country: "IE",
         eircode: "D01 X2X2",
         name: "Docklands Campus",
-        regionId,
+        serviceAreaId,
         town: "Dublin",
       });
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
@@ -222,13 +223,13 @@ describe("sites create sheet", () => {
   );
 
   it(
-    "maps stale region failures to the field without a duplicate alert",
+    "maps stale service area failures to the field without a duplicate alert",
     { timeout: 10_000 },
     async () => {
       mockedCreateSite.mockResolvedValue(
         Exit.fail({
-          _tag: REGION_NOT_FOUND_ERROR_TAG,
-          message: "Region is no longer available.",
+          _tag: SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+          message: "Service area is no longer available.",
         })
       );
 
@@ -236,7 +237,7 @@ describe("sites create sheet", () => {
       render(<SitesCreateSheet />);
 
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
-      await user.click(screen.getByLabelText("Region"));
+      await user.click(screen.getByLabelText("Service area"));
       await user.click(screen.getByRole("option", { name: "Dublin" }));
       await user.type(
         screen.getByLabelText("Address line 1"),
@@ -246,15 +247,15 @@ describe("sites create sheet", () => {
       await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
       await user.click(screen.getByRole("button", { name: /create site/i }));
 
-      const regionControl = screen.getByLabelText("Region");
+      const serviceAreaControl = screen.getByLabelText("Service area");
 
       expect(
-        screen.getByText("Region is no longer available.")
+        screen.getByText("Service area is no longer available.")
       ).toBeInTheDocument();
-      expect(regionControl).toHaveAttribute("aria-invalid", "true");
-      expect(regionControl).toHaveAttribute(
+      expect(serviceAreaControl).toHaveAttribute("aria-invalid", "true");
+      expect(serviceAreaControl).toHaveAttribute(
         "aria-describedby",
-        "site-region-error"
+        "site-service-area-error"
       );
       expect(
         screen.queryByText("We couldn't create that site.")
@@ -301,13 +302,13 @@ describe("sites create sheet", () => {
   );
 
   it(
-    "suppresses stale region failures from the global result alert",
+    "suppresses stale service area failures from the global result alert",
     { timeout: 10_000 },
     () => {
       mockedCreateResult = {
         error: {
-          _tag: REGION_NOT_FOUND_ERROR_TAG,
-          message: "Region is no longer available.",
+          _tag: SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+          message: "Service area is no longer available.",
         },
         waiting: false,
       };

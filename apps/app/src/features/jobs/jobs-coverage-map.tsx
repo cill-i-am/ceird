@@ -211,9 +211,9 @@ function renderMapViewport(
                 <p className="font-medium">
                   {group.site.name ?? "Mapped site"}
                 </p>
-                {group.site.regionName ? (
+                {group.site.serviceAreaName ? (
                   <p className="text-sm text-muted-foreground">
-                    {group.site.regionName}
+                    {group.site.serviceAreaName}
                   </p>
                 ) : null}
               </div>

@@ -29,7 +29,7 @@ export { decodeJobsSearch };
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
   members: [],
-  regions: [],
+  serviceAreas: [],
   sites: [],
 };
 

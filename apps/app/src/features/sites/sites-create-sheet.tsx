@@ -5,7 +5,7 @@ import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  REGION_NOT_FOUND_ERROR_TAG,
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
 } from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
@@ -26,7 +26,7 @@ import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 import {
   SiteCreateFields,
   buildCreateSiteInputFromDraft,
-  buildSiteRegionSelectionGroups,
+  buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   validateSiteCreateDraft,
@@ -41,7 +41,8 @@ export type SitesCreateFormState = SiteCreateDraft;
 export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
 
 export const defaultSiteFormState = defaultSiteCreateDraft;
-export const buildRegionSelectionGroups = buildSiteRegionSelectionGroups;
+export const buildServiceAreaSelectionGroups =
+  buildSiteServiceAreaSelectionGroups;
 export const validateSiteForm = validateSiteCreateDraft;
 export const hasSiteFieldErrors = hasSiteCreateFieldErrors;
 export const buildSiteInput = buildCreateSiteInputFromDraft;
@@ -63,9 +64,9 @@ export function SitesCreateSheet() {
   const closeNavigationTimeout = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const regionGroups = React.useMemo(
-    () => buildSiteRegionSelectionGroups(options.regions),
-    [options.regions]
+  const serviceAreaGroups = React.useMemo(
+    () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
+    [options.serviceAreas]
   );
 
   React.useEffect(
@@ -103,14 +104,14 @@ export function SitesCreateSheet() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextErrors = validateSiteCreateDraft(values, options.regions);
+    const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
     setFieldErrors(nextErrors);
 
     if (hasSiteCreateFieldErrors(nextErrors)) {
       return;
     }
 
-    const payload = buildCreateSiteInputFromDraft(values, options.regions);
+    const payload = buildCreateSiteInputFromDraft(values, options.serviceAreas);
     const exit = await createSite(payload);
 
     if (Exit.isSuccess(exit)) {
@@ -124,11 +125,11 @@ export function SitesCreateSheet() {
 
     if (
       failure._tag === "Some" &&
-      failure.value._tag === REGION_NOT_FOUND_ERROR_TAG
+      failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
         ...current,
-        regionSelection: failure.value.message,
+        serviceAreaSelection: failure.value.message,
       }));
     }
 
@@ -156,7 +157,7 @@ export function SitesCreateSheet() {
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New site</DrawerTitle>
           <DrawerDescription>
-            Add the address and region for dispatch.
+            Add the address and service area for dispatch.
           </DrawerDescription>
         </DrawerHeader>
 
@@ -183,16 +184,16 @@ export function SitesCreateSheet() {
               draft={values}
               errors={fieldErrors}
               idPrefix="site"
-              regionGroups={regionGroups}
+              serviceAreaGroups={serviceAreaGroups}
               onDraftChange={setValues}
-              onRegionSelectionChange={(nextValue) => {
+              onServiceAreaSelectionChange={(nextValue) => {
                 setFieldErrors((current) => ({
                   ...current,
-                  regionSelection: undefined,
+                  serviceAreaSelection: undefined,
                 }));
                 setValues((current) => ({
                   ...current,
-                  regionSelection: nextValue,
+                  serviceAreaSelection: nextValue,
                 }));
               }}
             />
@@ -233,7 +234,7 @@ function isHandledCreateSiteError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    (error._tag === REGION_NOT_FOUND_ERROR_TAG ||
+    (error._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG ||
       error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
   );
 }

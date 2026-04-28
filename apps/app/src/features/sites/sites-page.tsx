@@ -69,7 +69,7 @@ export function SitesPage({
         group: "Sites",
         icon: Location01Icon,
         id: `sites-open-${site.id}`,
-        keywords: [site.regionName, buildSiteAddressSummary(site)].filter(
+        keywords: [site.serviceAreaName, buildSiteAddressSummary(site)].filter(
           (value): value is string => typeof value === "string"
         ),
         priority: 60,
@@ -79,7 +79,7 @@ export function SitesPage({
             to: "/sites/$siteId",
           }),
         scope: "route",
-        subtitle: site.regionName ?? undefined,
+        subtitle: site.serviceAreaName ?? undefined,
         title: `Open ${site.name}`,
       }));
 
@@ -151,7 +151,7 @@ export function SitesPage({
             <TableHeader>
               <TableRow>
                 <TableHead>Site</TableHead>
-                <TableHead>Region</TableHead>
+                <TableHead>Service area</TableHead>
                 <TableHead>Address</TableHead>
                 <TableHead className="w-28 text-right">Map</TableHead>
               </TableRow>
@@ -169,10 +169,12 @@ export function SitesPage({
                     </Link>
                   </TableCell>
                   <TableCell>
-                    {site.regionName ? (
-                      <Badge variant="secondary">{site.regionName}</Badge>
+                    {site.serviceAreaName ? (
+                      <Badge variant="secondary">{site.serviceAreaName}</Badge>
                     ) : (
-                      <span className="text-muted-foreground">No region</span>
+                      <span className="text-muted-foreground">
+                        No service area
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">

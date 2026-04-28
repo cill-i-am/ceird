@@ -70,7 +70,7 @@ const createSiteResponse: CreateSiteResponse = {
 };
 
 const siteOptionsResponse: SitesOptionsResponse = {
-  regions: [],
+  serviceAreas: [],
   sites: [createSiteResponse],
 };
 

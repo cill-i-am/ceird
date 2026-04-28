@@ -4,7 +4,7 @@ import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Location01Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { REGION_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
+import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
 import type { JobSiteOption, SiteIdType } from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
@@ -29,7 +29,7 @@ import { hasJobsElevatedAccess } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 
 import {
-  buildRegionSelectionGroups,
+  buildServiceAreaSelectionGroups,
   buildSiteInput,
   hasSiteFieldErrors,
   validateSiteForm,
@@ -62,9 +62,9 @@ export function SitesDetailSheet({
     mode: "promiseExit",
   });
   const canEdit = hasJobsElevatedAccess(viewer.role);
-  const regionGroups = React.useMemo(
-    () => buildRegionSelectionGroups(options.regions),
-    [options.regions]
+  const serviceAreaGroups = React.useMemo(
+    () => buildServiceAreaSelectionGroups(options.serviceAreas),
+    [options.serviceAreas]
   );
   const [values, setValues] = React.useState<SitesCreateFormState>(() =>
     currentSite ? buildFormStateFromSite(currentSite) : buildEmptySiteState()
@@ -93,14 +93,14 @@ export function SitesDetailSheet({
       return;
     }
 
-    const nextErrors = validateSiteForm(values, options.regions);
+    const nextErrors = validateSiteForm(values, options.serviceAreas);
     setFieldErrors(nextErrors);
 
     if (hasSiteFieldErrors(nextErrors)) {
       return;
     }
 
-    const exit = await updateSite(buildSiteInput(values, options.regions));
+    const exit = await updateSite(buildSiteInput(values, options.serviceAreas));
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
@@ -111,11 +111,11 @@ export function SitesDetailSheet({
 
     if (
       failure._tag === "Some" &&
-      failure.value._tag === REGION_NOT_FOUND_ERROR_TAG
+      failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
         ...current,
-        regionSelection: failure.value.message,
+        serviceAreaSelection: failure.value.message,
       }));
     }
   }
@@ -159,7 +159,7 @@ export function SitesDetailSheet({
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(updateResult)
               .onError((error) =>
-                isRegionNotFoundError(error) ? null : (
+                isServiceAreaNotFoundError(error) ? null : (
                   <Alert variant="destructive">
                     <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
                     <AlertTitle>We couldn&apos;t update that site.</AlertTitle>
@@ -191,27 +191,29 @@ export function SitesDetailSheet({
               </AuthFormField>
 
               <AuthFormField
-                label="Region"
-                htmlFor="site-edit-region"
-                invalid={Boolean(fieldErrors.regionSelection)}
-                errorText={fieldErrors.regionSelection}
+                label="Service area"
+                htmlFor="site-edit-service-area"
+                invalid={Boolean(fieldErrors.serviceAreaSelection)}
+                errorText={fieldErrors.serviceAreaSelection}
               >
                 <CommandSelect
-                  id="site-edit-region"
-                  value={values.regionSelection}
-                  placeholder="Pick region"
-                  emptyText="No regions found."
-                  groups={regionGroups}
-                  ariaInvalid={fieldErrors.regionSelection ? true : undefined}
+                  id="site-edit-service-area"
+                  value={values.serviceAreaSelection}
+                  placeholder="Pick service area"
+                  emptyText="No service areas found."
+                  groups={serviceAreaGroups}
+                  ariaInvalid={
+                    fieldErrors.serviceAreaSelection ? true : undefined
+                  }
                   disabled={!canEdit}
                   onValueChange={(nextValue) => {
                     setFieldErrors((current) => ({
                       ...current,
-                      regionSelection: undefined,
+                      serviceAreaSelection: undefined,
                     }));
                     setValues((current) => ({
                       ...current,
-                      regionSelection: nextValue,
+                      serviceAreaSelection: nextValue,
                     }));
                   }}
                 />
@@ -379,7 +381,7 @@ function buildFormStateFromSite(site: JobSiteOption): SitesCreateFormState {
     country: "IE",
     eircode: site.eircode ?? "",
     name: site.name,
-    regionSelection: site.regionId ?? NONE_VALUE,
+    serviceAreaSelection: site.serviceAreaId ?? NONE_VALUE,
     town: site.town ?? "",
   };
 }
@@ -393,16 +395,16 @@ function buildEmptySiteState(): SitesCreateFormState {
     country: "IE",
     eircode: "",
     name: "",
-    regionSelection: NONE_VALUE,
+    serviceAreaSelection: NONE_VALUE,
     town: "",
   };
 }
 
-function isRegionNotFoundError(error: unknown) {
+function isServiceAreaNotFoundError(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    error._tag === REGION_NOT_FOUND_ERROR_TAG
+    error._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
   );
 }

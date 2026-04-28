@@ -18,7 +18,7 @@ import { SitesRouteContent } from "#/features/sites/sites-route-content";
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
   members: [],
-  regions: [],
+  serviceAreas: [],
   sites: [],
 };
 
@@ -66,7 +66,7 @@ export async function loadSitesRouteData(
     options: {
       contacts: [],
       members: [],
-      regions: siteOptions.regions,
+      serviceAreas: siteOptions.serviceAreas,
       sites: siteOptions.sites,
     },
     viewer: {

@@ -14,7 +14,7 @@ import type {
   JobPriority,
   JobStatus,
   Job,
-  RegionIdType,
+  ServiceAreaIdType,
   SiteIdType,
   UserIdType,
 } from "@task-tracker/jobs-core";
@@ -30,7 +30,7 @@ export interface JobsListFilters {
   readonly coordinatorId: UserIdType | "all";
   readonly priority: JobPriority | "all";
   readonly query: string;
-  readonly regionId: RegionIdType | "all";
+  readonly serviceAreaId: ServiceAreaIdType | "all";
   readonly siteId: SiteIdType | "all";
   readonly status: JobsStatusFilter;
 }
@@ -54,7 +54,7 @@ export interface JobsNotice {
 export const emptyJobOptions: JobOptionsResponse = {
   contacts: [],
   members: [],
-  regions: [],
+  serviceAreas: [],
   sites: [],
 };
 
@@ -63,7 +63,7 @@ export const defaultJobsListFilters: JobsListFilters = {
   coordinatorId: "all",
   priority: "all",
   query: "",
-  regionId: "all",
+  serviceAreaId: "all",
   siteId: "all",
   status: "active",
 };
@@ -95,7 +95,9 @@ export const jobsLookupAtom = Atom.make((get) => {
       options.contacts.map((contact) => [contact.id, contact])
     ),
     memberById: new Map(options.members.map((member) => [member.id, member])),
-    regionById: new Map(options.regions.map((region) => [region.id, region])),
+    serviceAreaById: new Map(
+      options.serviceAreas.map((serviceArea) => [serviceArea.id, serviceArea])
+    ),
     siteById: new Map(options.sites.map((site) => [site.id, site])),
   };
 }).pipe(Atom.keepAlive);
@@ -143,13 +145,13 @@ export const visibleJobsAtom = Atom.make((get) => {
       }
     }
 
-    if (filters.regionId !== "all") {
-      const regionId =
+    if (filters.serviceAreaId !== "all") {
+      const serviceAreaId =
         item.siteId === undefined
           ? undefined
-          : siteById.get(item.siteId)?.regionId;
+          : siteById.get(item.siteId)?.serviceAreaId;
 
-      if (regionId !== filters.regionId) {
+      if (serviceAreaId !== filters.serviceAreaId) {
         return false;
       }
     }
