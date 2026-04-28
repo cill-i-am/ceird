@@ -1,6 +1,7 @@
 "use client";
 
 import { Link, useMatches, useRouterState } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import ThemeToggle from "#/components/ThemeToggle";
@@ -37,10 +38,11 @@ export function SiteHeader() {
     select: (state) =>
       getActiveShortcutScopes(state.location.pathname, state.location.search),
   });
+  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
 
   return (
     <header className="sticky top-0 z-40 flex w-full items-center border-b border-border/60 bg-background/90 backdrop-blur">
-      <RouteHotkeys />
+      <RouteHotkeys currentOrganizationRole={currentOrganizationRole} />
       <div className="flex min-h-(--header-height) w-full flex-wrap items-center gap-3 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Tooltip>
@@ -101,6 +103,26 @@ export function SiteHeader() {
   );
 }
 
+function useCurrentOrganizationRoleFromMatches() {
+  return useMatches({
+    select: (matches) => {
+      const orgMatch = matches.find(
+        (match) => match.routeId === "/_app/_org" || match.id === "/_app/_org"
+      );
+      const context = orgMatch?.context as
+        | { readonly currentOrganizationRole?: unknown }
+        | undefined;
+      const role = context?.currentOrganizationRole;
+
+      return isOrganizationRole(role) ? role : undefined;
+    },
+  });
+}
+
+function isOrganizationRole(input: unknown): input is OrganizationRole {
+  return input === "owner" || input === "admin" || input === "member";
+}
+
 function getActiveShortcutScopes(
   pathname: string,
   search?: unknown
@@ -121,6 +143,10 @@ function getActiveShortcutScopes(
 
   if (pathname === "/members") {
     return ["global", "members"];
+  }
+
+  if (pathname === "/activity") {
+    return ["global"];
   }
 
   if (pathname === "/settings" || pathname === "/organization/settings") {

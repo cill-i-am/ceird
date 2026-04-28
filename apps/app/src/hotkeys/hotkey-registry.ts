@@ -68,6 +68,13 @@ export const HOTKEYS = {
     label: "Go to Sites",
     scope: "global",
   },
+  goActivity: {
+    group: "Navigation",
+    hotkey: "G A",
+    id: "goActivity",
+    label: "Go to Activity",
+    scope: "global",
+  },
   goMembers: {
     group: "Navigation",
     hotkey: "G M",

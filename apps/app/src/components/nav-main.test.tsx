@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { isValidElement } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
+import { getPrimaryNavItemsForRole } from "./app-navigation";
 import { NavMain } from "./nav-main";
 
 const { mockedPathname } = vi.hoisted(() => ({
@@ -192,6 +193,27 @@ vi.mock(import("#/components/ui/sidebar"), () => ({
 }));
 
 describe("nav main", () => {
+  it(
+    "filters primary navigation items by organization role",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      for (const role of ["owner", "admin"] as const) {
+        expect(
+          getPrimaryNavItemsForRole(role).map((item) => item.url)
+        ).toStrictEqual(["/", "/jobs", "/sites", "/activity", "/members"]);
+      }
+
+      expect(
+        getPrimaryNavItemsForRole("member").map((item) => item.url)
+      ).toStrictEqual(["/", "/jobs", "/sites"]);
+      expect(getPrimaryNavItemsForRole().map((item) => item.url)).toStrictEqual(
+        ["/", "/jobs", "/sites"]
+      );
+    }
+  );
+
   it(
     "keeps submenu expansion and active state in sync with route changes",
     {

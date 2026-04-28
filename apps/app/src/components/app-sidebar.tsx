@@ -2,10 +2,11 @@
 
 import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useMatches, useNavigate } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
-import { APP_PRIMARY_NAV_ITEMS } from "#/components/app-navigation";
+import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
 import { NavMain } from "#/components/nav-main";
 import { NavUser } from "#/components/nav-user";
 import type { NavUserAccount } from "#/components/nav-user";
@@ -26,6 +27,8 @@ export function AppSidebar({
   user?: NavUserAccount | null;
 }) {
   const navigate = useNavigate();
+  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const primaryNavItems = getPrimaryNavItemsForRole(currentOrganizationRole);
 
   return (
     <Sidebar
@@ -58,7 +61,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent className="px-1 pb-2">
         <NavMain
-          items={APP_PRIMARY_NAV_ITEMS.map((item) => ({
+          items={primaryNavItems.map((item) => ({
             icon: <HugeiconsIcon icon={item.icon} strokeWidth={2} />,
             title: item.title,
             url: item.url,
@@ -72,4 +75,24 @@ export function AppSidebar({
       ) : null}
     </Sidebar>
   );
+}
+
+function useCurrentOrganizationRoleFromMatches() {
+  return useMatches({
+    select: (matches) => {
+      const orgMatch = matches.find(
+        (match) => match.routeId === "/_app/_org" || match.id === "/_app/_org"
+      );
+      const context = orgMatch?.context as
+        | { readonly currentOrganizationRole?: unknown }
+        | undefined;
+      const role = context?.currentOrganizationRole;
+
+      return isOrganizationRole(role) ? role : undefined;
+    },
+  });
+}
+
+function isOrganizationRole(input: unknown): input is OrganizationRole {
+  return input === "owner" || input === "admin" || input === "member";
 }

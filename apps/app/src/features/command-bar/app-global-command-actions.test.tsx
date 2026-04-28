@@ -68,7 +68,7 @@ describe("app global command actions", () => {
 
       render(
         <CommandBarProvider>
-          <AppOrganizationCommandActions />
+          <AppOrganizationCommandActions currentOrganizationRole="owner" />
         </CommandBarProvider>
       );
 
@@ -84,12 +84,74 @@ describe("app global command actions", () => {
         screen.getByRole("option", { name: /go to sites/i })
       ).toBeInTheDocument();
       expect(
+        screen.getByRole("option", { name: /go to activity/i })
+      ).toBeInTheDocument();
+      expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
 
       await user.click(screen.getByRole("option", { name: /go to jobs/i }));
 
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
+    }
+  );
+
+  it.each(["owner", "admin"] as const)(
+    "registers administrator organization commands for %s role",
+    { timeout: 10_000 },
+    async (role) => {
+      render(
+        <CommandBarProvider>
+          <AppOrganizationCommandActions currentOrganizationRole={role} />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /go to activity/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("option", { name: /go to members/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: /open organization settings/i })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it.each(["member", undefined] as const)(
+    "hides administrator organization commands for %s role",
+    { timeout: 10_000 },
+    async (role) => {
+      render(
+        <CommandBarProvider>
+          <AppOrganizationCommandActions currentOrganizationRole={role} />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /go to jobs/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByRole("option", { name: /go to activity/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to members/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", {
+          name: /open organization settings/i,
+        })
+      ).not.toBeInTheDocument();
     }
   );
 });
