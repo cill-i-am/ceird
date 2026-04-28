@@ -14,6 +14,8 @@ import {
   JobListQuerySchema,
   JobOptionsResponseSchema,
   JobListResponseSchema,
+  OrganizationActivityListResponseSchema,
+  OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   PatchJobResponseSchema,
   ReopenJobResponseSchema,
@@ -64,6 +66,14 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
       .addError(ContactNotFoundError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.get("listOrganizationActivity", "/activity")
+      .setUrlParams(OrganizationActivityQuerySchema)
+      .addSuccess(OrganizationActivityListResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(JobListCursorInvalidError)
       .addError(JobStorageError)
   )
   .add(

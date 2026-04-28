@@ -501,10 +501,18 @@ describe("jobs-core", () => {
 
   it("surfaces the jobs api contract with the expected paths", () => {
     const spec = OpenApi.fromApi(JobsApi);
+    const getOperation = (path: string, method: "get" | "post") => {
+      const operation = spec.paths[path]?.[method];
+
+      expect(operation).toBeDefined();
+
+      return operation as NonNullable<typeof operation>;
+    };
 
     expect(Object.keys(spec.paths)).toStrictEqual([
       "/jobs",
       "/jobs/options",
+      "/activity",
       "/jobs/{workItemId}",
       "/jobs/{workItemId}/transitions",
       "/jobs/{workItemId}/reopen",
@@ -515,22 +523,30 @@ describe("jobs-core", () => {
       "/sites/{siteId}",
     ]);
 
-    expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
-    expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
-    expect(spec.paths["/jobs/options"]?.get?.operationId).toBe(
-      "jobs.getJobOptions"
+    const listJobs = getOperation("/jobs", "get");
+    const createJob = getOperation("/jobs", "post");
+    const getJobOptions = getOperation("/jobs/options", "get");
+    const listOrganizationActivity = getOperation("/activity", "get");
+    const getJobDetail = getOperation("/jobs/{workItemId}", "get");
+    const addJobVisit = getOperation("/jobs/{workItemId}/visits", "post");
+    const getSiteOptions = getOperation("/sites/options", "get");
+    const createSite = getOperation("/sites", "post");
+
+    expect(listJobs.operationId).toBe("jobs.listJobs");
+    expect(createJob.operationId).toBe("jobs.createJob");
+    expect(getJobOptions.operationId).toBe("jobs.getJobOptions");
+    expect(listOrganizationActivity.operationId).toBe(
+      "jobs.listOrganizationActivity"
     );
-    expect(
-      spec.paths["/jobs/{workItemId}"]?.get?.responses["404"]
-    ).toBeDefined();
-    expect(
-      spec.paths["/jobs/{workItemId}/visits"]?.post?.responses["400"]
-    ).toBeDefined();
-    expect(spec.paths["/jobs"]?.post?.responses["422"]).toBeDefined();
-    expect(spec.paths["/sites/options"]?.get?.operationId).toBe(
-      "sites.getSiteOptions"
-    );
-    expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
+    expect(listOrganizationActivity.responses["200"]).toBeDefined();
+    expect(listOrganizationActivity.responses["403"]).toBeDefined();
+    expect(listOrganizationActivity.responses["400"]).toBeDefined();
+    expect(listOrganizationActivity.responses["503"]).toBeDefined();
+    expect(getJobDetail.responses["404"]).toBeDefined();
+    expect(addJobVisit.responses["400"]).toBeDefined();
+    expect(createJob.responses["422"]).toBeDefined();
+    expect(getSiteOptions.operationId).toBe("sites.getSiteOptions");
+    expect(createSite.operationId).toBe("sites.createSite");
   }, 5000);
 
   it("documents standalone site creation responses", () => {
