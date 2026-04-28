@@ -2,6 +2,7 @@
 
 import { SqlClient } from "@effect/sql";
 import {
+  ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
   IsoDateTimeString as IsoDateTimeStringSchema,
@@ -31,6 +32,7 @@ import {
   WorkItemId as WorkItemIdSchema,
 } from "@task-tracker/jobs-core";
 import type {
+  ActivityIdType as ActivityId,
   ContactIdType as ContactId,
   Job,
   JobActivity,
@@ -38,7 +40,6 @@ import type {
   JobComment,
   JobContactOption,
   JobDetail,
-  JobActivityEventType,
   JobKind,
   JobListCursorType as JobListCursor,
   JobListQuery,
@@ -123,7 +124,7 @@ interface OrganizationActivityRow extends WorkItemActivityRow {
 }
 
 interface OrganizationActivityCursorState {
-  readonly id: string;
+  readonly id: ActivityId;
   readonly createdAt: string;
 }
 
@@ -284,6 +285,7 @@ const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
   JobActivityPayloadSchema
 );
+const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
 const decodeOrganizationActivityCursor = Schema.decodeUnknownSync(
   OrganizationActivityCursorSchema
 );
@@ -318,7 +320,7 @@ const decodeJobCursorState = Schema.decodeUnknownSync(
 );
 const decodeOrganizationActivityCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
-    id: Schema.String,
+    id: ActivityIdSchema,
     createdAt: IsoDateTimeStringSchema,
   })
 );
@@ -1604,7 +1606,7 @@ function mapOrganizationActivityRow(
             name: row.actor_name ?? row.actor_email ?? "Team member",
           },
     createdAt: row.created_at.toISOString(),
-    eventType: row.event_type as JobActivityEventType,
+    eventType: row.event_type,
     id: row.id,
     jobTitle: row.job_title,
     payload: decodeJobActivityPayload(row.payload),
@@ -1657,7 +1659,7 @@ function encodeOrganizationActivityCursor(
   return decodeOrganizationActivityCursor(
     Buffer.from(
       JSON.stringify({
-        id: row.id,
+        id: decodeActivityId(row.id),
         createdAt: row.created_at.toISOString(),
       } satisfies OrganizationActivityCursorState)
     ).toString("base64url")
