@@ -1,10 +1,15 @@
 import { Schema } from "effect";
 
 import {
+  ContactEmailSchema,
+  ContactNameSchema,
+  ContactNotesSchema,
+  ContactPhoneSchema,
   IsoDateString,
   IsoDateTimeString,
   JobBlockedReasonSchema,
   JobCommentBodySchema,
+  JobExternalReferenceSchema,
   JobKindSchema,
   JobPrioritySchema,
   JobStatusSchema,
@@ -41,6 +46,7 @@ export const JobSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -60,6 +66,7 @@ export const JobListItemSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -249,10 +256,10 @@ export type CreateJobContactExistingInput = Schema.Schema.Type<
 export const CreateJobContactInlineInputSchema = Schema.Struct({
   kind: Schema.Literal("create"),
   input: Schema.Struct({
-    name: Schema.Trim.pipe(Schema.minLength(1)),
-    email: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
-    phone: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
-    notes: Schema.optional(Schema.Trim.pipe(Schema.minLength(1))),
+    name: ContactNameSchema,
+    email: Schema.optional(ContactEmailSchema),
+    phone: Schema.optional(ContactPhoneSchema),
+    notes: Schema.optional(ContactNotesSchema),
   }),
 });
 export type CreateJobContactInlineInput = Schema.Schema.Type<
@@ -269,6 +276,7 @@ export type CreateJobContactInput = Schema.Schema.Type<
 
 export const CreateJobInputSchema = Schema.Struct({
   title: JobTitleSchema,
+  externalReference: Schema.optional(JobExternalReferenceSchema),
   priority: Schema.optional(JobPrioritySchema),
   site: Schema.optional(CreateJobSiteInputSchema),
   contact: Schema.optional(CreateJobContactInputSchema),
@@ -282,6 +290,7 @@ export type CreateJobResponse = Schema.Schema.Type<
 
 export const PatchJobInputSchema = Schema.Struct({
   title: Schema.optional(JobTitleSchema),
+  externalReference: Schema.optional(Schema.NullOr(JobExternalReferenceSchema)),
   priority: Schema.optional(JobPrioritySchema),
   siteId: Schema.optional(Schema.NullOr(SiteId)),
   contactId: Schema.optional(Schema.NullOr(ContactId)),
@@ -399,7 +408,10 @@ export type UpdateSiteResponse = Schema.Schema.Type<
 
 export const JobContactOptionSchema = Schema.Struct({
   id: ContactId,
-  name: Schema.String,
+  name: ContactNameSchema,
+  email: Schema.optional(ContactEmailSchema),
+  phone: Schema.optional(ContactPhoneSchema),
+  notes: Schema.optional(ContactNotesSchema),
   siteIds: Schema.Array(SiteId),
 });
 export type JobContactOption = Schema.Schema.Type<

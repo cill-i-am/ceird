@@ -120,6 +120,29 @@ export type IsoDateString = Schema.Schema.Type<typeof IsoDateString>;
 export const JobTitleSchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobTitle = Schema.Schema.Type<typeof JobTitleSchema>;
 
+export const JobExternalReferenceSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(120)
+);
+export type JobExternalReference = Schema.Schema.Type<
+  typeof JobExternalReferenceSchema
+>;
+
+export const ContactNameSchema = Schema.Trim.pipe(Schema.minLength(1));
+export type ContactName = Schema.Schema.Type<typeof ContactNameSchema>;
+
+export const ContactEmailSchema = Schema.Trim.pipe(Schema.minLength(1));
+export type ContactEmail = Schema.Schema.Type<typeof ContactEmailSchema>;
+
+export const ContactPhoneSchema = Schema.Trim.pipe(Schema.minLength(1));
+export type ContactPhone = Schema.Schema.Type<typeof ContactPhoneSchema>;
+
+export const ContactNotesSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(2000)
+);
+export type ContactNotes = Schema.Schema.Type<typeof ContactNotesSchema>;
+
 export const JobCommentBodySchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobCommentBody = Schema.Schema.Type<typeof JobCommentBodySchema>;
 
