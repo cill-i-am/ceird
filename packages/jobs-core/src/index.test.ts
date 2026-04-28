@@ -394,6 +394,44 @@ describe("jobs-core", () => {
         unitPriceMinor: -1,
       })
     ).toThrow(/Expected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 6500,
+        unexpected: true,
+      })
+    ).toThrow(/unexpected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: Number.POSITIVE_INFINITY,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/positive finite quantity/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 65.5,
+      })
+    ).toThrow(/Expected an integer/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        taxRateBasisPoints: 10_001,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 10000/);
   }, 5000);
 
   it("calculates line totals and job cost summaries in minor units", () => {

@@ -1212,6 +1212,9 @@ function describeActivity(
     case "contact_changed": {
       return `${actorPrefix}updated the contact.`;
     }
+    case "cost_line_added": {
+      return `${actorPrefix}added a cost line.`;
+    }
     case "coordinator_changed": {
       return `${actorPrefix}updated the coordinator.`;
     }

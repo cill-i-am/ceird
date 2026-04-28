@@ -444,6 +444,10 @@ function buildDetail(): JobDetailResponse {
         workItemId,
       },
     ],
+    costLines: [],
+    costSummary: {
+      subtotalMinor: 0,
+    },
     job: {
       assigneeId: actorUserId,
       contactId,

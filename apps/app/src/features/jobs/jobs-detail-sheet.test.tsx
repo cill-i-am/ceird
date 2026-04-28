@@ -662,6 +662,10 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
+    costLines: [],
+    costSummary: {
+      subtotalMinor: 0,
+    },
     job: {
       assigneeId: actorUserId,
       createdAt: "2026-04-23T10:00:00.000Z",

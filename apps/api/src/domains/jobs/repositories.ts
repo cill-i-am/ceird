@@ -636,6 +636,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           decodeJobDetail({
             activity: activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
+            costLines: [],
+            costSummary: {
+              subtotalMinor: 0,
+            },
             job,
             visits: visits.map(mapJobVisitRow),
           })

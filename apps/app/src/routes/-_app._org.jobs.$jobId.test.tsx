@@ -251,6 +251,10 @@ function buildDetail() {
         workItemId,
       },
     ],
+    costLines: [],
+    costSummary: {
+      subtotalMinor: 0,
+    },
     job: {
       assigneeId: actorUserId,
       contactId,

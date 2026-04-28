@@ -1,5 +1,5 @@
 import { HttpApiBuilder } from "@effect/platform";
-import { JobsApi } from "@task-tracker/jobs-core";
+import { JobStorageError, JobsApi } from "@task-tracker/jobs-core";
 import { Effect, Layer } from "effect";
 
 import {
@@ -33,6 +33,13 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       )
       .handle("addJobVisit", ({ path, payload }) =>
         jobsService.addVisit(path.workItemId, payload)
+      )
+      .handle("addJobCostLine", () =>
+        Effect.fail(
+          new JobStorageError({
+            message: "Job cost line persistence is not implemented yet",
+          })
+        )
       );
   })
 );
