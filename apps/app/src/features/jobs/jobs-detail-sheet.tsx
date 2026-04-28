@@ -1084,7 +1084,14 @@ function JobsDetailContact({
         <HeaderMetaItem label="Phone" value={contact.phone} />
       ) : null}
       {contact.notes ? (
-        <HeaderMetaItem label="Notes" value={contact.notes} />
+        <div className="min-w-0 text-left">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase">
+            Notes
+          </p>
+          <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">
+            {contact.notes}
+          </p>
+        </div>
       ) : null}
     </div>
   );
