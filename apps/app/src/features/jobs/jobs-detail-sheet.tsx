@@ -215,6 +215,7 @@ export function JobsDetailSheet({
   );
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAssignLabels = hasAssignmentAccess;
+  const canCreateLabels = hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
@@ -481,7 +482,7 @@ export function JobsDetailSheet({
   }
 
   async function handleCreateAndAssignLabel(name: string) {
-    if (!canAssignLabels) {
+    if (!canAssignLabels || !canCreateLabels) {
       return;
     }
 
@@ -675,6 +676,7 @@ export function JobsDetailSheet({
             availableLabels={availableLabels}
             organizationLabels={organizationLabels}
             canAssignLabels={canAssignLabels}
+            canCreateLabels={canCreateLabels}
             disabled={
               assignLabelResult.waiting ||
               createAndAssignLabelResult.waiting ||
@@ -1191,6 +1193,7 @@ function HeaderMetaItem({
 function JobDetailLabels({
   availableLabels,
   canAssignLabels,
+  canCreateLabels,
   disabled,
   labels,
   onAssignLabel,
@@ -1200,6 +1203,7 @@ function JobDetailLabels({
 }: {
   readonly availableLabels: readonly JobLabel[];
   readonly canAssignLabels: boolean;
+  readonly canCreateLabels: boolean;
   readonly disabled: boolean;
   readonly labels: readonly JobLabel[];
   readonly onAssignLabel: (labelId: JobLabelIdType) => void;
@@ -1240,6 +1244,7 @@ function JobDetailLabels({
       {canAssignLabels ? (
         <JobLabelPicker
           availableLabels={availableLabels}
+          canCreateLabels={canCreateLabels}
           disabled={disabled}
           organizationLabels={organizationLabels}
           onAssignLabel={onAssignLabel}
@@ -1252,12 +1257,14 @@ function JobDetailLabels({
 
 function JobLabelPicker({
   availableLabels,
+  canCreateLabels,
   disabled,
   onAssignLabel,
   onCreateAndAssignLabel,
   organizationLabels,
 }: {
   readonly availableLabels: readonly JobLabel[];
+  readonly canCreateLabels: boolean;
   readonly disabled: boolean;
   readonly onAssignLabel: (labelId: JobLabelIdType) => void;
   readonly onCreateAndAssignLabel: (name: string) => void;
@@ -1272,7 +1279,8 @@ function JobLabelPicker({
     organizationLabels.some(
       (label) => normalizeJobLabelName(label.name) === normalizedCreateName
     );
-  const showCreate = createLabelName.length > 0 && !hasExistingLabelName;
+  const showCreate =
+    canCreateLabels && createLabelName.length > 0 && !hasExistingLabelName;
 
   return (
     <Popover
@@ -1491,7 +1499,7 @@ function insertSortedJobLabel(
 }
 
 function normalizeJobLabelName(name: string) {
-  return name.trim().toLocaleLowerCase();
+  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase();
 }
 
 function renderMutationError(

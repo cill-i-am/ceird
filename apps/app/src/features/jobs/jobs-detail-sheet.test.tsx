@@ -29,6 +29,7 @@ const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
 const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
+const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as JobLabelIdType;
 
 const {
   mockedNavigate,
@@ -377,6 +378,15 @@ describe("jobs detail sheet", () => {
                 updatedAt: "2026-04-23T09:05:00.000Z",
               },
             ],
+            [
+              waitingLabelId,
+              {
+                createdAt: "2026-04-23T09:10:00.000Z",
+                id: waitingLabelId,
+                name: "Waiting on PO",
+                updatedAt: "2026-04-23T09:10:00.000Z",
+              },
+            ],
           ]),
           memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
           regionById: new Map(),
@@ -548,6 +558,73 @@ describe("jobs detail sheet", () => {
       );
 
       expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+    }
+  );
+
+  it(
+    "lets assigned members assign and remove existing labels without creating labels",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+      mockedRemoveLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), {
+        role: "member",
+        userId: actorUserId,
+      });
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(screen.getByPlaceholderText("Search labels"), "Warranty");
+
+      expect(
+        screen.queryByRole("option", {
+          name: 'Create new label: "Warranty"',
+        })
+      ).not.toBeInTheDocument();
+
+      await user.clear(screen.getByPlaceholderText("Search labels"));
+      await user.click(screen.getByRole("option", { name: "Access" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove urgent callout label/i,
+        })
+      );
+
+      expect(mockedAssignLabel).toHaveBeenCalledWith({
+        labelId: accessLabelId,
+      });
+      expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+      expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "does not offer duplicate label creation when whitespace-normalized names match",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(
+        buildDetail({
+          labels: [buildJobLabel(waitingLabelId, "Waiting on PO")],
+        })
+      );
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(
+        screen.getByPlaceholderText("Search labels"),
+        "Waiting  on PO"
+      );
+
+      expect(
+        screen.queryByRole("option", {
+          name: 'Create new label: "Waiting  on PO"',
+        })
+      ).not.toBeInTheDocument();
     }
   );
 
@@ -781,17 +858,11 @@ describe("jobs detail sheet", () => {
 });
 
 function buildDetail(overrides?: {
+  readonly labels?: ReturnType<typeof buildJobLabel>[];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
 }) {
   const status = overrides?.status ?? "in_progress";
-  const urgentLabel = {
-    createdAt: "2026-04-23T09:00:00.000Z",
-    id: urgentLabelId,
-    name: "Urgent callout",
-    updatedAt: "2026-04-23T09:00:00.000Z",
-  };
-
   return {
     activity: [
       {
@@ -822,7 +893,9 @@ function buildDetail(overrides?: {
       createdByUserId: actorUserId,
       id: workItemId,
       kind: "job" as const,
-      labels: [urgentLabel],
+      labels: overrides?.labels ?? [
+        buildJobLabel(urgentLabelId, "Urgent callout"),
+      ],
       priority: "medium" as const,
       siteId: overrides && "siteId" in overrides ? overrides.siteId : siteId,
       status,
@@ -840,6 +913,15 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
+  };
+}
+
+function buildJobLabel(id: JobLabelIdType, name: string) {
+  return {
+    createdAt: "2026-04-23T09:00:00.000Z",
+    id,
+    name,
+    updatedAt: "2026-04-23T09:00:00.000Z",
   };
 }
 
