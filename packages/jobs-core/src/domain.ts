@@ -143,11 +143,12 @@ export const JobCostLineQuantitySchema = Schema.Number.pipe(
     (value) =>
       value > 0 &&
       Number.isFinite(value) &&
+      value <= 9_999_999_999.99 &&
       /^\d+(?:\.\d{1,2})?$/.test(String(value))
   ),
   Schema.annotations({
     message: () =>
-      "Expected a positive finite quantity with at most two decimal places",
+      "Expected a positive finite quantity with at most two decimal places less than or equal to 9999999999.99",
   })
 );
 export type JobCostLineQuantity = Schema.Schema.Type<
@@ -155,7 +156,8 @@ export type JobCostLineQuantity = Schema.Schema.Type<
 >;
 
 export const JobCostLineUnitPriceMinorSchema = Schema.Int.pipe(
-  Schema.greaterThanOrEqualTo(0)
+  Schema.greaterThanOrEqualTo(0),
+  Schema.lessThanOrEqualTo(2_147_483_647)
 );
 export type JobCostLineUnitPriceMinor = Schema.Schema.Type<
   typeof JobCostLineUnitPriceMinorSchema

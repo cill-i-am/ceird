@@ -426,11 +426,29 @@ describe("jobs-core", () => {
     expect(() =>
       decode({
         description: "Install replacement valve",
+        quantity: 10_000_000_000,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 9999999999.99/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
         quantity: 1,
         type: "labour",
         unitPriceMinor: 65.5,
       })
     ).toThrow(/Expected an integer/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 2_147_483_648,
+      })
+    ).toThrow(/less than or equal to 2147483647/);
 
     expect(() =>
       decode({
