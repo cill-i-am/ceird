@@ -61,6 +61,18 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
               )
       );
 
+      const ensureCanManageLabels = Effect.fn(
+        "JobsAuthorization.ensureCanManageLabels"
+      )((actor: JobsActor) =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can manage job labels"
+              )
+            )
+      );
+
       const ensureCanComment = Effect.fn("JobsAuthorization.ensureCanComment")(
         (actor: JobsActor) => ensureCanView(actor)
       );
@@ -123,6 +135,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
         ensureCanComment,
         ensureCanCreate,
         ensureCanCreateSite,
+        ensureCanManageLabels,
         ensureCanPatch,
         ensureCanReopen,
         ensureCanTransition,

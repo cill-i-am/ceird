@@ -2,6 +2,7 @@
 import type {
   Job,
   JobActivityPayload,
+  JobLabel,
   VisitIdType as VisitId,
 } from "@task-tracker/jobs-core";
 import { Effect } from "effect";
@@ -83,6 +84,36 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
         }
       );
 
+      const recordLabelAssigned = Effect.fn(
+        "JobsActivityRecorder.recordLabelAssigned"
+      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            eventType: "label_added",
+            labelId: label.id,
+            labelName: label.name,
+          },
+          workItemId: job.id,
+        });
+      });
+
+      const recordLabelRemoved = Effect.fn(
+        "JobsActivityRecorder.recordLabelRemoved"
+      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            eventType: "label_removed",
+            labelId: label.id,
+            labelName: label.name,
+          },
+          workItemId: job.id,
+        });
+      });
+
       const recordVisitLogged = Effect.fn(
         "JobsActivityRecorder.recordVisitLogged"
       )(function* (
@@ -105,6 +136,8 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       return {
         recordCreated,
+        recordLabelAssigned,
+        recordLabelRemoved,
         recordPatched,
         recordReopened,
         recordTransition,

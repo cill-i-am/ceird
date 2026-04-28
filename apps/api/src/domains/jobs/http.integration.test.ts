@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import {
   CreateSiteResponseSchema,
+  JobDetailResponseSchema,
+  JobLabelResponseSchema,
+  JobLabelsResponseSchema,
+  JobListResponseSchema,
   REGION_NOT_FOUND_ERROR_TAG,
   SitesOptionsResponseSchema,
 } from "@task-tracker/jobs-core";
@@ -418,6 +422,172 @@ describe("jobs http integration", () => {
         )
       );
       expect(memberPatchResponse.status).toBe(403);
+
+      const memberCreateLabelResponse = await api.handler(
+        makeJsonRequest(
+          "/job-labels",
+          {
+            name: "Member Label",
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(memberCreateLabelResponse.status).toBe(403);
+
+      const createLabelResponse = await api.handler(
+        makeJsonRequest(
+          "/job-labels",
+          {
+            name: "Waiting PO",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(createLabelResponse.status).toBe(201);
+      const createdLabel = ParseResult.decodeUnknownSync(
+        JobLabelResponseSchema
+      )(await createLabelResponse.json());
+
+      const updateLabelResponse = await api.handler(
+        makeJsonRequest(
+          `/job-labels/${createdLabel.id}`,
+          {
+            name: "Waiting on PO",
+          },
+          {
+            cookieJar: ownerCookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(updateLabelResponse.status).toBe(200);
+      const updatedLabel = ParseResult.decodeUnknownSync(
+        JobLabelResponseSchema
+      )(await updateLabelResponse.json());
+      expect(updatedLabel).toMatchObject({
+        id: createdLabel.id,
+        name: "Waiting on PO",
+      });
+
+      const labelsResponse = await api.handler(
+        makeRequest("/job-labels", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(labelsResponse.status).toBe(200);
+      const labels = ParseResult.decodeUnknownSync(JobLabelsResponseSchema)(
+        await labelsResponse.json()
+      );
+      expect(labels.labels).toContainEqual(
+        expect.objectContaining({
+          id: updatedLabel.id,
+          name: "Waiting on PO",
+        })
+      );
+
+      const assignLabelResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${createdJob.id}/labels`,
+          {
+            labelId: updatedLabel.id,
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(assignLabelResponse.status).toBe(200);
+      const assignedDetail = ParseResult.decodeUnknownSync(
+        JobDetailResponseSchema
+      )(await assignLabelResponse.json());
+      expect(assignedDetail.job.labels).toContainEqual(
+        expect.objectContaining({
+          id: updatedLabel.id,
+          name: "Waiting on PO",
+        })
+      );
+      expect(assignedDetail.activity).toContainEqual(
+        expect.objectContaining({
+          payload: {
+            eventType: "label_added",
+            labelId: updatedLabel.id,
+            labelName: "Waiting on PO",
+          },
+        })
+      );
+
+      const filteredJobsResponse = await api.handler(
+        makeRequest(`/jobs?labelId=${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(filteredJobsResponse.status).toBe(200);
+      const filteredJobs = ParseResult.decodeUnknownSync(JobListResponseSchema)(
+        await filteredJobsResponse.json()
+      );
+      expect(filteredJobs.items.map((job) => job.id)).toContain(createdJob.id);
+
+      const removeLabelResponse = await api.handler(
+        makeRequest(`/jobs/${createdJob.id}/labels/${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+          method: "DELETE",
+        })
+      );
+      expect(removeLabelResponse.status).toBe(200);
+      const removedDetail = ParseResult.decodeUnknownSync(
+        JobDetailResponseSchema
+      )(await removeLabelResponse.json());
+      expect(removedDetail.job.labels).toStrictEqual([]);
+      expect(removedDetail.activity).toContainEqual(
+        expect.objectContaining({
+          payload: {
+            eventType: "label_removed",
+            labelId: updatedLabel.id,
+            labelName: "Waiting on PO",
+          },
+        })
+      );
+
+      const filteredAfterRemoveResponse = await api.handler(
+        makeRequest(`/jobs?labelId=${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(filteredAfterRemoveResponse.status).toBe(200);
+      const filteredAfterRemove = ParseResult.decodeUnknownSync(
+        JobListResponseSchema
+      )(await filteredAfterRemoveResponse.json());
+      expect(filteredAfterRemove.items).toHaveLength(0);
+
+      const archiveLabelResponse = await api.handler(
+        makeRequest(`/job-labels/${updatedLabel.id}`, {
+          cookieJar: ownerCookieJar,
+          method: "DELETE",
+        })
+      );
+      expect(archiveLabelResponse.status).toBe(200);
+      const archivedLabel = ParseResult.decodeUnknownSync(
+        JobLabelResponseSchema
+      )(await archiveLabelResponse.json());
+      expect(archivedLabel).toMatchObject({
+        id: updatedLabel.id,
+        name: "Waiting on PO",
+      });
+
+      const labelsAfterArchiveResponse = await api.handler(
+        makeRequest("/job-labels", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(labelsAfterArchiveResponse.status).toBe(200);
+      const labelsAfterArchive = ParseResult.decodeUnknownSync(
+        JobLabelsResponseSchema
+      )(await labelsAfterArchiveResponse.json());
+      expect(labelsAfterArchive.labels).toStrictEqual([]);
 
       const memberDetailResponse = await api.handler(
         makeRequest(`/jobs/${createdJob.id}`, {
