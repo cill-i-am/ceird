@@ -67,6 +67,9 @@ export function OrganizationSettingsPage({
     React.useState<JobLabelIdType | null>(null);
   const [editingLabelName, setEditingLabelName] = React.useState("");
   const [labelError, setLabelError] = React.useState<string | null>(null);
+  const [labelErrorTarget, setLabelErrorTarget] = React.useState<
+    "create" | "edit" | "general" | null
+  >(null);
   const [labelStatus, setLabelStatus] = React.useState<string | null>(null);
   const [pendingLabelAction, setPendingLabelAction] = React.useState<
     "archive" | "create" | "update" | null
@@ -161,6 +164,7 @@ export function OrganizationSettingsPage({
     setEditingLabelId(null);
     setEditingLabelName("");
     setLabelError(null);
+    setLabelErrorTarget(null);
     setLabelStatus(null);
 
     if (organizationChanged) {
@@ -197,20 +201,24 @@ export function OrganizationSettingsPage({
     const decodedName = validateLabelName(newLabelName);
 
     setLabelError(null);
+    setLabelErrorTarget(null);
     setLabelStatus(null);
 
     if (decodedName.kind === "empty") {
       setLabelError(EMPTY_LABEL_NAME_MESSAGE);
+      setLabelErrorTarget("create");
       return;
     }
 
     if (decodedName.kind === "invalid") {
       setLabelError(INVALID_LABEL_NAME_MESSAGE);
+      setLabelErrorTarget("create");
       return;
     }
 
     if (hasDuplicateLabelName(labels, decodedName.name)) {
       setLabelError(DUPLICATE_LABEL_NAME_MESSAGE);
+      setLabelErrorTarget("create");
       return;
     }
 
@@ -225,6 +233,7 @@ export function OrganizationSettingsPage({
       await refreshRouteData();
     } catch {
       setLabelError(SAVE_LABEL_FAILURE_MESSAGE);
+      setLabelErrorTarget("create");
     } finally {
       setPendingLabelAction(null);
     }
@@ -234,6 +243,7 @@ export function OrganizationSettingsPage({
     const decodedName = validateLabelName(editingLabelName);
 
     setLabelError(null);
+    setLabelErrorTarget(null);
     setLabelStatus(null);
 
     if (decodedName.kind !== "valid") {
@@ -242,11 +252,13 @@ export function OrganizationSettingsPage({
           ? "Type a label name before saving it."
           : INVALID_LABEL_NAME_MESSAGE
       );
+      setLabelErrorTarget("edit");
       return;
     }
 
     if (hasDuplicateLabelName(labels, decodedName.name, labelId)) {
       setLabelError(DUPLICATE_LABEL_NAME_MESSAGE);
+      setLabelErrorTarget("edit");
       return;
     }
 
@@ -272,6 +284,7 @@ export function OrganizationSettingsPage({
       await refreshRouteData();
     } catch {
       setLabelError(SAVE_LABEL_FAILURE_MESSAGE);
+      setLabelErrorTarget("edit");
     } finally {
       setPendingLabelAction(null);
     }
@@ -279,6 +292,7 @@ export function OrganizationSettingsPage({
 
   async function handleArchiveLabel(labelId: JobLabelIdType) {
     setLabelError(null);
+    setLabelErrorTarget(null);
     setLabelStatus(null);
     setPendingLabelAction("archive");
 
@@ -295,10 +309,16 @@ export function OrganizationSettingsPage({
       await refreshRouteData();
     } catch {
       setLabelError(ARCHIVE_LABEL_FAILURE_MESSAGE);
+      setLabelErrorTarget("general");
     } finally {
       setPendingLabelAction(null);
     }
   }
+
+  const labelErrorId = labelError ? "job-label-settings-error" : undefined;
+  const isCreateLabelError =
+    labelErrorTarget === "create" && Boolean(labelError);
+  const isEditLabelError = labelErrorTarget === "edit" && Boolean(labelError);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -405,19 +425,21 @@ export function OrganizationSettingsPage({
               <AuthFormField
                 label="New label name"
                 htmlFor="new-job-label-name"
-                invalid={labelError === EMPTY_LABEL_NAME_MESSAGE}
+                invalid={isCreateLabelError}
                 errorText={undefined}
               >
                 <Input
                   id="new-job-label-name"
                   value={newLabelName}
                   maxLength={48}
-                  aria-invalid={
-                    labelError === EMPTY_LABEL_NAME_MESSAGE || undefined
+                  aria-describedby={
+                    isCreateLabelError ? labelErrorId : undefined
                   }
+                  aria-invalid={isCreateLabelError || undefined}
                   onChange={(event) => {
                     setNewLabelName(event.target.value);
                     setLabelError(null);
+                    setLabelErrorTarget(null);
                     setLabelStatus(null);
                   }}
                 />
@@ -434,7 +456,9 @@ export function OrganizationSettingsPage({
               </Button>
             </form>
 
-            {labelError ? <FieldError>{labelError}</FieldError> : null}
+            {labelError ? (
+              <FieldError id={labelErrorId}>{labelError}</FieldError>
+            ) : null}
             {labelStatus ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {labelStatus}
@@ -468,9 +492,14 @@ export function OrganizationSettingsPage({
                               id={`job-label-${label.id}`}
                               value={editingLabelName}
                               maxLength={48}
+                              aria-describedby={
+                                isEditLabelError ? labelErrorId : undefined
+                              }
+                              aria-invalid={isEditLabelError || undefined}
                               onChange={(event) => {
                                 setEditingLabelName(event.target.value);
                                 setLabelError(null);
+                                setLabelErrorTarget(null);
                               }}
                             />
                             <div className="flex gap-2">
@@ -490,6 +519,7 @@ export function OrganizationSettingsPage({
                                   setEditingLabelId(null);
                                   setEditingLabelName("");
                                   setLabelError(null);
+                                  setLabelErrorTarget(null);
                                 }}
                               >
                                 <X aria-hidden="true" />
@@ -509,6 +539,7 @@ export function OrganizationSettingsPage({
                                   setEditingLabelId(label.id);
                                   setEditingLabelName(label.name);
                                   setLabelError(null);
+                                  setLabelErrorTarget(null);
                                   setLabelStatus(null);
                                 }}
                               >
