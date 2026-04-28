@@ -132,6 +132,13 @@ export const HOTKEYS = {
     label: "Map view",
     scope: "jobs",
   },
+  jobsSavedViews: {
+    group: "Jobs",
+    hotkey: "V S",
+    id: "jobsSavedViews",
+    label: "Saved views",
+    scope: "jobs",
+  },
   jobsClearFilters: {
     group: "Jobs",
     hotkey: "C",

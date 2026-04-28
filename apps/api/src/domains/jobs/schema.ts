@@ -198,6 +198,7 @@ export const workItem = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     title: text("title").notNull(),
+    externalReference: text("external_reference"),
     status: text("status").notNull(),
     priority: text("priority").notNull().default("none"),
     siteId: uuid("site_id").references(() => site.id, { onDelete: "set null" }),

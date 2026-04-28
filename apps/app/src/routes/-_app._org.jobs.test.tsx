@@ -1,12 +1,13 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { WorkItemIdType } from "@task-tracker/jobs-core";
+import type { UserIdType, WorkItemIdType } from "@task-tracker/jobs-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
+const userId = "user_123" as UserIdType;
 
 const {
   mockedEnsureActiveOrganizationId,
@@ -81,14 +82,14 @@ describe("jobs route loader", () => {
             targetOrganizationId: organizationId,
           },
           currentOrganizationRole: "owner",
-          currentUserId: "user_123",
+          currentUserId: userId,
         })
       ).resolves.toStrictEqual({
         list,
         options,
         viewer: {
           role: "owner",
-          userId: "user_123",
+          userId,
         },
       });
       expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
@@ -113,7 +114,7 @@ describe("jobs route loader", () => {
             required: true,
             targetOrganizationId: organizationId,
           },
-          currentUserId: "user_123",
+          currentUserId: userId,
         })
       ).resolves.toStrictEqual({
         list: {
@@ -128,7 +129,7 @@ describe("jobs route loader", () => {
         },
         viewer: {
           role: "member",
-          userId: "user_123",
+          userId,
         },
       });
       expect(mockedListAllCurrentServerJobs).not.toHaveBeenCalled();
@@ -189,7 +190,7 @@ describe("jobs route loader", () => {
           }}
           viewer={{
             role: "owner",
-            userId: "user_123",
+            userId,
           }}
         />
       );
@@ -240,7 +241,7 @@ describe("jobs route loader", () => {
           }}
           viewer={{
             role: "owner",
-            userId: "user_123",
+            userId,
           }}
         >
           <div data-testid="jobs-outlet-placeholder" />

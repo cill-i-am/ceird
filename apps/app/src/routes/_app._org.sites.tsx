@@ -7,9 +7,10 @@ import type {
   OrganizationId,
   OrganizationRole,
 } from "@task-tracker/identity-core";
-import type { JobOptionsResponse } from "@task-tracker/jobs-core";
+import type { JobOptionsResponse, UserIdType } from "@task-tracker/jobs-core";
 
 import { getCurrentServerSiteOptions } from "#/features/jobs/jobs-server";
+import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
@@ -29,7 +30,7 @@ interface SitesRouteOrganizationAccess {
   readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly currentUserId: string;
+  readonly currentUserId: UserIdType;
 }
 
 function toSitesRouteOrganizationAccess(
@@ -38,7 +39,7 @@ function toSitesRouteOrganizationAccess(
   return {
     activeOrganizationId: organizationAccess.activeOrganizationId,
     activeOrganizationSync: organizationAccess.activeOrganizationSync,
-    currentUserId: organizationAccess.session.user.id,
+    currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
   };
 }
 

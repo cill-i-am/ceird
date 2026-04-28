@@ -10,6 +10,7 @@ import {
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
   JobDetailResponseSchema,
+  JobContactOptionSchema,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
   JobPrioritySchema,
@@ -113,6 +114,65 @@ describe("jobs-core", () => {
     ).toStrictEqual({
       body: "Confirmed on site",
     });
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        title: "  Replace boiler  ",
+        externalReference: "  PO-4471  ",
+        contact: {
+          kind: "create",
+          input: {
+            name: "  Alex Contact  ",
+            email: "  alex@example.com  ",
+            phone: "  +353 87 123 4567  ",
+            notes: "  Prefers morning calls.  ",
+          },
+        },
+      })
+    ).toStrictEqual({
+      title: "Replace boiler",
+      externalReference: "PO-4471",
+      contact: {
+        kind: "create",
+        input: {
+          name: "Alex Contact",
+          email: "alex@example.com",
+          phone: "+353 87 123 4567",
+          notes: "Prefers morning calls.",
+        },
+      },
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(JobContactOptionSchema)({
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Alex Contact",
+        email: "alex@example.com",
+        phone: "+353 87 123 4567",
+        siteIds: [],
+      })
+    ).toStrictEqual({
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      name: "Alex Contact",
+      email: "alex@example.com",
+      phone: "+353 87 123 4567",
+      siteIds: [],
+    });
+  }, 5000);
+
+  it("rejects invalid contact emails at DTO boundaries", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        title: "Replace boiler",
+        contact: {
+          kind: "create",
+          input: {
+            name: "Alex Contact",
+            email: "not-an-email",
+          },
+        },
+      })
+    ).toThrow(/a valid email/);
   }, 5000);
 
   it("rejects coordinates when creating a site", () => {

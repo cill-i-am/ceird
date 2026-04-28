@@ -12,6 +12,7 @@ import type {
 import type {
   JobListResponse,
   JobOptionsResponse,
+  UserIdType,
 } from "@task-tracker/jobs-core";
 
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
@@ -20,6 +21,7 @@ import {
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
+import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
@@ -45,7 +47,7 @@ interface JobsRouteOrganizationAccess {
   readonly activeOrganizationId: OrganizationId;
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly currentUserId: string;
+  readonly currentUserId: UserIdType;
 }
 
 function toJobsRouteOrganizationAccess(
@@ -54,7 +56,7 @@ function toJobsRouteOrganizationAccess(
   return {
     activeOrganizationId: organizationAccess.activeOrganizationId,
     activeOrganizationSync: organizationAccess.activeOrganizationSync,
-    currentUserId: organizationAccess.session.user.id,
+    currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
   };
 }
 

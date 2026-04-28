@@ -6,6 +6,7 @@ import {
 import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
+import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import {
   getCurrentOrganizationMemberRole,
   requireOrganizationAccess,
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/_app/_org")({
       activeOrganizationId: organizationAccess.activeOrganizationId,
       activeOrganizationSync: organizationAccess.activeOrganizationSync,
       currentOrganizationRole,
-      currentUserId: organizationAccess.session.user.id,
+      currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
     };
   },
   component: OrganizationRouteComponent,

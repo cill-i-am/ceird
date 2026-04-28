@@ -43,6 +43,7 @@ const {
   mockedListJobs,
   mockedMakeBrowserJobsClient,
   mockedNavigate,
+  mockedPatchJob,
   mockedReopenJob,
   mockedTransitionJob,
 } = vi.hoisted(() => ({
@@ -52,6 +53,7 @@ const {
   mockedListJobs: vi.fn<EffectClientMock>(),
   mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
   mockedNavigate: vi.fn<NavigateMock>(),
+  mockedPatchJob: vi.fn<EffectClientMock>(),
   mockedReopenJob: vi.fn<EffectClientMock>(),
   mockedTransitionJob: vi.fn<EffectClientMock>(),
 }));
@@ -168,6 +170,7 @@ describe("jobs detail sheet integration", () => {
     mockedListJobs.mockReset();
     mockedMakeBrowserJobsClient.mockReset();
     mockedNavigate.mockReset();
+    mockedPatchJob.mockReset();
     mockedReopenJob.mockReset();
     mockedTransitionJob.mockReset();
 
@@ -178,6 +181,7 @@ describe("jobs detail sheet integration", () => {
           addJobVisit: mockedAddJobVisit,
           getJobDetail: mockedGetJobDetail,
           listJobs: mockedListJobs,
+          patchJob: mockedPatchJob,
           reopenJob: mockedReopenJob,
           transitionJob: mockedTransitionJob,
         },
@@ -227,6 +231,12 @@ describe("jobs detail sheet integration", () => {
       });
 
       expect(screen.getByText("Completed")).toBeInTheDocument();
+      expect(screen.getAllByText("PO-4471").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("pat@example.com").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("+353 87 765 4321").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("Use email for routine updates.").length
+      ).toBeGreaterThan(0);
       expect(
         screen.getByText("Use reception and the south gate.")
       ).toBeInTheDocument();
@@ -326,6 +336,40 @@ describe("jobs detail sheet integration", () => {
       ).not.toBeInTheDocument();
     }
   );
+
+  it(
+    "clears stale rich contact detail when site reassignment clears the contact and refresh fails",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedPatchJob.mockReturnValue(
+        Effect.succeed({
+          ...buildDetail().job,
+          contactId: undefined,
+          siteId: undefined,
+          updatedAt: "2026-04-24T13:00:00.000Z",
+        })
+      );
+      mockedGetJobDetail.mockReturnValue(
+        Effect.fail(new Error("refresh failed"))
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet();
+
+      await user.selectOptions(screen.getByLabelText("Site"), "__none__");
+      await user.click(screen.getByRole("button", { name: /save site/i }));
+
+      await waitFor(() => {
+        expect(screen.getAllByText("No contact yet").length).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByText("Use email for routine updates.")
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("pat@example.com")).not.toBeInTheDocument();
+    }
+  );
 });
 
 function renderDetailSheet() {
@@ -340,6 +384,7 @@ function renderDetailSheet() {
                 assigneeId: actorUserId,
                 contactId,
                 createdAt: "2026-04-23T10:00:00.000Z",
+                externalReference: "PO-4471",
                 id: workItemId,
                 kind: "job",
                 priority: "medium",
@@ -357,8 +402,10 @@ function renderDetailSheet() {
           seedJobsOptionsState(organizationId, {
             contacts: [
               {
+                email: "pat@example.com",
                 id: contactId,
                 name: "Pat Contact",
+                phone: "+353 87 765 4321",
                 siteIds: [siteId],
               },
             ],
@@ -444,11 +491,19 @@ function buildDetail(): JobDetailResponse {
         workItemId,
       },
     ],
+    contact: {
+      email: "pat@example.com",
+      id: contactId,
+      name: "Pat Contact",
+      notes: "Use email for routine updates.",
+      phone: "+353 87 765 4321",
+    },
     job: {
       assigneeId: actorUserId,
       contactId,
       createdAt: "2026-04-23T10:00:00.000Z",
       createdByUserId: actorUserId,
+      externalReference: "PO-4471",
       id: workItemId,
       kind: "job",
       priority: "medium",

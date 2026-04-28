@@ -3,6 +3,7 @@ import { Schema } from "effect";
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isIsoDateString(value: string): boolean {
   if (!ISO_DATE_PATTERN.test(value)) {
@@ -119,6 +120,35 @@ export type IsoDateString = Schema.Schema.Type<typeof IsoDateString>;
 
 export const JobTitleSchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobTitle = Schema.Schema.Type<typeof JobTitleSchema>;
+
+export const JobExternalReferenceSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(120)
+);
+export type JobExternalReference = Schema.Schema.Type<
+  typeof JobExternalReferenceSchema
+>;
+
+export const ContactNameSchema = Schema.Trim.pipe(Schema.minLength(1));
+export type ContactName = Schema.Schema.Type<typeof ContactNameSchema>;
+
+export const ContactEmailSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.filter((value) => CONTACT_EMAIL_PATTERN.test(value)),
+  Schema.annotations({
+    message: () => "Expected a valid email address",
+  })
+);
+export type ContactEmail = Schema.Schema.Type<typeof ContactEmailSchema>;
+
+export const ContactPhoneSchema = Schema.Trim.pipe(Schema.minLength(1));
+export type ContactPhone = Schema.Schema.Type<typeof ContactPhoneSchema>;
+
+export const ContactNotesSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(2000)
+);
+export type ContactNotes = Schema.Schema.Type<typeof ContactNotesSchema>;
 
 export const JobCommentBodySchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobCommentBody = Schema.Schema.Type<typeof JobCommentBodySchema>;

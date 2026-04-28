@@ -1,6 +1,6 @@
 {
-  "id": "44012bbf-10cd-4eee-9ed5-653b1024e25c",
-  "prevId": "9b2a1a69-4dbf-4180-807c-364426c3c990",
+  "id": "f39ad749-ca75-43cd-8a7f-fdd3d9ea0d24",
+  "prevId": "12b163f0-a9df-4c34-ae90-5c2d284353ac",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1377,6 +1377,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "external_reference": {
+          "name": "external_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",

@@ -1,5 +1,5 @@
 {
-  "id": "9b2a1a69-4dbf-4180-807c-364426c3c990",
+  "id": "12b163f0-a9df-4c34-ae90-5c2d284353ac",
   "prevId": "d13b3f3f-8399-4b24-b02e-ce9ea420b90b",
   "version": "7",
   "dialect": "postgresql",
@@ -1378,6 +1378,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "external_reference": {
+          "name": "external_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -1824,72 +1830,6 @@
           "columns": [
             {
               "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "work_item_activity_organization_actor_created_at_idx": {
-          "name": "work_item_activity_organization_actor_created_at_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "actor_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "work_item_activity_organization_event_created_at_idx": {
-          "name": "work_item_activity_organization_event_created_at_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "event_type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

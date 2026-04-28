@@ -177,6 +177,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               const job = yield* jobsRepository.create({
                 contactId,
                 createdByUserId: actor.userId,
+                externalReference: input.externalReference,
                 organizationId: actor.organizationId,
                 priority: input.priority,
                 siteId,
@@ -692,6 +693,7 @@ function hasPatchChanges(input: PatchJobInput): boolean {
     input.assigneeId !== undefined ||
     input.contactId !== undefined ||
     input.coordinatorId !== undefined ||
+    input.externalReference !== undefined ||
     input.priority !== undefined ||
     input.siteId !== undefined ||
     input.title !== undefined
