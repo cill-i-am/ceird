@@ -5,6 +5,7 @@ import {
   JOB_KINDS,
   JOB_PRIORITIES,
   JOB_STATUSES,
+  MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
 } from "@task-tracker/jobs-core";
 import { relations, sql } from "drizzle-orm";
 import {
@@ -419,7 +420,7 @@ export const workItemCostLine = pgTable(
     ),
     check(
       "work_item_cost_lines_tax_rate_range_chk",
-      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= 10000)`
+      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS})`
     ),
     index("work_item_cost_lines_work_item_created_at_idx").on(
       table.workItemId,

@@ -131,6 +131,10 @@ export const JOB_COST_LINE_TYPES = ["labour", "material"] as const;
 export const JobCostLineTypeSchema = Schema.Literal(...JOB_COST_LINE_TYPES);
 export type JobCostLineType = Schema.Schema.Type<typeof JobCostLineTypeSchema>;
 
+export const MAX_JOB_COST_LINE_QUANTITY = 9_999_999_999.99;
+export const MAX_JOB_COST_LINE_UNIT_PRICE_MINOR = 2_147_483_647;
+export const MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS = 10_000;
+
 export const JobCostLineDescriptionSchema = Schema.Trim.pipe(
   Schema.minLength(1)
 );
@@ -143,12 +147,12 @@ export const JobCostLineQuantitySchema = Schema.Number.pipe(
     (value) =>
       value > 0 &&
       Number.isFinite(value) &&
-      value <= 9_999_999_999.99 &&
+      value <= MAX_JOB_COST_LINE_QUANTITY &&
       /^\d+(?:\.\d{1,2})?$/.test(String(value))
   ),
   Schema.annotations({
     message: () =>
-      "Expected a positive finite quantity with at most two decimal places less than or equal to 9999999999.99",
+      `Expected a positive finite quantity with at most two decimal places less than or equal to ${MAX_JOB_COST_LINE_QUANTITY}`,
   })
 );
 export type JobCostLineQuantity = Schema.Schema.Type<
@@ -157,7 +161,7 @@ export type JobCostLineQuantity = Schema.Schema.Type<
 
 export const JobCostLineUnitPriceMinorSchema = Schema.Int.pipe(
   Schema.greaterThanOrEqualTo(0),
-  Schema.lessThanOrEqualTo(2_147_483_647)
+  Schema.lessThanOrEqualTo(MAX_JOB_COST_LINE_UNIT_PRICE_MINOR)
 );
 export type JobCostLineUnitPriceMinor = Schema.Schema.Type<
   typeof JobCostLineUnitPriceMinorSchema
@@ -165,7 +169,7 @@ export type JobCostLineUnitPriceMinor = Schema.Schema.Type<
 
 export const JobCostLineTaxRateBasisPointsSchema = Schema.Int.pipe(
   Schema.greaterThanOrEqualTo(0),
-  Schema.lessThanOrEqualTo(10_000)
+  Schema.lessThanOrEqualTo(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
 );
 export type JobCostLineTaxRateBasisPoints = Schema.Schema.Type<
   typeof JobCostLineTaxRateBasisPointsSchema

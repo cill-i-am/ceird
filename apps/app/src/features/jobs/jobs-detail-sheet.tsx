@@ -16,7 +16,11 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { SiteId } from "@task-tracker/jobs-core";
+import {
+  MAX_JOB_COST_LINE_QUANTITY,
+  MAX_JOB_COST_LINE_UNIT_PRICE_MINOR,
+  SiteId,
+} from "@task-tracker/jobs-core";
 import type {
   JobDetailResponse,
   JobSiteOption,
@@ -127,9 +131,7 @@ const COST_LINE_TYPE_SELECTION_GROUPS = [
 ] satisfies readonly CommandSelectGroup[];
 
 const NO_SITE_VALUE = "__none__";
-const MAX_COST_LINE_QUANTITY = 9_999_999_999.99;
-const MAX_COST_LINE_UNIT_PRICE_MINOR = 2_147_483_647;
-const MAX_COST_LINE_UNIT_PRICE_MAJOR = 21_474_836.47;
+const MAX_COST_LINE_UNIT_PRICE_MAJOR = MAX_JOB_COST_LINE_UNIT_PRICE_MINOR / 100;
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 
 interface JobsDetailSheetProps {
@@ -1468,7 +1470,7 @@ function parseCostLineQuantity(
     return { error: "Enter a valid quantity.", ok: false };
   }
 
-  if (quantity > MAX_COST_LINE_QUANTITY) {
+  if (quantity > MAX_JOB_COST_LINE_QUANTITY) {
     return {
       error: "Quantity must be no more than 9,999,999,999.99.",
       ok: false,
@@ -1525,7 +1527,7 @@ function parseCostLineUnitPriceMinor(
 
   if (
     !Number.isSafeInteger(unitPriceMinor) ||
-    unitPriceMinor > MAX_COST_LINE_UNIT_PRICE_MINOR
+    unitPriceMinor > MAX_JOB_COST_LINE_UNIT_PRICE_MINOR
   ) {
     return {
       error: "Unit price must be no more than €21,474,836.47.",
