@@ -121,6 +121,28 @@ describe("jobs-core", () => {
         name: "Standard",
       })
     ).toThrow(/greaterThanOrEqualTo/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: [
+          {
+            kind: "labour",
+            name: "Labour",
+            position: 1,
+            unit: "hour",
+            value: 85,
+          },
+          {
+            kind: "callout",
+            name: "Callout",
+            position: 1,
+            unit: "visit",
+            value: 120,
+          },
+        ],
+        name: "Standard",
+      })
+    ).toThrow(/positions must be unique/);
   }, 5000);
 
   it("decodes rate card response contracts", () => {

@@ -38,6 +38,12 @@ const RateCardLineValueSchema = Schema.Number.pipe(
 );
 const RateCardLinePositionSchema = Schema.Int.pipe(Schema.positive());
 
+function hasUniqueRateCardLinePositions(
+  lines: readonly { readonly position: number }[]
+) {
+  return new Set(lines.map((line) => line.position)).size === lines.length;
+}
+
 export const JobListCursor = Schema.String.pipe(
   Schema.brand("@task-tracker/jobs-core/JobListCursor")
 );
@@ -120,9 +126,16 @@ export type RateCardLineInput = Schema.Schema.Type<
   typeof RateCardLineInputSchema
 >;
 
+const RateCardLineInputListSchema = Schema.Array(RateCardLineInputSchema).pipe(
+  Schema.filter(hasUniqueRateCardLinePositions),
+  Schema.annotations({
+    message: () => "Rate card line positions must be unique",
+  })
+);
+
 export const CreateRateCardInputSchema = Schema.Struct({
   name: NonEmptyTrimmedString,
-  lines: Schema.Array(RateCardLineInputSchema),
+  lines: RateCardLineInputListSchema,
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -137,7 +150,7 @@ export type CreateRateCardResponse = Schema.Schema.Type<
 
 export const UpdateRateCardInputSchema = Schema.Struct({
   name: Schema.optional(NonEmptyTrimmedString),
-  lines: Schema.optional(Schema.Array(RateCardLineInputSchema)),
+  lines: Schema.optional(RateCardLineInputListSchema),
 }).annotations({
   parseOptions: { onExcessProperty: "error" },
 });

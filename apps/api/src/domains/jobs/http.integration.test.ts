@@ -330,6 +330,35 @@ describe("jobs http integration", () => {
       );
       expect(memberListServiceAreasResponse.status).toBe(403);
 
+      const duplicateRateCardPositionResponse = await api.handler(
+        makeJsonRequest(
+          "/rate-cards",
+          {
+            lines: [
+              {
+                kind: "callout",
+                name: "Standard callout",
+                position: 1,
+                unit: "visit",
+                value: 125,
+              },
+              {
+                kind: "labour",
+                name: "Labour",
+                position: 1,
+                unit: "hour",
+                value: 85,
+              },
+            ],
+            name: "Invalid duplicate positions",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(duplicateRateCardPositionResponse.status).toBe(400);
+
       const createRateCardResponse = await api.handler(
         makeJsonRequest(
           "/rate-cards",
