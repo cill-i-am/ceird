@@ -139,6 +139,10 @@ interface JobLabelRow {
   readonly updated_at: Date;
 }
 
+interface JobLabelAssignmentRow extends JobLabelRow {
+  readonly work_item_id: string | null;
+}
+
 interface WorkItemLabelRow {
   readonly created_at: Date;
   readonly label_id: string;
@@ -524,7 +528,9 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             job_labels.updated_at
           from work_item_labels
           join job_labels on job_labels.id = work_item_labels.label_id
-          where work_item_labels.organization_id = ${organizationId}
+          join work_items on work_items.id = work_item_labels.work_item_id
+          where job_labels.organization_id = ${organizationId}
+            and work_items.organization_id = ${organizationId}
             and work_item_labels.work_item_id in ${sql.in(workItemIds)}
             and job_labels.archived_at is null
           order by job_labels.name asc, job_labels.id asc
@@ -557,15 +563,21 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         const labelFilterJoin =
           query.labelId === undefined
             ? sql``
-            : sql`join work_item_labels as filter_labels on filter_labels.work_item_id = work_items.id`;
+            : sql`
+              join work_item_labels as filter_labels on filter_labels.work_item_id = work_items.id
+              join job_labels as filter_job_labels on filter_job_labels.id = filter_labels.label_id
+            `;
         const sitesJoin =
           query.regionId === undefined
             ? sql``
             : sql`left join sites on sites.id = work_items.site_id`;
 
         if (query.labelId !== undefined) {
-          clauses.push(sql`filter_labels.organization_id = ${organizationId}`);
-          clauses.push(sql`filter_labels.label_id = ${query.labelId}`);
+          clauses.push(
+            sql`filter_job_labels.organization_id = ${organizationId}`
+          );
+          clauses.push(sql`filter_job_labels.id = ${query.labelId}`);
+          clauses.push(sql`filter_job_labels.archived_at is null`);
         }
 
         if (query.status !== undefined) {
@@ -1614,8 +1626,12 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
 
             yield* sql`
               delete from work_item_labels
-              where organization_id = ${organizationId}
-                and label_id = ${labelId}
+              using job_labels, work_items
+              where work_item_labels.label_id = job_labels.id
+                and work_item_labels.work_item_id = work_items.id
+                and job_labels.organization_id = ${organizationId}
+                and job_labels.id = ${labelId}
+                and work_items.organization_id = ${organizationId}
             `;
 
             return label;
@@ -1625,25 +1641,64 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
 
       const assignToJob = Effect.fn("JobLabelsRepository.assignToJob")(
         function* (input: AssignJobLabelRecordInput) {
-          const label = yield* getActiveLabelOrFail(
-            input.organizationId,
-            input.labelId
-          );
-          yield* ensureWorkItemOrganizationMatches(
-            input.organizationId,
-            input.workItemId
-          );
-
-          yield* sql`
-            insert into work_item_labels ${sql.insert({
-              label_id: input.labelId,
-              organization_id: input.organizationId,
-              work_item_id: input.workItemId,
-            })}
-            on conflict do nothing
+          const rows = yield* sql<JobLabelAssignmentRow>`
+            with active_label as (
+              select *
+              from job_labels
+              where organization_id = ${input.organizationId}
+                and id = ${input.labelId}
+                and archived_at is null
+              for update
+            ),
+            organization_work_item as (
+              select id
+              from work_items
+              where organization_id = ${input.organizationId}
+                and id = ${input.workItemId}
+            ),
+            inserted_label as (
+              insert into work_item_labels (
+                work_item_id,
+                label_id,
+                organization_id
+              )
+              select
+                organization_work_item.id,
+                active_label.id,
+                active_label.organization_id
+              from active_label
+              join organization_work_item on true
+              on conflict do nothing
+              returning label_id
+            )
+            select
+              active_label.*,
+              organization_work_item.id as work_item_id,
+              (select count(*) from inserted_label)::integer as inserted_count
+            from active_label
+            left join organization_work_item on true
+            limit 1
           `;
 
-          return label;
+          const row = rows[0];
+
+          if (row === undefined) {
+            return yield* Effect.fail(
+              new JobLabelNotFoundError({
+                labelId: input.labelId,
+                message: "Job label does not exist in the organization",
+              })
+            );
+          }
+
+          if (row.work_item_id === null) {
+            yield* ensureWorkItemOrganizationMatches(
+              input.organizationId,
+              input.workItemId
+            );
+          }
+
+          return mapJobLabelRow(row);
         }
       );
 
@@ -1660,9 +1715,13 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
 
           yield* sql`
             delete from work_item_labels
-            where organization_id = ${input.organizationId}
-              and work_item_id = ${input.workItemId}
-              and label_id = ${input.labelId}
+            using job_labels, work_items
+            where work_item_labels.label_id = job_labels.id
+              and work_item_labels.work_item_id = work_items.id
+              and job_labels.organization_id = ${input.organizationId}
+              and job_labels.id = ${input.labelId}
+              and work_items.organization_id = ${input.organizationId}
+              and work_items.id = ${input.workItemId}
           `;
 
           return label;
