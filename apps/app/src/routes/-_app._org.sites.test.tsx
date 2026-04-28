@@ -61,26 +61,21 @@ describe("sites route loader", () => {
         sites: [],
       };
 
-      mockedEnsureActiveOrganizationId.mockResolvedValue({
-        activeOrganizationId: organizationId,
-        activeOrganizationSync: {
-          required: false,
-          targetOrganizationId: organizationId,
-        },
-        session: {
-          user: {
-            id: "user_123",
-          },
-        },
-      });
-      mockedGetCurrentOrganizationMemberRole.mockResolvedValue({
-        role: "owner",
-      });
       mockedGetCurrentServerSiteOptions.mockResolvedValue(siteOptions);
 
       const { loadSitesRouteData } = await import("./_app._org.sites");
 
-      await expect(loadSitesRouteData()).resolves.toStrictEqual({
+      await expect(
+        loadSitesRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "owner",
+          currentUserId: userId,
+        })
+      ).resolves.toStrictEqual({
         options: {
           contacts: [],
           members: [],
@@ -92,9 +87,8 @@ describe("sites route loader", () => {
           userId,
         },
       });
-      expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        organizationId
-      );
+      expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
       expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
     }
   );

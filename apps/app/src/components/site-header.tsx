@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "#/components/ui/tooltip";
 import { isJobsMapViewSearch } from "#/features/jobs/jobs-search";
+import { useCurrentOrganizationRoleFromMatches } from "#/features/organizations/organization-route-context";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyScope } from "#/hotkeys/hotkey-registry";
@@ -37,10 +38,11 @@ export function SiteHeader() {
     select: (state) =>
       getActiveShortcutScopes(state.location.pathname, state.location.search),
   });
+  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
 
   return (
     <header className="sticky top-0 z-40 flex w-full items-center border-b border-border/60 bg-background/90 backdrop-blur">
-      <RouteHotkeys />
+      <RouteHotkeys currentOrganizationRole={currentOrganizationRole} />
       <div className="flex min-h-(--header-height) w-full flex-wrap items-center gap-3 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Tooltip>
@@ -121,6 +123,10 @@ function getActiveShortcutScopes(
 
   if (pathname === "/members") {
     return ["global", "members"];
+  }
+
+  if (pathname === "/activity") {
+    return ["global"];
   }
 
   if (pathname === "/settings" || pathname === "/organization/settings") {

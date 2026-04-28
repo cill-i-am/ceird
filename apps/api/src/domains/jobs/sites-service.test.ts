@@ -10,6 +10,8 @@ import type {
   JobActivityPayload,
   JobListResponse,
   JobMemberOption,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   JobRegionOption,
   JobSiteOption,
   OrganizationIdType as OrganizationId,
@@ -129,6 +131,14 @@ function makeHarness(
       } satisfies JobListResponse),
     listMemberOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobMemberOption[]),
+    listOrganizationActivity: (
+      _organizationId: OrganizationId,
+      _query: OrganizationActivityQuery
+    ) =>
+      Effect.succeed({
+        items: [],
+        nextCursor: undefined,
+      } satisfies OrganizationActivityListResponse),
     patch: (
       _organizationId: OrganizationId,
       _workItemId: WorkItemId,

@@ -7,6 +7,7 @@ import {
   ContactPhoneSchema,
   IsoDateString,
   IsoDateTimeString,
+  JobActivityEventTypeSchema,
   JobBlockedReasonSchema,
   JobCommentBodySchema,
   JobCostLineDescriptionSchema,
@@ -181,6 +182,67 @@ export const JobActivitySchema = Schema.Struct({
   createdAt: IsoDateTimeString,
 });
 export type JobActivity = Schema.Schema.Type<typeof JobActivitySchema>;
+
+export const OrganizationActivityCursor = Schema.String.pipe(
+  Schema.brand("@task-tracker/jobs-core/OrganizationActivityCursor")
+);
+export type OrganizationActivityCursor = Schema.Schema.Type<
+  typeof OrganizationActivityCursor
+>;
+
+export const OrganizationActivityQuerySchema = Schema.Struct({
+  actorUserId: Schema.optional(UserId),
+  cursor: Schema.optional(OrganizationActivityCursor),
+  eventType: Schema.optional(JobActivityEventTypeSchema),
+  fromDate: Schema.optional(IsoDateString),
+  jobTitle: Schema.optional(NonEmptyTrimmedString),
+  limit: Schema.optional(
+    Schema.NumberFromString.pipe(
+      Schema.int(),
+      Schema.positive(),
+      Schema.lessThanOrEqualTo(100)
+    )
+  ),
+  toDate: Schema.optional(IsoDateString),
+});
+export type OrganizationActivityQuery = Schema.Schema.Type<
+  typeof OrganizationActivityQuerySchema
+>;
+
+export const OrganizationActivityActorSchema = Schema.Struct({
+  id: UserId,
+  name: Schema.String,
+  email: Schema.String,
+});
+export type OrganizationActivityActor = Schema.Schema.Type<
+  typeof OrganizationActivityActorSchema
+>;
+
+export const OrganizationActivityItemSchema = Schema.Struct({
+  id: ActivityId,
+  workItemId: WorkItemId,
+  jobTitle: JobTitleSchema,
+  actor: Schema.optional(OrganizationActivityActorSchema),
+  eventType: JobActivityEventTypeSchema,
+  payload: JobActivityPayloadSchema,
+  createdAt: IsoDateTimeString,
+}).pipe(
+  Schema.filter(({ eventType, payload }) => eventType === payload.eventType),
+  Schema.annotations({
+    message: () => "eventType must match payload.eventType",
+  })
+);
+export type OrganizationActivityItem = Schema.Schema.Type<
+  typeof OrganizationActivityItemSchema
+>;
+
+export const OrganizationActivityListResponseSchema = Schema.Struct({
+  items: Schema.Array(OrganizationActivityItemSchema),
+  nextCursor: Schema.optional(OrganizationActivityCursor),
+});
+export type OrganizationActivityListResponse = Schema.Schema.Type<
+  typeof OrganizationActivityListResponseSchema
+>;
 
 export const JobVisitSchema = Schema.Struct({
   id: VisitId,
@@ -548,6 +610,13 @@ export const JobOptionsResponseSchema = Schema.Struct({
 });
 export type JobOptionsResponse = Schema.Schema.Type<
   typeof JobOptionsResponseSchema
+>;
+
+export const JobMemberOptionsResponseSchema = Schema.Struct({
+  members: Schema.Array(JobMemberOptionSchema),
+});
+export type JobMemberOptionsResponse = Schema.Schema.Type<
+  typeof JobMemberOptionsResponseSchema
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({

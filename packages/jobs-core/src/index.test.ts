@@ -16,6 +16,7 @@ import {
   JobDetailResponseSchema,
   JobContactOptionSchema,
   JobListQuerySchema,
+  JobMemberOptionsResponseSchema,
   JobPrioritySchema,
   JobSiteOptionSchema,
   JobStatusSchema,
@@ -24,6 +25,10 @@ import {
   JobsContextSchema,
   JobCostSummaryLimitExceededError,
   JobTitleSchema,
+  OrganizationActivityCursor,
+  OrganizationActivityCursorInvalidError,
+  OrganizationActivityListResponseSchema,
+  OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   SitesOptionsResponseSchema,
   SitesApiGroup,
@@ -428,6 +433,119 @@ describe("jobs-core", () => {
     });
   }, 5000);
 
+  it("exports organization activity query and response DTOs", () => {
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        actorUserId: "user_123",
+        cursor: "activity_cursor_1",
+        eventType: "status_changed",
+        fromDate: "2026-04-01",
+        jobTitle: "  Replace boiler  ",
+        limit: "25",
+        toDate: "2026-04-28",
+      })
+    ).toStrictEqual({
+      actorUserId: "user_123",
+      cursor: "activity_cursor_1",
+      eventType: "status_changed",
+      fromDate: "2026-04-01",
+      jobTitle: "Replace boiler",
+      limit: 25,
+      toDate: "2026-04-28",
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            actor: {
+              id: "user_123",
+              name: "Ada Lovelace",
+              email: "ada@example.com",
+            },
+            eventType: "status_changed",
+            payload: {
+              eventType: "status_changed",
+              fromStatus: "new",
+              toStatus: "in_progress",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+        nextCursor: "activity_cursor_2",
+      })
+    ).toStrictEqual({
+      items: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440020",
+          workItemId: "550e8400-e29b-41d4-a716-446655440000",
+          jobTitle: "Replace boiler",
+          actor: {
+            id: "user_123",
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+          },
+          eventType: "status_changed",
+          payload: {
+            eventType: "status_changed",
+            fromStatus: "new",
+            toStatus: "in_progress",
+          },
+          createdAt: "2026-04-23T11:00:00.000Z",
+        },
+      ],
+      nextCursor: "activity_cursor_2",
+    });
+
+    expect(OrganizationActivityCursor).toBeDefined();
+    expect(
+      ParseResult.decodeUnknownSync(JobMemberOptionsResponseSchema)({
+        members: [
+          {
+            id: "user_123",
+            name: "Ada Lovelace",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      members: [
+        {
+          id: "user_123",
+          name: "Ada Lovelace",
+        },
+      ],
+    });
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        limit: "101",
+      })
+    ).toThrow(/lessThanOrEqualTo/);
+  }, 5000);
+
+  it("rejects organization activity items whose event type differs from the payload", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            eventType: "status_changed",
+            payload: {
+              eventType: "priority_changed",
+              fromPriority: "none",
+              toPriority: "high",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+      })
+    ).toThrow(/eventType/);
+  }, 5000);
+
   it("validates add cost line input at the boundary", () => {
     const decode = ParseResult.decodeUnknownSync(AddJobCostLineInputSchema);
 
@@ -623,6 +741,8 @@ describe("jobs-core", () => {
     expect(Object.keys(spec.paths)).toStrictEqual([
       "/jobs",
       "/jobs/options",
+      "/jobs/member-options",
+      "/activity",
       "/jobs/{workItemId}",
       "/jobs/{workItemId}/transitions",
       "/jobs/{workItemId}/reopen",
@@ -784,6 +904,15 @@ describe("jobs-core", () => {
 
     expect(costSummaryError._tag).toBe(
       "@task-tracker/jobs-core/JobCostSummaryLimitExceededError"
+    );
+
+    const activityCursorError = new OrganizationActivityCursorInvalidError({
+      cursor: "bad-cursor",
+      message: "Organization activity cursor is invalid",
+    });
+
+    expect(activityCursorError._tag).toBe(
+      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
     );
   }, 5000);
 

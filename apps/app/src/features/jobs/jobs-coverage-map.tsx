@@ -18,6 +18,7 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { cn } from "#/lib/utils";
 
+import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
 import { buildGoogleMapsUrl, hasSiteCoordinates } from "./jobs-location";
 import type { SiteLocationLike } from "./jobs-location";
 
@@ -30,14 +31,7 @@ interface JobsCoverageMapProps {
   readonly sites: ReadonlyMap<string, SiteRecord>;
 }
 
-export const STATUS_LABELS = {
-  blocked: "Blocked",
-  canceled: "Canceled",
-  completed: "Completed",
-  in_progress: "In progress",
-  new: "New",
-  triaged: "Triaged",
-} as const;
+export { STATUS_LABELS };
 
 const JobsCoverageMapCanvas = React.lazy(async () => {
   const module = await import("./jobs-coverage-map-canvas");

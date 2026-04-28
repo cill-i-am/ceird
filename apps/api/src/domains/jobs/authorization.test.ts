@@ -80,6 +80,27 @@ describe("jobs authorization", () => {
       runAuthorization(
         Effect.gen(function* () {
           const authorization = yield* JobsAuthorization;
+          yield* authorization.ensureCanViewOrganizationActivity(owner);
+        })
+      )
+    ).resolves.toBeUndefined();
+
+    await expect(
+      runAuthorization(
+        Effect.gen(function* () {
+          const authorization = yield* JobsAuthorization;
+          yield* authorization.ensureCanViewOrganizationActivity(member);
+        })
+      )
+    ).rejects.toMatchObject({
+      message:
+        "Only organization owners and admins can view organization activity",
+    });
+
+    await expect(
+      runAuthorization(
+        Effect.gen(function* () {
+          const authorization = yield* JobsAuthorization;
           yield* authorization.ensureCanCreateSite(member);
         })
       )

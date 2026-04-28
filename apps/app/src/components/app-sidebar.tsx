@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
-import { APP_PRIMARY_NAV_ITEMS } from "#/components/app-navigation";
+import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
 import { NavMain } from "#/components/nav-main";
 import { NavUser } from "#/components/nav-user";
 import type { NavUserAccount } from "#/components/nav-user";
@@ -18,6 +18,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
+import { useCurrentOrganizationRoleFromMatches } from "#/features/organizations/organization-route-context";
 
 export function AppSidebar({
   user,
@@ -26,6 +27,8 @@ export function AppSidebar({
   user?: NavUserAccount | null;
 }) {
   const navigate = useNavigate();
+  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const primaryNavItems = getPrimaryNavItemsForRole(currentOrganizationRole);
 
   return (
     <Sidebar
@@ -58,7 +61,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent className="px-1 pb-2">
         <NavMain
-          items={APP_PRIMARY_NAV_ITEMS.map((item) => ({
+          items={primaryNavItems.map((item) => ({
             icon: <HugeiconsIcon icon={item.icon} strokeWidth={2} />,
             title: item.title,
             url: item.url,

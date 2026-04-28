@@ -28,6 +28,8 @@ import type {
   JobRegionOption,
   JobSiteOption,
   JobVisit,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   RegionIdType as RegionId,
   SiteIdType as SiteId,
@@ -132,6 +134,7 @@ interface JobsServiceHarness {
     findByIdForUpdate: number;
     geocode: number;
     linkContact: number;
+    listOrganizationActivity: number;
     patch: number;
     transition: number;
   };
@@ -155,6 +158,7 @@ function makeHarness(
     findByIdForUpdate: 0,
     geocode: 0,
     linkContact: 0,
+    listOrganizationActivity: 0,
     patch: 0,
     transition: 0,
   };
@@ -280,6 +284,18 @@ function makeHarness(
       } satisfies JobListResponse),
     listMemberOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobMemberOption[]),
+    listOrganizationActivity: (
+      _organizationId: OrganizationId,
+      _query: OrganizationActivityQuery
+    ) =>
+      Effect.sync(() => {
+        calls.listOrganizationActivity += 1;
+
+        return {
+          items: [],
+          nextCursor: undefined,
+        } satisfies OrganizationActivityListResponse;
+      }),
     patch: (
       _organizationId: OrganizationId,
       _workItemId: Job["id"],
@@ -486,6 +502,42 @@ function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
 }
 
 describe("jobs service", () => {
+  it("lets owners list organization activity", async () => {
+    const harness = makeHarness({ actor: makeActor("owner") });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.listOrganizationActivity({});
+        }),
+        harness
+      )
+    ).resolves.toStrictEqual({
+      items: [],
+      nextCursor: undefined,
+    });
+
+    expect(harness.calls.listOrganizationActivity).toBe(1);
+  }, 10_000);
+
+  it("denies members listing organization activity", async () => {
+    const harness = makeHarness({ actor: makeActor("member") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.listOrganizationActivity({});
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(harness.calls.listOrganizationActivity).toBe(0);
+  }, 10_000);
+
   it("geocodes inline site creation before creating the job", async () => {
     const harness = makeHarness();
 

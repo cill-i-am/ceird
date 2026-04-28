@@ -72,26 +72,19 @@ describe("jobs route loader", () => {
 
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
       mockedGetCurrentServerJobOptions.mockResolvedValue(options);
-      mockedEnsureActiveOrganizationId.mockResolvedValue({
-        activeOrganizationId: organizationId,
-        activeOrganizationSync: {
-          required: false,
-          targetOrganizationId: organizationId,
-        },
-        currentUserId: "user_123",
-        session: {
-          user: {
-            id: "user_123",
-          },
-        },
-      });
-      mockedGetCurrentOrganizationMemberRole.mockResolvedValue({
-        role: "owner",
-      });
-
       const { loadJobsRouteData } = await import("./_app._org.jobs");
 
-      await expect(loadJobsRouteData()).resolves.toStrictEqual({
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "owner",
+          currentUserId: userId,
+        })
+      ).resolves.toStrictEqual({
         list,
         options,
         viewer: {
@@ -99,6 +92,8 @@ describe("jobs route loader", () => {
           userId,
         },
       });
+      expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
       expect(mockedListAllCurrentServerJobs).toHaveBeenCalledWith({});
       expect(mockedGetCurrentServerJobOptions).toHaveBeenCalledOnce();
     }

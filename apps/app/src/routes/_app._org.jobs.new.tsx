@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
-import { requireOrganizationAdministrationAccess } from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
 
 export const Route = createFileRoute("/_app/_org/jobs/new")({
   staticData: {
@@ -10,8 +10,8 @@ export const Route = createFileRoute("/_app/_org/jobs/new")({
       to: "/jobs/new",
     },
   },
-  beforeLoad: async () => {
-    await requireOrganizationAdministrationAccess();
+  beforeLoad: ({ context }) => {
+    assertOrganizationAdministrationRouteContext(context);
   },
   component: JobsCreateRoute,
 });

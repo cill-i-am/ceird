@@ -47,6 +47,17 @@ export class JobListCursorInvalidError extends Schema.TaggedError<JobListCursorI
   HttpApiSchema.annotations({ status: 400 })
 ) {}
 
+export const ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG =
+  "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError" as const;
+export class OrganizationActivityCursorInvalidError extends Schema.TaggedError<OrganizationActivityCursorInvalidError>()(
+  ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
+  {
+    cursor: Schema.String,
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 400 })
+) {}
+
 export const JOB_STORAGE_ERROR_TAG =
   "@task-tracker/jobs-core/JobStorageError" as const;
 export class JobStorageError extends Schema.TaggedError<JobStorageError>()(
@@ -180,6 +191,7 @@ export type JobsError =
   | JobNotFoundError
   | JobAccessDeniedError
   | JobListCursorInvalidError
+  | OrganizationActivityCursorInvalidError
   | JobStorageError
   | JobCostSummaryLimitExceededError
   | InvalidJobTransitionError

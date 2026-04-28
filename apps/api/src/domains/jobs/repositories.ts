@@ -2,6 +2,7 @@
 
 import { SqlClient } from "@effect/sql";
 import {
+  ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
   IsoDateTimeString as IsoDateTimeStringSchema,
@@ -18,12 +19,16 @@ import {
   JobListCursorInvalidError,
   JobListItemSchema,
   JobMemberOptionSchema,
+  OrganizationActivityCursorInvalidError,
   JobRegionOptionSchema,
   JobListResponseSchema,
   JobNotFoundError,
   JobSchema,
   JobSiteOptionSchema,
   JobVisitSchema,
+  OrganizationActivityCursor as OrganizationActivityCursorSchema,
+  OrganizationActivityItemSchema,
+  OrganizationActivityListResponseSchema,
   OrganizationId as OrganizationIdSchema,
   OrganizationMemberNotFoundError,
   RegionNotFoundError,
@@ -34,6 +39,7 @@ import {
   calculateJobCostSummary,
 } from "@task-tracker/jobs-core";
 import type {
+  ActivityIdType as ActivityId,
   ContactIdType as ContactId,
   Job,
   JobActivity,
@@ -56,6 +62,10 @@ import type {
   JobTitle,
   JobVisit,
   IsoDateTimeStringType as IsoDateTimeString,
+  OrganizationActivityCursorType as OrganizationActivityCursor,
+  OrganizationActivityItem,
+  OrganizationActivityListResponse,
+  OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   RegionIdType as RegionId,
   SiteCountry,
@@ -118,6 +128,17 @@ interface WorkItemActivityRow {
   readonly organization_id: string;
   readonly payload: unknown;
   readonly work_item_id: string;
+}
+
+interface OrganizationActivityRow extends WorkItemActivityRow {
+  readonly actor_email: string | null;
+  readonly actor_name: string | null;
+  readonly job_title: string;
+}
+
+interface OrganizationActivityCursorState {
+  readonly id: ActivityId;
+  readonly createdAt: string;
 }
 
 interface WorkItemVisitRow {
@@ -317,6 +338,16 @@ const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
   JobActivityPayloadSchema
 );
+const decodeActivityId = Schema.decodeUnknownSync(ActivityIdSchema);
+const decodeOrganizationActivityCursor = Schema.decodeUnknownSync(
+  OrganizationActivityCursorSchema
+);
+const decodeOrganizationActivityItem = Schema.decodeUnknownSync(
+  OrganizationActivityItemSchema
+);
+const decodeOrganizationActivityListResponse = Schema.decodeUnknownSync(
+  OrganizationActivityListResponseSchema
+);
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
@@ -343,6 +374,12 @@ const decodeJobCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
     id: WorkItemIdSchema,
     updatedAt: IsoDateTimeStringSchema,
+  })
+);
+const decodeOrganizationActivityCursorState = Schema.decodeUnknownSync(
+  Schema.Struct({
+    id: ActivityIdSchema,
+    createdAt: IsoDateTimeStringSchema,
   })
 );
 
@@ -618,6 +655,97 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
 
         return decodeJobListResponse({ items, nextCursor });
+      });
+
+      const listOrganizationActivity = Effect.fn(
+        "JobsRepository.listOrganizationActivity"
+      )(function* (
+        organizationId: OrganizationId,
+        query: OrganizationActivityQuery
+      ) {
+        const limit = clampJobListLimit(query.limit ?? boundedDefaultListLimit);
+        const clauses = [
+          sql`work_item_activity.organization_id = ${organizationId}`,
+          sql`work_items.organization_id = ${organizationId}`,
+        ];
+
+        if (query.actorUserId !== undefined) {
+          clauses.push(
+            sql`work_item_activity.actor_user_id = ${query.actorUserId}`
+          );
+        }
+
+        if (query.eventType !== undefined) {
+          clauses.push(sql`work_item_activity.event_type = ${query.eventType}`);
+        }
+
+        if (query.fromDate !== undefined) {
+          clauses.push(
+            sql`work_item_activity.created_at >= ${isoDateToUtcStartDate(
+              query.fromDate
+            )}`
+          );
+        }
+
+        if (query.toDate !== undefined) {
+          clauses.push(
+            sql`work_item_activity.created_at < ${getExclusiveDateUpperBound(
+              query.toDate
+            )}`
+          );
+        }
+
+        if (query.jobTitle !== undefined) {
+          clauses.push(sql`work_items.title ilike ${`%${query.jobTitle}%`}`);
+        }
+
+        if (query.cursor !== undefined) {
+          const encodedCursor = query.cursor;
+          const cursor = yield* Effect.try({
+            try: () => decodeOrganizationActivityCursorValue(encodedCursor),
+            catch: () =>
+              new OrganizationActivityCursorInvalidError({
+                cursor: encodedCursor,
+                message: "Organization activity cursor is invalid",
+              }),
+          });
+
+          clauses.push(sql`(
+            work_item_activity.created_at < ${cursor.createdAt}
+            or (
+              work_item_activity.created_at = ${cursor.createdAt}
+              and work_item_activity.id < ${cursor.id}
+            )
+          )`);
+        }
+
+        const rows = yield* sql<OrganizationActivityRow>`
+          select
+            work_item_activity.*,
+            work_items.title as job_title,
+            "user".name as actor_name,
+            "user".email as actor_email
+          from work_item_activity
+          join work_items on work_items.id = work_item_activity.work_item_id
+          left join "user" on "user".id = work_item_activity.actor_user_id
+          where ${sql.and(clauses)}
+          order by work_item_activity.created_at desc, work_item_activity.id desc
+          limit ${limit + 1}
+        `;
+
+        const items = rows.slice(0, limit).map(mapOrganizationActivityRow);
+        const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
+
+        const response: OrganizationActivityListResponse =
+          decodeOrganizationActivityListResponse({
+            items,
+            nextCursor:
+              nextCursorRow === undefined
+                ? undefined
+                : encodeOrganizationActivityCursor(nextCursorRow),
+          });
+
+        return response;
       });
 
       const listMemberOptions = Effect.fn("JobsRepository.listMemberOptions")(
@@ -1115,6 +1243,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         findByIdForUpdate,
         getDetail,
         list,
+        listOrganizationActivity,
         listMemberOptions,
         patch,
         reopen,
@@ -1668,6 +1797,30 @@ function mapJobActivityRow(row: WorkItemActivityRow): JobActivity {
   });
 }
 
+function mapOrganizationActivityRow(
+  row: OrganizationActivityRow
+): OrganizationActivityItem {
+  return decodeOrganizationActivityItem({
+    actor:
+      row.actor_user_id === null
+        ? undefined
+        : {
+            email: row.actor_email ?? "",
+            id: row.actor_user_id,
+            name: normalizeOptionName(
+              row.actor_name,
+              row.actor_email ?? "Team member"
+            ),
+          },
+    createdAt: row.created_at.toISOString(),
+    eventType: row.event_type,
+    id: row.id,
+    jobTitle: row.job_title,
+    payload: decodeJobActivityPayload(row.payload),
+    workItemId: row.work_item_id,
+  });
+}
+
 function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {
   return decodeJobVisit({
     authorUserId: row.author_user_id,
@@ -1704,13 +1857,12 @@ function mapJobCostLineRow(row: WorkItemCostLineRow): JobCostLine {
 function encodeCursor(
   row: Pick<WorkItemRow, "id" | "updated_at">
 ): JobListCursor {
-  return decodeJobListCursor(
-    Buffer.from(
-      JSON.stringify({
-        id: decodeWorkItemId(row.id),
-        updatedAt: row.updated_at.toISOString(),
-      } satisfies JobCursorState)
-    ).toString("base64url")
+  return encodeJsonCursor(
+    {
+      id: decodeWorkItemId(row.id),
+      updatedAt: row.updated_at.toISOString(),
+    } satisfies JobCursorState,
+    decodeJobListCursor
   );
 }
 
@@ -1718,14 +1870,48 @@ function decodeCursor(cursor: JobListCursor): {
   readonly id: WorkItemId;
   readonly updatedAt: Date;
 } {
-  const value = decodeJobCursorState(
-    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
-  ) as JobCursorState;
+  const value = decodeJsonCursor(cursor, decodeJobCursorState);
 
   return {
     id: value.id,
     updatedAt: new Date(value.updatedAt),
   };
+}
+
+function encodeOrganizationActivityCursor(
+  row: Pick<OrganizationActivityRow, "id" | "created_at">
+): OrganizationActivityCursor {
+  return encodeJsonCursor(
+    {
+      id: decodeActivityId(row.id),
+      createdAt: row.created_at.toISOString(),
+    } satisfies OrganizationActivityCursorState,
+    decodeOrganizationActivityCursor
+  );
+}
+
+function decodeOrganizationActivityCursorValue(
+  cursor: OrganizationActivityCursor
+): OrganizationActivityCursorState {
+  return decodeJsonCursor(cursor, decodeOrganizationActivityCursorState);
+}
+
+function encodeJsonCursor<Cursor extends string>(
+  value: unknown,
+  decodeCursorValue: (value: string) => Cursor
+): Cursor {
+  return decodeCursorValue(
+    Buffer.from(JSON.stringify(value)).toString("base64url")
+  );
+}
+
+function decodeJsonCursor<State>(
+  cursor: string,
+  decodeState: (value: unknown) => State
+): State {
+  return decodeState(
+    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
+  );
 }
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {
@@ -1760,6 +1946,22 @@ function getRequiredRow<Value>(rows: readonly Value[], label: string): Value {
 
 function parseIsoDateTime(value: string): Date {
   return new Date(value);
+}
+
+function isoDateToUtcStartDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function getExclusiveDateUpperBound(value: string): Date {
+  const start = isoDateToUtcStartDate(value);
+
+  return new Date(
+    Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth(),
+      start.getUTCDate() + 1
+    )
+  );
 }
 
 function formatPgDate(value: Date | string): string {

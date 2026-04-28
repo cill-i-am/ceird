@@ -49,6 +49,18 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
             )
       );
 
+      const ensureCanViewOrganizationActivity = Effect.fn(
+        "JobsAuthorization.ensureCanViewOrganizationActivity"
+      )((actor: JobsActor) =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can view organization activity"
+              )
+            )
+      );
+
       const ensureCanPatch = Effect.fn("JobsAuthorization.ensureCanPatch")(
         (actor: JobsActor, workItemId: WorkItemId) =>
           hasElevatedAccess(actor)
@@ -141,6 +153,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
         ensureCanReopen,
         ensureCanTransition,
         ensureCanView,
+        ensureCanViewOrganizationActivity,
       };
     }),
   }

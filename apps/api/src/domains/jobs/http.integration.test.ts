@@ -413,6 +413,40 @@ describe("jobs http integration", () => {
       );
       expect(patchAssigneeResponse.status).toBe(200);
 
+      const ownerActivityResponse = await api.handler(
+        makeRequest("/activity", { cookieJar: ownerCookieJar })
+      );
+      expect(ownerActivityResponse.status).toBe(200);
+
+      const ownerActivityByActorResponse = await api.handler(
+        makeRequest(`/activity?actorUserId=${memberUserId}`, {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(ownerActivityByActorResponse.status).toBe(200);
+
+      const ownerActivityByEventAndDateResponse = await api.handler(
+        makeRequest(
+          "/activity?eventType=visit_logged&fromDate=2026-04-22&toDate=2026-04-22",
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(ownerActivityByEventAndDateResponse.status).toBe(200);
+
+      const ownerActivityByJobTitleResponse = await api.handler(
+        makeRequest("/activity?jobTitle=boiler", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(ownerActivityByJobTitleResponse.status).toBe(200);
+
+      const memberActivityResponse = await api.handler(
+        makeRequest("/activity", { cookieJar: memberCookieJar })
+      );
+      expect(memberActivityResponse.status).toBe(403);
+
       const invalidCoordinatorResponse = await api.handler(
         makeJsonRequest(
           `/jobs/${createdJob.id}`,

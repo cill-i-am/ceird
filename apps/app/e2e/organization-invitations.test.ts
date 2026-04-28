@@ -392,7 +392,7 @@ test.describe("organization invitations", () => {
     await invitedContext.close();
   });
 
-  test("a non-admin member is redirected away from the members page", async ({
+  test("a non-admin member cannot access the members page", async ({
     browser,
     page,
     request,
@@ -425,9 +425,10 @@ test.describe("organization invitations", () => {
       .click();
 
     await expectAuthenticatedHome(invitedPage);
-    await invitedPage
-      .getByRole("link", { name: "Members", exact: true })
-      .click();
+    await expect(
+      invitedPage.getByRole("link", { name: "Members", exact: true })
+    ).not.toBeVisible();
+    await invitedPage.goto("/members");
     await expectAuthenticatedHome(invitedPage);
     await expect(
       invitedPage.getByRole("button", { name: "Send invite" })
