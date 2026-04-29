@@ -727,7 +727,7 @@ export const siteContactRelations = relations(siteContact, ({ one }) => ({
 
 export const workItemRelations = relations(workItem, ({ many, one }) => ({
   activity: many(workItemActivity),
-  collaborators: many(workItemCollaborator),
+  workItemCollaborators: many(workItemCollaborator),
   comments: many(workItemComment),
   contact: one(contact, {
     fields: [workItem.contactId],
