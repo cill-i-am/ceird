@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { JobSchema, WorkItemId } from "@task-tracker/jobs-core";
+import {
+  JobAccessDeniedError,
+  JobSchema,
+  WorkItemId,
+} from "@task-tracker/jobs-core";
 import type { Job, UserId } from "@task-tracker/jobs-core";
 import { Cause, Effect, Exit, Option, ParseResult, Schema } from "effect";
 
@@ -271,36 +275,42 @@ describe("jobs authorization", () => {
       assigneeId: external.userId,
     });
 
-    const authorizationChecks = await Promise.all(
-      [
-        runAuthorization(JobsAuthorization.ensureCanCreate(external)),
-        runAuthorization(JobsAuthorization.ensureCanCreateSite(external)),
-        runAuthorization(
-          JobsAuthorization.ensureCanManageConfiguration(external)
-        ),
-        runAuthorization(JobsAuthorization.ensureCanManageLabels(external)),
-        runAuthorization(
-          JobsAuthorization.ensureCanManageCollaborators(external, job.id)
-        ),
-        runAuthorization(JobsAuthorization.ensureCanPatch(external, job.id)),
-        runAuthorization(
-          JobsAuthorization.ensureCanAssignLabels(external, job)
-        ),
-        runAuthorization(JobsAuthorization.ensureCanAddVisit(external, job)),
-        runAuthorization(JobsAuthorization.ensureCanAddCostLine(external, job)),
-        runAuthorization(
-          JobsAuthorization.ensureCanTransition(external, job, "completed")
-        ),
-        runAuthorization(JobsAuthorization.ensureCanReopen(external, job)),
-        runAuthorization(
-          JobsAuthorization.ensureCanViewOrganizationActivity(external)
-        ),
-      ].map((effect) =>
-        effect.then(() => "allowed" as const).catch((error: unknown) => error)
-      )
-    );
+    const authorizationChecks = await Promise.all([
+      runAuthorizationExit(JobsAuthorization.ensureCanCreate(external)),
+      runAuthorizationExit(JobsAuthorization.ensureCanCreateSite(external)),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanManageConfiguration(external)
+      ),
+      runAuthorizationExit(JobsAuthorization.ensureCanManageLabels(external)),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanManageCollaborators(external, job.id)
+      ),
+      runAuthorizationExit(JobsAuthorization.ensureCanPatch(external, job.id)),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanAssignLabels(external, job)
+      ),
+      runAuthorizationExit(JobsAuthorization.ensureCanAddVisit(external, job)),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanAddCostLine(external, job)
+      ),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanTransition(external, job, "completed")
+      ),
+      runAuthorizationExit(JobsAuthorization.ensureCanReopen(external, job)),
+      runAuthorizationExit(
+        JobsAuthorization.ensureCanViewOrganizationActivity(external)
+      ),
+    ]);
 
-    expect(authorizationChecks).not.toContain("allowed");
+    expect(
+      authorizationChecks
+        .map((exit) =>
+          Exit.isFailure(exit)
+            ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+            : undefined
+        )
+        .every((check) => check instanceof JobAccessDeniedError)
+    ).toBeTruthy();
     expect(authorizationChecks).toHaveLength(12);
   }, 10_000);
 });

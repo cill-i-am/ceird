@@ -152,7 +152,9 @@ interface JobsServiceHarness {
     ensureServiceArea: number;
     findByIdForUpdate: number;
     geocode: number;
+    list: number;
     listLabels: number;
+    listMemberOptions: number;
     linkContact: number;
     listOrganizationActivity: number;
     patch: number;
@@ -182,7 +184,9 @@ function makeHarness(
     ensureServiceArea: 0,
     findByIdForUpdate: 0,
     geocode: 0,
+    list: 0,
     listLabels: 0,
+    listMemberOptions: 0,
     linkContact: 0,
     listOrganizationActivity: 0,
     patch: 0,
@@ -335,12 +339,20 @@ function makeHarness(
         } satisfies JobDetail)
       ),
     list: (_organizationId: OrganizationId, _query: unknown) =>
-      Effect.succeed({
-        items: [],
-        nextCursor: undefined,
-      } satisfies JobListResponse),
+      Effect.sync(() => {
+        calls.list += 1;
+
+        return {
+          items: [],
+          nextCursor: undefined,
+        } satisfies JobListResponse;
+      }),
     listMemberOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly JobMemberOption[]),
+      Effect.sync(() => {
+        calls.listMemberOptions += 1;
+
+        return [] satisfies readonly JobMemberOption[];
+      }),
     listOrganizationActivity: (
       _organizationId: OrganizationId,
       _query: OrganizationActivityQuery
@@ -875,6 +887,115 @@ describe("jobs service", () => {
 
     expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
     expect(harness.calls.listOrganizationActivity).toBe(0);
+  }, 10_000);
+
+  it("denies external actors loading ungranted job detail", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getDetail(workItemId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(
+      new JobAccessDeniedError({
+        message: "External collaborators can only view jobs granted to them",
+        workItemId,
+      })
+    );
+  }, 10_000);
+
+  it("denies external actors adding ungranted job comments", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addComment(workItemId, {
+          body: "Can you share the access code?",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(
+      new JobAccessDeniedError({
+        message:
+          "External collaborators need comment access to comment on jobs",
+        workItemId,
+      })
+    );
+    expect(harness.calls.findByIdForUpdate).toBe(0);
+  }, 10_000);
+
+  it("denies external actors loading organization-wide jobs data", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exits = await Promise.all([
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.list({});
+        }),
+        harness
+      ),
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.getOptions();
+        }),
+        harness
+      ),
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.listJobLabels();
+        }),
+        harness
+      ),
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.getMemberOptions();
+        }),
+        harness
+      ),
+    ]);
+
+    const failures = exits.map((exit) =>
+      getFailure(exit as Exit.Exit<unknown, unknown>)
+    );
+
+    expect(failures).toStrictEqual([
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+    ]);
+    expect(harness.calls.list).toBe(0);
+    expect(harness.calls.listLabels).toBe(0);
+    expect(harness.calls.listMemberOptions).toBe(0);
   }, 10_000);
 
   it("geocodes inline site creation before creating the job", async () => {

@@ -1,3 +1,4 @@
+import { isExternalOrganizationRole } from "@task-tracker/identity-core";
 import {
   BlockedReasonRequiredError,
   CoordinatorMatchesAssigneeError,
@@ -40,6 +41,7 @@ import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
 import { CurrentJobsActor } from "./current-jobs-actor.js";
+import type { JobsActor } from "./current-jobs-actor.js";
 import {
   ContactsRepository,
   ConfigurationRepository,
@@ -88,7 +90,7 @@ export class JobsService extends Effect.Service<JobsService>()(
         query: JobListQuery
       ) {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanView(actor);
+        yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
         return yield* jobsRepository
           .list(actor.organizationId, query)
@@ -97,7 +99,7 @@ export class JobsService extends Effect.Service<JobsService>()(
 
       const getOptions = Effect.fn("JobsService.getOptions")(function* () {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanView(actor);
+        yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
         const [members, sites, contacts, labels] = yield* Effect.all([
           jobsRepository.listMemberOptions(actor.organizationId),
@@ -123,7 +125,7 @@ export class JobsService extends Effect.Service<JobsService>()(
       const listJobLabels = Effect.fn("JobsService.listJobLabels")(
         function* () {
           const actor = yield* loadActor();
-          yield* authorization.ensureCanView(actor);
+          yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
           const labels = yield* jobLabelsRepository
             .list(actor.organizationId)
@@ -136,7 +138,7 @@ export class JobsService extends Effect.Service<JobsService>()(
       const getMemberOptions = Effect.fn("JobsService.getMemberOptions")(
         function* () {
           const actor = yield* loadActor();
-          yield* authorization.ensureCanView(actor);
+          yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
           const members = yield* jobsRepository
             .listMemberOptions(actor.organizationId)
@@ -356,7 +358,7 @@ export class JobsService extends Effect.Service<JobsService>()(
         workItemId: WorkItemId
       ) {
         const actor = yield* loadActor(workItemId);
-        yield* authorization.ensureCanView(actor);
+        yield* authorization.ensureCanViewJobDetail(actor, workItemId);
 
         return yield* loadJobDetailOrFail(
           actor.organizationId,
@@ -646,7 +648,7 @@ export class JobsService extends Effect.Service<JobsService>()(
         input: AddJobCommentInput
       ) {
         const actor = yield* loadActor(workItemId);
-        yield* authorization.ensureCanComment(actor);
+        yield* authorization.ensureCanComment(actor, workItemId);
 
         const result = yield* jobsRepository
           .withTransaction(
@@ -1054,6 +1056,26 @@ function failJobsStorageError(
   error: unknown
 ): Effect.Effect<never, JobStorageError> {
   return Effect.fail(makeJobsStorageError(error));
+}
+
+function ensureCanViewOrganizationJobsData(
+  actor: JobsActor,
+  authorization: JobsAuthorization
+) {
+  return Effect.gen(function* () {
+    yield* authorization.ensureCanView(actor);
+
+    if (!isExternalOrganizationRole(actor.role)) {
+      return;
+    }
+
+    return yield* Effect.fail(
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      })
+    );
+  });
 }
 
 function makeJobsStorageError(error: unknown): JobStorageError {
