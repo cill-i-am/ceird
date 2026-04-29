@@ -4,6 +4,7 @@ import type {
   ActivityIdType,
   JobDetailResponse,
   JobLabelIdType,
+  JobSiteOption,
   SiteIdType,
   UserIdType,
   WorkItemIdType,
@@ -60,6 +61,7 @@ const mockedAssignLabel = vi.fn<AsyncMutationMock>();
 const mockedCreateAndAssignLabel = vi.fn<AsyncMutationMock>();
 const mockedRemoveLabel = vi.fn<AsyncMutationMock>();
 const mockedAddCostLine = vi.fn<AsyncMutationMock>();
+let lookupSiteById: Map<SiteIdType, JobSiteOption>;
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
@@ -322,6 +324,8 @@ vi.mock("./jobs-detail-location-map-preview-canvas", () => ({
 
 describe("jobs detail sheet", () => {
   beforeEach(() => {
+    lookupSiteById = new Map([[siteId, buildSiteOption()]]);
+
     mockedNavigate.mockReset();
     mockedUseAtomInitialValues.mockReset();
     mockedTransitionJob.mockReset();
@@ -407,24 +411,7 @@ describe("jobs detail sheet", () => {
           ]),
           memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
           serviceAreaById: new Map(),
-          siteById: new Map([
-            [
-              siteId,
-              {
-                accessNotes: "Use the south gate and ring reception.",
-                addressLine1: "1 Custom House Quay",
-                addressLine2: "North Dock",
-                county: "Dublin",
-                eircode: "D01 X2X2",
-                id: siteId,
-                latitude: 53.3498,
-                longitude: -6.2603,
-                name: "Docklands Campus",
-                serviceAreaName: "Dublin",
-                town: "Dublin",
-              },
-            ],
-          ]),
+          siteById: lookupSiteById,
         };
       }
 
@@ -513,6 +500,24 @@ describe("jobs detail sheet", () => {
       expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
         [`detail:${workItemId}`, buildDetail()],
       ]);
+    }
+  );
+
+  it(
+    "renders detail site when site options are empty",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      lookupSiteById = new Map();
+
+      renderDetailSheet(buildDetail({ site: buildSiteOption() }));
+
+      expect(screen.getAllByText("Docklands Campus").length).toBeGreaterThan(0);
+      expect(
+        screen.getByText("1 Custom House Quay, North Dock")
+      ).toBeInTheDocument();
+      expect(screen.queryByText("No site yet")).not.toBeInTheDocument();
     }
   );
 
@@ -1076,6 +1081,7 @@ describe("jobs detail sheet", () => {
 function buildDetail(overrides?: {
   readonly costs?: JobDetailResponse["costs"];
   readonly labels?: ReturnType<typeof buildJobLabel>[];
+  readonly site?: JobDetailResponse["site"];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
 }) {
@@ -1117,6 +1123,7 @@ function buildDetail(overrides?: {
       canComment: true,
       visibility: "internal" as const,
     },
+    site: overrides?.site,
     job: {
       assigneeId: actorUserId,
       createdAt: "2026-04-23T10:00:00.000Z",
@@ -1143,6 +1150,25 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
+  };
+}
+
+function buildSiteOption(): JobSiteOption {
+  return {
+    accessNotes: "Use the south gate and ring reception.",
+    addressLine1: "1 Custom House Quay",
+    addressLine2: "North Dock",
+    country: "IE",
+    county: "Dublin",
+    eircode: "D01 X2X2",
+    geocodedAt: "2026-04-23T09:00:00.000Z",
+    geocodingProvider: "google",
+    id: siteId,
+    latitude: 53.3498,
+    longitude: -6.2603,
+    name: "Docklands Campus",
+    serviceAreaName: "Dublin",
+    town: "Dublin",
   };
 }
 

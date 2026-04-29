@@ -249,9 +249,9 @@ export function JobsDetailSheet({
   const [visitNote, setVisitNote] = React.useState("");
   const [visitError, setVisitError] = React.useState<string | null>(null);
   const [labelError, setLabelError] = React.useState<string | null>(null);
-  const site = detail.job.siteId
-    ? lookup.siteById.get(detail.job.siteId)
-    : undefined;
+  const site =
+    detail.site ??
+    (detail.job.siteId ? lookup.siteById.get(detail.job.siteId) : undefined);
   const contact =
     detail.contact ??
     (detail.job.contactId
