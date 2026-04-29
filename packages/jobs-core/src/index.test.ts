@@ -25,6 +25,7 @@ import {
   JobCollaboratorsResponseSchema,
   JobDetailResponseSchema,
   JobContactOptionSchema,
+  JobExternalMemberOptionsResponseSchema,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
   JobLabelNameSchema,
@@ -957,6 +958,25 @@ describe("jobs-core", () => {
         },
       ],
     });
+    expect(
+      ParseResult.decodeUnknownSync(JobExternalMemberOptionsResponseSchema)({
+        members: [
+          {
+            email: "ada@example.com",
+            id: "user_123",
+            name: "Ada Lovelace",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      members: [
+        {
+          email: "ada@example.com",
+          id: "user_123",
+          name: "Ada Lovelace",
+        },
+      ],
+    });
     expect(() =>
       ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
         limit: "101",
@@ -1181,6 +1201,7 @@ describe("jobs-core", () => {
       "/jobs",
       "/jobs/options",
       "/jobs/member-options",
+      "/jobs/external-member-options",
       "/activity",
       "/jobs/{workItemId}",
       "/jobs/{workItemId}/transitions",
@@ -1286,6 +1307,9 @@ describe("jobs-core", () => {
     const collaborator =
       spec.paths["/jobs/{workItemId}/collaborators/{collaboratorId}"];
 
+    expect(spec.paths["/jobs/external-member-options"]?.get?.operationId).toBe(
+      "jobs.getJobExternalMemberOptions"
+    );
     expect(collaborators?.get?.operationId).toBe("jobs.listJobCollaborators");
     expect(collaborators?.post?.operationId).toBe("jobs.attachJobCollaborator");
     expect(collaborators?.post?.responses["201"]).toBeDefined();

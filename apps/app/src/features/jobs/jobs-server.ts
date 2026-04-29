@@ -1,6 +1,7 @@
 import { createIsomorphicFn } from "@tanstack/react-start";
 import type {
   JobDetailResponse,
+  JobExternalMemberOptionsResponse,
   JobLabelsResponse,
   JobListItem,
   JobListQuery,
@@ -73,6 +74,14 @@ const getCurrentServerJobMemberOptionsIsomorphic = createIsomorphicFn()
     return await getCurrentServerJobMemberOptionsDirect();
   })
   .client(() => getCurrentBrowserJobMemberOptions());
+
+const getCurrentServerJobExternalMemberOptionsIsomorphic = createIsomorphicFn()
+  .server(async () => {
+    const { getCurrentServerJobExternalMemberOptionsDirect } =
+      await importJobsServerSsr();
+    return await getCurrentServerJobExternalMemberOptionsDirect();
+  })
+  .client(() => getCurrentBrowserJobExternalMemberOptions());
 
 const getCurrentServerSiteOptionsIsomorphic = createIsomorphicFn()
   .server(async () => {
@@ -162,6 +171,12 @@ async function getCurrentBrowserJobMemberOptions(): Promise<JobMemberOptionsResp
   );
 }
 
+async function getCurrentBrowserJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
+  return await runBrowserJobsClient((client) =>
+    client.jobs.getJobExternalMemberOptions()
+  );
+}
+
 async function getCurrentBrowserSiteOptions(): Promise<SitesOptionsResponse> {
   return await runBrowserJobsClient((client) => client.sites.getSiteOptions());
 }
@@ -200,6 +215,10 @@ export function getCurrentServerJobLabels(): Promise<JobLabelsResponse> {
 
 export function getCurrentServerJobMemberOptions(): Promise<JobMemberOptionsResponse> {
   return getCurrentServerJobMemberOptionsIsomorphic();
+}
+
+export function getCurrentServerJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
+  return getCurrentServerJobExternalMemberOptionsIsomorphic();
 }
 
 export function getCurrentServerSiteOptions(): Promise<SitesOptionsResponse> {

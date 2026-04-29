@@ -29,7 +29,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { organization, user } from "../identity/authentication/schema.js";
+import {
+  member,
+  organization,
+  user,
+} from "../identity/authentication/schema.js";
 import { generateJobDomainUuid } from "./id-generation.js";
 
 const jobsTimestamp = (name: string) =>
@@ -439,6 +443,11 @@ export const workItemCollaborator = pgTable(
       columns: [table.workItemId, table.organizationId],
       foreignColumns: [workItem.id, workItem.organizationId],
       name: "work_item_collaborators_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [member.organizationId, member.userId],
+      name: "work_item_collaborators_member_fk",
     }).onDelete("cascade"),
     check(
       "work_item_collaborators_subject_type_chk",

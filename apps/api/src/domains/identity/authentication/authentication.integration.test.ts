@@ -942,6 +942,190 @@ describe("authentication integration", () => {
     ).resolves.toBeNull();
   }, 30_000);
 
+  it("only lets owners and admins use Better Auth member listing", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping member listing authorization coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle(authPool, { schema: authSchema }),
+      reportPasswordResetEmailFailure: () => {},
+      reportVerificationEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const ownerCookieJar = new Map<string, string>();
+    const ownerSignUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "owner-list-members@example.com",
+        name: "Owner List Members",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(ownerCookieJar, ownerSignUpResponse);
+    expect(ownerSignUpResponse.status).toBe(200);
+
+    const organizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Member Listing Guard",
+          slug: "member-listing-guard",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    updateCookieJar(ownerCookieJar, organizationResponse);
+    expect(organizationResponse.status).toBe(200);
+    const createdOrganization =
+      (await organizationResponse.json()) as CreatedOrganizationResponse;
+
+    const ownerListResponse = await auth.handler(
+      makeRequest(
+        `/organization/list-members?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(ownerListResponse.status).toBe(200);
+
+    const ownerFullOrganizationResponse = await auth.handler(
+      makeRequest(
+        `/organization/get-full-organization?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(ownerFullOrganizationResponse.status).toBe(200);
+
+    const ownerInvitationsResponse = await auth.handler(
+      makeRequest(
+        `/organization/list-invitations?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(ownerInvitationsResponse.status).toBe(200);
+
+    const inviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "external-list-members@example.com",
+          role: "external",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(inviteResponse.status).toBe(200);
+    const invitation = (await inviteResponse.json()) as {
+      readonly id: string;
+    };
+
+    const externalCookieJar = new Map<string, string>();
+    const externalSignUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "external-list-members@example.com",
+        name: "External List Members",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(externalCookieJar, externalSignUpResponse);
+    expect(externalSignUpResponse.status).toBe(200);
+
+    const acceptInvitationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/accept-invitation",
+        {
+          invitationId: invitation.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    updateCookieJar(externalCookieJar, acceptInvitationResponse);
+    expect(acceptInvitationResponse.status).toBe(200);
+
+    const externalListResponse = await auth.handler(
+      makeRequest(
+        `/organization/list-members?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+
+    expect(externalListResponse.status).toBe(403);
+
+    const externalFullOrganizationResponse = await auth.handler(
+      makeRequest(
+        `/organization/get-full-organization?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+
+    expect(externalFullOrganizationResponse.status).toBe(403);
+
+    const externalInvitationsResponse = await auth.handler(
+      makeRequest(
+        `/organization/list-invitations?organizationId=${createdOrganization.id}`,
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+
+    expect(externalInvitationsResponse.status).toBe(403);
+
+    const externalFullOrganizationBySlugResponse = await auth.handler(
+      makeRequest(
+        "/organization/get-full-organization?organizationSlug=member-listing-guard",
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+
+    expect(externalFullOrganizationBySlugResponse.status).toBe(403);
+  }, 30_000);
+
   it("serves the public invitation preview from the mounted api route", async (context: {
     skip: (note?: string) => never;
   }) => {

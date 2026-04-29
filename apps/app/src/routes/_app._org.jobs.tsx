@@ -82,17 +82,20 @@ export async function loadJobsRouteData(
     };
   }
 
-  const [activeRole, list] = await Promise.all([
-    resolveJobsRouteOrganizationRole(resolvedOrganizationAccess),
-    listAllCurrentServerJobs({}),
-  ]);
+  const listPromise = listAllCurrentServerJobs({});
+  const activeRole = await resolveJobsRouteOrganizationRole(
+    resolvedOrganizationAccess
+  );
   const viewer = {
     role: activeRole,
     userId: resolvedOrganizationAccess.currentUserId,
   } satisfies JobsViewer;
-  const options = canUseInternalJobOptions(viewer)
-    ? await getCurrentServerJobOptions()
-    : EMPTY_JOBS_OPTIONS;
+  const [list, options] = await Promise.all([
+    listPromise,
+    canUseInternalJobOptions(viewer)
+      ? getCurrentServerJobOptions()
+      : Promise.resolve(EMPTY_JOBS_OPTIONS),
+  ]);
 
   return {
     list,

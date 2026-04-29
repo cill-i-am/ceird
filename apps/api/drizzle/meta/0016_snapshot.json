@@ -2551,6 +2551,15 @@
           "columnsTo": ["id", "organization_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "work_item_collaborators_member_fk": {
+          "name": "work_item_collaborators_member_fk",
+          "tableFrom": "work_item_collaborators",
+          "tableTo": "member",
+          "columnsFrom": ["organization_id", "user_id"],
+          "columnsTo": ["organization_id", "user_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},

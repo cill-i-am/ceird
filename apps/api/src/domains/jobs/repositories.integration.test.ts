@@ -157,6 +157,7 @@ describe("jobs repositories integration", () => {
           yield* JobsRepository.addComment({
             authorUserId: identity.ownerUserId,
             body: "Customer reported repeat water ingress by the front lobby.",
+            organizationId: identity.organizationId,
             workItemId: job.id,
           });
           yield* JobsRepository.addActivity({
@@ -744,6 +745,7 @@ describe("jobs repositories integration", () => {
       databaseUrl,
       JobsRepository.updateCollaborator(
         identity.organizationId,
+        grantedJob.id,
         collaborator.id,
         {
           accessLevel: "read",
@@ -753,10 +755,34 @@ describe("jobs repositories integration", () => {
     );
     expect(updated.accessLevel).toBe("read");
 
+    const wrongJobUpdateExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.updateCollaborator(
+        identity.organizationId,
+        hiddenJob.id,
+        collaborator.id,
+        {
+          roleLabel: "Wrong job update",
+        }
+      )
+    );
+    expectFailureTag(wrongJobUpdateExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
+
+    const wrongJobRemoveExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.removeCollaborator(
+        identity.organizationId,
+        hiddenJob.id,
+        collaborator.id
+      )
+    );
+    expectFailureTag(wrongJobRemoveExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
+
     const removed = await runJobsEffect(
       databaseUrl,
       JobsRepository.removeCollaborator(
         identity.organizationId,
+        grantedJob.id,
         collaborator.id
       )
     );
@@ -766,6 +792,7 @@ describe("jobs repositories integration", () => {
       databaseUrl,
       JobsRepository.removeCollaborator(
         identity.organizationId,
+        grantedJob.id,
         collaborator.id
       )
     );
@@ -1657,6 +1684,7 @@ describe("jobs repositories integration", () => {
       JobsRepository.addComment({
         authorUserId: foreignIdentity.ownerUserId,
         body: "Cross-org comment",
+        organizationId: primaryIdentity.organizationId,
         workItemId: primaryJob.id,
       })
     );
@@ -2005,6 +2033,7 @@ describe("jobs repositories integration", () => {
           yield* JobsRepository.addComment({
             authorUserId: identity.ownerUserId,
             body: "This comment should also roll back.",
+            organizationId: identity.organizationId,
             workItemId: job.id,
           });
 

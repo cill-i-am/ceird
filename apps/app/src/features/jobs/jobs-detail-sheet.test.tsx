@@ -41,14 +41,14 @@ const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
 const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as JobLabelIdType;
 
 const {
-  mockedListMembers,
+  mockedGetExternalMemberOptions,
   mockedNavigate,
   mockedUseAppHotkey,
   mockedUseAtomInitialValues,
   mockedUseAtomSet,
   mockedUseAtomValue,
 } = vi.hoisted(() => ({
-  mockedListMembers: vi.fn<AsyncMutationMock>(),
+  mockedGetExternalMemberOptions: vi.fn<() => Promise<unknown>>(),
   mockedNavigate: vi.fn<NavigateMock>(),
   mockedUseAppHotkey: vi.fn<AppHotkeyMock>(),
   mockedUseAtomInitialValues: vi.fn<InitialValuesMock>(),
@@ -311,12 +311,8 @@ vi.mock("#/hotkeys/use-app-hotkey", () => ({
   useAppHotkey: mockedUseAppHotkey,
 }));
 
-vi.mock("#/lib/auth-client", () => ({
-  authClient: {
-    organization: {
-      listMembers: mockedListMembers,
-    },
-  },
+vi.mock("./jobs-server", () => ({
+  getCurrentServerJobExternalMemberOptions: mockedGetExternalMemberOptions,
 }));
 
 vi.mock("./jobs-detail-state", () => ({
@@ -370,37 +366,23 @@ describe("jobs detail sheet", () => {
     mockedCreateAndAssignLabel.mockReset();
     mockedRemoveLabel.mockReset();
     mockedAddCostLine.mockReset();
-    mockedListMembers.mockReset();
+    mockedGetExternalMemberOptions.mockReset();
     mockedRefreshCollaborators.mockReset();
     mockedUpdateCollaborator.mockReset();
     mockedUseAppHotkey.mockReset();
-    mockedListMembers.mockResolvedValue({
-      data: {
-        members: [
-          {
-            id: "member_external",
-            role: "external",
-            userId: externalUserId,
-            user: {
-              email: "external@example.com",
-              id: externalUserId,
-              name: "External Partner",
-            },
-          },
-          {
-            id: "member_second_external",
-            role: "external",
-            userId: secondExternalUserId,
-            user: {
-              email: "requester@example.com",
-              id: secondExternalUserId,
-              name: "Job Requester",
-            },
-          },
-        ],
-        total: 2,
-      },
-      error: null,
+    mockedGetExternalMemberOptions.mockResolvedValue({
+      members: [
+        {
+          email: "external@example.com",
+          id: externalUserId,
+          name: "External Partner",
+        },
+        {
+          email: "requester@example.com",
+          id: secondExternalUserId,
+          name: "Job Requester",
+        },
+      ],
     });
 
     mockedUseAtomValue.mockImplementation((atom: unknown) => {
@@ -1057,11 +1039,7 @@ describe("jobs detail sheet", () => {
       await screen.findByText("External Partner");
 
       expect(mockedRefreshCollaborators).toHaveBeenCalledWith();
-      expect(mockedListMembers).toHaveBeenCalledWith({
-        query: {
-          limit: 100,
-        },
-      });
+      expect(mockedGetExternalMemberOptions).toHaveBeenCalledWith();
 
       await user.selectOptions(
         screen.getByLabelText("External collaborator"),

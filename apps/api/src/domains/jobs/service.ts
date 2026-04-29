@@ -6,7 +6,6 @@ import {
   InvalidJobTransitionError,
   JOB_NOT_FOUND_ERROR_TAG,
   JobAccessDeniedError,
-  JobCollaboratorNotFoundError,
   JobNotFoundError,
   JobStorageError,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
@@ -28,6 +27,7 @@ import type {
   JobCollaboratorIdType as JobCollaboratorId,
   JobCollaboratorsResponse,
   JobDetail,
+  JobExternalMemberOptionsResponse,
   JobLabelIdType as JobLabelId,
   JobMemberOptionsResponse,
   JobListQuery,
@@ -156,6 +156,21 @@ export class JobsService extends Effect.Service<JobsService>()(
           } satisfies JobMemberOptionsResponse;
         }
       );
+
+      const getExternalMemberOptions = Effect.fn(
+        "JobsService.getExternalMemberOptions"
+      )(function* () {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanManageCollaborators(actor);
+
+        const members = yield* jobsRepository
+          .listExternalMemberOptions(actor.organizationId)
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+
+        return {
+          members,
+        } satisfies JobExternalMemberOptionsResponse;
+      });
 
       const createJobLabel = Effect.fn("JobsService.createJobLabel")(function* (
         input: CreateJobLabelInput
@@ -376,7 +391,7 @@ export class JobsService extends Effect.Service<JobsService>()(
           actor.organizationId,
           workItemId,
           jobsRepository,
-          getRepositoryAccess(actor)
+          getRepositoryAccess(actor, grant)
         );
       });
 
@@ -701,6 +716,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               return yield* jobsRepository.addComment({
                 authorUserId: actor.userId,
                 body: input.body,
+                organizationId: actor.organizationId,
                 workItemId,
               });
             })
@@ -722,6 +738,9 @@ export class JobsService extends Effect.Service<JobsService>()(
                   })
                 )
               : Effect.die(result.left);
+          }
+          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+            return yield* Effect.die(result.left);
           }
           case "SqlError": {
             return yield* failJobsStorageError(result.left);
@@ -1082,15 +1101,14 @@ export class JobsService extends Effect.Service<JobsService>()(
         ) {
           const actor = yield* loadActor(workItemId);
           yield* authorization.ensureCanManageCollaborators(actor, workItemId);
-          yield* ensureCollaboratorBelongsToWorkItem(
-            actor.organizationId,
-            workItemId,
-            collaboratorId,
-            jobsRepository
-          );
 
           return yield* jobsRepository
-            .updateCollaborator(actor.organizationId, collaboratorId, input)
+            .updateCollaborator(
+              actor.organizationId,
+              workItemId,
+              collaboratorId,
+              input
+            )
             .pipe(Effect.catchTag("SqlError", failJobsStorageError));
         }
       );
@@ -1099,15 +1117,13 @@ export class JobsService extends Effect.Service<JobsService>()(
         function* (workItemId: WorkItemId, collaboratorId: JobCollaboratorId) {
           const actor = yield* loadActor(workItemId);
           yield* authorization.ensureCanManageCollaborators(actor, workItemId);
-          yield* ensureCollaboratorBelongsToWorkItem(
-            actor.organizationId,
-            workItemId,
-            collaboratorId,
-            jobsRepository
-          );
 
           return yield* jobsRepository
-            .removeCollaborator(actor.organizationId, collaboratorId)
+            .removeCollaborator(
+              actor.organizationId,
+              workItemId,
+              collaboratorId
+            )
             .pipe(Effect.catchTag("SqlError", failJobsStorageError));
         }
       );
@@ -1122,6 +1138,7 @@ export class JobsService extends Effect.Service<JobsService>()(
         create,
         createJobLabel,
         getDetail,
+        getExternalMemberOptions,
         getMemberOptions,
         getOptions,
         list,
@@ -1195,43 +1212,13 @@ function loadExternalGrantIfNeeded(
     );
 }
 
-function getRepositoryAccess(actor: JobsActor): JobsRepositoryAccess {
+function getRepositoryAccess(
+  actor: JobsActor,
+  grant?: JobCollaborator | undefined
+): JobsRepositoryAccess {
   return isExternalOrganizationRole(actor.role)
-    ? { userId: actor.userId, visibility: "external" }
+    ? { grant, userId: actor.userId, visibility: "external" }
     : { visibility: "internal" };
-}
-
-function ensureCollaboratorBelongsToWorkItem(
-  organizationId: OrganizationId,
-  workItemId: WorkItemId,
-  collaboratorId: JobCollaboratorId,
-  jobsRepository: JobsRepository
-) {
-  return Effect.gen(function* () {
-    const collaborators = yield* jobsRepository
-      .listCollaborators(organizationId, workItemId)
-      .pipe(
-        Effect.catchTag(
-          WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-          dieWorkItemOrganizationMismatch
-        ),
-        Effect.catchTag("SqlError", failJobsStorageError)
-      );
-
-    if (
-      collaborators.some((collaborator) => collaborator.id === collaboratorId)
-    ) {
-      return;
-    }
-
-    return yield* Effect.fail(
-      new JobCollaboratorNotFoundError({
-        collaboratorId,
-        message: "Job collaborator does not exist on the job",
-        workItemId,
-      })
-    );
-  });
 }
 
 function failJobsStorageError(

@@ -165,6 +165,7 @@ interface JobsServiceHarness {
     list: number;
     listCollaborators: number;
     listLabels: number;
+    listExternalMemberOptions: number;
     listMemberOptions: number;
     linkContact: number;
     listOrganizationActivity: number;
@@ -203,6 +204,7 @@ function makeHarness(
     list: 0,
     listCollaborators: 0,
     listLabels: 0,
+    listExternalMemberOptions: 0,
     listMemberOptions: 0,
     linkContact: 0,
     listOrganizationActivity: 0,
@@ -255,6 +257,7 @@ function makeHarness(
     addComment: (input: {
       readonly authorUserId: UserId;
       readonly body: string;
+      readonly organizationId: OrganizationId;
       readonly workItemId: Job["id"];
     }) =>
       Effect.succeed({
@@ -450,6 +453,12 @@ function makeHarness(
 
         return [] satisfies readonly JobMemberOption[];
       }),
+    listExternalMemberOptions: (_organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        calls.listExternalMemberOptions += 1;
+
+        return [];
+      }),
     listOrganizationActivity: (
       _organizationId: OrganizationId,
       _query: OrganizationActivityQuery
@@ -474,6 +483,7 @@ function makeHarness(
       }),
     removeCollaborator: (
       _organizationId: OrganizationId,
+      _workItemId: Job["id"],
       _collaboratorId: JobCollaborator["id"]
     ) =>
       Effect.sync(() => {
@@ -511,6 +521,7 @@ function makeHarness(
       }),
     updateCollaborator: (
       _organizationId: OrganizationId,
+      _workItemId: Job["id"],
       _collaboratorId: JobCollaborator["id"],
       input: Partial<Pick<JobCollaborator, "accessLevel" | "roleLabel">>
     ) =>
@@ -1157,7 +1168,7 @@ describe("jobs service", () => {
     expect(updated.accessLevel).toBe("read");
     expect(removed.id).toBe(collaboratorId);
     expect(harness.calls.attachCollaborator).toBe(1);
-    expect(harness.calls.listCollaborators).toBe(3);
+    expect(harness.calls.listCollaborators).toBe(1);
     expect(harness.calls.updateCollaborator).toBe(1);
     expect(harness.calls.removeCollaborator).toBe(1);
   }, 10_000);

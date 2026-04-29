@@ -3,6 +3,7 @@
 
 import type {
   JobLabelIdType,
+  JobExternalMemberOptionsResponse,
   JobLabelsResponse,
   ActivityIdType,
   JobMemberOptionsResponse,
@@ -18,6 +19,7 @@ import {
   listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
   getCurrentServerJobDetailDirect as getCurrentServerJobDetail,
   getCurrentServerJobLabelsDirect as getCurrentServerJobLabels,
+  getCurrentServerJobExternalMemberOptionsDirect as getCurrentServerJobExternalMemberOptions,
   getCurrentServerJobMemberOptionsDirect as getCurrentServerJobMemberOptions,
   getCurrentServerJobOptionsDirect as getCurrentServerJobOptions,
   listCurrentServerOrganizationActivityDirect as listCurrentServerOrganizationActivity,
@@ -73,6 +75,16 @@ const labelsResponse: JobLabelsResponse = {
 
 const memberOptionsResponse: JobMemberOptionsResponse = {
   members: optionsResponse.members,
+};
+
+const externalMemberOptionsResponse: JobExternalMemberOptionsResponse = {
+  members: [
+    {
+      email: "client@example.com",
+      id: "55555555-5555-4555-8555-555555555555" as UserIdType,
+      name: "Client Coordinator",
+    },
+  ],
 };
 
 const organizationActivityResponse: OrganizationActivityListResponse = {
@@ -288,6 +300,31 @@ describe("server jobs helpers", () => {
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe("http://tt-sbx-api:4301/jobs/member-options");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("forwards the current auth cookie when reading external job member options", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(externalMemberOptionsResponse));
+
+    await expect(
+      getCurrentServerJobExternalMemberOptions()
+    ).resolves.toStrictEqual(externalMemberOptionsResponse);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe(
+      "http://tt-sbx-api:4301/jobs/external-member-options"
+    );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",

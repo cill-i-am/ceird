@@ -19,11 +19,11 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { decodeOrganizationRole } from "@task-tracker/identity-core";
 import {
+  JOB_COLLABORATOR_ACCESS_LEVELS,
+  JobCollaboratorAccessLevelSchema,
   JobLabelNameSchema,
   SiteId,
-  UserId,
   normalizeJobLabelName,
 } from "@task-tracker/jobs-core";
 import type {
@@ -40,7 +40,7 @@ import type {
   SiteIdType,
   UserIdType,
 } from "@task-tracker/jobs-core";
-import { Exit, Schema } from "effect";
+import { Exit, Option, Schema } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -84,7 +84,6 @@ import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
-import { authClient } from "#/lib/auth-client";
 import { cn } from "#/lib/utils";
 
 import {
@@ -112,6 +111,7 @@ import {
   transitionJobMutationAtomFamily,
   updateJobCollaboratorMutationAtomFamily,
 } from "./jobs-detail-state";
+import { getCurrentServerJobExternalMemberOptions } from "./jobs-server";
 import { jobsLookupAtom } from "./jobs-state";
 import {
   getAvailableJobTransitions,
@@ -135,8 +135,11 @@ const VISIT_DURATION_SELECTION_GROUPS = [
 ] satisfies readonly CommandSelectGroup[];
 
 const NO_SITE_VALUE = "__none__";
+const COLLABORATOR_ACCESS_LEVEL_LABELS = {
+  comment: "Comment-only",
+  read: "Read-only",
+} satisfies Record<JobCollaboratorAccessLevel, string>;
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
-const decodeUserId = Schema.decodeUnknownSync(UserId);
 
 interface ExternalMemberOption {
   readonly email: string;
@@ -390,22 +393,13 @@ export function JobsDetailSheet({
       setCollaboratorsError(null);
 
       try {
-        const result = await authClient.organization.listMembers({
-          query: {
-            limit: 100,
-          },
-        });
+        const result = await getCurrentServerJobExternalMemberOptions();
 
         if (ignore) {
           return;
         }
 
-        if (result.error || !result.data) {
-          setCollaboratorsError("External collaborators could not be loaded.");
-          return;
-        }
-
-        setExternalMembers(toExternalMemberOptions(result.data.members));
+        setExternalMembers(toExternalMemberOptions(result.members));
       } catch {
         if (!ignore) {
           setCollaboratorsError("External collaborators could not be loaded.");
@@ -1494,9 +1488,14 @@ function JobCollaboratorsSection({
                     emptyText="No access levels available."
                     groups={accessLevelGroups}
                     disabled={isLoading}
-                    onValueChange={(value) =>
-                      onAccessLevelChange(value as JobCollaboratorAccessLevel)
-                    }
+                    onValueChange={(value) => {
+                      const accessLevel =
+                        decodeOptionalJobCollaboratorAccessLevel(value);
+
+                      if (accessLevel !== undefined) {
+                        onAccessLevelChange(accessLevel);
+                      }
+                    }}
                   />
                 </FieldContent>
               </Field>
@@ -1610,9 +1609,14 @@ function JobCollaboratorRow({
                 emptyText="No access levels available."
                 groups={accessLevelGroups}
                 disabled={disabled}
-                onValueChange={(value) =>
-                  setAccessLevel(value as JobCollaboratorAccessLevel)
-                }
+                onValueChange={(value) => {
+                  const nextAccessLevel =
+                    decodeOptionalJobCollaboratorAccessLevel(value);
+
+                  if (nextAccessLevel !== undefined) {
+                    setAccessLevel(nextAccessLevel);
+                  }
+                }}
               />
             </FieldContent>
           </Field>
@@ -1926,18 +1930,22 @@ function getCollaboratorAccessLevelGroups() {
   return [
     {
       label: "Access",
-      options: [
-        {
-          label: "Read-only",
-          value: "read",
-        },
-        {
-          label: "Comment-only",
-          value: "comment",
-        },
-      ],
+      options: JOB_COLLABORATOR_ACCESS_LEVELS.map((accessLevel) => ({
+        label: COLLABORATOR_ACCESS_LEVEL_LABELS[accessLevel],
+        value: accessLevel,
+      })),
     },
   ] satisfies readonly CommandSelectGroup[];
+}
+
+function decodeOptionalJobCollaboratorAccessLevel(
+  input: unknown
+): JobCollaboratorAccessLevel | undefined {
+  const decoded = Schema.decodeUnknownOption(JobCollaboratorAccessLevelSchema)(
+    input
+  );
+
+  return Option.getOrUndefined(decoded);
 }
 
 function getStatusCommandLabel(status: JobStatus) {
@@ -2045,44 +2053,18 @@ const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
 
 function toExternalMemberOptions(
   members: readonly {
-    readonly role: string;
-    readonly userId: string;
-    readonly user?: {
-      readonly email?: string | null | undefined;
-      readonly id?: string | null | undefined;
-      readonly name?: string | null | undefined;
-    };
+    readonly email: string;
+    readonly id: UserIdType;
+    readonly name: string;
   }[]
 ): readonly ExternalMemberOption[] {
   let externalMembers: readonly ExternalMemberOption[] = [];
 
-  for (const externalMember of members
-    .filter((candidate) => {
-      try {
-        return decodeOrganizationRole(candidate.role) === "external";
-      } catch {
-        return false;
-      }
-    })
-    .map((candidate) => {
-      const userId = decodeOptionalUserId(
-        candidate.user?.id ?? candidate.userId
-      );
-
-      if (!userId) {
-        return null;
-      }
-
-      const name =
-        candidate.user?.name?.trim() || candidate.user?.email || userId;
-
-      return {
-        email: candidate.user?.email ?? "",
-        name,
-        userId,
-      };
-    })
-    .filter((option) => option !== null)) {
+  for (const externalMember of members.map((candidate) => ({
+    email: candidate.email,
+    name: candidate.name,
+    userId: candidate.id,
+  }))) {
     externalMembers = insertSortedExternalMember(
       externalMembers,
       externalMember
@@ -2090,14 +2072,6 @@ function toExternalMemberOptions(
   }
 
   return externalMembers;
-}
-
-function decodeOptionalUserId(input: unknown): UserIdType | null {
-  try {
-    return decodeUserId(input);
-  } catch {
-    return null;
-  }
 }
 
 function insertSortedExternalMember(

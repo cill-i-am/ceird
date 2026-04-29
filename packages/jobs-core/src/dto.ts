@@ -854,6 +854,15 @@ export const JobMemberOptionSchema = Schema.Struct({
 });
 export type JobMemberOption = Schema.Schema.Type<typeof JobMemberOptionSchema>;
 
+export const JobExternalMemberOptionSchema = Schema.Struct({
+  email: Schema.String,
+  id: UserId,
+  name: Schema.String,
+});
+export type JobExternalMemberOption = Schema.Schema.Type<
+  typeof JobExternalMemberOptionSchema
+>;
+
 export const CreateSiteResponseSchema = JobSiteOptionSchema;
 export type CreateSiteResponse = Schema.Schema.Type<
   typeof CreateSiteResponseSchema
@@ -894,6 +903,13 @@ export const JobMemberOptionsResponseSchema = Schema.Struct({
 });
 export type JobMemberOptionsResponse = Schema.Schema.Type<
   typeof JobMemberOptionsResponseSchema
+>;
+
+export const JobExternalMemberOptionsResponseSchema = Schema.Struct({
+  members: Schema.Array(JobExternalMemberOptionSchema),
+});
+export type JobExternalMemberOptionsResponse = Schema.Schema.Type<
+  typeof JobExternalMemberOptionsResponseSchema
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({

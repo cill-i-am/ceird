@@ -14,15 +14,20 @@ import {
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 
 export const Route = createFileRoute("/_app/_org")({
-  beforeLoad: async () => {
+  beforeLoad: async ({ context }) => {
     const organizationAccess = await requireOrganizationAccess();
+    const { currentOrganizationRole: contextCurrentOrganizationRole } = context;
     let currentOrganizationRole: OrganizationRole | undefined;
 
     if (!organizationAccess.activeOrganizationSync.required) {
-      const currentMemberRole = await getCurrentOrganizationMemberRole(
-        organizationAccess.activeOrganizationId
-      );
-      currentOrganizationRole = currentMemberRole.role;
+      if (contextCurrentOrganizationRole === undefined) {
+        const currentMemberRole = await getCurrentOrganizationMemberRole(
+          organizationAccess.activeOrganizationId
+        );
+        currentOrganizationRole = currentMemberRole.role;
+      } else {
+        currentOrganizationRole = contextCurrentOrganizationRole;
+      }
     }
 
     return {

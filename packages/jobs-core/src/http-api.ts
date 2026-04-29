@@ -22,6 +22,7 @@ import {
   JobDetailResponseSchema,
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
+  JobExternalMemberOptionsResponseSchema,
   JobLabelResponseSchema,
   JobLabelsResponseSchema,
   JobMemberOptionsResponseSchema,
@@ -96,6 +97,15 @@ const jobsGroup = HttpApiGroup.make("jobs")
   .add(
     HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options")
       .addSuccess(JobMemberOptionsResponseSchema)
+      .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.get(
+      "getJobExternalMemberOptions",
+      "/jobs/external-member-options"
+    )
+      .addSuccess(JobExternalMemberOptionsResponseSchema)
       .addError(JobAccessDeniedError)
       .addError(JobStorageError)
   )

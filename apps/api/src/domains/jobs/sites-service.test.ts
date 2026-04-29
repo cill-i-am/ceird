@@ -154,6 +154,8 @@ function makeHarness(
     ) => unexpected("listCollaborators"),
     listMemberOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobMemberOption[]),
+    listExternalMemberOptions: (_organizationId: OrganizationId) =>
+      Effect.succeed([]),
     listOrganizationActivity: (
       _organizationId: OrganizationId,
       _query: OrganizationActivityQuery
@@ -169,6 +171,7 @@ function makeHarness(
     ) => unexpected("patch"),
     removeCollaborator: (
       _organizationId: OrganizationId,
+      _workItemId: WorkItemId,
       _collaboratorId: unknown
     ) => unexpected("removeCollaborator"),
     reopen: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>
@@ -180,6 +183,7 @@ function makeHarness(
     ) => unexpected("transition"),
     updateCollaborator: (
       _organizationId: OrganizationId,
+      _workItemId: WorkItemId,
       _collaboratorId: unknown,
       _input: unknown
     ) => unexpected("updateCollaborator"),
