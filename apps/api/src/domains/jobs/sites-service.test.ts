@@ -71,6 +71,8 @@ interface SitesServiceHarness {
     ensureServiceArea: number;
     geocode: number;
     getOptionById: number;
+    listOptions: number;
+    listServiceAreaOptions: number;
   };
   readonly layer: Layer.Layer<
     SitesService | HttpServerRequest.HttpServerRequest
@@ -91,6 +93,8 @@ function makeHarness(
     ensureServiceArea: 0,
     geocode: 0,
     getOptionById: 0,
+    listOptions: 0,
+    listServiceAreaOptions: 0,
   };
   const createdSiteOption: JobSiteOption = {
     addressLine1: "1 Custom House Quay",
@@ -230,8 +234,13 @@ function makeHarness(
       readonly organizationId: OrganizationId;
       readonly siteId: SiteId;
     }) => Effect.succeed(undefinedValue),
-    listOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly JobSiteOption[]),
+    listOptions: (organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        calls.listOptions += 1;
+        expect(organizationId).toBe(actor.organizationId);
+
+        return [] satisfies readonly JobSiteOption[];
+      }),
     update: (
       _organizationId: OrganizationId,
       _siteId: SiteId,
@@ -242,8 +251,13 @@ function makeHarness(
   const configurationRepository = ConfigurationRepository.make({
     createServiceArea: (_input: unknown) =>
       unexpected("configuration.createServiceArea"),
-    listServiceAreaOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies SitesOptionsResponse["serviceAreas"]),
+    listServiceAreaOptions: (organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        calls.listServiceAreaOptions += 1;
+        expect(organizationId).toBe(actor.organizationId);
+
+        return [] satisfies SitesOptionsResponse["serviceAreas"];
+      }),
     listServiceAreas: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly ServiceArea[]),
     updateServiceArea: (
@@ -381,6 +395,27 @@ describe("sites service", () => {
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.ensureServiceArea).toBe(0);
     expect(harness.calls.getOptionById).toBe(0);
+  }, 10_000);
+
+  it("denies external actors loading organization-wide site options", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.getOptions();
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message:
+        "External collaborators cannot view organization-wide site options",
+    });
+    expect(harness.calls.listOptions).toBe(0);
+    expect(harness.calls.listServiceAreaOptions).toBe(0);
   }, 10_000);
 
   it("validates stale service areas before geocoding standalone sites", async () => {

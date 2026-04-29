@@ -1,4 +1,9 @@
-import { JobStorageError, SiteNotFoundError } from "@task-tracker/jobs-core";
+import { isExternalOrganizationRole } from "@task-tracker/identity-core";
+import {
+  JobAccessDeniedError,
+  JobStorageError,
+  SiteNotFoundError,
+} from "@task-tracker/jobs-core";
 import type {
   CreateSiteInput,
   ServiceAreaOption,
@@ -10,6 +15,7 @@ import { Effect, Option } from "effect";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
 import { CurrentJobsActor } from "./current-jobs-actor.js";
+import type { JobsActor } from "./current-jobs-actor.js";
 import {
   ConfigurationRepository,
   JobsRepositoriesLive,
@@ -179,7 +185,7 @@ export class SitesService extends Effect.Service<SitesService>()(
 
       const getOptions = Effect.fn("SitesService.getOptions")(function* () {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanView(actor);
+        yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
         yield* Effect.annotateCurrentSpan("action", "getOptions");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -221,6 +227,26 @@ function failSitesStorageError(
       message: "Sites storage operation failed",
     })
   );
+}
+
+function ensureCanViewOrganizationSiteOptions(
+  actor: JobsActor,
+  authorization: JobsAuthorization
+) {
+  return Effect.gen(function* () {
+    yield* authorization.ensureCanView(actor);
+
+    if (!isExternalOrganizationRole(actor.role)) {
+      return;
+    }
+
+    return yield* Effect.fail(
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide site options",
+      })
+    );
+  });
 }
 
 function hasElevatedAccess(actor: { readonly role: string }): boolean {

@@ -159,6 +159,7 @@ interface JobsServiceHarness {
     listOrganizationActivity: number;
     patch: number;
     removeLabel: number;
+    reopen: number;
     transition: number;
     updateLabel: number;
   };
@@ -191,6 +192,7 @@ function makeHarness(
     listOrganizationActivity: 0,
     patch: 0,
     removeLabel: 0,
+    reopen: 0,
     transition: 0,
     updateLabel: 0,
   };
@@ -376,7 +378,11 @@ function makeHarness(
         return Option.some(lockedJob);
       }),
     reopen: (_organizationId: OrganizationId, _workItemId: Job["id"]) =>
-      Effect.succeed(Option.some(makeJob({ status: "in_progress" }))),
+      Effect.sync(() => {
+        calls.reopen += 1;
+
+        return Option.some(makeJob({ status: "in_progress" }));
+      }),
     transition: (
       _organizationId: OrganizationId,
       _workItemId: Job["id"],
@@ -1154,6 +1160,60 @@ describe("jobs service", () => {
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 
+  it("denies external actors before validating transition input", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      lockedJob: makeJob({ status: "in_progress" }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.transition(workItemId, {
+          status: "blocked",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "External collaborators cannot change job status",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.transition).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("denies external actors before validating reopen eligibility", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      lockedJob: makeJob({ status: "in_progress" }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.reopen(workItemId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Members can only reopen jobs assigned to them",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.reopen).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
   it("rejects visit durations that are not whole-hour increments before hitting persistence", async () => {
     const harness = makeHarness();
 
@@ -1173,6 +1233,33 @@ describe("jobs service", () => {
     expect(getFailure(exit)).toBeInstanceOf(VisitDurationIncrementError);
 
     expect(harness.calls.findByIdForUpdate).toBe(0);
+    expect(harness.calls.addVisit).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("denies external actors before validating visit duration", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addVisit(workItemId, {
+          durationMinutes: 90,
+          note: "Stayed late to retest the relay.",
+          visitDate: "2026-04-22",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Members can only log visits on jobs assigned to them",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
     expect(harness.calls.addVisit).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);

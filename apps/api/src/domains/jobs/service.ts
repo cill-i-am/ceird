@@ -499,12 +499,21 @@ export class JobsService extends Effect.Service<JobsService>()(
                 );
               }
 
-              yield* validateTransitionInput(existing, input);
-              yield* authorization.ensureCanTransition(
-                actor,
-                existing,
-                input.status
-              );
+              if (isExternalOrganizationRole(actor.role)) {
+                yield* authorization.ensureCanTransition(
+                  actor,
+                  existing,
+                  input.status
+                );
+                yield* validateTransitionInput(existing, input);
+              } else {
+                yield* validateTransitionInput(existing, input);
+                yield* authorization.ensureCanTransition(
+                  actor,
+                  existing,
+                  input.status
+                );
+              }
 
               const job = yield* jobsRepository
                 .transition(actor.organizationId, workItemId, {
@@ -588,8 +597,13 @@ export class JobsService extends Effect.Service<JobsService>()(
                 );
               }
 
-              yield* validateReopen(existing);
-              yield* authorization.ensureCanReopen(actor, existing);
+              if (isExternalOrganizationRole(actor.role)) {
+                yield* authorization.ensureCanReopen(actor, existing);
+                yield* validateReopen(existing);
+              } else {
+                yield* validateReopen(existing);
+                yield* authorization.ensureCanReopen(actor, existing);
+              }
 
               const job = yield* jobsRepository
                 .reopen(actor.organizationId, workItemId)
@@ -851,7 +865,11 @@ export class JobsService extends Effect.Service<JobsService>()(
         input: AddJobVisitInput
       ) {
         const actor = yield* loadActor(workItemId);
-        yield* validateVisitDuration(workItemId, input.durationMinutes);
+        const isExternalActor = isExternalOrganizationRole(actor.role);
+
+        if (!isExternalActor) {
+          yield* validateVisitDuration(workItemId, input.durationMinutes);
+        }
 
         const result = yield* jobsRepository
           .withTransaction(
@@ -870,6 +888,9 @@ export class JobsService extends Effect.Service<JobsService>()(
               }
 
               yield* authorization.ensureCanAddVisit(actor, job);
+              if (isExternalActor) {
+                yield* validateVisitDuration(workItemId, input.durationMinutes);
+              }
 
               const visit = yield* jobsRepository.addVisit({
                 authorUserId: actor.userId,
