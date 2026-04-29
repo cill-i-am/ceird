@@ -8,7 +8,7 @@ const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
   mockedMatches: {
     value: [] as {
       context?: {
-        currentOrganizationRole?: "owner" | "admin" | "member";
+        currentOrganizationRole?: "owner" | "admin" | "member" | "external";
       };
       id?: string;
       routeId?: string;
@@ -188,8 +188,10 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 vi.mock(import("#/components/nav-user"), () => ({
   NavUser: ({
+    currentOrganizationRole,
     user,
   }: {
+    currentOrganizationRole?: string;
     user: {
       name: string;
       email: string;
@@ -198,6 +200,7 @@ vi.mock(import("#/components/nav-user"), () => ({
   }) => (
     <div data-testid="nav-user">
       {user.name} {user.email}
+      {currentOrganizationRole ? ` ${currentOrganizationRole}` : ""}
     </div>
   ),
 }));
@@ -236,7 +239,7 @@ describe("app sidebar", () => {
       );
 
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
-        "Taylor Example person@example.com"
+        "Taylor Example person@example.com owner"
       );
       const brandLink = screen.getByRole("link", { name: /task tracker/i });
 
@@ -318,6 +321,46 @@ describe("app sidebar", () => {
         "href",
         "/sites"
       );
+      expect(
+        screen.queryByRole("link", { name: /activity/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /members/i })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "shows only jobs navigation for external role",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      mockedMatches.value = [
+        {
+          id: "/_app/_org",
+          routeId: "/_app/_org",
+          context: {
+            currentOrganizationRole: "external",
+          },
+        },
+      ];
+
+      render(<AppSidebar />);
+
+      expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
+      expect(
+        screen.getByRole("link", { name: /task tracker/i })
+      ).toHaveAttribute("href", "/jobs");
+      expect(
+        screen.queryByRole("link", { name: /^home$/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /sites/i })
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("link", { name: /activity/i })
       ).not.toBeInTheDocument();

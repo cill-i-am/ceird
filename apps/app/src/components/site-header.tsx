@@ -1,6 +1,7 @@
 "use client";
 
 import { Link, useMatches, useRouterState } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import ThemeToggle from "#/components/ThemeToggle";
@@ -19,7 +20,10 @@ import {
   TooltipTrigger,
 } from "#/components/ui/tooltip";
 import { isJobsMapViewSearch } from "#/features/jobs/jobs-search";
-import { useCurrentOrganizationRoleFromMatches } from "#/features/organizations/organization-route-context";
+import {
+  useCurrentOrganizationRoleFromMatches,
+  useIsInOrganizationRoute,
+} from "#/features/organizations/organization-route-context";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyScope } from "#/hotkeys/hotkey-registry";
@@ -27,7 +31,11 @@ import { RouteHotkeys } from "#/hotkeys/route-hotkeys";
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 import { ShortcutIntroNotice } from "#/hotkeys/shortcut-intro-notice";
 
-export function SiteHeader() {
+export function SiteHeader({
+  currentOrganizationRole: appCurrentOrganizationRole,
+}: {
+  currentOrganizationRole?: OrganizationRole | undefined;
+}) {
   const breadcrumbs = useMatches({
     select: (matches) =>
       matches
@@ -38,7 +46,11 @@ export function SiteHeader() {
     select: (state) =>
       getActiveShortcutScopes(state.location.pathname, state.location.search),
   });
-  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const isInOrganizationRoute = useIsInOrganizationRoute();
+  const matchedOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const currentOrganizationRole =
+    matchedOrganizationRole ??
+    (isInOrganizationRoute ? undefined : appCurrentOrganizationRole);
 
   return (
     <header className="sticky top-0 z-40 flex w-full items-center border-b border-border/60 bg-background/90 backdrop-blur">

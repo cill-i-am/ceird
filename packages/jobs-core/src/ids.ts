@@ -60,6 +60,11 @@ export const JobLabelId = Schema.UUID.pipe(
 );
 export type JobLabelId = Schema.Schema.Type<typeof JobLabelId>;
 
+export const JobCollaboratorId = Schema.UUID.pipe(
+  Schema.brand("@task-tracker/jobs-core/JobCollaboratorId")
+);
+export type JobCollaboratorId = Schema.Schema.Type<typeof JobCollaboratorId>;
+
 export const CostLineId = Schema.UUID.pipe(
   Schema.brand("@task-tracker/jobs-core/CostLineId")
 );

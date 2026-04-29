@@ -3,6 +3,7 @@ import {
   CommentId,
   ContactId,
   CostLineId,
+  JobCollaboratorId,
   JobLabelId,
   RateCardId,
   RateCardLineId,
@@ -16,6 +17,7 @@ import type {
   CommentIdType,
   ContactIdType,
   CostLineIdType,
+  JobCollaboratorIdType,
   JobLabelIdType,
   RateCardIdType,
   RateCardLineIdType,
@@ -31,6 +33,7 @@ const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeContactId = Schema.decodeUnknownSync(ContactId);
 const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
+const decodeJobCollaboratorId = Schema.decodeUnknownSync(JobCollaboratorId);
 const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
 const decodeRateCardId = Schema.decodeUnknownSync(RateCardId);
 const decodeRateCardLineId = Schema.decodeUnknownSync(RateCardLineId);
@@ -57,6 +60,10 @@ export function generateContactId(): ContactIdType {
 
 export function generateCostLineId(): CostLineIdType {
   return decodeCostLineId(generateJobDomainUuid());
+}
+
+export function generateJobCollaboratorId(): JobCollaboratorIdType {
+  return decodeJobCollaboratorId(generateJobDomainUuid());
 }
 
 export function generateJobLabelId(): JobLabelIdType {

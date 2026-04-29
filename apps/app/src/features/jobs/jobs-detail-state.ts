@@ -10,11 +10,15 @@ import type {
   AddJobVisitInput,
   AddJobVisitResponse,
   AssignJobLabelInput,
+  AttachJobCollaboratorInput,
   CreateJobLabelInput,
   Job,
+  JobCollaborator,
+  JobCollaboratorIdType,
   JobDetailResponse,
   JobLabel,
   JobLabelIdType,
+  UpdateJobCollaboratorInput,
   PatchJobInput,
   PatchJobResponse,
   TransitionJobInput,
@@ -39,6 +43,14 @@ export const jobDetailStateAtomFamily = Atom.family(
   }
 );
 
+export const jobCollaboratorsStateAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) => {
+    void workItemId;
+
+    return Atom.make<readonly JobCollaborator[]>([]);
+  }
+);
+
 export const refreshJobDetailAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, JobDetailResponse>((_, get) =>
@@ -48,6 +60,23 @@ export const refreshJobDetailAtomFamily = Atom.family(
             get.set(jobDetailStateAtomFamily(workItemId), detail);
           })
         )
+      )
+    )
+);
+
+export const refreshJobCollaboratorsAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, readonly JobCollaborator[]>((_, get) =>
+      listBrowserJobCollaborators(workItemId).pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => {
+            get.set(
+              jobCollaboratorsStateAtomFamily(workItemId),
+              response.collaborators
+            );
+          })
+        ),
+        Effect.map((response) => response.collaborators)
       )
     )
 );
@@ -139,6 +168,59 @@ export const addJobCostLineMutationAtomFamily = Atom.family(
               });
 
               yield* refreshJobDetailIfPossible(get, workItemId);
+            })
+          )
+        )
+    )
+);
+
+export const attachJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobCollaborator, AttachJobCollaboratorInput>(
+      (input, get) =>
+        attachBrowserJobCollaborator(workItemId, input).pipe(
+          Effect.tap((collaborator) =>
+            Effect.sync(() =>
+              upsertJobCollaborator(get, workItemId, collaborator)
+            )
+          )
+        )
+    )
+);
+
+export const updateJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<
+      AppJobsError,
+      JobCollaborator,
+      {
+        readonly collaboratorId: JobCollaboratorIdType;
+        readonly input: UpdateJobCollaboratorInput;
+      }
+    >(({ collaboratorId, input }, get) =>
+      updateBrowserJobCollaborator(workItemId, collaboratorId, input).pipe(
+        Effect.tap((collaborator) =>
+          Effect.sync(() =>
+            upsertJobCollaborator(get, workItemId, collaborator)
+          )
+        )
+      )
+    )
+);
+
+export const detachJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobCollaborator, JobCollaboratorIdType>(
+      (collaboratorId, get) =>
+        detachBrowserJobCollaborator(workItemId, collaboratorId).pipe(
+          Effect.tap((collaborator) =>
+            Effect.sync(() => {
+              const current = get(jobCollaboratorsStateAtomFamily(workItemId));
+
+              get.set(
+                jobCollaboratorsStateAtomFamily(workItemId),
+                current.filter((item) => item.id !== collaborator.id)
+              );
             })
           )
         )
@@ -259,6 +341,50 @@ function addBrowserJobCostLine(
   );
 }
 
+function listBrowserJobCollaborators(workItemId: WorkItemIdType) {
+  return runBrowserJobsRequest("JobsBrowser.listJobCollaborators", (client) =>
+    client.jobs.listJobCollaborators({
+      path: { workItemId },
+    })
+  );
+}
+
+function attachBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  input: AttachJobCollaboratorInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.attachJobCollaborator", (client) =>
+    client.jobs.attachJobCollaborator({
+      path: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function updateBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  collaboratorId: JobCollaboratorIdType,
+  input: UpdateJobCollaboratorInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.updateJobCollaborator", (client) =>
+    client.jobs.updateJobCollaborator({
+      path: { collaboratorId, workItemId },
+      payload: input,
+    })
+  );
+}
+
+function detachBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  collaboratorId: JobCollaboratorIdType
+) {
+  return runBrowserJobsRequest("JobsBrowser.detachJobCollaborator", (client) =>
+    client.jobs.detachJobCollaborator({
+      path: { collaboratorId, workItemId },
+    })
+  );
+}
+
 function createBrowserJobLabel(input: CreateJobLabelInput) {
   return runBrowserJobsRequest("JobsBrowser.createJobLabel", (client) =>
     client.jobs.createJobLabel({
@@ -304,12 +430,14 @@ function updateJobDetailJob(
     return;
   }
 
-  const { contact, ...detailWithoutContact } = currentDetail;
+  const { contact, site, ...detailWithoutContactAndSite } = currentDetail;
   const matchingContact = contact?.id === job.contactId ? { contact } : {};
+  const matchingSite = site?.id === job.siteId ? { site } : {};
 
   get.set(jobDetailStateAtomFamily(workItemId), {
-    ...detailWithoutContact,
+    ...detailWithoutContactAndSite,
     ...matchingContact,
+    ...matchingSite,
     job,
   });
 }
@@ -349,6 +477,22 @@ function upsertJobOptionLabel(get: Atom.FnContext, label: JobLabel) {
     },
     organizationId: currentOptionsState.organizationId,
   });
+}
+
+function upsertJobCollaborator(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  collaborator: JobCollaborator
+) {
+  const current = get(jobCollaboratorsStateAtomFamily(workItemId));
+
+  get.set(
+    jobCollaboratorsStateAtomFamily(workItemId),
+    [
+      collaborator,
+      ...current.filter((item) => item.id !== collaborator.id),
+    ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel))
+  );
 }
 
 function compareJobLabels(left: JobLabel, right: JobLabel) {
@@ -438,9 +582,10 @@ function insertJobCostLine(
     return;
   }
 
+  const currentCostLines = currentDetail.costs?.lines ?? [];
   const costLines = [
     costLine,
-    ...currentDetail.costLines.filter((current) => current.id !== costLine.id),
+    ...currentCostLines.filter((current) => current.id !== costLine.id),
   ].sort((left, right) => {
     const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
 
@@ -451,12 +596,14 @@ function insertJobCostLine(
 
   get.set(jobDetailStateAtomFamily(workItemId), {
     ...currentDetail,
-    costLines,
-    costSummary: {
-      subtotalMinor: costLines.reduce(
-        (subtotal, current) => subtotal + current.lineTotalMinor,
-        0
-      ),
+    costs: {
+      lines: costLines,
+      summary: {
+        subtotalMinor: costLines.reduce(
+          (subtotal, current) => subtotal + current.lineTotalMinor,
+          0
+        ),
+      },
     },
   });
 }

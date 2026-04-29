@@ -11,6 +11,7 @@ import {
 import {
   ContactId,
   JobLabelId,
+  JobCollaboratorId,
   OrganizationId,
   RateCardId,
   ServiceAreaId,
@@ -157,6 +158,30 @@ export class JobLabelNameConflictError extends Schema.TaggedError<JobLabelNameCo
   HttpApiSchema.annotations({ status: 409 })
 ) {}
 
+export const JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCollaboratorNotFoundError" as const;
+export class JobCollaboratorNotFoundError extends Schema.TaggedError<JobCollaboratorNotFoundError>()(
+  JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
+  {
+    collaboratorId: JobCollaboratorId,
+    message: Schema.String,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const JOB_COLLABORATOR_CONFLICT_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCollaboratorConflictError" as const;
+export class JobCollaboratorConflictError extends Schema.TaggedError<JobCollaboratorConflictError>()(
+  JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
+  {
+    message: Schema.String,
+    userId: UserId,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 409 })
+) {}
+
 export const SITE_NOT_FOUND_ERROR_TAG =
   "@task-tracker/jobs-core/SiteNotFoundError" as const;
 export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
@@ -240,6 +265,8 @@ export type JobsError =
   | VisitDurationIncrementError
   | JobLabelNotFoundError
   | JobLabelNameConflictError
+  | JobCollaboratorNotFoundError
+  | JobCollaboratorConflictError
   | SiteNotFoundError
   | SiteGeocodingFailedError
   | ContactNotFoundError

@@ -19,7 +19,7 @@ const {
     value: "/jobs",
   },
   mockedRole: {
-    value: undefined as "owner" | "admin" | "member" | undefined,
+    value: undefined as "owner" | "admin" | "member" | "external" | undefined,
   },
   mockedSearch: {
     value: {} as Record<string, unknown>,
@@ -28,7 +28,9 @@ const {
     vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
 }));
 
-function setOrgMatches(currentOrganizationRole?: "owner" | "admin" | "member") {
+function setOrgMatches(
+  currentOrganizationRole?: "owner" | "admin" | "member" | "external"
+) {
   mockedRole.value = currentOrganizationRole;
   mockedUseMatches.mockImplementation(({ select }) =>
     select([
@@ -71,7 +73,9 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     )) as typeof actual.Link,
     useMatch: ((options?: {
       select?: (match: {
-        context: { currentOrganizationRole?: "owner" | "admin" | "member" };
+        context: {
+          currentOrganizationRole?: "owner" | "admin" | "member" | "external";
+        };
         id?: string;
         routeId?: string;
       }) => unknown;
@@ -346,4 +350,38 @@ describe("site header", () => {
       expect(mockedNavigate).not.toHaveBeenCalled();
     }
   );
+
+  it.each(["owner", "admin", "member"] as const)(
+    "enables the sites route hotkey for internal %s role",
+    { timeout: 10_000 },
+    async (role) => {
+      const user = userEvent.setup();
+      setOrgMatches(role);
+
+      render(
+        <HotkeysProvider>
+          <SiteHeader />
+        </HotkeysProvider>
+      );
+
+      await user.keyboard("gs");
+
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
+    }
+  );
+
+  it("does not enable the sites route hotkey for external role", async () => {
+    const user = userEvent.setup();
+    setOrgMatches("external");
+
+    render(
+      <HotkeysProvider>
+        <SiteHeader />
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("gs");
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
 });

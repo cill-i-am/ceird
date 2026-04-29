@@ -58,6 +58,7 @@ const INVITATION_LOAD_FAILURE_MESSAGE =
   "We couldn't load invitations right now. Please try again.";
 const INVITE_ROLE_LABELS = {
   admin: "Admin",
+  external: "External collaborator",
   member: "Member",
 } satisfies Record<OrganizationMemberInviteInput["role"], string>;
 const ROLE_SELECTION_GROUPS = [

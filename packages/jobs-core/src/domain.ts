@@ -57,6 +57,29 @@ export const JOB_PRIORITIES = [
 export const JobPrioritySchema = Schema.Literal(...JOB_PRIORITIES);
 export type JobPriority = Schema.Schema.Type<typeof JobPrioritySchema>;
 
+export const JOB_COLLABORATOR_SUBJECT_TYPES = ["user"] as const;
+export const JobCollaboratorSubjectTypeSchema = Schema.Literal(
+  ...JOB_COLLABORATOR_SUBJECT_TYPES
+);
+export type JobCollaboratorSubjectType = Schema.Schema.Type<
+  typeof JobCollaboratorSubjectTypeSchema
+>;
+
+export const JOB_COLLABORATOR_ACCESS_LEVELS = ["read", "comment"] as const;
+export const JobCollaboratorAccessLevelSchema = Schema.Literal(
+  ...JOB_COLLABORATOR_ACCESS_LEVELS
+);
+export type JobCollaboratorAccessLevel = Schema.Schema.Type<
+  typeof JobCollaboratorAccessLevelSchema
+>;
+
+export const JobCollaboratorRoleLabelSchema = Schema.Trim.pipe(
+  Schema.minLength(1)
+);
+export type JobCollaboratorRoleLabel = Schema.Schema.Type<
+  typeof JobCollaboratorRoleLabelSchema
+>;
+
 export const RATE_CARD_LINE_KINDS = [
   "labour",
   "callout",

@@ -1,3 +1,4 @@
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { isValidElement } from "react";
@@ -74,23 +75,6 @@ vi.mock(
     };
   }
 );
-
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    Link: (({
-      children,
-      to,
-      ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    )) as typeof actual.Link,
-  };
-});
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
@@ -256,16 +240,35 @@ describe("nav user", () => {
     vi.clearAllMocks();
   });
 
-  function renderNavUser() {
-    return render(<NavUser user={user} navigate={mockedNavigate} />);
+  function renderNavUser(currentOrganizationRole?: OrganizationRole) {
+    return render(
+      <NavUser
+        currentOrganizationRole={currentOrganizationRole}
+        user={user}
+        navigate={mockedNavigate}
+      />
+    );
   }
 
-  it("links to organization settings from the account menu", () => {
-    renderNavUser();
+  it("links admins to organization settings from the account menu", () => {
+    renderNavUser("admin");
 
     expect(
       screen.getByRole("link", { name: /organization settings/i })
     ).toHaveAttribute("href", "/organization/settings");
+  }, 10_000);
+
+  it("hides organization settings from external users", () => {
+    renderNavUser("external");
+
+    expect(
+      screen.queryByRole("link", { name: /organization settings/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("link")
+        .find((link) => link.getAttribute("href") === "/settings")
+    ).toBeInTheDocument();
   }, 10_000);
 
   it(

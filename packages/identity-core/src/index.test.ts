@@ -1,6 +1,9 @@
 import {
   decodeCreateOrganizationInput,
+  decodeOrganizationRole,
   decodeUpdateOrganizationInput,
+  isExternalOrganizationRole,
+  isInternalOrganizationRole,
 } from "./index.js";
 
 describe("createOrganizationInputSchema", () => {
@@ -52,5 +55,24 @@ describe("updateOrganizationInputSchema", () => {
         slug: "northwind-field-ops",
       })
     ).toThrow(/is unexpected/);
+  }, 1000);
+});
+
+describe("organization role boundary", () => {
+  it("decodes external as an organization role", () => {
+    expect(decodeOrganizationRole("external")).toBe("external");
+  }, 1000);
+
+  it("classifies internal and external organization roles", () => {
+    expect(
+      (["owner", "admin", "member", "external"] as const).map((role) =>
+        isInternalOrganizationRole(role)
+      )
+    ).toStrictEqual([true, true, true, false]);
+    expect(
+      (["owner", "admin", "member", "external"] as const).map((role) =>
+        isExternalOrganizationRole(role)
+      )
+    ).toStrictEqual([false, false, false, true]);
   }, 1000);
 });

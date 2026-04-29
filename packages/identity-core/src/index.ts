@@ -8,9 +8,23 @@ export const OrganizationId = Schema.NonEmptyString.pipe(
 );
 export type OrganizationId = Schema.Schema.Type<typeof OrganizationId>;
 
-export const ORGANIZATION_ROLES = ["owner", "admin", "member"] as const;
+export const ORGANIZATION_ROLES = [
+  "owner",
+  "admin",
+  "member",
+  "external",
+] as const;
+export const INTERNAL_ORGANIZATION_ROLES = [
+  "owner",
+  "admin",
+  "member",
+] as const;
 export const ADMINISTRATIVE_ORGANIZATION_ROLES = ["owner", "admin"] as const;
-export const INVITABLE_ORGANIZATION_ROLES = ["admin", "member"] as const;
+export const INVITABLE_ORGANIZATION_ROLES = [
+  "admin",
+  "member",
+  "external",
+] as const;
 
 export const OrganizationRole = Schema.Literal(...ORGANIZATION_ROLES);
 export type OrganizationRole = Schema.Schema.Type<typeof OrganizationRole>;
@@ -20,6 +34,13 @@ export const AdministrativeOrganizationRole = Schema.Literal(
 );
 export type AdministrativeOrganizationRole = Schema.Schema.Type<
   typeof AdministrativeOrganizationRole
+>;
+
+export const InternalOrganizationRole = Schema.Literal(
+  ...INTERNAL_ORGANIZATION_ROLES
+);
+export type InternalOrganizationRole = Schema.Schema.Type<
+  typeof InternalOrganizationRole
 >;
 
 export const InvitableOrganizationRole = Schema.Literal(
@@ -119,11 +140,26 @@ export function decodeOrganizationRole(input: unknown): OrganizationRole {
 const administrativeOrganizationRoleSet = new Set<OrganizationRole>(
   ADMINISTRATIVE_ORGANIZATION_ROLES
 );
+const internalOrganizationRoleSet = new Set<OrganizationRole>(
+  INTERNAL_ORGANIZATION_ROLES
+);
 
 export function isAdministrativeOrganizationRole(
   role: OrganizationRole
 ): boolean {
   return administrativeOrganizationRoleSet.has(role);
+}
+
+export function isInternalOrganizationRole(
+  role: OrganizationRole
+): role is InternalOrganizationRole {
+  return internalOrganizationRoleSet.has(role);
+}
+
+export function isExternalOrganizationRole(
+  role: OrganizationRole
+): role is "external" {
+  return role === "external";
 }
 
 export function decodeOrganizationMemberRoleResponse(

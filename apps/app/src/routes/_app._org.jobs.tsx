@@ -21,7 +21,10 @@ import {
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
-import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
+import {
+  canUseInternalJobOptions,
+  decodeJobsViewerUserId,
+} from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
@@ -79,19 +82,25 @@ export async function loadJobsRouteData(
     };
   }
 
-  const [activeRole, list, options] = await Promise.all([
-    resolveJobsRouteOrganizationRole(resolvedOrganizationAccess),
-    listAllCurrentServerJobs({}),
-    getCurrentServerJobOptions(),
+  const listPromise = listAllCurrentServerJobs({});
+  const activeRole = await resolveJobsRouteOrganizationRole(
+    resolvedOrganizationAccess
+  );
+  const viewer = {
+    role: activeRole,
+    userId: resolvedOrganizationAccess.currentUserId,
+  } satisfies JobsViewer;
+  const [list, options] = await Promise.all([
+    listPromise,
+    canUseInternalJobOptions(viewer)
+      ? getCurrentServerJobOptions()
+      : Promise.resolve(EMPTY_JOBS_OPTIONS),
   ]);
 
   return {
     list,
     options,
-    viewer: {
-      role: activeRole,
-      userId: resolvedOrganizationAccess.currentUserId,
-    } satisfies JobsViewer,
+    viewer,
   };
 }
 

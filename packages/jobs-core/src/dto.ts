@@ -10,6 +10,9 @@ import {
   JobActivityEventTypeSchema,
   JobBlockedReasonSchema,
   JobCommentBodySchema,
+  JobCollaboratorAccessLevelSchema,
+  JobCollaboratorRoleLabelSchema,
+  JobCollaboratorSubjectTypeSchema,
   JobCostLineDescriptionSchema,
   JobCostLineQuantitySchema,
   JobCostLineTaxRateBasisPointsSchema,
@@ -35,6 +38,7 @@ import {
   ContactId,
   CostLineId,
   JobLabelId,
+  JobCollaboratorId,
   OrganizationId,
   RateCardId,
   RateCardLineId,
@@ -258,6 +262,18 @@ export const JobCommentSchema = Schema.Struct({
   createdAt: IsoDateTimeString,
 });
 export type JobComment = Schema.Schema.Type<typeof JobCommentSchema>;
+
+export const JobCollaboratorSchema = Schema.Struct({
+  id: JobCollaboratorId,
+  workItemId: WorkItemId,
+  subjectType: JobCollaboratorSubjectTypeSchema,
+  userId: Schema.optional(UserId),
+  roleLabel: JobCollaboratorRoleLabelSchema,
+  accessLevel: JobCollaboratorAccessLevelSchema,
+  createdAt: IsoDateTimeString,
+  updatedAt: IsoDateTimeString,
+});
+export type JobCollaborator = Schema.Schema.Type<typeof JobCollaboratorSchema>;
 
 export const JobActivityJobCreatedPayloadSchema = Schema.Struct({
   eventType: Schema.Literal("job_created"),
@@ -610,6 +626,40 @@ export type AddJobCommentResponse = Schema.Schema.Type<
   typeof AddJobCommentResponseSchema
 >;
 
+export const AttachJobCollaboratorInputSchema = Schema.Struct({
+  userId: UserId,
+  roleLabel: JobCollaboratorRoleLabelSchema,
+  accessLevel: JobCollaboratorAccessLevelSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type AttachJobCollaboratorInput = Schema.Schema.Type<
+  typeof AttachJobCollaboratorInputSchema
+>;
+
+export const UpdateJobCollaboratorInputSchema = Schema.Struct({
+  roleLabel: Schema.optional(JobCollaboratorRoleLabelSchema),
+  accessLevel: Schema.optional(JobCollaboratorAccessLevelSchema),
+}).pipe(
+  Schema.filter(
+    (input) => input.roleLabel !== undefined || input.accessLevel !== undefined
+  ),
+  Schema.annotations({
+    message: () => "Expected at least one collaborator field to update",
+    parseOptions: { onExcessProperty: "error" },
+  })
+);
+export type UpdateJobCollaboratorInput = Schema.Schema.Type<
+  typeof UpdateJobCollaboratorInputSchema
+>;
+
+export const JobCollaboratorsResponseSchema = Schema.Struct({
+  collaborators: Schema.Array(JobCollaboratorSchema),
+});
+export type JobCollaboratorsResponse = Schema.Schema.Type<
+  typeof JobCollaboratorsResponseSchema
+>;
+
 export const AddJobVisitInputSchema = Schema.Struct({
   visitDate: IsoDateString,
   note: JobVisitNoteSchema,
@@ -744,29 +794,6 @@ export type JobContactDetail = Schema.Schema.Type<
   typeof JobContactDetailSchema
 >;
 
-export const JobDetailSchema = Schema.Struct({
-  job: JobSchema,
-  contact: Schema.optional(JobContactDetailSchema),
-  comments: Schema.Array(JobCommentSchema),
-  activity: Schema.Array(JobActivitySchema),
-  visits: Schema.Array(JobVisitSchema),
-  costLines: Schema.Array(JobCostLineSchema),
-  costSummary: JobCostSummarySchema,
-});
-export type JobDetail = Schema.Schema.Type<typeof JobDetailSchema>;
-
-export const JobListResponseSchema = Schema.Struct({
-  items: Schema.Array(JobListItemSchema),
-  nextCursor: Schema.optional(JobListCursor),
-});
-export type JobListResponse = Schema.Schema.Type<typeof JobListResponseSchema>;
-
-export const JobMemberOptionSchema = Schema.Struct({
-  id: UserId,
-  name: Schema.String,
-});
-export type JobMemberOption = Schema.Schema.Type<typeof JobMemberOptionSchema>;
-
 export const JobSiteOptionSchema = Schema.Struct({
   id: SiteId,
   name: Schema.String,
@@ -785,6 +812,56 @@ export const JobSiteOptionSchema = Schema.Struct({
   geocodedAt: IsoDateTimeString,
 });
 export type JobSiteOption = Schema.Schema.Type<typeof JobSiteOptionSchema>;
+
+// Job detail intentionally returns the same rich site shape as site options.
+export const JobSiteDetailSchema = JobSiteOptionSchema;
+export type JobSiteDetail = Schema.Schema.Type<typeof JobSiteDetailSchema>;
+
+export const JobViewerAccessSchema = Schema.Struct({
+  visibility: Schema.Literal("internal", "external"),
+  canComment: Schema.Boolean,
+});
+export type JobViewerAccess = Schema.Schema.Type<typeof JobViewerAccessSchema>;
+
+export const JobDetailSchema = Schema.Struct({
+  job: JobSchema,
+  contact: Schema.optional(JobContactDetailSchema),
+  site: Schema.optional(JobSiteDetailSchema),
+  viewerAccess: JobViewerAccessSchema,
+  comments: Schema.Array(JobCommentSchema),
+  activity: Schema.Array(JobActivitySchema),
+  visits: Schema.Array(JobVisitSchema),
+  costs: Schema.optional(
+    Schema.Struct({
+      lines: Schema.Array(JobCostLineSchema),
+      summary: JobCostSummarySchema,
+    })
+  ),
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobDetail = Schema.Schema.Type<typeof JobDetailSchema>;
+
+export const JobListResponseSchema = Schema.Struct({
+  items: Schema.Array(JobListItemSchema),
+  nextCursor: Schema.optional(JobListCursor),
+});
+export type JobListResponse = Schema.Schema.Type<typeof JobListResponseSchema>;
+
+export const JobMemberOptionSchema = Schema.Struct({
+  id: UserId,
+  name: Schema.String,
+});
+export type JobMemberOption = Schema.Schema.Type<typeof JobMemberOptionSchema>;
+
+export const JobExternalMemberOptionSchema = Schema.Struct({
+  email: Schema.String,
+  id: UserId,
+  name: Schema.String,
+});
+export type JobExternalMemberOption = Schema.Schema.Type<
+  typeof JobExternalMemberOptionSchema
+>;
 
 export const CreateSiteResponseSchema = JobSiteOptionSchema;
 export type CreateSiteResponse = Schema.Schema.Type<
@@ -826,6 +903,13 @@ export const JobMemberOptionsResponseSchema = Schema.Struct({
 });
 export type JobMemberOptionsResponse = Schema.Schema.Type<
   typeof JobMemberOptionsResponseSchema
+>;
+
+export const JobExternalMemberOptionsResponseSchema = Schema.Struct({
+  members: Schema.Array(JobExternalMemberOptionSchema),
+});
+export type JobExternalMemberOptionsResponse = Schema.Schema.Type<
+  typeof JobExternalMemberOptionsResponseSchema
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({

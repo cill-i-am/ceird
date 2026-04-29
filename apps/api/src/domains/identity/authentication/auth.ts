@@ -2,16 +2,26 @@ import { createHash } from "node:crypto";
 
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import {
+  isAdministrativeOrganizationRole,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeUpdateOrganizationInput,
 } from "@task-tracker/identity-core";
-import type { PublicInvitationPreview } from "@task-tracker/identity-core";
+import type {
+  OrganizationRole,
+  PublicInvitationPreview,
+} from "@task-tracker/identity-core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
+import type { Role } from "better-auth/plugins/access";
 import { organization } from "better-auth/plugins/organization";
+import {
+  adminAc,
+  memberAc,
+  ownerAc,
+} from "better-auth/plugins/organization/access";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Runtime } from "effect";
@@ -29,17 +39,36 @@ import type { AuthenticationConfig } from "./config.js";
 import {
   authSchema,
   invitation as invitationTable,
+  member as memberTable,
   organization as organizationTable,
+  session as sessionTable,
 } from "./schema.js";
 
 export { matchesTrustedOrigin } from "./config.js";
 
 const ORGANIZATION_INVITATION_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
 const INVALID_ORGANIZATION_ROLE_MESSAGE =
-  "Organization role must be one of owner, admin, or member.";
+  "Organization role must be one of owner, admin, member, or external.";
+const BETTER_AUTH_ORGANIZATION_ROLES: Record<OrganizationRole, Role> = {
+  admin: adminAc,
+  external: memberAc,
+  member: memberAc,
+  owner: ownerAc,
+};
 const PUBLIC_INVITATION_PREVIEW_PATH_PATTERN =
   /^\/api\/public\/invitations\/([^/]+)\/preview$/;
+const ADMINISTRATIVE_ORGANIZATION_ENDPOINT_PATHS = [
+  "/organization/get-full-organization",
+  "/organization/list-invitations",
+  "/organization/list-members",
+] as const;
 const ORGANIZATION_UPDATE_INPUT_FIELDS = new Set(["name"]);
+const SESSION_COOKIE_NAMES = [
+  "better-auth.session_token",
+  "__Secure-better-auth.session_token",
+  "__Host-better-auth.session_token",
+  "better-auth-session_token",
+] as const;
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
@@ -219,7 +248,7 @@ export function createAuthentication(options: {
   } = options;
   const { databaseUrl: _databaseUrl, ...authConfig } = config;
 
-  return betterAuth({
+  const auth = betterAuth({
     ...authConfig,
     advanced: {
       ...authConfig.advanced,
@@ -235,6 +264,7 @@ export function createAuthentication(options: {
       organization({
         cancelPendingInvitationsOnReInvite: true,
         invitationExpiresIn: ORGANIZATION_INVITATION_EXPIRATION_SECONDS,
+        roles: BETTER_AUTH_ORGANIZATION_ROLES,
         organizationHooks: {
           beforeCreateOrganization: ({ organization: nextOrganization }) => {
             let input;
@@ -371,6 +401,10 @@ export function createAuthentication(options: {
       },
     },
   });
+
+  auth.handler = withAuthenticationAuthorizationGuards(auth.handler, database);
+
+  return auth;
 }
 
 function makeAuthenticationBackgroundTaskHandler() {
@@ -460,6 +494,177 @@ function appendVaryHeader(headers: Headers, value: string) {
     value,
   ]);
   headers.set("Vary", [...values].join(", "));
+}
+
+function withAuthenticationAuthorizationGuards(
+  handler: (request: Request) => Promise<Response>,
+  database: NodePgDatabase<typeof authSchema>
+) {
+  return async (request: Request) => {
+    if (isAdministrativeOrganizationEndpointRequest(request)) {
+      const access = await resolveAdministrativeOrganizationEndpointAccess(
+        database,
+        request
+      );
+
+      if (access === "nonAdministrative") {
+        return Response.json(
+          {
+            code: "FORBIDDEN",
+            message:
+              "Only organization owners and admins can access organization administration.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    return handler(request);
+  };
+}
+
+function isAdministrativeOrganizationEndpointRequest(request: Request) {
+  const { pathname } = new URL(request.url);
+
+  return (
+    request.method === "GET" &&
+    ADMINISTRATIVE_ORGANIZATION_ENDPOINT_PATHS.some(
+      (endpointPath) =>
+        pathname === endpointPath || pathname.endsWith(endpointPath)
+    )
+  );
+}
+
+async function resolveAdministrativeOrganizationEndpointAccess(
+  database: NodePgDatabase<typeof authSchema>,
+  request: Request
+): Promise<"administrative" | "nonAdministrative" | "unknown"> {
+  const sessionToken = extractBetterAuthSessionToken(
+    request.headers.get("cookie")
+  );
+
+  if (sessionToken === undefined) {
+    return "unknown";
+  }
+
+  const [session] = await database
+    .select({
+      activeOrganizationId: sessionTable.activeOrganizationId,
+      userId: sessionTable.userId,
+    })
+    .from(sessionTable)
+    .where(
+      and(
+        eq(sessionTable.token, sessionToken),
+        gt(sessionTable.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+
+  if (session === undefined) {
+    return "unknown";
+  }
+
+  const organizationId = await resolveAdministrativeOrganizationTargetId(
+    database,
+    request,
+    session.activeOrganizationId
+  );
+
+  if (organizationId === null) {
+    return "nonAdministrative";
+  }
+
+  const [member] = await database
+    .select({
+      role: memberTable.role,
+    })
+    .from(memberTable)
+    .where(
+      and(
+        eq(memberTable.organizationId, organizationId),
+        eq(memberTable.userId, session.userId)
+      )
+    )
+    .limit(1);
+
+  if (member === undefined) {
+    return "unknown";
+  }
+
+  return isAdministrativeOrganizationRole(decodeOrganizationRole(member.role))
+    ? "administrative"
+    : "nonAdministrative";
+}
+
+async function resolveAdministrativeOrganizationTargetId(
+  database: NodePgDatabase<typeof authSchema>,
+  request: Request,
+  activeOrganizationId: string | null
+) {
+  const { searchParams } = new URL(request.url);
+  const organizationSlug = searchParams.get("organizationSlug");
+
+  if (organizationSlug !== null) {
+    const [organizationRow] = await database
+      .select({
+        id: organizationTable.id,
+      })
+      .from(organizationTable)
+      .where(eq(organizationTable.slug, organizationSlug))
+      .limit(1);
+
+    return organizationRow?.id ?? null;
+  }
+
+  return searchParams.get("organizationId") ?? activeOrganizationId;
+}
+
+function extractBetterAuthSessionToken(cookieHeader: string | null) {
+  if (cookieHeader === null) {
+    return;
+  }
+
+  for (const cookie of cookieHeader.split(";")) {
+    const separatorIndex = cookie.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const name = cookie.slice(0, separatorIndex).trim();
+
+    if (!isBetterAuthSessionCookieName(name)) {
+      continue;
+    }
+
+    const rawValue = decodeCookieValue(cookie.slice(separatorIndex + 1).trim());
+    const [token] = rawValue.split(".", 1);
+
+    if (token && token.length > 0) {
+      return token;
+    }
+
+    return;
+  }
+}
+
+function isBetterAuthSessionCookieName(name: string) {
+  return (
+    SESSION_COOKIE_NAMES.includes(
+      name as (typeof SESSION_COOKIE_NAMES)[number]
+    ) ||
+    name.endsWith("better-auth.session_token") ||
+    name.endsWith("better-auth-session_token")
+  );
+}
+
+function decodeCookieValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function withAuthenticationCors(

@@ -208,8 +208,11 @@ describe("nav main", () => {
       expect(
         getPrimaryNavItemsForRole("member").map((item) => item.url)
       ).toStrictEqual(["/", "/jobs", "/sites"]);
+      expect(
+        getPrimaryNavItemsForRole("external").map((item) => item.url)
+      ).toStrictEqual(["/jobs"]);
       expect(getPrimaryNavItemsForRole().map((item) => item.url)).toStrictEqual(
-        ["/", "/jobs", "/sites"]
+        ["/jobs"]
       );
     }
   );

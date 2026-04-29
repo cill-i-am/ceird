@@ -1,6 +1,8 @@
 import type { JobActivityPayload } from "@task-tracker/jobs-core";
 import {
   JOB_ACTIVITY_EVENT_TYPES,
+  JOB_COLLABORATOR_ACCESS_LEVELS,
+  JOB_COLLABORATOR_SUBJECT_TYPES,
   JOB_COST_LINE_TYPES,
   JOB_KINDS,
   JOB_PRIORITIES,
@@ -27,7 +29,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { organization, user } from "../identity/authentication/schema.js";
+import {
+  member,
+  organization,
+  user,
+} from "../identity/authentication/schema.js";
 import { generateJobDomainUuid } from "./id-generation.js";
 
 const jobsTimestamp = (name: string) =>
@@ -47,6 +53,12 @@ const kindValuesSql = sql.raw(
 );
 const activityEventTypeValuesSql = sql.raw(
   JOB_ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const collaboratorSubjectTypeValuesSql = sql.raw(
+  JOB_COLLABORATOR_SUBJECT_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const collaboratorAccessLevelValuesSql = sql.raw(
+  JOB_COLLABORATOR_ACCESS_LEVELS.map((value) => `'${value}'`).join(", ")
 );
 const jobLabelNameMaxLength = 48;
 const rateCardLineKindValuesSql = sql.raw(
@@ -406,6 +418,64 @@ export const workItem = pgTable(
   ]
 );
 
+export const workItemCollaborator = pgTable(
+  "work_item_collaborators",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    subjectType: text("subject_type").notNull().default("user"),
+    userId: text("user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+    roleLabel: text("role_label").notNull(),
+    accessLevel: text("access_level").notNull().default("comment"),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: jobsTimestamp("created_at"),
+    updatedAt: jobsTimestamp("updated_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_collaborators_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [member.organizationId, member.userId],
+      name: "work_item_collaborators_member_fk",
+    }).onDelete("cascade"),
+    check(
+      "work_item_collaborators_subject_type_chk",
+      sql`${table.subjectType} in (${collaboratorSubjectTypeValuesSql})`
+    ),
+    check(
+      "work_item_collaborators_user_subject_chk",
+      sql`${table.subjectType} <> 'user' or ${table.userId} is not null`
+    ),
+    check(
+      "work_item_collaborators_access_level_chk",
+      sql`${table.accessLevel} in (${collaboratorAccessLevelValuesSql})`
+    ),
+    check(
+      "work_item_collaborators_role_label_not_empty_chk",
+      sql`length(trim(${table.roleLabel})) > 0`
+    ),
+    uniqueIndex("work_item_collaborators_user_unique_idx")
+      .on(table.organizationId, table.workItemId, table.userId)
+      .where(sql`${table.subjectType} = 'user'`),
+    index("work_item_collaborators_user_lookup_idx").on(
+      table.organizationId,
+      table.userId,
+      table.workItemId
+    ),
+  ]
+);
+
 export const workItemLabel = pgTable(
   "work_item_labels",
   {
@@ -666,6 +736,7 @@ export const siteContactRelations = relations(siteContact, ({ one }) => ({
 
 export const workItemRelations = relations(workItem, ({ many, one }) => ({
   activity: many(workItemActivity),
+  workItemCollaborators: many(workItemCollaborator),
   comments: many(workItemComment),
   contact: one(contact, {
     fields: [workItem.contactId],
@@ -679,6 +750,28 @@ export const workItemRelations = relations(workItem, ({ many, one }) => ({
   labels: many(workItemLabel),
   visits: many(workItemVisit),
 }));
+
+export const workItemCollaboratorRelations = relations(
+  workItemCollaborator,
+  ({ one }) => ({
+    createdBy: one(user, {
+      fields: [workItemCollaborator.createdByUserId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [workItemCollaborator.organizationId],
+      references: [organization.id],
+    }),
+    user: one(user, {
+      fields: [workItemCollaborator.userId],
+      references: [user.id],
+    }),
+    workItem: one(workItem, {
+      fields: [workItemCollaborator.workItemId],
+      references: [workItem.id],
+    }),
+  })
+);
 
 export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
   label: one(jobLabel, {
@@ -766,6 +859,7 @@ export const jobsSchema = {
   siteContact,
   workItem,
   workItemActivity,
+  workItemCollaborator,
   workItemCostLine,
   workItemComment,
   workItemLabel,

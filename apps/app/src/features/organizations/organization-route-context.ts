@@ -9,3 +9,12 @@ export function useCurrentOrganizationRoleFromMatches() {
     select: (match) => match.context.currentOrganizationRole,
   });
 }
+
+export function useIsInOrganizationRoute() {
+  return Boolean(
+    useMatch({
+      from: "/_app/_org",
+      shouldThrow: false,
+    })
+  );
+}

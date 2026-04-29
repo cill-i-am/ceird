@@ -266,9 +266,15 @@ function buildDetail() {
         workItemId,
       },
     ],
-    costLines: [],
-    costSummary: {
-      subtotalMinor: 0,
+    costs: {
+      lines: [],
+      summary: {
+        subtotalMinor: 0,
+      },
+    },
+    viewerAccess: {
+      canComment: true,
+      visibility: "internal" as const,
     },
     contact: {
       email: "pat@example.com",

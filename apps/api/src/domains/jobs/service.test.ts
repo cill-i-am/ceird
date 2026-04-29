@@ -7,6 +7,7 @@ import {
   calculateJobCostSummary,
   CommentId,
   CostLineId,
+  JobCollaboratorId,
   JobLabelId,
   JobAccessDeniedError,
   JobCostSummaryLimitExceededError,
@@ -24,6 +25,8 @@ import type {
   Job,
   JobComment,
   JobCostLine,
+  JobCollaborator,
+  JobCollaboratorAccessLevel,
   JobActivity,
   JobActivityPayload,
   JobDetail,
@@ -68,6 +71,7 @@ import { SiteGeocoder } from "./site-geocoder.js";
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
+const decodeJobCollaboratorId = Schema.decodeUnknownSync(JobCollaboratorId);
 const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
 const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
@@ -82,6 +86,10 @@ const serviceAreaId = "99999999-9999-4999-8999-999999999999" as ServiceAreaId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
 const labelId = decodeJobLabelId("88888888-8888-4888-8888-888888888888");
 const costLineId = decodeCostLineId("99999999-9999-4999-8999-999999999998");
+const collaboratorId = decodeJobCollaboratorId(
+  "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+);
+const externalUserId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as UserId;
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const inlineSiteInput = {
   addressLine1: "1 Custom House Quay",
@@ -133,6 +141,7 @@ interface JobsServiceHarnessOptions {
   readonly lockedJob?: Job;
   readonly removeLabelChanged?: boolean;
   readonly costLineFailure?: JobCostSummaryLimitExceededError;
+  readonly grantAccessLevel?: JobCollaboratorAccessLevel;
   readonly serviceAreaFailure?: ServiceAreaNotFoundError;
   readonly serviceAreaStorageFailure?: SqlError;
   readonly transactionFailure?: OrganizationMemberNotFoundError;
@@ -151,14 +160,23 @@ interface JobsServiceHarness {
     createSite: number;
     ensureServiceArea: number;
     findByIdForUpdate: number;
+    findUserCollaboratorGrant: number;
     geocode: number;
+    list: number;
+    listCollaborators: number;
     listLabels: number;
+    listExternalMemberOptions: number;
+    listMemberOptions: number;
     linkContact: number;
     listOrganizationActivity: number;
     patch: number;
+    attachCollaborator: number;
+    removeCollaborator: number;
     removeLabel: number;
+    reopen: number;
     transition: number;
     updateLabel: number;
+    updateCollaborator: number;
   };
   readonly layer: Layer.Layer<
     JobsService | HttpServerRequest.HttpServerRequest
@@ -181,14 +199,23 @@ function makeHarness(
     createSite: 0,
     ensureServiceArea: 0,
     findByIdForUpdate: 0,
+    findUserCollaboratorGrant: 0,
     geocode: 0,
+    list: 0,
+    listCollaborators: 0,
     listLabels: 0,
+    listExternalMemberOptions: 0,
+    listMemberOptions: 0,
     linkContact: 0,
     listOrganizationActivity: 0,
     patch: 0,
+    attachCollaborator: 0,
+    removeCollaborator: 0,
     removeLabel: 0,
+    reopen: 0,
     transition: 0,
     updateLabel: 0,
+    updateCollaborator: 0,
   };
   const jobLabel = {
     createdAt: "2026-04-22T10:00:00.000Z",
@@ -197,6 +224,16 @@ function makeHarness(
     updatedAt: "2026-04-22T10:00:00.000Z",
   } satisfies JobLabel;
   const activityPayloads: JobActivityPayload[] = [];
+  const collaborator = {
+    accessLevel: options.grantAccessLevel ?? "comment",
+    createdAt: "2026-04-22T10:00:00.000Z",
+    id: collaboratorId,
+    roleLabel: "Tenant contact",
+    subjectType: "user",
+    updatedAt: "2026-04-22T10:00:00.000Z",
+    userId: actor.userId,
+    workItemId,
+  } satisfies JobCollaborator;
 
   const jobsRepository = JobsRepository.make({
     addActivity: (input: {
@@ -220,6 +257,7 @@ function makeHarness(
     addComment: (input: {
       readonly authorUserId: UserId;
       readonly body: string;
+      readonly organizationId: OrganizationId;
       readonly workItemId: Job["id"];
     }) =>
       Effect.succeed({
@@ -300,6 +338,42 @@ function makeHarness(
           title: input.title,
         });
       }),
+    attachCollaborator: (input: {
+      readonly accessLevel: JobCollaboratorAccessLevel;
+      readonly createdByUserId: UserId;
+      readonly organizationId: OrganizationId;
+      readonly roleLabel: string;
+      readonly userId: UserId;
+      readonly workItemId: Job["id"];
+    }) =>
+      Effect.sync(() => {
+        calls.attachCollaborator += 1;
+        expect(input.createdByUserId).toBe(actor.userId);
+        expect(input.organizationId).toBe(actor.organizationId);
+
+        return {
+          ...collaborator,
+          accessLevel: input.accessLevel,
+          roleLabel: input.roleLabel,
+          userId: input.userId,
+          workItemId: input.workItemId,
+        } satisfies JobCollaborator;
+      }),
+    findUserCollaboratorGrant: (
+      _organizationId: OrganizationId,
+      _workItemId: Job["id"],
+      _userId: UserId
+    ) =>
+      Effect.sync(() => {
+        calls.findUserCollaboratorGrant += 1;
+
+        return options.grantAccessLevel === undefined
+          ? Option.none<JobCollaborator>()
+          : Option.some({
+              ...collaborator,
+              accessLevel: options.grantAccessLevel,
+            });
+      }),
     findById: (_organizationId: OrganizationId, _workItemId: Job["id"]) =>
       Effect.succeed(Option.some(lockedJob)),
     findByIdForUpdate: (
@@ -311,13 +385,22 @@ function makeHarness(
 
         return Option.some(lockedJob);
       }),
-    getDetail: (_organizationId: OrganizationId, _workItemId: Job["id"]) =>
+    getDetail: (
+      _organizationId: OrganizationId,
+      _workItemId: Job["id"],
+      access?: { readonly visibility: "external" | "internal" }
+    ) =>
       Effect.succeed(
         Option.some({
           activity: [],
           comments: [],
-          costLines: [],
-          costSummary: calculateJobCostSummary([]),
+          costs:
+            access?.visibility === "external"
+              ? undefined
+              : {
+                  lines: [],
+                  summary: calculateJobCostSummary([]),
+                },
           job: {
             ...lockedJob,
             labels:
@@ -325,16 +408,57 @@ function makeHarness(
                 ? [jobLabel]
                 : lockedJob.labels,
           },
+          viewerAccess: {
+            canComment:
+              access?.visibility === "external"
+                ? options.grantAccessLevel === "comment"
+                : true,
+            visibility: access?.visibility ?? "internal",
+          },
           visits: [],
         } satisfies JobDetail)
       ),
-    list: (_organizationId: OrganizationId, _query: unknown) =>
-      Effect.succeed({
-        items: [],
-        nextCursor: undefined,
-      } satisfies JobListResponse),
+    list: (
+      _organizationId: OrganizationId,
+      _query: unknown,
+      _access?: { readonly visibility: "external" | "internal" }
+    ) =>
+      Effect.sync(() => {
+        calls.list += 1;
+
+        return {
+          items: [],
+          nextCursor: undefined,
+        } satisfies JobListResponse;
+      }),
+    listAccessibleWorkItemIdsForUser: (
+      _organizationId: OrganizationId,
+      _userId: UserId
+    ) =>
+      Effect.succeed(
+        options.grantAccessLevel === undefined ? [] : [workItemId]
+      ),
+    listCollaborators: (
+      _organizationId: OrganizationId,
+      _workItemId: Job["id"]
+    ) =>
+      Effect.sync(() => {
+        calls.listCollaborators += 1;
+
+        return [collaborator] satisfies readonly JobCollaborator[];
+      }),
     listMemberOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly JobMemberOption[]),
+      Effect.sync(() => {
+        calls.listMemberOptions += 1;
+
+        return [] satisfies readonly JobMemberOption[];
+      }),
+    listExternalMemberOptions: (_organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        calls.listExternalMemberOptions += 1;
+
+        return [];
+      }),
     listOrganizationActivity: (
       _organizationId: OrganizationId,
       _query: OrganizationActivityQuery
@@ -357,8 +481,22 @@ function makeHarness(
 
         return Option.some(lockedJob);
       }),
+    removeCollaborator: (
+      _organizationId: OrganizationId,
+      _workItemId: Job["id"],
+      _collaboratorId: JobCollaborator["id"]
+    ) =>
+      Effect.sync(() => {
+        calls.removeCollaborator += 1;
+
+        return collaborator;
+      }),
     reopen: (_organizationId: OrganizationId, _workItemId: Job["id"]) =>
-      Effect.succeed(Option.some(makeJob({ status: "in_progress" }))),
+      Effect.sync(() => {
+        calls.reopen += 1;
+
+        return Option.some(makeJob({ status: "in_progress" }));
+      }),
     transition: (
       _organizationId: OrganizationId,
       _workItemId: Job["id"],
@@ -380,6 +518,20 @@ function makeHarness(
             status: input.status,
           })
         );
+      }),
+    updateCollaborator: (
+      _organizationId: OrganizationId,
+      _workItemId: Job["id"],
+      _collaboratorId: JobCollaborator["id"],
+      input: Partial<Pick<JobCollaborator, "accessLevel" | "roleLabel">>
+    ) =>
+      Effect.sync(() => {
+        calls.updateCollaborator += 1;
+
+        return {
+          ...collaborator,
+          ...input,
+        };
       }),
     withTransaction: <Value, Error, Requirements>(
       effect: Effect.Effect<Value, Error, Requirements>
@@ -871,6 +1023,218 @@ describe("jobs service", () => {
     expect(harness.calls.listOrganizationActivity).toBe(0);
   }, 10_000);
 
+  it("denies external actors loading ungranted job detail", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getDetail(workItemId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(
+      new JobAccessDeniedError({
+        message: "External collaborators can only view jobs granted to them",
+        workItemId,
+      })
+    );
+    expect(harness.calls.findUserCollaboratorGrant).toBe(1);
+  }, 10_000);
+
+  it("allows external actors to list granted jobs and load redacted detail", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      grantAccessLevel: "read",
+    });
+
+    const [list, detail] = await Promise.all([
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.list({});
+        }),
+        harness
+      ),
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.getDetail(workItemId);
+        }),
+        harness
+      ),
+    ]);
+
+    expect(list.items).toHaveLength(0);
+    expect(detail.costs).toBeUndefined();
+    expect(detail.viewerAccess).toStrictEqual({
+      canComment: false,
+      visibility: "external",
+    });
+    expect(harness.calls.list).toBe(1);
+    expect(harness.calls.findUserCollaboratorGrant).toBe(1);
+  }, 10_000);
+
+  it("denies external actors adding ungranted job comments", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addComment(workItemId, {
+          body: "Can you share the access code?",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toStrictEqual(
+      new JobAccessDeniedError({
+        message:
+          "External collaborators need comment access to comment on jobs",
+        workItemId,
+      })
+    );
+    expect(harness.calls.findByIdForUpdate).toBe(0);
+    expect(harness.calls.findUserCollaboratorGrant).toBe(1);
+  }, 10_000);
+
+  it("allows external actors with comment grants to add comments", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      grantAccessLevel: "comment",
+    });
+
+    const comment = await runJobsService(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addComment(workItemId, {
+          body: "Can you share the access code?",
+        });
+      }),
+      harness
+    );
+
+    expect(comment.body).toBe("Can you share the access code?");
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.findUserCollaboratorGrant).toBe(1);
+  }, 10_000);
+
+  it("lets owners manage job collaborators", async () => {
+    const harness = makeHarness({ actor: makeActor("owner") });
+
+    const [attached, listed, updated, removed] = await runJobsService(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+        const attachedCollaborator = yield* jobs.attachCollaborator(
+          workItemId,
+          {
+            accessLevel: "comment",
+            roleLabel: "Tenant contact",
+            userId: externalUserId,
+          }
+        );
+        const collaborators = yield* jobs.listCollaborators(workItemId);
+        const updatedCollaborator = yield* jobs.updateCollaborator(
+          workItemId,
+          collaboratorId,
+          {
+            accessLevel: "read",
+          }
+        );
+        const removedCollaborator = yield* jobs.removeCollaborator(
+          workItemId,
+          collaboratorId
+        );
+
+        return [
+          attachedCollaborator,
+          collaborators,
+          updatedCollaborator,
+          removedCollaborator,
+        ] as const;
+      }),
+      harness
+    );
+
+    expect(attached.userId).toBe(externalUserId);
+    expect(listed.collaborators).toHaveLength(1);
+    expect(updated.accessLevel).toBe("read");
+    expect(removed.id).toBe(collaboratorId);
+    expect(harness.calls.attachCollaborator).toBe(1);
+    expect(harness.calls.listCollaborators).toBe(1);
+    expect(harness.calls.updateCollaborator).toBe(1);
+    expect(harness.calls.removeCollaborator).toBe(1);
+  }, 10_000);
+
+  it("denies external actors loading organization-wide options data", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const list = await runJobsService(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.list({});
+      }),
+      harness
+    );
+    const exits = await Promise.all([
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.getOptions();
+        }),
+        harness
+      ),
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.listJobLabels();
+        }),
+        harness
+      ),
+      runJobsServiceExit(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.getMemberOptions();
+        }),
+        harness
+      ),
+    ]);
+
+    const failures = exits.map((exit) =>
+      getFailure(exit as Exit.Exit<unknown, unknown>)
+    );
+
+    expect(failures).toStrictEqual([
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide jobs data",
+      }),
+    ]);
+    expect(list.items).toHaveLength(0);
+    expect(harness.calls.list).toBe(1);
+    expect(harness.calls.listLabels).toBe(0);
+    expect(harness.calls.listMemberOptions).toBe(0);
+  }, 10_000);
+
   it("geocodes inline site creation before creating the job", async () => {
     const harness = makeHarness();
 
@@ -1027,6 +1391,60 @@ describe("jobs service", () => {
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 
+  it("denies external actors before validating transition input", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      lockedJob: makeJob({ status: "in_progress" }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.transition(workItemId, {
+          status: "blocked",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "External collaborators cannot change job status",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.transition).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("denies external actors before validating reopen eligibility", async () => {
+    const harness = makeHarness({
+      actor: makeActor("external"),
+      lockedJob: makeJob({ status: "in_progress" }),
+    });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.reopen(workItemId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Members can only reopen jobs assigned to them",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
+    expect(harness.calls.reopen).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
   it("rejects visit durations that are not whole-hour increments before hitting persistence", async () => {
     const harness = makeHarness();
 
@@ -1046,6 +1464,33 @@ describe("jobs service", () => {
     expect(getFailure(exit)).toBeInstanceOf(VisitDurationIncrementError);
 
     expect(harness.calls.findByIdForUpdate).toBe(0);
+    expect(harness.calls.addVisit).toBe(0);
+    expect(harness.calls.addActivity).toBe(0);
+  }, 10_000);
+
+  it("denies external actors before validating visit duration", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runJobsServiceExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addVisit(workItemId, {
+          durationMinutes: 90,
+          note: "Stayed late to retest the relay.",
+          visitDate: "2026-04-22",
+        });
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Members can only log visits on jobs assigned to them",
+      workItemId,
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(1);
     expect(harness.calls.addVisit).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);

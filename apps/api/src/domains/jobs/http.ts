@@ -19,6 +19,9 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       .handle("listJobs", ({ urlParams }) => jobsService.list(urlParams))
       .handle("getJobOptions", () => jobsService.getOptions())
       .handle("getJobMemberOptions", () => jobsService.getMemberOptions())
+      .handle("getJobExternalMemberOptions", () =>
+        jobsService.getExternalMemberOptions()
+      )
       .handle("createJob", ({ payload }) => jobsService.create(payload))
       .handle("listOrganizationActivity", ({ urlParams }) =>
         jobsService.listOrganizationActivity(urlParams)
@@ -57,6 +60,22 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       )
       .handle("addJobCostLine", ({ path, payload }) =>
         jobsService.addCostLine(path.workItemId, payload)
+      )
+      .handle("listJobCollaborators", ({ path }) =>
+        jobsService.listCollaborators(path.workItemId)
+      )
+      .handle("attachJobCollaborator", ({ path, payload }) =>
+        jobsService.attachCollaborator(path.workItemId, payload)
+      )
+      .handle("updateJobCollaborator", ({ path, payload }) =>
+        jobsService.updateCollaborator(
+          path.workItemId,
+          path.collaboratorId,
+          payload
+        )
+      )
+      .handle("detachJobCollaborator", ({ path }) =>
+        jobsService.removeCollaborator(path.workItemId, path.collaboratorId)
       );
   })
 );

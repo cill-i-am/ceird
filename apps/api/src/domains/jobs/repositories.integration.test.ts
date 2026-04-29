@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import {
   calculateJobCostLineTotalMinor,
+  JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
+  JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
   JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   OrganizationId,
   ServiceAreaId,
@@ -155,6 +157,7 @@ describe("jobs repositories integration", () => {
           yield* JobsRepository.addComment({
             authorUserId: identity.ownerUserId,
             body: "Customer reported repeat water ingress by the front lobby.",
+            organizationId: identity.organizationId,
             workItemId: job.id,
           });
           yield* JobsRepository.addActivity({
@@ -211,6 +214,23 @@ describe("jobs repositories integration", () => {
       notes: "Prefers morning calls.",
       phone: "+353871234567",
     });
+    expect(detailValue.site).toMatchObject({
+      accessNotes: "Use the south gate and reception desk.",
+      addressLine1: "1 Custom House Quay",
+      country: "IE",
+      county: "Dublin",
+      eircode: "D01 X2X2",
+      geocodedAt: "2026-04-27T10:00:00.000Z",
+      geocodingProvider: "google",
+      id: createdSiteId,
+      latitude: 53.3498,
+      longitude: -6.2603,
+      name: "Docklands Campus",
+      serviceAreaId,
+      serviceAreaName: "Dublin",
+      town: "Dublin",
+    });
+    expect(detailValue.site?.addressLine2).toBeUndefined();
     expect(detailValue.comments).toHaveLength(1);
     expect(detailValue.comments[0]?.body).toContain("water ingress");
     expect(detailValue.activity).toHaveLength(1);
@@ -218,8 +238,8 @@ describe("jobs repositories integration", () => {
     expect(detailValue.visits).toHaveLength(1);
     expect(detailValue.visits[0]?.visitDate).toBe("2026-04-21");
     expect(detailValue.visits[0]?.durationMinutes).toBe(120);
-    expect(detailValue.costLines).toHaveLength(1);
-    expect(detailValue.costLines[0]).toMatchObject({
+    expect(detailValue.costs?.lines).toHaveLength(1);
+    expect(detailValue.costs?.lines[0]).toMatchObject({
       description: "Replacement seal kit",
       lineTotalMinor: 5198,
       quantity: 2,
@@ -227,7 +247,7 @@ describe("jobs repositories integration", () => {
       type: "material",
       unitPriceMinor: 2599,
     });
-    expect(detailValue.costSummary).toStrictEqual({
+    expect(detailValue.costs?.summary).toStrictEqual({
       subtotalMinor: 5198,
     });
 
@@ -493,6 +513,292 @@ describe("jobs repositories integration", () => {
     expect(byStatus.items.map((item) => item.id)).toStrictEqual([middleJobId]);
   }, 30_000);
 
+  it("manages collaborators and scopes external repository access to grants", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_collab" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository collaborator coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const serviceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "External collaboration area"
+    );
+    const siteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        addressLine1: "12 External Street",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D02 X2X2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        latitude: 53.345,
+        longitude: -6.267,
+        name: "External Tenant Site",
+        organizationId: identity.organizationId,
+        serviceAreaId,
+        town: "Dublin",
+      })
+    );
+    const contactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.create({
+        email: "external-contact@example.com",
+        name: "External Contact",
+        organizationId: identity.organizationId,
+        phone: "+353871111111",
+      })
+    );
+    const externalUserId = await insertMember(
+      databaseUrl,
+      identity.organizationId,
+      "external"
+    );
+
+    const grantedJob = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        contactId,
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        siteId,
+        title: "Repair front door closer",
+      })
+    );
+    const hiddenJob = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        title: "Replace roof hatch seal",
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      JobsRepository.addCostLine({
+        authorUserId: identity.ownerUserId,
+        description: "Closer kit",
+        organizationId: identity.organizationId,
+        quantity: 1,
+        type: "material",
+        unitPriceMinor: 4200,
+        workItemId: grantedJob.id,
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      JobsRepository.addActivity({
+        actorUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        payload: {
+          eventType: "job_created",
+          kind: grantedJob.kind,
+          priority: grantedJob.priority,
+          title: grantedJob.title,
+        },
+        workItemId: grantedJob.id,
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      JobsRepository.addVisit({
+        authorUserId: identity.ownerUserId,
+        durationMinutes: 60,
+        note: "Internal collaborator visit.",
+        organizationId: identity.organizationId,
+        visitDate: "2026-04-21",
+        workItemId: grantedJob.id,
+      })
+    );
+
+    const collaborator = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.attachCollaborator({
+        accessLevel: "comment",
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        roleLabel: "Tenant contact",
+        userId: externalUserId,
+        workItemId: grantedJob.id,
+      })
+    );
+
+    expect(collaborator).toMatchObject({
+      accessLevel: "comment",
+      roleLabel: "Tenant contact",
+      userId: externalUserId,
+      workItemId: grantedJob.id,
+    });
+
+    const duplicateExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.attachCollaborator({
+        accessLevel: "read",
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        roleLabel: "Duplicate",
+        userId: externalUserId,
+        workItemId: grantedJob.id,
+      })
+    );
+    expectFailureTag(duplicateExit, JOB_COLLABORATOR_CONFLICT_ERROR_TAG);
+
+    const grant = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.findUserCollaboratorGrant(
+          identity.organizationId,
+          grantedJob.id,
+          externalUserId
+        )
+      )
+    );
+    expect(grant.accessLevel).toBe("comment");
+
+    const externalList = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(
+        identity.organizationId,
+        {},
+        {
+          userId: externalUserId,
+          visibility: "external",
+        }
+      )
+    );
+    expect(externalList.items.map((item) => item.id)).toStrictEqual([
+      grantedJob.id,
+    ]);
+
+    const accessibleIds = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.listAccessibleWorkItemIdsForUser(
+        identity.organizationId,
+        externalUserId
+      )
+    );
+    expect(accessibleIds).toStrictEqual([grantedJob.id]);
+
+    const internalDetail = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, grantedJob.id)
+      )
+    );
+    expect(internalDetail.activity).toHaveLength(1);
+    expect(internalDetail.visits).toHaveLength(1);
+    expect(internalDetail.costs?.lines).toHaveLength(1);
+
+    const grantedDetail = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, grantedJob.id, {
+          userId: externalUserId,
+          visibility: "external",
+        })
+      )
+    );
+    expect(grantedDetail.costs).toBeUndefined();
+    expect(grantedDetail.activity).toStrictEqual([]);
+    expect(grantedDetail.visits).toStrictEqual([]);
+    expect(grantedDetail.site).toMatchObject({
+      id: siteId,
+      name: "External Tenant Site",
+    });
+    expect(grantedDetail.contact).toMatchObject({
+      email: "external-contact@example.com",
+      id: contactId,
+      name: "External Contact",
+      phone: "+353871111111",
+    });
+    expect(grantedDetail.viewerAccess).toStrictEqual({
+      canComment: true,
+      visibility: "external",
+    });
+
+    const hiddenDetail = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.getDetail(identity.organizationId, hiddenJob.id, {
+        userId: externalUserId,
+        visibility: "external",
+      })
+    );
+    expect(Option.isNone(hiddenDetail) ? "none" : "some").toBe("none");
+
+    const updated = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.updateCollaborator(
+        identity.organizationId,
+        grantedJob.id,
+        collaborator.id,
+        {
+          accessLevel: "read",
+          roleLabel: "Read-only contact",
+        }
+      )
+    );
+    expect(updated.accessLevel).toBe("read");
+
+    const wrongJobUpdateExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.updateCollaborator(
+        identity.organizationId,
+        hiddenJob.id,
+        collaborator.id,
+        {
+          roleLabel: "Wrong job update",
+        }
+      )
+    );
+    expectFailureTag(wrongJobUpdateExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
+
+    const wrongJobRemoveExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.removeCollaborator(
+        identity.organizationId,
+        hiddenJob.id,
+        collaborator.id
+      )
+    );
+    expectFailureTag(wrongJobRemoveExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
+
+    const removed = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.removeCollaborator(
+        identity.organizationId,
+        grantedJob.id,
+        collaborator.id
+      )
+    );
+    expect(removed.roleLabel).toBe("Read-only contact");
+
+    const missingRemoveExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.removeCollaborator(
+        identity.organizationId,
+        grantedJob.id,
+        collaborator.id
+      )
+    );
+    expectFailureTag(missingRemoveExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
+  }, 30_000);
+
   it("creates, assigns, removes, archives, and filters organization job labels", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -667,7 +973,9 @@ describe("jobs repositories integration", () => {
 
     const filtered = await runJobsEffect(
       databaseUrl,
-      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+      JobsRepository.list(identity.organizationId, {
+        labelId: updatedLabel.id,
+      })
     );
     expect(filtered.items.map((item) => item.id)).toStrictEqual([
       createdJob.id,
@@ -738,7 +1046,9 @@ describe("jobs repositories integration", () => {
 
     const filteredAfterArchive = await runJobsEffect(
       databaseUrl,
-      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+      JobsRepository.list(identity.organizationId, {
+        labelId: updatedLabel.id,
+      })
     );
     expect(filteredAfterArchive.items).toStrictEqual([]);
 
@@ -1157,8 +1467,8 @@ describe("jobs repositories integration", () => {
     );
     const detailValue = expectSome(detail);
 
-    expect(detailValue.costLines).toHaveLength(1);
-    expect(detailValue.costSummary).toStrictEqual({
+    expect(detailValue.costs?.lines).toHaveLength(1);
+    expect(detailValue.costs?.summary).toStrictEqual({
       subtotalMinor: calculateJobCostLineTotalMinor(firstLine),
     });
   }, 30_000);
@@ -1244,8 +1554,8 @@ describe("jobs repositories integration", () => {
     );
     const detailValue = expectSome(detail);
 
-    expect(detailValue.costLines).toHaveLength(2);
-    expect(detailValue.costSummary.subtotalMinor).toBe(
+    expect(detailValue.costs?.lines).toHaveLength(2);
+    expect(detailValue.costs?.summary.subtotalMinor).toBe(
       Number.MAX_SAFE_INTEGER - 14
     );
   }, 30_000);
@@ -1374,6 +1684,7 @@ describe("jobs repositories integration", () => {
       JobsRepository.addComment({
         authorUserId: foreignIdentity.ownerUserId,
         body: "Cross-org comment",
+        organizationId: primaryIdentity.organizationId,
         workItemId: primaryJob.id,
       })
     );
@@ -1722,6 +2033,7 @@ describe("jobs repositories integration", () => {
           yield* JobsRepository.addComment({
             authorUserId: identity.ownerUserId,
             body: "This comment should also roll back.",
+            organizationId: identity.organizationId,
             workItemId: job.id,
           });
 
@@ -2006,6 +2318,34 @@ async function insertServiceArea(
   });
 
   return serviceAreaId;
+}
+
+async function insertMember(
+  databaseUrl: string,
+  organizationId: Schema.Schema.Type<typeof OrganizationId>,
+  role: "admin" | "external" | "member" | "owner"
+) {
+  const userId = decodeUserId(randomUUID());
+
+  await withPool(databaseUrl, async (pool) => {
+    const db = drizzle(pool);
+
+    await db.insert(user).values({
+      email: `${role}-${Date.now()}-${randomUUID()}@example.com`,
+      emailVerified: true,
+      id: userId,
+      name: `${role} user`,
+    });
+    await db.insert(member).values({
+      createdAt: new Date(),
+      id: randomUUID(),
+      organizationId,
+      role,
+      userId,
+    });
+  });
+
+  return userId;
 }
 
 async function insertSite(

@@ -2,6 +2,7 @@
 
 import { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql";
+import { INTERNAL_ORGANIZATION_ROLES } from "@task-tracker/identity-core";
 import {
   ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
@@ -10,6 +11,10 @@ import {
   JobActivityPayloadSchema,
   JobActivitySchema,
   JobCommentSchema,
+  JobCollaboratorConflictError,
+  JobCollaboratorId as JobCollaboratorIdSchema,
+  JobCollaboratorNotFoundError,
+  JobCollaboratorSchema,
   JobCostLineSchema,
   JobCostLineQuantitySchema,
   JobCostSummaryLimitExceededError,
@@ -45,6 +50,7 @@ import {
   ServiceAreaSchema,
   SiteNotFoundError,
   SiteId as SiteIdSchema,
+  UserId as UserIdSchema,
   WorkItemId as WorkItemIdSchema,
   calculateJobCostLineTotalMinor,
   calculateJobCostSummary,
@@ -57,11 +63,16 @@ import type {
   JobActivity,
   JobActivityPayload,
   JobComment,
+  JobCollaborator,
+  JobCollaboratorAccessLevel,
+  JobCollaboratorIdType as JobCollaboratorId,
+  JobCollaboratorRoleLabel,
   JobCostLine,
   JobCostLineType,
   JobContactDetail,
   JobContactOption,
   JobDetail,
+  JobExternalMemberOption,
   JobExternalReference,
   JobKind,
   JobLabel,
@@ -101,6 +112,7 @@ import {
   generateCommentId,
   generateContactId,
   generateCostLineId,
+  generateJobCollaboratorId,
   generateJobLabelId,
   generateRateCardId,
   generateRateCardLineId,
@@ -109,6 +121,8 @@ import {
   generateVisitId,
   generateWorkItemId,
 } from "./id-generation.js";
+
+const EXTERNAL_ORGANIZATION_ROLE = "external" as const;
 
 interface JobCursorState {
   readonly id: WorkItemId;
@@ -140,6 +154,17 @@ interface WorkItemCommentRow {
   readonly body: string;
   readonly created_at: Date;
   readonly id: string;
+  readonly work_item_id: string;
+}
+
+interface WorkItemCollaboratorRow {
+  readonly access_level: string;
+  readonly created_at: Date;
+  readonly id: string;
+  readonly role_label: string;
+  readonly subject_type: string;
+  readonly updated_at: Date;
+  readonly user_id: string | null;
   readonly work_item_id: string;
 }
 
@@ -329,7 +354,34 @@ export interface TransitionJobRecordInput {
 export interface AddJobCommentRecordInput {
   readonly authorUserId: UserId;
   readonly body: string;
+  readonly organizationId: OrganizationId;
   readonly workItemId: WorkItemId;
+}
+
+export type JobsRepositoryAccess =
+  | { readonly visibility: "internal" }
+  | {
+      readonly grant?: JobCollaborator | undefined;
+      readonly userId: UserId;
+      readonly visibility: "external";
+    };
+
+const INTERNAL_JOBS_REPOSITORY_ACCESS: JobsRepositoryAccess = {
+  visibility: "internal",
+};
+
+export interface AttachJobCollaboratorRecordInput {
+  readonly accessLevel: JobCollaboratorAccessLevel;
+  readonly createdByUserId: UserId;
+  readonly organizationId: OrganizationId;
+  readonly roleLabel: JobCollaboratorRoleLabel;
+  readonly userId: UserId;
+  readonly workItemId: WorkItemId;
+}
+
+export interface UpdateJobCollaboratorRecordInput {
+  readonly accessLevel?: JobCollaboratorAccessLevel;
+  readonly roleLabel?: JobCollaboratorRoleLabel;
 }
 
 export interface AddJobActivityRecordInput {
@@ -469,6 +521,10 @@ const decodeOrganizationActivityListResponse = Schema.decodeUnknownSync(
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
+const decodeJobCollaborator = Schema.decodeUnknownSync(JobCollaboratorSchema);
+const decodeJobCollaboratorId = Schema.decodeUnknownSync(
+  JobCollaboratorIdSchema
+);
 const decodeJobCostLine = Schema.decodeUnknownSync(JobCostLineSchema);
 const decodeJobCostLineQuantity = Schema.decodeUnknownSync(
   JobCostLineQuantitySchema
@@ -484,6 +540,7 @@ const decodeJobLabelsResponse = Schema.decodeUnknownSync(
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
 const decodeJobMemberOption = Schema.decodeUnknownSync(JobMemberOptionSchema);
+const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
 const decodeJobContactOption = Schema.decodeUnknownSync(JobContactOptionSchema);
 const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
 const decodeJobSiteOption = Schema.decodeUnknownSync(JobSiteOptionSchema);
@@ -590,6 +647,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           from member
           where organization_id = ${organizationId}
             and user_id = ${userId}
+            and role in ${sql.in(INTERNAL_ORGANIZATION_ROLES)}
           limit 1
           ${lockClause}
         `;
@@ -605,6 +663,78 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         }
 
         return userId;
+      });
+
+      const ensureExternalOrganizationMember = Effect.fn(
+        "JobsRepository.ensureExternalOrganizationMember"
+      )(function* (organizationId: OrganizationId, userId: UserId) {
+        const rows = yield* sql<IdRow>`
+          select user_id as id
+          from member
+          where organization_id = ${organizationId}
+            and user_id = ${userId}
+            and role = ${EXTERNAL_ORGANIZATION_ROLE}
+          limit 1
+        `;
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(
+            new OrganizationMemberNotFoundError({
+              message: "User is not an external member of the organization",
+              organizationId,
+              userId,
+            })
+          );
+        }
+
+        return userId;
+      });
+
+      const ensureCommentAuthorCanReferenceWorkItem = Effect.fn(
+        "JobsRepository.ensureCommentAuthorCanReferenceWorkItem"
+      )(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        userId: UserId
+      ) {
+        const internalRows = yield* sql<IdRow>`
+          select user_id as id
+          from member
+          where organization_id = ${organizationId}
+            and user_id = ${userId}
+            and role in ${sql.in(INTERNAL_ORGANIZATION_ROLES)}
+          limit 1
+          for update
+        `;
+
+        if (internalRows[0] !== undefined) {
+          return userId;
+        }
+
+        const grantRows = yield* sql<IdRow>`
+          select id
+          from work_item_collaborators
+          where organization_id = ${organizationId}
+            and work_item_id = ${workItemId}
+            and subject_type = 'user'
+            and user_id = ${userId}
+            and access_level = 'comment'
+          limit 1
+          for update
+        `;
+
+        if (grantRows[0] !== undefined) {
+          return userId;
+        }
+
+        return yield* Effect.fail(
+          new OrganizationMemberNotFoundError({
+            message:
+              "User is not an internal organization member or comment-enabled job collaborator",
+            organizationId,
+            userId,
+          })
+        );
       });
 
       const lookupWorkItemOrganization = Effect.fn(
@@ -753,8 +883,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const list = Effect.fn("JobsRepository.list")(function* (
         organizationId: OrganizationId,
-        query: JobListQuery
+        query: JobListQuery,
+        access?: JobsRepositoryAccess
       ) {
+        const resolvedAccess = access ?? INTERNAL_JOBS_REPOSITORY_ACCESS;
         const limit = clampJobListLimit(query.limit ?? boundedDefaultListLimit);
         const clauses = [sql`work_items.organization_id = ${organizationId}`];
         const labelFilterJoin =
@@ -799,6 +931,17 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
         if (query.serviceAreaId !== undefined) {
           clauses.push(sql`sites.service_area_id = ${query.serviceAreaId}`);
+        }
+
+        if (resolvedAccess.visibility === "external") {
+          clauses.push(sql`exists (
+            select 1
+            from work_item_collaborators
+            where work_item_collaborators.organization_id = ${organizationId}
+              and work_item_collaborators.work_item_id = work_items.id
+              and work_item_collaborators.subject_type = 'user'
+              and work_item_collaborators.user_id = ${resolvedAccess.userId}
+          )`);
         }
 
         if (query.cursor !== undefined) {
@@ -967,12 +1110,199 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           from member
           join "user" on "user".id = member.user_id
           where member.organization_id = ${organizationId}
+            and member.role in ${sql.in(INTERNAL_ORGANIZATION_ROLES)}
           order by "user".name asc, "user".email asc
         `;
 
           return rows.map(mapJobMemberOptionRow);
         }
       );
+
+      const listExternalMemberOptions = Effect.fn(
+        "JobsRepository.listExternalMemberOptions"
+      )(function* (organizationId: OrganizationId) {
+        const rows = yield* sql<JobMemberOptionRow>`
+          select
+            "user".id,
+            "user".name,
+            "user".email
+          from member
+          join "user" on "user".id = member.user_id
+          where member.organization_id = ${organizationId}
+            and member.role = ${EXTERNAL_ORGANIZATION_ROLE}
+          order by "user".name asc, "user".email asc
+        `;
+
+        return rows.map(mapJobExternalMemberOptionRow);
+      });
+
+      const listCollaborators = Effect.fn("JobsRepository.listCollaborators")(
+        function* (organizationId: OrganizationId, workItemId: WorkItemId) {
+          yield* ensureWorkItemOrganizationMatches(organizationId, workItemId);
+
+          const rows = yield* sql<WorkItemCollaboratorRow>`
+          select *
+          from work_item_collaborators
+          where organization_id = ${organizationId}
+            and work_item_id = ${workItemId}
+          order by created_at asc, id asc
+        `;
+
+          return rows.map(mapJobCollaboratorRow);
+        }
+      );
+
+      const attachCollaborator = Effect.fn("JobsRepository.attachCollaborator")(
+        function* (input: AttachJobCollaboratorRecordInput) {
+          yield* ensureWorkItemOrganizationMatches(
+            input.organizationId,
+            input.workItemId
+          );
+          yield* ensureOrganizationMember(
+            input.organizationId,
+            input.createdByUserId
+          );
+          yield* ensureExternalOrganizationMember(
+            input.organizationId,
+            input.userId
+          );
+
+          const insertCollaborator = sql<WorkItemCollaboratorRow>`
+          insert into work_item_collaborators ${sql
+            .insert({
+              access_level: input.accessLevel,
+              created_by_user_id: input.createdByUserId,
+              id: generateJobCollaboratorId(),
+              organization_id: input.organizationId,
+              role_label: input.roleLabel,
+              subject_type: "user",
+              user_id: input.userId,
+              work_item_id: input.workItemId,
+            })
+            .returning("*")}
+        `;
+          const rows = yield* Effect.catchAll(insertCollaborator, (error) =>
+            mapJobCollaboratorConflict(error, input)
+          );
+          const row = yield* getRequiredRow(
+            rows,
+            "inserted work item collaborator"
+          );
+
+          return mapJobCollaboratorRow(row);
+        }
+      );
+
+      const updateCollaborator = Effect.fn("JobsRepository.updateCollaborator")(
+        function* (
+          organizationId: OrganizationId,
+          workItemId: WorkItemId,
+          collaboratorId: JobCollaboratorId,
+          input: UpdateJobCollaboratorRecordInput
+        ) {
+          const values: Record<string, unknown> = {
+            updated_at: new Date(),
+          };
+
+          if (input.accessLevel !== undefined) {
+            values.access_level = input.accessLevel;
+          }
+
+          if (input.roleLabel !== undefined) {
+            values.role_label = input.roleLabel;
+          }
+
+          const rows = yield* sql<WorkItemCollaboratorRow>`
+          update work_item_collaborators
+          set ${sql.update(values)}
+          where organization_id = ${organizationId}
+            and work_item_id = ${workItemId}
+            and id = ${collaboratorId}
+          returning *
+        `;
+          const [row] = rows;
+
+          if (row === undefined) {
+            return yield* Effect.fail(
+              new JobCollaboratorNotFoundError({
+                collaboratorId,
+                message: "Job collaborator does not exist in the organization",
+                workItemId,
+              })
+            );
+          }
+
+          return mapJobCollaboratorRow(row);
+        }
+      );
+
+      const removeCollaborator = Effect.fn("JobsRepository.removeCollaborator")(
+        function* (
+          organizationId: OrganizationId,
+          workItemId: WorkItemId,
+          collaboratorId: JobCollaboratorId
+        ) {
+          const rows = yield* sql<WorkItemCollaboratorRow>`
+          delete from work_item_collaborators
+          where organization_id = ${organizationId}
+            and work_item_id = ${workItemId}
+            and id = ${collaboratorId}
+          returning *
+        `;
+          const [row] = rows;
+
+          if (row === undefined) {
+            return yield* Effect.fail(
+              new JobCollaboratorNotFoundError({
+                collaboratorId,
+                message: "Job collaborator does not exist in the organization",
+                workItemId,
+              })
+            );
+          }
+
+          return mapJobCollaboratorRow(row);
+        }
+      );
+
+      const findUserCollaboratorGrant = Effect.fn(
+        "JobsRepository.findUserCollaboratorGrant"
+      )(function* (
+        organizationId: OrganizationId,
+        workItemId: WorkItemId,
+        userId: UserId
+      ) {
+        const rows = yield* sql<WorkItemCollaboratorRow>`
+          select *
+          from work_item_collaborators
+          where organization_id = ${organizationId}
+            and work_item_id = ${workItemId}
+            and subject_type = 'user'
+            and user_id = ${userId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(
+          Option.map(mapJobCollaboratorRow)
+        );
+      });
+
+      const listAccessibleWorkItemIdsForUser = Effect.fn(
+        "JobsRepository.listAccessibleWorkItemIdsForUser"
+      )(function* (organizationId: OrganizationId, userId: UserId) {
+        const rows = yield* sql<IdRow>`
+          select work_items.id
+          from work_item_collaborators
+          join work_items on work_items.id = work_item_collaborators.work_item_id
+            and work_items.organization_id = work_item_collaborators.organization_id
+          where work_item_collaborators.organization_id = ${organizationId}
+            and work_item_collaborators.subject_type = 'user'
+            and work_item_collaborators.user_id = ${userId}
+          order by work_items.updated_at desc, work_items.id desc
+        `;
+
+        return rows.map((row) => decodeWorkItemId(row.id));
+      });
 
       const findById = Effect.fn("JobsRepository.findById")(function* (
         organizationId: OrganizationId,
@@ -1014,8 +1344,27 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
       const getDetail = Effect.fn("JobsRepository.getDetail")(function* (
         organizationId: OrganizationId,
-        workItemId: WorkItemId
+        workItemId: WorkItemId,
+        access?: JobsRepositoryAccess
       ) {
+        const resolvedAccess = access ?? INTERNAL_JOBS_REPOSITORY_ACCESS;
+        let grant = Option.none<JobCollaborator>();
+
+        if (resolvedAccess.visibility === "external") {
+          grant =
+            resolvedAccess.grant === undefined
+              ? yield* findUserCollaboratorGrant(
+                  organizationId,
+                  workItemId,
+                  resolvedAccess.userId
+                )
+              : Option.some(resolvedAccess.grant);
+        }
+
+        if (resolvedAccess.visibility === "external" && Option.isNone(grant)) {
+          return Option.none<JobDetail>();
+        }
+
         const job = yield* findById(organizationId, workItemId).pipe(
           Effect.map(Option.getOrUndefined)
         );
@@ -1024,56 +1373,125 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           return Option.none<JobDetail>();
         }
 
-        const [comments, activity, visits, labelsByWorkItemId, costLines] =
-          yield* Effect.all([
-            sql<WorkItemCommentRow>`
+        const [comments, labelsByWorkItemId] = yield* Effect.all([
+          sql<WorkItemCommentRow>`
             select *
             from work_item_comments
             where work_item_id = ${workItemId}
             order by created_at asc, id asc
           `,
-            sql<WorkItemActivityRow>`
+          listLabelsForWorkItems(organizationId, [workItemId]),
+        ]);
+        const [activity, visits, costLines] =
+          resolvedAccess.visibility === "external"
+            ? [
+                [] as WorkItemActivityRow[],
+                [] as WorkItemVisitRow[],
+                [] as WorkItemCostLineRow[],
+              ]
+            : yield* Effect.all([
+                sql<WorkItemActivityRow>`
             select *
             from work_item_activity
             where work_item_id = ${workItemId}
             order by created_at desc, id desc
           `,
-            sql<WorkItemVisitRow>`
+                sql<WorkItemVisitRow>`
             select *
             from work_item_visits
             where work_item_id = ${workItemId}
             order by visit_date desc, id desc
           `,
-            listLabelsForWorkItems(organizationId, [workItemId]),
-            sql<WorkItemCostLineRow>`
+                sql<WorkItemCostLineRow>`
             select *
             from work_item_cost_lines
             where work_item_id = ${workItemId}
             order by created_at desc, id desc
           `,
-          ]);
+              ]);
         const contact =
           job.contactId === undefined
             ? undefined
             : yield* findContactDetailById(organizationId, job.contactId);
+        const site =
+          job.siteId === undefined
+            ? undefined
+            : yield* findSiteDetailById(organizationId, job.siteId).pipe(
+                Effect.map(Option.getOrUndefined)
+              );
 
-        const mappedCostLines = costLines.map(mapJobCostLineRow);
+        const mappedCostLines =
+          resolvedAccess.visibility === "external"
+            ? []
+            : costLines.map(mapJobCostLineRow);
 
         return Option.some(
           decodeJobDetail({
-            activity: activity.map(mapJobActivityRow),
+            activity:
+              resolvedAccess.visibility === "external"
+                ? []
+                : activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
             contact,
-            costLines: mappedCostLines,
-            costSummary: calculateJobCostSummary(mappedCostLines),
+            site,
+            costs:
+              resolvedAccess.visibility === "external"
+                ? undefined
+                : {
+                    lines: mappedCostLines,
+                    summary: calculateJobCostSummary(mappedCostLines),
+                  },
             job: {
               ...job,
               labels: labelsByWorkItemId.get(workItemId) ?? [],
             },
-            visits: visits.map(mapJobVisitRow),
+            viewerAccess: {
+              canComment:
+                resolvedAccess.visibility === "external"
+                  ? Option.getOrUndefined(grant)?.accessLevel === "comment"
+                  : true,
+              visibility: resolvedAccess.visibility,
+            },
+            visits:
+              resolvedAccess.visibility === "external"
+                ? []
+                : visits.map(mapJobVisitRow),
           })
         );
       });
+
+      const findSiteDetailById = Effect.fn("JobsRepository.findSiteDetailById")(
+        function* (organizationId: OrganizationId, siteId: SiteId) {
+          const rows = yield* sql<JobSiteOptionRow>`
+          select
+            sites.access_notes,
+            sites.address_line_1,
+            sites.address_line_2,
+            sites.country,
+            sites.county,
+            sites.eircode,
+            sites.geocoded_at,
+            sites.geocoding_provider,
+            sites.id,
+            sites.latitude,
+            sites.longitude,
+            sites.name,
+            service_areas.id as service_area_id,
+            service_areas.name as service_area_name,
+            sites.town
+          from sites
+          left join service_areas on service_areas.id = sites.service_area_id
+          where sites.organization_id = ${organizationId}
+            and sites.id = ${siteId}
+            and sites.archived_at is null
+          limit 1
+        `;
+
+          return Option.fromNullable(rows[0]).pipe(
+            Option.map(mapJobSiteOptionRow)
+          );
+        }
+      );
 
       const findContactDetailById = Effect.fn(
         "JobsRepository.findContactDetailById"
@@ -1297,23 +1715,16 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
       const addComment = Effect.fn("JobsRepository.addComment")(function* (
         input: AddJobCommentRecordInput
       ) {
-        const workItemOrganizationId = yield* lookupWorkItemOrganization(
-          input.workItemId
+        yield* ensureWorkItemOrganizationMatches(
+          input.organizationId,
+          input.workItemId,
+          { forUpdate: true }
         );
 
-        if (Option.isNone(workItemOrganizationId)) {
-          return yield* Effect.fail(
-            new JobNotFoundError({
-              message: "Job does not exist",
-              workItemId: input.workItemId,
-            })
-          );
-        }
-
-        yield* ensureOrganizationMember(
-          workItemOrganizationId.value,
-          input.authorUserId,
-          { forUpdate: true }
+        yield* ensureCommentAuthorCanReferenceWorkItem(
+          input.organizationId,
+          input.workItemId,
+          input.authorUserId
         );
 
         const rows = yield* sql<WorkItemCommentRow>`
@@ -1476,16 +1887,23 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         addComment,
         addCostLine,
         addVisit,
+        attachCollaborator,
         create,
         findById,
         findByIdForUpdate,
+        findUserCollaboratorGrant,
         getDetail,
         list,
+        listAccessibleWorkItemIdsForUser,
+        listCollaborators,
         listOrganizationActivity,
         listMemberOptions,
+        listExternalMemberOptions,
         patch,
+        removeCollaborator,
         reopen,
         transition,
+        updateCollaborator,
         withTransaction,
       };
     }),
@@ -2516,6 +2934,19 @@ function mapJobListItemRow(row: WorkItemRow, labels: readonly JobLabel[] = []) {
   });
 }
 
+function mapJobCollaboratorRow(row: WorkItemCollaboratorRow): JobCollaborator {
+  return decodeJobCollaborator({
+    accessLevel: row.access_level,
+    createdAt: row.created_at.toISOString(),
+    id: decodeJobCollaboratorId(row.id),
+    roleLabel: row.role_label,
+    subjectType: row.subject_type,
+    updatedAt: row.updated_at.toISOString(),
+    userId: nullableToUndefined(row.user_id),
+    workItemId: decodeWorkItemId(row.work_item_id),
+  });
+}
+
 function mapJobLabelRow(row: JobLabelRow): JobLabel {
   return decodeJobLabel({
     createdAt: row.created_at.toISOString(),
@@ -2530,6 +2961,16 @@ function mapJobMemberOptionRow(row: JobMemberOptionRow): JobMemberOption {
     id: row.id,
     name: normalizeOptionName(row.name, row.email),
   });
+}
+
+function mapJobExternalMemberOptionRow(
+  row: JobMemberOptionRow
+): JobExternalMemberOption {
+  return {
+    email: row.email,
+    id: decodeUserId(row.id),
+    name: normalizeOptionName(row.name, row.email),
+  };
 }
 
 function mapServiceAreaRow(row: ServiceAreaRow): ServiceArea {
@@ -2823,6 +3264,25 @@ function mapJobLabelNameConflict(
       new JobLabelNameConflictError({
         message: "Job label name already exists in the organization",
         name,
+      })
+    );
+  }
+
+  return Effect.fail(error);
+}
+
+function mapJobCollaboratorConflict(
+  error: SqlError.SqlError,
+  input: AttachJobCollaboratorRecordInput
+): Effect.Effect<never, JobCollaboratorConflictError | SqlError.SqlError> {
+  if (
+    isUniqueConstraintError(error, "work_item_collaborators_user_unique_idx")
+  ) {
+    return Effect.fail(
+      new JobCollaboratorConflictError({
+        message: "User is already a collaborator on the job",
+        userId: input.userId,
+        workItemId: input.workItemId,
       })
     );
   }

@@ -53,8 +53,36 @@ describe("route hotkeys", () => {
     10_000
   );
 
-  it.each(["member", undefined] as const)(
-    "hides administrator navigation for %s role in the shortcut overlay",
+  it("hides administrator navigation for member role in the shortcut overlay", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <RouteHotkeys currentOrganizationRole="member" />
+        <ShortcutHelpOverlay activeScopes={["global"]} />
+      </HotkeysProvider>
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+
+    expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+    expect(within(dialog).getByText("Go to Sites")).toBeVisible();
+    expect(
+      within(dialog).queryByText("Go to Activity")
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Go to Members")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Go to Settings")).toBeVisible();
+    expect(within(dialog).getByText("Go to Map")).toBeVisible();
+  }, 10_000);
+
+  it.each(["external", undefined] as const)(
+    "hides internal navigation for %s role in the shortcut overlay",
     async (role) => {
       const user = userEvent.setup();
 
@@ -74,7 +102,7 @@ describe("route hotkeys", () => {
       });
 
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
-      expect(within(dialog).getByText("Go to Sites")).toBeVisible();
+      expect(within(dialog).queryByText("Go to Sites")).not.toBeInTheDocument();
       expect(
         within(dialog).queryByText("Go to Activity")
       ).not.toBeInTheDocument();
@@ -82,7 +110,7 @@ describe("route hotkeys", () => {
         within(dialog).queryByText("Go to Members")
       ).not.toBeInTheDocument();
       expect(within(dialog).getByText("Go to Settings")).toBeVisible();
-      expect(within(dialog).getByText("Go to Map")).toBeVisible();
+      expect(within(dialog).queryByText("Go to Map")).not.toBeInTheDocument();
     },
     10_000
   );
@@ -153,7 +181,7 @@ describe("route hotkeys", () => {
     10_000
   );
 
-  it.each(["member", undefined] as const)(
+  it.each(["member", "external", undefined] as const)(
     "does not navigate to administrator routes for %s role",
     async (role) => {
       const user = userEvent.setup();
@@ -166,6 +194,25 @@ describe("route hotkeys", () => {
 
       await user.keyboard("ga");
       await user.keyboard("gm");
+      await user.keyboard("gj");
+
+      expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });
+    },
+    10_000
+  );
+
+  it.each(["external", undefined] as const)(
+    "does not navigate to map for %s role",
+    async (role) => {
+      const user = userEvent.setup();
+
+      render(
+        <HotkeysProvider>
+          <RouteHotkeys currentOrganizationRole={role} />
+        </HotkeysProvider>
+      );
+
+      await user.keyboard("gp");
       await user.keyboard("gj");
 
       expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });

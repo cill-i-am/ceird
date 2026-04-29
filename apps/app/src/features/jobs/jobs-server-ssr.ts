@@ -1,5 +1,6 @@
 import type {
   JobDetailResponse,
+  JobExternalMemberOptionsResponse,
   JobLabelsResponse,
   JobListItem,
   JobListQuery,
@@ -146,6 +147,16 @@ export async function getCurrentServerJobMemberOptionsDirect(): Promise<JobMembe
     request,
     "JobsServer.getJobMemberOptions",
     (client) => client.jobs.getJobMemberOptions()
+  );
+}
+
+export async function getCurrentServerJobExternalMemberOptionsDirect(): Promise<JobExternalMemberOptionsResponse> {
+  const request = await readServerJobsRequestStrict();
+
+  return await runJobsClient(
+    request,
+    "JobsServer.getJobExternalMemberOptions",
+    (client) => client.jobs.getJobExternalMemberOptions()
   );
 }
 

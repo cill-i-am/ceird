@@ -1,6 +1,15 @@
 import { decodePublicInvitationPreview } from "@task-tracker/identity-core";
-import type { PublicInvitationPreview } from "@task-tracker/identity-core";
+import type {
+  OrganizationRole,
+  PublicInvitationPreview,
+} from "@task-tracker/identity-core";
 import { organizationClient } from "better-auth/client/plugins";
+import type { Role } from "better-auth/plugins/access";
+import {
+  adminAc,
+  memberAc,
+  ownerAc,
+} from "better-auth/plugins/organization/access";
 import { createAuthClient } from "better-auth/react";
 
 import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
@@ -8,6 +17,12 @@ import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
 export const API_BASE_PATH = "/api";
 export const AUTH_BASE_PATH = "/api/auth";
 const configuredApiOrigin = readConfiguredApiOrigin();
+const BETTER_AUTH_ORGANIZATION_ROLES: Record<OrganizationRole, Role> = {
+  admin: adminAc,
+  external: memberAc,
+  member: memberAc,
+  owner: ownerAc,
+};
 
 export class AuthClientConfigurationError extends Error {
   constructor(message = "Cannot resolve a trusted auth API origin.") {
@@ -45,7 +60,11 @@ export function resolveApiBaseURL(
 export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
-    plugins: [organizationClient()],
+    plugins: [
+      organizationClient({
+        roles: BETTER_AUTH_ORGANIZATION_ROLES,
+      }),
+    ],
     ...(baseURL ? { baseURL } : {}),
   });
 }

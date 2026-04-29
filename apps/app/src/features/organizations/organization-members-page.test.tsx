@@ -18,7 +18,7 @@ const { mockedInviteMember, mockedListInvitations } = vi.hoisted(() => ({
     (input: {
       email: string;
       organizationId: string;
-      role: "admin" | "member";
+      role: "admin" | "external" | "member";
     }) => Promise<{
       data: {
         id: string;
@@ -249,6 +249,27 @@ describe("organization members page", () => {
 
     expect(screen.getByRole("combobox")).toHaveFocus();
     expect(screen.getByRole("option", { name: "Admin" })).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: "External collaborator" })
+    ).toBeVisible();
+  }, 10_000);
+
+  it("submits external collaborator invites", async () => {
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await user.type(screen.getByLabelText("Email"), "vendor@example.com");
+    await chooseCommandOption(user, "Role", "External collaborator");
+    await user.click(screen.getByRole("button", { name: "Send invite" }));
+
+    await waitFor(() => {
+      expect(mockedInviteMember).toHaveBeenCalledWith({
+        email: "vendor@example.com",
+        organizationId: "org_123",
+        role: "external",
+      });
+    });
   }, 10_000);
 
   it("lists live members shortcuts in shortcut help", async () => {
