@@ -33,7 +33,7 @@ export function AppSidebar({
   currentOrganizationRole?: OrganizationRole | undefined;
   user?: NavUserAccount | null;
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
   const isInOrganizationRoute = useIsInOrganizationRoute();
   const matchedOrganizationRole = useCurrentOrganizationRoleFromMatches();
   const currentOrganizationRole =

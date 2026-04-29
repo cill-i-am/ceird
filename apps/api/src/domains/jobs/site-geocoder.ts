@@ -335,9 +335,23 @@ export function makeGoogleSiteGeocoder(
         requestTimeoutMs,
         url,
       }).pipe(
-        Effect.catchAll((failure) =>
-          logAndFailSiteGeocoding(input, googleRequestFailureDetails(failure))
-        )
+        Effect.catchTags({
+          GoogleGeocodingFetchFailed: (failure) =>
+            logAndFailSiteGeocoding(
+              input,
+              googleRequestFailureDetails(failure)
+            ),
+          GoogleGeocodingJsonDecodeFailed: (failure) =>
+            logAndFailSiteGeocoding(
+              input,
+              googleRequestFailureDetails(failure)
+            ),
+          GoogleGeocodingTimedOut: (failure) =>
+            logAndFailSiteGeocoding(
+              input,
+              googleRequestFailureDetails(failure)
+            ),
+        })
       );
 
       if (requestResult._tag === "HttpError") {

@@ -36,9 +36,11 @@ export const createSiteMutationAtom = Atom.fn<
       Effect.gen(function* () {
         yield* refreshSiteOptionsOrUpsert(get, createdSite);
 
-        get.set(sitesNoticeAtom, {
-          kind: "created",
-          name: createdSite.name,
+        yield* Effect.sync(() => {
+          get.set(sitesNoticeAtom, {
+            kind: "created",
+            name: createdSite.name,
+          });
         });
       })
     )
@@ -52,9 +54,11 @@ export const updateSiteMutationAtomFamily = Atom.family((siteId: SiteIdType) =>
         Effect.gen(function* () {
           yield* refreshSiteOptionsOrUpsert(get, updatedSite);
 
-          get.set(sitesNoticeAtom, {
-            kind: "updated",
-            name: updatedSite.name,
+          yield* Effect.sync(() => {
+            get.set(sitesNoticeAtom, {
+              kind: "updated",
+              name: updatedSite.name,
+            });
           });
         })
       )
@@ -131,9 +135,11 @@ function refreshSiteOptionsOrUpsert(get: Atom.FnContext, site: JobSiteOption) {
         mergeSiteOptions(currentOptionsState.data, freshOptions),
     });
 
-    get.set(jobsOptionsStateAtom, {
-      data: nextOptions,
-      organizationId: currentOptionsState.organizationId,
+    yield* Effect.sync(() => {
+      get.set(jobsOptionsStateAtom, {
+        data: nextOptions,
+        organizationId: currentOptionsState.organizationId,
+      });
     });
   });
 }

@@ -48,7 +48,7 @@ export const hasSiteFieldErrors = hasSiteCreateFieldErrors;
 export const buildSiteInput = buildCreateSiteInputFromDraft;
 
 export function SitesCreateSheet() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/sites/new" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
   const createSite = useAtomSet(createSiteMutationAtom, {
     mode: "promiseExit",

@@ -223,7 +223,7 @@ export function AcceptInvitationPage({
 }: {
   readonly invitationId: string;
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/accept-invitation/$invitationId" });
   const [state, setState] = React.useState<InvitationPageState>({
     status: "loading",
   });
@@ -326,6 +326,23 @@ export function AcceptInvitationPage({
         message: INVITATION_ACCEPT_ERROR_MESSAGE,
       });
       return;
+    }
+
+    const acceptedOrganizationId = result.data?.member.organizationId;
+
+    if (acceptedOrganizationId) {
+      const activeOrganizationResult = await authClient.organization.setActive({
+        organizationId: acceptedOrganizationId,
+      });
+
+      if (activeOrganizationResult.error) {
+        setState({
+          status: "error",
+          invitation: state.invitation,
+          message: INVITATION_ACCEPT_ERROR_MESSAGE,
+        });
+        return;
+      }
     }
 
     await navigate({

@@ -141,6 +141,23 @@ describe("server session lookup", () => {
     );
   }, 1000);
 
+  it("fails closed when the auth session payload is invalid", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        session: {
+          id: "session_123",
+        },
+      })
+    );
+
+    await expect(getCurrentServerSession()).resolves.toBeNull();
+  }, 1000);
+
   it("fails closed when the configured server API origin is missing", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined

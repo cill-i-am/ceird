@@ -2688,8 +2688,10 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             })
             .returning("*")}
         `;
-        const rows = yield* Effect.catchAll(insertLabel, (error) =>
-          mapJobLabelNameConflict(error, name)
+        const rows = yield* insertLabel.pipe(
+          Effect.catchTag("SqlError", (error) =>
+            mapJobLabelNameConflict(error, name)
+          )
         );
 
         const row = yield* getRequiredRow(rows, "inserted job label");
@@ -2715,8 +2717,10 @@ export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
             and archived_at is null
           returning *
         `;
-        const rows = yield* Effect.catchAll(updateLabel, (error) =>
-          mapJobLabelNameConflict(error, name)
+        const rows = yield* updateLabel.pipe(
+          Effect.catchTag("SqlError", (error) =>
+            mapJobLabelNameConflict(error, name)
+          )
         );
 
         return Option.fromNullable(rows[0]).pipe(Option.map(mapJobLabelRow));
