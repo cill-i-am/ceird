@@ -1240,9 +1240,11 @@ describe("jobs http integration", () => {
       const finalDetail = (await finalDetailResponse.json()) as {
         readonly activity: readonly unknown[];
         readonly comments: readonly unknown[];
-        readonly costLines: readonly unknown[];
-        readonly costSummary: {
-          readonly subtotalMinor: number;
+        readonly costs?: {
+          readonly lines: readonly unknown[];
+          readonly summary: {
+            readonly subtotalMinor: number;
+          };
         };
         readonly contact?: {
           readonly email?: string;
@@ -1267,8 +1269,8 @@ describe("jobs http integration", () => {
         phone: "+353 87 123 4567",
       });
       expect(finalDetail.comments).toHaveLength(1);
-      expect(finalDetail.costLines).toHaveLength(1);
-      expect(finalDetail.costSummary.subtotalMinor).toBe(18_500);
+      expect(finalDetail.costs?.lines).toHaveLength(1);
+      expect(finalDetail.costs?.summary.subtotalMinor).toBe(18_500);
       expect(finalDetail.visits).toHaveLength(1);
       expect(finalDetail.activity.length).toBeGreaterThanOrEqual(8);
     });

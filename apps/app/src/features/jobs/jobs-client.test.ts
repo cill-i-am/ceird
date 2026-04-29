@@ -54,9 +54,15 @@ const detailResponse: JobDetailResponse = {
   },
   comments: [],
   activity: [],
-  costLines: [],
-  costSummary: {
-    subtotalMinor: 0,
+  costs: {
+    lines: [],
+    summary: {
+      subtotalMinor: 0,
+    },
+  },
+  viewerAccess: {
+    canComment: true,
+    visibility: "internal",
   },
   visits: [],
 };

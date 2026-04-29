@@ -54,6 +54,8 @@ import {
   InvalidJobTransitionError,
   JobAccessDeniedError,
   JobCostSummaryLimitExceededError,
+  JobCollaboratorConflictError,
+  JobCollaboratorNotFoundError,
   JobLabelNameConflictError,
   JobLabelNotFoundError,
   JobListCursorInvalidError,
@@ -259,6 +261,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(OrganizationMemberNotFoundError)
+      .addError(JobCollaboratorConflictError)
       .addError(JobStorageError)
   )
   .add(
@@ -275,6 +278,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .setPayload(UpdateJobCollaboratorInputSchema)
       .addSuccess(JobCollaboratorSchema)
       .addError(JobNotFoundError)
+      .addError(JobCollaboratorNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(JobStorageError)
   )
@@ -291,6 +295,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       )
       .addSuccess(JobCollaboratorSchema)
       .addError(JobNotFoundError)
+      .addError(JobCollaboratorNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(JobStorageError)
   );

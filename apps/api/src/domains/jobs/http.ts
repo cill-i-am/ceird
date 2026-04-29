@@ -1,5 +1,6 @@
 import { HttpApiBuilder } from "@effect/platform";
-import { JobsApi } from "@task-tracker/jobs-core";
+import { JobAccessDeniedError, JobsApi } from "@task-tracker/jobs-core";
+import type { WorkItemIdType as WorkItemId } from "@task-tracker/jobs-core";
 import { Effect, Layer } from "effect";
 
 import {
@@ -57,9 +58,30 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       )
       .handle("addJobCostLine", ({ path, payload }) =>
         jobsService.addCostLine(path.workItemId, payload)
+      )
+      .handle("listJobCollaborators", ({ path }) =>
+        denyCollaboratorEndpoint(path.workItemId)
+      )
+      .handle("attachJobCollaborator", ({ path }) =>
+        denyCollaboratorEndpoint(path.workItemId)
+      )
+      .handle("updateJobCollaborator", ({ path }) =>
+        denyCollaboratorEndpoint(path.workItemId)
+      )
+      .handle("detachJobCollaborator", ({ path }) =>
+        denyCollaboratorEndpoint(path.workItemId)
       );
   })
 );
+
+function denyCollaboratorEndpoint(workItemId: WorkItemId) {
+  return Effect.fail(
+    new JobAccessDeniedError({
+      message: "Job collaborator access is not available yet",
+      workItemId,
+    })
+  );
+}
 
 const SitesHandlersLive = HttpApiBuilder.group(JobsApi, "sites", (handlers) =>
   Effect.gen(function* () {

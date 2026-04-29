@@ -640,9 +640,15 @@ export type AttachJobCollaboratorInput = Schema.Schema.Type<
 export const UpdateJobCollaboratorInputSchema = Schema.Struct({
   roleLabel: Schema.optional(JobCollaboratorRoleLabelSchema),
   accessLevel: Schema.optional(JobCollaboratorAccessLevelSchema),
-}).annotations({
-  parseOptions: { onExcessProperty: "error" },
-});
+}).pipe(
+  Schema.filter(
+    (input) => input.roleLabel !== undefined || input.accessLevel !== undefined
+  ),
+  Schema.annotations({
+    message: () => "Expected at least one collaborator field to update",
+    parseOptions: { onExcessProperty: "error" },
+  })
+);
 export type UpdateJobCollaboratorInput = Schema.Schema.Type<
   typeof UpdateJobCollaboratorInputSchema
 >;
@@ -807,6 +813,7 @@ export const JobSiteOptionSchema = Schema.Struct({
 });
 export type JobSiteOption = Schema.Schema.Type<typeof JobSiteOptionSchema>;
 
+// Job detail intentionally returns the same rich site shape as site options.
 export const JobSiteDetailSchema = JobSiteOptionSchema;
 export type JobSiteDetail = Schema.Schema.Type<typeof JobSiteDetailSchema>;
 

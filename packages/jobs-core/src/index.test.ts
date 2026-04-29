@@ -123,9 +123,9 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("keeps job collaborator mutation inputs strict and shapeable", () => {
-    expect(
+    expect(() =>
       ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({})
-    ).toStrictEqual({});
+    ).toThrow(/Expected at least one collaborator field/);
     expect(
       ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
         roleLabel: "  Approver  ",
@@ -1289,11 +1289,13 @@ describe("jobs-core", () => {
     expect(collaborators?.get?.operationId).toBe("jobs.listJobCollaborators");
     expect(collaborators?.post?.operationId).toBe("jobs.attachJobCollaborator");
     expect(collaborators?.post?.responses["201"]).toBeDefined();
+    expect(collaborators?.post?.responses["409"]).toBeDefined();
     expect(collaborator?.patch?.operationId).toBe("jobs.updateJobCollaborator");
     expect(collaborator?.delete?.operationId).toBe(
       "jobs.detachJobCollaborator"
     );
     expect(collaborator?.patch?.responses["404"]).toBeDefined();
+    expect(collaborator?.delete?.responses["404"]).toBeDefined();
   }, 5000);
 
   it("documents standalone site creation responses", () => {

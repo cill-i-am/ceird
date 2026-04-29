@@ -1089,9 +1089,15 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
-    costLines: [],
-    costSummary: {
-      subtotalMinor: 0,
+    costs: {
+      lines: [],
+      summary: {
+        subtotalMinor: 0,
+      },
+    },
+    viewerAccess: {
+      canComment: true,
+      visibility: "internal" as const,
     },
     job: {
       assigneeId: actorUserId,

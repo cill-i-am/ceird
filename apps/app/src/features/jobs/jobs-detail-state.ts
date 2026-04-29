@@ -438,9 +438,10 @@ function insertJobCostLine(
     return;
   }
 
+  const currentCostLines = currentDetail.costs?.lines ?? [];
   const costLines = [
     costLine,
-    ...currentDetail.costLines.filter((current) => current.id !== costLine.id),
+    ...currentCostLines.filter((current) => current.id !== costLine.id),
   ].sort((left, right) => {
     const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
 
@@ -451,12 +452,14 @@ function insertJobCostLine(
 
   get.set(jobDetailStateAtomFamily(workItemId), {
     ...currentDetail,
-    costLines,
-    costSummary: {
-      subtotalMinor: costLines.reduce(
-        (subtotal, current) => subtotal + current.lineTotalMinor,
-        0
-      ),
+    costs: {
+      lines: costLines,
+      summary: {
+        subtotalMinor: costLines.reduce(
+          (subtotal, current) => subtotal + current.lineTotalMinor,
+          0
+        ),
+      },
     },
   });
 }

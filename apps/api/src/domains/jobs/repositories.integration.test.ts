@@ -218,8 +218,8 @@ describe("jobs repositories integration", () => {
     expect(detailValue.visits).toHaveLength(1);
     expect(detailValue.visits[0]?.visitDate).toBe("2026-04-21");
     expect(detailValue.visits[0]?.durationMinutes).toBe(120);
-    expect(detailValue.costLines).toHaveLength(1);
-    expect(detailValue.costLines[0]).toMatchObject({
+    expect(detailValue.costs?.lines).toHaveLength(1);
+    expect(detailValue.costs?.lines[0]).toMatchObject({
       description: "Replacement seal kit",
       lineTotalMinor: 5198,
       quantity: 2,
@@ -227,7 +227,7 @@ describe("jobs repositories integration", () => {
       type: "material",
       unitPriceMinor: 2599,
     });
-    expect(detailValue.costSummary).toStrictEqual({
+    expect(detailValue.costs?.summary).toStrictEqual({
       subtotalMinor: 5198,
     });
 
@@ -667,7 +667,9 @@ describe("jobs repositories integration", () => {
 
     const filtered = await runJobsEffect(
       databaseUrl,
-      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+      JobsRepository.list(identity.organizationId, {
+        labelId: updatedLabel.id,
+      })
     );
     expect(filtered.items.map((item) => item.id)).toStrictEqual([
       createdJob.id,
@@ -738,7 +740,9 @@ describe("jobs repositories integration", () => {
 
     const filteredAfterArchive = await runJobsEffect(
       databaseUrl,
-      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+      JobsRepository.list(identity.organizationId, {
+        labelId: updatedLabel.id,
+      })
     );
     expect(filteredAfterArchive.items).toStrictEqual([]);
 
@@ -1157,8 +1161,8 @@ describe("jobs repositories integration", () => {
     );
     const detailValue = expectSome(detail);
 
-    expect(detailValue.costLines).toHaveLength(1);
-    expect(detailValue.costSummary).toStrictEqual({
+    expect(detailValue.costs?.lines).toHaveLength(1);
+    expect(detailValue.costs?.summary).toStrictEqual({
       subtotalMinor: calculateJobCostLineTotalMinor(firstLine),
     });
   }, 30_000);
@@ -1244,8 +1248,8 @@ describe("jobs repositories integration", () => {
     );
     const detailValue = expectSome(detail);
 
-    expect(detailValue.costLines).toHaveLength(2);
-    expect(detailValue.costSummary.subtotalMinor).toBe(
+    expect(detailValue.costs?.lines).toHaveLength(2);
+    expect(detailValue.costs?.summary.subtotalMinor).toBe(
       Number.MAX_SAFE_INTEGER - 14
     );
   }, 30_000);

@@ -40,7 +40,9 @@ export const COST_LINE_TYPE_LABELS = {
   material: "Material",
 } as const;
 
-type CostLineType = JobDetailResponse["costLines"][number]["type"];
+type CostLineType = NonNullable<
+  JobDetailResponse["costs"]
+>["lines"][number]["type"];
 
 const COST_LINE_TYPE_SELECTION_GROUPS = [
   {
@@ -73,6 +75,7 @@ export function JobCostsSection({
   waiting,
   workItemId,
 }: JobCostsSectionProps) {
+  const { costs } = detail;
   const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const [costLineType, setCostLineType] =
     React.useState<CostLineType>("labour");
@@ -158,204 +161,236 @@ export function JobCostsSection({
             Cost total
           </span>
           <span className="text-lg font-semibold text-foreground">
-            {formatMoneyMinor(detail.costSummary.subtotalMinor)}
+            {formatMoneyMinor(costs?.summary.subtotalMinor ?? 0)}
           </span>
         </div>
 
-        {canAddCostLine ? (
-          <>
-            {mutationError}
-            <form
-              className="flex flex-col gap-4"
-              method="post"
-              noValidate
-              onSubmit={handleAddCostLine}
-            >
-              <FieldGroup>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Field>
-                    <FieldLabel htmlFor="job-cost-type">Cost type</FieldLabel>
-                    <FieldContent>
-                      <CommandSelect
-                        id="job-cost-type"
-                        value={costLineType}
-                        placeholder="Pick type"
-                        emptyText="No cost types found."
-                        groups={COST_LINE_TYPE_SELECTION_GROUPS}
-                        onValueChange={(nextValue) => {
-                          const decoded = decodeCostLineType(nextValue);
+        <CostControls
+          canAddCostLine={canAddCostLine}
+          costsAvailable={costs !== undefined}
+        >
+          {mutationError}
+          <form
+            className="flex flex-col gap-4"
+            method="post"
+            noValidate
+            onSubmit={handleAddCostLine}
+          >
+            <FieldGroup>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field>
+                  <FieldLabel htmlFor="job-cost-type">Cost type</FieldLabel>
+                  <FieldContent>
+                    <CommandSelect
+                      id="job-cost-type"
+                      value={costLineType}
+                      placeholder="Pick type"
+                      emptyText="No cost types found."
+                      groups={COST_LINE_TYPE_SELECTION_GROUPS}
+                      onValueChange={(nextValue) => {
+                        const decoded = decodeCostLineType(nextValue);
 
-                          if (decoded) {
-                            setCostLineType(decoded);
-                          }
-                        }}
-                      />
-                    </FieldContent>
-                  </Field>
-
-                  <Field
-                    data-invalid={
-                      Boolean(costError) &&
-                      !parseCostLineQuantity(costQuantity).ok
-                    }
-                  >
-                    <FieldLabel htmlFor="job-cost-quantity">
-                      Quantity
-                    </FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="job-cost-quantity"
-                        inputMode="decimal"
-                        min="0.01"
-                        step="0.01"
-                        type="number"
-                        value={costQuantity}
-                        aria-invalid={
-                          Boolean(costError) &&
-                          !parseCostLineQuantity(costQuantity).ok
-                            ? true
-                            : undefined
+                        if (decoded) {
+                          setCostLineType(decoded);
                         }
-                        onChange={(event) =>
-                          setCostQuantity(event.target.value)
-                        }
-                      />
-                    </FieldContent>
-                  </Field>
-
-                  <Field
-                    data-invalid={
-                      Boolean(costError) &&
-                      !parseCostLineUnitPriceMinor(costUnitPrice).ok
-                    }
-                  >
-                    <FieldLabel htmlFor="job-cost-unit-price">
-                      Unit price
-                    </FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="job-cost-unit-price"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={costUnitPrice}
-                        aria-invalid={
-                          Boolean(costError) &&
-                          !parseCostLineUnitPriceMinor(costUnitPrice).ok
-                            ? true
-                            : undefined
-                        }
-                        onChange={(event) =>
-                          setCostUnitPrice(event.target.value)
-                        }
-                      />
-                    </FieldContent>
-                  </Field>
-                </div>
+                      }}
+                    />
+                  </FieldContent>
+                </Field>
 
                 <Field
                   data-invalid={
-                    Boolean(costError) && costDescription.trim().length === 0
+                    Boolean(costError) &&
+                    !parseCostLineQuantity(costQuantity).ok
                   }
                 >
-                  <FieldLabel htmlFor="job-cost-description">
-                    Cost description
-                  </FieldLabel>
+                  <FieldLabel htmlFor="job-cost-quantity">Quantity</FieldLabel>
                   <FieldContent>
                     <Input
-                      id="job-cost-description"
-                      ref={costDescriptionRef}
-                      value={costDescription}
+                      id="job-cost-quantity"
+                      inputMode="decimal"
+                      min="0.01"
+                      step="0.01"
+                      type="number"
+                      value={costQuantity}
                       aria-invalid={
                         Boolean(costError) &&
-                        costDescription.trim().length === 0
+                        !parseCostLineQuantity(costQuantity).ok
                           ? true
                           : undefined
                       }
-                      onChange={(event) =>
-                        setCostDescription(event.target.value)
-                      }
+                      onChange={(event) => setCostQuantity(event.target.value)}
                     />
-                    <FieldDescription>
-                      Keep it short: what was used or what work was carried out.
-                    </FieldDescription>
-                    <FieldError>{costError}</FieldError>
                   </FieldContent>
                 </Field>
-              </FieldGroup>
 
-              <div className="flex">
-                <Button
-                  type="submit"
-                  loading={waiting}
-                  className="w-full sm:w-fit"
+                <Field
+                  data-invalid={
+                    Boolean(costError) &&
+                    !parseCostLineUnitPriceMinor(costUnitPrice).ok
+                  }
                 >
-                  {waiting ? (
-                    "Adding..."
-                  ) : (
-                    <>
-                      <HugeiconsIcon
-                        icon={Briefcase01Icon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
-                      Add cost line
-                    </>
-                  )}
-                </Button>
+                  <FieldLabel htmlFor="job-cost-unit-price">
+                    Unit price
+                  </FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="job-cost-unit-price"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={costUnitPrice}
+                      aria-invalid={
+                        Boolean(costError) &&
+                        !parseCostLineUnitPriceMinor(costUnitPrice).ok
+                          ? true
+                          : undefined
+                      }
+                      onChange={(event) => setCostUnitPrice(event.target.value)}
+                    />
+                  </FieldContent>
+                </Field>
               </div>
-            </form>
-          </>
-        ) : (
-          <Alert>
-            <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-            <AlertTitle>Cost tracking is limited here.</AlertTitle>
-            <AlertDescription>
-              Members can only add costs on jobs assigned to them.
-            </AlertDescription>
-          </Alert>
-        )}
+
+              <Field
+                data-invalid={
+                  Boolean(costError) && costDescription.trim().length === 0
+                }
+              >
+                <FieldLabel htmlFor="job-cost-description">
+                  Cost description
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="job-cost-description"
+                    ref={costDescriptionRef}
+                    value={costDescription}
+                    aria-invalid={
+                      Boolean(costError) && costDescription.trim().length === 0
+                        ? true
+                        : undefined
+                    }
+                    onChange={(event) => setCostDescription(event.target.value)}
+                  />
+                  <FieldDescription>
+                    Keep it short: what was used or what work was carried out.
+                  </FieldDescription>
+                  <FieldError>{costError}</FieldError>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <div className="flex">
+              <Button
+                type="submit"
+                loading={waiting}
+                className="w-full sm:w-fit"
+              >
+                {waiting ? (
+                  "Adding..."
+                ) : (
+                  <>
+                    <HugeiconsIcon
+                      icon={Briefcase01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Add cost line
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </CostControls>
 
         <Separator />
 
-        {detail.costLines.length === 0 ? (
-          <DetailEmpty
-            title="No costs added yet."
-            description="Add labour or materials once the work creates a real cost."
-          />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {detail.costLines.map((costLine) => (
-              <li
-                key={costLine.id}
-                className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-              >
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                      <Badge variant="secondary">
-                        {COST_LINE_TYPE_LABELS[costLine.type]}
-                      </Badge>
-                      <span>
-                        {formatQuantity(costLine.quantity)} x{" "}
-                        {formatMoneyMinor(costLine.unitPriceMinor)}
-                      </span>
-                    </div>
-                    <span className="text-sm font-semibold text-foreground">
-                      Line total {formatMoneyMinor(costLine.lineTotalMinor)}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-7 whitespace-pre-wrap">
-                    {costLine.description}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <CostLines costs={costs} />
       </div>
     </DetailSection>
+  );
+}
+
+function CostControls({
+  canAddCostLine,
+  children,
+  costsAvailable,
+}: {
+  readonly canAddCostLine: boolean;
+  readonly children: React.ReactNode;
+  readonly costsAvailable: boolean;
+}) {
+  if (!costsAvailable) {
+    return (
+      <Alert>
+        <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+        <AlertTitle>Cost details are not available here.</AlertTitle>
+        <AlertDescription>
+          This view does not include job cost information.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!canAddCostLine) {
+    return (
+      <Alert>
+        <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+        <AlertTitle>Cost tracking is limited here.</AlertTitle>
+        <AlertDescription>
+          Members can only add costs on jobs assigned to them.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return children;
+}
+
+function CostLines({ costs }: { readonly costs: JobDetailResponse["costs"] }) {
+  if (costs === undefined) {
+    return null;
+  }
+
+  if (costs.lines.length === 0) {
+    return (
+      <DetailEmpty
+        title="No costs added yet."
+        description="Add labour or materials once the work creates a real cost."
+      />
+    );
+  }
+
+  return (
+    <ul className="flex flex-col gap-3">
+      {costs.lines.map((costLine) => (
+        <li
+          key={costLine.id}
+          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="secondary">
+                  {COST_LINE_TYPE_LABELS[costLine.type]}
+                </Badge>
+                <span>
+                  {formatQuantity(costLine.quantity)} x{" "}
+                  {formatMoneyMinor(costLine.unitPriceMinor)}
+                </span>
+              </div>
+              <span className="text-sm font-semibold text-foreground">
+                Line total {formatMoneyMinor(costLine.lineTotalMinor)}
+              </span>
+            </div>
+            <p className="text-sm leading-7 whitespace-pre-wrap">
+              {costLine.description}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

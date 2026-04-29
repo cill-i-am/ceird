@@ -726,21 +726,27 @@ function buildDetail(
         workItemId,
       },
     ],
-    costLines: [
-      {
-        authorUserId: actorUserId,
-        createdAt: "2026-04-23T12:00:00.000Z",
-        description: "Replacement relay",
-        id: "99999999-9999-4999-8999-999999999999" as CostLineIdType,
-        lineTotalMinor: 4500,
-        quantity: 1,
-        type: "material",
-        unitPriceMinor: 4500,
-        workItemId,
+    costs: {
+      lines: [
+        {
+          authorUserId: actorUserId,
+          createdAt: "2026-04-23T12:00:00.000Z",
+          description: "Replacement relay",
+          id: "99999999-9999-4999-8999-999999999999" as CostLineIdType,
+          lineTotalMinor: 4500,
+          quantity: 1,
+          type: "material",
+          unitPriceMinor: 4500,
+          workItemId,
+        },
+      ],
+      summary: {
+        subtotalMinor: 4500,
       },
-    ],
-    costSummary: {
-      subtotalMinor: 4500,
+    },
+    viewerAccess: {
+      canComment: true,
+      visibility: "internal" as const,
     },
     contact: {
       email: "pat@example.com",

@@ -1064,11 +1064,17 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             activity: activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
             contact,
-            costLines: mappedCostLines,
-            costSummary: calculateJobCostSummary(mappedCostLines),
+            costs: {
+              lines: mappedCostLines,
+              summary: calculateJobCostSummary(mappedCostLines),
+            },
             job: {
               ...job,
               labels: labelsByWorkItemId.get(workItemId) ?? [],
+            },
+            viewerAccess: {
+              canComment: true,
+              visibility: "internal",
             },
             visits: visits.map(mapJobVisitRow),
           })

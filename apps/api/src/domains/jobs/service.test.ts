@@ -316,14 +316,20 @@ function makeHarness(
         Option.some({
           activity: [],
           comments: [],
-          costLines: [],
-          costSummary: calculateJobCostSummary([]),
+          costs: {
+            lines: [],
+            summary: calculateJobCostSummary([]),
+          },
           job: {
             ...lockedJob,
             labels:
               calls.assignLabel > calls.removeLabel
                 ? [jobLabel]
                 : lockedJob.labels,
+          },
+          viewerAccess: {
+            canComment: true,
+            visibility: "internal",
           },
           visits: [],
         } satisfies JobDetail)
