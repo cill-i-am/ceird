@@ -12,7 +12,7 @@ export function RouteHotkeys({
 }: {
   currentOrganizationRole?: OrganizationRole;
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
   const canUseAdministratorHotkeys =
     currentOrganizationRole !== undefined &&
     isAdministrativeOrganizationRole(currentOrganizationRole);
@@ -45,7 +45,7 @@ export function RouteHotkeys({
 }
 
 function AdministratorRouteHotkeys() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
 
   useAppHotkeySequence("goActivity", () => {
     React.startTransition(() => {

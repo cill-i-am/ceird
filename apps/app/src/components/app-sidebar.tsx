@@ -26,7 +26,7 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & {
   user?: NavUserAccount | null;
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
   const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
   const primaryNavItems = getPrimaryNavItemsForRole(currentOrganizationRole);
 

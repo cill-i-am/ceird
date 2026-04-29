@@ -12,7 +12,7 @@ import { useRegisterCommandActions } from "./command-bar";
 import type { CommandAction } from "./command-bar";
 
 export function AppGlobalCommandActions() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
   const actions = React.useMemo<readonly CommandAction[]>(
     () => [
       {

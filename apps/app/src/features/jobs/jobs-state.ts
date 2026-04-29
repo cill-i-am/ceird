@@ -202,10 +202,11 @@ export const createJobMutationAtom = Atom.fn<
           input.site?.kind === "create" || input.contact?.kind === "create";
         yield* refreshJobListOrUpsert(get, createdJob);
         yield* refreshJobOptionsWhen(get, shouldRefreshOptions);
-
-        get.set(jobsNoticeAtom, {
-          kind: "created",
-          title: createdJob.title,
+        yield* Effect.sync(() => {
+          get.set(jobsNoticeAtom, {
+            kind: "created",
+            title: createdJob.title,
+          });
         });
 
         return createdJob;
@@ -318,7 +319,9 @@ function refreshJobListOrUpsert(get: Atom.FnContext, job: CreateJobResponse) {
       }),
     });
 
-    get.set(jobsListStateAtom, nextListState);
+    yield* Effect.sync(() => {
+      get.set(jobsListStateAtom, nextListState);
+    });
   });
 }
 

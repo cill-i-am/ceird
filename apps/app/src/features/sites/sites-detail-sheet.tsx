@@ -53,7 +53,7 @@ export function SitesDetailSheet({
   siteId,
   viewer,
 }: SitesDetailSheetProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/sites/$siteId" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
   const currentSite =
     options.sites.find((site) => site.id === siteId) ?? initialSite;

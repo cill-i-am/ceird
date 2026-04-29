@@ -135,13 +135,13 @@ export function CommandBarProvider({
 }
 
 export function useCommandActions() {
-  return React.useContext(CommandRegistryContext)?.actions ?? [];
+  return React.use(CommandRegistryContext)?.actions ?? [];
 }
 
 export function useRegisterCommandActions(
   actions: readonly CommandAction[]
 ): void {
-  const context = React.useContext(CommandRegistryContext);
+  const context = React.use(CommandRegistryContext);
   const ownerId = React.useRef<symbol>(Symbol("command-actions"));
   const registerActions = context?.registerActions;
   const unregisterActions = context?.unregisterActions;

@@ -223,7 +223,7 @@ export function AcceptInvitationPage({
 }: {
   readonly invitationId: string;
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/accept-invitation/$invitationId" });
   const [state, setState] = React.useState<InvitationPageState>({
     status: "loading",
   });

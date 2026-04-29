@@ -23,7 +23,7 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your organization. Please try again.";
 
 export function OrganizationOnboardingPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/create-organization" });
   const isHydrated = useIsHydrated();
   const form = useForm({
     defaultValues: {
