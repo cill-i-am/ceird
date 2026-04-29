@@ -211,6 +211,23 @@ describe("jobs repositories integration", () => {
       notes: "Prefers morning calls.",
       phone: "+353871234567",
     });
+    expect(detailValue.site).toMatchObject({
+      accessNotes: "Use the south gate and reception desk.",
+      addressLine1: "1 Custom House Quay",
+      country: "IE",
+      county: "Dublin",
+      eircode: "D01 X2X2",
+      geocodedAt: "2026-04-27T10:00:00.000Z",
+      geocodingProvider: "google",
+      id: createdSiteId,
+      latitude: 53.3498,
+      longitude: -6.2603,
+      name: "Docklands Campus",
+      serviceAreaId,
+      serviceAreaName: "Dublin",
+      town: "Dublin",
+    });
+    expect(detailValue.site?.addressLine2).toBeUndefined();
     expect(detailValue.comments).toHaveLength(1);
     expect(detailValue.comments[0]?.body).toContain("water ingress");
     expect(detailValue.activity).toHaveLength(1);

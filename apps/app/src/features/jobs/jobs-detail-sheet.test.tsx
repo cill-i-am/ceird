@@ -2,6 +2,7 @@
 import type {
   CommentIdType,
   ActivityIdType,
+  JobDetailResponse,
   JobLabelIdType,
   SiteIdType,
   UserIdType,
@@ -866,6 +867,19 @@ describe("jobs detail sheet", () => {
     );
   }, 1000);
 
+  it("does not render a zero cost total when costs are omitted", () => {
+    renderDetailSheet(buildDetail({ costs: undefined }));
+
+    expect(screen.queryByText("Cost total")).not.toBeInTheDocument();
+    expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Cost details are not available here.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add cost line/i })
+    ).not.toBeInTheDocument();
+  }, 1000);
+
   it(
     "rejects invalid cost form values before submitting",
     {
@@ -1060,6 +1074,7 @@ describe("jobs detail sheet", () => {
 });
 
 function buildDetail(overrides?: {
+  readonly costs?: JobDetailResponse["costs"];
   readonly labels?: ReturnType<typeof buildJobLabel>[];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
@@ -1089,12 +1104,15 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
-    costs: {
-      lines: [],
-      summary: {
-        subtotalMinor: 0,
-      },
-    },
+    costs:
+      overrides && "costs" in overrides
+        ? overrides.costs
+        : {
+            lines: [],
+            summary: {
+              subtotalMinor: 0,
+            },
+          },
     viewerAccess: {
       canComment: true,
       visibility: "internal" as const,

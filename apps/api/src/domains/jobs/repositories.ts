@@ -1056,6 +1056,12 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           job.contactId === undefined
             ? undefined
             : yield* findContactDetailById(organizationId, job.contactId);
+        const site =
+          job.siteId === undefined
+            ? undefined
+            : yield* findSiteDetailById(organizationId, job.siteId).pipe(
+                Effect.map(Option.getOrUndefined)
+              );
 
         const mappedCostLines = costLines.map(mapJobCostLineRow);
 
@@ -1064,6 +1070,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             activity: activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
             contact,
+            site,
             costs: {
               lines: mappedCostLines,
               summary: calculateJobCostSummary(mappedCostLines),
@@ -1080,6 +1087,39 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           })
         );
       });
+
+      const findSiteDetailById = Effect.fn("JobsRepository.findSiteDetailById")(
+        function* (organizationId: OrganizationId, siteId: SiteId) {
+          const rows = yield* sql<JobSiteOptionRow>`
+          select
+            sites.access_notes,
+            sites.address_line_1,
+            sites.address_line_2,
+            sites.country,
+            sites.county,
+            sites.eircode,
+            sites.geocoded_at,
+            sites.geocoding_provider,
+            sites.id,
+            sites.latitude,
+            sites.longitude,
+            sites.name,
+            service_areas.id as service_area_id,
+            service_areas.name as service_area_name,
+            sites.town
+          from sites
+          left join service_areas on service_areas.id = sites.service_area_id
+          where sites.organization_id = ${organizationId}
+            and sites.id = ${siteId}
+            and sites.archived_at is null
+          limit 1
+        `;
+
+          return Option.fromNullable(rows[0]).pipe(
+            Option.map(mapJobSiteOptionRow)
+          );
+        }
+      );
 
       const findContactDetailById = Effect.fn(
         "JobsRepository.findContactDetailById"

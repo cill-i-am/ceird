@@ -156,14 +156,16 @@ export function JobCostsSection({
       description="Track labour and materials without mixing them into the job narrative."
     >
       <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3">
-          <span className="text-sm font-medium text-muted-foreground">
-            Cost total
-          </span>
-          <span className="text-lg font-semibold text-foreground">
-            {formatMoneyMinor(costs?.summary.subtotalMinor ?? 0)}
-          </span>
-        </div>
+        {costs === undefined ? null : (
+          <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3">
+            <span className="text-sm font-medium text-muted-foreground">
+              Cost total
+            </span>
+            <span className="text-lg font-semibold text-foreground">
+              {formatMoneyMinor(costs.summary.subtotalMinor)}
+            </span>
+          </div>
+        )}
 
         <CostControls
           canAddCostLine={canAddCostLine}
@@ -304,9 +306,12 @@ export function JobCostsSection({
           </form>
         </CostControls>
 
-        <Separator />
-
-        <CostLines costs={costs} />
+        {costs === undefined ? null : (
+          <>
+            <Separator />
+            <CostLines costs={costs} />
+          </>
+        )}
       </div>
     </DetailSection>
   );
