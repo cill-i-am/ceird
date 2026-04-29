@@ -1495,6 +1495,92 @@ describe("jobs http integration", () => {
         visibility: "external",
       });
 
+      const deniedSitesOptionsResponse = await api.handler(
+        makeRequest("/sites/options", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(deniedSitesOptionsResponse.status).toBe(403);
+
+      const deniedActivityResponse = await api.handler(
+        makeRequest("/activity", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(deniedActivityResponse.status).toBe(403);
+
+      const deniedJobLabelsResponse = await api.handler(
+        makeRequest("/job-labels", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(deniedJobLabelsResponse.status).toBe(403);
+
+      const deniedJobOptionsResponse = await api.handler(
+        makeRequest("/jobs/options", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(deniedJobOptionsResponse.status).toBe(403);
+
+      const deniedCostLineResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}/cost-lines`,
+          {
+            description: "External-only material",
+            quantity: 1,
+            type: "material",
+            unitPriceMinor: 1000,
+          },
+          {
+            cookieJar: externalCookieJar,
+          }
+        )
+      );
+      expect(deniedCostLineResponse.status).toBe(403);
+
+      const deniedVisitResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}/visits`,
+          {
+            durationMinutes: 60,
+            note: "External visit should be blocked.",
+            visitDate: "2026-04-23",
+          },
+          {
+            cookieJar: externalCookieJar,
+          }
+        )
+      );
+      expect(deniedVisitResponse.status).toBe(403);
+
+      const deniedTransitionResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}/transitions`,
+          {
+            status: "in_progress",
+          },
+          {
+            cookieJar: externalCookieJar,
+          }
+        )
+      );
+      expect(deniedTransitionResponse.status).toBe(403);
+
+      const deniedPatchResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}`,
+          {
+            title: "External users cannot rename jobs",
+          },
+          {
+            cookieJar: externalCookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(deniedPatchResponse.status).toBe(403);
+
       const hiddenDetailResponse = await api.handler(
         makeRequest(`/jobs/${hiddenJob.id}`, {
           cookieJar: externalCookieJar,
@@ -1532,6 +1618,17 @@ describe("jobs http integration", () => {
         await updateResponse.json()
       );
       expect(updated.accessLevel).toBe("read");
+
+      const readOnlyDetailResponse = await api.handler(
+        makeRequest(`/jobs/${grantedJob.id}`, {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(readOnlyDetailResponse.status).toBe(200);
+      const readOnlyDetail = ParseResult.decodeUnknownSync(
+        JobDetailResponseSchema
+      )(await readOnlyDetailResponse.json());
+      expect(readOnlyDetail.viewerAccess.canComment).toBeFalsy();
 
       const deniedCommentResponse = await api.handler(
         makeJsonRequest(
