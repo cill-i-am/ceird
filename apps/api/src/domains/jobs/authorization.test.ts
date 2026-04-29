@@ -302,15 +302,15 @@ describe("jobs authorization", () => {
       ),
     ]);
 
-    expect(
+    expect([
       authorizationChecks
         .map((exit) =>
           Exit.isFailure(exit)
             ? Option.getOrUndefined(Cause.failureOption(exit.cause))
             : undefined
         )
-        .every((check) => check instanceof JobAccessDeniedError)
-    ).toBeTruthy();
+        .every((check) => check instanceof JobAccessDeniedError),
+    ]).toStrictEqual([true]);
     expect(authorizationChecks).toHaveLength(12);
   }, 10_000);
 });

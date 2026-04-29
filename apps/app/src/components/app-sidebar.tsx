@@ -3,6 +3,8 @@
 import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { isExternalOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
@@ -18,17 +20,31 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
-import { useCurrentOrganizationRoleFromMatches } from "#/features/organizations/organization-route-context";
+import {
+  useCurrentOrganizationRoleFromMatches,
+  useIsInOrganizationRoute,
+} from "#/features/organizations/organization-route-context";
 
 export function AppSidebar({
+  currentOrganizationRole: appCurrentOrganizationRole,
   user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  currentOrganizationRole?: OrganizationRole | undefined;
   user?: NavUserAccount | null;
 }) {
   const navigate = useNavigate();
-  const currentOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const isInOrganizationRoute = useIsInOrganizationRoute();
+  const matchedOrganizationRole = useCurrentOrganizationRoleFromMatches();
+  const currentOrganizationRole =
+    matchedOrganizationRole ??
+    (isInOrganizationRoute ? undefined : appCurrentOrganizationRole);
   const primaryNavItems = getPrimaryNavItemsForRole(currentOrganizationRole);
+  const homeTarget =
+    currentOrganizationRole !== undefined &&
+    isExternalOrganizationRole(currentOrganizationRole)
+      ? "/jobs"
+      : "/";
 
   return (
     <Sidebar
@@ -43,7 +59,7 @@ export function AppSidebar({
             <SidebarMenuButton
               size="lg"
               className="rounded-xl px-2.5 py-2.5"
-              render={<Link to="/" />}
+              render={<Link to={homeTarget} />}
             >
               <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklab,var(--sidebar-primary-foreground)_30%,transparent)]">
                 <HugeiconsIcon
@@ -70,7 +86,11 @@ export function AppSidebar({
       </SidebarContent>
       {user ? (
         <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-2.5">
-          <NavUser user={user} navigate={navigate} />
+          <NavUser
+            currentOrganizationRole={currentOrganizationRole}
+            user={user}
+            navigate={navigate}
+          />
         </SidebarFooter>
       ) : null}
     </Sidebar>

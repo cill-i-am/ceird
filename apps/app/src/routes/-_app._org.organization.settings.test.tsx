@@ -66,12 +66,12 @@ describe("settings route loader", () => {
     }
   );
 
-  it(
-    "redirects members away from organization settings",
+  it.each<OrganizationRole>(["member", "external"])(
+    "redirects %s users away from organization settings",
     {
       timeout: 10_000,
     },
-    async () => {
+    async (role) => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
       let result: unknown;
@@ -83,7 +83,7 @@ describe("settings route loader", () => {
             required: false,
             targetOrganizationId: organizationId,
           },
-          currentOrganizationRole: "member",
+          currentOrganizationRole: role,
         });
       } catch (error) {
         result = error;

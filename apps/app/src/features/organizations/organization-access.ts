@@ -4,6 +4,8 @@ import {
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummary,
   isAdministrativeOrganizationRole,
+  isExternalOrganizationRole,
+  isInternalOrganizationRole,
 } from "@task-tracker/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
@@ -138,6 +140,33 @@ export function assertOrganizationAdministrationRouteContext(context: {
   }
 
   assertOrganizationAdministrationRole({ role });
+}
+
+export function assertOrganizationInternalRole(input: {
+  readonly role: OrganizationRole;
+}) {
+  if (!isInternalOrganizationRole(input.role)) {
+    throw redirect({
+      to: isExternalOrganizationRole(input.role) ? "/jobs" : "/",
+    });
+  }
+}
+
+export function assertOrganizationInternalRouteContext(context: {
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  if (context.activeOrganizationSync.required) {
+    return;
+  }
+
+  const role = context.currentOrganizationRole;
+
+  if (role === undefined) {
+    throw redirect({ to: "/" });
+  }
+
+  assertOrganizationInternalRole({ role });
 }
 
 export async function redirectIfOrganizationReady() {

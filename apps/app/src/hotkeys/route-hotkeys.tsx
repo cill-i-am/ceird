@@ -1,7 +1,10 @@
 "use client";
 
 import { useNavigate } from "@tanstack/react-router";
-import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import {
+  isAdministrativeOrganizationRole,
+  isInternalOrganizationRole,
+} from "@task-tracker/identity-core";
 import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
@@ -16,6 +19,9 @@ export function RouteHotkeys({
   const canUseAdministratorHotkeys =
     currentOrganizationRole !== undefined &&
     isAdministrativeOrganizationRole(currentOrganizationRole);
+  const canUseInternalHotkeys =
+    currentOrganizationRole !== undefined &&
+    isInternalOrganizationRole(currentOrganizationRole);
 
   useAppHotkeySequence("goJobs", () => {
     React.startTransition(() => {
@@ -23,11 +29,15 @@ export function RouteHotkeys({
     });
   });
 
-  useAppHotkeySequence("goSites", () => {
-    React.startTransition(() => {
-      navigate({ to: "/sites" });
-    });
-  });
+  useAppHotkeySequence(
+    "goSites",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/sites" });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
 
   useAppHotkeySequence("goSettings", () => {
     React.startTransition(() => {
@@ -35,11 +45,15 @@ export function RouteHotkeys({
     });
   });
 
-  useAppHotkeySequence("goMap", () => {
-    React.startTransition(() => {
-      navigate({ to: "/jobs", search: { view: "map" } });
-    });
-  });
+  useAppHotkeySequence(
+    "goMap",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/jobs", search: { view: "map" } });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
 
   return canUseAdministratorHotkeys ? <AdministratorRouteHotkeys /> : null;
 }

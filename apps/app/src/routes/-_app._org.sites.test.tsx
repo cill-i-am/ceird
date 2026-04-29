@@ -42,10 +42,20 @@ vi.mock("#/features/jobs/jobs-server", () => ({
   getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
 }));
 
-vi.mock("#/features/organizations/organization-access", () => ({
-  ensureActiveOrganizationId: mockedEnsureActiveOrganizationId,
-  getCurrentOrganizationMemberRole: mockedGetCurrentOrganizationMemberRole,
-}));
+vi.mock(
+  import("#/features/organizations/organization-access"),
+  async (importActual) => {
+    const actual = await importActual();
+
+    return {
+      ...actual,
+      ensureActiveOrganizationId:
+        mockedEnsureActiveOrganizationId as typeof actual.ensureActiveOrganizationId,
+      getCurrentOrganizationMemberRole:
+        mockedGetCurrentOrganizationMemberRole as typeof actual.getCurrentOrganizationMemberRole,
+    };
+  }
+);
 
 describe("sites route loader", () => {
   afterEach(() => {
@@ -91,6 +101,31 @@ describe("sites route loader", () => {
       expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
       expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
+    }
+  );
+
+  it(
+    "redirects external users before fetching site options",
+    { timeout: 10_000 },
+    async () => {
+      const { isRedirect } = await import("@tanstack/react-router");
+      const { loadSitesRouteData } = await import("./_app._org.sites");
+      const result = loadSitesRouteData({
+        activeOrganizationId: organizationId,
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: organizationId,
+        },
+        currentOrganizationRole: "external",
+        currentUserId: userId,
+      });
+
+      await expect(result).rejects.toMatchObject({
+        options: { to: "/jobs" },
+      });
+      await expect(result).rejects.toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerSiteOptions).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
     }
   );
 

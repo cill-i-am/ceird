@@ -79,12 +79,12 @@ describe("activity route loader", () => {
     }
   );
 
-  it(
-    "redirects members away from organization activity",
+  it.each<OrganizationRole>(["member", "external"])(
+    "redirects %s users away from organization activity",
     {
       timeout: 10_000,
     },
-    async () => {
+    async (role) => {
       const { loadActivityRouteData } = await import("./_app._org.activity");
       const result = loadActivityRouteData(
         {
@@ -93,7 +93,7 @@ describe("activity route loader", () => {
             required: false,
             targetOrganizationId: organizationId,
           },
-          currentOrganizationRole: "member",
+          currentOrganizationRole: role,
         },
         {}
       );

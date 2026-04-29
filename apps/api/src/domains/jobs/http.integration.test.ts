@@ -1628,7 +1628,7 @@ describe("jobs http integration", () => {
       const readOnlyDetail = ParseResult.decodeUnknownSync(
         JobDetailResponseSchema
       )(await readOnlyDetailResponse.json());
-      expect(readOnlyDetail.viewerAccess.canComment).toBeFalsy();
+      expect([readOnlyDetail.viewerAccess.canComment]).toStrictEqual([false]);
 
       const deniedCommentResponse = await api.handler(
         makeJsonRequest(

@@ -18,9 +18,11 @@ const { mockedAppSidebar, mockedEmailVerificationBanner, mockedSidebarInset } =
       } & ComponentProps<"div">) => ReactElement
     >(
       ({
+        currentOrganizationRole: _currentOrganizationRole,
         user,
         ...props
       }: {
+        currentOrganizationRole?: unknown;
         user?: {
           name: string;
           email: string;
@@ -118,6 +120,7 @@ describe("app layout", () => {
 
       expect(mockedAppSidebar).toHaveBeenCalledOnce();
       expect(mockedAppSidebar.mock.calls[0]?.[0]).toStrictEqual({
+        currentOrganizationRole: undefined,
         user: {
           name: "Taylor Example",
           email: "person@example.com",

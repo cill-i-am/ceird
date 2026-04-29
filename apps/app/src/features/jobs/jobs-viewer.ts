@@ -1,4 +1,8 @@
-import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import {
+  isAdministrativeOrganizationRole,
+  isExternalOrganizationRole,
+  isInternalOrganizationRole,
+} from "@task-tracker/identity-core";
 import type { OrganizationRole } from "@task-tracker/identity-core";
 import { UserId } from "@task-tracker/jobs-core";
 import type { JobStatus, UserIdType } from "@task-tracker/jobs-core";
@@ -37,11 +41,36 @@ export function hasJobsElevatedAccess(role: JobsViewerRole): boolean {
   return isAdministrativeOrganizationRole(role);
 }
 
+export function isExternalJobsViewer(
+  viewer: Pick<JobsViewer, "role">
+): boolean {
+  return isExternalOrganizationRole(viewer.role);
+}
+
+export function canViewOrganizationJobs(
+  _viewer: Pick<JobsViewer, "role">
+): boolean {
+  return true;
+}
+
+export function canUseInternalJobOptions(
+  viewer: Pick<JobsViewer, "role">
+): boolean {
+  return isInternalOrganizationRole(viewer.role);
+}
+
+export function canCommentOnJob(viewer: Pick<JobsViewer, "role">): boolean {
+  return canViewOrganizationJobs(viewer);
+}
+
 export function hasAssignedJobAccess(
   viewer: JobsViewer,
   assigneeId: UserIdType | undefined
 ): boolean {
-  return hasJobsElevatedAccess(viewer.role) || assigneeId === viewer.userId;
+  return (
+    isInternalOrganizationRole(viewer.role) &&
+    (hasJobsElevatedAccess(viewer.role) || assigneeId === viewer.userId)
+  );
 }
 
 export function getAvailableJobTransitions(
@@ -55,11 +84,9 @@ export function getAvailableJobTransitions(
     return ELEVATED_TRANSITION_OPTIONS[job.status];
   }
 
-  if (job.assigneeId !== viewer.userId) {
-    return [];
-  }
-
-  return MEMBER_TRANSITION_OPTIONS[job.status];
+  return hasAssignedJobAccess(viewer, job.assigneeId)
+    ? MEMBER_TRANSITION_OPTIONS[job.status]
+    : [];
 }
 
 export function decodeJobsViewerUserId(input: unknown): UserIdType {

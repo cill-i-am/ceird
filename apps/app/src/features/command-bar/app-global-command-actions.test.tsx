@@ -154,4 +154,46 @@ describe("app global command actions", () => {
       ).not.toBeInTheDocument();
     }
   );
+
+  it(
+    "registers only jobs and user settings commands for external users",
+    { timeout: 10_000 },
+    async () => {
+      render(
+        <CommandBarProvider>
+          <AppGlobalCommandActions />
+          <AppOrganizationCommandActions currentOrganizationRole="external" />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /go to jobs/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("option", { name: /open user settings/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to home/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to sites/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to activity/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to members/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", {
+          name: /open organization settings/i,
+        })
+      ).not.toBeInTheDocument();
+    }
+  );
 });

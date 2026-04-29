@@ -64,14 +64,15 @@ describe("organization role boundary", () => {
   }, 1000);
 
   it("classifies internal and external organization roles", () => {
-    expect(isInternalOrganizationRole("owner")).toBe(true);
-    expect(isInternalOrganizationRole("admin")).toBe(true);
-    expect(isInternalOrganizationRole("member")).toBe(true);
-    expect(isInternalOrganizationRole("external")).toBe(false);
-
-    expect(isExternalOrganizationRole("owner")).toBe(false);
-    expect(isExternalOrganizationRole("admin")).toBe(false);
-    expect(isExternalOrganizationRole("member")).toBe(false);
-    expect(isExternalOrganizationRole("external")).toBe(true);
+    expect(
+      (["owner", "admin", "member", "external"] as const).map((role) =>
+        isInternalOrganizationRole(role)
+      )
+    ).toStrictEqual([true, true, true, false]);
+    expect(
+      (["owner", "admin", "member", "external"] as const).map((role) =>
+        isExternalOrganizationRole(role)
+      )
+    ).toStrictEqual([false, false, false, true]);
   }, 1000);
 });

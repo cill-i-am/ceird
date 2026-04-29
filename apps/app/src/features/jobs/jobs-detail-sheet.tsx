@@ -19,13 +19,17 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
+import { decodeOrganizationRole } from "@task-tracker/identity-core";
 import {
   JobLabelNameSchema,
   SiteId,
+  UserId,
   normalizeJobLabelName,
 } from "@task-tracker/jobs-core";
 import type {
   CreateJobLabelInput,
+  JobCollaborator,
+  JobCollaboratorAccessLevel,
   JobContactDetail,
   JobContactOption,
   JobDetailResponse,
@@ -34,6 +38,7 @@ import type {
   JobSiteOption,
   JobStatus,
   SiteIdType,
+  UserIdType,
 } from "@task-tracker/jobs-core";
 import { Exit, Schema } from "effect";
 import * as React from "react";
@@ -79,6 +84,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { authClient } from "#/lib/auth-client";
 import { cn } from "#/lib/utils";
 
 import {
@@ -93,13 +99,18 @@ import {
   addJobCostLineMutationAtomFamily,
   addJobCommentMutationAtomFamily,
   addJobVisitMutationAtomFamily,
+  attachJobCollaboratorMutationAtomFamily,
   assignJobLabelMutationAtomFamily,
   createAndAssignJobLabelMutationAtomFamily,
+  detachJobCollaboratorMutationAtomFamily,
+  jobCollaboratorsStateAtomFamily,
   jobDetailStateAtomFamily,
   patchJobMutationAtomFamily,
+  refreshJobCollaboratorsAtomFamily,
   removeJobLabelMutationAtomFamily,
   reopenJobMutationAtomFamily,
   transitionJobMutationAtomFamily,
+  updateJobCollaboratorMutationAtomFamily,
 } from "./jobs-detail-state";
 import { jobsLookupAtom } from "./jobs-state";
 import {
@@ -125,6 +136,13 @@ const VISIT_DURATION_SELECTION_GROUPS = [
 
 const NO_SITE_VALUE = "__none__";
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
+const decodeUserId = Schema.decodeUnknownSync(UserId);
+
+interface ExternalMemberOption {
+  readonly email: string;
+  readonly name: string;
+  readonly userId: UserIdType;
+}
 
 interface JobsDetailSheetProps {
   readonly initialDetail: JobDetailResponse;
@@ -144,7 +162,22 @@ export function JobsDetailSheet({
 
   const detailState = useAtomValue(jobDetailStateAtomFamily(workItemId));
   const detail = detailState ?? initialDetail;
+  const collaborators = useAtomValue(
+    jobCollaboratorsStateAtomFamily(workItemId)
+  );
   const lookup = useAtomValue(jobsLookupAtom);
+  const refreshCollaboratorsResult = useAtomValue(
+    refreshJobCollaboratorsAtomFamily(workItemId)
+  );
+  const attachCollaboratorResult = useAtomValue(
+    attachJobCollaboratorMutationAtomFamily(workItemId)
+  );
+  const updateCollaboratorResult = useAtomValue(
+    updateJobCollaboratorMutationAtomFamily(workItemId)
+  );
+  const detachCollaboratorResult = useAtomValue(
+    detachJobCollaboratorMutationAtomFamily(workItemId)
+  );
   const transitionResult = useAtomValue(
     transitionJobMutationAtomFamily(workItemId)
   );
@@ -211,16 +244,42 @@ export function JobsDetailSheet({
       mode: "promiseExit",
     }
   );
+  const refreshCollaborators = useAtomSet(
+    refreshJobCollaboratorsAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
+  const attachCollaborator = useAtomSet(
+    attachJobCollaboratorMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
+  const updateCollaborator = useAtomSet(
+    updateJobCollaboratorMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
+  const detachCollaborator = useAtomSet(
+    detachJobCollaboratorMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
     detail.job.assigneeId
   );
+  const canManageCollaborators = hasJobsElevatedAccess(viewer.role);
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAssignLabels =
     hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canCreateLabels = hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canAddCostLine = hasAssignmentAccess;
+  const canAddComment = detail.viewerAccess.canComment;
   const canReopen = hasAssignmentAccess;
   const transitionOptions = getAvailableJobTransitions(viewer, detail.job);
   const transitionSelectionGroups =
@@ -249,6 +308,20 @@ export function JobsDetailSheet({
   const [visitNote, setVisitNote] = React.useState("");
   const [visitError, setVisitError] = React.useState<string | null>(null);
   const [labelError, setLabelError] = React.useState<string | null>(null);
+  const [externalMembers, setExternalMembers] = React.useState<
+    readonly ExternalMemberOption[]
+  >([]);
+  const [collaboratorsError, setCollaboratorsError] = React.useState<
+    string | null
+  >(null);
+  const [collaboratorsMutationError, setCollaboratorsMutationError] =
+    React.useState<string | null>(null);
+  const [selectedCollaboratorUserId, setSelectedCollaboratorUserId] =
+    React.useState<UserIdType | "">("");
+  const [collaboratorRoleLabel, setCollaboratorRoleLabel] =
+    React.useState("Requester");
+  const [collaboratorAccessLevel, setCollaboratorAccessLevel] =
+    React.useState<JobCollaboratorAccessLevel>("read");
   const site =
     detail.site ??
     (detail.job.siteId ? lookup.siteById.get(detail.job.siteId) : undefined);
@@ -297,6 +370,55 @@ export function JobsDetailSheet({
     setVisitError(null);
     setLabelError(null);
   }, [detail.job.siteId, detail.job.status, workItemId]);
+
+  React.useEffect(() => {
+    if (!canManageCollaborators) {
+      return;
+    }
+
+    void refreshCollaborators();
+  }, [canManageCollaborators, refreshCollaborators, workItemId]);
+
+  React.useEffect(() => {
+    if (!canManageCollaborators) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadExternalMembers() {
+      setCollaboratorsError(null);
+
+      try {
+        const result = await authClient.organization.listMembers({
+          query: {
+            limit: 100,
+          },
+        });
+
+        if (ignore) {
+          return;
+        }
+
+        if (result.error || !result.data) {
+          setCollaboratorsError("External collaborators could not be loaded.");
+          return;
+        }
+
+        setExternalMembers(toExternalMemberOptions(result.data.members));
+      } catch {
+        if (!ignore) {
+          setCollaboratorsError("External collaborators could not be loaded.");
+        }
+      }
+    }
+
+    void loadExternalMembers();
+
+    return () => {
+      ignore = true;
+    };
+  }, [canManageCollaborators, workItemId]);
 
   const closeSheet = React.useCallback(() => {
     React.startTransition(() => {
@@ -436,6 +558,10 @@ export function JobsDetailSheet({
   async function handleAddComment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!canAddComment) {
+      return;
+    }
+
     if (commentBody.trim().length === 0) {
       setCommentError("Add the context you want the team to see.");
       return;
@@ -515,6 +641,68 @@ export function JobsDetailSheet({
 
     setLabelError(null);
     await removeJobLabel(labelId);
+  }
+
+  async function handleAttachCollaborator(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!canManageCollaborators) {
+      return;
+    }
+
+    const roleLabel = collaboratorRoleLabel.trim();
+
+    if (!selectedCollaboratorUserId || roleLabel.length === 0) {
+      setCollaboratorsError(
+        "Choose an external collaborator and add a role label."
+      );
+      return;
+    }
+
+    setCollaboratorsError(null);
+    setCollaboratorsMutationError(null);
+    const exit = await attachCollaborator({
+      accessLevel: collaboratorAccessLevel,
+      roleLabel,
+      userId: selectedCollaboratorUserId,
+    });
+
+    if (Exit.isSuccess(exit)) {
+      setSelectedCollaboratorUserId("");
+      setCollaboratorRoleLabel("Requester");
+      setCollaboratorAccessLevel("read");
+      return;
+    }
+
+    setCollaboratorsMutationError(getExitErrorMessage(exit));
+  }
+
+  async function handleUpdateCollaborator(input: {
+    readonly collaboratorId: JobCollaborator["id"];
+    readonly input: {
+      readonly accessLevel: JobCollaboratorAccessLevel;
+      readonly roleLabel: string;
+    };
+  }) {
+    setCollaboratorsMutationError(null);
+    const exit = await updateCollaborator(input);
+
+    if (Exit.isFailure(exit)) {
+      setCollaboratorsMutationError(getExitErrorMessage(exit));
+    }
+  }
+
+  async function handleDetachCollaborator(
+    collaboratorId: JobCollaborator["id"]
+  ) {
+    setCollaboratorsMutationError(null);
+    const exit = await detachCollaborator(collaboratorId);
+
+    if (Exit.isFailure(exit)) {
+      setCollaboratorsMutationError(getExitErrorMessage(exit));
+    }
   }
 
   let transitionErrorContent: React.ReactNode = null;
@@ -849,55 +1037,60 @@ export function JobsDetailSheet({
             >
               <div className="flex flex-col gap-5">
                 {renderMutationError(commentResult)}
-                <form
-                  className="flex flex-col gap-4"
-                  method="post"
-                  onSubmit={handleAddComment}
-                >
-                  <FieldGroup>
-                    <Field data-invalid={Boolean(commentError)}>
-                      <FieldLabel htmlFor="job-comment-body">
-                        Add a comment
-                      </FieldLabel>
-                      <FieldContent>
-                        <Textarea
-                          id="job-comment-body"
-                          value={commentBody}
-                          aria-invalid={Boolean(commentError) || undefined}
-                          onChange={(event) =>
-                            setCommentBody(event.target.value)
-                          }
-                        />
-                        <FieldDescription>
-                          Capture the detail the next person will actually need.
-                        </FieldDescription>
-                        <FieldError>{commentError}</FieldError>
-                      </FieldContent>
-                    </Field>
-                  </FieldGroup>
-                  <div className="flex">
-                    <Button
-                      type="submit"
-                      loading={commentResult.waiting}
-                      className="w-full sm:w-fit"
+                {canAddComment ? (
+                  <>
+                    <form
+                      className="flex flex-col gap-4"
+                      method="post"
+                      onSubmit={handleAddComment}
                     >
-                      {commentResult.waiting ? (
-                        "Adding..."
-                      ) : (
-                        <>
-                          <HugeiconsIcon
-                            icon={Comment01Icon}
-                            strokeWidth={2}
-                            data-icon="inline-start"
-                          />
-                          Add comment
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
+                      <FieldGroup>
+                        <Field data-invalid={Boolean(commentError)}>
+                          <FieldLabel htmlFor="job-comment-body">
+                            Add a comment
+                          </FieldLabel>
+                          <FieldContent>
+                            <Textarea
+                              id="job-comment-body"
+                              value={commentBody}
+                              aria-invalid={Boolean(commentError) || undefined}
+                              onChange={(event) =>
+                                setCommentBody(event.target.value)
+                              }
+                            />
+                            <FieldDescription>
+                              Capture the detail the next person will actually
+                              need.
+                            </FieldDescription>
+                            <FieldError>{commentError}</FieldError>
+                          </FieldContent>
+                        </Field>
+                      </FieldGroup>
+                      <div className="flex">
+                        <Button
+                          type="submit"
+                          loading={commentResult.waiting}
+                          className="w-full sm:w-fit"
+                        >
+                          {commentResult.waiting ? (
+                            "Adding..."
+                          ) : (
+                            <>
+                              <HugeiconsIcon
+                                icon={Comment01Icon}
+                                strokeWidth={2}
+                                data-icon="inline-start"
+                              />
+                              Add comment
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
 
-                <Separator />
+                    <Separator />
+                  </>
+                ) : null}
 
                 {detail.comments.length === 0 ? (
                   <DetailEmpty
@@ -934,6 +1127,33 @@ export function JobsDetailSheet({
                 )}
               </div>
             </DetailSection>
+
+            {canManageCollaborators ? (
+              <JobCollaboratorsSection
+                collaborators={collaborators}
+                detachCollaborator={handleDetachCollaborator}
+                errorMessage={collaboratorsMutationError ?? collaboratorsError}
+                externalMembers={externalMembers}
+                isLoading={
+                  refreshCollaboratorsResult.waiting ||
+                  attachCollaboratorResult.waiting
+                }
+                selectedAccessLevel={collaboratorAccessLevel}
+                selectedRoleLabel={collaboratorRoleLabel}
+                selectedUserId={selectedCollaboratorUserId}
+                updateCollaborator={handleUpdateCollaborator}
+                updatingOrRemoving={
+                  updateCollaboratorResult.waiting ||
+                  detachCollaboratorResult.waiting
+                }
+                onAccessLevelChange={setCollaboratorAccessLevel}
+                onAttach={handleAttachCollaborator}
+                onRoleLabelChange={setCollaboratorRoleLabel}
+                onUserChange={(userId) =>
+                  setSelectedCollaboratorUserId(userId as UserIdType | "")
+                }
+              />
+            ) : null}
 
             <JobCostsSection
               addJobCostLine={addJobCostLine}
@@ -1155,6 +1375,276 @@ export function JobsDetailSheet({
         </div>
       </DrawerContent>
     </ResponsiveDrawer>
+  );
+}
+
+function JobCollaboratorsSection({
+  collaborators,
+  detachCollaborator,
+  errorMessage,
+  externalMembers,
+  isLoading,
+  onAccessLevelChange,
+  onAttach,
+  onRoleLabelChange,
+  onUserChange,
+  selectedAccessLevel,
+  selectedRoleLabel,
+  selectedUserId,
+  updateCollaborator,
+  updatingOrRemoving,
+}: {
+  readonly collaborators: readonly JobCollaborator[];
+  readonly detachCollaborator: (
+    collaboratorId: JobCollaborator["id"]
+  ) => Promise<unknown>;
+  readonly errorMessage: string | null;
+  readonly externalMembers: readonly ExternalMemberOption[];
+  readonly isLoading: boolean;
+  readonly onAccessLevelChange: (value: JobCollaboratorAccessLevel) => void;
+  readonly onAttach: (event: React.FormEvent<HTMLFormElement>) => void;
+  readonly onRoleLabelChange: (value: string) => void;
+  readonly onUserChange: (value: string) => void;
+  readonly selectedAccessLevel: JobCollaboratorAccessLevel;
+  readonly selectedRoleLabel: string;
+  readonly selectedUserId: UserIdType | "";
+  readonly updateCollaborator: (input: {
+    readonly collaboratorId: JobCollaborator["id"];
+    readonly input: {
+      readonly accessLevel: JobCollaboratorAccessLevel;
+      readonly roleLabel: string;
+    };
+  }) => Promise<unknown>;
+  readonly updatingOrRemoving: boolean;
+}) {
+  const collaboratorOptions = externalMembers
+    .filter(
+      (member) =>
+        !collaborators.some(
+          (collaborator) => collaborator.userId === member.userId
+        )
+    )
+    .map((member) => ({
+      label: member.name,
+      value: member.userId,
+    }));
+  const collaboratorSelectionGroups = [
+    {
+      label: "External collaborators",
+      options: collaboratorOptions,
+    },
+  ] satisfies readonly CommandSelectGroup[];
+  const accessLevelGroups = getCollaboratorAccessLevelGroups();
+
+  return (
+    <DetailSection
+      title="Collaborators"
+      description="Share this job with external people without making them internal members."
+    >
+      <div className="flex flex-col gap-5">
+        {errorMessage ? (
+          <Alert>
+            <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+            <AlertTitle>Collaborator access could not be updated.</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <form className="flex flex-col gap-4" onSubmit={onAttach}>
+          <FieldGroup>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field>
+                <FieldLabel htmlFor="job-collaborator-user">
+                  External collaborator
+                </FieldLabel>
+                <FieldContent>
+                  <CommandSelect
+                    id="job-collaborator-user"
+                    value={selectedUserId}
+                    placeholder="Choose collaborator"
+                    emptyText="No external collaborators available."
+                    groups={collaboratorSelectionGroups}
+                    disabled={isLoading || collaboratorOptions.length === 0}
+                    onValueChange={onUserChange}
+                  />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="job-collaborator-role-label">
+                  Role label
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="job-collaborator-role-label"
+                    value={selectedRoleLabel}
+                    disabled={isLoading}
+                    onChange={(event) => onRoleLabelChange(event.target.value)}
+                  />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="job-collaborator-access-level">
+                  Access level
+                </FieldLabel>
+                <FieldContent>
+                  <CommandSelect
+                    id="job-collaborator-access-level"
+                    value={selectedAccessLevel}
+                    placeholder="Choose access"
+                    emptyText="No access levels available."
+                    groups={accessLevelGroups}
+                    disabled={isLoading}
+                    onValueChange={(value) =>
+                      onAccessLevelChange(value as JobCollaboratorAccessLevel)
+                    }
+                  />
+                </FieldContent>
+              </Field>
+            </div>
+          </FieldGroup>
+          <div className="flex">
+            <Button
+              type="submit"
+              loading={isLoading}
+              className="w-full sm:w-fit"
+            >
+              Grant access
+            </Button>
+          </div>
+        </form>
+
+        <Separator />
+
+        {collaborators.length === 0 ? (
+          <DetailEmpty
+            title="No external collaborators yet."
+            description="Attach an external member when this job needs limited shared visibility."
+          />
+        ) : (
+          <ul className="flex flex-col gap-4">
+            {collaborators.map((collaborator) => (
+              <JobCollaboratorRow
+                key={collaborator.id}
+                collaborator={collaborator}
+                disabled={updatingOrRemoving}
+                externalMember={externalMembers.find(
+                  (member) => member.userId === collaborator.userId
+                )}
+                accessLevelGroups={accessLevelGroups}
+                detachCollaborator={detachCollaborator}
+                updateCollaborator={updateCollaborator}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </DetailSection>
+  );
+}
+
+function JobCollaboratorRow({
+  accessLevelGroups,
+  collaborator,
+  detachCollaborator,
+  disabled,
+  externalMember,
+  updateCollaborator,
+}: {
+  readonly accessLevelGroups: readonly CommandSelectGroup[];
+  readonly collaborator: JobCollaborator;
+  readonly detachCollaborator: (
+    collaboratorId: JobCollaborator["id"]
+  ) => Promise<unknown>;
+  readonly disabled: boolean;
+  readonly externalMember: ExternalMemberOption | undefined;
+  readonly updateCollaborator: (input: {
+    readonly collaboratorId: JobCollaborator["id"];
+    readonly input: {
+      readonly accessLevel: JobCollaboratorAccessLevel;
+      readonly roleLabel: string;
+    };
+  }) => Promise<unknown>;
+}) {
+  const name = externalMember?.name ?? "External collaborator";
+  const [roleLabel, setRoleLabel] = React.useState(collaborator.roleLabel);
+  const [accessLevel, setAccessLevel] =
+    React.useState<JobCollaboratorAccessLevel>(collaborator.accessLevel);
+
+  React.useEffect(() => {
+    setRoleLabel(collaborator.roleLabel);
+    setAccessLevel(collaborator.accessLevel);
+  }, [collaborator.accessLevel, collaborator.roleLabel]);
+
+  return (
+    <li className="rounded-md border p-3">
+      <div className="flex flex-col gap-4">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {externalMember?.email ?? "External member"}
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
+          <Field>
+            <FieldLabel htmlFor={`job-collaborator-role-${collaborator.id}`}>
+              Role label for {name}
+            </FieldLabel>
+            <FieldContent>
+              <Input
+                id={`job-collaborator-role-${collaborator.id}`}
+                value={roleLabel}
+                disabled={disabled}
+                onChange={(event) => setRoleLabel(event.target.value)}
+              />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`job-collaborator-access-${collaborator.id}`}>
+              Access level for {name}
+            </FieldLabel>
+            <FieldContent>
+              <CommandSelect
+                id={`job-collaborator-access-${collaborator.id}`}
+                value={accessLevel}
+                placeholder="Choose access"
+                emptyText="No access levels available."
+                groups={accessLevelGroups}
+                disabled={disabled}
+                onValueChange={(value) =>
+                  setAccessLevel(value as JobCollaboratorAccessLevel)
+                }
+              />
+            </FieldContent>
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={disabled || roleLabel.trim().length === 0}
+            onClick={() =>
+              updateCollaborator({
+                collaboratorId: collaborator.id,
+                input: {
+                  accessLevel,
+                  roleLabel: roleLabel.trim(),
+                },
+              })
+            }
+          >
+            Save {name} access
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={() => detachCollaborator(collaborator.id)}
+          >
+            Remove {name} access
+          </Button>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -1432,6 +1922,24 @@ function buildTransitionSelectionGroups(
   ] satisfies readonly CommandSelectGroup[];
 }
 
+function getCollaboratorAccessLevelGroups() {
+  return [
+    {
+      label: "Access",
+      options: [
+        {
+          label: "Read-only",
+          value: "read",
+        },
+        {
+          label: "Comment-only",
+          value: "comment",
+        },
+      ],
+    },
+  ] satisfies readonly CommandSelectGroup[];
+}
+
 function getStatusCommandLabel(status: JobStatus) {
   if (status === "blocked") {
     return "Prepare blocked status";
@@ -1535,6 +2043,82 @@ function insertSortedJobLabel(
 
 const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
 
+function toExternalMemberOptions(
+  members: readonly {
+    readonly role: string;
+    readonly userId: string;
+    readonly user?: {
+      readonly email?: string | null | undefined;
+      readonly id?: string | null | undefined;
+      readonly name?: string | null | undefined;
+    };
+  }[]
+): readonly ExternalMemberOption[] {
+  let externalMembers: readonly ExternalMemberOption[] = [];
+
+  for (const externalMember of members
+    .filter((candidate) => {
+      try {
+        return decodeOrganizationRole(candidate.role) === "external";
+      } catch {
+        return false;
+      }
+    })
+    .map((candidate) => {
+      const userId = decodeOptionalUserId(
+        candidate.user?.id ?? candidate.userId
+      );
+
+      if (!userId) {
+        return null;
+      }
+
+      const name =
+        candidate.user?.name?.trim() || candidate.user?.email || userId;
+
+      return {
+        email: candidate.user?.email ?? "",
+        name,
+        userId,
+      };
+    })
+    .filter((option) => option !== null)) {
+    externalMembers = insertSortedExternalMember(
+      externalMembers,
+      externalMember
+    );
+  }
+
+  return externalMembers;
+}
+
+function decodeOptionalUserId(input: unknown): UserIdType | null {
+  try {
+    return decodeUserId(input);
+  } catch {
+    return null;
+  }
+}
+
+function insertSortedExternalMember(
+  members: readonly ExternalMemberOption[],
+  member: ExternalMemberOption
+) {
+  const insertIndex = members.findIndex(
+    (current) => member.name.localeCompare(current.name) < 0
+  );
+
+  if (insertIndex === -1) {
+    return [...members, member];
+  }
+
+  return [
+    ...members.slice(0, insertIndex),
+    member,
+    ...members.slice(insertIndex),
+  ];
+}
+
 function validateLabelName(
   input: string
 ):
@@ -1567,6 +2151,15 @@ function renderMutationError(
       </Alert>
     ))
     .render();
+}
+
+function getExitErrorMessage(exit: Exit.Exit<unknown, unknown>) {
+  const cause = Exit.isFailure(exit) ? exit.cause : undefined;
+  const message = cause ? String(cause) : "";
+
+  return message && message !== "Error"
+    ? message
+    : "Collaborator access could not be updated.";
 }
 
 function getLocalDateInputValue(reference = new Date()) {

@@ -565,6 +565,59 @@ describe("jobs page", () => {
   }, 10_000);
 
   it(
+    "limits external collaborators to search and status filters without map controls",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({
+        viewer: {
+          role: "external",
+          userId: memberOneId,
+        },
+      });
+
+      expect(screen.getByLabelText("Search jobs")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /status filter/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /saved view/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /assignee filter/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /priority filter/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /label filter/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /site filter/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /more filter/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("tab", { name: "Map" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /new job/i })
+      ).not.toBeInTheDocument();
+
+      await chooseCommandFilter(user, /status filter/i, "All jobs");
+
+      const queuePanel = getPrimaryQueuePanel();
+      expect(
+        within(queuePanel).getAllByText("Closed inspection").length
+      ).toBeGreaterThan(0);
+    }
+  );
+
+  it(
     "searches jobs by external reference",
     {
       timeout: 10_000,

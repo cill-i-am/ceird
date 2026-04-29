@@ -102,7 +102,7 @@ import {
   visibleJobsAtom,
 } from "./jobs-state";
 import type { JobsAssigneeFilter, JobsListFilters } from "./jobs-state";
-import { hasJobsElevatedAccess } from "./jobs-viewer";
+import { canUseInternalJobOptions, hasJobsElevatedAccess } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
 type JobsViewMode = "list" | "map";
@@ -147,6 +147,8 @@ export function JobsPage({
   const setNotice = useAtomSet(jobsNoticeAtom);
   const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
+  const canUseInternalOptions = canUseInternalJobOptions(viewer);
+  const visibleViewMode = canUseInternalOptions ? viewMode : "list";
   const [savedViewsOpen, setSavedViewsOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
@@ -156,6 +158,22 @@ export function JobsPage({
     [viewer.userId]
   );
   const activeSavedView = findMatchingJobSavedView(filters, savedViews);
+
+  React.useEffect(() => {
+    if (canUseInternalOptions) {
+      return;
+    }
+
+    setFilters((current) => ({
+      ...current,
+      assigneeId: defaultJobsListFilters.assigneeId,
+      coordinatorId: defaultJobsListFilters.coordinatorId,
+      labelId: defaultJobsListFilters.labelId,
+      priority: defaultJobsListFilters.priority,
+      serviceAreaId: defaultJobsListFilters.serviceAreaId,
+      siteId: defaultJobsListFilters.siteId,
+    }));
+  }, [canUseInternalOptions, setFilters]);
 
   const patchFilters = React.useCallback(
     (patch: Partial<JobsListFilters>) => {
@@ -204,36 +222,40 @@ export function JobsPage({
             },
           ]
         : []),
-      ...savedViews.map((savedView, index) => ({
-        disabled: savedView.id === activeSavedView?.id,
-        group: "Job views",
-        icon: FilterHorizontalIcon,
-        id: `jobs-saved-view-${savedView.id}`,
-        priority: 65 - index,
-        run: () => applySavedView(savedView),
-        scope: "route" as const,
-        title: `Apply ${savedView.label} view`,
-      })),
-      {
-        disabled: viewMode === "list",
-        group: "Current page",
-        icon: LeftToRightListBulletIcon,
-        id: "jobs-switch-list-view",
-        priority: 80,
-        run: () => setViewMode("list"),
-        scope: "route",
-        title: "Switch to list view",
-      },
-      {
-        disabled: viewMode === "map",
-        group: "Current page",
-        icon: MapsSquare01Icon,
-        id: "jobs-switch-map-view",
-        priority: 70,
-        run: () => setViewMode("map"),
-        scope: "route",
-        title: "Switch to map view",
-      },
+      ...(canUseInternalOptions
+        ? [
+            ...savedViews.map((savedView, index) => ({
+              disabled: savedView.id === activeSavedView?.id,
+              group: "Job views",
+              icon: FilterHorizontalIcon,
+              id: `jobs-saved-view-${savedView.id}`,
+              priority: 65 - index,
+              run: () => applySavedView(savedView),
+              scope: "route" as const,
+              title: `Apply ${savedView.label} view`,
+            })),
+            {
+              disabled: viewMode === "list",
+              group: "Current page",
+              icon: LeftToRightListBulletIcon,
+              id: "jobs-switch-list-view",
+              priority: 80,
+              run: () => setViewMode("list"),
+              scope: "route" as const,
+              title: "Switch to list view",
+            },
+            {
+              disabled: viewMode === "map",
+              group: "Current page",
+              icon: MapsSquare01Icon,
+              id: "jobs-switch-map-view",
+              priority: 70,
+              run: () => setViewMode("map"),
+              scope: "route" as const,
+              title: "Switch to map view",
+            },
+          ]
+        : []),
       {
         disabled: filters.status === "active",
         group: "Job filters",
@@ -273,6 +295,7 @@ export function JobsPage({
     activeSavedView?.id,
     applySavedView,
     canCreateJobs,
+    canUseInternalOptions,
     filters.status,
     hasCustomFilters,
     navigate,
@@ -311,21 +334,21 @@ export function JobsPage({
     () => {
       setViewMode("list");
     },
-    { enabled: listHotkeysEnabled }
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
   );
   useAppHotkeySequence(
     "jobsMapView",
     () => {
       setViewMode("map");
     },
-    { enabled: listHotkeysEnabled }
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
   );
   useAppHotkeySequence(
     "jobsSavedViews",
     () => {
       setSavedViewsOpen(true);
     },
-    { enabled: listHotkeysEnabled }
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
   );
 
   return (
@@ -343,7 +366,9 @@ export function JobsPage({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
+            {canUseInternalOptions ? (
+              <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
+            ) : null}
             {canCreateJobs ? <NewJobLink /> : null}
           </div>
         </div>
@@ -360,6 +385,7 @@ export function JobsPage({
           savedViews={savedViews}
           savedViewsOpen={savedViewsOpen}
           searchInputRef={searchInputRef}
+          showInternalFilters={canUseInternalOptions}
         />
       </header>
 
@@ -395,7 +421,7 @@ export function JobsPage({
         />
       ) : null}
 
-      {viewMode === "list" ? (
+      {visibleViewMode === "list" ? (
         <JobsListView jobs={jobs} canCreateJobs={canCreateJobs} />
       ) : (
         <section data-testid="jobs-coverage-panel" className="min-h-0">
@@ -420,6 +446,7 @@ function JobsCommandToolbar({
   savedViews,
   savedViewsOpen,
   searchInputRef,
+  showInternalFilters,
 }: {
   readonly activeSavedView: JobSavedView | undefined;
   readonly filters: JobsListFilters;
@@ -447,17 +474,20 @@ function JobsCommandToolbar({
   readonly savedViews: readonly JobSavedView[];
   readonly savedViewsOpen: boolean;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
+  readonly showInternalFilters: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-        <SavedViewsControl
-          activeSavedView={activeSavedView}
-          onOpenChange={onSavedViewsOpenChange}
-          onSavedViewSelect={onSavedViewSelect}
-          open={savedViewsOpen}
-          savedViews={savedViews}
-        />
+        {showInternalFilters ? (
+          <SavedViewsControl
+            activeSavedView={activeSavedView}
+            onOpenChange={onSavedViewsOpenChange}
+            onSavedViewSelect={onSavedViewSelect}
+            open={savedViewsOpen}
+            savedViews={savedViews}
+          />
+        ) : null}
         <InputGroup className="h-8 bg-background xl:max-w-72">
           <InputGroupAddon>
             <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
@@ -480,118 +510,126 @@ function JobsCommandToolbar({
               onFiltersChange({ status: value as JobsListFilters["status"] })
             }
           />
-          <CommandFilter
-            label="Assignee"
-            value={formatJobsAssigneeFilterValue(filters.assigneeId)}
-            options={[
-              { label: "All assignees", value: "all" },
-              { label: "Unassigned", value: "unassigned" },
-              ...optionsState.members.map((member) => ({
-                label: member.name,
-                value: formatJobsAssigneeFilterValue({
-                  kind: "user",
-                  userId: member.id,
-                }),
-              })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({
-                assigneeId: parseJobsAssigneeFilterValue(
-                  value,
-                  optionsState.members
-                ),
-              })
-            }
-          />
-          <CommandFilter
-            label="Priority"
-            value={filters.priority}
-            options={[
-              { label: "All priorities", value: "all" },
-              ...Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
-                label,
-                value,
-              })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({
-                priority: value as JobsListFilters["priority"],
-              })
-            }
-          />
-          <CommandFilter
-            label="Label"
-            value={filters.labelId}
-            options={[
-              { label: "All labels", value: "all" },
-              ...optionsState.labels.map((label) => ({
-                label: label.name,
-                value: label.id,
-              })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({
-                labelId: value as JobsListFilters["labelId"],
-              })
-            }
-          />
-          <CommandFilter
-            label="Site"
-            value={filters.siteId}
-            options={[
-              { label: "All sites", value: "all" },
-              ...optionsState.sites
-                .filter((site) =>
-                  filters.serviceAreaId === "all"
-                    ? true
-                    : site.serviceAreaId === filters.serviceAreaId
-                )
-                .map((site) => ({
-                  label: site.name,
-                  value: site.id,
-                })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({ siteId: value as JobsListFilters["siteId"] })
-            }
-          />
-          <CommandFilter
-            label="More"
-            value="all"
-            triggerIcon={FilterHorizontalIcon}
-            options={[
-              { label: "All coordinators", value: "coordinator:all" },
-              ...optionsState.members.map((member) => ({
-                label: `Coordinator: ${member.name}`,
-                value: `coordinator:${member.id}`,
-              })),
-              { label: "All service areas", value: "serviceArea:all" },
-              ...optionsState.serviceAreas.map((serviceArea) => ({
-                label: `Service area: ${serviceArea.name}`,
-                value: `serviceArea:${serviceArea.id}`,
-              })),
-            ]}
-            onValueChange={(value) => {
-              const [kind, nextValue] = value.split(":");
+          {showInternalFilters ? (
+            <>
+              <CommandFilter
+                label="Assignee"
+                value={formatJobsAssigneeFilterValue(filters.assigneeId)}
+                options={[
+                  { label: "All assignees", value: "all" },
+                  { label: "Unassigned", value: "unassigned" },
+                  ...optionsState.members.map((member) => ({
+                    label: member.name,
+                    value: formatJobsAssigneeFilterValue({
+                      kind: "user",
+                      userId: member.id,
+                    }),
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    assigneeId: parseJobsAssigneeFilterValue(
+                      value,
+                      optionsState.members
+                    ),
+                  })
+                }
+              />
+              <CommandFilter
+                label="Priority"
+                value={filters.priority}
+                options={[
+                  { label: "All priorities", value: "all" },
+                  ...Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
+                    label,
+                    value,
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    priority: value as JobsListFilters["priority"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="Label"
+                value={filters.labelId}
+                options={[
+                  { label: "All labels", value: "all" },
+                  ...optionsState.labels.map((label) => ({
+                    label: label.name,
+                    value: label.id,
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    labelId: value as JobsListFilters["labelId"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="Site"
+                value={filters.siteId}
+                options={[
+                  { label: "All sites", value: "all" },
+                  ...optionsState.sites
+                    .filter((site) =>
+                      filters.serviceAreaId === "all"
+                        ? true
+                        : site.serviceAreaId === filters.serviceAreaId
+                    )
+                    .map((site) => ({
+                      label: site.name,
+                      value: site.id,
+                    })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    siteId: value as JobsListFilters["siteId"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="More"
+                value="all"
+                triggerIcon={FilterHorizontalIcon}
+                options={[
+                  { label: "All coordinators", value: "coordinator:all" },
+                  ...optionsState.members.map((member) => ({
+                    label: `Coordinator: ${member.name}`,
+                    value: `coordinator:${member.id}`,
+                  })),
+                  { label: "All service areas", value: "serviceArea:all" },
+                  ...optionsState.serviceAreas.map((serviceArea) => ({
+                    label: `Service area: ${serviceArea.name}`,
+                    value: `serviceArea:${serviceArea.id}`,
+                  })),
+                ]}
+                onValueChange={(value) => {
+                  const [kind, nextValue] = value.split(":");
 
-              if (kind === "coordinator") {
-                onFiltersChange({
-                  coordinatorId: nextValue as JobsListFilters["coordinatorId"],
-                });
-                return;
-              }
+                  if (kind === "coordinator") {
+                    onFiltersChange({
+                      coordinatorId:
+                        nextValue as JobsListFilters["coordinatorId"],
+                    });
+                    return;
+                  }
 
-              if (kind === "serviceArea") {
-                onFiltersChange({
-                  serviceAreaId: nextValue as JobsListFilters["serviceAreaId"],
-                  siteId:
-                    nextValue === "all"
-                      ? filters.siteId
-                      : defaultJobsListFilters.siteId,
-                });
-              }
-            }}
-          />
+                  if (kind === "serviceArea") {
+                    onFiltersChange({
+                      serviceAreaId:
+                        nextValue as JobsListFilters["serviceAreaId"],
+                      siteId:
+                        nextValue === "all"
+                          ? filters.siteId
+                          : defaultJobsListFilters.siteId,
+                    });
+                  }
+                }}
+              />
+            </>
+          ) : null}
 
           {hasCustomFilters ? (
             <Button

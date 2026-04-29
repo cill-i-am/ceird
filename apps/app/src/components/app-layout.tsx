@@ -1,6 +1,7 @@
 "use client";
 
 import { Outlet } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { AppSidebar } from "#/components/app-sidebar";
 import type { NavUserAccount } from "#/components/nav-user";
@@ -17,17 +18,21 @@ export type AppLayoutUser =
   | null;
 
 export interface AppLayoutProps {
+  currentOrganizationRole?: OrganizationRole | undefined;
   user: AppLayoutUser;
 }
 
-export function AppLayout({ user }: AppLayoutProps) {
+export function AppLayout({ currentOrganizationRole, user }: AppLayoutProps) {
   return (
     <CommandBarProvider>
       <AppGlobalCommandActions />
       <SidebarProvider className="[--header-height:calc(--spacing(15))]">
-        <AppSidebar user={user} />
+        <AppSidebar
+          currentOrganizationRole={currentOrganizationRole}
+          user={user}
+        />
         <SidebarInset className="min-h-svh overflow-hidden border border-border/60 bg-background/94 shadow-[0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] supports-[backdrop-filter]:bg-background/88">
-          <SiteHeader />
+          <SiteHeader currentOrganizationRole={currentOrganizationRole} />
           <div className="flex flex-1 flex-col overflow-x-clip">
             {user && !user.emailVerified ? (
               <EmailVerificationBanner

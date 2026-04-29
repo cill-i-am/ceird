@@ -157,22 +157,20 @@ describe("auth base URL resolution", () => {
   it("configures external as a member-level organization client role", () => {
     const authClient = createTaskTrackerAuthClient();
 
-    expect(
+    expect([
       authClient.organization.checkRolePermission({
         role: "external",
         permissions: {
           ac: ["read"],
         },
-      })
-    ).toBeTruthy();
-    expect(
+      }),
       authClient.organization.checkRolePermission({
         role: "external",
         permissions: {
           member: ["create"],
         },
-      })
-    ).toBeFalsy();
+      }),
+    ]).toStrictEqual([true, false]);
   }, 1000);
 
   it("builds the password reset redirect URL from an origin", () => {

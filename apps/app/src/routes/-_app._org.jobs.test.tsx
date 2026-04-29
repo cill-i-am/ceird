@@ -141,6 +141,49 @@ describe("jobs route loader", () => {
   );
 
   it(
+    "skips internal job options for external collaborators",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const list = {
+        items: [],
+        nextCursor: undefined,
+      };
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(list);
+      const { loadJobsRouteData } = await import("./_app._org.jobs");
+
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "external",
+          currentUserId: userId,
+        })
+      ).resolves.toStrictEqual({
+        list,
+        options: {
+          contacts: [],
+          labels: [],
+          members: [],
+          serviceAreas: [],
+          sites: [],
+        },
+        viewer: {
+          role: "external",
+          userId,
+        },
+      });
+      expect(mockedListAllCurrentServerJobs).toHaveBeenCalledWith({});
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
     "normalizes unknown jobs view search values to list mode",
     {
       timeout: 10_000,

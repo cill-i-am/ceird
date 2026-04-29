@@ -6,13 +6,16 @@ import {
   Location01Icon,
 } from "@hugeicons/core-free-icons";
 import type { HugeiconsIcon } from "@hugeicons/react";
-import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import {
+  isAdministrativeOrganizationRole,
+  isInternalOrganizationRole,
+} from "@task-tracker/identity-core";
 import type { OrganizationRole } from "@task-tracker/identity-core";
 import type * as React from "react";
 
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];
 
-export type AppNavigationAccess = "all" | "administrators";
+export type AppNavigationAccess = "all" | "internal" | "administrators";
 
 export interface AppNavigationItem {
   readonly access?: AppNavigationAccess;
@@ -25,7 +28,7 @@ export interface AppNavigationItem {
 
 export const APP_PRIMARY_NAV_ITEMS = [
   {
-    access: "all",
+    access: "internal",
     icon: ComputerTerminalIcon,
     id: "home",
     keywords: ["dashboard", "overview"],
@@ -41,7 +44,7 @@ export const APP_PRIMARY_NAV_ITEMS = [
     url: "/jobs",
   },
   {
-    access: "all",
+    access: "internal",
     icon: Location01Icon,
     id: "sites",
     keywords: ["locations", "places"],
@@ -70,10 +73,18 @@ export function getPrimaryNavItemsForRole(
   role?: OrganizationRole | null
 ): readonly AppNavigationItem[] {
   return APP_PRIMARY_NAV_ITEMS.filter((item) => {
-    if (item.access !== "administrators") {
+    if (item.access === "all") {
       return true;
     }
 
-    return role ? isAdministrativeOrganizationRole(role) : false;
+    if (!role) {
+      return false;
+    }
+
+    if (item.access === "internal") {
+      return isInternalOrganizationRole(role);
+    }
+
+    return isAdministrativeOrganizationRole(role);
   });
 }

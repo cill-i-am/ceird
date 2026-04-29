@@ -3,6 +3,7 @@ import type {
   CommentIdType,
   ActivityIdType,
   JobDetailResponse,
+  JobCollaboratorIdType,
   JobLabelIdType,
   JobSiteOption,
   SiteIdType,
@@ -30,17 +31,24 @@ type AppHotkeyMock = (...args: unknown[]) => void;
 const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
+const externalUserId = "12121212-1212-4121-8121-121212121212" as UserIdType;
+const secondExternalUserId =
+  "45454545-4545-4454-8454-454545454545" as UserIdType;
+const collaboratorId =
+  "23232323-2323-4232-8232-232323232323" as JobCollaboratorIdType;
 const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
 const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
 const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as JobLabelIdType;
 
 const {
+  mockedListMembers,
   mockedNavigate,
   mockedUseAppHotkey,
   mockedUseAtomInitialValues,
   mockedUseAtomSet,
   mockedUseAtomValue,
 } = vi.hoisted(() => ({
+  mockedListMembers: vi.fn<AsyncMutationMock>(),
   mockedNavigate: vi.fn<NavigateMock>(),
   mockedUseAppHotkey: vi.fn<AppHotkeyMock>(),
   mockedUseAtomInitialValues: vi.fn<InitialValuesMock>(),
@@ -58,10 +66,15 @@ const mockedPatchJob = vi.fn<AsyncMutationMock>();
 const mockedAddComment = vi.fn<AsyncMutationMock>();
 const mockedAddVisit = vi.fn<AsyncMutationMock>();
 const mockedAssignLabel = vi.fn<AsyncMutationMock>();
+const mockedAttachCollaborator = vi.fn<AsyncMutationMock>();
 const mockedCreateAndAssignLabel = vi.fn<AsyncMutationMock>();
+const mockedDetachCollaborator = vi.fn<AsyncMutationMock>();
 const mockedRemoveLabel = vi.fn<AsyncMutationMock>();
+const mockedRefreshCollaborators = vi.fn<AsyncMutationMock>();
 const mockedAddCostLine = vi.fn<AsyncMutationMock>();
+const mockedUpdateCollaborator = vi.fn<AsyncMutationMock>();
 let lookupSiteById: Map<SiteIdType, JobSiteOption>;
+let collaboratorState: readonly ReturnType<typeof buildCollaborator>[];
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
@@ -298,18 +311,35 @@ vi.mock("#/hotkeys/use-app-hotkey", () => ({
   useAppHotkey: mockedUseAppHotkey,
 }));
 
+vi.mock("#/lib/auth-client", () => ({
+  authClient: {
+    organization: {
+      listMembers: mockedListMembers,
+    },
+  },
+}));
+
 vi.mock("./jobs-detail-state", () => ({
   addJobCostLineMutationAtomFamily: (id: string) => `cost:${id}`,
   addJobCommentMutationAtomFamily: (id: string) => `comment:${id}`,
   addJobVisitMutationAtomFamily: (id: string) => `visit:${id}`,
+  attachJobCollaboratorMutationAtomFamily: (id: string) =>
+    `attach-collaborator:${id}`,
   assignJobLabelMutationAtomFamily: (id: string) => `assign-label:${id}`,
   createAndAssignJobLabelMutationAtomFamily: (id: string) =>
     `create-assign-label:${id}`,
+  detachJobCollaboratorMutationAtomFamily: (id: string) =>
+    `detach-collaborator:${id}`,
+  jobCollaboratorsStateAtomFamily: (id: string) => `collaborators:${id}`,
   jobDetailStateAtomFamily: (id: string) => `detail:${id}`,
   patchJobMutationAtomFamily: (id: string) => `patch:${id}`,
+  refreshJobCollaboratorsAtomFamily: (id: string) =>
+    `refresh-collaborators:${id}`,
   removeJobLabelMutationAtomFamily: (id: string) => `remove-label:${id}`,
   reopenJobMutationAtomFamily: (id: string) => `reopen:${id}`,
   transitionJobMutationAtomFamily: (id: string) => `transition:${id}`,
+  updateJobCollaboratorMutationAtomFamily: (id: string) =>
+    `update-collaborator:${id}`,
 }));
 
 vi.mock("./jobs-state", () => ({
@@ -325,10 +355,13 @@ vi.mock("./jobs-detail-location-map-preview-canvas", () => ({
 describe("jobs detail sheet", () => {
   beforeEach(() => {
     lookupSiteById = new Map([[siteId, buildSiteOption()]]);
+    collaboratorState = [];
 
     mockedNavigate.mockReset();
     mockedUseAtomInitialValues.mockReset();
+    mockedAttachCollaborator.mockReset();
     mockedTransitionJob.mockReset();
+    mockedDetachCollaborator.mockReset();
     mockedReopenJob.mockReset();
     mockedPatchJob.mockReset();
     mockedAddComment.mockReset();
@@ -337,11 +370,62 @@ describe("jobs detail sheet", () => {
     mockedCreateAndAssignLabel.mockReset();
     mockedRemoveLabel.mockReset();
     mockedAddCostLine.mockReset();
+    mockedListMembers.mockReset();
+    mockedRefreshCollaborators.mockReset();
+    mockedUpdateCollaborator.mockReset();
     mockedUseAppHotkey.mockReset();
+    mockedListMembers.mockResolvedValue({
+      data: {
+        members: [
+          {
+            id: "member_external",
+            role: "external",
+            userId: externalUserId,
+            user: {
+              email: "external@example.com",
+              id: externalUserId,
+              name: "External Partner",
+            },
+          },
+          {
+            id: "member_second_external",
+            role: "external",
+            userId: secondExternalUserId,
+            user: {
+              email: "requester@example.com",
+              id: secondExternalUserId,
+              name: "Job Requester",
+            },
+          },
+        ],
+        total: 2,
+      },
+      error: null,
+    });
 
     mockedUseAtomValue.mockImplementation((atom: unknown) => {
       if (atom === `detail:${workItemId}`) {
         return null;
+      }
+
+      if (atom === `collaborators:${workItemId}`) {
+        return collaboratorState;
+      }
+
+      if (atom === `refresh-collaborators:${workItemId}`) {
+        return { waiting: false };
+      }
+
+      if (atom === `attach-collaborator:${workItemId}`) {
+        return { waiting: false };
+      }
+
+      if (atom === `update-collaborator:${workItemId}`) {
+        return { waiting: false };
+      }
+
+      if (atom === `detach-collaborator:${workItemId}`) {
+        return { waiting: false };
       }
 
       if (atom === `transition:${workItemId}`) {
@@ -419,6 +503,22 @@ describe("jobs detail sheet", () => {
     });
 
     mockedUseAtomSet.mockImplementation((atom: unknown) => {
+      if (atom === `refresh-collaborators:${workItemId}`) {
+        return mockedRefreshCollaborators;
+      }
+
+      if (atom === `attach-collaborator:${workItemId}`) {
+        return mockedAttachCollaborator;
+      }
+
+      if (atom === `update-collaborator:${workItemId}`) {
+        return mockedUpdateCollaborator;
+      }
+
+      if (atom === `detach-collaborator:${workItemId}`) {
+        return mockedDetachCollaborator;
+      }
+
       if (atom === `transition:${workItemId}`) {
         return mockedTransitionJob;
       }
@@ -885,6 +985,137 @@ describe("jobs detail sheet", () => {
     ).not.toBeInTheDocument();
   }, 1000);
 
+  it("renders assigned external collaborator details as read-only when comments are disabled", () => {
+    renderDetailSheet(
+      buildDetail({
+        costs: undefined,
+        viewerAccess: {
+          canComment: false,
+          visibility: "external",
+        },
+      }),
+      {
+        role: "external",
+        userId: actorUserId,
+      }
+    );
+
+    expect(screen.getByText("Inspect boiler")).toBeInTheDocument();
+    expect(
+      screen.getByText("Checked the burner and reset the controls.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Add a comment")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add comment/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /apply status change/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /log visit/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add cost line/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add label/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /save site/i })
+    ).not.toBeInTheDocument();
+  }, 1000);
+
+  it(
+    "lets admins attach, update, and remove job collaborators",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      collaboratorState = [buildCollaborator()];
+      mockedAttachCollaborator.mockResolvedValue(
+        Exit.succeed(
+          buildCollaborator({
+            id: "45454545-4545-4454-8454-454545454545" as JobCollaboratorIdType,
+            roleLabel: "Tenant contact",
+          })
+        )
+      );
+      mockedUpdateCollaborator.mockResolvedValue(
+        Exit.succeed(buildCollaborator({ roleLabel: "Read-only contact" }))
+      );
+      mockedDetachCollaborator.mockResolvedValue(
+        Exit.succeed(buildCollaborator())
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), {
+        role: "admin",
+        userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
+      });
+
+      await screen.findByText("Collaborators");
+      await screen.findByText("External Partner");
+
+      expect(mockedRefreshCollaborators).toHaveBeenCalledWith();
+      expect(mockedListMembers).toHaveBeenCalledWith({
+        query: {
+          limit: 100,
+        },
+      });
+
+      await user.selectOptions(
+        screen.getByLabelText("External collaborator"),
+        secondExternalUserId
+      );
+      await user.clear(screen.getByLabelText("Role label"));
+      await user.type(screen.getByLabelText("Role label"), "Tenant contact");
+      await user.selectOptions(
+        screen.getByLabelText("Access level"),
+        "comment"
+      );
+      await user.click(screen.getByRole("button", { name: /grant access/i }));
+
+      expect(mockedAttachCollaborator).toHaveBeenCalledWith({
+        accessLevel: "comment",
+        roleLabel: "Tenant contact",
+        userId: secondExternalUserId,
+      });
+
+      await user.clear(
+        screen.getByLabelText("Role label for External Partner")
+      );
+      await user.type(
+        screen.getByLabelText("Role label for External Partner"),
+        "Read-only contact"
+      );
+      await user.selectOptions(
+        screen.getByLabelText("Access level for External Partner"),
+        "read"
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: /save external partner access/i,
+        })
+      );
+
+      expect(mockedUpdateCollaborator).toHaveBeenCalledWith({
+        collaboratorId,
+        input: {
+          accessLevel: "read",
+          roleLabel: "Read-only contact",
+        },
+      });
+
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove external partner access/i,
+        })
+      );
+
+      expect(mockedDetachCollaborator).toHaveBeenCalledWith(collaboratorId);
+    }
+  );
+
   it(
     "rejects invalid cost form values before submitting",
     {
@@ -1084,6 +1315,7 @@ function buildDetail(overrides?: {
   readonly site?: JobDetailResponse["site"];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
+  readonly viewerAccess?: JobDetailResponse["viewerAccess"];
 }) {
   const status = overrides?.status ?? "in_progress";
   return {
@@ -1119,7 +1351,7 @@ function buildDetail(overrides?: {
               subtotalMinor: 0,
             },
           },
-    viewerAccess: {
+    viewerAccess: overrides?.viewerAccess ?? {
       canComment: true,
       visibility: "internal" as const,
     },
@@ -1169,6 +1401,33 @@ function buildSiteOption(): JobSiteOption {
     name: "Docklands Campus",
     serviceAreaName: "Dublin",
     town: "Dublin",
+  };
+}
+
+interface TestJobCollaborator {
+  readonly accessLevel: "comment" | "read";
+  readonly createdAt: string;
+  readonly id: JobCollaboratorIdType;
+  readonly roleLabel: string;
+  readonly subjectType: "user";
+  readonly updatedAt: string;
+  readonly userId: UserIdType;
+  readonly workItemId: WorkItemIdType;
+}
+
+function buildCollaborator(
+  overrides?: Partial<TestJobCollaborator>
+): TestJobCollaborator {
+  return {
+    accessLevel: "comment" as const,
+    createdAt: "2026-04-23T09:00:00.000Z",
+    id: collaboratorId,
+    roleLabel: "Tenant reviewer",
+    subjectType: "user" as const,
+    updatedAt: "2026-04-23T09:00:00.000Z",
+    userId: externalUserId,
+    workItemId,
+    ...overrides,
   };
 }
 

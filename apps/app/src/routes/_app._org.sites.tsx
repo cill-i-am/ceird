@@ -14,6 +14,7 @@ import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
+  assertOrganizationInternalRole,
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
@@ -61,10 +62,13 @@ export async function loadSitesRouteData(
     };
   }
 
-  const [activeRole, siteOptions] = await Promise.all([
-    resolveSitesRouteOrganizationRole(resolvedOrganizationAccess),
-    getCurrentServerSiteOptions(),
-  ]);
+  const activeRole = await resolveSitesRouteOrganizationRole(
+    resolvedOrganizationAccess
+  );
+
+  assertOrganizationInternalRole({ role: activeRole });
+
+  const siteOptions = await getCurrentServerSiteOptions();
 
   return {
     options: {
