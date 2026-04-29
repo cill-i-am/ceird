@@ -533,6 +533,37 @@ describe("jobs repositories integration", () => {
     await applyAllMigrations(databaseUrl);
 
     const identity = await seedIdentityRecords(databaseUrl);
+    const serviceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "External collaboration area"
+    );
+    const siteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        addressLine1: "12 External Street",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D02 X2X2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        latitude: 53.345,
+        longitude: -6.267,
+        name: "External Tenant Site",
+        organizationId: identity.organizationId,
+        serviceAreaId,
+        town: "Dublin",
+      })
+    );
+    const contactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.create({
+        email: "external-contact@example.com",
+        name: "External Contact",
+        organizationId: identity.organizationId,
+        phone: "+353871111111",
+      })
+    );
     const externalUserId = await insertMember(
       databaseUrl,
       identity.organizationId,
@@ -542,8 +573,10 @@ describe("jobs repositories integration", () => {
     const grantedJob = await runJobsEffect(
       databaseUrl,
       JobsRepository.create({
+        contactId,
         createdByUserId: identity.ownerUserId,
         organizationId: identity.organizationId,
+        siteId,
         title: "Repair front door closer",
       })
     );
@@ -564,6 +597,31 @@ describe("jobs repositories integration", () => {
         quantity: 1,
         type: "material",
         unitPriceMinor: 4200,
+        workItemId: grantedJob.id,
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      JobsRepository.addActivity({
+        actorUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        payload: {
+          eventType: "job_created",
+          kind: grantedJob.kind,
+          priority: grantedJob.priority,
+          title: grantedJob.title,
+        },
+        workItemId: grantedJob.id,
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      JobsRepository.addVisit({
+        authorUserId: identity.ownerUserId,
+        durationMinutes: 60,
+        note: "Internal collaborator visit.",
+        organizationId: identity.organizationId,
+        visitDate: "2026-04-21",
         workItemId: grantedJob.id,
       })
     );
@@ -636,6 +694,16 @@ describe("jobs repositories integration", () => {
     );
     expect(accessibleIds).toStrictEqual([grantedJob.id]);
 
+    const internalDetail = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, grantedJob.id)
+      )
+    );
+    expect(internalDetail.activity).toHaveLength(1);
+    expect(internalDetail.visits).toHaveLength(1);
+    expect(internalDetail.costs?.lines).toHaveLength(1);
+
     const grantedDetail = expectSome(
       await runJobsEffect(
         databaseUrl,
@@ -646,6 +714,18 @@ describe("jobs repositories integration", () => {
       )
     );
     expect(grantedDetail.costs).toBeUndefined();
+    expect(grantedDetail.activity).toStrictEqual([]);
+    expect(grantedDetail.visits).toStrictEqual([]);
+    expect(grantedDetail.site).toMatchObject({
+      id: siteId,
+      name: "External Tenant Site",
+    });
+    expect(grantedDetail.contact).toMatchObject({
+      email: "external-contact@example.com",
+      id: contactId,
+      name: "External Contact",
+      phone: "+353871111111",
+    });
     expect(grantedDetail.viewerAccess).toStrictEqual({
       canComment: true,
       visibility: "external",

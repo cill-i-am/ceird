@@ -1350,7 +1350,26 @@ describe("jobs http integration", () => {
         makeJsonRequest(
           "/jobs",
           {
+            contact: {
+              kind: "create",
+              input: {
+                email: "tenant-contact@example.com",
+                name: "Tenant Contact",
+                phone: "+353 87 222 2222",
+              },
+            },
             priority: "medium",
+            site: {
+              kind: "create",
+              input: {
+                addressLine1: "22 Tenant Street",
+                country: "IE",
+                county: "Dublin",
+                eircode: "D02 X2X2",
+                name: "Tenant Site",
+                town: "Dublin",
+              },
+            },
             title: "Repair tenant intercom",
           },
           {
@@ -1393,6 +1412,21 @@ describe("jobs http integration", () => {
         )
       );
       expect(costLineResponse.status).toBe(201);
+
+      const visitResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}/visits`,
+          {
+            durationMinutes: 60,
+            note: "Internal visit before external review.",
+            visitDate: "2026-04-22",
+          },
+          {
+            cookieJar: ownerCookieJar,
+          }
+        )
+      );
+      expect(visitResponse.status).toBe(201);
 
       const attachResponse = await api.handler(
         makeJsonRequest(
@@ -1446,6 +1480,16 @@ describe("jobs http integration", () => {
         JobDetailResponseSchema
       )(await externalDetailResponse.json());
       expect(externalDetail.costs).toBeUndefined();
+      expect(externalDetail.activity).toStrictEqual([]);
+      expect(externalDetail.visits).toStrictEqual([]);
+      expect(externalDetail.site).toMatchObject({
+        name: "Tenant Site",
+      });
+      expect(externalDetail.contact).toMatchObject({
+        email: "tenant-contact@example.com",
+        name: "Tenant Contact",
+        phone: "+353 87 222 2222",
+      });
       expect(externalDetail.viewerAccess).toStrictEqual({
         canComment: true,
         visibility: "external",

@@ -1385,7 +1385,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
 
         return Option.some(
           decodeJobDetail({
-            activity: activity.map(mapJobActivityRow),
+            activity:
+              resolvedAccess.visibility === "external"
+                ? []
+                : activity.map(mapJobActivityRow),
             comments: comments.map(mapJobCommentRow),
             contact,
             site,
@@ -1407,7 +1410,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
                   : true,
               visibility: resolvedAccess.visibility,
             },
-            visits: visits.map(mapJobVisitRow),
+            visits:
+              resolvedAccess.visibility === "external"
+                ? []
+                : visits.map(mapJobVisitRow),
           })
         );
       });
