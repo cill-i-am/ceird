@@ -2,6 +2,8 @@
 // @vitest-environment node
 
 import type {
+  JobLabelIdType,
+  JobLabelsResponse,
   ActivityIdType,
   JobMemberOptionsResponse,
   JobListResponse,
@@ -15,6 +17,7 @@ import { JOBS_REQUEST_ERROR_TAG } from "./jobs-errors";
 import {
   listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
   getCurrentServerJobDetailDirect as getCurrentServerJobDetail,
+  getCurrentServerJobLabelsDirect as getCurrentServerJobLabels,
   getCurrentServerJobMemberOptionsDirect as getCurrentServerJobMemberOptions,
   getCurrentServerJobOptionsDirect as getCurrentServerJobOptions,
   listCurrentServerOrganizationActivityDirect as listCurrentServerOrganizationActivity,
@@ -34,6 +37,7 @@ const listResponse: JobListResponse = {
     {
       id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
       kind: "job",
+      labels: [],
       title: "Inspect boiler",
       status: "new",
       priority: "none",
@@ -45,6 +49,7 @@ const listResponse: JobListResponse = {
 
 const optionsResponse: JobOptionsResponse = {
   contacts: [],
+  labels: [],
   members: [
     {
       id: "22222222-2222-4222-8222-222222222222" as UserIdType,
@@ -53,6 +58,17 @@ const optionsResponse: JobOptionsResponse = {
   ],
   serviceAreas: [],
   sites: [],
+};
+
+const labelsResponse: JobLabelsResponse = {
+  labels: [
+    {
+      id: "33333333-3333-4333-8333-333333333333" as JobLabelIdType,
+      name: "Waiting on PO",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:00:00.000Z",
+    },
+  ],
 };
 
 const memberOptionsResponse: JobMemberOptionsResponse = {
@@ -141,6 +157,7 @@ describe("server jobs helpers", () => {
         {
           id: "22222222-2222-4222-8222-222222222222" as WorkItemIdType,
           kind: "job",
+          labels: [],
           title: "Replace air valve",
           status: "triaged",
           priority: "high",
@@ -225,6 +242,29 @@ describe("server jobs helpers", () => {
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe("http://tt-sbx-api:4301/jobs/options");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("forwards the current auth cookie when reading job labels", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(labelsResponse));
+
+    await expect(getCurrentServerJobLabels()).resolves.toStrictEqual(
+      labelsResponse
+    );
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://tt-sbx-api:4301/job-labels");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",

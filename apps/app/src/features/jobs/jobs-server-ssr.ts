@@ -1,5 +1,6 @@
 import type {
   JobDetailResponse,
+  JobLabelsResponse,
   JobListItem,
   JobListQuery,
   JobListResponse,
@@ -127,6 +128,14 @@ export async function getCurrentServerJobOptionsDirect(): Promise<JobOptionsResp
 
   return await runJobsClient(request, "JobsServer.getJobOptions", (client) =>
     client.jobs.getJobOptions()
+  );
+}
+
+export async function getCurrentServerJobLabelsDirect(): Promise<JobLabelsResponse> {
+  const request = await readServerJobsRequestStrict();
+
+  return await runJobsClient(request, "JobsServer.listJobLabels", (client) =>
+    client.jobs.listJobLabels()
   );
 }
 

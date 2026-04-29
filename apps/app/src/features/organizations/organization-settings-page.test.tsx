@@ -1,23 +1,51 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type { JobLabel, JobLabelIdType } from "@task-tracker/jobs-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Effect, pipe } from "effect";
 
+import type { runBrowserJobsRequest as RunBrowserJobsRequest } from "#/features/jobs/jobs-client";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OrganizationSettingsPage } from "./organization-settings-page";
 
 const organizationId = decodeOrganizationId("org_123");
 const nextOrganizationId = decodeOrganizationId("org_456");
+const urgentLabelId = "11111111-1111-4111-8111-111111111111" as JobLabelIdType;
+const blockedLabelId = "22222222-2222-4222-8222-222222222222" as JobLabelIdType;
 
-const { mockedInvalidate, mockedUpdateOrganization } = vi.hoisted(() => ({
+const {
+  mockedArchiveJobLabel,
+  mockedCreateJobLabel,
+  mockedInvalidate,
+  mockedRunBrowserJobsRequest,
+  mockedUpdateJobLabel,
+  mockedUpdateOrganization,
+} = vi.hoisted(() => ({
+  mockedArchiveJobLabel: vi.fn<(input: { labelId: string }) => JobLabel>(),
+  mockedCreateJobLabel: vi.fn<(input: { name: string }) => JobLabel>(),
   mockedInvalidate: vi.fn<() => Promise<void>>(),
+  mockedRunBrowserJobsRequest:
+    vi.fn<
+      (
+        operation: string,
+        execute: Parameters<typeof RunBrowserJobsRequest>[1]
+      ) => Effect.Effect<unknown, unknown>
+    >(),
+  mockedUpdateJobLabel:
+    vi.fn<(input: { labelId: string; name: string }) => JobLabel>(),
   mockedUpdateOrganization: vi.fn<
     (input: { data: { name: string }; organizationId: string }) => Promise<{
       data: { id: string; name: string; slug: string } | null;
       error: { message: string; status: number; statusText: string } | null;
     }>
   >(),
+}));
+
+vi.mock(import("#/features/jobs/jobs-client"), () => ({
+  runBrowserJobsRequest:
+    mockedRunBrowserJobsRequest as unknown as typeof RunBrowserJobsRequest,
 }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
@@ -59,6 +87,54 @@ vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
 describe("organization settings page", () => {
   beforeEach(() => {
     mockedInvalidate.mockResolvedValue();
+    mockedRunBrowserJobsRequest.mockImplementation((operation, execute) =>
+      pipe(
+        execute({
+          jobs: {
+            createJobLabel: ({ payload }: { payload: { name: string } }) =>
+              Effect.sync(() => mockedCreateJobLabel(payload)),
+            deleteJobLabel: ({ path }: { path: { labelId: string } }) =>
+              Effect.sync(() => mockedArchiveJobLabel(path)),
+            updateJobLabel: ({
+              path,
+              payload,
+            }: {
+              path: { labelId: string };
+              payload: { name: string };
+            }) =>
+              Effect.sync(() =>
+                mockedUpdateJobLabel({
+                  labelId: path.labelId,
+                  name: payload.name,
+                })
+              ),
+          },
+        } as never),
+        Effect.mapError((error) => error)
+      ).pipe(
+        Effect.tapError(() =>
+          Effect.logDebug(`Mocked ${operation} failed as requested`)
+        )
+      )
+    );
+    mockedCreateJobLabel.mockReturnValue(
+      buildLabel({
+        id: "33333333-3333-4333-8333-333333333333" as JobLabelIdType,
+        name: "Needs estimate",
+      })
+    );
+    mockedUpdateJobLabel.mockReturnValue(
+      buildLabel({
+        id: urgentLabelId,
+        name: "Emergency",
+      })
+    );
+    mockedArchiveJobLabel.mockReturnValue(
+      buildLabel({
+        id: blockedLabelId,
+        name: "Blocked",
+      })
+    );
     mockedUpdateOrganization.mockResolvedValue({
       data: {
         id: "org_123",
@@ -81,6 +157,7 @@ describe("organization settings page", () => {
           name: "Acme Field Ops",
           slug: "acme-field-ops",
         }}
+        jobLabels={[buildLabel({ id: urgentLabelId, name: "Urgent" })]}
       />
     );
 
@@ -91,6 +168,186 @@ describe("organization settings page", () => {
       "Acme Field Ops"
     );
     expect(screen.getByText("acme-field-ops")).toBeVisible();
+    expect(screen.getByText("Urgent")).toBeVisible();
+  }, 10_000);
+
+  it("creates a job label and refreshes route data", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[]}
+      />
+    );
+
+    await user.type(screen.getByLabelText("New label name"), "Needs estimate");
+    await user.click(screen.getByRole("button", { name: "Create label" }));
+
+    await waitFor(() => {
+      expect(mockedRunBrowserJobsRequest).toHaveBeenCalledWith(
+        "JobsBrowser.createJobLabel",
+        expect.any(Function)
+      );
+    });
+    expect(mockedCreateJobLabel).toHaveBeenCalledWith({
+      name: "Needs estimate",
+    });
+    await expect(screen.findByText("Needs estimate")).resolves.toBeVisible();
+    expect(screen.getByLabelText("New label name")).toHaveValue("");
+    expect(mockedInvalidate).toHaveBeenCalledWith();
+  }, 10_000);
+
+  it("edits a job label name", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[buildLabel({ id: urgentLabelId, name: "Urgent" })]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit Urgent" }));
+    await user.clear(screen.getByLabelText("Label name"));
+    await user.type(screen.getByLabelText("Label name"), "Emergency");
+    await user.click(
+      screen.getByRole("button", { name: "Save label changes" })
+    );
+
+    await waitFor(() => {
+      expect(mockedRunBrowserJobsRequest).toHaveBeenCalledWith(
+        "JobsBrowser.updateJobLabel",
+        expect.any(Function)
+      );
+    });
+    expect(mockedUpdateJobLabel).toHaveBeenCalledWith({
+      labelId: String(urgentLabelId),
+      name: "Emergency",
+    });
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+  }, 10_000);
+
+  it("archives a job label", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[
+          buildLabel({ id: urgentLabelId, name: "Urgent" }),
+          buildLabel({ id: blockedLabelId, name: "Blocked" }),
+        ]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Archive Blocked" }));
+
+    await waitFor(() => {
+      expect(mockedRunBrowserJobsRequest).toHaveBeenCalledWith(
+        "JobsBrowser.archiveJobLabel",
+        expect.any(Function)
+      );
+    });
+    expect(mockedArchiveJobLabel).toHaveBeenCalledWith({
+      labelId: String(blockedLabelId),
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Urgent")).toBeVisible();
+  }, 10_000);
+
+  it("validates job label names before creating", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[buildLabel({ id: urgentLabelId, name: "Urgent" })]}
+      />
+    );
+
+    await user.type(screen.getByLabelText("New label name"), "   ");
+    await user.click(screen.getByRole("button", { name: "Create label" }));
+
+    expect(
+      screen.getByText("Type a label name before creating it.")
+    ).toBeVisible();
+    expect(mockedRunBrowserJobsRequest).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText("New label name"));
+    await user.type(screen.getByLabelText("New label name"), "urgent");
+    await user.click(screen.getByRole("button", { name: "Create label" }));
+
+    expect(
+      screen.getByText("A label with that name already exists.")
+    ).toBeVisible();
+    expect(mockedRunBrowserJobsRequest).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("matches server whitespace normalization when checking duplicate label names", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[buildLabel({ id: urgentLabelId, name: "Waiting on PO" })]}
+      />
+    );
+
+    await user.type(screen.getByLabelText("New label name"), "Waiting  on PO");
+    await user.click(screen.getByRole("button", { name: "Create label" }));
+
+    expect(
+      screen.getByText("A label with that name already exists.")
+    ).toBeVisible();
+    expect(mockedRunBrowserJobsRequest).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("shows a safe error when a job label mutation fails", async () => {
+    mockedRunBrowserJobsRequest.mockReturnValueOnce(
+      Effect.fail(new Error("conflict"))
+    );
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationSettingsPage
+        organization={{
+          id: organizationId,
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }}
+        jobLabels={[]}
+      />
+    );
+
+    await user.type(screen.getByLabelText("New label name"), "Needs estimate");
+    await user.click(screen.getByRole("button", { name: "Create label" }));
+
+    await expect(
+      screen.findByText("We couldn't save the label. Please try again.")
+    ).resolves.toBeVisible();
   }, 10_000);
 
   it("updates the organization name and refreshes route data", async () => {
@@ -340,3 +597,18 @@ describe("organization settings page", () => {
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
   }, 10_000);
 });
+
+function buildLabel({
+  id = urgentLabelId,
+  name = "Urgent",
+}: {
+  readonly id?: JobLabelIdType;
+  readonly name?: string;
+} = {}): JobLabel {
+  return {
+    id,
+    name,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}

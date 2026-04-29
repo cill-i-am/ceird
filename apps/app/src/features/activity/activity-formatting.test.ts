@@ -1,8 +1,13 @@
-import type { JobActivityPayload, VisitIdType } from "@task-tracker/jobs-core";
+import type {
+  JobActivityPayload,
+  JobLabelIdType,
+  VisitIdType,
+} from "@task-tracker/jobs-core";
 
 import { describeJobActivity } from "./activity-formatting";
 
 const visitId = "88888888-8888-4888-8888-888888888888" as VisitIdType;
+const labelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
 
 describe("job activity formatting", () => {
   it.each([
@@ -44,6 +49,16 @@ describe("job activity formatting", () => {
       "job_reopened",
       { eventType: "job_reopened" },
       "Taylor Owner reopened the job.",
+    ],
+    [
+      "label_added",
+      { eventType: "label_added", labelId, labelName: "Waiting on PO" },
+      "Taylor Owner added the Waiting on PO label.",
+    ],
+    [
+      "label_removed",
+      { eventType: "label_removed", labelId, labelName: "Waiting on PO" },
+      "Taylor Owner removed the Waiting on PO label.",
     ],
     [
       "priority_changed",

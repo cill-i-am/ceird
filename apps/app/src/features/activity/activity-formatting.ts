@@ -41,6 +41,12 @@ export function describeJobActivity(
     case "job_reopened": {
       return `${actorPrefix}reopened the job.`;
     }
+    case "label_added": {
+      return `${actorPrefix}added the ${payload.labelName} label.`;
+    }
+    case "label_removed": {
+      return `${actorPrefix}removed the ${payload.labelName} label.`;
+    }
     case "priority_changed": {
       return `${actorPrefix}changed priority from ${JOB_PRIORITY_LABELS[payload.fromPriority]} to ${JOB_PRIORITY_LABELS[payload.toPriority]}.`;
     }

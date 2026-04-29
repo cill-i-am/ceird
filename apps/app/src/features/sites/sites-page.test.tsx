@@ -32,6 +32,7 @@ const organizationId = decodeOrganizationId("org_123");
 
 const options: JobOptionsResponse = {
   contacts: [],
+  labels: [],
   members: [],
   serviceAreas: [
     {

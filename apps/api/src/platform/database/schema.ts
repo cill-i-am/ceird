@@ -21,6 +21,8 @@ export {
 export {
   contact,
   contactRelations,
+  jobLabel,
+  jobLabelRelations,
   jobsSchema,
   rateCard,
   rateCardLine,
@@ -39,6 +41,8 @@ export {
   workItemCostLineRelations,
   workItemComment,
   workItemCommentRelations,
+  workItemLabel,
+  workItemLabelRelations,
   workItemRelations,
   workItemVisit,
   workItemVisitRelations,

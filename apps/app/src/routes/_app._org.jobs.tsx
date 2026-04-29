@@ -33,6 +33,7 @@ export { decodeJobsSearch };
 
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
+  labels: [],
   members: [],
   serviceAreas: [],
   sites: [],

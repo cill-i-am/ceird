@@ -4,6 +4,7 @@ import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
+  JobLabelIdType,
   ServiceAreaIdType,
   SiteIdType,
   UserIdType,
@@ -20,6 +21,7 @@ const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
+const labelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
 const serviceAreaId =
   "55555555-5555-4555-8555-555555555555" as ServiceAreaIdType;
 const organizationId = decodeOrganizationId("org_123");
@@ -154,6 +156,7 @@ describe("job detail route", () => {
                 externalReference: "PO-4471",
                 id: workItemId,
                 kind: "job",
+                labels: [buildLabel()],
                 priority: "medium",
                 siteId,
                 status: "in_progress",
@@ -173,6 +176,7 @@ describe("job detail route", () => {
                 siteIds: [siteId],
               },
             ],
+            labels: [buildLabel()],
             members: [
               {
                 id: actorUserId,
@@ -223,6 +227,7 @@ describe("job detail route", () => {
       expect(screen.getAllByText("Taylor Owner").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Depot").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Pat Contact").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
       expect(screen.getAllByText("PO-4471").length).toBeGreaterThan(0);
       expect(screen.getAllByText("pat@example.com").length).toBeGreaterThan(0);
       expect(screen.getAllByText("+353 87 765 4321").length).toBeGreaterThan(0);
@@ -280,6 +285,7 @@ function buildDetail() {
       externalReference: "PO-4471",
       id: workItemId,
       kind: "job" as const,
+      labels: [buildLabel()],
       priority: "medium" as const,
       siteId,
       status: "in_progress" as const,
@@ -297,5 +303,14 @@ function buildDetail() {
         workItemId,
       },
     ],
+  };
+}
+
+function buildLabel() {
+  return {
+    createdAt: "2026-04-23T09:00:00.000Z",
+    id: labelId,
+    name: "Urgent",
+    updatedAt: "2026-04-23T09:00:00.000Z",
   };
 }

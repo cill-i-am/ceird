@@ -18,6 +18,7 @@ import {
   JobCostLineUnitPriceMinorSchema,
   JobExternalReferenceSchema,
   JobKindSchema,
+  JobLabelNameSchema,
   JobPrioritySchema,
   JobStatusSchema,
   JobTitleSchema,
@@ -33,6 +34,7 @@ import {
   CommentId,
   ContactId,
   CostLineId,
+  JobLabelId,
   OrganizationId,
   RateCardId,
   RateCardLineId,
@@ -71,6 +73,14 @@ export const JobListCursor = Schema.String.pipe(
   Schema.brand("@task-tracker/jobs-core/JobListCursor")
 );
 export type JobListCursor = Schema.Schema.Type<typeof JobListCursor>;
+
+export const JobLabelSchema = Schema.Struct({
+  id: JobLabelId,
+  name: JobLabelNameSchema,
+  createdAt: IsoDateTimeString,
+  updatedAt: IsoDateTimeString,
+});
+export type JobLabel = Schema.Schema.Type<typeof JobLabelSchema>;
 
 export const ServiceAreaSchema = Schema.Struct({
   id: ServiceAreaId,
@@ -208,6 +218,7 @@ export const JobSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  labels: Schema.Array(JobLabelSchema),
   externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
@@ -228,6 +239,7 @@ export const JobListItemSchema = Schema.Struct({
   title: JobTitleSchema,
   status: JobStatusSchema,
   priority: JobPrioritySchema,
+  labels: Schema.Array(JobLabelSchema),
   externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
@@ -305,6 +317,18 @@ export const JobActivityVisitLoggedPayloadSchema = Schema.Struct({
   visitId: VisitId,
 });
 
+export const JobActivityLabelAddedPayloadSchema = Schema.Struct({
+  eventType: Schema.Literal("label_added"),
+  labelId: JobLabelId,
+  labelName: JobLabelNameSchema,
+});
+
+export const JobActivityLabelRemovedPayloadSchema = Schema.Struct({
+  eventType: Schema.Literal("label_removed"),
+  labelId: JobLabelId,
+  labelName: JobLabelNameSchema,
+});
+
 export const JobActivityCostLineAddedPayloadSchema = Schema.Struct({
   eventType: Schema.Literal("cost_line_added"),
   costLineId: CostLineId,
@@ -322,6 +346,8 @@ export const JobActivityPayloadSchema = Schema.Union(
   JobActivityContactChangedPayloadSchema,
   JobActivityReopenedPayloadSchema,
   JobActivityVisitLoggedPayloadSchema,
+  JobActivityLabelAddedPayloadSchema,
+  JobActivityLabelRemovedPayloadSchema,
   JobActivityCostLineAddedPayloadSchema
 );
 export type JobActivityPayload = Schema.Schema.Type<
@@ -442,6 +468,7 @@ export const JobListQuerySchema = Schema.Struct({
   coordinatorId: Schema.optional(UserId),
   priority: Schema.optional(JobPrioritySchema),
   siteId: Schema.optional(SiteId),
+  labelId: Schema.optional(JobLabelId),
   serviceAreaId: Schema.optional(ServiceAreaId),
 });
 export type JobListQuery = Schema.Schema.Type<typeof JobListQuerySchema>;
@@ -595,6 +622,39 @@ export type AddJobVisitInput = Schema.Schema.Type<
 export const AddJobVisitResponseSchema = JobVisitSchema;
 export type AddJobVisitResponse = Schema.Schema.Type<
   typeof AddJobVisitResponseSchema
+>;
+
+export const CreateJobLabelInputSchema = Schema.Struct({
+  name: JobLabelNameSchema,
+});
+export type CreateJobLabelInput = Schema.Schema.Type<
+  typeof CreateJobLabelInputSchema
+>;
+
+export const UpdateJobLabelInputSchema = Schema.Struct({
+  name: JobLabelNameSchema,
+});
+export type UpdateJobLabelInput = Schema.Schema.Type<
+  typeof UpdateJobLabelInputSchema
+>;
+
+export const AssignJobLabelInputSchema = Schema.Struct({
+  labelId: JobLabelId,
+});
+export type AssignJobLabelInput = Schema.Schema.Type<
+  typeof AssignJobLabelInputSchema
+>;
+
+export const JobLabelResponseSchema = JobLabelSchema;
+export type JobLabelResponse = Schema.Schema.Type<
+  typeof JobLabelResponseSchema
+>;
+
+export const JobLabelsResponseSchema = Schema.Struct({
+  labels: Schema.Array(JobLabelSchema),
+});
+export type JobLabelsResponse = Schema.Schema.Type<
+  typeof JobLabelsResponseSchema
 >;
 
 export const AddJobCostLineInputSchema = Schema.Struct({
@@ -755,6 +815,7 @@ export const JobOptionsResponseSchema = Schema.Struct({
   serviceAreas: Schema.Array(ServiceAreaOptionSchema),
   sites: Schema.Array(JobSiteOptionSchema),
   contacts: Schema.Array(JobContactOptionSchema),
+  labels: Schema.Array(JobLabelSchema),
 });
 export type JobOptionsResponse = Schema.Schema.Type<
   typeof JobOptionsResponseSchema

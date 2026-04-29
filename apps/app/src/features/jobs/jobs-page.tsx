@@ -16,6 +16,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type {
+  JobLabel,
   JobListItem,
   JobPriority,
   UserIdType,
@@ -428,6 +429,7 @@ function JobsCommandToolbar({
   readonly onSavedViewSelect: (savedView: JobSavedView) => void;
   readonly onSavedViewsOpenChange: (open: boolean) => void;
   readonly optionsState: {
+    readonly labels: readonly { readonly id: string; readonly name: string }[];
     readonly members: readonly {
       readonly id: UserIdType;
       readonly name: string;
@@ -514,6 +516,22 @@ function JobsCommandToolbar({
             onValueChange={(value) =>
               onFiltersChange({
                 priority: value as JobsListFilters["priority"],
+              })
+            }
+          />
+          <CommandFilter
+            label="Label"
+            value={filters.labelId}
+            options={[
+              { label: "All labels", value: "all" },
+              ...optionsState.labels.map((label) => ({
+                label: label.name,
+                value: label.id,
+              })),
+            ]}
+            onValueChange={(value) =>
+              onFiltersChange({
+                labelId: value as JobsListFilters["labelId"],
               })
             }
           />
@@ -875,6 +893,7 @@ function JobIssueTableRow({
             <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
           </span>
           <span className="min-w-0 truncate font-medium">{job.title}</span>
+          <JobLabelBadges labels={job.labels} />
           {site && hasSiteCoordinates(site) ? (
             <HugeiconsIcon
               icon={Location01Icon}
@@ -944,6 +963,7 @@ function JobIssueRow({
           <span className="truncate font-medium">{job.title}</span>
           <StatusBadge status={job.status} />
           <PriorityBadge priority={job.priority} />
+          <JobLabelBadges labels={job.labels} />
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{site?.name ?? "No site"}</span>
@@ -1047,6 +1067,26 @@ function PriorityBadge({ priority }: { readonly priority: JobPriority }) {
   );
 }
 
+function JobLabelBadges({ labels }: { readonly labels: readonly JobLabel[] }) {
+  if (labels.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {labels.map((label) => (
+        <Badge
+          key={label.id}
+          variant="outline"
+          className="max-w-32 rounded-full text-muted-foreground"
+        >
+          <span className="truncate">{label.name}</span>
+        </Badge>
+      ))}
+    </>
+  );
+}
+
 function formatRelativeDate(value: string) {
   const date = new Date(value);
   const formatter = new Intl.DateTimeFormat("en", {
@@ -1066,6 +1106,7 @@ interface ActiveFilterBadge {
 function buildActiveFilterBadges(
   filters: JobsListFilters,
   lookup: {
+    readonly labelById: ReadonlyMap<string, { readonly name: string }>;
     readonly memberById: ReadonlyMap<string, { readonly name: string }>;
     readonly serviceAreaById: ReadonlyMap<string, { readonly name: string }>;
     readonly siteById: ReadonlyMap<string, { readonly name: string }>;
@@ -1117,21 +1158,50 @@ function buildActiveFilterBadges(
     });
   }
 
-  if (filters.serviceAreaId !== defaultJobsListFilters.serviceAreaId) {
-    badges.push({
-      key: "serviceAreaId",
-      label: `Service area: ${lookup.serviceAreaById.get(filters.serviceAreaId)?.name ?? "Unknown"}`,
-    });
-  }
-
-  if (filters.siteId !== defaultJobsListFilters.siteId) {
-    badges.push({
-      key: "siteId",
-      label: `Site: ${lookup.siteById.get(filters.siteId)?.name ?? "Unknown"}`,
-    });
-  }
+  addLookupFilterBadge(
+    badges,
+    "labelId",
+    filters.labelId,
+    defaultJobsListFilters.labelId,
+    "Label",
+    lookup.labelById
+  );
+  addLookupFilterBadge(
+    badges,
+    "serviceAreaId",
+    filters.serviceAreaId,
+    defaultJobsListFilters.serviceAreaId,
+    "Service area",
+    lookup.serviceAreaById
+  );
+  addLookupFilterBadge(
+    badges,
+    "siteId",
+    filters.siteId,
+    defaultJobsListFilters.siteId,
+    "Site",
+    lookup.siteById
+  );
 
   return badges;
+}
+
+function addLookupFilterBadge(
+  badges: ActiveFilterBadge[],
+  key: keyof JobsListFilters,
+  value: string,
+  defaultValue: string,
+  labelPrefix: string,
+  lookup: ReadonlyMap<string, { readonly name: string }>
+) {
+  if (value === defaultValue) {
+    return;
+  }
+
+  badges.push({
+    key,
+    label: `${labelPrefix}: ${lookup.get(value)?.name ?? "Unknown"}`,
+  });
 }
 
 function buildAssigneeFilterBadgeLabel(

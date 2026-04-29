@@ -103,6 +103,8 @@ export const JOB_ACTIVITY_EVENT_TYPES = [
   "contact_changed",
   "job_reopened",
   "visit_logged",
+  "label_added",
+  "label_removed",
   "cost_line_added",
 ] as const;
 export const JobActivityEventTypeSchema = Schema.Literal(
@@ -227,3 +229,13 @@ export const JobBlockedReasonSchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobBlockedReason = Schema.Schema.Type<
   typeof JobBlockedReasonSchema
 >;
+
+export const JobLabelNameSchema = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(48)
+);
+export type JobLabelName = Schema.Schema.Type<typeof JobLabelNameSchema>;
+
+export function normalizeJobLabelName(name: string): string {
+  return name.trim().replaceAll(/\s+/g, " ").toLocaleLowerCase("en");
+}

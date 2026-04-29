@@ -8,6 +8,7 @@ import {
   SiteId,
   UserId,
   WorkItemId,
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
 } from "@task-tracker/jobs-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Cause, ConfigProvider, Effect, Exit, Option, Schema } from "effect";
@@ -31,6 +32,7 @@ import {
 import {
   ConfigurationRepository,
   ContactsRepository,
+  JobLabelsRepository,
   JobsRepositoriesLive,
   JobsRepository,
   RateCardsRepository,
@@ -489,6 +491,340 @@ describe("jobs repositories integration", () => {
     ]);
     expect(bySite.items.map((item) => item.id)).toStrictEqual([middleJobId]);
     expect(byStatus.items.map((item) => item.id)).toStrictEqual([middleJobId]);
+  }, 30_000);
+
+  it("creates, assigns, removes, archives, and filters organization job labels", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_labels" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping label coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+    const identity = await seedIdentityRecords(databaseUrl);
+    const foreignIdentity = await seedIdentityRecords(databaseUrl);
+
+    const createdJob = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        title: "Replace lock cylinder",
+      })
+    );
+
+    const label = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Waiting on PO",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    const sameNameInOtherOrg = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Waiting on PO",
+        organizationId: foreignIdentity.organizationId,
+      })
+    );
+
+    expect(label.name).toBe("Waiting on PO");
+    expect(sameNameInOtherOrg.name).toBe("Waiting on PO");
+
+    const conflictingLabel = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Needs Review",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    const duplicateLabelExit = await runJobsEffectExit(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: " waiting on po ",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    expectFailureTag(duplicateLabelExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+
+    const updatedLabel = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobLabelsRepository.update(identity.organizationId, label.id, {
+          name: "Awaiting PO",
+        })
+      )
+    );
+    expect(updatedLabel).toMatchObject({
+      id: label.id,
+      name: "Awaiting PO",
+    });
+
+    const updateConflictExit = await runJobsEffectExit(
+      databaseUrl,
+      JobLabelsRepository.update(identity.organizationId, conflictingLabel.id, {
+        name: " awaiting po ",
+      })
+    );
+
+    expectFailureTag(updateConflictExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+
+    const activeLabels = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.list(identity.organizationId)
+    );
+    expect(activeLabels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Awaiting PO",
+      "Needs Review",
+    ]);
+
+    const assigned = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+
+    expect(assigned).toStrictEqual({
+      changed: true,
+      label: updatedLabel,
+    });
+
+    const duplicateAssigned = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+
+    expect(duplicateAssigned).toStrictEqual({
+      changed: false,
+      label: updatedLabel,
+    });
+
+    const detail = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(detail.job.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Awaiting PO",
+    ]);
+
+    const patchedJob = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.patch(identity.organizationId, createdJob.id, {
+          title: "Replace lock cylinder after PO approval",
+        })
+      )
+    );
+    expect(patchedJob.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Awaiting PO",
+    ]);
+
+    const transitionedJob = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.transition(identity.organizationId, createdJob.id, {
+          completedByUserId: identity.ownerUserId,
+          status: "completed",
+        })
+      )
+    );
+    expect(
+      transitionedJob.labels.map((jobLabel) => jobLabel.name)
+    ).toStrictEqual(["Awaiting PO"]);
+
+    const reopenedJob = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.reopen(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(reopenedJob.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "Awaiting PO",
+    ]);
+
+    const filtered = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+    );
+    expect(filtered.items.map((item) => item.id)).toStrictEqual([
+      createdJob.id,
+    ]);
+
+    const removed = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.removeFromJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+    expect(removed).toStrictEqual({
+      changed: true,
+      label: updatedLabel,
+    });
+
+    const secondRemoved = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.removeFromJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+    expect(secondRemoved).toStrictEqual({
+      changed: false,
+      label: updatedLabel,
+    });
+
+    const detailAfterSecondRemove = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(detailAfterSecondRemove.job.labels).toStrictEqual([]);
+
+    await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: updatedLabel.id,
+        organizationId: identity.organizationId,
+        workItemId: createdJob.id,
+      })
+    );
+
+    const archived = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.archive(identity.organizationId, updatedLabel.id)
+    );
+    expect(Option.getOrUndefined(archived)).toMatchObject({
+      label: {
+        id: updatedLabel.id,
+        name: updatedLabel.name,
+      },
+      removedWorkItemIds: [createdJob.id],
+    });
+
+    const detailAfterArchive = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        JobsRepository.getDetail(identity.organizationId, createdJob.id)
+      )
+    );
+    expect(detailAfterArchive.job.labels).toStrictEqual([]);
+
+    const filteredAfterArchive = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.list(identity.organizationId, { labelId: updatedLabel.id })
+    );
+    expect(filteredAfterArchive.items).toStrictEqual([]);
+
+    const labelsAfterArchive = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.list(identity.organizationId)
+    );
+    expect(labelsAfterArchive.map((jobLabel) => jobLabel.id)).not.toContain(
+      updatedLabel.id
+    );
+  }, 30_000);
+
+  it("rejects invalid job label names at the database boundary", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping label constraint coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const oversizedLabelName = "x".repeat(49);
+
+    await withPool(databaseUrl, async (pool) => {
+      await expect(
+        pool.query(
+          `
+            insert into job_labels (
+              id,
+              organization_id,
+              name,
+              normalized_name,
+              created_at,
+              updated_at
+            )
+            values ($1, $2, $3, $4, now(), now())
+          `,
+          [
+            randomUUID(),
+            identity.organizationId,
+            oversizedLabelName,
+            oversizedLabelName,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "job_labels_name_max_length_chk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into job_labels (
+              id,
+              organization_id,
+              name,
+              normalized_name,
+              created_at,
+              updated_at
+            )
+            values ($1, $2, $3, $4, now(), now())
+          `,
+          [
+            randomUUID(),
+            identity.organizationId,
+            "Valid label",
+            oversizedLabelName,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "job_labels_normalized_name_max_length_chk",
+      });
+    });
   }, 30_000);
 
   it("lists organization activity with organization and filter boundaries", async (context: {
@@ -993,6 +1329,20 @@ describe("jobs repositories integration", () => {
         title: "Primary org job",
       })
     );
+    const primaryLabel = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Primary label",
+        organizationId: primaryIdentity.organizationId,
+      })
+    );
+    const foreignLabel = await runJobsEffect(
+      databaseUrl,
+      JobLabelsRepository.create({
+        name: "Foreign label",
+        organizationId: foreignIdentity.organizationId,
+      })
+    );
 
     const createWithForeignContactExit = await runJobsEffectExit(
       databaseUrl,
@@ -1035,6 +1385,14 @@ describe("jobs repositories integration", () => {
         note: "Cross-org visit",
         organizationId: foreignIdentity.organizationId,
         visitDate: "2026-04-21",
+        workItemId: primaryJob.id,
+      })
+    );
+    const assignForeignLabelExit = await runJobsEffectExit(
+      databaseUrl,
+      JobLabelsRepository.assignToJob({
+        labelId: foreignLabel.id,
+        organizationId: primaryIdentity.organizationId,
         workItemId: primaryJob.id,
       })
     );
@@ -1088,6 +1446,63 @@ describe("jobs repositories integration", () => {
       visitWithForeignOrganizationExit,
       "@task-tracker/domains/jobs/WorkItemOrganizationMismatchError"
     );
+    expectFailureTag(
+      assignForeignLabelExit,
+      "@task-tracker/jobs-core/JobLabelNotFoundError"
+    );
+
+    await withPool(databaseUrl, async (pool) => {
+      await expect(
+        pool.query(
+          `
+            insert into work_item_labels (
+              work_item_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [primaryJob.id, foreignLabel.id, primaryIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_labels_label_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into work_item_labels (
+              work_item_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [primaryJob.id, foreignLabel.id, foreignIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_labels_work_item_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into work_item_labels (
+              work_item_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [primaryJob.id, primaryLabel.id, primaryIdentity.organizationId]
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+    });
   }, 30_000);
 
   it("rejects invalid site geocoding metadata at the database boundary", async (context: {

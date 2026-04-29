@@ -131,6 +131,7 @@ function buildJob(
     createdAt: "2026-04-23T11:00:00.000Z",
     id,
     kind: "job",
+    labels: [],
     priority: "none",
     status,
     title,

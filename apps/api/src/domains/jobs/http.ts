@@ -39,6 +39,22 @@ const JobsHandlersLive = HttpApiBuilder.group(JobsApi, "jobs", (handlers) =>
       .handle("addJobVisit", ({ path, payload }) =>
         jobsService.addVisit(path.workItemId, payload)
       )
+      .handle("assignJobLabel", ({ path, payload }) =>
+        jobsService.assignJobLabel(path.workItemId, payload)
+      )
+      .handle("removeJobLabel", ({ path }) =>
+        jobsService.removeJobLabel(path.workItemId, path.labelId)
+      )
+      .handle("listJobLabels", () => jobsService.listJobLabels())
+      .handle("createJobLabel", ({ payload }) =>
+        jobsService.createJobLabel(payload)
+      )
+      .handle("updateJobLabel", ({ path, payload }) =>
+        jobsService.updateJobLabel(path.labelId, payload)
+      )
+      .handle("deleteJobLabel", ({ path }) =>
+        jobsService.archiveJobLabel(path.labelId)
+      )
       .handle("addJobCostLine", ({ path, payload }) =>
         jobsService.addCostLine(path.workItemId, payload)
       );

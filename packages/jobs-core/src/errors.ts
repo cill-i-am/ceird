@@ -3,9 +3,14 @@
 import { HttpApiSchema } from "@effect/platform";
 import { Schema } from "effect";
 
-import { JobStatusSchema, SiteCountrySchema } from "./domain.js";
+import {
+  JobLabelNameSchema,
+  JobStatusSchema,
+  SiteCountrySchema,
+} from "./domain.js";
 import {
   ContactId,
+  JobLabelId,
   OrganizationId,
   RateCardId,
   ServiceAreaId,
@@ -130,6 +135,28 @@ export class VisitDurationIncrementError extends Schema.TaggedError<VisitDuratio
   HttpApiSchema.annotations({ status: 400 })
 ) {}
 
+export const JOB_LABEL_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/JobLabelNotFoundError" as const;
+export class JobLabelNotFoundError extends Schema.TaggedError<JobLabelNotFoundError>()(
+  JOB_LABEL_NOT_FOUND_ERROR_TAG,
+  {
+    labelId: Schema.optional(JobLabelId),
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const JOB_LABEL_NAME_CONFLICT_ERROR_TAG =
+  "@task-tracker/jobs-core/JobLabelNameConflictError" as const;
+export class JobLabelNameConflictError extends Schema.TaggedError<JobLabelNameConflictError>()(
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+  {
+    message: Schema.String,
+    name: JobLabelNameSchema,
+  },
+  HttpApiSchema.annotations({ status: 409 })
+) {}
+
 export const SITE_NOT_FOUND_ERROR_TAG =
   "@task-tracker/jobs-core/SiteNotFoundError" as const;
 export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
@@ -211,6 +238,8 @@ export type JobsError =
   | BlockedReasonRequiredError
   | CoordinatorMatchesAssigneeError
   | VisitDurationIncrementError
+  | JobLabelNotFoundError
+  | JobLabelNameConflictError
   | SiteNotFoundError
   | SiteGeocodingFailedError
   | ContactNotFoundError

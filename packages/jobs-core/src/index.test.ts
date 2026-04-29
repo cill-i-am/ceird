@@ -16,8 +16,12 @@ import {
   CreateSiteResponseSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
+  JobActivityLabelAddedPayloadSchema,
   JobDetailResponseSchema,
   JobContactOptionSchema,
+  JobLabelNameSchema,
+  JobLabelSchema,
+  JobListItemSchema,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
   JobPrioritySchema,
@@ -47,6 +51,7 @@ import {
   UserId,
   VisitDurationIncrementError,
   WorkItemId,
+  normalizeJobLabelName,
 } from "./index.js";
 
 const { describe, expect, it } = Vitest;
@@ -253,6 +258,7 @@ describe("jobs-core", () => {
           createdByUserId: "",
           id: "11111111-1111-4111-8111-111111111111",
           kind: "job",
+          labels: [],
           priority: "none",
           status: "new",
           title: "Inspect boiler",
@@ -563,6 +569,74 @@ describe("jobs-core", () => {
         limit: "101",
       })
     ).toThrow(/lessThanOrEqualTo/);
+  }, 5000);
+
+  it("keeps job label DTOs shapeable", () => {
+    expect(
+      ParseResult.decodeUnknownSync(JobLabelNameSchema)("  Waiting on PO  ")
+    ).toBe("Waiting on PO");
+    expect(normalizeJobLabelName("  Waiting   on PO  ")).toBe("waiting on po");
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(JobLabelNameSchema)(" ".repeat(4))
+    ).toThrow(/at least 1/);
+
+    const label = ParseResult.decodeUnknownSync(JobLabelSchema)({
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Waiting on PO",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:00:00.000Z",
+    });
+
+    expect(label.name).toBe("Waiting on PO");
+  }, 5000);
+
+  it("keeps job labels on list and detail responses", () => {
+    const label = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "No access",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:00:00.000Z",
+    };
+
+    const listItem = ParseResult.decodeUnknownSync(JobListItemSchema)({
+      createdAt: "2026-04-28T10:00:00.000Z",
+      id: "22222222-2222-4222-8222-222222222222",
+      kind: "job",
+      labels: [label],
+      priority: "none",
+      status: "new",
+      title: "Inspect access panel",
+      updatedAt: "2026-04-28T10:15:00.000Z",
+    });
+
+    expect(listItem.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "No access",
+    ]);
+  }, 5000);
+
+  it("accepts label filters and label activity payloads", () => {
+    expect(
+      ParseResult.decodeUnknownSync(JobListQuerySchema)({
+        labelId: "11111111-1111-4111-8111-111111111111",
+        limit: "25",
+      })
+    ).toMatchObject({
+      labelId: "11111111-1111-4111-8111-111111111111",
+      limit: 25,
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(JobActivityLabelAddedPayloadSchema)({
+        eventType: "label_added",
+        labelId: "11111111-1111-4111-8111-111111111111",
+        labelName: "Parts ordered",
+      })
+    ).toStrictEqual({
+      eventType: "label_added",
+      labelId: "11111111-1111-4111-8111-111111111111",
+      labelName: "Parts ordered",
+    });
   }, 5000);
 
   it("keeps the activity and visit DTOs well-formed", () => {
@@ -934,6 +1008,10 @@ describe("jobs-core", () => {
       "/jobs/{workItemId}/reopen",
       "/jobs/{workItemId}/comments",
       "/jobs/{workItemId}/visits",
+      "/jobs/{workItemId}/labels",
+      "/jobs/{workItemId}/labels/{labelId}",
+      "/job-labels",
+      "/job-labels/{labelId}",
       "/jobs/{workItemId}/cost-lines",
       "/service-areas",
       "/service-areas/{serviceAreaId}",
@@ -960,6 +1038,20 @@ describe("jobs-core", () => {
       "sites.getSiteOptions"
     );
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
+  }, 5000);
+
+  it("documents job label api operations", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+
+    expect(spec.paths["/job-labels"]?.get?.operationId).toBe(
+      "jobs.listJobLabels"
+    );
+    expect(spec.paths["/job-labels"]?.post?.operationId).toBe(
+      "jobs.createJobLabel"
+    );
+    expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
+      "jobs.assignJobLabel"
+    );
   }, 5000);
 
   it("surfaces the rate cards api contract with the expected paths", () => {
@@ -1113,6 +1205,7 @@ describe("jobs-core", () => {
           },
         ],
         contacts: [],
+        labels: [],
       })
     ).toStrictEqual({
       members: [],
@@ -1139,6 +1232,7 @@ describe("jobs-core", () => {
         },
       ],
       contacts: [],
+      labels: [],
     });
   }, 5000);
 

@@ -6,6 +6,7 @@ import type {
   CreateJobInput,
   CreateJobResponse,
   JobContactOption,
+  JobLabelIdType,
   JobListCursorType,
   JobListQuery,
   JobListItem,
@@ -33,6 +34,7 @@ export type JobsAssigneeFilter =
 export interface JobsListFilters {
   readonly assigneeId: JobsAssigneeFilter;
   readonly coordinatorId: UserIdType | "all";
+  readonly labelId: JobLabelIdType | "all";
   readonly priority: JobPriority | "all";
   readonly query: string;
   readonly serviceAreaId: ServiceAreaIdType | "all";
@@ -58,6 +60,7 @@ export interface JobsNotice {
 
 export const emptyJobOptions: JobOptionsResponse = {
   contacts: [],
+  labels: [],
   members: [],
   serviceAreas: [],
   sites: [],
@@ -66,6 +69,7 @@ export const emptyJobOptions: JobOptionsResponse = {
 export const defaultJobsListFilters: JobsListFilters = {
   assigneeId: { kind: "all" },
   coordinatorId: "all",
+  labelId: "all",
   priority: "all",
   query: "",
   serviceAreaId: "all",
@@ -100,6 +104,7 @@ export const jobsLookupAtom = Atom.make((get) => {
       options.contacts.map((contact) => [contact.id, contact])
     ),
     memberById: new Map(options.members.map((member) => [member.id, member])),
+    labelById: new Map(options.labels.map((label) => [label.id, label])),
     serviceAreaById: new Map(
       options.serviceAreas.map((serviceArea) => [serviceArea.id, serviceArea])
     ),
@@ -388,6 +393,17 @@ function matchesStatusFilter(status: JobStatus, filter: JobsStatusFilter) {
   return status === filter;
 }
 
+function matchesLabelFilter(item: JobListItem, filters: JobsListFilters) {
+  return (
+    filters.labelId === "all" ||
+    item.labels.some((label) => label.id === filters.labelId)
+  );
+}
+
+function matchesSiteFilter(item: JobListItem, filters: JobsListFilters) {
+  return filters.siteId === "all" || item.siteId === filters.siteId;
+}
+
 interface VisibleJobsLookup {
   readonly contactById: ReadonlyMap<JobContactOption["id"], JobContactOption>;
   readonly siteById: ReadonlyMap<
@@ -407,7 +423,8 @@ function matchesVisibleJob(
     matchesAssigneeFilter(item.assigneeId, filters.assigneeId) &&
     matchesOptionalFilter(item.coordinatorId, filters.coordinatorId) &&
     matchesOptionalFilter(item.priority, filters.priority) &&
-    matchesOptionalFilter(item.siteId, filters.siteId) &&
+    matchesLabelFilter(item, filters) &&
+    matchesSiteFilter(item, filters) &&
     matchesQueryFilter(item, normalizedQuery, lookup) &&
     matchesServiceAreaFilter(item, filters.serviceAreaId, lookup.siteById)
   );
@@ -483,6 +500,7 @@ type JobListItemSource = Pick<
   | "externalReference"
   | "id"
   | "kind"
+  | "labels"
   | "priority"
   | "siteId"
   | "status"
@@ -499,6 +517,7 @@ export function toJobListItem(job: JobListItemSource): JobListItem {
     externalReference: job.externalReference,
     id: job.id,
     kind: job.kind,
+    labels: job.labels,
     priority: job.priority,
     siteId: job.siteId,
     status: job.status,

@@ -4,8 +4,10 @@ import {
   ActivityId,
   BlockedReasonRequiredError,
   calculateJobCostLineTotalMinor,
+  calculateJobCostSummary,
   CommentId,
   CostLineId,
+  JobLabelId,
   JobAccessDeniedError,
   JobCostSummaryLimitExceededError,
   JobSchema,
@@ -24,6 +26,8 @@ import type {
   JobCostLine,
   JobActivity,
   JobActivityPayload,
+  JobDetail,
+  JobLabel,
   JobListResponse,
   JobMemberOption,
   JobOptionsResponse,
@@ -55,6 +59,7 @@ import {
   ConfigurationRepository,
   ContactsRepository,
   JobsRepository,
+  JobLabelsRepository,
   SitesRepository,
 } from "./repositories.js";
 import { JobsService } from "./service.js";
@@ -63,6 +68,7 @@ import { SiteGeocoder } from "./site-geocoder.js";
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
+const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
 const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
@@ -74,6 +80,7 @@ const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
 const serviceAreaId = "99999999-9999-4999-8999-999999999999" as ServiceAreaId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
+const labelId = decodeJobLabelId("88888888-8888-4888-8888-888888888888");
 const costLineId = decodeCostLineId("99999999-9999-4999-8999-999999999998");
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const inlineSiteInput = {
@@ -109,6 +116,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     createdByUserId: "user_creator" as UserId,
     id: workItemId,
     kind: "job",
+    labels: [],
     priority: "medium",
     siteId: undefined,
     status: "in_progress",
@@ -120,27 +128,37 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 
 interface JobsServiceHarnessOptions {
   readonly actor?: JobsActor;
-  readonly costLineFailure?: JobCostSummaryLimitExceededError;
+  readonly archiveRemovedWorkItemIds?: readonly WorkItemId[];
+  readonly assignLabelChanged?: boolean;
   readonly lockedJob?: Job;
+  readonly removeLabelChanged?: boolean;
+  readonly costLineFailure?: JobCostSummaryLimitExceededError;
   readonly serviceAreaFailure?: ServiceAreaNotFoundError;
   readonly serviceAreaStorageFailure?: SqlError;
   readonly transactionFailure?: OrganizationMemberNotFoundError;
 }
 
 interface JobsServiceHarness {
+  readonly activityPayloads: JobActivityPayload[];
   readonly calls: {
     addActivity: number;
     addCostLine: number;
     addVisit: number;
+    archiveLabel: number;
+    assignLabel: number;
     create: number;
+    createLabel: number;
     createSite: number;
     ensureServiceArea: number;
     findByIdForUpdate: number;
     geocode: number;
+    listLabels: number;
     linkContact: number;
     listOrganizationActivity: number;
     patch: number;
+    removeLabel: number;
     transition: number;
+    updateLabel: number;
   };
   readonly layer: Layer.Layer<
     JobsService | HttpServerRequest.HttpServerRequest
@@ -156,16 +174,29 @@ function makeHarness(
     addActivity: 0,
     addCostLine: 0,
     addVisit: 0,
+    archiveLabel: 0,
+    assignLabel: 0,
     create: 0,
+    createLabel: 0,
     createSite: 0,
     ensureServiceArea: 0,
     findByIdForUpdate: 0,
     geocode: 0,
+    listLabels: 0,
     linkContact: 0,
     listOrganizationActivity: 0,
     patch: 0,
+    removeLabel: 0,
     transition: 0,
+    updateLabel: 0,
   };
+  const jobLabel = {
+    createdAt: "2026-04-22T10:00:00.000Z",
+    id: labelId,
+    name: "Waiting on PO",
+    updatedAt: "2026-04-22T10:00:00.000Z",
+  } satisfies JobLabel;
+  const activityPayloads: JobActivityPayload[] = [];
 
   const jobsRepository = JobsRepository.make({
     addActivity: (input: {
@@ -176,6 +207,7 @@ function makeHarness(
     }) =>
       Effect.sync(() => {
         calls.addActivity += 1;
+        activityPayloads.push(input.payload);
 
         return {
           actorUserId: input.actorUserId,
@@ -280,7 +312,22 @@ function makeHarness(
         return Option.some(lockedJob);
       }),
     getDetail: (_organizationId: OrganizationId, _workItemId: Job["id"]) =>
-      Effect.succeed(Option.none()),
+      Effect.succeed(
+        Option.some({
+          activity: [],
+          comments: [],
+          costLines: [],
+          costSummary: calculateJobCostSummary([]),
+          job: {
+            ...lockedJob,
+            labels:
+              calls.assignLabel > calls.removeLabel
+                ? [jobLabel]
+                : lockedJob.labels,
+          },
+          visits: [],
+        } satisfies JobDetail)
+      ),
     list: (_organizationId: OrganizationId, _query: unknown) =>
       Effect.succeed({
         items: [],
@@ -437,6 +484,95 @@ function makeHarness(
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies JobOptionsResponse["contacts"]),
   });
+  const jobLabelsRepository = JobLabelsRepository.make({
+    archive: (
+      organizationId: OrganizationId,
+      requestedLabelId: JobLabel["id"]
+    ) =>
+      Effect.sync(() => {
+        calls.archiveLabel += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedLabelId).toBe(labelId);
+
+        return Option.some({
+          label: jobLabel,
+          removedWorkItemIds: options.archiveRemovedWorkItemIds ?? [],
+        });
+      }),
+    assignToJob: (input: {
+      readonly labelId: JobLabel["id"];
+      readonly organizationId: OrganizationId;
+      readonly workItemId: Job["id"];
+    }) =>
+      Effect.sync(() => {
+        calls.assignLabel += 1;
+        expect(input).toStrictEqual({
+          labelId,
+          organizationId: actor.organizationId,
+          workItemId,
+        });
+
+        return {
+          changed: options.assignLabelChanged ?? true,
+          label: jobLabel,
+        };
+      }),
+    create: (input: {
+      readonly name: JobLabel["name"];
+      readonly organizationId: OrganizationId;
+    }) =>
+      Effect.sync(() => {
+        calls.createLabel += 1;
+        expect(input).toStrictEqual({
+          name: "Waiting on PO",
+          organizationId: actor.organizationId,
+        });
+
+        return jobLabel;
+      }),
+    findById: (
+      _organizationId: OrganizationId,
+      _requestedLabelId: JobLabel["id"]
+    ) => Effect.succeed(Option.some(jobLabel)),
+    list: (organizationId: OrganizationId) =>
+      Effect.sync(() => {
+        calls.listLabels += 1;
+        expect(organizationId).toBe(actor.organizationId);
+
+        return [jobLabel];
+      }),
+    removeFromJob: (input: {
+      readonly labelId: JobLabel["id"];
+      readonly organizationId: OrganizationId;
+      readonly workItemId: Job["id"];
+    }) =>
+      Effect.sync(() => {
+        calls.removeLabel += 1;
+        expect(input).toStrictEqual({
+          labelId,
+          organizationId: actor.organizationId,
+          workItemId,
+        });
+
+        return {
+          changed: options.removeLabelChanged ?? true,
+          label: jobLabel,
+        };
+      }),
+    update: (
+      organizationId: OrganizationId,
+      requestedLabelId: JobLabel["id"],
+      input: { readonly name: JobLabel["name"] }
+    ) =>
+      Effect.sync(() => {
+        calls.updateLabel += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedLabelId).toBe(labelId);
+        expect(input).toStrictEqual({ name: "Waiting on PO" });
+
+        return Option.some(jobLabel);
+      }),
+  });
   const siteGeocoder = SiteGeocoder.make({
     geocode: (input: CreateSiteInput) =>
       Effect.sync(() => {
@@ -454,6 +590,7 @@ function makeHarness(
 
   const repositoriesLayer = Layer.mergeAll(
     Layer.succeed(JobsRepository, jobsRepository),
+    Layer.succeed(JobLabelsRepository, jobLabelsRepository),
     Layer.succeed(SitesRepository, sitesRepository),
     Layer.succeed(ConfigurationRepository, configurationRepository),
     Layer.succeed(ContactsRepository, contactsRepository),
@@ -483,6 +620,7 @@ function makeHarness(
   );
 
   return {
+    activityPayloads,
     calls,
     layer: Layer.mergeAll(
       serviceLayer,
@@ -541,6 +679,180 @@ describe("jobs service", () => {
     });
 
     expect(harness.calls.listOrganizationActivity).toBe(1);
+  }, 10_000);
+
+  it("lets elevated users create, list, update, and archive organization job labels", async () => {
+    const harness = makeHarness();
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          const created = yield* jobs.createJobLabel({
+            name: "Waiting on PO",
+          });
+          const labels = yield* jobs.listJobLabels();
+          const updated = yield* jobs.updateJobLabel(labelId, {
+            name: "Waiting on PO",
+          });
+          const archived = yield* jobs.archiveJobLabel(labelId);
+
+          return { archived, created, labels, updated };
+        }),
+        harness
+      )
+    ).resolves.toStrictEqual({
+      archived: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
+      created: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
+      labels: {
+        labels: [
+          expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
+        ],
+      },
+      updated: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
+    });
+
+    expect(harness.calls.createLabel).toBe(1);
+    expect(harness.calls.listLabels).toBe(1);
+    expect(harness.calls.updateLabel).toBe(1);
+    expect(harness.calls.archiveLabel).toBe(1);
+  }, 10_000);
+
+  it("records runtime-valid activity when assigning and removing a job label", async () => {
+    const harness = makeHarness({
+      lockedJob: makeJob({ labels: [] }),
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          const assigned = yield* jobs.assignJobLabel(workItemId, { labelId });
+          const removed = yield* jobs.removeJobLabel(workItemId, labelId);
+
+          return { assigned, removed };
+        }),
+        harness
+      )
+    ).resolves.toStrictEqual({
+      assigned: expect.objectContaining({
+        job: expect.objectContaining({
+          labels: [
+            expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
+          ],
+        }),
+      }),
+      removed: expect.objectContaining({
+        job: expect.objectContaining({ labels: [] }),
+      }),
+    });
+
+    expect(harness.calls.assignLabel).toBe(1);
+    expect(harness.calls.removeLabel).toBe(1);
+    expect(harness.calls.addActivity).toBe(2);
+    expect(harness.activityPayloads).toStrictEqual([
+      {
+        eventType: "label_added",
+        labelId,
+        labelName: "Waiting on PO",
+      },
+      {
+        eventType: "label_removed",
+        labelId,
+        labelName: "Waiting on PO",
+      },
+    ]);
+  }, 10_000);
+
+  it("records label removal activity for jobs affected by archived labels", async () => {
+    const harness = makeHarness({
+      archiveRemovedWorkItemIds: [workItemId],
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          return yield* jobs.archiveJobLabel(labelId);
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({ id: labelId, name: "Waiting on PO" });
+
+    expect(harness.calls.archiveLabel).toBe(1);
+    expect(harness.calls.addActivity).toBe(1);
+    expect(harness.activityPayloads).toStrictEqual([
+      {
+        eventType: "label_removed",
+        labelId,
+        labelName: "Waiting on PO",
+      },
+    ]);
+  }, 10_000);
+
+  it("lets assigned members assign and remove labels on their jobs", async () => {
+    const actor = makeActor("member");
+    const harness = makeHarness({
+      actor,
+      lockedJob: makeJob({ assigneeId: actor.userId }),
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          const assigned = yield* jobs.assignJobLabel(workItemId, { labelId });
+          const removed = yield* jobs.removeJobLabel(workItemId, labelId);
+
+          return { assigned, removed };
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      assigned: {
+        job: {
+          id: workItemId,
+        },
+      },
+      removed: {
+        job: {
+          id: workItemId,
+        },
+      },
+    });
+
+    expect(harness.calls.findByIdForUpdate).toBe(2);
+    expect(harness.calls.assignLabel).toBe(1);
+    expect(harness.calls.removeLabel).toBe(1);
+  }, 10_000);
+
+  it("does not record label activity when assignment state does not change", async () => {
+    const harness = makeHarness({
+      assignLabelChanged: false,
+      lockedJob: makeJob({ labels: [] }),
+      removeLabelChanged: false,
+    });
+
+    await expect(
+      runJobsService(
+        Effect.gen(function* () {
+          const jobs = yield* JobsService;
+
+          yield* jobs.assignJobLabel(workItemId, { labelId });
+          yield* jobs.removeJobLabel(workItemId, labelId);
+        }),
+        harness
+      )
+    ).resolves.toBeUndefined();
+
+    expect(harness.calls.assignLabel).toBe(1);
+    expect(harness.calls.removeLabel).toBe(1);
+    expect(harness.calls.addActivity).toBe(0);
+    expect(harness.activityPayloads).toStrictEqual([]);
   }, 10_000);
 
   it("denies members listing organization activity", async () => {

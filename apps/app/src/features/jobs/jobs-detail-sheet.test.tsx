@@ -1,10 +1,11 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import type {
+  CommentIdType,
+  ActivityIdType,
+  JobLabelIdType,
   SiteIdType,
   UserIdType,
   WorkItemIdType,
-  CommentIdType,
-  ActivityIdType,
   VisitIdType,
 } from "@task-tracker/jobs-core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -27,6 +28,9 @@ type AppHotkeyMock = (...args: unknown[]) => void;
 const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
+const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
+const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
+const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as JobLabelIdType;
 
 const {
   mockedNavigate,
@@ -51,6 +55,9 @@ const mockedReopenJob = vi.fn<AsyncMutationMock>();
 const mockedPatchJob = vi.fn<AsyncMutationMock>();
 const mockedAddComment = vi.fn<AsyncMutationMock>();
 const mockedAddVisit = vi.fn<AsyncMutationMock>();
+const mockedAssignLabel = vi.fn<AsyncMutationMock>();
+const mockedCreateAndAssignLabel = vi.fn<AsyncMutationMock>();
+const mockedRemoveLabel = vi.fn<AsyncMutationMock>();
 const mockedAddCostLine = vi.fn<AsyncMutationMock>();
 
 vi.mock("@tanstack/react-router", () => ({
@@ -260,6 +267,26 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
+vi.mock("#/components/ui/popover", () => ({
+  Popover: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverTrigger: ({
+    children,
+    id,
+    render: _render,
+    ...props
+  }: ComponentProps<"button"> & {
+    children?: ReactNode;
+    render?: unknown;
+  }) => (
+    <button type="button" id={id} {...props}>
+      {children}
+    </button>
+  ),
+}));
+
 vi.mock("#/components/ui/textarea", () => ({
   Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
 }));
@@ -272,8 +299,12 @@ vi.mock("./jobs-detail-state", () => ({
   addJobCostLineMutationAtomFamily: (id: string) => `cost:${id}`,
   addJobCommentMutationAtomFamily: (id: string) => `comment:${id}`,
   addJobVisitMutationAtomFamily: (id: string) => `visit:${id}`,
+  assignJobLabelMutationAtomFamily: (id: string) => `assign-label:${id}`,
+  createAndAssignJobLabelMutationAtomFamily: (id: string) =>
+    `create-assign-label:${id}`,
   jobDetailStateAtomFamily: (id: string) => `detail:${id}`,
   patchJobMutationAtomFamily: (id: string) => `patch:${id}`,
+  removeJobLabelMutationAtomFamily: (id: string) => `remove-label:${id}`,
   reopenJobMutationAtomFamily: (id: string) => `reopen:${id}`,
   transitionJobMutationAtomFamily: (id: string) => `transition:${id}`,
 }));
@@ -297,6 +328,9 @@ describe("jobs detail sheet", () => {
     mockedPatchJob.mockReset();
     mockedAddComment.mockReset();
     mockedAddVisit.mockReset();
+    mockedAssignLabel.mockReset();
+    mockedCreateAndAssignLabel.mockReset();
+    mockedRemoveLabel.mockReset();
     mockedAddCostLine.mockReset();
     mockedUseAppHotkey.mockReset();
 
@@ -328,10 +362,48 @@ describe("jobs detail sheet", () => {
       if (atom === `patch:${workItemId}`) {
         return { waiting: false };
       }
+      if (atom === `assign-label:${workItemId}`) {
+        return { waiting: false };
+      }
+      if (atom === `create-assign-label:${workItemId}`) {
+        return { waiting: false };
+      }
+      if (atom === `remove-label:${workItemId}`) {
+        return { waiting: false };
+      }
 
       if (atom === jobsLookupAtomToken) {
         return {
           contactById: new Map(),
+          labelById: new Map([
+            [
+              urgentLabelId,
+              {
+                createdAt: "2026-04-23T09:00:00.000Z",
+                id: urgentLabelId,
+                name: "Urgent callout",
+                updatedAt: "2026-04-23T09:00:00.000Z",
+              },
+            ],
+            [
+              accessLabelId,
+              {
+                createdAt: "2026-04-23T09:05:00.000Z",
+                id: accessLabelId,
+                name: "Access",
+                updatedAt: "2026-04-23T09:05:00.000Z",
+              },
+            ],
+            [
+              waitingLabelId,
+              {
+                createdAt: "2026-04-23T09:10:00.000Z",
+                id: waitingLabelId,
+                name: "Waiting on PO",
+                updatedAt: "2026-04-23T09:10:00.000Z",
+              },
+            ],
+          ]),
           memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
           serviceAreaById: new Map(),
           siteById: new Map([
@@ -378,6 +450,17 @@ describe("jobs detail sheet", () => {
       if (atom === `visit:${workItemId}`) {
         return mockedAddVisit;
       }
+      if (atom === `assign-label:${workItemId}`) {
+        return mockedAssignLabel;
+      }
+
+      if (atom === `create-assign-label:${workItemId}`) {
+        return mockedCreateAndAssignLabel;
+      }
+
+      if (atom === `remove-label:${workItemId}`) {
+        return mockedRemoveLabel;
+      }
 
       if (atom === `cost:${workItemId}`) {
         return mockedAddCostLine;
@@ -411,6 +494,7 @@ describe("jobs detail sheet", () => {
       expect(
         screen.getByText("Taylor Owner created the job.")
       ).toBeInTheDocument();
+      expect(screen.getByText("Urgent callout")).toBeInTheDocument();
       expect(screen.getAllByText("Docklands Campus").length).toBeGreaterThan(0);
       expect(
         screen.getByText("1 Custom House Quay, North Dock")
@@ -428,6 +512,193 @@ describe("jobs detail sheet", () => {
       expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
         [`detail:${workItemId}`, buildDetail()],
       ]);
+    }
+  );
+
+  it(
+    "assigns an existing organization label from the detail picker",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.click(screen.getByRole("option", { name: "Access" }));
+
+      expect(mockedAssignLabel).toHaveBeenCalledWith({
+        labelId: accessLabelId,
+      });
+    }
+  );
+
+  it(
+    "creates and assigns a new organization label from the detail picker",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedCreateAndAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(screen.getByPlaceholderText("Search labels"), "Warranty");
+      await user.click(
+        screen.getByRole("option", {
+          name: 'Create new label: "Warranty"',
+        })
+      );
+
+      expect(mockedCreateAndAssignLabel).toHaveBeenCalledWith({
+        name: "Warranty",
+      });
+    }
+  );
+
+  it(
+    "does not offer invalid label names for inline creation",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(
+        screen.getByPlaceholderText("Search labels"),
+        "x".repeat(49)
+      );
+
+      expect(
+        screen.queryByRole("option", {
+          name: `Create new label: "${"x".repeat(49)}"`,
+        })
+      ).not.toBeInTheDocument();
+      expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "removes an assigned label from the detail header",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedRemoveLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail());
+
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove urgent callout label/i,
+        })
+      );
+
+      expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+    }
+  );
+
+  it(
+    "lets elevated users assign and remove labels even when they are not assigned",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+      mockedRemoveLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), {
+        role: "admin",
+        userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
+      });
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.click(screen.getByRole("option", { name: "Access" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove urgent callout label/i,
+        })
+      );
+
+      expect(mockedAssignLabel).toHaveBeenCalledWith({
+        labelId: accessLabelId,
+      });
+      expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+    }
+  );
+
+  it(
+    "lets assigned members assign and remove existing labels without creating labels",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+      mockedRemoveLabel.mockResolvedValue(Exit.succeed(buildDetail()));
+
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), {
+        role: "member",
+        userId: actorUserId,
+      });
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(screen.getByPlaceholderText("Search labels"), "Warranty");
+
+      expect(
+        screen.queryByRole("option", {
+          name: 'Create new label: "Warranty"',
+        })
+      ).not.toBeInTheDocument();
+
+      await user.clear(screen.getByPlaceholderText("Search labels"));
+      await user.click(screen.getByRole("option", { name: "Access" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: /remove urgent callout label/i,
+        })
+      );
+
+      expect(mockedAssignLabel).toHaveBeenCalledWith({
+        labelId: accessLabelId,
+      });
+      expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
+      expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "does not offer duplicate label creation when whitespace-normalized names match",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(
+        buildDetail({
+          labels: [buildJobLabel(waitingLabelId, "Waiting on PO")],
+        })
+      );
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(
+        screen.getByPlaceholderText("Search labels"),
+        "Waiting  on PO"
+      );
+
+      expect(
+        screen.queryByRole("option", {
+          name: 'Create new label: "Waiting  on PO"',
+        })
+      ).not.toBeInTheDocument();
     }
   );
 
@@ -772,6 +1043,14 @@ describe("jobs detail sheet", () => {
       screen.queryByRole("button", { name: /log visit/i })
     ).not.toBeInTheDocument();
     expect(
+      screen.queryByRole("button", { name: /add label/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /remove urgent callout label/i,
+      })
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByText(/status changes open once this job is assigned to you/i)
     ).toBeInTheDocument();
     expect(
@@ -781,11 +1060,11 @@ describe("jobs detail sheet", () => {
 });
 
 function buildDetail(overrides?: {
+  readonly labels?: ReturnType<typeof buildJobLabel>[];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
 }) {
   const status = overrides?.status ?? "in_progress";
-
   return {
     activity: [
       {
@@ -820,6 +1099,9 @@ function buildDetail(overrides?: {
       createdByUserId: actorUserId,
       id: workItemId,
       kind: "job" as const,
+      labels: overrides?.labels ?? [
+        buildJobLabel(urgentLabelId, "Urgent callout"),
+      ],
       priority: "medium" as const,
       siteId: overrides && "siteId" in overrides ? overrides.siteId : siteId,
       status,
@@ -837,6 +1119,15 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
+  };
+}
+
+function buildJobLabel(id: JobLabelIdType, name: string) {
+  return {
+    createdAt: "2026-04-23T09:00:00.000Z",
+    id,
+    name,
+    updatedAt: "2026-04-23T09:00:00.000Z",
   };
 }
 

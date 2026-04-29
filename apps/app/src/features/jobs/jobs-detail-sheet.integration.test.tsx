@@ -7,6 +7,7 @@ import type {
   ContactIdType,
   CostLineIdType,
   JobDetailResponse,
+  JobLabelIdType,
   ServiceAreaIdType,
   SiteIdType,
   UserIdType,
@@ -34,6 +35,8 @@ const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
+const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
+const newLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
 const serviceAreaId =
   "55555555-5555-4555-8555-555555555555" as ServiceAreaIdType;
 const organizationId = decodeOrganizationId("org_123");
@@ -42,10 +45,13 @@ const {
   mockedAddJobCostLine,
   mockedAddJobComment,
   mockedAddJobVisit,
+  mockedAssignJobLabel,
+  mockedCreateJobLabel,
   mockedGetJobDetail,
   mockedListJobs,
   mockedMakeBrowserJobsClient,
   mockedNavigate,
+  mockedRemoveJobLabel,
   mockedPatchJob,
   mockedReopenJob,
   mockedTransitionJob,
@@ -53,10 +59,13 @@ const {
   mockedAddJobCostLine: vi.fn<EffectClientMock>(),
   mockedAddJobComment: vi.fn<EffectClientMock>(),
   mockedAddJobVisit: vi.fn<EffectClientMock>(),
+  mockedAssignJobLabel: vi.fn<EffectClientMock>(),
+  mockedCreateJobLabel: vi.fn<EffectClientMock>(),
   mockedGetJobDetail: vi.fn<EffectClientMock>(),
   mockedListJobs: vi.fn<EffectClientMock>(),
   mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
   mockedNavigate: vi.fn<NavigateMock>(),
+  mockedRemoveJobLabel: vi.fn<EffectClientMock>(),
   mockedPatchJob: vi.fn<EffectClientMock>(),
   mockedReopenJob: vi.fn<EffectClientMock>(),
   mockedTransitionJob: vi.fn<EffectClientMock>(),
@@ -147,6 +156,26 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
+vi.mock("#/components/ui/popover", () => ({
+  Popover: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverTrigger: ({
+    children,
+    id,
+    render: _render,
+    ...props
+  }: ComponentProps<"button"> & {
+    children?: ReactNode;
+    render?: unknown;
+  }) => (
+    <button type="button" id={id} {...props}>
+      {children}
+    </button>
+  ),
+}));
+
 vi.mock("./jobs-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
@@ -171,10 +200,13 @@ describe("jobs detail sheet integration", () => {
     mockedAddJobCostLine.mockReset();
     mockedAddJobComment.mockReset();
     mockedAddJobVisit.mockReset();
+    mockedAssignJobLabel.mockReset();
+    mockedCreateJobLabel.mockReset();
     mockedGetJobDetail.mockReset();
     mockedListJobs.mockReset();
     mockedMakeBrowserJobsClient.mockReset();
     mockedNavigate.mockReset();
+    mockedRemoveJobLabel.mockReset();
     mockedPatchJob.mockReset();
     mockedReopenJob.mockReset();
     mockedTransitionJob.mockReset();
@@ -185,8 +217,11 @@ describe("jobs detail sheet integration", () => {
           addJobCostLine: mockedAddJobCostLine,
           addJobComment: mockedAddJobComment,
           addJobVisit: mockedAddJobVisit,
+          assignJobLabel: mockedAssignJobLabel,
+          createJobLabel: mockedCreateJobLabel,
           getJobDetail: mockedGetJobDetail,
           listJobs: mockedListJobs,
+          removeJobLabel: mockedRemoveJobLabel,
           patchJob: mockedPatchJob,
           reopenJob: mockedReopenJob,
           transitionJob: mockedTransitionJob,
@@ -198,6 +233,124 @@ describe("jobs detail sheet integration", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it(
+    "assigns an existing label and syncs detail activity plus the jobs list",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedAssignJobLabel.mockReturnValue(
+        Effect.succeed(
+          buildDetail({
+            activity: [
+              buildLabelActivity("label_added", urgentLabelId, "Urgent"),
+              ...buildDetail().activity,
+            ],
+            labels: [buildLabel(urgentLabelId, "Urgent")],
+          })
+        )
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet();
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.click(screen.getByRole("option", { name: "Urgent" }));
+
+      await expect(
+        screen.findByText("Taylor Owner added the Urgent label.")
+      ).resolves.toBeInTheDocument();
+      expect(screen.getByTestId("list-labels")).toHaveTextContent("Urgent");
+      expect(mockedAssignJobLabel).toHaveBeenCalledWith({
+        path: { workItemId },
+        payload: { labelId: urgentLabelId },
+      });
+    }
+  );
+
+  it(
+    "creates and assigns an inline label while updating the options lookup",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const newLabel = buildLabel(newLabelId, "Warranty");
+      mockedCreateJobLabel.mockReturnValue(Effect.succeed(newLabel));
+      mockedAssignJobLabel.mockReturnValue(
+        Effect.succeed(
+          buildDetail({
+            activity: [
+              buildLabelActivity("label_added", newLabelId, "Warranty"),
+            ],
+            labels: [newLabel],
+          })
+        )
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet();
+
+      await user.click(screen.getByRole("button", { name: /add label/i }));
+      await user.type(screen.getByPlaceholderText("Search labels"), "Warranty");
+      await user.click(
+        screen.getByRole("option", {
+          name: 'Create new label: "Warranty"',
+        })
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Warranty").length).toBeGreaterThan(0);
+      });
+      expect(screen.getByTestId("option-labels")).toHaveTextContent(
+        "Urgent | Warranty"
+      );
+      expect(screen.getByTestId("list-labels")).toHaveTextContent("Warranty");
+      expect(mockedCreateJobLabel).toHaveBeenCalledWith({
+        payload: { name: "Warranty" },
+      });
+      expect(mockedAssignJobLabel).toHaveBeenCalledWith({
+        path: { workItemId },
+        payload: { labelId: newLabelId },
+      });
+    }
+  );
+
+  it(
+    "removes an assigned label and syncs detail activity plus the jobs list",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      mockedRemoveJobLabel.mockReturnValue(
+        Effect.succeed(
+          buildDetail({
+            activity: [
+              buildLabelActivity("label_removed", urgentLabelId, "Urgent"),
+            ],
+            labels: [],
+          })
+        )
+      );
+
+      const user = userEvent.setup();
+      renderDetailSheet(
+        buildDetail({ labels: [buildLabel(urgentLabelId, "Urgent")] })
+      );
+
+      await user.click(
+        screen.getByRole("button", { name: /remove urgent label/i })
+      );
+
+      await expect(
+        screen.findByText("Taylor Owner removed the Urgent label.")
+      ).resolves.toBeInTheDocument();
+      expect(screen.getByTestId("list-labels")).toHaveTextContent("none");
+      expect(mockedRemoveJobLabel).toHaveBeenCalledWith({
+        path: { workItemId, labelId: urgentLabelId },
+      });
+    }
+  );
 
   it(
     "keeps a status transition successful when the follow-up detail and list refresh both fail",
@@ -428,7 +581,7 @@ describe("jobs detail sheet integration", () => {
   );
 });
 
-function renderDetailSheet() {
+function renderDetailSheet(detail: JobDetailResponse = buildDetail()) {
   return render(
     <RegistryProvider
       initialValues={[
@@ -443,6 +596,7 @@ function renderDetailSheet() {
                 externalReference: "PO-4471",
                 id: workItemId,
                 kind: "job",
+                labels: detail.job.labels,
                 priority: "medium",
                 siteId,
                 status: "in_progress",
@@ -465,6 +619,7 @@ function renderDetailSheet() {
                 siteIds: [siteId],
               },
             ],
+            labels: [buildLabel(urgentLabelId, "Urgent")],
             members: [
               {
                 id: actorUserId,
@@ -501,13 +656,14 @@ function renderDetailSheet() {
       ]}
     >
       <JobsDetailSheet
-        initialDetail={buildDetail()}
+        initialDetail={detail}
         viewer={{
           role: "owner",
           userId: actorUserId,
         }}
       />
       <JobsListProbe />
+      <JobsOptionsProbe />
     </RegistryProvider>
   );
 }
@@ -516,15 +672,38 @@ function JobsListProbe() {
   const listState = useAtomValue(jobsListStateAtom);
 
   return (
-    <output data-testid="list-statuses">
-      {listState.items.map((job) => job.status).join(" | ")}
+    <>
+      <output data-testid="list-statuses">
+        {listState.items.map((job) => job.status).join(" | ")}
+      </output>
+      <output data-testid="list-labels">
+        {listState.items
+          .flatMap((job) => job.labels.map((label) => label.name))
+          .join(" | ") || "none"}
+      </output>
+    </>
+  );
+}
+
+function JobsOptionsProbe() {
+  const optionsState = useAtomValue(jobsOptionsStateAtom);
+
+  return (
+    <output data-testid="option-labels">
+      {optionsState.data.labels.map((label) => label.name).join(" | ") ||
+        "none"}
     </output>
   );
 }
 
-function buildDetail(): JobDetailResponse {
+function buildDetail(
+  overrides: {
+    readonly activity?: JobDetailResponse["activity"];
+    readonly labels?: JobDetailResponse["job"]["labels"];
+  } = {}
+): JobDetailResponse {
   return {
-    activity: [
+    activity: overrides.activity ?? [
       {
         actorUserId,
         createdAt: "2026-04-23T10:00:00.000Z",
@@ -578,6 +757,7 @@ function buildDetail(): JobDetailResponse {
       externalReference: "PO-4471",
       id: workItemId,
       kind: "job",
+      labels: overrides.labels ?? [],
       priority: "medium",
       siteId,
       status: "in_progress",
@@ -595,5 +775,32 @@ function buildDetail(): JobDetailResponse {
         workItemId,
       },
     ],
+  };
+}
+
+function buildLabel(id: JobLabelIdType, name: string) {
+  return {
+    createdAt: "2026-04-23T09:00:00.000Z",
+    id,
+    name,
+    updatedAt: "2026-04-23T09:00:00.000Z",
+  };
+}
+
+function buildLabelActivity(
+  eventType: "label_added" | "label_removed",
+  labelId: JobLabelIdType,
+  labelName: string
+): JobDetailResponse["activity"][number] {
+  return {
+    actorUserId,
+    createdAt: "2026-04-24T10:00:00.000Z",
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" as ActivityIdType,
+    payload: {
+      eventType,
+      labelId,
+      labelName,
+    },
+    workItemId,
   };
 }

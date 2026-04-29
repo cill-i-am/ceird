@@ -1,6 +1,7 @@
 import { RegistryProvider } from "@effect-atom/atom-react";
 import { decodeOrganizationId } from "@task-tracker/identity-core";
 import type {
+  JobLabelIdType,
   ContactIdType,
   JobListResponse,
   JobOptionsResponse,
@@ -13,6 +14,7 @@ import {
   fireEvent,
   render,
   screen,
+  cleanup,
   waitFor,
   within,
 } from "@testing-library/react";
@@ -39,6 +41,9 @@ const serviceAreaWestId =
   "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
+const labelComplianceId =
+  "12121212-1212-4121-8121-121212121212" as JobLabelIdType;
+const labelAccessId = "34343434-3434-4343-8343-343434343434" as JobLabelIdType;
 const organizationId = decodeOrganizationId("org_123");
 const originalInnerWidth = window.innerWidth;
 
@@ -56,6 +61,20 @@ const initialList: JobListResponse = {
       externalReference: "PO-4471",
       id: "77777777-7777-4777-8777-777777777777" as WorkItemIdType,
       kind: "job",
+      labels: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: labelComplianceId,
+          name: "Compliance",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: labelAccessId,
+          name: "Access needed",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
       priority: "high",
       siteId: siteDepotId,
       status: "new",
@@ -68,6 +87,14 @@ const initialList: JobListResponse = {
       createdAt: "2026-04-23T11:30:00.000Z",
       id: "88888888-8888-4888-8888-888888888888" as WorkItemIdType,
       kind: "job",
+      labels: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: labelAccessId,
+          name: "Access needed",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
       priority: "urgent",
       siteId: siteDepotId,
       status: "blocked",
@@ -80,6 +107,7 @@ const initialList: JobListResponse = {
       createdAt: "2026-04-23T13:00:00.000Z",
       id: "99999999-9999-4999-8999-999999999999" as WorkItemIdType,
       kind: "job",
+      labels: [],
       priority: "medium",
       siteId: siteSchoolId,
       status: "triaged",
@@ -92,6 +120,7 @@ const initialList: JobListResponse = {
       createdAt: "2026-04-23T14:30:00.000Z",
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as WorkItemIdType,
       kind: "job",
+      labels: [],
       priority: "low",
       siteId: siteSchoolId,
       status: "completed",
@@ -102,6 +131,7 @@ const initialList: JobListResponse = {
       createdAt: "2026-04-23T15:30:00.000Z",
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as WorkItemIdType,
       kind: "job",
+      labels: [],
       priority: "none",
       status: "canceled",
       title: "Canceled visit",
@@ -112,6 +142,7 @@ const initialList: JobListResponse = {
       createdAt: "2026-04-23T16:30:00.000Z",
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" as WorkItemIdType,
       kind: "job",
+      labels: [],
       priority: "medium",
       siteId: siteDepotId,
       status: "triaged",
@@ -123,6 +154,20 @@ const initialList: JobListResponse = {
 };
 
 const initialOptions: JobOptionsResponse = {
+  labels: [
+    {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: labelComplianceId,
+      name: "Compliance",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: labelAccessId,
+      name: "Access needed",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ],
   contacts: [
     {
       email: "contact.search@example.com",
@@ -667,6 +712,46 @@ describe("jobs page", () => {
       expect(
         within(filteredQueuePanel).queryByText("Finalize snag list")
       ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "shows labels in every list layout and filters by label",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({ viewportWidth: 1280 });
+      const desktopQueuePanel = getPrimaryQueuePanel();
+
+      expect(
+        within(desktopQueuePanel).getAllByText("Compliance").length
+      ).toBeGreaterThan(0);
+      expect(
+        within(desktopQueuePanel).getAllByText("Access needed").length
+      ).toBeGreaterThan(0);
+
+      await chooseCommandFilter(user, /label filter/i, "Compliance");
+
+      expect(
+        within(desktopQueuePanel).getAllByText("Inspect boiler").length
+      ).toBeGreaterThan(0);
+      expect(
+        within(desktopQueuePanel).queryByText("Await materials")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /remove label: compliance/i })
+      ).toBeInTheDocument();
+
+      cleanup();
+      renderJobsPage({ viewportWidth: 720 });
+      const compactQueuePanel = getPrimaryQueuePanel();
+
+      expect(
+        within(compactQueuePanel).getAllByText("Access needed").length
+      ).toBeGreaterThan(0);
     }
   );
 

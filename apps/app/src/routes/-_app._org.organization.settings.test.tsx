@@ -1,34 +1,38 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
 import { decodeOrganizationId } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
+  JobLabelIdType,
+  JobLabelsResponse,
+} from "@task-tracker/jobs-core";
 
-import type * as OrganizationAccess from "#/features/organizations/organization-access";
-
-type RoleLookupMock = (
-  organizationId: OrganizationId
-) => Promise<{ role: OrganizationRole }>;
 const organizationId = decodeOrganizationId("org_123");
 
-const { mockedGetCurrentOrganizationMemberRole } = vi.hoisted(() => ({
-  mockedGetCurrentOrganizationMemberRole: vi.fn<RoleLookupMock>(),
+const { mockedGetCurrentServerJobLabels } = vi.hoisted(() => ({
+  mockedGetCurrentServerJobLabels: vi.fn<() => Promise<JobLabelsResponse>>(),
 }));
 
-vi.mock(import("#/features/organizations/organization-access"), async () => {
-  const actual = await vi.importActual<typeof OrganizationAccess>(
-    "#/features/organizations/organization-access"
-  );
-
-  return {
-    ...actual,
-    getCurrentOrganizationMemberRole: mockedGetCurrentOrganizationMemberRole,
-  };
-});
+vi.mock(import("#/features/jobs/jobs-server"), () => ({
+  getCurrentServerJobLabels: mockedGetCurrentServerJobLabels,
+}));
 
 describe("settings route loader", () => {
+  beforeEach(() => {
+    const jobLabels: JobLabelsResponse = {
+      labels: [
+        {
+          id: "11111111-1111-4111-8111-111111111111" as JobLabelIdType,
+          name: "Urgent",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+
+    mockedGetCurrentServerJobLabels.mockResolvedValue(jobLabels);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -42,7 +46,7 @@ describe("settings route loader", () => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
 
-      expect(
+      await expect(
         loadSettingsRoute({
           activeOrganizationId: organizationId,
           activeOrganizationSync: {
@@ -51,8 +55,14 @@ describe("settings route loader", () => {
           },
           currentOrganizationRole: role,
         })
-      ).toBeUndefined();
-      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+      ).resolves.toStrictEqual({
+        jobLabels: [
+          expect.objectContaining({
+            name: "Urgent",
+          }),
+        ],
+      });
+      expect(mockedGetCurrentServerJobLabels).toHaveBeenCalledOnce();
     }
   );
 
@@ -83,6 +93,7 @@ describe("settings route loader", () => {
         options: { to: "/" },
       });
       expect(result).toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerJobLabels).not.toHaveBeenCalled();
     }
   );
 
@@ -104,8 +115,10 @@ describe("settings route loader", () => {
           },
           currentOrganizationRole: undefined,
         })
-      ).toBeUndefined();
-      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+      ).toStrictEqual({
+        jobLabels: [],
+      });
+      expect(mockedGetCurrentServerJobLabels).not.toHaveBeenCalled();
     }
   );
 });

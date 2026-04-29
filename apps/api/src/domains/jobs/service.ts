@@ -1,6 +1,7 @@
 import {
   BlockedReasonRequiredError,
   CoordinatorMatchesAssigneeError,
+  JobLabelNotFoundError,
   InvalidJobTransitionError,
   JOB_NOT_FOUND_ERROR_TAG,
   JobAccessDeniedError,
@@ -13,11 +14,15 @@ import type {
   AddJobCommentInput,
   AddJobCostLineInput,
   AddJobVisitInput,
+  AssignJobLabelInput,
   ContactIdType as ContactId,
+  CreateJobLabelInput,
   CreateJobContactInput,
   CreateJobInput,
   CreateJobSiteInput,
   Job,
+  JobDetail,
+  JobLabelIdType as JobLabelId,
   JobMemberOptionsResponse,
   JobListQuery,
   OrganizationActivityQuery,
@@ -26,6 +31,7 @@ import type {
   ServiceAreaOption,
   SiteIdType as SiteId,
   TransitionJobInput,
+  UpdateJobLabelInput,
   WorkItemIdType as WorkItemId,
 } from "@task-tracker/jobs-core";
 import { Effect, Either, Option } from "effect";
@@ -37,6 +43,7 @@ import { CurrentJobsActor } from "./current-jobs-actor.js";
 import {
   ContactsRepository,
   ConfigurationRepository,
+  JobLabelsRepository,
   JobsRepositoriesLive,
   JobsRepository,
   SitesRepository,
@@ -64,6 +71,7 @@ export class JobsService extends Effect.Service<JobsService>()(
       const configurationRepository = yield* ConfigurationRepository;
       const contactsRepository = yield* ContactsRepository;
       const currentJobsActor = yield* CurrentJobsActor;
+      const jobLabelsRepository = yield* JobLabelsRepository;
       const jobsRepository = yield* JobsRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
@@ -91,10 +99,11 @@ export class JobsService extends Effect.Service<JobsService>()(
         const actor = yield* loadActor();
         yield* authorization.ensureCanView(actor);
 
-        const [members, sites, contacts] = yield* Effect.all([
+        const [members, sites, contacts, labels] = yield* Effect.all([
           jobsRepository.listMemberOptions(actor.organizationId),
           sitesRepository.listOptions(actor.organizationId),
           contactsRepository.listOptions(actor.organizationId),
+          jobLabelsRepository.list(actor.organizationId),
         ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
         const serviceAreas = hasElevatedAccess(actor)
           ? yield* configurationRepository
@@ -104,11 +113,25 @@ export class JobsService extends Effect.Service<JobsService>()(
 
         return {
           contacts,
+          labels,
           members,
           serviceAreas,
           sites,
         } as const;
       });
+
+      const listJobLabels = Effect.fn("JobsService.listJobLabels")(
+        function* () {
+          const actor = yield* loadActor();
+          yield* authorization.ensureCanView(actor);
+
+          const labels = yield* jobLabelsRepository
+            .list(actor.organizationId)
+            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+
+          return { labels } as const;
+        }
+      );
 
       const getMemberOptions = Effect.fn("JobsService.getMemberOptions")(
         function* () {
@@ -125,6 +148,109 @@ export class JobsService extends Effect.Service<JobsService>()(
         }
       );
 
+      const createJobLabel = Effect.fn("JobsService.createJobLabel")(function* (
+        input: CreateJobLabelInput
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanManageLabels(actor);
+
+        return yield* jobLabelsRepository
+          .create({
+            name: input.name,
+            organizationId: actor.organizationId,
+          })
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+      });
+
+      const updateJobLabel = Effect.fn("JobsService.updateJobLabel")(function* (
+        labelId: JobLabelId,
+        input: UpdateJobLabelInput
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanManageLabels(actor);
+
+        const label = yield* jobLabelsRepository
+          .update(actor.organizationId, labelId, {
+            name: input.name,
+          })
+          .pipe(
+            Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.map(Option.getOrUndefined)
+          );
+
+        if (label !== undefined) {
+          return label;
+        }
+
+        return yield* Effect.fail(
+          new JobLabelNotFoundError({
+            labelId,
+            message: "Job label does not exist in the organization",
+          })
+        );
+      });
+
+      const archiveJobLabel = Effect.fn("JobsService.archiveJobLabel")(
+        function* (labelId: JobLabelId) {
+          const actor = yield* loadActor();
+          yield* authorization.ensureCanManageLabels(actor);
+
+          const result = yield* Effect.gen(function* () {
+            const archived = yield* jobLabelsRepository
+              .archive(actor.organizationId, labelId)
+              .pipe(Effect.map(Option.getOrUndefined));
+
+            if (archived === undefined) {
+              return yield* Effect.fail(
+                new JobLabelNotFoundError({
+                  labelId,
+                  message: "Job label does not exist in the organization",
+                })
+              );
+            }
+
+            yield* Effect.all(
+              archived.removedWorkItemIds.map((workItemId) =>
+                activityRecorder.recordLabelRemovedFromWorkItem(
+                  actor,
+                  workItemId,
+                  archived.label
+                )
+              )
+            );
+
+            return archived.label;
+          }).pipe(Effect.either);
+
+          if (Either.isRight(result)) {
+            return result.right;
+          }
+
+          switch (result.left._tag) {
+            case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+              return yield* result.left.userId === actor.userId
+                ? Effect.fail(
+                    new JobAccessDeniedError({
+                      message:
+                        "Your organization access changed while the request was running",
+                    })
+                  )
+                : Effect.die(result.left);
+            }
+            case JOB_NOT_FOUND_ERROR_TAG:
+            case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+              return yield* Effect.die(result.left);
+            }
+            case "SqlError": {
+              return yield* failJobsStorageError(result.left);
+            }
+            default: {
+              return yield* Effect.fail(result.left);
+            }
+          }
+        }
+      );
+
       const listOrganizationActivity = Effect.fn(
         "JobsService.listOrganizationActivity"
       )(function* (query: OrganizationActivityQuery) {
@@ -135,7 +261,6 @@ export class JobsService extends Effect.Service<JobsService>()(
           .listOrganizationActivity(actor.organizationId, query)
           .pipe(Effect.catchTag("SqlError", failJobsStorageError));
       });
-
       const create = Effect.fn("JobsService.create")(function* (
         input: CreateJobInput
       ) {
@@ -233,22 +358,10 @@ export class JobsService extends Effect.Service<JobsService>()(
         const actor = yield* loadActor(workItemId);
         yield* authorization.ensureCanView(actor);
 
-        const detail = yield* jobsRepository
-          .getDetail(actor.organizationId, workItemId)
-          .pipe(
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.map(Option.getOrUndefined)
-          );
-
-        if (detail !== undefined) {
-          return detail;
-        }
-
-        return yield* Effect.fail(
-          new JobNotFoundError({
-            message: "Job does not exist",
-            workItemId,
-          })
+        return yield* loadJobDetailOrFail(
+          actor.organizationId,
+          workItemId,
+          jobsRepository
         );
       });
 
@@ -331,7 +444,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -417,7 +534,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -489,7 +610,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           .pipe(Effect.either);
 
         if (Either.isRight(result)) {
-          return result.right;
+          return yield* loadJobOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
         }
 
         switch (result.left._tag) {
@@ -563,6 +688,152 @@ export class JobsService extends Effect.Service<JobsService>()(
                   })
                 )
               : Effect.die(result.left);
+          }
+          case "SqlError": {
+            return yield* failJobsStorageError(result.left);
+          }
+          default: {
+            return yield* Effect.fail(result.left);
+          }
+        }
+      });
+
+      const assignJobLabel = Effect.fn("JobsService.assignJobLabel")(function* (
+        workItemId: WorkItemId,
+        input: AssignJobLabelInput
+      ) {
+        const actor = yield* loadActor(workItemId);
+
+        const result = yield* jobsRepository
+          .withTransaction(
+            Effect.gen(function* () {
+              const job = yield* jobsRepository
+                .findByIdForUpdate(actor.organizationId, workItemId)
+                .pipe(Effect.map(Option.getOrUndefined));
+
+              if (job === undefined) {
+                return yield* Effect.fail(
+                  new JobNotFoundError({
+                    message: "Job does not exist",
+                    workItemId,
+                  })
+                );
+              }
+
+              yield* authorization.ensureCanAssignLabels(actor, job);
+
+              const assignment = yield* jobLabelsRepository.assignToJob({
+                labelId: input.labelId,
+                organizationId: actor.organizationId,
+                workItemId,
+              });
+
+              if (assignment.changed) {
+                yield* activityRecorder.recordLabelAssigned(
+                  actor,
+                  job,
+                  assignment.label
+                );
+              }
+            })
+          )
+          .pipe(Effect.either);
+
+        if (Either.isRight(result)) {
+          return yield* loadJobDetailOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
+        }
+
+        switch (result.left._tag) {
+          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+            return yield* result.left.userId === actor.userId
+              ? Effect.fail(
+                  new JobAccessDeniedError({
+                    message:
+                      "Your organization access changed while the request was running",
+                    workItemId,
+                  })
+                )
+              : Effect.die(result.left);
+          }
+          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+            return yield* Effect.die(result.left);
+          }
+          case "SqlError": {
+            return yield* failJobsStorageError(result.left);
+          }
+          default: {
+            return yield* Effect.fail(result.left);
+          }
+        }
+      });
+
+      const removeJobLabel = Effect.fn("JobsService.removeJobLabel")(function* (
+        workItemId: WorkItemId,
+        labelId: JobLabelId
+      ) {
+        const actor = yield* loadActor(workItemId);
+
+        const result = yield* jobsRepository
+          .withTransaction(
+            Effect.gen(function* () {
+              const job = yield* jobsRepository
+                .findByIdForUpdate(actor.organizationId, workItemId)
+                .pipe(Effect.map(Option.getOrUndefined));
+
+              if (job === undefined) {
+                return yield* Effect.fail(
+                  new JobNotFoundError({
+                    message: "Job does not exist",
+                    workItemId,
+                  })
+                );
+              }
+
+              yield* authorization.ensureCanAssignLabels(actor, job);
+
+              const assignment = yield* jobLabelsRepository.removeFromJob({
+                labelId,
+                organizationId: actor.organizationId,
+                workItemId,
+              });
+
+              if (assignment.changed) {
+                yield* activityRecorder.recordLabelRemoved(
+                  actor,
+                  job,
+                  assignment.label
+                );
+              }
+            })
+          )
+          .pipe(Effect.either);
+
+        if (Either.isRight(result)) {
+          return yield* loadJobDetailOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository
+          );
+        }
+
+        switch (result.left._tag) {
+          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
+            return yield* result.left.userId === actor.userId
+              ? Effect.fail(
+                  new JobAccessDeniedError({
+                    message:
+                      "Your organization access changed while the request was running",
+                    workItemId,
+                  })
+                )
+              : Effect.die(result.left);
+          }
+          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
+            return yield* Effect.die(result.left);
           }
           case "SqlError": {
             return yield* failJobsStorageError(result.left);
@@ -723,19 +994,61 @@ export class JobsService extends Effect.Service<JobsService>()(
         addComment,
         addCostLine,
         addVisit,
+        archiveJobLabel,
+        assignJobLabel,
         create,
+        createJobLabel,
         getDetail,
         getMemberOptions,
         getOptions,
         list,
+        listJobLabels,
         listOrganizationActivity,
         patch,
+        removeJobLabel,
         reopen,
         transition,
+        updateJobLabel,
       };
     }),
   }
 ) {}
+
+function loadJobDetailOrFail(
+  organizationId: OrganizationId,
+  workItemId: WorkItemId,
+  jobsRepository: JobsRepository
+): Effect.Effect<JobDetail, JobNotFoundError | JobStorageError> {
+  return Effect.gen(function* () {
+    const detail = yield* jobsRepository
+      .getDetail(organizationId, workItemId)
+      .pipe(
+        Effect.catchTag("SqlError", failJobsStorageError),
+        Effect.map(Option.getOrUndefined)
+      );
+
+    if (detail !== undefined) {
+      return detail;
+    }
+
+    return yield* Effect.fail(
+      new JobNotFoundError({
+        message: "Job does not exist",
+        workItemId,
+      })
+    );
+  });
+}
+
+function loadJobOrFail(
+  organizationId: OrganizationId,
+  workItemId: WorkItemId,
+  jobsRepository: JobsRepository
+): Effect.Effect<Job, JobNotFoundError | JobStorageError> {
+  return loadJobDetailOrFail(organizationId, workItemId, jobsRepository).pipe(
+    Effect.map((detail) => detail.job)
+  );
+}
 
 function failJobsStorageError(
   error: unknown

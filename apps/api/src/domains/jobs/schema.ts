@@ -48,6 +48,7 @@ const kindValuesSql = sql.raw(
 const activityEventTypeValuesSql = sql.raw(
   JOB_ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
 );
+const jobLabelNameMaxLength = 48;
 const rateCardLineKindValuesSql = sql.raw(
   RATE_CARD_LINE_KINDS.map((value) => `'${value}'`).join(", ")
 );
@@ -235,6 +236,49 @@ export const contact = pgTable(
   ]
 );
 
+export const jobLabel = pgTable(
+  "job_labels",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdAt: jobsTimestamp("created_at"),
+    updatedAt: jobsTimestamp("updated_at"),
+    archivedAt: archivedAtColumn("archived_at"),
+  },
+  (table) => [
+    uniqueIndex("job_labels_organization_normalized_active_idx")
+      .on(table.organizationId, table.normalizedName)
+      .where(sql`${table.archivedAt} is null`),
+    uniqueIndex("job_labels_id_organization_idx").on(
+      table.id,
+      table.organizationId
+    ),
+    index("job_labels_organization_name_idx")
+      .on(table.organizationId, table.name, table.id)
+      .where(sql`${table.archivedAt} is null`),
+    check(
+      "job_labels_name_not_empty_chk",
+      sql`length(trim(${table.name})) > 0`
+    ),
+    check(
+      "job_labels_name_max_length_chk",
+      sql`length(trim(${table.name})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
+    ),
+    check(
+      "job_labels_normalized_name_not_empty_chk",
+      sql`length(trim(${table.normalizedName})) > 0`
+    ),
+    check(
+      "job_labels_normalized_name_max_length_chk",
+      sql`length(trim(${table.normalizedName})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
+    ),
+  ]
+);
+
 export const siteContact = pgTable(
   "site_contacts",
   {
@@ -344,6 +388,10 @@ export const workItem = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
+    uniqueIndex("work_items_id_organization_idx").on(
+      table.id,
+      table.organizationId
+    ),
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
@@ -354,6 +402,36 @@ export const workItem = pgTable(
     uniqueIndex("work_items_id_organization_id_idx").on(
       table.id,
       table.organizationId
+    ),
+  ]
+);
+
+export const workItemLabel = pgTable(
+  "work_item_labels",
+  {
+    workItemId: uuid("work_item_id").notNull(),
+    labelId: uuid("label_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: jobsTimestamp("created_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workItemId, table.labelId] }),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_labels_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.labelId, table.organizationId],
+      foreignColumns: [jobLabel.id, jobLabel.organizationId],
+      name: "work_item_labels_label_org_fk",
+    }).onDelete("cascade"),
+    index("work_item_labels_label_work_item_idx").on(
+      table.organizationId,
+      table.labelId,
+      table.workItemId
     ),
   ]
 );
@@ -567,6 +645,14 @@ export const contactRelations = relations(contact, ({ many, one }) => ({
   workItems: many(workItem),
 }));
 
+export const jobLabelRelations = relations(jobLabel, ({ many, one }) => ({
+  organization: one(organization, {
+    fields: [jobLabel.organizationId],
+    references: [organization.id],
+  }),
+  workItems: many(workItemLabel),
+}));
+
 export const siteContactRelations = relations(siteContact, ({ one }) => ({
   site: one(site, {
     fields: [siteContact.siteId],
@@ -590,7 +676,19 @@ export const workItemRelations = relations(workItem, ({ many, one }) => ({
     fields: [workItem.siteId],
     references: [site.id],
   }),
+  labels: many(workItemLabel),
   visits: many(workItemVisit),
+}));
+
+export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
+  label: one(jobLabel, {
+    fields: [workItemLabel.labelId],
+    references: [jobLabel.id],
+  }),
+  workItem: one(workItem, {
+    fields: [workItemLabel.workItemId],
+    references: [workItem.id],
+  }),
 }));
 
 export const workItemCommentRelations = relations(
@@ -660,6 +758,7 @@ export const workItemCostLineRelations = relations(
 
 export const jobsSchema = {
   contact,
+  jobLabel,
   rateCard,
   rateCardLine,
   serviceArea,
@@ -669,5 +768,6 @@ export const jobsSchema = {
   workItemActivity,
   workItemCostLine,
   workItemComment,
+  workItemLabel,
   workItemVisit,
 };

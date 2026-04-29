@@ -78,6 +78,7 @@ describe("sites route loader", () => {
       ).resolves.toStrictEqual({
         options: {
           contacts: [],
+          labels: [],
           members: [],
           serviceAreas: [],
           sites: [],
@@ -105,6 +106,7 @@ describe("sites route loader", () => {
           activeOrganizationId={organizationId}
           options={{
             contacts: [],
+            labels: [],
             members: [],
             serviceAreas: [],
             sites: [

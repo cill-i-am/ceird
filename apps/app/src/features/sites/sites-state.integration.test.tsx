@@ -162,6 +162,7 @@ function renderSitesStateProbe() {
           jobsOptionsStateAtom,
           seedJobsOptionsState(organizationId, {
             contacts: [],
+            labels: [],
             members: [],
             serviceAreas: [],
             sites: [buildSite(existingSiteId, "Existing Site")],

@@ -8,7 +8,10 @@ import {
   useAtomValue,
 } from "@effect-atom/atom-react";
 import {
+  Add01Icon,
+  ArrowDown01Icon,
   Briefcase01Icon,
+  Cancel01Icon,
   CheckmarkCircle02Icon,
   Comment01Icon,
   Location01Icon,
@@ -16,11 +19,18 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { SiteId } from "@task-tracker/jobs-core";
+import {
+  JobLabelNameSchema,
+  SiteId,
+  normalizeJobLabelName,
+} from "@task-tracker/jobs-core";
 import type {
+  CreateJobLabelInput,
   JobContactDetail,
   JobContactOption,
   JobDetailResponse,
+  JobLabel,
+  JobLabelIdType,
   JobSiteOption,
   JobStatus,
   SiteIdType,
@@ -30,7 +40,16 @@ import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "#/components/ui/command";
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
@@ -49,12 +68,18 @@ import {
   FieldLabel,
 } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#/components/ui/popover";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { cn } from "#/lib/utils";
 
 import {
   formatJobDateTime,
@@ -68,8 +93,11 @@ import {
   addJobCostLineMutationAtomFamily,
   addJobCommentMutationAtomFamily,
   addJobVisitMutationAtomFamily,
+  assignJobLabelMutationAtomFamily,
+  createAndAssignJobLabelMutationAtomFamily,
   jobDetailStateAtomFamily,
   patchJobMutationAtomFamily,
+  removeJobLabelMutationAtomFamily,
   reopenJobMutationAtomFamily,
   transitionJobMutationAtomFamily,
 } from "./jobs-detail-state";
@@ -126,6 +154,15 @@ export function JobsDetailSheet({
     addJobCommentMutationAtomFamily(workItemId)
   );
   const visitResult = useAtomValue(addJobVisitMutationAtomFamily(workItemId));
+  const assignLabelResult = useAtomValue(
+    assignJobLabelMutationAtomFamily(workItemId)
+  );
+  const createAndAssignLabelResult = useAtomValue(
+    createAndAssignJobLabelMutationAtomFamily(workItemId)
+  );
+  const removeLabelResult = useAtomValue(
+    removeJobLabelMutationAtomFamily(workItemId)
+  );
   const costLineResult = useAtomValue(
     addJobCostLineMutationAtomFamily(workItemId)
   );
@@ -150,6 +187,24 @@ export function JobsDetailSheet({
   const addJobVisit = useAtomSet(addJobVisitMutationAtomFamily(workItemId), {
     mode: "promiseExit",
   });
+  const assignJobLabel = useAtomSet(
+    assignJobLabelMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
+  const createAndAssignJobLabel = useAtomSet(
+    createAndAssignJobLabelMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
+  const removeJobLabel = useAtomSet(
+    removeJobLabelMutationAtomFamily(workItemId),
+    {
+      mode: "promiseExit",
+    }
+  );
   const addJobCostLine = useAtomSet(
     addJobCostLineMutationAtomFamily(workItemId),
     {
@@ -161,6 +216,9 @@ export function JobsDetailSheet({
     detail.job.assigneeId
   );
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
+  const canAssignLabels =
+    hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
+  const canCreateLabels = hasJobsElevatedAccess(viewer.role);
   const canAddVisit = hasAssignmentAccess;
   const canAddCostLine = hasAssignmentAccess;
   const canReopen = hasAssignmentAccess;
@@ -190,6 +248,7 @@ export function JobsDetailSheet({
   const [visitDurationMinutes, setVisitDurationMinutes] = React.useState("60");
   const [visitNote, setVisitNote] = React.useState("");
   const [visitError, setVisitError] = React.useState<string | null>(null);
+  const [labelError, setLabelError] = React.useState<string | null>(null);
   const site = detail.job.siteId
     ? lookup.siteById.get(detail.job.siteId)
     : undefined;
@@ -208,6 +267,18 @@ export function JobsDetailSheet({
     () => buildSiteSelectionGroups([...lookup.siteById.values()]),
     [lookup.siteById]
   );
+  const organizationLabels = React.useMemo<readonly JobLabel[]>(
+    () => getSortedJobLabels([...lookup.labelById.values()]),
+    [lookup.labelById]
+  );
+  const assignedLabelIds = React.useMemo<ReadonlySet<JobLabelIdType>>(
+    () => new Set(detail.job.labels.map((label) => label.id)),
+    [detail.job.labels]
+  );
+  const availableLabels = React.useMemo<readonly JobLabel[]>(
+    () => organizationLabels.filter((label) => !assignedLabelIds.has(label.id)),
+    [assignedLabelIds, organizationLabels]
+  );
   const selectedSiteChanged =
     selectedSiteId !== (detail.job.siteId ?? NO_SITE_VALUE);
 
@@ -224,6 +295,7 @@ export function JobsDetailSheet({
     setVisitDurationMinutes("60");
     setVisitNote("");
     setVisitError(null);
+    setLabelError(null);
   }, [detail.job.siteId, detail.job.status, workItemId]);
 
   const closeSheet = React.useCallback(() => {
@@ -406,6 +478,45 @@ export function JobsDetailSheet({
     }
   }
 
+  async function handleAssignLabel(labelId: JobLabelIdType) {
+    if (!canAssignLabels) {
+      return;
+    }
+
+    setLabelError(null);
+    await assignJobLabel({ labelId });
+  }
+
+  async function handleCreateAndAssignLabel(name: string) {
+    if (!canAssignLabels || !canCreateLabels) {
+      return;
+    }
+
+    const decodedName = validateLabelName(name);
+
+    if (decodedName.kind === "empty") {
+      setLabelError("Type a label name before creating it.");
+      return;
+    }
+
+    if (decodedName.kind === "invalid") {
+      setLabelError("Keep label names between 1 and 48 characters.");
+      return;
+    }
+
+    setLabelError(null);
+    await createAndAssignJobLabel({ name: decodedName.name });
+  }
+
+  async function handleRemoveLabel(labelId: JobLabelIdType) {
+    if (!canAssignLabels) {
+      return;
+    }
+
+    setLabelError(null);
+    await removeJobLabel(labelId);
+  }
+
   let transitionErrorContent: React.ReactNode = null;
 
   if (selectedStatus === "blocked") {
@@ -571,6 +682,29 @@ export function JobsDetailSheet({
               context, and log the site visits that matter.
             </DrawerDescription>
           </div>
+          <JobDetailLabels
+            labels={detail.job.labels}
+            availableLabels={availableLabels}
+            organizationLabels={organizationLabels}
+            canAssignLabels={canAssignLabels}
+            canCreateLabels={canCreateLabels}
+            disabled={
+              assignLabelResult.waiting ||
+              createAndAssignLabelResult.waiting ||
+              removeLabelResult.waiting
+            }
+            onAssignLabel={handleAssignLabel}
+            onCreateAndAssignLabel={handleCreateAndAssignLabel}
+            onRemoveLabel={handleRemoveLabel}
+          />
+          {labelError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {labelError}
+            </p>
+          ) : null}
+          {renderMutationError(assignLabelResult)}
+          {renderMutationError(createAndAssignLabelResult)}
+          {renderMutationError(removeLabelResult)}
           <div className="grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2">
             <HeaderMetaItem
               label="Site"
@@ -995,7 +1129,10 @@ export function JobsDetailSheet({
                         >
                           <div className="flex flex-col gap-2">
                             <p className="text-sm leading-7">
-                              {describeJobActivity(actor?.name, event.payload)}
+                              {describeJobDetailActivity(
+                                actor?.name,
+                                event.payload
+                              )}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {formatDateTime(event.createdAt)}
@@ -1086,6 +1223,198 @@ function HeaderMetaItem({
   );
 }
 
+function JobDetailLabels({
+  availableLabels,
+  canAssignLabels,
+  canCreateLabels,
+  disabled,
+  labels,
+  onAssignLabel,
+  onCreateAndAssignLabel,
+  onRemoveLabel,
+  organizationLabels,
+}: {
+  readonly availableLabels: readonly JobLabel[];
+  readonly canAssignLabels: boolean;
+  readonly canCreateLabels: boolean;
+  readonly disabled: boolean;
+  readonly labels: readonly JobLabel[];
+  readonly onAssignLabel: (labelId: JobLabelIdType) => void;
+  readonly onCreateAndAssignLabel: (name: string) => void;
+  readonly onRemoveLabel: (labelId: JobLabelIdType) => void;
+  readonly organizationLabels: readonly JobLabel[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {labels.length === 0 ? (
+        <span className="text-sm text-muted-foreground">No labels yet</span>
+      ) : (
+        labels.map((label) => (
+          <Badge
+            key={label.id}
+            variant="outline"
+            className="gap-1.5 rounded-full pr-1"
+          >
+            <span>{label.name}</span>
+            {canAssignLabels ? (
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="size-5 rounded-full"
+                aria-label={`Remove ${label.name} label`}
+                title={`Remove ${label.name} label`}
+                disabled={disabled}
+                onClick={() => onRemoveLabel(label.id)}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            ) : null}
+          </Badge>
+        ))
+      )}
+
+      {canAssignLabels ? (
+        <JobLabelPicker
+          availableLabels={availableLabels}
+          canCreateLabels={canCreateLabels}
+          disabled={disabled}
+          organizationLabels={organizationLabels}
+          onAssignLabel={onAssignLabel}
+          onCreateAndAssignLabel={onCreateAndAssignLabel}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function JobLabelPicker({
+  availableLabels,
+  canCreateLabels,
+  disabled,
+  onAssignLabel,
+  onCreateAndAssignLabel,
+  organizationLabels,
+}: {
+  readonly availableLabels: readonly JobLabel[];
+  readonly canCreateLabels: boolean;
+  readonly disabled: boolean;
+  readonly onAssignLabel: (labelId: JobLabelIdType) => void;
+  readonly onCreateAndAssignLabel: (name: string) => void;
+  readonly organizationLabels: readonly JobLabel[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const createLabelName = query.trim();
+  const normalizedCreateName = normalizeJobLabelName(createLabelName);
+  const canCreateLabelName =
+    validateLabelName(createLabelName).kind === "valid";
+  const hasExistingLabelName =
+    normalizedCreateName.length > 0 &&
+    organizationLabels.some(
+      (label) => normalizeJobLabelName(label.name) === normalizedCreateName
+    );
+  const showCreate =
+    canCreateLabels && canCreateLabelName && !hasExistingLabelName;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+
+        if (!nextOpen) {
+          setQuery("");
+        }
+      }}
+    >
+      <PopoverTrigger
+        type="button"
+        id="job-label-picker"
+        aria-label="Add label"
+        disabled={disabled}
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "rounded-full bg-background"
+        )}
+      >
+        <HugeiconsIcon
+          icon={Add01Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        Add label
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          strokeWidth={2}
+          data-icon="inline-end"
+          className="text-muted-foreground"
+        />
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--anchor-width)] min-w-72 p-0">
+        <Command>
+          <CommandInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search labels"
+          />
+          <CommandList>
+            <CommandEmpty>
+              {createLabelName
+                ? "No matching labels."
+                : "Type a label name to create one."}
+            </CommandEmpty>
+            {showCreate ? (
+              <CommandGroup>
+                <CommandItem
+                  aria-label={`Create new label: "${createLabelName}"`}
+                  value={`Create new label ${createLabelName}`}
+                  onSelect={() => {
+                    onCreateAndAssignLabel(createLabelName);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+                  <span>
+                    Create new label:{" "}
+                    <span className="text-muted-foreground">
+                      &quot;{createLabelName}&quot;
+                    </span>
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+            {showCreate && availableLabels.length > 0 ? (
+              <CommandSeparator />
+            ) : null}
+            {availableLabels.length > 0 ? (
+              <CommandGroup heading="Labels">
+                {availableLabels.map((label) => (
+                  <CommandItem
+                    key={label.id}
+                    aria-label={label.name}
+                    value={label.name}
+                    onSelect={() => {
+                      onAssignLabel(label.id);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {label.name}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function buildTransitionSelectionGroups(
   transitionOptions: readonly JobStatus[]
 ) {
@@ -1169,6 +1498,63 @@ function insertSortedSite(
   ];
 }
 
+function getSortedJobLabels(labels: readonly JobLabel[]) {
+  let sortedLabels: readonly JobLabel[] = [];
+
+  for (const label of labels) {
+    sortedLabels = insertSortedJobLabel(sortedLabels, label);
+  }
+
+  return sortedLabels;
+}
+
+function compareJobLabels(left: JobLabel, right: JobLabel) {
+  const nameOrder = left.name.localeCompare(right.name);
+
+  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
+}
+
+function insertSortedJobLabel(
+  sortedLabels: readonly JobLabel[],
+  label: JobLabel
+) {
+  const insertIndex = sortedLabels.findIndex(
+    (sortedLabel) => compareJobLabels(label, sortedLabel) < 0
+  );
+
+  if (insertIndex === -1) {
+    return [...sortedLabels, label];
+  }
+
+  return [
+    ...sortedLabels.slice(0, insertIndex),
+    label,
+    ...sortedLabels.slice(insertIndex),
+  ];
+}
+
+const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
+
+function validateLabelName(
+  input: string
+):
+  | { readonly kind: "empty" }
+  | { readonly kind: "invalid" }
+  | { readonly kind: "valid"; readonly name: CreateJobLabelInput["name"] } {
+  if (input.trim().length === 0) {
+    return { kind: "empty" };
+  }
+
+  try {
+    return {
+      kind: "valid",
+      name: decodeJobLabelName(input),
+    };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+
 function renderMutationError(
   result: Result.Result<unknown, { readonly message: string }>
 ) {
@@ -1207,4 +1593,23 @@ function formatDateTime(value: string) {
 function formatDuration(durationMinutes: number) {
   const hours = durationMinutes / 60;
   return `${hours}h logged`;
+}
+
+function describeJobDetailActivity(
+  actorName: string | undefined,
+  payload: JobDetailResponse["activity"][number]["payload"]
+) {
+  const actorPrefix = actorName ? `${actorName} ` : "";
+
+  switch (payload.eventType) {
+    case "label_added": {
+      return `${actorPrefix}added the ${payload.labelName} label.`;
+    }
+    case "label_removed": {
+      return `${actorPrefix}removed the ${payload.labelName} label.`;
+    }
+    default: {
+      return describeJobActivity(actorName, payload);
+    }
+  }
 }

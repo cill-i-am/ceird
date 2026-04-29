@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
 import { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql";
 import {
   ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
@@ -15,6 +16,12 @@ import {
   JobContactDetailSchema,
   JobContactOptionSchema,
   JobDetailSchema,
+  JobLabelId as JobLabelIdSchema,
+  JobLabelNameSchema,
+  JobLabelNameConflictError,
+  JobLabelNotFoundError,
+  JobLabelSchema,
+  JobLabelsResponseSchema,
   JobListCursor as JobListCursorSchema,
   JobListCursorInvalidError,
   JobListItemSchema,
@@ -41,6 +48,7 @@ import {
   WorkItemId as WorkItemIdSchema,
   calculateJobCostLineTotalMinor,
   calculateJobCostSummary,
+  normalizeJobLabelName,
 } from "@task-tracker/jobs-core";
 import type {
   ActivityIdType as ActivityId,
@@ -56,6 +64,9 @@ import type {
   JobDetail,
   JobExternalReference,
   JobKind,
+  JobLabel,
+  JobLabelIdType as JobLabelId,
+  JobLabelName,
   JobListCursorType as JobListCursor,
   JobListQuery,
   JobMemberOption,
@@ -90,6 +101,7 @@ import {
   generateCommentId,
   generateContactId,
   generateCostLineId,
+  generateJobLabelId,
   generateRateCardId,
   generateRateCardLineId,
   generateServiceAreaId,
@@ -160,6 +172,34 @@ interface WorkItemVisitRow {
   readonly note: string;
   readonly organization_id: string;
   readonly visit_date: Date | string;
+  readonly work_item_id: string;
+}
+
+interface JobLabelRow {
+  readonly archived_at: Date | null;
+  readonly created_at: Date;
+  readonly id: string;
+  readonly name: string;
+  readonly normalized_name: string;
+  readonly organization_id: string;
+  readonly updated_at: Date;
+}
+
+interface JobLabelAssignmentRow extends JobLabelRow {
+  readonly inserted_count: number;
+  readonly work_item_id: string | null;
+}
+
+interface ArchivedJobLabel {
+  readonly label: JobLabel;
+  readonly removedWorkItemIds: readonly WorkItemId[];
+}
+
+interface WorkItemLabelRow {
+  readonly created_at: Date;
+  readonly label_id: string;
+  readonly name: string;
+  readonly updated_at: Date;
   readonly work_item_id: string;
 }
 
@@ -389,6 +429,28 @@ export interface LinkSiteContactInput {
   readonly siteId: SiteId;
 }
 
+export interface CreateJobLabelRecordInput {
+  readonly name: JobLabelName;
+  readonly organizationId: OrganizationId;
+}
+
+export interface UpdateJobLabelRecordInput {
+  readonly name: JobLabelName;
+}
+
+export interface AssignJobLabelRecordInput {
+  readonly labelId: JobLabelId;
+  readonly organizationId: OrganizationId;
+  readonly workItemId: WorkItemId;
+}
+
+export interface JobLabelAssignmentResult {
+  readonly changed: boolean;
+  readonly label: JobLabel;
+}
+
+export type ArchiveJobLabelResult = ArchivedJobLabel;
+
 const decodeJob = Schema.decodeUnknownSync(JobSchema);
 const decodeJobActivity = Schema.decodeUnknownSync(JobActivitySchema);
 const decodeJobActivityPayload = Schema.decodeUnknownSync(
@@ -413,6 +475,12 @@ const decodeJobCostLineQuantity = Schema.decodeUnknownSync(
 );
 const decodeJobContactDetail = Schema.decodeUnknownSync(JobContactDetailSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
+const decodeJobLabel = Schema.decodeUnknownSync(JobLabelSchema);
+const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelIdSchema);
+const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
+const decodeJobLabelsResponse = Schema.decodeUnknownSync(
+  JobLabelsResponseSchema
+);
 const decodeJobListCursor = Schema.decodeUnknownSync(JobListCursorSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
 const decodeJobMemberOption = Schema.decodeUnknownSync(JobMemberOptionSchema);
@@ -626,16 +694,88 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         }
       });
 
+      const listLabelsForWorkItems = Effect.fn(
+        "JobsRepository.listLabelsForWorkItems"
+      )(function* (
+        organizationId: OrganizationId,
+        workItemIds: readonly WorkItemId[]
+      ) {
+        if (workItemIds.length === 0) {
+          return new Map<string, readonly JobLabel[]>();
+        }
+
+        const rows = yield* sql<WorkItemLabelRow>`
+          select
+            work_item_labels.work_item_id,
+            work_item_labels.label_id,
+            job_labels.created_at,
+            job_labels.name,
+            job_labels.updated_at
+          from work_item_labels
+          join job_labels on job_labels.id = work_item_labels.label_id
+          join work_items on work_items.id = work_item_labels.work_item_id
+          where job_labels.organization_id = ${organizationId}
+            and work_items.organization_id = ${organizationId}
+            and work_item_labels.work_item_id in ${sql.in(workItemIds)}
+            and job_labels.archived_at is null
+          order by job_labels.name asc, job_labels.id asc
+        `;
+
+        const labelsByWorkItemId = new Map<string, JobLabel[]>();
+
+        for (const row of rows) {
+          const labels = labelsByWorkItemId.get(row.work_item_id) ?? [];
+          labels.push(
+            decodeJobLabel({
+              createdAt: row.created_at.toISOString(),
+              id: decodeJobLabelId(row.label_id),
+              name: row.name,
+              updatedAt: row.updated_at.toISOString(),
+            })
+          );
+          labelsByWorkItemId.set(row.work_item_id, labels);
+        }
+
+        return labelsByWorkItemId;
+      });
+
+      const mapJobRowWithLabels = Effect.fn(
+        "JobsRepository.mapJobRowWithLabels"
+      )(function* (organizationId: OrganizationId, row: WorkItemRow) {
+        const workItemId = decodeWorkItemId(row.id);
+        const labelsByWorkItemId = yield* listLabelsForWorkItems(
+          organizationId,
+          [workItemId]
+        );
+
+        return mapJobRow(row, labelsByWorkItemId.get(workItemId) ?? []);
+      });
+
       const list = Effect.fn("JobsRepository.list")(function* (
         organizationId: OrganizationId,
         query: JobListQuery
       ) {
         const limit = clampJobListLimit(query.limit ?? boundedDefaultListLimit);
         const clauses = [sql`work_items.organization_id = ${organizationId}`];
+        const labelFilterJoin =
+          query.labelId === undefined
+            ? sql``
+            : sql`
+              join work_item_labels as filter_labels on filter_labels.work_item_id = work_items.id
+              join job_labels as filter_job_labels on filter_job_labels.id = filter_labels.label_id
+            `;
         const sitesJoin =
           query.serviceAreaId === undefined
             ? sql``
             : sql`left join sites on sites.id = work_items.site_id`;
+
+        if (query.labelId !== undefined) {
+          clauses.push(
+            sql`filter_job_labels.organization_id = ${organizationId}`
+          );
+          clauses.push(sql`filter_job_labels.id = ${query.labelId}`);
+          clauses.push(sql`filter_job_labels.archived_at is null`);
+        }
 
         if (query.status !== undefined) {
           clauses.push(sql`work_items.status = ${query.status}`);
@@ -703,13 +843,22 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             work_items.created_by_user_id,
             work_items.organization_id
           from work_items
+          ${labelFilterJoin}
           ${sitesJoin}
           where ${sql.and(clauses)}
           order by work_items.updated_at desc, work_items.id desc
           limit ${limit + 1}
         `;
 
-        const items = rows.slice(0, limit).map(mapJobListItemRow);
+        const labelsByWorkItemId = yield* listLabelsForWorkItems(
+          organizationId,
+          rows.slice(0, limit).map((row) => decodeWorkItemId(row.id))
+        );
+        const items = rows
+          .slice(0, limit)
+          .map((row) =>
+            mapJobListItemRow(row, labelsByWorkItemId.get(row.id) ?? [])
+          );
         const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
         const nextCursor =
           nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
@@ -858,7 +1007,9 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           ${lockClause}
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        return Option.fromNullable(rows[0]).pipe(
+          Option.map((row) => mapJobRow(row))
+        );
       });
 
       const getDetail = Effect.fn("JobsRepository.getDetail")(function* (
@@ -873,32 +1024,34 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           return Option.none<JobDetail>();
         }
 
-        const [comments, activity, visits, costLines] = yield* Effect.all([
-          sql<WorkItemCommentRow>`
+        const [comments, activity, visits, labelsByWorkItemId, costLines] =
+          yield* Effect.all([
+            sql<WorkItemCommentRow>`
             select *
             from work_item_comments
             where work_item_id = ${workItemId}
             order by created_at asc, id asc
           `,
-          sql<WorkItemActivityRow>`
+            sql<WorkItemActivityRow>`
             select *
             from work_item_activity
             where work_item_id = ${workItemId}
             order by created_at desc, id desc
           `,
-          sql<WorkItemVisitRow>`
+            sql<WorkItemVisitRow>`
             select *
             from work_item_visits
             where work_item_id = ${workItemId}
             order by visit_date desc, id desc
           `,
-          sql<WorkItemCostLineRow>`
+            listLabelsForWorkItems(organizationId, [workItemId]),
+            sql<WorkItemCostLineRow>`
             select *
             from work_item_cost_lines
             where work_item_id = ${workItemId}
             order by created_at desc, id desc
           `,
-        ]);
+          ]);
         const contact =
           job.contactId === undefined
             ? undefined
@@ -913,7 +1066,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
             contact,
             costLines: mappedCostLines,
             costSummary: calculateJobCostSummary(mappedCostLines),
-            job,
+            job: {
+              ...job,
+              labels: labelsByWorkItemId.get(workItemId) ?? [],
+            },
             visits: visits.map(mapJobVisitRow),
           })
         );
@@ -1056,7 +1212,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const transition = Effect.fn("JobsRepository.transition")(function* (
@@ -1102,7 +1262,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const reopen = Effect.fn("JobsRepository.reopen")(function* (
@@ -1123,7 +1287,11 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           returning *
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobRow));
+        const [row] = rows;
+
+        return row === undefined
+          ? Option.none<Job>()
+          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const addComment = Effect.fn("JobsRepository.addComment")(function* (
@@ -1987,11 +2155,310 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
   }
 ) {}
 
+export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
+  "@task-tracker/domains/jobs/JobLabelsRepository",
+  {
+    accessors: true,
+    effect: Effect.gen(function* JobLabelsRepositoryLive() {
+      const sql = yield* SqlClient.SqlClient;
+
+      const lookupWorkItemOrganization = Effect.fn(
+        "JobLabelsRepository.lookupWorkItemOrganization"
+      )(function* (workItemId: WorkItemId) {
+        const rows = yield* sql<{ readonly organization_id: string }>`
+          select organization_id
+          from work_items
+          where id = ${workItemId}
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]?.organization_id).pipe(
+          Option.map(decodeOrganizationId)
+        );
+      });
+
+      const ensureWorkItemOrganizationMatches = Effect.fn(
+        "JobLabelsRepository.ensureWorkItemOrganizationMatches"
+      )(function* (organizationId: OrganizationId, workItemId: WorkItemId) {
+        const workItemOrganizationId =
+          yield* lookupWorkItemOrganization(workItemId);
+
+        if (Option.isNone(workItemOrganizationId)) {
+          return yield* Effect.fail(
+            new JobNotFoundError({
+              message: "Job does not exist",
+              workItemId,
+            })
+          );
+        }
+
+        if (workItemOrganizationId.value !== organizationId) {
+          return yield* Effect.fail(
+            new WorkItemOrganizationMismatchError({
+              message: "Job does not belong to the organization",
+              organizationId,
+              workItemId,
+            })
+          );
+        }
+
+        return workItemId;
+      });
+
+      const findById = Effect.fn("JobLabelsRepository.findById")(function* (
+        organizationId: OrganizationId,
+        labelId: JobLabelId
+      ) {
+        const rows = yield* sql<JobLabelRow>`
+          select *
+          from job_labels
+          where organization_id = ${organizationId}
+            and id = ${labelId}
+            and archived_at is null
+          limit 1
+        `;
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobLabelRow));
+      });
+
+      const getActiveLabelOrFail = Effect.fn(
+        "JobLabelsRepository.getActiveLabelOrFail"
+      )(function* (organizationId: OrganizationId, labelId: JobLabelId) {
+        const label = yield* findById(organizationId, labelId).pipe(
+          Effect.map(Option.getOrUndefined)
+        );
+
+        if (label === undefined) {
+          return yield* Effect.fail(
+            new JobLabelNotFoundError({
+              labelId,
+              message: "Job label does not exist in the organization",
+            })
+          );
+        }
+
+        return label;
+      });
+
+      const list = Effect.fn("JobLabelsRepository.list")(function* (
+        organizationId: OrganizationId
+      ) {
+        const rows = yield* sql<JobLabelRow>`
+          select *
+          from job_labels
+          where organization_id = ${organizationId}
+            and archived_at is null
+          order by name asc, id asc
+        `;
+
+        return decodeJobLabelsResponse({
+          labels: rows.map(mapJobLabelRow),
+        }).labels;
+      });
+
+      const create = Effect.fn("JobLabelsRepository.create")(function* (
+        input: CreateJobLabelRecordInput
+      ) {
+        const name = decodeJobLabelName(input.name);
+        const insertLabel = sql<JobLabelRow>`
+          insert into job_labels ${sql
+            .insert({
+              id: generateJobLabelId(),
+              name,
+              normalized_name: normalizeJobLabelName(name),
+              organization_id: input.organizationId,
+            })
+            .returning("*")}
+        `;
+        const rows = yield* Effect.catchAll(insertLabel, (error) =>
+          mapJobLabelNameConflict(error, name)
+        );
+
+        const row = yield* getRequiredRow(rows, "inserted job label");
+
+        return mapJobLabelRow(row);
+      });
+
+      const update = Effect.fn("JobLabelsRepository.update")(function* (
+        organizationId: OrganizationId,
+        labelId: JobLabelId,
+        input: UpdateJobLabelRecordInput
+      ) {
+        const name = decodeJobLabelName(input.name);
+        const updateLabel = sql<JobLabelRow>`
+          update job_labels
+          set ${sql.update({
+            name,
+            normalized_name: normalizeJobLabelName(name),
+            updated_at: new Date(),
+          })}
+          where organization_id = ${organizationId}
+            and id = ${labelId}
+            and archived_at is null
+          returning *
+        `;
+        const rows = yield* Effect.catchAll(updateLabel, (error) =>
+          mapJobLabelNameConflict(error, name)
+        );
+
+        return Option.fromNullable(rows[0]).pipe(Option.map(mapJobLabelRow));
+      });
+
+      const archive = Effect.fn("JobLabelsRepository.archive")(function* (
+        organizationId: OrganizationId,
+        labelId: JobLabelId
+      ) {
+        return yield* sql.withTransaction(
+          Effect.gen(function* () {
+            const rows = yield* sql<JobLabelRow>`
+              update job_labels
+              set archived_at = now(), updated_at = now()
+              where organization_id = ${organizationId}
+                and id = ${labelId}
+                and archived_at is null
+              returning *
+            `;
+
+            const label = Option.fromNullable(rows[0]).pipe(
+              Option.map(mapJobLabelRow)
+            );
+
+            if (Option.isNone(label)) {
+              return Option.none<ArchivedJobLabel>();
+            }
+
+            const removedRows = yield* sql<IdRow>`
+              delete from work_item_labels
+              where organization_id = ${organizationId}
+                and label_id = ${labelId}
+              returning work_item_id as id
+            `;
+
+            return Option.some({
+              label: label.value,
+              removedWorkItemIds: removedRows.map((row) =>
+                decodeWorkItemId(row.id)
+              ),
+            });
+          })
+        );
+      });
+
+      const assignToJob = Effect.fn("JobLabelsRepository.assignToJob")(
+        function* (input: AssignJobLabelRecordInput) {
+          const rows = yield* sql<JobLabelAssignmentRow>`
+            with active_label as (
+              select *
+              from job_labels
+              where organization_id = ${input.organizationId}
+                and id = ${input.labelId}
+                and archived_at is null
+              for share
+            ),
+            organization_work_item as (
+              select id
+              from work_items
+              where organization_id = ${input.organizationId}
+                and id = ${input.workItemId}
+            ),
+            inserted_label as (
+              insert into work_item_labels (
+                work_item_id,
+                label_id,
+                organization_id
+              )
+              select
+                organization_work_item.id,
+                active_label.id,
+                active_label.organization_id
+              from active_label
+              join organization_work_item on true
+              on conflict do nothing
+              returning label_id
+            )
+            select
+              active_label.*,
+              organization_work_item.id as work_item_id,
+              (select count(*) from inserted_label)::integer as inserted_count
+            from active_label
+            left join organization_work_item on true
+            limit 1
+          `;
+
+          const [row] = rows;
+
+          if (row === undefined) {
+            return yield* Effect.fail(
+              new JobLabelNotFoundError({
+                labelId: input.labelId,
+                message: "Job label does not exist in the organization",
+              })
+            );
+          }
+
+          if (row.work_item_id === null) {
+            yield* ensureWorkItemOrganizationMatches(
+              input.organizationId,
+              input.workItemId
+            );
+          }
+
+          return {
+            changed: row.inserted_count > 0,
+            label: mapJobLabelRow(row),
+          };
+        }
+      );
+
+      const removeFromJob = Effect.fn("JobLabelsRepository.removeFromJob")(
+        function* (input: AssignJobLabelRecordInput) {
+          const label = yield* getActiveLabelOrFail(
+            input.organizationId,
+            input.labelId
+          );
+          yield* ensureWorkItemOrganizationMatches(
+            input.organizationId,
+            input.workItemId
+          );
+
+          const rows = yield* sql<IdRow>`
+            delete from work_item_labels
+            using job_labels, work_items
+            where work_item_labels.label_id = job_labels.id
+              and work_item_labels.work_item_id = work_items.id
+              and job_labels.organization_id = ${input.organizationId}
+              and job_labels.id = ${input.labelId}
+              and work_items.organization_id = ${input.organizationId}
+              and work_items.id = ${input.workItemId}
+            returning work_item_labels.label_id as id
+          `;
+
+          return {
+            changed: rows.length > 0,
+            label,
+          };
+        }
+      );
+
+      return {
+        archive,
+        assignToJob,
+        create,
+        findById,
+        list,
+        removeFromJob,
+        update,
+      };
+    }),
+  }
+) {}
+
 export const JobsRepositoriesLive = Layer.mergeAll(
   ConfigurationRepository.Default,
   JobsRepository.Default,
   SitesRepository.Default,
   ContactsRepository.Default,
+  JobLabelsRepository.Default,
   RateCardsRepository.Default
 );
 
@@ -2004,7 +2471,7 @@ export const withJobsTransaction = <Value, Error, Requirements>(
     return yield* repository.withTransaction(effect);
   });
 
-function mapJobRow(row: WorkItemRow): Job {
+function mapJobRow(row: WorkItemRow, labels: readonly JobLabel[] = []): Job {
   return decodeJob({
     assigneeId: nullableToUndefined(row.assignee_id),
     blockedReason: nullableToUndefined(row.blocked_reason),
@@ -2018,6 +2485,7 @@ function mapJobRow(row: WorkItemRow): Job {
     externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
+    labels,
     priority: row.priority,
     siteId: nullableToUndefined(row.site_id),
     status: row.status,
@@ -2026,7 +2494,7 @@ function mapJobRow(row: WorkItemRow): Job {
   });
 }
 
-function mapJobListItemRow(row: WorkItemRow) {
+function mapJobListItemRow(row: WorkItemRow, labels: readonly JobLabel[] = []) {
   return decodeJobListItem({
     assigneeId: nullableToUndefined(row.assignee_id),
     contactId: nullableToUndefined(row.contact_id),
@@ -2035,10 +2503,20 @@ function mapJobListItemRow(row: WorkItemRow) {
     externalReference: nullableToUndefined(row.external_reference),
     id: row.id,
     kind: row.kind,
+    labels,
     priority: row.priority,
     siteId: nullableToUndefined(row.site_id),
     status: row.status,
     title: row.title,
+    updatedAt: row.updated_at.toISOString(),
+  });
+}
+
+function mapJobLabelRow(row: JobLabelRow): JobLabel {
+  return decodeJobLabel({
+    createdAt: row.created_at.toISOString(),
+    id: decodeJobLabelId(row.id),
+    name: row.name,
     updatedAt: row.updated_at.toISOString(),
   });
 }
@@ -2325,6 +2803,42 @@ function normalizeOptionName(value: string | null, fallback: string): string {
   }
 
   return fallback;
+}
+
+function mapJobLabelNameConflict(
+  error: SqlError.SqlError,
+  name: JobLabelName
+): Effect.Effect<never, JobLabelNameConflictError | SqlError.SqlError> {
+  if (
+    isUniqueConstraintError(
+      error,
+      "job_labels_organization_normalized_active_idx"
+    )
+  ) {
+    return Effect.fail(
+      new JobLabelNameConflictError({
+        message: "Job label name already exists in the organization",
+        name,
+      })
+    );
+  }
+
+  return Effect.fail(error);
+}
+
+function isUniqueConstraintError(
+  error: unknown,
+  constraintName: string
+): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "cause" in error &&
+    typeof error.cause === "object" &&
+    error.cause !== null &&
+    "constraint" in error.cause &&
+    error.cause.constraint === constraintName
+  );
 }
 
 function slugifyName(name: string): string {

@@ -26,6 +26,7 @@ export interface JobSavedView {
 const JOBS_LIST_FILTER_EQUALITY_FIELDS = {
   assigneeId: true,
   coordinatorId: true,
+  labelId: true,
   priority: true,
   query: true,
   serviceAreaId: true,

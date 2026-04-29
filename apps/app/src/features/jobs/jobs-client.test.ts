@@ -30,6 +30,7 @@ const listResponse: JobListResponse = {
     {
       id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
       kind: "job",
+      labels: [],
       title: "Inspect boiler",
       status: "new",
       priority: "none",
@@ -43,6 +44,7 @@ const detailResponse: JobDetailResponse = {
   job: {
     id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
     kind: "job",
+    labels: [],
     title: "Inspect boiler",
     status: "new",
     priority: "none",

@@ -38,6 +38,8 @@ const EVENT_TYPE_LABELS: Record<JobActivityEventType, string> = {
   cost_line_added: "Cost line added",
   job_created: "Job created",
   job_reopened: "Job reopened",
+  label_added: "Label added",
+  label_removed: "Label removed",
   priority_changed: "Priority changed",
   site_changed: "Site changed",
   status_changed: "Status changed",
