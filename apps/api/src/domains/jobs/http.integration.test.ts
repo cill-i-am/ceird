@@ -33,8 +33,10 @@ describe("jobs http integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
 
   afterAll(async () => {
-    await Promise.all([...cleanup].toReversed().map((step) => step()));
-  });
+    for (const step of cleanup.toReversed()) {
+      await step();
+    }
+  }, 30_000);
 
   it("fails closed until the request has a session, an active organization, and org membership", async (context: {
     skip: (note?: string) => never;

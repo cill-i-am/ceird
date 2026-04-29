@@ -138,8 +138,10 @@ const JobsServicesLive = Layer.mergeAll(
   SiteGeocoder.Default
 );
 
-export const JobsHttpLive = HttpApiBuilder.api(JobsApi).pipe(
-  Layer.provide(JobsCorsLive),
-  Layer.provide(JobsHandlerGroupsLive),
+const JobsHandlerGroupsWithServicesLive = JobsHandlerGroupsLive.pipe(
   Layer.provide(JobsServicesLive)
+);
+
+export const JobsHttpLive = HttpApiBuilder.api(JobsApi).pipe(
+  Layer.provide(Layer.mergeAll(JobsCorsLive, JobsHandlerGroupsWithServicesLive))
 );
