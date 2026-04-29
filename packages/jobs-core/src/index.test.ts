@@ -6,6 +6,7 @@ import {
   AddJobCostLineInputSchema,
   AddJobCommentInputSchema,
   AddJobVisitInputSchema,
+  AttachJobCollaboratorInputSchema,
   calculateJobCostLineTotalMinor,
   calculateJobCostSummary,
   CreateJobInputSchema,
@@ -17,9 +18,11 @@ import {
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
   JobActivityLabelAddedPayloadSchema,
+  JobCollaboratorSchema,
   JobCollaboratorAccessLevelSchema,
   JobCollaboratorRoleLabelSchema,
   JobCollaboratorSubjectTypeSchema,
+  JobCollaboratorsResponseSchema,
   JobDetailResponseSchema,
   JobContactOptionSchema,
   JOB_COLLABORATOR_ACCESS_LEVELS,
@@ -33,6 +36,7 @@ import {
   JobOptionsResponseSchema,
   JobSiteOptionSchema,
   JobStatusSchema,
+  JobViewerAccessSchema,
   JobsApi,
   JobsApiGroup,
   JobsContextSchema,
@@ -51,6 +55,7 @@ import {
   SitesOptionsResponseSchema,
   SitesApiGroup,
   SiteGeocodingFailedError,
+  UpdateJobCollaboratorInputSchema,
   UpdateServiceAreaInputSchema,
   UpdateServiceAreaResponseSchema,
   UserId,
@@ -81,6 +86,76 @@ describe("jobs-core", () => {
       Schema.decodeUnknownSync(JobCollaboratorRoleLabelSchema)("   ")
     ).toThrow(/Expected/);
   });
+
+  it("decodes job collaborator DTO contracts", () => {
+    const collaborator = {
+      id: "11111111-1111-4111-8111-111111111111",
+      workItemId: "22222222-2222-4222-8222-222222222222",
+      subjectType: "user",
+      userId: "user_123",
+      roleLabel: "Reviewer",
+      accessLevel: "comment",
+      createdAt: "2026-04-29T10:00:00.000Z",
+      updatedAt: "2026-04-29T10:05:00.000Z",
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(JobCollaboratorSchema)(collaborator)
+    ).toStrictEqual(collaborator);
+    expect(
+      ParseResult.decodeUnknownSync(JobCollaboratorsResponseSchema)({
+        collaborators: [collaborator],
+      })
+    ).toStrictEqual({
+      collaborators: [collaborator],
+    });
+    expect(
+      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+        userId: "user_456",
+        roleLabel: "  Viewer  ",
+        accessLevel: "read",
+      })
+    ).toStrictEqual({
+      userId: "user_456",
+      roleLabel: "Viewer",
+      accessLevel: "read",
+    });
+  }, 5000);
+
+  it("keeps job collaborator mutation inputs strict and shapeable", () => {
+    expect(
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({})
+    ).toStrictEqual({});
+    expect(
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        roleLabel: "  Approver  ",
+      })
+    ).toStrictEqual({
+      roleLabel: "Approver",
+    });
+    expect(
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        accessLevel: "comment",
+      })
+    ).toStrictEqual({
+      accessLevel: "comment",
+    });
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+        userId: "user_456",
+        roleLabel: "Viewer",
+        accessLevel: "read",
+        extra: true,
+      })
+    ).toThrow(/unexpected/);
+    expect(() =>
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        roleLabel: "Approver",
+        extra: true,
+      })
+    ).toThrow(/unexpected/);
+  }, 5000);
 
   it("decodes service area contracts", () => {
     const serviceArea = {
@@ -274,10 +349,6 @@ describe("jobs-core", () => {
       ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
         activity: [],
         comments: [],
-        costLines: [],
-        costSummary: {
-          subtotalMinor: 0,
-        },
         job: {
           createdAt: "2026-04-23T11:00:00.000Z",
           createdByUserId: "",
@@ -289,9 +360,92 @@ describe("jobs-core", () => {
           title: "Inspect boiler",
           updatedAt: "2026-04-23T12:00:00.000Z",
         },
+        viewerAccess: {
+          visibility: "internal",
+          canComment: true,
+        },
         visits: [],
       })
     ).toThrow(/Expected a non empty string/);
+  }, 5000);
+
+  it("decodes job detail with viewer access, optional costs, and selected site detail", () => {
+    const site = {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      name: "Docklands Campus",
+      addressLine1: "1 Custom House Quay",
+      county: "Dublin",
+      country: "IE",
+      eircode: "D01 X2X2",
+      latitude: 53.3498,
+      longitude: -6.2603,
+      geocodingProvider: "google",
+      geocodedAt: "2026-04-22T10:00:00.000Z",
+    };
+    const baseDetail = {
+      activity: [],
+      comments: [],
+      job: {
+        createdAt: "2026-04-23T11:00:00.000Z",
+        createdByUserId: "user_123",
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "job",
+        labels: [],
+        priority: "none",
+        siteId: site.id,
+        status: "new",
+        title: "Inspect boiler",
+        updatedAt: "2026-04-23T12:00:00.000Z",
+      },
+      site,
+      viewerAccess: {
+        visibility: "external",
+        canComment: true,
+      },
+      visits: [],
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(JobViewerAccessSchema)({
+        visibility: "internal",
+        canComment: false,
+      })
+    ).toStrictEqual({
+      visibility: "internal",
+      canComment: false,
+    });
+    expect(
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)(baseDetail)
+    ).toStrictEqual(baseDetail);
+    expect(
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+        ...baseDetail,
+        costs: {
+          lines: [],
+          summary: {
+            subtotalMinor: 0,
+          },
+        },
+        viewerAccess: {
+          visibility: "internal",
+          canComment: true,
+        },
+      }).costs
+    ).toStrictEqual({
+      lines: [],
+      summary: {
+        subtotalMinor: 0,
+      },
+    });
+    expect(() =>
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+        ...baseDetail,
+        costLines: [],
+        costSummary: {
+          subtotalMinor: 0,
+        },
+      })
+    ).toThrow(/unexpected/);
   }, 5000);
 
   it("decodes trimmed boundary DTOs", () => {
@@ -1038,6 +1192,8 @@ describe("jobs-core", () => {
       "/job-labels",
       "/job-labels/{labelId}",
       "/jobs/{workItemId}/cost-lines",
+      "/jobs/{workItemId}/collaborators",
+      "/jobs/{workItemId}/collaborators/{collaboratorId}",
       "/service-areas",
       "/service-areas/{serviceAreaId}",
       "/rate-cards",
@@ -1122,6 +1278,22 @@ describe("jobs-core", () => {
 
     expect(addCostLine?.operationId).toBe("jobs.addJobCostLine");
     expect(addCostLine?.responses["422"]).toBeDefined();
+  }, 5000);
+
+  it("surfaces the job collaborators api contract", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const collaborators = spec.paths["/jobs/{workItemId}/collaborators"];
+    const collaborator =
+      spec.paths["/jobs/{workItemId}/collaborators/{collaboratorId}"];
+
+    expect(collaborators?.get?.operationId).toBe("jobs.listJobCollaborators");
+    expect(collaborators?.post?.operationId).toBe("jobs.attachJobCollaborator");
+    expect(collaborators?.post?.responses["201"]).toBeDefined();
+    expect(collaborator?.patch?.operationId).toBe("jobs.updateJobCollaborator");
+    expect(collaborator?.delete?.operationId).toBe(
+      "jobs.detachJobCollaborator"
+    );
+    expect(collaborator?.patch?.responses["404"]).toBeDefined();
   }, 5000);
 
   it("documents standalone site creation responses", () => {

@@ -9,6 +9,7 @@ import {
   AddJobVisitInputSchema,
   AddJobVisitResponseSchema,
   AssignJobLabelInputSchema,
+  AttachJobCollaboratorInputSchema,
   CreateJobLabelInputSchema,
   CreateJobInputSchema,
   CreateJobResponseSchema,
@@ -19,6 +20,8 @@ import {
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
   JobDetailResponseSchema,
+  JobCollaboratorSchema,
+  JobCollaboratorsResponseSchema,
   JobLabelResponseSchema,
   JobLabelsResponseSchema,
   JobMemberOptionsResponseSchema,
@@ -35,6 +38,7 @@ import {
   SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
+  UpdateJobCollaboratorInputSchema,
   UpdateJobLabelInputSchema,
   UpdateRateCardInputSchema,
   UpdateRateCardResponseSchema,
@@ -65,6 +69,7 @@ import {
 } from "./errors.js";
 import {
   JobLabelId,
+  JobCollaboratorId,
   RateCardId,
   ServiceAreaId,
   SiteId,
@@ -230,6 +235,63 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(JobNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(JobCostSummaryLimitExceededError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.get(
+      "listJobCollaborators",
+      "/jobs/:workItemId/collaborators"
+    )
+      .setPath(Schema.Struct({ workItemId: WorkItemId }))
+      .addSuccess(JobCollaboratorsResponseSchema)
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "attachJobCollaborator",
+      "/jobs/:workItemId/collaborators"
+    )
+      .setPath(Schema.Struct({ workItemId: WorkItemId }))
+      .setPayload(AttachJobCollaboratorInputSchema)
+      .addSuccess(JobCollaboratorSchema, { status: 201 })
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
+      .addError(OrganizationMemberNotFoundError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.patch(
+      "updateJobCollaborator",
+      "/jobs/:workItemId/collaborators/:collaboratorId"
+    )
+      .setPath(
+        Schema.Struct({
+          workItemId: WorkItemId,
+          collaboratorId: JobCollaboratorId,
+        })
+      )
+      .setPayload(UpdateJobCollaboratorInputSchema)
+      .addSuccess(JobCollaboratorSchema)
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
+      .addError(JobStorageError)
+  )
+  .add(
+    HttpApiEndpoint.del(
+      "detachJobCollaborator",
+      "/jobs/:workItemId/collaborators/:collaboratorId"
+    )
+      .setPath(
+        Schema.Struct({
+          workItemId: WorkItemId,
+          collaboratorId: JobCollaboratorId,
+        })
+      )
+      .addSuccess(JobCollaboratorSchema)
+      .addError(JobNotFoundError)
+      .addError(JobAccessDeniedError)
       .addError(JobStorageError)
   );
 
