@@ -167,7 +167,7 @@ const defaultFormState: JobsCreateFormState = {
 };
 
 export function JobsCreateSheet() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/jobs/new" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
   const createJob = useAtomSet(createJobMutationAtom, {
     mode: "promiseExit",

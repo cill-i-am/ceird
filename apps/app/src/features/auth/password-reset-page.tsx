@@ -35,7 +35,7 @@ interface PasswordResetPageProps {
 }
 
 export function PasswordResetPage({ search }: PasswordResetPageProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/reset-password" });
   const isHydrated = useIsHydrated();
   const normalizedSearch: PasswordResetSearch = decodePasswordResetSearch(
     search ?? {}

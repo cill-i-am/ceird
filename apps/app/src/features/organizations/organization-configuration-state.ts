@@ -27,11 +27,11 @@ import type { AppJobsError } from "#/features/jobs/jobs-errors";
 export const organizationServiceAreasStateAtom =
   Atom.make<ServiceAreaListResponse>({
     items: [],
-  });
+  }).pipe(Atom.keepAlive);
 
 export const organizationRateCardsStateAtom = Atom.make<RateCardListResponse>({
   items: [],
-});
+}).pipe(Atom.keepAlive);
 
 export const listServiceAreasAtom = Atom.fn<
   AppJobsError,

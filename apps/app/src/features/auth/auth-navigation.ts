@@ -39,7 +39,7 @@ export function getAuthSuccessNavigationTarget(invitationId?: string) {
 }
 
 export function useAuthSuccessNavigation(invitationId?: string) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/" });
 
   return async () => {
     await navigate(getAuthSuccessNavigationTarget(invitationId));
