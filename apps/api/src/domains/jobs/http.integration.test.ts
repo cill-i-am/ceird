@@ -1553,6 +1553,39 @@ describe("jobs http integration", () => {
         })
       );
       expect(deleteResponse.status).toBe(200);
+
+      const revokedListResponse = await api.handler(
+        makeRequest("/jobs", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(revokedListResponse.status).toBe(200);
+      const revokedList = ParseResult.decodeUnknownSync(JobListResponseSchema)(
+        await revokedListResponse.json()
+      );
+      expect(revokedList.items.map((item) => item.id)).not.toContain(
+        grantedJob.id
+      );
+
+      const revokedDetailResponse = await api.handler(
+        makeRequest(`/jobs/${grantedJob.id}`, {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect([403, 404]).toContain(revokedDetailResponse.status);
+
+      const revokedCommentResponse = await api.handler(
+        makeJsonRequest(
+          `/jobs/${grantedJob.id}/comments`,
+          {
+            body: "This should be blocked after revocation.",
+          },
+          {
+            cookieJar: externalCookieJar,
+          }
+        )
+      );
+      expect([403, 404]).toContain(revokedCommentResponse.status);
     });
   }, 30_000);
 });
