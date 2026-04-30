@@ -2,6 +2,7 @@
 
 import { Link } from "@tanstack/react-router";
 import type {
+  OrganizationActivityItem,
   JobMemberOptionsResponse,
   OrganizationActivityListResponse,
   JobActivityEventType,
@@ -57,7 +58,10 @@ export function OrganizationActivityPage({
   readonly search: ActivitySearch;
   readonly onSearchChange: (search: ActivitySearch) => void;
 }) {
-  const hasActivity = activity.items.length > 0;
+  const visibleActivityItems = activity.items.filter((item) =>
+    activityItemMatchesSearch(item, search)
+  );
+  const hasActivity = visibleActivityItems.length > 0;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-5 p-4 sm:p-6">
@@ -73,7 +77,7 @@ export function OrganizationActivityPage({
         <section aria-label="Organization activity" className="min-h-0">
           <div className="overflow-hidden rounded-lg border bg-card">
             <div className="divide-y">
-              {activity.items.map((item) => {
+              {visibleActivityItems.map((item) => {
                 const actorName = item.actor?.name;
                 const actorLabel = actorName ?? "System";
                 const summary = describeJobActivity(actorName, item.payload);
@@ -123,6 +127,25 @@ export function OrganizationActivityPage({
         </Empty>
       )}
     </main>
+  );
+}
+
+function activityItemMatchesSearch(
+  item: OrganizationActivityItem,
+  search: ActivitySearch
+) {
+  const jobTitle = search.jobTitle?.trim().toLocaleLowerCase();
+
+  return (
+    (search.actorUserId === undefined ||
+      item.actor?.id === search.actorUserId) &&
+    (search.eventType === undefined || item.eventType === search.eventType) &&
+    (search.fromDate === undefined ||
+      item.createdAt.slice(0, 10) >= search.fromDate) &&
+    (search.toDate === undefined ||
+      item.createdAt.slice(0, 10) <= search.toDate) &&
+    (jobTitle === undefined ||
+      item.jobTitle.toLocaleLowerCase().includes(jobTitle))
   );
 }
 
