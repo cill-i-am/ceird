@@ -549,7 +549,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    () => {
+    async () => {
       renderDetailSheet(buildDetail());
 
       expect(
@@ -582,6 +582,7 @@ describe("jobs detail sheet", () => {
       expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
         [`detail:${workItemId}`, buildDetail()],
       ]);
+      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -590,7 +591,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    () => {
+    async () => {
       lookupSiteById = new Map();
 
       renderDetailSheet(buildDetail({ site: buildSiteOption() }));
@@ -600,6 +601,7 @@ describe("jobs detail sheet", () => {
         screen.getByText("1 Custom House Quay, North Dock")
       ).toBeInTheDocument();
       expect(screen.queryByText("No site yet")).not.toBeInTheDocument();
+      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -809,13 +811,14 @@ describe("jobs detail sheet", () => {
     }
   );
 
-  it("renders an explicit empty location state when the job has no site yet", () => {
+  it("renders an explicit empty location state when the job has no site yet", async () => {
     renderDetailSheet(buildDetail({ siteId: undefined }));
 
     expect(screen.getByText("No site attached yet.")).toBeInTheDocument();
     expect(
       screen.getByText(/it will not show up on the map until a site is added/i)
     ).toBeInTheDocument();
+    await expectExternalCollaboratorOptionsToLoad();
   }, 1000);
 
   it(
@@ -846,7 +849,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    () => {
+    async () => {
       renderDetailSheet(buildDetail({ status: "blocked" }));
 
       const statusSelect = screen.getByLabelText("Next status");
@@ -861,6 +864,7 @@ describe("jobs detail sheet", () => {
         screen.queryByRole("option", { name: "Completed" })
       ).not.toBeInTheDocument();
       expect(statusSelect).toHaveValue("");
+      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -954,7 +958,7 @@ describe("jobs detail sheet", () => {
     );
   }, 1000);
 
-  it("does not render a zero cost total when costs are omitted", () => {
+  it("does not render a zero cost total when costs are omitted", async () => {
     renderDetailSheet(buildDetail({ costs: undefined }));
 
     expect(screen.queryByText("Cost total")).not.toBeInTheDocument();
@@ -965,6 +969,7 @@ describe("jobs detail sheet", () => {
     expect(
       screen.queryByRole("button", { name: /add cost line/i })
     ).not.toBeInTheDocument();
+    await expectExternalCollaboratorOptionsToLoad();
   }, 1000);
 
   it("renders assigned external collaborator details as read-only when comments are disabled", () => {
@@ -1442,4 +1447,10 @@ function renderDetailSheet(
       sheet
     )
   );
+}
+
+async function expectExternalCollaboratorOptionsToLoad() {
+  await expect(
+    screen.findByRole("option", { name: "External Partner" })
+  ).resolves.toBeInTheDocument();
 }
