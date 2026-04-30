@@ -1,6 +1,14 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { UserIdType, WorkItemIdType } from "@task-tracker/jobs-core";
+import type {
+  CommentIdType,
+  ContactIdType,
+  JobDetailResponse,
+  ServiceAreaIdType,
+  SiteIdType,
+  UserIdType,
+  WorkItemIdType,
+} from "@task-tracker/jobs-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
@@ -8,15 +16,22 @@ import type { ComponentProps } from "react";
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
 const userId = "user_123" as UserIdType;
+const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
+const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
+const serviceAreaId =
+  "55555555-5555-4555-8555-555555555555" as ServiceAreaIdType;
 
 const {
   mockedEnsureActiveOrganizationId,
   mockedGetCurrentOrganizationMemberRole,
+  mockedGetCurrentServerJobDetail,
   mockedGetCurrentServerJobOptions,
   mockedListAllCurrentServerJobs,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
+  mockedGetCurrentServerJobDetail: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerJobOptions: vi.fn<AsyncLoaderMock>(),
   mockedListAllCurrentServerJobs: vi.fn<AsyncLoaderMock>(),
 }));
@@ -39,6 +54,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 });
 
 vi.mock("#/features/jobs/jobs-server", () => ({
+  getCurrentServerJobDetail: mockedGetCurrentServerJobDetail,
   getCurrentServerJobOptions: mockedGetCurrentServerJobOptions,
   listAllCurrentServerJobs: mockedListAllCurrentServerJobs,
 }));
@@ -184,6 +200,76 @@ describe("jobs route loader", () => {
   );
 
   it(
+    "hydrates granted job site context for external collaborators without organization-wide options",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const list = {
+        items: [
+          {
+            createdAt: "2026-04-23T11:00:00.000Z",
+            id: workItemId,
+            kind: "job" as const,
+            labels: [],
+            priority: "none" as const,
+            siteId,
+            status: "new" as const,
+            title: "Inspect library boiler",
+            updatedAt: "2026-04-23T12:00:00.000Z",
+          },
+        ],
+        nextCursor: undefined,
+      };
+      const detail = buildExternalDetail();
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(list);
+      mockedGetCurrentServerJobDetail.mockResolvedValue(detail);
+      const { loadJobsRouteData } = await import("./_app._org.jobs");
+
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "external",
+          currentUserId: userId,
+        })
+      ).resolves.toStrictEqual({
+        list,
+        options: {
+          contacts: [
+            {
+              email: "tenant@example.com",
+              id: contactId,
+              name: "Tenant Contact",
+              phone: "+353 87 111 1111",
+              siteIds: [siteId],
+            },
+          ],
+          labels: [],
+          members: [],
+          serviceAreas: [
+            {
+              id: serviceAreaId,
+              name: "Limerick East",
+            },
+          ],
+          sites: [detail.site],
+        },
+        viewer: {
+          role: "external",
+          userId,
+        },
+      });
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerJobDetail).toHaveBeenCalledWith(workItemId);
+    }
+  );
+
+  it(
     "normalizes unknown jobs view search values to list mode",
     {
       timeout: 10_000,
@@ -305,3 +391,55 @@ describe("jobs route loader", () => {
     }
   );
 });
+
+function buildExternalDetail(): JobDetailResponse {
+  return {
+    activity: [],
+    comments: [
+      {
+        authorUserId: userId,
+        body: "Ready for review.",
+        createdAt: "2026-04-23T11:30:00.000Z",
+        id: "66666666-6666-4666-8666-666666666666" as CommentIdType,
+        workItemId,
+      },
+    ],
+    contact: {
+      email: "tenant@example.com",
+      id: contactId,
+      name: "Tenant Contact",
+      phone: "+353 87 111 1111",
+    },
+    job: {
+      createdAt: "2026-04-23T11:00:00.000Z",
+      createdByUserId: userId,
+      id: workItemId,
+      kind: "job",
+      labels: [],
+      priority: "none",
+      siteId,
+      status: "new",
+      title: "Inspect library boiler",
+      updatedAt: "2026-04-23T12:00:00.000Z",
+    },
+    site: {
+      addressLine1: "King Street",
+      country: "IE",
+      county: "Limerick",
+      eircode: "V94 X2X2",
+      geocodedAt: "2026-04-27T10:00:00.000Z",
+      geocodingProvider: "stub",
+      id: siteId,
+      latitude: 52.6638,
+      longitude: -8.6267,
+      name: "King Street Library",
+      serviceAreaId,
+      serviceAreaName: "Limerick East",
+    },
+    viewerAccess: {
+      canComment: true,
+      visibility: "external",
+    },
+    visits: [],
+  };
+}

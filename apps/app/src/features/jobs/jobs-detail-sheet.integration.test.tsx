@@ -20,6 +20,8 @@ import { Effect } from "effect";
 import type * as EffectPackage from "effect";
 import type { ComponentProps, ReactNode } from "react";
 
+import { CommandBarProvider } from "#/features/command-bar/command-bar";
+
 import { JobsDetailSheet } from "./jobs-detail-sheet";
 import {
   jobsListStateAtom,
@@ -233,6 +235,41 @@ describe("jobs detail sheet integration", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it(
+    "opens external collaborator detail under the command bar without recursive updates",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      renderDetailSheet(
+        buildDetail({
+          costs: undefined,
+          activity: [],
+        }),
+        {
+          commandBar: true,
+          viewer: {
+            role: "external",
+            userId: actorUserId,
+          },
+        }
+      );
+
+      expect(screen.getByText("Inspect boiler")).toBeInTheDocument();
+      expect(screen.getAllByText("Depot").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("North").length).toBeGreaterThan(0);
+      expect(
+        screen.queryByRole("button", { name: /apply status change/i })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Site assignment")).not.toBeInTheDocument();
+      expect(screen.queryByText("Visits")).not.toBeInTheDocument();
+      expect(screen.queryByText("Activity")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Cost details are not available here.")
+      ).not.toBeInTheDocument();
+    }
+  );
 
   it(
     "assigns an existing label and syncs detail activity plus the jobs list",
@@ -585,8 +622,14 @@ describe("jobs detail sheet integration", () => {
   );
 });
 
-function renderDetailSheet(detail: JobDetailResponse = buildDetail()) {
-  return render(
+function renderDetailSheet(
+  detail: JobDetailResponse = buildDetail(),
+  options: {
+    readonly commandBar?: boolean;
+    readonly viewer?: ComponentProps<typeof JobsDetailSheet>["viewer"];
+  } = {}
+) {
+  const content = (
     <RegistryProvider
       initialValues={[
         [
@@ -661,14 +704,24 @@ function renderDetailSheet(detail: JobDetailResponse = buildDetail()) {
     >
       <JobsDetailSheet
         initialDetail={detail}
-        viewer={{
-          role: "owner",
-          userId: actorUserId,
-        }}
+        viewer={
+          options.viewer ?? {
+            role: "owner",
+            userId: actorUserId,
+          }
+        }
       />
       <JobsListProbe />
       <JobsOptionsProbe />
     </RegistryProvider>
+  );
+
+  return render(
+    options.commandBar ? (
+      <CommandBarProvider>{content}</CommandBarProvider>
+    ) : (
+      content
+    )
   );
 }
 
@@ -703,9 +756,29 @@ function JobsOptionsProbe() {
 function buildDetail(
   overrides: {
     readonly activity?: JobDetailResponse["activity"];
+    readonly costs?: JobDetailResponse["costs"];
     readonly labels?: JobDetailResponse["job"]["labels"];
   } = {}
 ): JobDetailResponse {
+  const defaultCosts: JobDetailResponse["costs"] = {
+    lines: [
+      {
+        authorUserId: actorUserId,
+        createdAt: "2026-04-23T12:00:00.000Z",
+        description: "Replacement relay",
+        id: "99999999-9999-4999-8999-999999999999" as CostLineIdType,
+        lineTotalMinor: 4500,
+        quantity: 1,
+        type: "material",
+        unitPriceMinor: 4500,
+        workItemId,
+      },
+    ],
+    summary: {
+      subtotalMinor: 4500,
+    },
+  };
+
   return {
     activity: overrides.activity ?? [
       {
@@ -730,24 +803,7 @@ function buildDetail(
         workItemId,
       },
     ],
-    costs: {
-      lines: [
-        {
-          authorUserId: actorUserId,
-          createdAt: "2026-04-23T12:00:00.000Z",
-          description: "Replacement relay",
-          id: "99999999-9999-4999-8999-999999999999" as CostLineIdType,
-          lineTotalMinor: 4500,
-          quantity: 1,
-          type: "material",
-          unitPriceMinor: 4500,
-          workItemId,
-        },
-      ],
-      summary: {
-        subtotalMinor: 4500,
-      },
-    },
+    costs: "costs" in overrides ? overrides.costs : defaultCosts,
     viewerAccess: {
       canComment: true,
       visibility: "internal" as const,

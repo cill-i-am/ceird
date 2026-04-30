@@ -117,6 +117,7 @@ import {
   getAvailableJobTransitions,
   hasAssignedJobAccess,
   hasJobsElevatedAccess,
+  isExternalJobsViewer,
 } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
@@ -276,6 +277,7 @@ export function JobsDetailSheet({
     detail.job.assigneeId
   );
   const canManageCollaborators = hasJobsElevatedAccess(viewer.role);
+  const isExternalViewer = isExternalJobsViewer(viewer);
   const canEditJob = hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
   const canAssignLabels =
     hasAssignmentAccess || hasJobsElevatedAccess(viewer.role);
@@ -932,12 +934,14 @@ export function JobsDetailSheet({
               </Alert>
             ) : null}
 
-            <DetailSection
-              title="Move forward"
-              description="Keep the status honest. Use blocked only when something is truly waiting on an unblock."
-            >
-              <div className="flex flex-col gap-4">{statusActionContent}</div>
-            </DetailSection>
+            {isExternalViewer ? null : (
+              <DetailSection
+                title="Move forward"
+                description="Keep the status honest. Use blocked only when something is truly waiting on an unblock."
+              >
+                <div className="flex flex-col gap-4">{statusActionContent}</div>
+              </DetailSection>
+            )}
 
             <JobsDetailLocation site={site} />
 
@@ -948,82 +952,86 @@ export function JobsDetailSheet({
               <JobsDetailContact contact={contact} />
             </DetailSection>
 
-            <DetailSection
-              title="Site assignment"
-              description="Move this job onto an existing site when the location becomes clear."
-            >
-              <div className="flex flex-col gap-4">
-                {renderMutationError(patchResult)}
-                <FieldGroup>
-                  <Field data-invalid={Boolean(siteAssignmentError)}>
-                    <FieldLabel htmlFor="job-site-assignment">Site</FieldLabel>
-                    <FieldContent>
-                      <CommandSelect
-                        id="job-site-assignment"
-                        value={selectedSiteId}
-                        placeholder="Pick site"
-                        emptyText="No sites found."
-                        groups={siteSelectionGroups}
-                        disabled={!canEditJob || patchResult.waiting}
-                        ariaInvalid={siteAssignmentError ? true : undefined}
-                        onValueChange={(nextValue) => {
-                          if (nextValue === NO_SITE_VALUE) {
-                            setSelectedSiteId(NO_SITE_VALUE);
-                          } else {
-                            try {
-                              setSelectedSiteId(decodeSiteId(nextValue));
-                            } catch {
+            {isExternalViewer ? null : (
+              <DetailSection
+                title="Site assignment"
+                description="Move this job onto an existing site when the location becomes clear."
+              >
+                <div className="flex flex-col gap-4">
+                  {renderMutationError(patchResult)}
+                  <FieldGroup>
+                    <Field data-invalid={Boolean(siteAssignmentError)}>
+                      <FieldLabel htmlFor="job-site-assignment">
+                        Site
+                      </FieldLabel>
+                      <FieldContent>
+                        <CommandSelect
+                          id="job-site-assignment"
+                          value={selectedSiteId}
+                          placeholder="Pick site"
+                          emptyText="No sites found."
+                          groups={siteSelectionGroups}
+                          disabled={!canEditJob || patchResult.waiting}
+                          ariaInvalid={siteAssignmentError ? true : undefined}
+                          onValueChange={(nextValue) => {
+                            if (nextValue === NO_SITE_VALUE) {
                               setSelectedSiteId(NO_SITE_VALUE);
+                            } else {
+                              try {
+                                setSelectedSiteId(decodeSiteId(nextValue));
+                              } catch {
+                                setSelectedSiteId(NO_SITE_VALUE);
+                              }
                             }
-                          }
-                          setSiteAssignmentError(null);
-                          setSiteAssignmentMessage(null);
-                        }}
-                      />
-                      <FieldDescription>
-                        Changing the site clears the linked contact so it cannot
-                        point at the wrong place.
-                      </FieldDescription>
-                      <FieldError>{siteAssignmentError}</FieldError>
-                    </FieldContent>
-                  </Field>
-                </FieldGroup>
-                {siteAssignmentMessage ? (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    {siteAssignmentMessage}
-                  </p>
-                ) : null}
-                {canEditJob ? (
-                  <div className="flex">
-                    <Button
-                      type="button"
-                      className="w-full sm:w-fit"
-                      loading={patchResult.waiting}
-                      disabled={!selectedSiteChanged}
-                      onClick={handleUpdateSiteAssignment}
-                    >
-                      {patchResult.waiting ? (
-                        "Saving..."
-                      ) : (
-                        <>
-                          <HugeiconsIcon
-                            icon={Location01Icon}
-                            strokeWidth={2}
-                            data-icon="inline-start"
-                          />
-                          Save site
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Site assignment is limited to the assignee or organization
-                    admins.
-                  </p>
-                )}
-              </div>
-            </DetailSection>
+                            setSiteAssignmentError(null);
+                            setSiteAssignmentMessage(null);
+                          }}
+                        />
+                        <FieldDescription>
+                          Changing the site clears the linked contact so it
+                          cannot point at the wrong place.
+                        </FieldDescription>
+                        <FieldError>{siteAssignmentError}</FieldError>
+                      </FieldContent>
+                    </Field>
+                  </FieldGroup>
+                  {siteAssignmentMessage ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {siteAssignmentMessage}
+                    </p>
+                  ) : null}
+                  {canEditJob ? (
+                    <div className="flex">
+                      <Button
+                        type="button"
+                        className="w-full sm:w-fit"
+                        loading={patchResult.waiting}
+                        disabled={!selectedSiteChanged}
+                        onClick={handleUpdateSiteAssignment}
+                      >
+                        {patchResult.waiting ? (
+                          "Saving..."
+                        ) : (
+                          <>
+                            <HugeiconsIcon
+                              icon={Location01Icon}
+                              strokeWidth={2}
+                              data-icon="inline-start"
+                            />
+                            Save site
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Site assignment is limited to the assignee or organization
+                      admins.
+                    </p>
+                  )}
+                </div>
+              </DetailSection>
+            )}
 
             <DetailSection
               title="Comments"
@@ -1149,216 +1157,223 @@ export function JobsDetailSheet({
               />
             ) : null}
 
-            <JobCostsSection
-              addJobCostLine={addJobCostLine}
-              canAddCostLine={canAddCostLine}
-              detail={detail}
-              mutationError={renderMutationError(costLineResult)}
-              waiting={costLineResult.waiting}
-              workItemId={workItemId}
-            />
+            {isExternalViewer ? null : (
+              <>
+                <JobCostsSection
+                  addJobCostLine={addJobCostLine}
+                  canAddCostLine={canAddCostLine}
+                  detail={detail}
+                  mutationError={renderMutationError(costLineResult)}
+                  waiting={costLineResult.waiting}
+                  workItemId={workItemId}
+                />
 
-            <DetailSection
-              title="Visits"
-              description="Log the site visits that explain the real effort behind the work."
-            >
-              <div className="flex flex-col gap-5">
-                {canAddVisit ? (
-                  <>
-                    {renderMutationError(visitResult)}
-                    <form
-                      className="flex flex-col gap-4"
-                      method="post"
-                      onSubmit={handleAddVisit}
-                    >
-                      <FieldGroup>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <Field
-                            data-invalid={
-                              Boolean(visitError) &&
-                              visitDate.trim().length === 0
-                            }
-                          >
-                            <FieldLabel htmlFor="job-visit-date">
-                              Visit date
-                            </FieldLabel>
-                            <FieldContent>
-                              <Input
-                                id="job-visit-date"
-                                type="date"
-                                value={visitDate}
-                                aria-invalid={
+                <DetailSection
+                  title="Visits"
+                  description="Log the site visits that explain the real effort behind the work."
+                >
+                  <div className="flex flex-col gap-5">
+                    {canAddVisit ? (
+                      <>
+                        {renderMutationError(visitResult)}
+                        <form
+                          className="flex flex-col gap-4"
+                          method="post"
+                          onSubmit={handleAddVisit}
+                        >
+                          <FieldGroup>
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <Field
+                                data-invalid={
                                   Boolean(visitError) &&
                                   visitDate.trim().length === 0
-                                    ? true
-                                    : undefined
                                 }
-                                onChange={(event) =>
-                                  setVisitDate(event.target.value)
-                                }
-                              />
-                            </FieldContent>
-                          </Field>
+                              >
+                                <FieldLabel htmlFor="job-visit-date">
+                                  Visit date
+                                </FieldLabel>
+                                <FieldContent>
+                                  <Input
+                                    id="job-visit-date"
+                                    type="date"
+                                    value={visitDate}
+                                    aria-invalid={
+                                      Boolean(visitError) &&
+                                      visitDate.trim().length === 0
+                                        ? true
+                                        : undefined
+                                    }
+                                    onChange={(event) =>
+                                      setVisitDate(event.target.value)
+                                    }
+                                  />
+                                </FieldContent>
+                              </Field>
 
-                          <Field>
-                            <FieldLabel htmlFor="job-visit-duration">
-                              Duration
-                            </FieldLabel>
-                            <FieldContent>
-                              <CommandSelect
-                                id="job-visit-duration"
-                                value={visitDurationMinutes}
-                                placeholder="Pick duration"
-                                emptyText="No durations found."
-                                groups={VISIT_DURATION_SELECTION_GROUPS}
-                                onValueChange={setVisitDurationMinutes}
-                              />
-                            </FieldContent>
-                          </Field>
-                        </div>
+                              <Field>
+                                <FieldLabel htmlFor="job-visit-duration">
+                                  Duration
+                                </FieldLabel>
+                                <FieldContent>
+                                  <CommandSelect
+                                    id="job-visit-duration"
+                                    value={visitDurationMinutes}
+                                    placeholder="Pick duration"
+                                    emptyText="No durations found."
+                                    groups={VISIT_DURATION_SELECTION_GROUPS}
+                                    onValueChange={setVisitDurationMinutes}
+                                  />
+                                </FieldContent>
+                              </Field>
+                            </div>
 
-                        <Field
-                          data-invalid={
-                            Boolean(visitError) && visitNote.trim().length === 0
-                          }
-                        >
-                          <FieldLabel htmlFor="job-visit-note">
-                            Visit note
-                          </FieldLabel>
-                          <FieldContent>
-                            <Textarea
-                              id="job-visit-note"
-                              value={visitNote}
-                              aria-invalid={
+                            <Field
+                              data-invalid={
                                 Boolean(visitError) &&
                                 visitNote.trim().length === 0
-                                  ? true
-                                  : undefined
                               }
-                              onChange={(event) =>
-                                setVisitNote(event.target.value)
-                              }
-                            />
-                            <FieldDescription>
-                              Keep it short and concrete: what happened, what
-                              changed, what is next.
-                            </FieldDescription>
-                            <FieldError>{visitError}</FieldError>
-                          </FieldContent>
-                        </Field>
-                      </FieldGroup>
+                            >
+                              <FieldLabel htmlFor="job-visit-note">
+                                Visit note
+                              </FieldLabel>
+                              <FieldContent>
+                                <Textarea
+                                  id="job-visit-note"
+                                  value={visitNote}
+                                  aria-invalid={
+                                    Boolean(visitError) &&
+                                    visitNote.trim().length === 0
+                                      ? true
+                                      : undefined
+                                  }
+                                  onChange={(event) =>
+                                    setVisitNote(event.target.value)
+                                  }
+                                />
+                                <FieldDescription>
+                                  Keep it short and concrete: what happened,
+                                  what changed, what is next.
+                                </FieldDescription>
+                                <FieldError>{visitError}</FieldError>
+                              </FieldContent>
+                            </Field>
+                          </FieldGroup>
 
-                      <div className="flex">
-                        <Button
-                          type="submit"
-                          loading={visitResult.waiting}
-                          className="w-full sm:w-fit"
-                        >
-                          {visitResult.waiting ? (
-                            "Logging..."
-                          ) : (
-                            <>
-                              <HugeiconsIcon
-                                icon={Time04Icon}
-                                strokeWidth={2}
-                                data-icon="inline-start"
-                              />
-                              Log visit
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </form>
-                  </>
-                ) : (
-                  <Alert>
-                    <HugeiconsIcon icon={Time04Icon} strokeWidth={2} />
-                    <AlertTitle>Visit logging is limited here.</AlertTitle>
-                    <AlertDescription>
-                      Members can only log visits on jobs assigned to them.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <Separator />
-
-                {detail.visits.length === 0 ? (
-                  <DetailEmpty
-                    title="No visits logged yet."
-                    description="Add the field work once the crew starts showing up on site."
-                  />
-                ) : (
-                  <ul className="flex flex-col gap-3">
-                    {detail.visits.map((visit) => {
-                      const author = lookup.memberById.get(visit.authorUserId);
-
-                      return (
-                        <li
-                          key={visit.id}
-                          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-                        >
-                          <div className="flex flex-col gap-2">
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                {author?.name ?? "Team member"}
-                              </span>
-                              <span>{formatDate(visit.visitDate)}</span>
-                              <span>
-                                {formatDuration(visit.durationMinutes)}
-                              </span>
-                            </div>
-                            <p className="text-sm leading-7 whitespace-pre-wrap">
-                              {visit.note}
-                            </p>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </DetailSection>
-
-            <DetailSection
-              title="Activity"
-              description="System activity stays separate from narrative comments."
-            >
-              <div>
-                {detail.activity.length === 0 ? (
-                  <DetailEmpty
-                    title="No activity yet."
-                    description="The history will fill in as the job moves."
-                  />
-                ) : (
-                  <ul className="flex flex-col gap-3">
-                    {detail.activity.map((event) => {
-                      const actor = event.actorUserId
-                        ? lookup.memberById.get(event.actorUserId)
-                        : undefined;
-
-                      return (
-                        <li
-                          key={event.id}
-                          className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-                        >
-                          <div className="flex flex-col gap-2">
-                            <p className="text-sm leading-7">
-                              {describeJobDetailActivity(
-                                actor?.name,
-                                event.payload
+                          <div className="flex">
+                            <Button
+                              type="submit"
+                              loading={visitResult.waiting}
+                              className="w-full sm:w-fit"
+                            >
+                              {visitResult.waiting ? (
+                                "Logging..."
+                              ) : (
+                                <>
+                                  <HugeiconsIcon
+                                    icon={Time04Icon}
+                                    strokeWidth={2}
+                                    data-icon="inline-start"
+                                  />
+                                  Log visit
+                                </>
                               )}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDateTime(event.createdAt)}
-                            </p>
+                            </Button>
                           </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </DetailSection>
+                        </form>
+                      </>
+                    ) : (
+                      <Alert>
+                        <HugeiconsIcon icon={Time04Icon} strokeWidth={2} />
+                        <AlertTitle>Visit logging is limited here.</AlertTitle>
+                        <AlertDescription>
+                          Members can only log visits on jobs assigned to them.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <Separator />
+
+                    {detail.visits.length === 0 ? (
+                      <DetailEmpty
+                        title="No visits logged yet."
+                        description="Add the field work once the crew starts showing up on site."
+                      />
+                    ) : (
+                      <ul className="flex flex-col gap-3">
+                        {detail.visits.map((visit) => {
+                          const author = lookup.memberById.get(
+                            visit.authorUserId
+                          );
+
+                          return (
+                            <li
+                              key={visit.id}
+                              className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex flex-col gap-2">
+                                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                  <span className="font-medium text-foreground">
+                                    {author?.name ?? "Team member"}
+                                  </span>
+                                  <span>{formatDate(visit.visitDate)}</span>
+                                  <span>
+                                    {formatDuration(visit.durationMinutes)}
+                                  </span>
+                                </div>
+                                <p className="text-sm leading-7 whitespace-pre-wrap">
+                                  {visit.note}
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </DetailSection>
+
+                <DetailSection
+                  title="Activity"
+                  description="System activity stays separate from narrative comments."
+                >
+                  <div>
+                    {detail.activity.length === 0 ? (
+                      <DetailEmpty
+                        title="No activity yet."
+                        description="The history will fill in as the job moves."
+                      />
+                    ) : (
+                      <ul className="flex flex-col gap-3">
+                        {detail.activity.map((event) => {
+                          const actor = event.actorUserId
+                            ? lookup.memberById.get(event.actorUserId)
+                            : undefined;
+
+                          return (
+                            <li
+                              key={event.id}
+                              className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex flex-col gap-2">
+                                <p className="text-sm leading-7">
+                                  {describeJobDetailActivity(
+                                    actor?.name,
+                                    event.payload
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatDateTime(event.createdAt)}
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </DetailSection>
+              </>
+            )}
           </div>
 
           <DrawerFooter className="border-t">

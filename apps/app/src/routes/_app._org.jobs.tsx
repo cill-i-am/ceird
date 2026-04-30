@@ -10,20 +10,27 @@ import type {
   OrganizationRole,
 } from "@task-tracker/identity-core";
 import type {
+  JobContactOption,
+  JobDetailResponse,
+  JobLabel,
   JobListResponse,
   JobOptionsResponse,
+  JobSiteOption,
+  ServiceAreaOption,
   UserIdType,
 } from "@task-tracker/jobs-core";
 
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
 import { decodeJobsSearch } from "#/features/jobs/jobs-search";
 import {
+  getCurrentServerJobDetail,
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
 import {
   canUseInternalJobOptions,
   decodeJobsViewerUserId,
+  isExternalJobsViewer,
 } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
@@ -90,17 +97,79 @@ export async function loadJobsRouteData(
     role: activeRole,
     userId: resolvedOrganizationAccess.currentUserId,
   } satisfies JobsViewer;
-  const [list, options] = await Promise.all([
-    listPromise,
-    canUseInternalJobOptions(viewer)
-      ? getCurrentServerJobOptions()
-      : Promise.resolve(EMPTY_JOBS_OPTIONS),
-  ]);
+  const list = await listPromise;
+  let options: JobOptionsResponse = EMPTY_JOBS_OPTIONS;
+
+  if (canUseInternalJobOptions(viewer)) {
+    options = await getCurrentServerJobOptions();
+  } else if (isExternalJobsViewer(viewer)) {
+    options = await loadExternalJobsScopedOptions(list);
+  }
 
   return {
     list,
     options,
     viewer,
+  };
+}
+
+async function loadExternalJobsScopedOptions(
+  list: JobListResponse
+): Promise<JobOptionsResponse> {
+  const details = await Promise.all(
+    list.items.map((item) => getCurrentServerJobDetail(item.id))
+  );
+
+  return deriveExternalJobsScopedOptions(details);
+}
+
+export function deriveExternalJobsScopedOptions(
+  details: readonly JobDetailResponse[]
+): JobOptionsResponse {
+  const contactsById = new Map<JobContactOption["id"], JobContactOption>();
+  const labelsById = new Map<JobLabel["id"], JobLabel>();
+  const serviceAreasById = new Map<
+    ServiceAreaOption["id"],
+    ServiceAreaOption
+  >();
+  const sitesById = new Map<JobSiteOption["id"], JobSiteOption>();
+
+  for (const detail of details) {
+    for (const label of detail.job.labels) {
+      labelsById.set(label.id, label);
+    }
+
+    if (detail.site !== undefined) {
+      sitesById.set(detail.site.id, detail.site);
+
+      if (
+        detail.site.serviceAreaId !== undefined &&
+        detail.site.serviceAreaName !== undefined
+      ) {
+        serviceAreasById.set(detail.site.serviceAreaId, {
+          id: detail.site.serviceAreaId,
+          name: detail.site.serviceAreaName,
+        });
+      }
+    }
+
+    if (detail.contact !== undefined) {
+      contactsById.set(detail.contact.id, {
+        email: detail.contact.email,
+        id: detail.contact.id,
+        name: detail.contact.name,
+        phone: detail.contact.phone,
+        siteIds: detail.job.siteId === undefined ? [] : [detail.job.siteId],
+      });
+    }
+  }
+
+  return {
+    contacts: [...contactsById.values()],
+    labels: [...labelsById.values()],
+    members: [],
+    serviceAreas: [...serviceAreasById.values()],
+    sites: [...sitesById.values()],
   };
 }
 

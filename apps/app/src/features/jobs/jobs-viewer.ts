@@ -37,6 +37,8 @@ export const MEMBER_TRANSITION_OPTIONS: Readonly<
   triaged: ["in_progress"],
 };
 
+const NO_TRANSITION_OPTIONS: readonly JobStatus[] = [];
+
 export function hasJobsElevatedAccess(role: JobsViewerRole): boolean {
   return isAdministrativeOrganizationRole(role);
 }
@@ -86,7 +88,7 @@ export function getAvailableJobTransitions(
 
   return hasAssignedJobAccess(viewer, job.assigneeId)
     ? MEMBER_TRANSITION_OPTIONS[job.status]
-    : [];
+    : NO_TRANSITION_OPTIONS;
 }
 
 export function decodeJobsViewerUserId(input: unknown): UserIdType {
