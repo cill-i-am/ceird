@@ -1,3 +1,4 @@
+/* eslint-disable typescript-eslint/no-explicit-any */
 import { createServer } from "node:http";
 
 import {
@@ -43,11 +44,27 @@ const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
 
 const ApiContractLive = HttpApiBuilder.api(Api).pipe(Layer.provide(SystemLive));
 
-export const ApiLive = Layer.mergeAll(
+const makeApiHandlersLive = (
+  authenticationHttpLive: Layer.Layer<never, any, any>
+) => Layer.mergeAll(ApiContractLive, authenticationHttpLive, JobsHttpLive);
+
+const ApiHandlersLive = Layer.mergeAll(
   ApiContractLive,
   AuthenticationHttpLive,
   JobsHttpLive
-).pipe(Layer.provide(AppDatabaseRuntimeLive));
+);
+
+export const makeApiLive = (
+  databaseRuntimeLive: Layer.Layer<any, any, any>,
+  authenticationHttpLive: Layer.Layer<never, any, any> = AuthenticationHttpLive
+) =>
+  makeApiHandlersLive(authenticationHttpLive).pipe(
+    Layer.provide(databaseRuntimeLive)
+  );
+
+export const ApiLive = ApiHandlersLive.pipe(
+  Layer.provide(AppDatabaseRuntimeLive)
+);
 
 export const ServerConfig = Config.all({
   host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
@@ -61,9 +78,19 @@ export const ServerLive = HttpApiBuilder.serve().pipe(
       NodeHttpServer.layerConfig(createServer, ServerConfig)
     )
   )
-);
+) as Layer.Layer<never, never, never>;
 
-export const makeApiWebHandler = () =>
-  HttpApiBuilder.toWebHandler(
-    Layer.mergeAll(ApiLive, NodeHttpServer.layerContext)
-  );
+export const makeApiWebHandler = (
+  databaseRuntimeLive: Layer.Layer<any, any, any> = AppDatabaseRuntimeLive,
+  authenticationHttpLive: Layer.Layer<never, any, any> = AuthenticationHttpLive,
+  baseLive: Layer.Layer<never> = Layer.empty
+) => {
+  const apiLayer = Layer.mergeAll(
+    makeApiLive(databaseRuntimeLive, authenticationHttpLive),
+    NodeHttpServer.layerContext
+  ).pipe(Layer.provide(baseLive)) as Parameters<
+    typeof HttpApiBuilder.toWebHandler
+  >[0];
+
+  return HttpApiBuilder.toWebHandler(apiLayer);
+};

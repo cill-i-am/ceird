@@ -140,15 +140,24 @@ Rule:
 - that `deliveryKey` stays consistent across transports so future verification
   mail can reuse the same boundary without baking provider-specific naming into
   the domain contract
-- Better Auth currently defers reset delivery through an in-process
-  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`
 - verification and organization invitation mail now pass through the same
   `AuthEmailSender` boundary
-- Better Auth currently defers auth email delivery through an in-process
-  `advanced.backgroundTasks.handler` that schedules work with `queueMicrotask`,
-  including verification sends and password reset mail
-- this in-process scheduling is explicitly temporary and should be replaced by a
-  durable queue in `TSK-37`
+- Node and sandbox runtimes send auth email through the direct promise bridge
+- the Cloudflare Worker runtime enqueues auth email work to Cloudflare Queues
+  and consumes it from the same Worker through the `queue()` handler
+
+### Cloudflare Queue Scheduling
+
+In the Cloudflare POC runtime, auth email delivery is scheduled through
+Cloudflare Queues instead of `queueMicrotask`.
+
+The API Worker enqueues validated auth email messages during Better Auth hooks.
+The same Worker consumes the queue and sends through the existing
+`AuthEmailSender` and Cloudflare transport boundary. Queue retries and the
+dead-letter queue own durable failure handling.
+
+The Node sandbox runtime continues to use direct promise-based delivery until
+the sandbox is moved to Workers.
 
 ### Base URL Strategy
 

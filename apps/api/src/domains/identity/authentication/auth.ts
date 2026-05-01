@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file, typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 
 import { HttpApiBuilder, HttpApp } from "@effect/platform";
@@ -24,11 +25,14 @@ import {
 } from "better-auth/plugins/organization/access";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Effect, Layer, Runtime } from "effect";
+import { Context, Effect, Layer, Runtime } from "effect";
 
 import { AppDatabase } from "../../../platform/database/database.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
-import { AuthEmailPromiseBridge } from "./auth-email-promise-bridge.js";
+import {
+  AuthenticationEmailScheduler,
+  AuthenticationEmailSchedulerLive,
+} from "./auth-email-scheduler.js";
 import type {
   EmailVerificationEmailInput,
   OrganizationInvitationEmailInput,
@@ -409,15 +413,22 @@ export function createAuthentication(options: {
 
 function makeAuthenticationBackgroundTaskHandler() {
   return (task: Promise<unknown>) => {
-    // Follow-up tracked in TSK-37: replace this temporary in-process
-    // queueMicrotask scheduler with a durable background queue so auth email
-    // delivery survives process restarts and can be retried independently of
-    // the request lifecycle.
+    // Node/sandbox runtime only. The Cloudflare Worker runtime provides a
+    // waitUntil-backed handler and schedules durable work through Queues.
     queueMicrotask(() => {
       void task;
     });
   };
 }
+
+export class AuthenticationBackgroundTaskHandler extends Context.Tag(
+  "@task-tracker/domains/identity/authentication/AuthenticationBackgroundTaskHandler"
+)<AuthenticationBackgroundTaskHandler, (task: Promise<unknown>) => void>() {}
+
+export const AuthenticationBackgroundTaskHandlerLive = Layer.succeed(
+  AuthenticationBackgroundTaskHandler,
+  makeAuthenticationBackgroundTaskHandler()
+);
 
 async function deliverAuthEmail<Input>(options: {
   readonly input: Input;
@@ -721,14 +732,13 @@ function withAuthenticationCors(
 export class Authentication extends Effect.Service<Authentication>()(
   "@task-tracker/domains/identity/authentication/Authentication",
   {
-    dependencies: [AuthEmailPromiseBridge.Default],
     effect: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
       const { authDb } = yield* AppDatabase;
-      const authEmailPromiseBridge = yield* AuthEmailPromiseBridge;
+      const authEmailScheduler = yield* AuthenticationEmailScheduler;
       const runtime = yield* Effect.runtime<never>();
-      const backgroundTaskHandler = makeAuthenticationBackgroundTaskHandler();
+      const backgroundTaskHandler = yield* AuthenticationBackgroundTaskHandler;
       const reportPasswordResetEmailFailure = makeEmailFailureReporter(
         runtime,
         "Password reset email delivery failed"
@@ -750,45 +760,58 @@ export class Authentication extends Effect.Service<Authentication>()(
         reportEmailChangeConfirmationFailure,
         reportPasswordResetEmailFailure,
         sendOrganizationInvitationEmail:
-          authEmailPromiseBridge.sendOrganizationInvitationEmail,
+          authEmailScheduler.sendOrganizationInvitationEmail,
         reportVerificationEmailFailure,
-        sendPasswordResetEmail: authEmailPromiseBridge.send,
-        sendVerificationEmail:
-          authEmailPromiseBridge.sendEmailVerificationEmail,
+        sendPasswordResetEmail: authEmailScheduler.sendPasswordResetEmail,
+        sendVerificationEmail: authEmailScheduler.sendVerificationEmail,
       });
     }),
   }
 ) {}
 
-export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
-  Effect.gen(function* mountAuthenticationHttp() {
-    const auth = yield* Authentication;
-    const { authDb } = yield* AppDatabase;
-    const config = yield* loadAuthenticationConfig;
+export const makeAuthenticationHttpLive = (
+  emailSchedulerLive: Layer.Layer<
+    AuthenticationEmailScheduler,
+    any,
+    any
+  > = AuthenticationEmailSchedulerLive,
+  backgroundTaskHandlerLive: Layer.Layer<AuthenticationBackgroundTaskHandler> = AuthenticationBackgroundTaskHandlerLive
+) =>
+  HttpApiBuilder.Router.use((router) =>
+    Effect.gen(function* mountAuthenticationHttp() {
+      const auth = yield* Authentication;
+      const { authDb } = yield* AppDatabase;
+      const config = yield* loadAuthenticationConfig;
 
-    // Effect strips mount prefixes by default. Better Auth expects to receive
-    // its configured basePath, so we preserve the full /api/auth prefix here.
-    yield* router.mountApp(
-      "/api/auth",
-      HttpApp.fromWebHandler(
-        withAuthenticationCors(auth.handler, config.trustedOrigins)
-      ),
-      {
-        includePrefix: true,
-      }
-    );
+      // Effect strips mount prefixes by default. Better Auth expects to receive
+      // its configured basePath, so we preserve the full /api/auth prefix here.
+      yield* router.mountApp(
+        "/api/auth",
+        HttpApp.fromWebHandler(
+          withAuthenticationCors(auth.handler, config.trustedOrigins)
+        ),
+        {
+          includePrefix: true,
+        }
+      );
 
-    yield* router.mountApp(
-      "/api/public",
-      HttpApp.fromWebHandler(
-        withAuthenticationCors(
-          makePublicInvitationPreviewHandler(authDb),
-          config.trustedOrigins
-        )
-      ),
-      {
-        includePrefix: true,
-      }
-    );
-  })
-).pipe(Layer.provide(Authentication.Default));
+      yield* router.mountApp(
+        "/api/public",
+        HttpApp.fromWebHandler(
+          withAuthenticationCors(
+            makePublicInvitationPreviewHandler(authDb),
+            config.trustedOrigins
+          )
+        ),
+        {
+          includePrefix: true,
+        }
+      );
+    })
+  ).pipe(
+    Layer.provide(Authentication.Default),
+    Layer.provide(emailSchedulerLive),
+    Layer.provide(backgroundTaskHandlerLive)
+  );
+
+export const AuthenticationHttpLive = makeAuthenticationHttpLive();

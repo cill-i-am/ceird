@@ -53,16 +53,16 @@ describe("api origin resolution", () => {
     ).toBe("https://agent-one.api.task-tracker.localhost:1355");
   }, 1000);
 
-  it("fails closed for unrecognized app hosts without an explicit API origin", () => {
-    expect(
-      resolveApiOrigin("https://app.task-tracker.example.com")
-    ).toBeUndefined();
+  it("maps conventional app subdomains to matching API subdomains", () => {
+    expect(resolveApiOrigin("https://app.task-tracker.example.com")).toBe(
+      "https://api.task-tracker.example.com"
+    );
   }, 1000);
 
-  it("fails closed for unrecognized app hosts when the injected API origin is invalid", () => {
+  it("falls back to conventional app subdomain mapping when the injected API origin is invalid", () => {
     expect(
       resolveApiOrigin("https://app.task-tracker.example.com", "not-a-url")
-    ).toBeUndefined();
+    ).toBe("https://api.task-tracker.example.com");
   }, 1000);
 
   it("reads the injected server API origin", () => {

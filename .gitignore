@@ -7,8 +7,6 @@ node_modules
 .pnpm-store
 
 # Local env files
-.env
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -41,4 +39,9 @@ yarn-error.log*
 .worktrees/
 node-compile-cache/
 
+.projects/cache
+.projects/vault
+packages/infra/.alchemy/
+.env
+.env.local
 .auto-research/

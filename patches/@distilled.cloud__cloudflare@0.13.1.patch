@@ -1,0 +1,139 @@
+diff --git a/lib/services/secrets-store.d.ts b/lib/services/secrets-store.d.ts
+index 53740dcfe05fc3fd83d63c05275a9924102a8b01..1221df42d5b294246b31f871cf9fc7798d0fdeb0 100644
+--- a/lib/services/secrets-store.d.ts
++++ b/lib/services/secrets-store.d.ts
+@@ -115,7 +115,7 @@ export interface CreateStoreRequest {
+     /** Body param: */
+     body: {
+         name: string;
+-    }[];
++    };
+ }
+ export declare const CreateStoreRequest: Schema.Schema<CreateStoreRequest>;
+ export interface CreateStoreResponse {
+@@ -124,11 +124,11 @@ export interface CreateStoreResponse {
+         created: string;
+         modified: string;
+         name: string;
+-    }[];
++    };
+ }
+ export declare const CreateStoreResponse: Schema.Schema<CreateStoreResponse>;
+ export type CreateStoreError = DefaultErrors | InvalidAccountId | MaximumStoresExceeded;
+-export declare const createStore: API.PaginatedOperationMethod<CreateStoreRequest, CreateStoreResponse, CreateStoreError, Credentials | HttpClient.HttpClient>;
++export declare const createStore: API.OperationMethod<CreateStoreRequest, CreateStoreResponse, CreateStoreError, Credentials | HttpClient.HttpClient>;
+ export interface DeleteStoreRequest {
+     storeId: string;
+     /** Account Identifier */
+diff --git a/lib/services/secrets-store.js b/lib/services/secrets-store.js
+index 49f2f3d049ee0ed216ae30e7d448a8f48e8b44d4..419ee50ad694e00d0868a35b136ad30b250e5422 100644
+--- a/lib/services/secrets-store.js
++++ b/lib/services/secrets-store.js
+@@ -115,29 +115,25 @@ export const listStores = /*@__PURE__*/ /*#__PURE__*/ API.makePaginated(() => ({
+ }));
+ export const CreateStoreRequest = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+     accountId: Schema.String.pipe(T.HttpPath("account_id")),
+-    body: Schema.Array(Schema.Struct({
++    body: Schema.Struct({
+         name: Schema.String,
+-    })).pipe(T.HttpBody()),
++    }).pipe(T.HttpBody()),
+ }).pipe(T.Http({
+     method: "POST",
+     path: "/accounts/{account_id}/secrets_store/stores",
+ }));
+ export const CreateStoreResponse = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+-    result: Schema.Array(Schema.Struct({
++    result: Schema.Struct({
+         id: Schema.String,
+         created: Schema.String,
+         modified: Schema.String,
+         name: Schema.String,
+-    })),
++    }),
+ });
+-export const createStore = /*@__PURE__*/ /*#__PURE__*/ API.makePaginated(() => ({
++export const createStore = /*@__PURE__*/ /*#__PURE__*/ API.make(() => ({
+     input: CreateStoreRequest,
+     output: CreateStoreResponse,
+     errors: [InvalidAccountId, MaximumStoresExceeded],
+-    pagination: {
+-        mode: "single",
+-        items: "result",
+-    },
+ }));
+ export const DeleteStoreRequest = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+     storeId: Schema.String.pipe(T.HttpPath("storeId")),
+diff --git a/src/services/secrets-store.ts b/src/services/secrets-store.ts
+index 48dff91f98f471cb03a3add2907dc7c60a71a9fb..dec89b51f074f99b2d4f888341f86e123bf96649 100644
+--- a/src/services/secrets-store.ts
++++ b/src/services/secrets-store.ts
+@@ -219,16 +219,14 @@ export interface CreateStoreRequest {
+   /** Path param: Account Identifier */
+   accountId: string;
+   /** Body param: */
+-  body: { name: string }[];
++  body: { name: string };
+ }
+ 
+ export const CreateStoreRequest = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+   accountId: Schema.String.pipe(T.HttpPath("account_id")),
+-  body: Schema.Array(
+-    Schema.Struct({
+-      name: Schema.String,
+-    }),
+-  ).pipe(T.HttpBody()),
++  body: Schema.Struct({
++    name: Schema.String,
++  }).pipe(T.HttpBody()),
+ }).pipe(
+   T.Http({
+     method: "POST",
+@@ -237,18 +235,16 @@ export const CreateStoreRequest = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+ ) as unknown as Schema.Schema<CreateStoreRequest>;
+ 
+ export interface CreateStoreResponse {
+-  result: { id: string; created: string; modified: string; name: string }[];
++  result: { id: string; created: string; modified: string; name: string };
+ }
+ 
+ export const CreateStoreResponse = /*@__PURE__*/ /*#__PURE__*/ Schema.Struct({
+-  result: Schema.Array(
+-    Schema.Struct({
+-      id: Schema.String,
+-      created: Schema.String,
+-      modified: Schema.String,
+-      name: Schema.String,
+-    }),
+-  ),
++  result: Schema.Struct({
++    id: Schema.String,
++    created: Schema.String,
++    modified: Schema.String,
++    name: Schema.String,
++  }),
+ }) as unknown as Schema.Schema<CreateStoreResponse>;
+ 
+ export type CreateStoreError =
+@@ -256,19 +252,15 @@ export type CreateStoreError =
+   | InvalidAccountId
+   | MaximumStoresExceeded;
+ 
+-export const createStore: API.PaginatedOperationMethod<
++export const createStore: API.OperationMethod<
+   CreateStoreRequest,
+   CreateStoreResponse,
+   CreateStoreError,
+   Credentials | HttpClient.HttpClient
+-> = /*@__PURE__*/ /*#__PURE__*/ API.makePaginated(() => ({
++> = /*@__PURE__*/ /*#__PURE__*/ API.make(() => ({
+   input: CreateStoreRequest,
+   output: CreateStoreResponse,
+   errors: [InvalidAccountId, MaximumStoresExceeded],
+-  pagination: {
+-    mode: "single",
+-    items: "result",
+-  } as const,
+ }));
+ 
+ export interface DeleteStoreRequest {
