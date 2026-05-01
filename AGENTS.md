@@ -31,6 +31,12 @@ When working from a linked git worktree, prefer the sandbox workflow over the ho
 - Prefer the sandbox URLs and `portless` aliases for worktree development. Fall back to the loopback URLs printed by the CLI when aliases are unavailable.
 - Do not default to `pnpm dev` inside linked worktrees unless the user explicitly asks for the non-sandbox flow.
 
+## Linear Issues And Pull Requests
+
+When a task is associated with a Linear issue, use the Linear issue title as the pull request title, including the issue key when it is part of the title, such as `TSK-4 My Linear Issue`.
+
+This lets Linear associate the pull request with the issue and move workflow states automatically.
+
 ## Type Boundaries
 
 Model runtime and type safety according to the boundary the code is crossing.

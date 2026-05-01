@@ -1,4 +1,13 @@
-# App Agent Context
+# Web App Context
+
+This app owns the user-facing TanStack Start experience.
+
+- Follow the existing TanStack Router file-route structure. Do not edit `src/routeTree.gen.ts` by hand.
+- Keep route loaders, server functions, and client components close to the feature that owns the workflow.
+- Use shared contracts from `packages/` for API payloads and decoded boundary data instead of redefining domain shapes in UI code.
+- Preserve the existing design language: quiet operational screens, dense but legible data surfaces, and restrained motion that helps the workflow.
+- Use the app hotkey layer for keyboard access. Avoid ad hoc `keydown` listeners.
+- Prefer existing UI primitives, feature-local components, and established test patterns before adding new abstractions.
 
 ## Command Bar Coverage
 
