@@ -89,6 +89,13 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       domain: input.config.apiHostname,
       observability: {
         enabled: true,
+        logs: {
+          enabled: true,
+          invocationLogs: true,
+        },
+        traces: {
+          enabled: true,
+        },
       },
       url: true,
     });
@@ -131,6 +138,13 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       domain: input.config.appHostname,
       observability: {
         enabled: true,
+        logs: {
+          enabled: true,
+          invocationLogs: true,
+        },
+        traces: {
+          enabled: true,
+        },
       },
       url: true,
     });
