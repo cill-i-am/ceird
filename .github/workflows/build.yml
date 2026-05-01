@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+env:
+  PNPM_CONFIG_OPTIONAL: "true"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -126,11 +129,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Rollup Linux native package
-        if: runner.os == 'Linux'
-        run: |
-          ROLLUP_VERSION=$(node -e "const fs = require('fs'); const lockfile = fs.readFileSync('pnpm-lock.yaml', 'utf8'); const match = lockfile.match(/^  rollup@([^:]+):/m); if (!match) { process.exit(1); } console.log(match[1]);")
-          pnpm add --save-dev --ignore-workspace-root-check "@rollup/rollup-linux-x64-gnu@${ROLLUP_VERSION}"
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
 
       - name: Install Playwright browsers
         run: pnpm --filter app exec playwright install --with-deps chromium
@@ -169,11 +169,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Rollup Linux native package
-        if: runner.os == 'Linux'
-        run: |
-          ROLLUP_VERSION=$(node -e "const fs = require('fs'); const lockfile = fs.readFileSync('pnpm-lock.yaml', 'utf8'); const match = lockfile.match(/^  rollup@([^:]+):/m); if (!match) { process.exit(1); } console.log(match[1]);")
-          pnpm add --save-dev --ignore-workspace-root-check "@rollup/rollup-linux-x64-gnu@${ROLLUP_VERSION}"
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
 
       - name: Build
         run: pnpm build

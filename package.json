@@ -42,13 +42,27 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "lefthook",
       "lightningcss"
     ],
+    "supportedArchitectures": {
+      "cpu": [
+        "current",
+        "x64"
+      ],
+      "libc": [
+        "current",
+        "glibc"
+      ],
+      "os": [
+        "current",
+        "linux"
+      ]
+    },
     "patchedDependencies": {
       "alchemy@2.0.0-beta.25": "patches/alchemy@2.0.0-beta.25.patch",
       "@distilled.cloud/cloudflare@0.13.1": "patches/@distilled.cloud__cloudflare@0.13.1.patch",
