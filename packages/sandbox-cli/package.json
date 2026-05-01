@@ -14,17 +14,17 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
-    "@effect/cli": "^0.75.0",
-    "@effect/platform": "^0.96.0",
+    "@effect/cli": "^0.75.1",
+    "@effect/platform": "^0.96.1",
     "@effect/platform-node": "^0.106.0",
     "@task-tracker/sandbox-core": "workspace:*",
-    "effect": "^3.21.0"
+    "effect": "^3.21.2"
   },
   "devDependencies": {
-    "@effect/language-service": "^0.84.2",
-    "@types/node": "^25.5.0",
+    "@effect/language-service": "^0.84.3",
+    "@types/node": "^25.6.0",
     "tsx": "^4.21.0",
     "typescript": "5.9.2",
-    "vitest": "^3.0.5"
+    "vitest": "^3.2.4"
   }
 }
