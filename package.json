@@ -1,5 +1,5 @@
 {
-  "name": "task-tracker",
+  "name": "ceird",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -9,6 +9,10 @@
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
+    "infra:check-types": "pnpm --filter @task-tracker/infra check-types",
+    "infra:deploy": "pnpm --filter @task-tracker/infra run deploy",
+    "infra:destroy": "pnpm --filter @task-tracker/infra run destroy",
+    "infra:dev": "pnpm --filter @task-tracker/infra run dev",
     "lint": "oxlint . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
@@ -44,6 +48,11 @@
       "esbuild",
       "lefthook",
       "lightningcss"
-    ]
+    ],
+    "patchedDependencies": {
+      "alchemy@2.0.0-beta.25": "patches/alchemy@2.0.0-beta.25.patch",
+      "@distilled.cloud/cloudflare@0.13.1": "patches/@distilled.cloud__cloudflare@0.13.1.patch",
+      "@distilled.cloud/planetscale@0.13.1": "patches/@distilled.cloud__planetscale@0.13.1.patch"
+    }
   }
 }

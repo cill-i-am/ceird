@@ -1,0 +1,221 @@
+diff --git a/bin/alchemy.js b/bin/alchemy.js
+index dab12f6229bd606c01bf7c47194e34024c095e37..8d6ab7b10144e9c79605e8e026da7135d57ee7cc 100644
+--- a/bin/alchemy.js
++++ b/bin/alchemy.js
+@@ -54018,15 +54018,18 @@ const QueueConsumerProvider = () => effect(QueueConsumer, Effect.gen(function* (
+ 			if (JSON.stringify(olds.settings ?? {}) !== JSON.stringify(news.settings ?? {})) return { action: "update" };
+ 		}),
+ 		create: Effect.fn(function* ({ news }) {
++			const create = createConsumer({
++				accountId,
++				queueId: news.queueId,
++				scriptName: news.scriptName,
++				type: "worker",
++				deadLetterQueue: news.deadLetterQueue,
++				settings: news.settings
++			});
+ 			return {
+-				consumerId: (yield* createConsumer({
+-					accountId,
+-					queueId: news.queueId,
+-					scriptName: news.scriptName,
+-					type: "worker",
+-					deadLetterQueue: news.deadLetterQueue,
+-					settings: news.settings
+-				}).pipe(Effect.catch(() => Effect.gen(function* () {
++				consumerId: (yield* create.pipe(Effect.retry({
++					schedule: Schedule.spaced("2 seconds").pipe(Schedule.both(Schedule.recurs(30)))
++				}), Effect.catch(() => Effect.gen(function* () {
+ 					const match = (yield* listConsumers({
+ 						accountId,
+ 						queueId: news.queueId
+@@ -54559,11 +54562,11 @@ const SecretsStoreProvider = () => effect(SecretsStore, Effect.gen(function* ()
+ 			}
+ 			const create$2 = createStore({
+ 				accountId,
+-				body: [{ name: "default_secrets_store" }]
++				body: { name: "default_secrets_store" }
+ 			});
+ 			const response = adoptEnabled ? yield* create$2.pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(void 0))) : yield* create$2;
+ 			if (response) {
+-				const store = response.result[0];
++				const store = Array.isArray(response.result) ? response.result[0] : response.result;
+ 				return {
+ 					storeId: store.id,
+ 					storeName: store.name,
+@@ -56217,9 +56220,10 @@ const hexToBytes = (hex) => {
+ //#endregion
+ //#region src/Cloudflare/StateStore/Api.ts
+ const STATE_STORE_SCRIPT_NAME = "alchemy-state-store";
++const STATE_STORE_API_MAIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "../lib/Cloudflare/StateStore/Api.js");
+ var Api_default = Worker("Api", {
+ 	name: STATE_STORE_SCRIPT_NAME,
+-	main: import.meta.path,
++	main: STATE_STORE_API_MAIN,
+ 	url: true,
+ 	compatibility: {
+ 		flags: ["nodejs_compat"],
+diff --git a/lib/Cloudflare/Queue/QueueConsumer.js b/lib/Cloudflare/Queue/QueueConsumer.js
+index 1853a73ea054e154504217093533faff6420199a..812022e690ffad05e94dccb028b0482ea33b0807 100644
+--- a/lib/Cloudflare/Queue/QueueConsumer.js
++++ b/lib/Cloudflare/Queue/QueueConsumer.js
+@@ -1,5 +1,6 @@
+ import * as queues from "@distilled.cloud/cloudflare/queues";
+ import * as Effect from "effect/Effect";
++import * as Schedule from "effect/Schedule";
+ import { isResolved } from "../../Diff.js";
+ import * as Provider from "../../Provider.js";
+ import { Resource } from "../../Resource.js";
+@@ -66,14 +67,17 @@ export const QueueConsumerProvider = () => Provider.effect(QueueConsumer, Effect
+             }
+         }),
+         create: Effect.fn(function* ({ news }) {
+-            const consumer = yield* createConsumer({
++            const create = createConsumer({
+                 accountId,
+                 queueId: news.queueId,
+                 scriptName: news.scriptName,
+                 type: "worker",
+                 deadLetterQueue: news.deadLetterQueue,
+                 settings: news.settings,
+-            }).pipe(Effect.catch(() => Effect.gen(function* () {
++            });
++            const consumer = yield* create.pipe(Effect.retry({
++                schedule: Schedule.spaced("2 seconds").pipe(Schedule.both(Schedule.recurs(30))),
++            }), Effect.catch(() => Effect.gen(function* () {
+                 // Consumer may already exist -- look it up
+                 const existing = yield* listConsumers({
+                     accountId,
+diff --git a/lib/Cloudflare/SecretsStore/SecretsStore.js b/lib/Cloudflare/SecretsStore/SecretsStore.js
+index 7b3b115e7526757acb8dc2bfc1e05c36b27eaf3c..54f8cee0516d7364671c3def26a9f40825fe8854 100644
+--- a/lib/Cloudflare/SecretsStore/SecretsStore.js
++++ b/lib/Cloudflare/SecretsStore/SecretsStore.js
+@@ -62,7 +62,7 @@ export const SecretsStoreProvider = () => Provider.effect(SecretsStore, Effect.g
+             const create = createStore({
+                 accountId,
+                 //`default_secrets_store` is the name cloudflare uses to create a secret store
+-                body: [{ name: "default_secrets_store" }],
++                body: { name: "default_secrets_store" },
+             });
+             const response = adoptEnabled
+                 ? yield* create.pipe(
+@@ -71,7 +71,9 @@ export const SecretsStoreProvider = () => Provider.effect(SecretsStore, Effect.g
+                 Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)))
+                 : yield* create;
+             if (response) {
+-                const store = response.result[0];
++                const store = Array.isArray(response.result)
++                    ? response.result[0]
++                    : response.result;
+                 return {
+                     storeId: store.id,
+                     storeName: store.name,
+diff --git a/lib/Cloudflare/StateStore/Api.js b/lib/Cloudflare/StateStore/Api.js
+index e87879789addfd4ec9cd31380469d99dccfcaa24..c135ab5052ddeb0839b0bdda93f01d6e67049f22 100644
+--- a/lib/Cloudflare/StateStore/Api.js
++++ b/lib/Cloudflare/StateStore/Api.js
+@@ -8,15 +8,17 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
+ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+ import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
+ import crypto from "node:crypto";
++import { fileURLToPath } from "node:url";
+ import { SecretBindingLive } from "../SecretsStore/SecretBinding.js";
+ import * as Secret from "../SecretsStore/Secret.js";
+ import { Worker } from "../Workers/Worker.js";
+ import Store from "./Store.js";
+ import { AuthToken } from "./Token.js";
+ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store";
++const stateStoreApiMain = typeof import.meta.url === "string" ? fileURLToPath(import.meta.url) : "";
+ export default Worker("Api", {
+     name: STATE_STORE_SCRIPT_NAME,
+-    main: import.meta.path,
++    main: stateStoreApiMain,
+     url: true,
+     compatibility: {
+         flags: ["nodejs_compat"],
+diff --git a/src/Cloudflare/Queue/QueueConsumer.ts b/src/Cloudflare/Queue/QueueConsumer.ts
+index 6fb5d5aab369e5d9114c9657d20bfd5e844ab4ec..6608f2816dcb9ac8cfd930784b666d66de7b5fd9 100644
+--- a/src/Cloudflare/Queue/QueueConsumer.ts
++++ b/src/Cloudflare/Queue/QueueConsumer.ts
+@@ -1,5 +1,6 @@
+ import * as queues from "@distilled.cloud/cloudflare/queues";
+ import * as Effect from "effect/Effect";
++import * as Schedule from "effect/Schedule";
+ import { isResolved } from "../../Diff.ts";
+ import * as Provider from "../../Provider.ts";
+ import { Resource } from "../../Resource.ts";
+@@ -132,14 +133,20 @@ export const QueueConsumerProvider = () =>
+           }
+         }),
+         create: Effect.fn(function* ({ news }) {
+-          const consumer = yield* createConsumer({
++          const create = createConsumer({
+             accountId,
+             queueId: news.queueId!,
+             scriptName: news.scriptName,
+             type: "worker",
+             deadLetterQueue: news.deadLetterQueue,
+             settings: news.settings,
+-          }).pipe(
++          });
++          const consumer = yield* create.pipe(
++            Effect.retry({
++              schedule: Schedule.spaced("2 seconds").pipe(
++                Schedule.both(Schedule.recurs(30)),
++              ),
++            }),
+             Effect.catch(() =>
+               Effect.gen(function* () {
+                 // Consumer may already exist -- look it up
+diff --git a/src/Cloudflare/SecretsStore/SecretsStore.ts b/src/Cloudflare/SecretsStore/SecretsStore.ts
+index f3a50d141956d1225d46aecfb2be8302e5a253f2..091fcdf02f42c4a27670fdfc741d99a1dd45775f 100644
+--- a/src/Cloudflare/SecretsStore/SecretsStore.ts
++++ b/src/Cloudflare/SecretsStore/SecretsStore.ts
+@@ -84,7 +84,7 @@ export const SecretsStoreProvider = () =>
+           const create = createStore({
+             accountId,
+             //`default_secrets_store` is the name cloudflare uses to create a secret store
+-            body: [{ name: "default_secrets_store" }],
++            body: { name: "default_secrets_store" },
+           });
+           const response = adoptEnabled
+             ? yield* create.pipe(
+@@ -97,7 +97,9 @@ export const SecretsStoreProvider = () =>
+             : yield* create;
+ 
+           if (response) {
+-            const store = response.result[0]!;
++            const store = Array.isArray(response.result)
++              ? response.result[0]!
++              : response.result;
+             return {
+               storeId: store.id,
+               storeName: store.name,
+diff --git a/src/Cloudflare/StateStore/Api.ts b/src/Cloudflare/StateStore/Api.ts
+index 6eae158c774839855a4e45a74d124fea663ccf7b..13f67c53fdc880ba103212cee5a1b462cdc9a40d 100644
+--- a/src/Cloudflare/StateStore/Api.ts
++++ b/src/Cloudflare/StateStore/Api.ts
+@@ -12,6 +12,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
+ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+ import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
+ import crypto from "node:crypto";
++import { fileURLToPath } from "node:url";
+ import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
+ import * as Secret from "../SecretsStore/Secret.ts";
+ import { Worker } from "../Workers/Worker.ts";
+@@ -20,11 +21,14 @@ import { AuthToken } from "./Token.ts";
+ 
+ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
+ 
++const stateStoreApiMain =
++  typeof import.meta.url === "string" ? fileURLToPath(import.meta.url) : "";
++
+ export default Worker(
+   "Api",
+   {
+     name: STATE_STORE_SCRIPT_NAME,
+-    main: import.meta.path,
++    main: stateStoreApiMain,
+     url: true,
+     compatibility: {
+       flags: ["nodejs_compat"],

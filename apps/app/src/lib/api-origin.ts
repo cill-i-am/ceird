@@ -33,6 +33,15 @@ function mapAppOriginToApiOrigin(url: URL): URL | undefined {
     return mapped;
   }
 
+  if (mapped.hostname.startsWith("app.")) {
+    const [, ...remainingLabels] = mapped.hostname.split(".");
+
+    if (remainingLabels.length >= 2) {
+      mapped.hostname = ["api", ...remainingLabels].join(".");
+      return mapped;
+    }
+  }
+
   return undefined;
 }
 

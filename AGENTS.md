@@ -39,3 +39,13 @@ Model runtime and type safety according to the boundary the code is crossing.
 - Prefer inferred types from `Schema` for shared DTOs and domain payloads that cross module or service boundaries.
 - Keep plain TypeScript interfaces and types for simple internal computed objects that stay inside a trusted local implementation and do not need runtime decoding.
 - Do not add runtime schemas for internal shapes unless they provide a clear boundary-level benefit such as decoding, validation, serialization, or contract sharing.
+
+<!-- stripe-projects-cli managed:agents-md:start -->
+## Stripe Projects CLI
+
+This repository is initialized for the Stripe project "task-tracker".
+
+## Tools used
+
+- [Stripe CLI](https://docs.stripe.com/stripe-cli) with the `projects` plugin to manage third-party services, credentials, and deployments for this project. Use the stripe-projects-cli to manage deploying and access to third party services.
+<!-- stripe-projects-cli managed:agents-md:end -->

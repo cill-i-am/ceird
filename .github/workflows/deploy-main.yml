@@ -1,0 +1,82 @@
+name: Deploy Main
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_migrations:
+        description: "Run Drizzle migrations before deploying Workers."
+        required: false
+        default: true
+        type: boolean
+  workflow_run:
+    workflows:
+      - Build
+    branches:
+      - main
+    types:
+      - completed
+
+concurrency:
+  group: ceird-main-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ALCHEMY_STAGE: main
+  AUTH_EMAIL_TRANSPORT: cloudflare
+  CEIRD_ALCHEMY_STAGE: main
+  CEIRD_API_HOSTNAME: api.ceird.app
+  CEIRD_APP_HOSTNAME: app.ceird.app
+  CEIRD_INFRA_STAGE: production
+  CEIRD_PLANETSCALE_CLUSTER_SIZE: PS-5
+  CEIRD_PLANETSCALE_DEFAULT_BRANCH: main
+  CEIRD_PLANETSCALE_REGION: eu-west
+  CEIRD_ZONE_NAME: ceird.app
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: main
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check app
+        run: pnpm --filter app check-types
+
+      - name: Type check infra
+        run: pnpm infra:check-types
+
+      - name: Deploy
+        run: pnpm --filter @task-tracker/infra run deploy
+        env:
+          APPLY_MIGRATIONS: ${{ github.event_name != 'workflow_dispatch' || inputs.apply_migrations }}
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PLANETSCALE_API_TOKEN: ${{ secrets.PLANETSCALE_API_TOKEN }}
+          PLANETSCALE_API_TOKEN_ID: ${{ secrets.PLANETSCALE_API_TOKEN_ID }}
+          PLANETSCALE_ORGANIZATION: ${{ vars.PLANETSCALE_ORGANIZATION }}

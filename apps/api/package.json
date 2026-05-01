@@ -29,6 +29,7 @@
     "uuid": "11.1.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250805.0",
     "@effect/language-service": "^0.84.2",
     "@types/node": "^25.5.0",
     "@types/pg": "8.15.6",
