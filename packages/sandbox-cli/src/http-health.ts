@@ -1,6 +1,6 @@
 import { HealthPayload } from "@task-tracker/sandbox-core";
 import type { SandboxRecord } from "@task-tracker/sandbox-core";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 export interface SandboxHttpHealth {
   readonly check: (
@@ -15,42 +15,86 @@ export class SandboxHttpHealthService extends Effect.Service<SandboxHttpHealthSe
   {
     accessors: true,
     effect: Effect.succeed<SandboxHttpHealth>({
-      check: (port, service, sandboxId) =>
-        Effect.tryPromise({
-          try: () =>
-            fetch(`http://127.0.0.1:${port}/health`, {
-              headers: { accept: "application/json" },
-              signal: AbortSignal.timeout(2000),
-            }),
-          catch: (error) => error,
-        }).pipe(
-          Effect.catchAll(() => Effect.succeed<Response | false>(false)),
-          Effect.flatMap((responseOrFalse) => {
-            if (responseOrFalse === false || !responseOrFalse.ok) {
-              return Effect.succeed(false);
-            }
+      check: Effect.fn("SandboxHttpHealth.check")(
+        function* (port, service, sandboxId) {
+          yield* Effect.annotateCurrentSpan("port", String(port));
+          yield* Effect.annotateCurrentSpan("service", service);
+          yield* Effect.annotateCurrentSpan("sandboxId", sandboxId);
 
-            return Effect.tryPromise({
-              try: () => responseOrFalse.json(),
-              catch: () => false,
-            }).pipe(
-              Effect.flatMap((payloadOrFalse) =>
-                payloadOrFalse === false
-                  ? Effect.succeed(false)
-                  : Schema.decodeUnknown(HealthPayload)(payloadOrFalse).pipe(
-                      Effect.map(
-                        (payload) =>
-                          payload.ok === true &&
-                          payload.service === service &&
-                          payload.sandboxId === sandboxId
-                      ),
-                      Effect.orElseSucceed(() => false)
+          const response = yield* fetchHealth(port).pipe(
+            Effect.tapError((error) =>
+              Effect.logWarning("Sandbox health request failed", {
+                error: formatUnknownError(error),
+                port,
+                sandboxId,
+                service,
+              })
+            ),
+            Effect.option
+          );
+
+          return yield* Option.match(response, {
+            onNone: () => Effect.succeed(false),
+            onSome: (healthResponse) =>
+              healthResponse.ok
+                ? decodeHealthPayload(healthResponse).pipe(
+                    Effect.tapError((error) =>
+                      Effect.logWarning(
+                        "Sandbox health payload decode failed",
+                        {
+                          error: formatUnknownError(error),
+                          port,
+                          sandboxId,
+                          service,
+                        }
+                      )
+                    ),
+                    Effect.option,
+                    Effect.map((payload) =>
+                      Option.match(payload, {
+                        onNone: () => false,
+                        onSome: (decoded) =>
+                          decoded.ok === true &&
+                          decoded.service === service &&
+                          decoded.sandboxId === sandboxId,
+                      })
                     )
-              )
-            );
-          }),
-          Effect.orElseSucceed(() => false)
-        ),
+                  )
+                : Effect.logWarning("Sandbox health endpoint returned not ok", {
+                    port,
+                    sandboxId,
+                    service,
+                    status: healthResponse.status,
+                  }).pipe(Effect.as(false)),
+          });
+        }
+      ),
     }),
   }
 ) {}
+
+function formatUnknownError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function fetchHealth(port: number) {
+  return Effect.tryPromise({
+    try: () =>
+      fetch(`http://127.0.0.1:${port}/health`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(2000),
+      }),
+    catch: (error) => error,
+  });
+}
+
+function decodeHealthPayload(response: Response) {
+  return Effect.tryPromise({
+    try: () => response.json(),
+    catch: (error) => error,
+  }).pipe(Effect.flatMap(Schema.decodeUnknown(HealthPayload)));
+}

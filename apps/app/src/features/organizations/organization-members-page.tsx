@@ -24,12 +24,13 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
+import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import { getErrorText } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 
 import {
@@ -57,6 +58,7 @@ const INVITATION_LOAD_FAILURE_MESSAGE =
   "We couldn't load invitations right now. Please try again.";
 const INVITE_ROLE_LABELS = {
   admin: "Admin",
+  external: "External collaborator",
   member: "Member",
 } satisfies Record<OrganizationMemberInviteInput["role"], string>;
 const ROLE_SELECTION_GROUPS = [
@@ -101,36 +103,54 @@ export function OrganizationMembersPage({
   const [loadErrorMessage, setLoadErrorMessage] = React.useState<string | null>(
     null
   );
+  const [isLoadingInvitations, setIsLoadingInvitations] = React.useState(false);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null
   );
+  const formRef = React.useRef<HTMLFormElement | null>(null);
   const invitationRequestSequence = React.useRef(0);
+  const invitationsOrganizationId = React.useRef(activeOrganizationId);
+  const roleSelectTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
 
   const loadInvitations = React.useCallback(async () => {
     invitationRequestSequence.current += 1;
     const requestSequence = invitationRequestSequence.current;
-    setInvitations([]);
+
+    if (invitationsOrganizationId.current !== activeOrganizationId) {
+      invitationsOrganizationId.current = activeOrganizationId;
+      setInvitations([]);
+    }
+
     setLoadErrorMessage(null);
-
-    const result = await authClient.organization.listInvitations({
-      query: {
-        organizationId: activeOrganizationId,
-      },
-    });
-
-    if (requestSequence !== invitationRequestSequence.current) {
-      return;
-    }
-
-    if (result.error || !result.data) {
-      setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
-      return;
-    }
+    setIsLoadingInvitations(true);
 
     try {
+      const result = await authClient.organization.listInvitations({
+        query: {
+          organizationId: activeOrganizationId,
+        },
+      });
+
+      if (requestSequence !== invitationRequestSequence.current) {
+        return;
+      }
+
+      if (result.error || !result.data) {
+        setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
+        return;
+      }
+
       setInvitations(result.data.filter(isPendingInvitation).map(toInvitation));
     } catch {
+      if (requestSequence !== invitationRequestSequence.current) {
+        return;
+      }
       setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
+    } finally {
+      if (requestSequence === invitationRequestSequence.current) {
+        setIsLoadingInvitations(false);
+      }
     }
   }, [activeOrganizationId]);
 
@@ -173,8 +193,35 @@ export function OrganizationMembersPage({
     },
   });
 
+  useAppHotkey(
+    "membersSubmit",
+    () => {
+      if (form.state.isSubmitting) {
+        return;
+      }
+
+      formRef.current?.requestSubmit();
+    },
+    { enabled: isHydrated }
+  );
+  useAppHotkey(
+    "membersRole",
+    () => {
+      if (form.state.isSubmitting) {
+        return;
+      }
+
+      roleSelectTriggerRef.current?.focus();
+      setRoleSelectOpen(true);
+    },
+    {
+      enabled: isHydrated && !roleSelectOpen,
+      ignoreInputs: true,
+    }
+  );
+
   const shouldRenderInvitationsSection =
-    invitations.length > 0 || Boolean(loadErrorMessage);
+    isLoadingInvitations || invitations.length > 0 || Boolean(loadErrorMessage);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -225,6 +272,7 @@ export function OrganizationMembersPage({
             className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
           >
             <form
+              ref={formRef}
               className="flex flex-col gap-5"
               method="post"
               noValidate
@@ -281,6 +329,9 @@ export function OrganizationMembersPage({
                           emptyText="No roles found."
                           groups={ROLE_SELECTION_GROUPS}
                           ariaInvalid={errorText ? true : undefined}
+                          open={roleSelectOpen}
+                          triggerRef={roleSelectTriggerRef}
+                          onOpenChange={setRoleSelectOpen}
                           onValueChange={(nextValue) => {
                             if (!isInviteRole(nextValue)) {
                               return;
@@ -313,9 +364,9 @@ export function OrganizationMembersPage({
                     type="submit"
                     size="lg"
                     className="w-full sm:w-auto"
-                    disabled={isSubmitting || !isHydrated}
+                    loading={isSubmitting}
+                    disabled={!isHydrated}
                   >
-                    {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                     {isSubmitting ? "Sending invite..." : "Send invite"}
                   </Button>
                 )}
@@ -343,6 +394,12 @@ export function OrganizationMembersPage({
                 {formatInvitationCount(invitations.length)}
               </Badge>
             </div>
+            {isLoadingInvitations ? (
+              <DotMatrixLoadingState
+                label="Loading invitations"
+                className="justify-start border-y py-4"
+              />
+            ) : null}
             {loadErrorMessage ? (
               <Alert variant="destructive">
                 <AlertDescription>{loadErrorMessage}</AlertDescription>

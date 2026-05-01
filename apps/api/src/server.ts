@@ -72,9 +72,13 @@ export const ServerConfig = Config.all({
 });
 
 export const ServerLive = HttpApiBuilder.serve().pipe(
-  Layer.provide(ApiLive),
-  Layer.provide(NodeHttpServer.layerConfig(createServer, ServerConfig))
-) as Layer.Layer<never, any, never>;
+  Layer.provide(
+    Layer.mergeAll(
+      ApiLive,
+      NodeHttpServer.layerConfig(createServer, ServerConfig)
+    )
+  )
+) as Layer.Layer<never, never, never>;
 
 export const makeApiWebHandler = (
   databaseRuntimeLive: Layer.Layer<any, any, any> = AppDatabaseRuntimeLive,

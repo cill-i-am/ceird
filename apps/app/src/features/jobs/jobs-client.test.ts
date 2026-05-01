@@ -11,11 +11,12 @@ import {
   JOB_NOT_FOUND_ERROR_TAG,
   JobNotFoundError,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Either } from "effect";
 
 import {
   makeBrowserJobsClient,
   provideBrowserJobsHttp,
+  runBrowserJobsRequest,
   runJobsClient,
 } from "./jobs-client";
 import {
@@ -29,6 +30,7 @@ const listResponse: JobListResponse = {
     {
       id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
       kind: "job",
+      labels: [],
       title: "Inspect boiler",
       status: "new",
       priority: "none",
@@ -42,6 +44,7 @@ const detailResponse: JobDetailResponse = {
   job: {
     id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
     kind: "job",
+    labels: [],
     title: "Inspect boiler",
     status: "new",
     priority: "none",
@@ -51,18 +54,35 @@ const detailResponse: JobDetailResponse = {
   },
   comments: [],
   activity: [],
+  costs: {
+    lines: [],
+    summary: {
+      subtotalMinor: 0,
+    },
+  },
+  viewerAccess: {
+    canComment: true,
+    visibility: "internal",
+  },
   visits: [],
 };
 
 const createSiteResponse: CreateSiteResponse = {
   addressLine1: "1 Custom House Quay",
+  county: "Dublin",
+  country: "IE",
+  eircode: "D01 X2X2",
+  geocodedAt: "2026-04-27T10:00:00.000Z",
+  geocodingProvider: "stub",
   id: "33333333-3333-4333-8333-333333333333" as SiteIdType,
+  latitude: 53.3498,
+  longitude: -6.2603,
   name: "Docklands Campus",
   town: "Dublin",
 };
 
 const siteOptionsResponse: SitesOptionsResponse = {
-  regions: [],
+  serviceAreas: [],
   sites: [createSiteResponse],
 };
 
@@ -70,6 +90,7 @@ describe("jobs client", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("uses the mapped API origin and forwards cookies when present", async () => {
@@ -83,6 +104,7 @@ describe("jobs client", () => {
           requestOrigin: "https://agent-one.app.task-tracker.localhost:1355",
           cookie: "better-auth.session_token=session-token",
         },
+        "JobsServer.test.listJobs",
         (client) => client.jobs.listJobs({ urlParams: {} })
       )
     ).resolves.toStrictEqual(listResponse);
@@ -138,10 +160,14 @@ describe("jobs client", () => {
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
+        "SitesServer.test.createSite",
         (client) =>
           client.sites.createSite({
             payload: {
               addressLine1: "1 Custom House Quay",
+              country: "IE",
+              county: "Dublin",
+              eircode: "D01 X2X2",
               name: "Docklands Campus",
               town: "Dublin",
             },
@@ -165,6 +191,7 @@ describe("jobs client", () => {
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
+        "SitesServer.test.getSiteOptions",
         (client) => client.sites.getSiteOptions()
       )
     ).resolves.toStrictEqual(siteOptionsResponse);
@@ -178,8 +205,10 @@ describe("jobs client", () => {
   it("does not invoke fetch when the jobs API origin cannot be resolved", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    const capturedError = await runJobsClient({}, (client) =>
-      client.jobs.listJobs({ urlParams: {} })
+    const capturedError = await runJobsClient(
+      {},
+      "JobsServer.test.unresolvedOrigin",
+      (client) => client.jobs.listJobs({ urlParams: {} })
     ).then(
       () => {},
       (rejectedError) => rejectedError
@@ -199,6 +228,7 @@ describe("jobs client", () => {
       {
         requestOrigin: "http://127.0.0.1:3000",
       },
+      "JobsServer.test.transportFailure",
       (client) => client.jobs.listJobs({ urlParams: {} })
     ).then(
       () => {},
@@ -206,6 +236,36 @@ describe("jobs client", () => {
     );
 
     expect(capturedError).toMatchObject({
+      _tag: JOBS_REQUEST_ERROR_TAG,
+      message: expect.stringContaining("Transport"),
+    });
+  }, 1000);
+
+  it("runs browser requests with HTTP provision and normalized errors", async () => {
+    vi.stubEnv("VITE_API_ORIGIN", "http://127.0.0.1:3001");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(listResponse))
+      .mockRejectedValueOnce(new Error("network down"));
+
+    await expect(
+      runBrowserJobsRequest("JobsBrowser.test.listJobs", (client) =>
+        client.jobs.listJobs({ urlParams: {} })
+      ).pipe(Effect.runPromise)
+    ).resolves.toStrictEqual(listResponse);
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(requestInit?.credentials).toBe("include");
+
+    const failure = await runBrowserJobsRequest(
+      "JobsBrowser.test.listJobs.failure",
+      (client) => client.jobs.listJobs({ urlParams: {} })
+    ).pipe(Effect.either, Effect.runPromise);
+
+    if (Either.isRight(failure)) {
+      throw new Error("Expected browser request to fail");
+    }
+    expect(failure.left).toMatchObject({
       _tag: JOBS_REQUEST_ERROR_TAG,
       message: expect.stringContaining("Transport"),
     });

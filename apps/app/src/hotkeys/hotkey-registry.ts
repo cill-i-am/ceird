@@ -1,0 +1,306 @@
+export const HOTKEY_SCOPES = [
+  "global",
+  "jobs",
+  "job-create",
+  "job-detail",
+  "sites",
+  "members",
+  "settings",
+  "map",
+] as const;
+
+export type HotkeyScope = (typeof HOTKEY_SCOPES)[number];
+
+export const HOTKEY_GROUPS = [
+  "Navigation",
+  "Layout",
+  "Jobs",
+  "Job drawer",
+  "Members",
+  "Settings",
+  "Map",
+] as const;
+
+export type HotkeyGroup = (typeof HOTKEY_GROUPS)[number];
+
+export interface HotkeyDefinition {
+  readonly group: HotkeyGroup;
+  readonly hotkey: string;
+  readonly id: string;
+  readonly label: string;
+  readonly scope: HotkeyScope;
+  readonly when?: string;
+}
+
+export const HOTKEYS = {
+  help: {
+    group: "Layout",
+    hotkey: "?",
+    id: "help",
+    label: "Show keyboard shortcuts",
+    scope: "global",
+  },
+  helpAlternate: {
+    group: "Layout",
+    hotkey: "Mod+/",
+    id: "helpAlternate",
+    label: "Show keyboard shortcuts",
+    scope: "global",
+  },
+  toggleSidebar: {
+    group: "Layout",
+    hotkey: "Mod+B",
+    id: "toggleSidebar",
+    label: "Toggle sidebar",
+    scope: "global",
+  },
+  goJobs: {
+    group: "Navigation",
+    hotkey: "G J",
+    id: "goJobs",
+    label: "Go to Jobs",
+    scope: "global",
+  },
+  goSites: {
+    group: "Navigation",
+    hotkey: "G S",
+    id: "goSites",
+    label: "Go to Sites",
+    scope: "global",
+  },
+  goActivity: {
+    group: "Navigation",
+    hotkey: "G A",
+    id: "goActivity",
+    label: "Go to Activity",
+    scope: "global",
+  },
+  goMembers: {
+    group: "Navigation",
+    hotkey: "G M",
+    id: "goMembers",
+    label: "Go to Members",
+    scope: "global",
+  },
+  goSettings: {
+    group: "Navigation",
+    hotkey: "G T",
+    id: "goSettings",
+    label: "Go to Settings",
+    scope: "global",
+  },
+  goMap: {
+    group: "Navigation",
+    hotkey: "G P",
+    id: "goMap",
+    label: "Go to Map",
+    scope: "global",
+  },
+  jobsSearch: {
+    group: "Jobs",
+    hotkey: "/",
+    id: "jobsSearch",
+    label: "Search jobs",
+    scope: "jobs",
+  },
+  jobsCreate: {
+    group: "Jobs",
+    hotkey: "N",
+    id: "jobsCreate",
+    label: "Create job",
+    scope: "jobs",
+    when: "Viewer can create jobs",
+  },
+  jobsRefresh: {
+    group: "Jobs",
+    hotkey: "R",
+    id: "jobsRefresh",
+    label: "Refresh jobs",
+    scope: "jobs",
+  },
+  jobsListView: {
+    group: "Jobs",
+    hotkey: "V L",
+    id: "jobsListView",
+    label: "List view",
+    scope: "jobs",
+  },
+  jobsMapView: {
+    group: "Jobs",
+    hotkey: "V M",
+    id: "jobsMapView",
+    label: "Map view",
+    scope: "jobs",
+  },
+  jobsSavedViews: {
+    group: "Jobs",
+    hotkey: "V S",
+    id: "jobsSavedViews",
+    label: "Saved views",
+    scope: "jobs",
+  },
+  jobsClearFilters: {
+    group: "Jobs",
+    hotkey: "C",
+    id: "jobsClearFilters",
+    label: "Clear filters",
+    scope: "jobs",
+    when: "Filters are active",
+  },
+  jobsDismissNotice: {
+    group: "Jobs",
+    hotkey: "Escape",
+    id: "jobsDismissNotice",
+    label: "Dismiss notice",
+    scope: "jobs",
+    when: "Notice is visible",
+  },
+  jobCreateSubmit: {
+    group: "Job drawer",
+    hotkey: "Mod+Enter",
+    id: "jobCreateSubmit",
+    label: "Submit create form",
+    scope: "job-create",
+  },
+  jobCreateCancel: {
+    group: "Job drawer",
+    hotkey: "Escape",
+    id: "jobCreateCancel",
+    label: "Cancel create form",
+    scope: "job-create",
+    when: "Not creating",
+  },
+  jobCreatePriority: {
+    group: "Job drawer",
+    hotkey: "P",
+    id: "jobCreatePriority",
+    label: "Open priority select",
+    scope: "job-create",
+  },
+  jobCreateSite: {
+    group: "Job drawer",
+    hotkey: "S",
+    id: "jobCreateSite",
+    label: "Open site select",
+    scope: "job-create",
+  },
+  jobCreateContact: {
+    group: "Job drawer",
+    hotkey: "C",
+    id: "jobCreateContact",
+    label: "Open contact select",
+    scope: "job-create",
+  },
+  jobDetailClose: {
+    group: "Job drawer",
+    hotkey: "Escape",
+    id: "jobDetailClose",
+    label: "Close drawer",
+    scope: "job-detail",
+  },
+  jobDetailStatus: {
+    group: "Job drawer",
+    hotkey: "S",
+    id: "jobDetailStatus",
+    label: "Focus next-status select",
+    scope: "job-detail",
+  },
+  jobDetailComment: {
+    group: "Job drawer",
+    hotkey: "C",
+    id: "jobDetailComment",
+    label: "Focus comment",
+    scope: "job-detail",
+  },
+  jobDetailCost: {
+    group: "Job drawer",
+    hotkey: "X",
+    id: "jobDetailCost",
+    label: "Focus cost line",
+    scope: "job-detail",
+  },
+  jobDetailVisit: {
+    group: "Job drawer",
+    hotkey: "V",
+    id: "jobDetailVisit",
+    label: "Focus visit note or date",
+    scope: "job-detail",
+  },
+  jobDetailSite: {
+    group: "Job drawer",
+    hotkey: "L",
+    id: "jobDetailSite",
+    label: "Focus site assignment",
+    scope: "job-detail",
+  },
+  jobDetailSubmit: {
+    group: "Job drawer",
+    hotkey: "Mod+Enter",
+    id: "jobDetailSubmit",
+    label: "Submit focused form area",
+    scope: "job-detail",
+  },
+  membersSubmit: {
+    group: "Members",
+    hotkey: "Mod+Enter",
+    id: "membersSubmit",
+    label: "Submit invite form",
+    scope: "members",
+  },
+  membersRole: {
+    group: "Members",
+    hotkey: "R",
+    id: "membersRole",
+    label: "Focus invite role select",
+    scope: "members",
+  },
+  settingsSubmit: {
+    group: "Settings",
+    hotkey: "Mod+Enter",
+    id: "settingsSubmit",
+    label: "Submit focused form",
+    scope: "settings",
+  },
+  mapZoomIn: {
+    group: "Map",
+    hotkey: "Shift+=",
+    id: "mapZoomIn",
+    label: "Zoom in",
+    scope: "map",
+    when: "Zoom controls are visible",
+  },
+  mapZoomOut: {
+    group: "Map",
+    hotkey: "-",
+    id: "mapZoomOut",
+    label: "Zoom out",
+    scope: "map",
+    when: "Zoom controls are visible",
+  },
+  mapResetBearing: {
+    group: "Map",
+    hotkey: "0",
+    id: "mapResetBearing",
+    label: "Reset bearing",
+    scope: "map",
+    when: "Compass control is visible",
+  },
+  mapLocate: {
+    group: "Map",
+    hotkey: "L",
+    id: "mapLocate",
+    label: "Locate",
+    scope: "map",
+    when: "Locate control is visible",
+  },
+  mapFullscreen: {
+    group: "Map",
+    hotkey: "F",
+    id: "mapFullscreen",
+    label: "Fullscreen",
+    scope: "map",
+    when: "Fullscreen control is visible",
+  },
+} as const satisfies Record<string, HotkeyDefinition>;
+
+export type HotkeyId = keyof typeof HOTKEYS;

@@ -4,6 +4,8 @@ import {
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummary,
   isAdministrativeOrganizationRole,
+  isExternalOrganizationRole,
+  isInternalOrganizationRole,
 } from "@task-tracker/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
@@ -15,11 +17,8 @@ import { authClient } from "#/lib/auth-client";
 
 import { getLoginNavigationTarget } from "../auth/auth-navigation";
 import { isServerEnvironment } from "../auth/runtime-environment";
-import {
-  getCurrentServerOrganizationMemberRole,
-  getCurrentServerOrganizationSession,
-  getCurrentServerOrganizations,
-} from "./organization-server";
+
+const importOrganizationServer = () => import("./organization-server");
 
 export type { OrganizationSummary } from "@task-tracker/identity-core";
 
@@ -41,6 +40,8 @@ type OrganizationMemberRole = NonNullable<
 >;
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
+    const { getCurrentServerOrganizationSession } =
+      await importOrganizationServer();
     return await getCurrentServerOrganizationSession();
   }
 
@@ -57,6 +58,7 @@ export async function listOrganizations(): Promise<
   readonly OrganizationSummary[]
 > {
   if (isServerEnvironment()) {
+    const { getCurrentServerOrganizations } = await importOrganizationServer();
     return await getCurrentServerOrganizations();
   }
 
@@ -123,6 +125,50 @@ export function assertOrganizationAdministrationRole(input: {
   }
 }
 
+export function assertOrganizationAdministrationRouteContext(context: {
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  if (context.activeOrganizationSync.required) {
+    return;
+  }
+
+  const role = context.currentOrganizationRole;
+
+  if (role === undefined) {
+    throw redirect({ to: "/" });
+  }
+
+  assertOrganizationAdministrationRole({ role });
+}
+
+export function assertOrganizationInternalRole(input: {
+  readonly role: OrganizationRole;
+}) {
+  if (!isInternalOrganizationRole(input.role)) {
+    throw redirect({
+      to: isExternalOrganizationRole(input.role) ? "/jobs" : "/",
+    });
+  }
+}
+
+export function assertOrganizationInternalRouteContext(context: {
+  readonly activeOrganizationSync: ActiveOrganizationSync;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  if (context.activeOrganizationSync.required) {
+    return;
+  }
+
+  const role = context.currentOrganizationRole;
+
+  if (role === undefined) {
+    throw redirect({ to: "/" });
+  }
+
+  assertOrganizationInternalRole({ role });
+}
+
 export async function redirectIfOrganizationReady() {
   const session = await getCurrentSession();
 
@@ -172,6 +218,8 @@ export async function getCurrentOrganizationMemberRole(
   organizationId: OrganizationIdType
 ) {
   if (isServerEnvironment()) {
+    const { getCurrentServerOrganizationMemberRole } =
+      await importOrganizationServer();
     return await getCurrentServerOrganizationMemberRole(organizationId);
   }
 

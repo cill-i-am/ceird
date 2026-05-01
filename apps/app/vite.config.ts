@@ -29,10 +29,10 @@ const config = defineConfig({
     "import.meta.env.VITE_API_ORIGIN": JSON.stringify(clientApiOrigin),
   },
   plugins: [
+    tanstackStart(),
     devtools(),
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
-    tanstackStart(),
     viteReact(),
   ],
 });

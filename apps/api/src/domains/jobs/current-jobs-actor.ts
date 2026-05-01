@@ -1,7 +1,14 @@
 import { HttpServerRequest } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
-import { OrganizationRole as OrganizationRoleSchema } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
+import {
+  isExternalOrganizationRole,
+  isInternalOrganizationRole,
+  OrganizationRole as OrganizationRoleSchema,
+} from "@task-tracker/identity-core";
+import type {
+  InternalOrganizationRole,
+  OrganizationRole,
+} from "@task-tracker/identity-core";
 import {
   JobStorageError,
   OrganizationId,
@@ -31,7 +38,9 @@ interface CurrentJobsActorSession {
   };
 }
 
-export type JobsActorRole = OrganizationRole;
+export type JobsActorRole =
+  | InternalOrganizationRole
+  | Extract<OrganizationRole, "external">;
 
 export interface JobsActor {
   readonly organizationId: OrganizationIdType;
@@ -161,5 +170,12 @@ function failCurrentJobsActorStorageError(
 function normalizeJobsActorRole(
   membershipRole: string
 ): JobsActorRole | undefined {
-  return isOrganizationRole(membershipRole) ? membershipRole : undefined;
+  if (!isOrganizationRole(membershipRole)) {
+    return undefined;
+  }
+
+  return isInternalOrganizationRole(membershipRole) ||
+    isExternalOrganizationRole(membershipRole)
+    ? membershipRole
+    : undefined;
 }

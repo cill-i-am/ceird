@@ -11,7 +11,6 @@ import {
 } from "#/components/ui/empty";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 
@@ -36,7 +35,7 @@ interface PasswordResetPageProps {
 }
 
 export function PasswordResetPage({ search }: PasswordResetPageProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/reset-password" });
   const isHydrated = useIsHydrated();
   const normalizedSearch: PasswordResetSearch = decodePasswordResetSearch(
     search ?? {}
@@ -270,9 +269,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting || !isHydrated}
+                loading={isSubmitting}
+                disabled={!isHydrated}
               >
-                {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                 {isSubmitting ? "Resetting password..." : "Reset password"}
               </Button>
             )}

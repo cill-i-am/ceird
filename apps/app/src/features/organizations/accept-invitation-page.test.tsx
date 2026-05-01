@@ -17,6 +17,7 @@ const {
   mockedGetPublicInvitationPreview,
   mockedGetSession,
   mockedNavigate,
+  mockedSetActiveOrganization,
   mockedSignOut,
 } = vi.hoisted(() => ({
   mockedAcceptInvitation: vi.fn<
@@ -25,6 +26,9 @@ const {
         invitation: {
           id: string;
           status: string;
+        };
+        member: {
+          organizationId: string;
         };
       } | null;
       error: {
@@ -72,6 +76,16 @@ const {
         to: string;
       }) => Promise<void>
     >(),
+  mockedSetActiveOrganization: vi.fn<
+    (input: { organizationId: string }) => Promise<{
+      data: unknown;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
   mockedSignOut: vi.fn<typeof SignOutModule.signOut>(),
 }));
 
@@ -114,6 +128,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
     organization: {
       acceptInvitation: mockedAcceptInvitation,
       getInvitation: mockedGetInvitation,
+      setActive: mockedSetActiveOrganization,
     },
   } as unknown as typeof AuthClient,
   getPublicInvitationPreview: mockedGetPublicInvitationPreview,
@@ -136,6 +151,15 @@ describe("accept invitation page", () => {
           id: "inv_123",
           status: "accepted",
         },
+        member: {
+          organizationId: "org_123",
+        },
+      },
+      error: null,
+    });
+    mockedSetActiveOrganization.mockResolvedValue({
+      data: {
+        id: "org_123",
       },
       error: null,
     });
@@ -279,10 +303,18 @@ describe("accept invitation page", () => {
       });
     });
     await waitFor(() => {
+      expect(mockedSetActiveOrganization).toHaveBeenCalledWith({
+        organizationId: "org_123",
+      });
+    });
+    await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
         to: "/",
       });
     });
+    expect(
+      mockedSetActiveOrganization.mock.invocationCallOrder[0]
+    ).toBeLessThan(mockedNavigate.mock.invocationCallOrder[0]);
   }, 10_000);
 
   it("keeps the invitation details visible when acceptance fails", async () => {

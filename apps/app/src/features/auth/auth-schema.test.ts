@@ -1,6 +1,7 @@
 import {
   buildPasswordResetRedirectTo,
   createBrowserTaskTrackerAuthClient,
+  createTaskTrackerAuthClient,
   resolveApiBaseURL,
   resolveAuthBaseURL,
 } from "../../lib/auth-client";
@@ -149,6 +150,25 @@ describe("auth base URL resolution", () => {
     );
 
     expect(authClient.$fetch).toBeDefined();
+  }, 1000);
+
+  it("configures external as a member-level organization client role", () => {
+    const authClient = createTaskTrackerAuthClient();
+
+    expect([
+      authClient.organization.checkRolePermission({
+        role: "external",
+        permissions: {
+          ac: ["read"],
+        },
+      }),
+      authClient.organization.checkRolePermission({
+        role: "external",
+        permissions: {
+          member: ["create"],
+        },
+      }),
+    ]).toStrictEqual([true, false]);
   }, 1000);
 
   it("builds the password reset redirect URL from an origin", () => {

@@ -19,7 +19,10 @@ export const Route = createFileRoute("/_app/_org/sites/$siteId")({
       label: "Site",
     },
   },
-  loader: ({ params }) => loadSiteDetailRouteData(params.siteId),
+  loader: ({ params }) => {
+    loadSiteDetailRouteData(params.siteId);
+    return params.siteId;
+  },
   component: SitesDetailRoute,
 });
 

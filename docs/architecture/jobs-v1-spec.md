@@ -156,6 +156,22 @@ link to multiple sites and that a job may reference a non-primary site contact.
 A join table is the smallest clean model that supports those requirements
 without encoding contradictory one-to-one assumptions into the schema.
 
+### Site Location Model
+
+Sites are address-first. A site should always carry enough structured address
+data to geocode, with Ireland/Eircode quality especially important for the
+current launch scope.
+
+Latitude and longitude are server-derived persistence fields, not user-editable
+inputs. Server geocoding should sit behind a provider-neutral service: Google is
+the initial production provider, while local, dev, test, and sandbox
+environments can use stub mode.
+
+The app keeps rendering saved coordinates with the existing map renderer for
+now. Future routing, directions, and provider swaps should remain behind
+backend/provider boundaries rather than leaking manual coordinates into create
+forms.
+
 ### Visits
 
 Visits are first-class execution logs.
@@ -393,8 +409,13 @@ Suggested columns:
 - `address_line_2 text null`
 - `town text null`
 - `county text null`
+- `country text not null`
 - `eircode text null`
 - `access_notes text null`
+- `latitude double precision null`
+- `longitude double precision null`
+- `geocoding_provider text null`
+- `geocoded_at timestamptz null`
 - `created_at timestamptz not null`
 - `updated_at timestamptz not null`
 - `archived_at timestamptz null`

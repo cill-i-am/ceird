@@ -8,9 +8,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
+import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { DotMatrixButtonLoader } from "#/components/ui/dot-matrix-loader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,9 +55,11 @@ function getInitials(name: string) {
 }
 
 export function NavUser({
+  currentOrganizationRole,
   user,
   navigate,
 }: {
+  currentOrganizationRole?: OrganizationRole | undefined;
   user: NavUserAccount;
   navigate: NavUserNavigate;
 }) {
@@ -138,10 +143,13 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem render={<Link to="/organization/settings" />}>
-                <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
-                Organization settings
-              </DropdownMenuItem>
+              {currentOrganizationRole !== undefined &&
+              isAdministrativeOrganizationRole(currentOrganizationRole) ? (
+                <DropdownMenuItem render={<Link to="/organization/settings" />}>
+                  <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
+                  Organization settings
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 render={
                   <Link to="/settings" search={{ emailChange: undefined }} />
@@ -151,6 +159,7 @@ export function NavUser({
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem
+                aria-busy={isSigningOut || undefined}
                 disabled={isSigningOut}
                 onClick={async (event) => {
                   event.preventDefault();
@@ -169,7 +178,11 @@ export function NavUser({
                   }
                 }}
               >
-                <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} />
+                {isSigningOut ? (
+                  <DotMatrixButtonLoader />
+                ) : (
+                  <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} />
+                )}
                 {isSigningOut ? "Signing out..." : "Sign out"}
               </DropdownMenuItem>
             </DropdownMenuGroup>

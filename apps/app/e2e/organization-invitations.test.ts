@@ -213,6 +213,40 @@ async function getInvitationIdForEmail(
   return invitation.id;
 }
 
+async function expectPublicInvitationPreviewReady(
+  request: APIRequestContext,
+  invitationId: string
+) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${API_ORIGIN}/api/public/invitations/${encodeURIComponent(invitationId)}/preview`,
+          {
+            headers: {
+              accept: "application/json",
+            },
+          }
+        );
+
+        if (!response.ok()) {
+          return null;
+        }
+
+        return (await response.json()) as {
+          readonly organizationName?: string;
+        } | null;
+      },
+      {
+        message: "public invitation preview is ready",
+        timeout: 15_000,
+      }
+    )
+    .toMatchObject({
+      organizationName: "Acme Field Ops",
+    });
+}
+
 async function createOwnerOrganization(
   request: APIRequestContext,
   page: Page,
@@ -274,6 +308,7 @@ test.describe("organization invitations", () => {
       request,
       invitedEmail
     );
+    await expectPublicInvitationPreviewReady(request, invitationId);
     const invitedContext = await browser.newContext();
     const invitedPage = await invitedContext.newPage();
     const invitedSignupPage = new SignupPage(invitedPage);
@@ -281,7 +316,7 @@ test.describe("organization invitations", () => {
     await invitedPage.goto(`/accept-invitation/${invitationId}`);
     await expect(
       invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
     await expect(
       invitedPage.getByRole("link", { name: "Sign in" })
     ).toBeVisible();
@@ -357,7 +392,7 @@ test.describe("organization invitations", () => {
     await invitedContext.close();
   });
 
-  test("a non-admin member is redirected away from the members page", async ({
+  test("a non-admin member cannot access the members page", async ({
     browser,
     page,
     request,
@@ -390,9 +425,10 @@ test.describe("organization invitations", () => {
       .click();
 
     await expectAuthenticatedHome(invitedPage);
-    await invitedPage
-      .getByRole("link", { name: "Members", exact: true })
-      .click();
+    await expect(
+      invitedPage.getByRole("link", { name: "Members", exact: true })
+    ).not.toBeVisible();
+    await invitedPage.goto("/members");
     await expectAuthenticatedHome(invitedPage);
     await expect(
       invitedPage.getByRole("button", { name: "Send invite" })

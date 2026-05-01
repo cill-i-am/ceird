@@ -1,7 +1,10 @@
 /* oxlint-disable unicorn/no-array-method-this-argument */
 import type {
+  CostLineId as CostLineIdType,
   Job,
   JobActivityPayload,
+  JobCostLineType,
+  JobLabel,
   VisitIdType as VisitId,
 } from "@task-tracker/jobs-core";
 import { Effect } from "effect";
@@ -35,15 +38,10 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       const recordPatched = Effect.fn("JobsActivityRecorder.recordPatched")(
         function* (actor: JobsActor, before: Job, after: Job) {
-          const events = collectPatchEvents(before, after);
-
-          yield* Effect.forEach(events, (payload) =>
-            repository.addActivity({
-              actorUserId: actor.userId,
-              organizationId: actor.organizationId,
-              payload,
-              workItemId: before.id,
-            })
+          yield* recordActivities(
+            actor,
+            before.id,
+            collectPatchEvents(before, after)
           );
         }
       );
@@ -51,14 +49,26 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordTransition = Effect.fn(
         "JobsActivityRecorder.recordTransition"
       )(function* (actor: JobsActor, before: Job, after: Job) {
-        const events = collectTransitionEvents(before, after);
+        yield* recordActivities(
+          actor,
+          before.id,
+          collectTransitionEvents(before, after)
+        );
+      });
 
+      const recordActivities = Effect.fn(
+        "JobsActivityRecorder.recordActivities"
+      )(function* (
+        actor: JobsActor,
+        workItemId: Job["id"],
+        events: readonly JobActivityPayload[]
+      ) {
         yield* Effect.forEach(events, (payload) =>
           repository.addActivity({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
             payload,
-            workItemId: before.id,
+            workItemId,
           })
         );
       });
@@ -75,6 +85,42 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
           });
         }
       );
+
+      const recordLabelAssigned = Effect.fn(
+        "JobsActivityRecorder.recordLabelAssigned"
+      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            eventType: "label_added",
+            labelId: label.id,
+            labelName: label.name,
+          },
+          workItemId: job.id,
+        });
+      });
+
+      const recordLabelRemoved = Effect.fn(
+        "JobsActivityRecorder.recordLabelRemoved"
+      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+        yield* recordLabelRemovedFromWorkItem(actor, job.id, label);
+      });
+
+      const recordLabelRemovedFromWorkItem = Effect.fn(
+        "JobsActivityRecorder.recordLabelRemovedFromWorkItem"
+      )(function* (actor: JobsActor, workItemId: Job["id"], label: JobLabel) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            eventType: "label_removed",
+            labelId: label.id,
+            labelName: label.name,
+          },
+          workItemId,
+        });
+      });
 
       const recordVisitLogged = Effect.fn(
         "JobsActivityRecorder.recordVisitLogged"
@@ -96,8 +142,34 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
         });
       });
 
+      const recordCostLineAdded = Effect.fn(
+        "JobsActivityRecorder.recordCostLineAdded"
+      )(function* (
+        actor: JobsActor,
+        input: {
+          readonly costLineId: CostLineIdType;
+          readonly costLineType: JobCostLineType;
+          readonly workItemId: Job["id"];
+        }
+      ) {
+        yield* repository.addActivity({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+          payload: {
+            costLineId: input.costLineId,
+            costLineType: input.costLineType,
+            eventType: "cost_line_added",
+          },
+          workItemId: input.workItemId,
+        });
+      });
+
       return {
+        recordCostLineAdded,
         recordCreated,
+        recordLabelAssigned,
+        recordLabelRemoved,
+        recordLabelRemovedFromWorkItem,
         recordPatched,
         recordReopened,
         recordTransition,

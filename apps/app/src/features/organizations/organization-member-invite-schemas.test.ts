@@ -6,7 +6,7 @@ import {
 } from "./organization-member-invite-schemas";
 
 describe("organization member invite schemas", () => {
-  it("accepts member and admin invites", () => {
+  it("accepts member, admin, and external invites", () => {
     expect(
       decodeOrganizationMemberInviteInput({
         email: "member@example.com",
@@ -25,6 +25,16 @@ describe("organization member invite schemas", () => {
     ).toStrictEqual({
       email: "admin@example.com",
       role: "admin",
+    });
+
+    expect(
+      decodeOrganizationMemberInviteInput({
+        email: "external@example.com",
+        role: "external",
+      })
+    ).toStrictEqual({
+      email: "external@example.com",
+      role: "external",
     });
   }, 10_000);
 

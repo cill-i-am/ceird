@@ -11,7 +11,6 @@ import {
   AlertTitle,
 } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
-import { Spinner } from "#/components/ui/spinner";
 import {
   authClient,
   buildEmailVerificationRedirectTo,
@@ -86,10 +85,9 @@ export function EmailVerificationBanner({
           type="button"
           size="sm"
           variant="secondary"
-          disabled={isSubmitting}
+          loading={isSubmitting}
           onClick={() => void handleResendVerificationEmail()}
         >
-          {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
           {isSubmitting ? "Sending..." : "Resend verification email"}
         </Button>
       </AlertAction>

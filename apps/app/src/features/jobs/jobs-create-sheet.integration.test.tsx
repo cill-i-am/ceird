@@ -8,9 +8,10 @@ import type {
   UserIdType,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
+import type * as EffectPackage from "effect";
 import type { ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
@@ -105,10 +106,24 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock("./jobs-client", () => ({
-  makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-  provideBrowserJobsHttp: (effect: unknown) => effect,
-}));
+vi.mock("./jobs-client", async () => {
+  const { Effect: EffectModule } =
+    await vi.importActual<typeof EffectPackage>("effect");
+
+  return {
+    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
+    provideBrowserJobsHttp: (effect: unknown) => effect,
+    runBrowserJobsRequest: (
+      _operation: string,
+      execute: (client: unknown) => unknown
+    ) =>
+      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+        EffectModule.flatMap(
+          (client) => execute(client) as Effect.Effect<unknown, unknown>
+        )
+      ),
+  };
+});
 
 describe("jobs create sheet integration", () => {
   beforeEach(() => {
@@ -151,11 +166,45 @@ describe("jobs create sheet integration", () => {
       renderCreateSheet();
 
       await user.type(screen.getByLabelText("Title"), "Replace air valve");
+      await user.type(
+        screen.getByLabelText("External reference"),
+        "CLAIM-2026-0042"
+      );
+      await createInlineContact(user, "Alex Caller");
+      await user.type(
+        screen.getByLabelText("Contact email"),
+        "alex@example.com"
+      );
+      await user.type(
+        screen.getByLabelText("Contact phone"),
+        "+353 87 123 4567"
+      );
+      await user.type(
+        screen.getByLabelText("Contact notes"),
+        "Prefers morning calls."
+      );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       await waitFor(() => {
         expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
       });
+
+      expect(mockedCreateJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            contact: {
+              input: {
+                email: "alex@example.com",
+                name: "Alex Caller",
+                notes: "Prefers morning calls.",
+                phone: "+353 87 123 4567",
+              },
+              kind: "create",
+            },
+            externalReference: "CLAIM-2026-0042",
+          }),
+        })
+      );
 
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
         "Replace air valve | Existing queue job"
@@ -202,6 +251,7 @@ describe("jobs create sheet integration", () => {
       renderCreateSheet();
 
       await user.type(screen.getByLabelText("Title"), "Replace air valve");
+      await createInlineContact(user, "Alex Caller");
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       await waitFor(() => {
@@ -211,6 +261,7 @@ describe("jobs create sheet integration", () => {
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
         "Canonical queue title"
       );
+      expect(mockedGetJobOptions).toHaveBeenCalledOnce();
       expect(
         screen.queryByText(/we couldn't create that job/i)
       ).not.toBeInTheDocument();
@@ -238,6 +289,40 @@ describe("jobs create sheet integration", () => {
       expect(mockedNavigate).not.toHaveBeenCalled();
     }
   );
+
+  it(
+    "validates constrained fields before submitting",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderCreateSheet();
+
+      await user.type(screen.getByLabelText("Title"), "Replace air valve");
+      fireEvent.change(screen.getByLabelText("External reference"), {
+        target: { value: "R".repeat(121) },
+      });
+      await createInlineContact(user, "Alex Caller");
+      await user.type(screen.getByLabelText("Contact email"), "not-an-email");
+      fireEvent.change(screen.getByLabelText("Contact notes"), {
+        target: { value: "N".repeat(2001) },
+      });
+      await user.click(screen.getByRole("button", { name: /create job/i }));
+
+      expect(mockedCreateJob).not.toHaveBeenCalled();
+      expect(mockedNavigate).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("Use 120 characters or fewer.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Enter a valid email address.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Use 2,000 characters or fewer.")
+      ).toBeInTheDocument();
+    }
+  );
 });
 
 function renderCreateSheet() {
@@ -252,6 +337,7 @@ function renderCreateSheet() {
                 createdAt: "2026-04-23T11:00:00.000Z",
                 id: existingJobId,
                 kind: "job",
+                labels: [],
                 priority: "none",
                 status: "new",
                 title: "Existing queue job",
@@ -266,19 +352,30 @@ function renderCreateSheet() {
           seedJobsOptionsState(organizationId, {
             contacts: [
               {
+                email: "pat@example.com",
                 id: depotContactId,
                 name: "Pat Contact",
+                phone: "+353 87 765 4321",
                 siteIds: [depotSiteId],
               },
             ],
+            labels: [],
             members: [],
-            regions: [],
+            serviceAreas: [],
             sites: [
               {
+                addressLine1: "Depot Road",
+                country: "IE",
+                county: "Dublin",
+                eircode: "D01 X2X2",
+                geocodedAt: "2026-04-27T10:00:00.000Z",
+                geocodingProvider: "stub",
                 id: depotSiteId,
+                latitude: 53.3498,
+                longitude: -6.2603,
                 name: "Depot",
-                regionId: undefined,
-                regionName: undefined,
+                serviceAreaId: undefined,
+                serviceAreaName: undefined,
               },
             ],
           }),
@@ -305,12 +402,26 @@ function JobsStateProbe() {
   );
 }
 
+async function createInlineContact(
+  user: ReturnType<typeof userEvent.setup>,
+  contactName: string
+) {
+  await user.click(screen.getByLabelText("Contact"));
+  await user.type(screen.getByPlaceholderText("Contact"), contactName);
+  await user.click(
+    screen.getByRole("option", {
+      name: `Create new contact: "${contactName}"`,
+    })
+  );
+}
+
 function buildCreatedJob(title: string): CreateJobResponse {
   return {
     createdAt: "2026-04-24T09:00:00.000Z",
     createdByUserId: "user_123" as UserIdType,
     id: "44444444-4444-4444-8444-444444444444" as WorkItemIdType,
     kind: "job",
+    labels: [],
     priority: "none",
     status: "new",
     title,

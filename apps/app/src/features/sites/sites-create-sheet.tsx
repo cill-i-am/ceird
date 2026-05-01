@@ -4,15 +4,15 @@ import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { REGION_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
-import type { CreateSiteInput, JobRegionOption } from "@task-tracker/jobs-core";
+import {
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+} from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
-import { CommandSelect } from "#/components/ui/command-select";
-import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   DrawerContent,
   DrawerDescription,
@@ -20,53 +20,35 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "#/components/ui/drawer";
-import { FieldGroup } from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
-import { Spinner } from "#/components/ui/spinner";
-import { Textarea } from "#/components/ui/textarea";
-import { AuthFormField } from "#/features/auth/auth-form-field";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
+import {
+  SiteCreateFields,
+  buildCreateSiteInputFromDraft,
+  buildSiteServiceAreaSelectionGroups,
+  defaultSiteCreateDraft,
+  hasSiteCreateFieldErrors,
+  validateSiteCreateDraft,
+} from "./site-create-form";
+import type {
+  SiteCreateDraft,
+  SiteCreateFieldErrors as SiteCreateDraftFieldErrors,
+} from "./site-create-form";
 import { createSiteMutationAtom } from "./sites-state";
 
-const NONE_VALUE = "__none__";
+export type SitesCreateFormState = SiteCreateDraft;
+export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
 
-export interface SitesCreateFormState {
-  readonly accessNotes: string;
-  readonly addressLine1: string;
-  readonly addressLine2: string;
-  readonly county: string;
-  readonly eircode: string;
-  readonly latitude: string;
-  readonly longitude: string;
-  readonly name: string;
-  readonly regionSelection: string;
-  readonly town: string;
-}
-
-export interface SitesCreateFieldErrors {
-  readonly latitude?: string;
-  readonly longitude?: string;
-  readonly name?: string;
-  readonly regionSelection?: string;
-}
-
-export const defaultSiteFormState: SitesCreateFormState = {
-  accessNotes: "",
-  addressLine1: "",
-  addressLine2: "",
-  county: "",
-  eircode: "",
-  latitude: "",
-  longitude: "",
-  name: "",
-  regionSelection: NONE_VALUE,
-  town: "",
-};
+export const defaultSiteFormState = defaultSiteCreateDraft;
+export const buildServiceAreaSelectionGroups =
+  buildSiteServiceAreaSelectionGroups;
+export const validateSiteForm = validateSiteCreateDraft;
+export const hasSiteFieldErrors = hasSiteCreateFieldErrors;
+export const buildSiteInput = buildCreateSiteInputFromDraft;
 
 export function SitesCreateSheet() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/sites/new" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
   const createSite = useAtomSet(createSiteMutationAtom, {
     mode: "promiseExit",
@@ -75,15 +57,16 @@ export function SitesCreateSheet() {
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
   );
-  const [values, setValues] =
-    React.useState<SitesCreateFormState>(defaultSiteFormState);
+  const [values, setValues] = React.useState<SiteCreateDraft>(
+    defaultSiteCreateDraft
+  );
   const [overlayOpen, setOverlayOpen] = React.useState(true);
   const closeNavigationTimeout = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const regionGroups = React.useMemo(
-    () => buildRegionSelectionGroups(options.regions),
-    [options.regions]
+  const serviceAreaGroups = React.useMemo(
+    () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
+    [options.serviceAreas]
   );
 
   React.useEffect(
@@ -121,19 +104,19 @@ export function SitesCreateSheet() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextErrors = validateSiteForm(values, options.regions);
+    const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
     setFieldErrors(nextErrors);
 
-    if (hasSiteFieldErrors(nextErrors)) {
+    if (hasSiteCreateFieldErrors(nextErrors)) {
       return;
     }
 
-    const payload = buildSiteInput(values, options.regions);
+    const payload = buildCreateSiteInputFromDraft(values, options.serviceAreas);
     const exit = await createSite(payload);
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      setValues(defaultSiteFormState);
+      setValues(defaultSiteCreateDraft);
       closeSheet();
       return;
     }
@@ -142,11 +125,21 @@ export function SitesCreateSheet() {
 
     if (
       failure._tag === "Some" &&
-      failure.value._tag === REGION_NOT_FOUND_ERROR_TAG
+      failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
         ...current,
-        regionSelection: failure.value.message,
+        serviceAreaSelection: failure.value.message,
+      }));
+    }
+
+    if (
+      failure._tag === "Some" &&
+      failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+    ) {
+      setFieldErrors((current) => ({
+        ...current,
+        eircode: failure.value.message,
       }));
     }
   }
@@ -164,7 +157,7 @@ export function SitesCreateSheet() {
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New site</DrawerTitle>
           <DrawerDescription>
-            Add the address, region, and map coordinates for dispatch.
+            Add the address and service area for dispatch.
           </DrawerDescription>
         </DrawerHeader>
 
@@ -177,7 +170,7 @@ export function SitesCreateSheet() {
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(createResult)
               .onError((error) =>
-                isRegionNotFoundError(error) ? null : (
+                isHandledCreateSiteError(error) ? null : (
                   <Alert variant="destructive">
                     <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
                     <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
@@ -187,197 +180,23 @@ export function SitesCreateSheet() {
               )
               .render()}
 
-            <FieldGroup>
-              <AuthFormField
-                label="Site name"
-                htmlFor="site-name"
-                invalid={Boolean(fieldErrors.name)}
-                errorText={fieldErrors.name}
-              >
-                <Input
-                  id="site-name"
-                  value={values.name}
-                  aria-invalid={Boolean(fieldErrors.name) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Region"
-                htmlFor="site-region"
-                invalid={Boolean(fieldErrors.regionSelection)}
-                errorText={fieldErrors.regionSelection}
-              >
-                <CommandSelect
-                  id="site-region"
-                  value={values.regionSelection}
-                  placeholder="Pick region"
-                  emptyText="No regions found."
-                  groups={regionGroups}
-                  ariaInvalid={fieldErrors.regionSelection ? true : undefined}
-                  onValueChange={(nextValue) => {
-                    setFieldErrors((current) => ({
-                      ...current,
-                      regionSelection: undefined,
-                    }));
-                    setValues((current) => ({
-                      ...current,
-                      regionSelection: nextValue,
-                    }));
-                  }}
-                />
-              </AuthFormField>
-            </FieldGroup>
-
-            <FieldGroup>
-              <AuthFormField
-                label="Address line 1"
-                htmlFor="site-address-line-1"
-                invalid={false}
-              >
-                <Input
-                  id="site-address-line-1"
-                  value={values.addressLine1}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      addressLine1: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Address line 2"
-                htmlFor="site-address-line-2"
-                invalid={false}
-              >
-                <Input
-                  id="site-address-line-2"
-                  value={values.addressLine2}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      addressLine2: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <AuthFormField label="Town" htmlFor="site-town" invalid={false}>
-                  <Input
-                    id="site-town"
-                    value={values.town}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        town: event.target.value,
-                      }))
-                    }
-                  />
-                </AuthFormField>
-
-                <AuthFormField
-                  label="County"
-                  htmlFor="site-county"
-                  invalid={false}
-                >
-                  <Input
-                    id="site-county"
-                    value={values.county}
-                    onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        county: event.target.value,
-                      }))
-                    }
-                  />
-                </AuthFormField>
-              </div>
-
-              <AuthFormField
-                label="Eircode"
-                htmlFor="site-eircode"
-                invalid={false}
-              >
-                <Input
-                  id="site-eircode"
-                  value={values.eircode}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      eircode: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Access notes"
-                htmlFor="site-access-notes"
-                invalid={false}
-              >
-                <Textarea
-                  id="site-access-notes"
-                  rows={3}
-                  value={values.accessNotes}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      accessNotes: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-            </FieldGroup>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <AuthFormField
-                label="Latitude"
-                htmlFor="site-latitude"
-                invalid={Boolean(fieldErrors.latitude)}
-                errorText={fieldErrors.latitude}
-              >
-                <Input
-                  id="site-latitude"
-                  inputMode="decimal"
-                  value={values.latitude}
-                  aria-invalid={Boolean(fieldErrors.latitude) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      latitude: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="Longitude"
-                htmlFor="site-longitude"
-                invalid={Boolean(fieldErrors.longitude)}
-                errorText={fieldErrors.longitude}
-              >
-                <Input
-                  id="site-longitude"
-                  inputMode="decimal"
-                  value={values.longitude}
-                  aria-invalid={Boolean(fieldErrors.longitude) || undefined}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      longitude: event.target.value,
-                    }))
-                  }
-                />
-              </AuthFormField>
-            </div>
+            <SiteCreateFields
+              draft={values}
+              errors={fieldErrors}
+              idPrefix="site"
+              serviceAreaGroups={serviceAreaGroups}
+              onDraftChange={setValues}
+              onServiceAreaSelectionChange={(nextValue) => {
+                setFieldErrors((current) => ({
+                  ...current,
+                  serviceAreaSelection: undefined,
+                }));
+                setValues((current) => ({
+                  ...current,
+                  serviceAreaSelection: nextValue,
+                }));
+              }}
+            />
           </div>
 
           <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
@@ -389,17 +208,19 @@ export function SitesCreateSheet() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createResult.waiting}>
+            <Button type="submit" loading={createResult.waiting}>
               {createResult.waiting ? (
-                <Spinner data-icon="inline-start" />
+                "Creating..."
               ) : (
-                <HugeiconsIcon
-                  icon={Add01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
+                <>
+                  <HugeiconsIcon
+                    icon={Add01Icon}
+                    strokeWidth={2}
+                    data-icon="inline-start"
+                  />
+                  Create site
+                </>
               )}
-              {createResult.waiting ? "Creating..." : "Create site"}
             </Button>
           </DrawerFooter>
         </form>
@@ -408,136 +229,12 @@ export function SitesCreateSheet() {
   );
 }
 
-export function buildRegionSelectionGroups(
-  regions: readonly { readonly id: string; readonly name: string }[]
-) {
-  return [
-    {
-      label: "Region",
-      options: [
-        { label: "No region yet", value: NONE_VALUE },
-        ...regions.map((region) => ({
-          label: region.name,
-          value: region.id,
-        })),
-      ],
-    },
-  ] satisfies readonly CommandSelectGroup[];
-}
-
-function isRegionNotFoundError(error: unknown) {
+function isHandledCreateSiteError(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    error._tag === REGION_NOT_FOUND_ERROR_TAG
+    (error._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG ||
+      error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
   );
-}
-
-export function validateSiteForm(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-): SitesCreateFieldErrors {
-  const coordinateErrors = validateCoordinates(values);
-
-  return {
-    latitude: coordinateErrors.latitude,
-    longitude: coordinateErrors.longitude,
-    name:
-      values.name.trim().length === 0
-        ? "Add a site name before creating it."
-        : undefined,
-    regionSelection:
-      values.regionSelection !== NONE_VALUE &&
-      findSelectedRegion(values, regions) === undefined
-        ? "Pick an available region, or choose no region."
-        : undefined,
-  };
-}
-
-function validateCoordinates(
-  values: SitesCreateFormState
-): Pick<SitesCreateFieldErrors, "latitude" | "longitude"> {
-  const latitudeValue = values.latitude.trim();
-  const longitudeValue = values.longitude.trim();
-
-  if (latitudeValue.length === 0 && longitudeValue.length === 0) {
-    return {};
-  }
-
-  if (latitudeValue.length === 0 || longitudeValue.length === 0) {
-    return {
-      latitude:
-        latitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-      longitude:
-        longitudeValue.length === 0
-          ? "Add both latitude and longitude, or leave both blank."
-          : undefined,
-    };
-  }
-
-  const latitude = Number(latitudeValue);
-  const longitude = Number(longitudeValue);
-
-  return {
-    latitude:
-      Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
-        ? undefined
-        : "Latitude must be between -90 and 90.",
-    longitude:
-      Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
-        ? undefined
-        : "Longitude must be between -180 and 180.",
-  };
-}
-
-export function hasSiteFieldErrors(errors: SitesCreateFieldErrors) {
-  return Object.values(errors).some((value) => value !== undefined);
-}
-
-export function buildSiteInput(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-): CreateSiteInput {
-  const latitude = toOptionalCoordinate(values.latitude);
-  const longitude = toOptionalCoordinate(values.longitude);
-  const selectedRegion = findSelectedRegion(values, regions);
-
-  return {
-    accessNotes: toOptionalTrimmedString(values.accessNotes),
-    addressLine1: toOptionalTrimmedString(values.addressLine1),
-    addressLine2: toOptionalTrimmedString(values.addressLine2),
-    county: toOptionalTrimmedString(values.county),
-    eircode: toOptionalTrimmedString(values.eircode),
-    latitude,
-    longitude,
-    name: values.name.trim(),
-    regionId: selectedRegion?.id,
-    town: toOptionalTrimmedString(values.town),
-  };
-}
-
-function findSelectedRegion(
-  values: SitesCreateFormState,
-  regions: readonly JobRegionOption[]
-) {
-  if (values.regionSelection === NONE_VALUE) {
-    return;
-  }
-
-  return regions.find((region) => region.id === values.regionSelection);
-}
-
-function toOptionalTrimmedString(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed.length === 0 ? undefined : trimmed;
-}
-
-function toOptionalCoordinate(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed.length === 0 ? undefined : Number(trimmed);
 }

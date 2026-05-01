@@ -2,17 +2,16 @@
 
 /* oxlint-disable eqeqeq, no-eq-null, no-inline-comments, prefer-destructuring, react/jsx-no-constructed-context-values */
 
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
+import { X, Minus, Plus, Locate, Maximize } from "lucide-react";
 import MapLibreGL from "maplibre-gl";
 import type { PopupOptions, MarkerOptions } from "maplibre-gl";
 import {
   createContext,
-  forwardRef,
+  use,
   useCallback,
-  useContext,
   useEffect,
   useId,
   useImperativeHandle,
@@ -20,12 +19,18 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
 
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { requestBrowserGeolocation } from "#/lib/browser-geolocation";
 import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
+
+import { DotMatrixButtonLoader } from "./dot-matrix-loader";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 const defaultStyles = {
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
@@ -107,7 +112,7 @@ interface MapContextValue {
 const MapContext = createContext<MapContextValue | null>(null);
 
 function useMap() {
-  const context = useContext(MapContext);
+  const context = use(MapContext);
   if (!context) {
     throw new Error("useMap must be used within a Map component");
   }
@@ -128,10 +133,11 @@ interface MapViewport {
 
 type MapStyleOption = string | MapLibreGL.StyleSpecification;
 
-type MapRef = MapLibreGL.Map;
+type MapRef = MapLibreGL.Map | null;
 
 type MapProps = {
   children?: ReactNode;
+  ref?: Ref<MapRef>;
   /** Additional CSS classes for the map container */
   className?: string;
   /**
@@ -183,20 +189,18 @@ function getViewport(map: MapLibreGL.Map): MapViewport {
   };
 }
 
-const Map = forwardRef<MapRef, MapProps>(function Map(
-  {
-    children,
-    className,
-    theme: themeProp,
-    styles,
-    projection,
-    viewport,
-    onViewportChange,
-    loading = false,
-    ...props
-  },
-  ref
-) {
+function Map({
+  children,
+  className,
+  ref,
+  theme: themeProp,
+  styles,
+  projection,
+  viewport,
+  onViewportChange,
+  loading = false,
+  ...props
+}: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<MapLibreGL.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -219,8 +223,8 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     [styles]
   );
 
-  // Expose the map instance to the parent component
-  useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
+  // Expose the map instance to the parent component once MapLibre has mounted.
+  useImperativeHandle<MapRef, MapRef>(ref, () => mapInstance, [mapInstance]);
 
   const clearStyleTimeout = useCallback(() => {
     if (styleTimeoutRef.current) {
@@ -354,7 +358,9 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     <MapContext.Provider value={contextValue}>
       <div
         ref={containerRef}
+        aria-label="Interactive map"
         className={cn("relative h-full w-full", className)}
+        role="region"
       >
         {(!isLoaded || loading) && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}
@@ -362,7 +368,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       </div>
     </MapContext.Provider>
   );
-});
+}
 
 interface MarkerContextValue {
   marker: MapLibreGL.Marker;
@@ -372,7 +378,7 @@ interface MarkerContextValue {
 const MarkerContext = createContext<MarkerContextValue | null>(null);
 
 function useMarkerContext() {
-  const context = useContext(MarkerContext);
+  const context = use(MarkerContext);
   if (!context) {
     throw new Error("Marker components must be used within MapMarker");
   }
@@ -782,17 +788,13 @@ function MarkerLabel({
   );
 }
 
+type MapControl = "zoom" | "compass" | "locate" | "fullscreen";
+
 interface MapControlsProps {
   /** Position of the controls on the map (default: "bottom-right") */
   position?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
-  /** Show zoom in/out buttons (default: true) */
-  showZoom?: boolean;
-  /** Show compass button to reset bearing (default: false) */
-  showCompass?: boolean;
-  /** Show locate button to find user's location (default: false) */
-  showLocate?: boolean;
-  /** Show fullscreen toggle button (default: false) */
-  showFullscreen?: boolean;
+  /** Controls to render. Defaults to zoom controls only. */
+  controls?: readonly MapControl[];
   /** Additional CSS classes for the controls container */
   className?: string;
   /** Callback with user coordinates when located */
@@ -808,7 +810,9 @@ const positionClasses = {
   "bottom-right": "bottom-10 right-2",
 };
 
-function ControlGroup({ children }: { children: React.ReactNode }) {
+const DEFAULT_MAP_CONTROLS = ["zoom"] as const satisfies readonly MapControl[];
+
+function ControlGroup({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col overflow-hidden rounded-md border border-border bg-background shadow-sm [&>button:not(:last-child)]:border-b [&>button:not(:last-child)]:border-border">
       {children}
@@ -819,18 +823,23 @@ function ControlGroup({ children }: { children: React.ReactNode }) {
 function ControlButton({
   onClick,
   label,
+  shortcut,
   children,
+  busy = false,
   disabled = false,
 }: {
   onClick: () => void;
   label: string;
-  children: React.ReactNode;
+  shortcut?: string;
+  children: ReactNode;
+  busy?: boolean;
   disabled?: boolean;
 }) {
-  return (
+  const button = (
     <button
       onClick={onClick}
       aria-label={label}
+      aria-busy={busy || undefined}
       type="button"
       className={cn(
         "flex size-8 items-center justify-center transition-all",
@@ -844,20 +853,32 @@ function ControlButton({
       {children}
     </button>
   );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent>
+        <span>{label}</span>
+        {shortcut ? <ShortcutHint hotkey={shortcut} label={label} /> : null}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function MapControls({
   position = "bottom-right",
-  showZoom = true,
-  showCompass = false,
-  showLocate = false,
-  showFullscreen = false,
+  controls = DEFAULT_MAP_CONTROLS,
   className,
   onLocate,
   onLocateError,
 }: MapControlsProps) {
   const { map } = useMap();
   const [waitingForLocation, setWaitingForLocation] = useState(false);
+  const showZoom = controls.includes("zoom");
+  const showCompass = controls.includes("compass");
+  const showLocate = controls.includes("locate");
+  const showFullscreen = controls.includes("fullscreen");
+  const mapHotkeyTarget = map?.getCanvas() ?? null;
 
   const handleZoomIn = useCallback(() => {
     map?.zoomTo(map.getZoom() + 1, { duration: 300 });
@@ -872,6 +893,10 @@ function MapControls({
   }, [map]);
 
   const handleLocate = useCallback(() => {
+    if (waitingForLocation) {
+      return;
+    }
+
     setWaitingForLocation(true);
 
     void (async () => {
@@ -892,14 +917,14 @@ function MapControls({
       } else {
         const failure = Cause.failureOption(exit.cause);
 
-        if (failure._tag === "Some") {
+        if (Option.isSome(failure)) {
           onLocateError?.(failure.value);
         }
       }
 
       setWaitingForLocation(false);
     })();
-  }, [map, onLocate, onLocateError]);
+  }, [map, onLocate, onLocateError, waitingForLocation]);
 
   const handleFullscreen = useCallback(() => {
     const container = map?.getContainer();
@@ -913,6 +938,27 @@ function MapControls({
     }
   }, [map]);
 
+  useAppHotkey("mapZoomIn", handleZoomIn, {
+    enabled: showZoom && map !== null,
+    target: mapHotkeyTarget,
+  });
+  useAppHotkey("mapZoomOut", handleZoomOut, {
+    enabled: showZoom && map !== null,
+    target: mapHotkeyTarget,
+  });
+  useAppHotkey("mapResetBearing", handleResetBearing, {
+    enabled: showCompass && map !== null,
+    target: mapHotkeyTarget,
+  });
+  useAppHotkey("mapLocate", handleLocate, {
+    enabled: showLocate && map !== null && !waitingForLocation,
+    target: mapHotkeyTarget,
+  });
+  useAppHotkey("mapFullscreen", handleFullscreen, {
+    enabled: showFullscreen && map !== null,
+    target: mapHotkeyTarget,
+  });
+
   return (
     <div
       className={cn(
@@ -923,10 +969,18 @@ function MapControls({
     >
       {showZoom && (
         <ControlGroup>
-          <ControlButton onClick={handleZoomIn} label="Zoom in">
+          <ControlButton
+            onClick={handleZoomIn}
+            label="Zoom in"
+            shortcut={HOTKEYS.mapZoomIn.hotkey}
+          >
             <Plus className="size-4" />
           </ControlButton>
-          <ControlButton onClick={handleZoomOut} label="Zoom out">
+          <ControlButton
+            onClick={handleZoomOut}
+            label="Zoom out"
+            shortcut={HOTKEYS.mapZoomOut.hotkey}
+          >
             <Minus className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -941,10 +995,12 @@ function MapControls({
           <ControlButton
             onClick={handleLocate}
             label="Find my location"
+            shortcut={HOTKEYS.mapLocate.hotkey}
+            busy={waitingForLocation}
             disabled={waitingForLocation}
           >
             {waitingForLocation ? (
-              <Loader2 className="size-4 animate-spin" />
+              <DotMatrixButtonLoader />
             ) : (
               <Locate className="size-4" />
             )}
@@ -953,7 +1009,11 @@ function MapControls({
       )}
       {showFullscreen && (
         <ControlGroup>
-          <ControlButton onClick={handleFullscreen} label="Toggle fullscreen">
+          <ControlButton
+            onClick={handleFullscreen}
+            label="Toggle fullscreen"
+            shortcut={HOTKEYS.mapFullscreen.hotkey}
+          >
             <Maximize className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -990,7 +1050,11 @@ function CompassButton({ onClick }: { onClick: () => void }) {
   }, [map]);
 
   return (
-    <ControlButton onClick={onClick} label="Reset bearing to north">
+    <ControlButton
+      onClick={onClick}
+      label="Reset bearing to north"
+      shortcut={HOTKEYS.mapResetBearing.hotkey}
+    >
       <svg
         ref={compassRef}
         viewBox="0 0 24 24"

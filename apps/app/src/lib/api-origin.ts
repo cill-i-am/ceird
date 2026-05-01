@@ -70,9 +70,3 @@ export function readConfiguredApiOrigin(): string | undefined {
   const envOrigin = import.meta.env.VITE_API_ORIGIN;
   return typeof envOrigin === "string" ? envOrigin : undefined;
 }
-
-export function readConfiguredServerApiOrigin(): string | undefined {
-  return typeof __SERVER_API_ORIGIN__ === "string"
-    ? __SERVER_API_ORIGIN__
-    : undefined;
-}

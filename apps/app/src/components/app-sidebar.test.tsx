@@ -4,7 +4,16 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
 
-const { mockedNavigate } = vi.hoisted(() => ({
+const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
+  mockedMatches: {
+    value: [] as {
+      context?: {
+        currentOrganizationRole?: "owner" | "admin" | "member" | "external";
+      };
+      id?: string;
+      routeId?: string;
+    }[],
+  },
   mockedNavigate: vi.fn<() => Promise<void>>(),
 }));
 
@@ -23,6 +32,27 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       </a>
     )) as typeof actual.Link,
     useNavigate: () => mockedNavigate,
+    useMatch: ((options?: {
+      select?: (match: (typeof mockedMatches.value)[number]) => unknown;
+      shouldThrow?: boolean;
+    }) => {
+      const match = mockedMatches.value.find(
+        (candidate) =>
+          candidate.routeId === "/_app/_org" || candidate.id === "/_app/_org"
+      );
+
+      if (!match && options?.shouldThrow !== false) {
+        throw new Error("Expected route match.");
+      }
+
+      return match && options?.select ? options.select(match) : match;
+    }) as typeof actual.useMatch,
+    useMatches: ((options?: {
+      select?: (matches: typeof mockedMatches.value) => unknown;
+    }) =>
+      options?.select
+        ? options.select(mockedMatches.value)
+        : mockedMatches.value) as typeof actual.useMatches,
     useRouterState: ((options?: {
       select?: (state: { location: { pathname: string } }) => unknown;
     }) => {
@@ -158,8 +188,10 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 vi.mock(import("#/components/nav-user"), () => ({
   NavUser: ({
+    currentOrganizationRole,
     user,
   }: {
+    currentOrganizationRole?: string;
     user: {
       name: string;
       email: string;
@@ -168,11 +200,28 @@ vi.mock(import("#/components/nav-user"), () => ({
   }) => (
     <div data-testid="nav-user">
       {user.name} {user.email}
+      {currentOrganizationRole ? ` ${currentOrganizationRole}` : ""}
     </div>
   ),
 }));
 
 describe("app sidebar", () => {
+  beforeEach(() => {
+    mockedMatches.value = [
+      {
+        id: "/_app/_org",
+        routeId: "/_app/_org",
+        context: {
+          currentOrganizationRole: "owner",
+        },
+      },
+    ];
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it(
     "shows the real session user and hides starter text",
     {
@@ -190,7 +239,7 @@ describe("app sidebar", () => {
       );
 
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
-        "Taylor Example person@example.com"
+        "Taylor Example person@example.com owner"
       );
       const brandLink = screen.getByRole("link", { name: /task tracker/i });
 
@@ -202,6 +251,10 @@ describe("app sidebar", () => {
         "href",
         "/jobs"
       );
+      expect(screen.getByRole("link", { name: /activity/i })).toHaveAttribute(
+        "href",
+        "/activity"
+      );
       const membersLink = screen.getByRole("link", { name: /members/i });
 
       expect(membersLink).toHaveAttribute("href", "/members");
@@ -210,6 +263,110 @@ describe("app sidebar", () => {
       );
       expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/shadcn starter/i)).not.toBeInTheDocument();
+    }
+  );
+
+  it.each(["owner", "admin"] as const)(
+    "shows administrator navigation for %s role",
+    {
+      timeout: 10_000,
+    },
+    (role) => {
+      mockedMatches.value = [
+        {
+          id: "/_app/_org",
+          routeId: "/_app/_org",
+          context: {
+            currentOrganizationRole: role,
+          },
+        },
+      ];
+
+      render(<AppSidebar />);
+
+      expect(screen.getByRole("link", { name: /activity/i })).toHaveAttribute(
+        "href",
+        "/activity"
+      );
+      expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
+        "href",
+        "/members"
+      );
+    }
+  );
+
+  it(
+    "hides administrator navigation for member role",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      mockedMatches.value = [
+        {
+          id: "/_app/_org",
+          routeId: "/_app/_org",
+          context: {
+            currentOrganizationRole: "member",
+          },
+        },
+      ];
+
+      render(<AppSidebar />);
+
+      expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
+      expect(screen.getByRole("link", { name: /sites/i })).toHaveAttribute(
+        "href",
+        "/sites"
+      );
+      expect(
+        screen.queryByRole("link", { name: /activity/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /members/i })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "shows only jobs navigation for external role",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      mockedMatches.value = [
+        {
+          id: "/_app/_org",
+          routeId: "/_app/_org",
+          context: {
+            currentOrganizationRole: "external",
+          },
+        },
+      ];
+
+      render(<AppSidebar />);
+
+      expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
+      expect(
+        screen.getByRole("link", { name: /task tracker/i })
+      ).toHaveAttribute("href", "/jobs");
+      expect(
+        screen.queryByRole("link", { name: /^home$/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /sites/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /activity/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /members/i })
+      ).not.toBeInTheDocument();
     }
   );
 });

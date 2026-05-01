@@ -14,8 +14,13 @@ import {
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
-import type { JobListItem, JobPriority } from "@task-tracker/jobs-core";
+import { Link, useNavigate } from "@tanstack/react-router";
+import type {
+  JobLabel,
+  JobListItem,
+  JobPriority,
+  UserIdType,
+} from "@task-tracker/jobs-core";
 import * as React from "react";
 
 import {
@@ -34,6 +39,8 @@ import {
   CommandItem,
   CommandList,
 } from "#/components/ui/command";
+import { CommandSelect } from "#/components/ui/command-select";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   Empty,
   EmptyContent,
@@ -61,20 +68,41 @@ import {
   TableRow,
 } from "#/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
+import {
+  JOB_PRIORITY_LABELS as PRIORITY_LABELS,
+  JOB_STATUS_LABELS as STATUS_LABELS,
+} from "./job-display";
 import { JobsCoverageMap } from "./jobs-coverage-map";
 import { hasSiteCoordinates } from "./jobs-location";
 import {
+  buildJobSavedViews,
+  findMatchingJobSavedView,
+} from "./jobs-saved-views";
+import type { JobSavedView } from "./jobs-saved-views";
+import {
   defaultJobsListFilters,
+  isJobsAssigneeFilterEqual,
   jobsListFiltersAtom,
   jobsLookupAtom,
   jobsNoticeAtom,
   jobsOptionsStateAtom,
+  refreshJobsListAtom,
   visibleJobsAtom,
 } from "./jobs-state";
-import type { JobsListFilters } from "./jobs-state";
-import { hasJobsElevatedAccess } from "./jobs-viewer";
+import type { JobsAssigneeFilter, JobsListFilters } from "./jobs-state";
+import { canUseInternalJobOptions, hasJobsElevatedAccess } from "./jobs-viewer";
 import type { JobsViewer } from "./jobs-viewer";
 
 type JobsViewMode = "list" | "map";
@@ -92,49 +120,236 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Canceled", value: "canceled" },
 ] as const;
 
-const PRIORITY_LABELS: Record<JobPriority, string> = {
-  none: "No priority",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  urgent: "Urgent",
-};
-
-const STATUS_LABELS = {
-  blocked: "Blocked",
-  canceled: "Canceled",
-  completed: "Completed",
-  in_progress: "In progress",
-  new: "New",
-  triaged: "Triaged",
-} as const;
-
 export function JobsPage({
   children,
+  listHotkeysEnabled = true,
+  onViewModeChange,
+  viewMode: controlledViewMode,
   viewer,
 }: {
   readonly activeOrganizationName: string;
   readonly children?: React.ReactNode;
+  readonly listHotkeysEnabled?: boolean;
+  readonly onViewModeChange?: (value: JobsViewMode) => void;
+  readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
-  const [viewMode, setViewMode] = React.useState<JobsViewMode>("list");
+  const [uncontrolledViewMode, setUncontrolledViewMode] =
+    React.useState<JobsViewMode>("list");
+  const viewMode = controlledViewMode ?? uncontrolledViewMode;
   const filters = useAtomValue(jobsListFiltersAtom);
   const jobs = useAtomValue(visibleJobsAtom);
   const lookup = useAtomValue(jobsLookupAtom);
   const notice = useAtomValue(jobsNoticeAtom);
   const optionsState = useAtomValue(jobsOptionsStateAtom);
+  const refreshJobs = useAtomSet(refreshJobsListAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
+  const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
+  const canUseInternalOptions = canUseInternalJobOptions(viewer);
+  const visibleViewMode = canUseInternalOptions ? viewMode : "list";
+  const [savedViewsOpen, setSavedViewsOpen] = React.useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
+  const savedViews = React.useMemo(
+    () => buildJobSavedViews(viewer.userId),
+    [viewer.userId]
+  );
+  const activeSavedView = findMatchingJobSavedView(filters, savedViews);
 
-  function patchFilters(patch: Partial<JobsListFilters>) {
+  React.useEffect(() => {
+    if (canUseInternalOptions) {
+      return;
+    }
+
     setFilters((current) => ({
       ...current,
-      ...patch,
+      assigneeId: defaultJobsListFilters.assigneeId,
+      coordinatorId: defaultJobsListFilters.coordinatorId,
+      labelId: defaultJobsListFilters.labelId,
+      priority: defaultJobsListFilters.priority,
+      serviceAreaId: defaultJobsListFilters.serviceAreaId,
+      siteId: defaultJobsListFilters.siteId,
     }));
-  }
+  }, [canUseInternalOptions, setFilters]);
+
+  const patchFilters = React.useCallback(
+    (patch: Partial<JobsListFilters>) => {
+      setFilters((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [setFilters]
+  );
+
+  const setViewMode = React.useCallback(
+    (nextViewMode: JobsViewMode) => {
+      if (nextViewMode === viewMode) {
+        return;
+      }
+
+      if (controlledViewMode === undefined) {
+        setUncontrolledViewMode(nextViewMode);
+      }
+
+      onViewModeChange?.(nextViewMode);
+    },
+    [controlledViewMode, onViewModeChange, viewMode]
+  );
+
+  const applySavedView = React.useCallback(
+    (savedView: JobSavedView) => {
+      setFilters(savedView.filters);
+    },
+    [setFilters]
+  );
+
+  const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
+    const actions: CommandAction[] = [
+      ...(canCreateJobs
+        ? [
+            {
+              group: "Current page",
+              icon: Add01Icon,
+              id: "jobs-create",
+              priority: 90,
+              run: () => navigate({ to: "/jobs/new" }),
+              scope: "route" as const,
+              title: "Create job",
+            },
+          ]
+        : []),
+      ...(canUseInternalOptions
+        ? [
+            ...savedViews.map((savedView, index) => ({
+              disabled: savedView.id === activeSavedView?.id,
+              group: "Job views",
+              icon: FilterHorizontalIcon,
+              id: `jobs-saved-view-${savedView.id}`,
+              priority: 65 - index,
+              run: () => applySavedView(savedView),
+              scope: "route" as const,
+              title: `Apply ${savedView.label} view`,
+            })),
+            {
+              disabled: viewMode === "list",
+              group: "Current page",
+              icon: LeftToRightListBulletIcon,
+              id: "jobs-switch-list-view",
+              priority: 80,
+              run: () => setViewMode("list"),
+              scope: "route" as const,
+              title: "Switch to list view",
+            },
+            {
+              disabled: viewMode === "map",
+              group: "Current page",
+              icon: MapsSquare01Icon,
+              id: "jobs-switch-map-view",
+              priority: 70,
+              run: () => setViewMode("map"),
+              scope: "route" as const,
+              title: "Switch to map view",
+            },
+          ]
+        : []),
+      {
+        disabled: filters.status === "active",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-active",
+        priority: 60,
+        run: () => patchFilters({ status: "active" }),
+        scope: "route",
+        title: "Show active jobs",
+      },
+      {
+        disabled: filters.status === "all",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-all",
+        priority: 50,
+        run: () => patchFilters({ status: "all" }),
+        scope: "route",
+        title: "Show all jobs",
+      },
+    ];
+
+    if (hasCustomFilters) {
+      actions.push({
+        group: "Job filters",
+        icon: Cancel01Icon,
+        id: "jobs-clear-filters",
+        priority: 90,
+        run: () => setFilters(defaultJobsListFilters),
+        scope: "route",
+        title: "Clear job filters",
+      });
+    }
+
+    return actions;
+  }, [
+    activeSavedView?.id,
+    applySavedView,
+    canCreateJobs,
+    canUseInternalOptions,
+    filters.status,
+    hasCustomFilters,
+    navigate,
+    patchFilters,
+    setFilters,
+    savedViews,
+    viewMode,
+    setViewMode,
+  ]);
+
+  useRegisterCommandActions(jobsPageCommandActions);
+  useAppHotkey(
+    "jobsSearch",
+    () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+    { enabled: listHotkeysEnabled }
+  );
+  useAppHotkey(
+    "jobsCreate",
+    () => {
+      navigate({ to: "/jobs/new" });
+    },
+    { enabled: listHotkeysEnabled && canCreateJobs }
+  );
+  useAppHotkey(
+    "jobsRefresh",
+    () => {
+      refreshJobs();
+    },
+    { enabled: listHotkeysEnabled }
+  );
+  useAppHotkeySequence(
+    "jobsListView",
+    () => {
+      setViewMode("list");
+    },
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
+  );
+  useAppHotkeySequence(
+    "jobsMapView",
+    () => {
+      setViewMode("map");
+    },
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
+  );
+  useAppHotkeySequence(
+    "jobsSavedViews",
+    () => {
+      setSavedViewsOpen(true);
+    },
+    { enabled: listHotkeysEnabled && canUseInternalOptions }
+  );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -151,26 +366,26 @@ export function JobsPage({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
-            {canCreateJobs ? (
-              <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
-                <HugeiconsIcon
-                  icon={Add01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                New job
-              </Link>
+            {canUseInternalOptions ? (
+              <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
             ) : null}
+            {canCreateJobs ? <NewJobLink /> : null}
           </div>
         </div>
 
         <JobsCommandToolbar
+          activeSavedView={activeSavedView}
           filters={filters}
           hasCustomFilters={hasCustomFilters}
+          onSavedViewSelect={applySavedView}
+          onSavedViewsOpenChange={setSavedViewsOpen}
           optionsState={optionsState.data}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
           onFiltersChange={patchFilters}
+          savedViews={savedViews}
+          savedViewsOpen={savedViewsOpen}
+          searchInputRef={searchInputRef}
+          showInternalFilters={canUseInternalOptions}
         />
       </header>
 
@@ -206,7 +421,7 @@ export function JobsPage({
         />
       ) : null}
 
-      {viewMode === "list" ? (
+      {visibleViewMode === "list" ? (
         <JobsListView jobs={jobs} canCreateJobs={canCreateJobs} />
       ) : (
         <section data-testid="jobs-coverage-panel" className="min-h-0">
@@ -220,29 +435,59 @@ export function JobsPage({
 }
 
 function JobsCommandToolbar({
+  activeSavedView,
   filters,
   hasCustomFilters,
   onClearFilters,
   onFiltersChange,
+  onSavedViewSelect,
+  onSavedViewsOpenChange,
   optionsState,
+  savedViews,
+  savedViewsOpen,
+  searchInputRef,
+  showInternalFilters,
 }: {
+  readonly activeSavedView: JobSavedView | undefined;
   readonly filters: JobsListFilters;
   readonly hasCustomFilters: boolean;
   readonly onClearFilters: () => void;
   readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly onSavedViewsOpenChange: (open: boolean) => void;
   readonly optionsState: {
-    readonly members: readonly { readonly id: string; readonly name: string }[];
-    readonly regions: readonly { readonly id: string; readonly name: string }[];
+    readonly labels: readonly { readonly id: string; readonly name: string }[];
+    readonly members: readonly {
+      readonly id: UserIdType;
+      readonly name: string;
+    }[];
+    readonly serviceAreas: readonly {
+      readonly id: string;
+      readonly name: string;
+    }[];
     readonly sites: readonly {
       readonly id: string;
       readonly name: string;
-      readonly regionId?: string | undefined;
+      readonly serviceAreaId?: string | undefined;
     }[];
   };
+  readonly savedViews: readonly JobSavedView[];
+  readonly savedViewsOpen: boolean;
+  readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
+  readonly showInternalFilters: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+        {showInternalFilters ? (
+          <SavedViewsControl
+            activeSavedView={activeSavedView}
+            onOpenChange={onSavedViewsOpenChange}
+            onSavedViewSelect={onSavedViewSelect}
+            open={savedViewsOpen}
+            savedViews={savedViews}
+          />
+        ) : null}
         <InputGroup className="h-8 bg-background xl:max-w-72">
           <InputGroupAddon>
             <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
@@ -250,6 +495,7 @@ function JobsCommandToolbar({
           <InputGroupInput
             aria-label="Search jobs"
             placeholder="Search jobs"
+            ref={searchInputRef}
             value={filters.query}
             onChange={(event) => onFiltersChange({ query: event.target.value })}
           />
@@ -264,95 +510,126 @@ function JobsCommandToolbar({
               onFiltersChange({ status: value as JobsListFilters["status"] })
             }
           />
-          <CommandFilter
-            label="Assignee"
-            value={filters.assigneeId}
-            options={[
-              { label: "All assignees", value: "all" },
-              ...optionsState.members.map((member) => ({
-                label: member.name,
-                value: member.id,
-              })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({
-                assigneeId: value as JobsListFilters["assigneeId"],
-              })
-            }
-          />
-          <CommandFilter
-            label="Priority"
-            value={filters.priority}
-            options={[
-              { label: "All priorities", value: "all" },
-              ...Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
-                label,
-                value,
-              })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({
-                priority: value as JobsListFilters["priority"],
-              })
-            }
-          />
-          <CommandFilter
-            label="Site"
-            value={filters.siteId}
-            options={[
-              { label: "All sites", value: "all" },
-              ...optionsState.sites
-                .filter((site) =>
-                  filters.regionId === "all"
-                    ? true
-                    : site.regionId === filters.regionId
-                )
-                .map((site) => ({
-                  label: site.name,
-                  value: site.id,
-                })),
-            ]}
-            onValueChange={(value) =>
-              onFiltersChange({ siteId: value as JobsListFilters["siteId"] })
-            }
-          />
-          <CommandFilter
-            label="More"
-            value="all"
-            triggerIcon={FilterHorizontalIcon}
-            options={[
-              { label: "All coordinators", value: "coordinator:all" },
-              ...optionsState.members.map((member) => ({
-                label: `Coordinator: ${member.name}`,
-                value: `coordinator:${member.id}`,
-              })),
-              { label: "All regions", value: "region:all" },
-              ...optionsState.regions.map((region) => ({
-                label: `Region: ${region.name}`,
-                value: `region:${region.id}`,
-              })),
-            ]}
-            onValueChange={(value) => {
-              const [kind, nextValue] = value.split(":");
+          {showInternalFilters ? (
+            <>
+              <CommandFilter
+                label="Assignee"
+                value={formatJobsAssigneeFilterValue(filters.assigneeId)}
+                options={[
+                  { label: "All assignees", value: "all" },
+                  { label: "Unassigned", value: "unassigned" },
+                  ...optionsState.members.map((member) => ({
+                    label: member.name,
+                    value: formatJobsAssigneeFilterValue({
+                      kind: "user",
+                      userId: member.id,
+                    }),
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    assigneeId: parseJobsAssigneeFilterValue(
+                      value,
+                      optionsState.members
+                    ),
+                  })
+                }
+              />
+              <CommandFilter
+                label="Priority"
+                value={filters.priority}
+                options={[
+                  { label: "All priorities", value: "all" },
+                  ...Object.entries(PRIORITY_LABELS).map(([value, label]) => ({
+                    label,
+                    value,
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    priority: value as JobsListFilters["priority"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="Label"
+                value={filters.labelId}
+                options={[
+                  { label: "All labels", value: "all" },
+                  ...optionsState.labels.map((label) => ({
+                    label: label.name,
+                    value: label.id,
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    labelId: value as JobsListFilters["labelId"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="Site"
+                value={filters.siteId}
+                options={[
+                  { label: "All sites", value: "all" },
+                  ...optionsState.sites
+                    .filter((site) =>
+                      filters.serviceAreaId === "all"
+                        ? true
+                        : site.serviceAreaId === filters.serviceAreaId
+                    )
+                    .map((site) => ({
+                      label: site.name,
+                      value: site.id,
+                    })),
+                ]}
+                onValueChange={(value) =>
+                  onFiltersChange({
+                    siteId: value as JobsListFilters["siteId"],
+                  })
+                }
+              />
+              <CommandFilter
+                label="More"
+                value="all"
+                triggerIcon={FilterHorizontalIcon}
+                options={[
+                  { label: "All coordinators", value: "coordinator:all" },
+                  ...optionsState.members.map((member) => ({
+                    label: `Coordinator: ${member.name}`,
+                    value: `coordinator:${member.id}`,
+                  })),
+                  { label: "All service areas", value: "serviceArea:all" },
+                  ...optionsState.serviceAreas.map((serviceArea) => ({
+                    label: `Service area: ${serviceArea.name}`,
+                    value: `serviceArea:${serviceArea.id}`,
+                  })),
+                ]}
+                onValueChange={(value) => {
+                  const [kind, nextValue] = value.split(":");
 
-              if (kind === "coordinator") {
-                onFiltersChange({
-                  coordinatorId: nextValue as JobsListFilters["coordinatorId"],
-                });
-                return;
-              }
+                  if (kind === "coordinator") {
+                    onFiltersChange({
+                      coordinatorId:
+                        nextValue as JobsListFilters["coordinatorId"],
+                    });
+                    return;
+                  }
 
-              if (kind === "region") {
-                onFiltersChange({
-                  regionId: nextValue as JobsListFilters["regionId"],
-                  siteId:
-                    nextValue === "all"
-                      ? filters.siteId
-                      : defaultJobsListFilters.siteId,
-                });
-              }
-            }}
-          />
+                  if (kind === "serviceArea") {
+                    onFiltersChange({
+                      serviceAreaId:
+                        nextValue as JobsListFilters["serviceAreaId"],
+                      siteId:
+                        nextValue === "all"
+                          ? filters.siteId
+                          : defaultJobsListFilters.siteId,
+                    });
+                  }
+                }}
+              />
+            </>
+          ) : null}
 
           {hasCustomFilters ? (
             <Button
@@ -367,6 +644,58 @@ function JobsCommandToolbar({
         </div>
       </div>
     </div>
+  );
+}
+
+function SavedViewsControl({
+  activeSavedView,
+  onOpenChange,
+  onSavedViewSelect,
+  open,
+  savedViews,
+}: {
+  readonly activeSavedView: JobSavedView | undefined;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly open: boolean;
+  readonly savedViews: readonly JobSavedView[];
+}) {
+  const label = activeSavedView?.label ?? "Custom view";
+  const groups = React.useMemo(
+    () =>
+      [
+        {
+          label: "Saved views",
+          options: savedViews.map((savedView) => ({
+            label: savedView.label,
+            value: savedView.id,
+          })),
+        },
+      ] satisfies readonly CommandSelectGroup[],
+    [savedViews]
+  );
+
+  return (
+    <CommandSelect
+      id="jobs-saved-view"
+      value={activeSavedView?.id ?? ""}
+      placeholder="Custom view"
+      emptyText="No views."
+      groups={groups}
+      open={open}
+      onOpenChange={onOpenChange}
+      onValueChange={(value) => {
+        const savedView = savedViews.find((view) => view.id === value);
+
+        if (savedView) {
+          onSavedViewSelect(savedView);
+        }
+      }}
+      ariaLabel={`Saved view: ${label}`}
+      className="h-8 w-full shrink-0 bg-background xl:w-44"
+      prefix={<HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />}
+      searchPlaceholder="Switch saved view"
+    />
   );
 }
 
@@ -602,6 +931,7 @@ function JobIssueTableRow({
             <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
           </span>
           <span className="min-w-0 truncate font-medium">{job.title}</span>
+          <JobLabelBadges labels={job.labels} />
           {site && hasSiteCoordinates(site) ? (
             <HugeiconsIcon
               icon={Location01Icon}
@@ -617,8 +947,17 @@ function JobIssueTableRow({
       <TableCell>
         <PriorityBadge priority={job.priority} />
       </TableCell>
-      <TableCell className="max-w-48 truncate text-muted-foreground">
-        {site?.name ?? "No site"}
+      <TableCell className="max-w-48 text-muted-foreground">
+        {site ? (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate">{site.name}</span>
+            {site.serviceAreaName ? (
+              <span className="truncate text-xs">{site.serviceAreaName}</span>
+            ) : null}
+          </span>
+        ) : (
+          "No site"
+        )}
       </TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">
         {assignee?.name ?? "Unassigned"}
@@ -662,9 +1001,16 @@ function JobIssueRow({
           <span className="truncate font-medium">{job.title}</span>
           <StatusBadge status={job.status} />
           <PriorityBadge priority={job.priority} />
+          <JobLabelBadges labels={job.labels} />
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{site?.name ?? "No site"}</span>
+          {site?.serviceAreaName ? (
+            <>
+              <span>/</span>
+              <span>{site.serviceAreaName}</span>
+            </>
+          ) : null}
           <span>/</span>
           <span>{assignee?.name ?? "Unassigned"}</span>
           <span>/</span>
@@ -699,18 +1045,37 @@ function JobsEmptyState({
         </EmptyHeader>
         {canCreateJobs ? (
           <EmptyContent>
-            <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New job
-            </Link>
+            <NewJobLink />
           </EmptyContent>
         ) : null}
       </Empty>
     </section>
+  );
+}
+
+function NewJobLink() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link to="/jobs/new" className={buttonVariants({ size: "sm" })} />
+        }
+      >
+        <HugeiconsIcon
+          icon={Add01Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        New job
+      </TooltipTrigger>
+      <TooltipContent>
+        <span>New job</span>
+        <ShortcutHint
+          hotkey={HOTKEYS.jobsCreate.hotkey}
+          label={HOTKEYS.jobsCreate.label}
+        />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -740,6 +1105,26 @@ function PriorityBadge({ priority }: { readonly priority: JobPriority }) {
   );
 }
 
+function JobLabelBadges({ labels }: { readonly labels: readonly JobLabel[] }) {
+  if (labels.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {labels.map((label) => (
+        <Badge
+          key={label.id}
+          variant="outline"
+          className="max-w-32 rounded-full text-muted-foreground"
+        >
+          <span className="truncate">{label.name}</span>
+        </Badge>
+      ))}
+    </>
+  );
+}
+
 function formatRelativeDate(value: string) {
   const date = new Date(value);
   const formatter = new Intl.DateTimeFormat("en", {
@@ -759,8 +1144,9 @@ interface ActiveFilterBadge {
 function buildActiveFilterBadges(
   filters: JobsListFilters,
   lookup: {
+    readonly labelById: ReadonlyMap<string, { readonly name: string }>;
     readonly memberById: ReadonlyMap<string, { readonly name: string }>;
-    readonly regionById: ReadonlyMap<string, { readonly name: string }>;
+    readonly serviceAreaById: ReadonlyMap<string, { readonly name: string }>;
     readonly siteById: ReadonlyMap<string, { readonly name: string }>;
   }
 ): readonly ActiveFilterBadge[] {
@@ -781,10 +1167,15 @@ function buildActiveFilterBadges(
     });
   }
 
-  if (filters.assigneeId !== defaultJobsListFilters.assigneeId) {
+  if (
+    !isJobsAssigneeFilterEqual(
+      filters.assigneeId,
+      defaultJobsListFilters.assigneeId
+    )
+  ) {
     badges.push({
       key: "assigneeId",
-      label: `Assignee: ${lookup.memberById.get(filters.assigneeId)?.name ?? "Unknown"}`,
+      label: buildAssigneeFilterBadgeLabel(filters.assigneeId, lookup),
     });
   }
 
@@ -805,19 +1196,96 @@ function buildActiveFilterBadges(
     });
   }
 
-  if (filters.regionId !== defaultJobsListFilters.regionId) {
-    badges.push({
-      key: "regionId",
-      label: `Region: ${lookup.regionById.get(filters.regionId)?.name ?? "Unknown"}`,
-    });
-  }
-
-  if (filters.siteId !== defaultJobsListFilters.siteId) {
-    badges.push({
-      key: "siteId",
-      label: `Site: ${lookup.siteById.get(filters.siteId)?.name ?? "Unknown"}`,
-    });
-  }
+  addLookupFilterBadge(
+    badges,
+    "labelId",
+    filters.labelId,
+    defaultJobsListFilters.labelId,
+    "Label",
+    lookup.labelById
+  );
+  addLookupFilterBadge(
+    badges,
+    "serviceAreaId",
+    filters.serviceAreaId,
+    defaultJobsListFilters.serviceAreaId,
+    "Service area",
+    lookup.serviceAreaById
+  );
+  addLookupFilterBadge(
+    badges,
+    "siteId",
+    filters.siteId,
+    defaultJobsListFilters.siteId,
+    "Site",
+    lookup.siteById
+  );
 
   return badges;
+}
+
+function addLookupFilterBadge(
+  badges: ActiveFilterBadge[],
+  key: keyof JobsListFilters,
+  value: string,
+  defaultValue: string,
+  labelPrefix: string,
+  lookup: ReadonlyMap<string, { readonly name: string }>
+) {
+  if (value === defaultValue) {
+    return;
+  }
+
+  badges.push({
+    key,
+    label: `${labelPrefix}: ${lookup.get(value)?.name ?? "Unknown"}`,
+  });
+}
+
+function buildAssigneeFilterBadgeLabel(
+  assigneeId: JobsAssigneeFilter,
+  lookup: {
+    readonly memberById: ReadonlyMap<string, { readonly name: string }>;
+  }
+) {
+  if (assigneeId.kind === "unassigned") {
+    return "Assignee: Unassigned";
+  }
+
+  if (assigneeId.kind === "all") {
+    return "Assignee: All";
+  }
+
+  return `Assignee: ${lookup.memberById.get(assigneeId.userId)?.name ?? "Unknown"}`;
+}
+
+function formatJobsAssigneeFilterValue(filter: JobsAssigneeFilter): string {
+  if (filter.kind === "user") {
+    return `user:${filter.userId}`;
+  }
+
+  return filter.kind;
+}
+
+function parseJobsAssigneeFilterValue(
+  value: string,
+  members: readonly { readonly id: UserIdType }[]
+): JobsAssigneeFilter {
+  if (value === "all") {
+    return { kind: "all" };
+  }
+
+  if (value === "unassigned") {
+    return { kind: "unassigned" };
+  }
+
+  const member = members.find(
+    (candidate) =>
+      formatJobsAssigneeFilterValue({
+        kind: "user",
+        userId: candidate.id,
+      }) === value
+  );
+
+  return member ? { kind: "user", userId: member.id } : { kind: "all" };
 }

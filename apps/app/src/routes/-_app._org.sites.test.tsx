@@ -1,20 +1,23 @@
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { SiteIdType } from "@task-tracker/jobs-core";
+import type { SiteIdType, UserIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
+const userId = "user_123" as UserIdType;
 
 const {
   mockedEnsureActiveOrganizationId,
   mockedGetCurrentOrganizationMemberRole,
   mockedGetCurrentServerSiteOptions,
+  mockedNavigate,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerSiteOptions: vi.fn<AsyncLoaderMock>(),
+  mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -31,6 +34,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
@@ -38,10 +42,20 @@ vi.mock("#/features/jobs/jobs-server", () => ({
   getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
 }));
 
-vi.mock("#/features/organizations/organization-access", () => ({
-  ensureActiveOrganizationId: mockedEnsureActiveOrganizationId,
-  getCurrentOrganizationMemberRole: mockedGetCurrentOrganizationMemberRole,
-}));
+vi.mock(
+  import("#/features/organizations/organization-access"),
+  async (importActual) => {
+    const actual = await importActual();
+
+    return {
+      ...actual,
+      ensureActiveOrganizationId:
+        mockedEnsureActiveOrganizationId as typeof actual.ensureActiveOrganizationId,
+      getCurrentOrganizationMemberRole:
+        mockedGetCurrentOrganizationMemberRole as typeof actual.getCurrentOrganizationMemberRole,
+    };
+  }
+);
 
 describe("sites route loader", () => {
   afterEach(() => {
@@ -53,45 +67,65 @@ describe("sites route loader", () => {
     { timeout: 10_000 },
     async () => {
       const siteOptions = {
-        regions: [],
+        serviceAreas: [],
         sites: [],
       };
 
-      mockedEnsureActiveOrganizationId.mockResolvedValue({
+      mockedGetCurrentServerSiteOptions.mockResolvedValue(siteOptions);
+
+      const { loadSitesRouteData } = await import("./_app._org.sites");
+
+      await expect(
+        loadSitesRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "owner",
+          currentUserId: userId,
+        })
+      ).resolves.toStrictEqual({
+        options: {
+          contacts: [],
+          labels: [],
+          members: [],
+          serviceAreas: [],
+          sites: [],
+        },
+        viewer: {
+          role: "owner",
+          userId,
+        },
+      });
+      expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
+    }
+  );
+
+  it(
+    "redirects external users before fetching site options",
+    { timeout: 10_000 },
+    async () => {
+      const { isRedirect } = await import("@tanstack/react-router");
+      const { loadSitesRouteData } = await import("./_app._org.sites");
+      const result = loadSitesRouteData({
         activeOrganizationId: organizationId,
         activeOrganizationSync: {
           required: false,
           targetOrganizationId: organizationId,
         },
-        session: {
-          user: {
-            id: "user_123",
-          },
-        },
+        currentOrganizationRole: "external",
+        currentUserId: userId,
       });
-      mockedGetCurrentOrganizationMemberRole.mockResolvedValue({
-        role: "owner",
-      });
-      mockedGetCurrentServerSiteOptions.mockResolvedValue(siteOptions);
 
-      const { loadSitesRouteData } = await import("./_app._org.sites");
-
-      await expect(loadSitesRouteData()).resolves.toStrictEqual({
-        options: {
-          contacts: [],
-          members: [],
-          regions: [],
-          sites: [],
-        },
-        viewer: {
-          role: "owner",
-          userId: "user_123",
-        },
+      await expect(result).rejects.toMatchObject({
+        options: { to: "/jobs" },
       });
-      expect(mockedGetCurrentOrganizationMemberRole).toHaveBeenCalledWith(
-        organizationId
-      );
-      expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
+      await expect(result).rejects.toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerSiteOptions).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
     }
   );
 
@@ -107,18 +141,27 @@ describe("sites route loader", () => {
           activeOrganizationId={organizationId}
           options={{
             contacts: [],
+            labels: [],
             members: [],
-            regions: [],
+            serviceAreas: [],
             sites: [
               {
+                addressLine1: "1 Custom House Quay",
+                country: "IE",
+                county: "Dublin",
+                eircode: "D01 X2X2",
+                geocodedAt: "2026-04-27T10:00:00.000Z",
+                geocodingProvider: "stub",
                 id: "55555555-5555-4555-8555-555555555555" as SiteIdType,
+                latitude: 53.3498,
+                longitude: -6.2603,
                 name: "Docklands Campus",
               },
             ],
           }}
           viewer={{
             role: "owner",
-            userId: "user_123",
+            userId,
           }}
         />
       );

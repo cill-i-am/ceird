@@ -26,6 +26,8 @@ describe("loadSandboxSharedEnvironment()", () => {
     }
     expect(result.left).toBeInstanceOf(SandboxEnvironmentError);
     expect(result.left.missing).toStrictEqual([...REQUIRED_SHARED_KEYS]);
+    expect(result.left.reason).toBe("missing_required");
+    expect(result.left.cause).toMatch(/EMAIL_SENDER/);
   }, 10_000);
 
   it("merges repo .env values and lets process env override them", async () => {
@@ -180,6 +182,8 @@ describe("loadSandboxSharedEnvironment()", () => {
       throw new Error("Expected sandbox env loading to fail");
     }
     expect(result.left.message).toMatch(/Failed to read sandbox env file/);
+    expect(result.left.reason).toBe("file_read_failed");
+    expect(result.left.cause).toBe("permission denied");
     expect(result.left.filePath).toBe("/repo/.env");
   }, 10_000);
 });

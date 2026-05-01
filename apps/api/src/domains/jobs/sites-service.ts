@@ -1,6 +1,12 @@
-import { JobStorageError, SiteNotFoundError } from "@task-tracker/jobs-core";
+import { isExternalOrganizationRole } from "@task-tracker/identity-core";
+import {
+  JobAccessDeniedError,
+  JobStorageError,
+  SiteNotFoundError,
+} from "@task-tracker/jobs-core";
 import type {
   CreateSiteInput,
+  ServiceAreaOption,
   SiteIdType as SiteId,
   UpdateSiteInput,
 } from "@task-tracker/jobs-core";
@@ -9,11 +15,14 @@ import { Effect, Option } from "effect";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
 import { CurrentJobsActor } from "./current-jobs-actor.js";
+import type { JobsActor } from "./current-jobs-actor.js";
 import {
+  ConfigurationRepository,
   JobsRepositoriesLive,
   JobsRepository,
   SitesRepository,
 } from "./repositories.js";
+import { SiteGeocoder } from "./site-geocoder.js";
 
 export class SitesService extends Effect.Service<SitesService>()(
   "@task-tracker/domains/jobs/SitesService",
@@ -23,11 +32,14 @@ export class SitesService extends Effect.Service<SitesService>()(
       CurrentJobsActor.Default,
       JobsAuthorization.Default,
       JobsRepositoriesLive,
+      SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* JobsAuthorization;
+      const configurationRepository = yield* ConfigurationRepository;
       const currentJobsActor = yield* CurrentJobsActor;
       const jobsRepository = yield* JobsRepository;
+      const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
@@ -49,9 +61,20 @@ export class SitesService extends Effect.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        if (input.regionId !== undefined) {
-          yield* Effect.annotateCurrentSpan("regionId", input.regionId);
+        if (input.serviceAreaId !== undefined) {
+          yield* Effect.annotateCurrentSpan(
+            "serviceAreaId",
+            input.serviceAreaId
+          );
+          yield* sitesRepository
+            .ensureServiceAreaInOrganization(
+              actor.organizationId,
+              input.serviceAreaId
+            )
+            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
         }
+
+        const geocodedLocation = yield* siteGeocoder.geocode(input);
 
         return yield* jobsRepository
           .withTransaction(
@@ -60,13 +83,16 @@ export class SitesService extends Effect.Service<SitesService>()(
                 accessNotes: input.accessNotes,
                 addressLine1: input.addressLine1,
                 addressLine2: input.addressLine2,
+                country: input.country,
                 county: input.county,
                 eircode: input.eircode,
-                latitude: input.latitude,
-                longitude: input.longitude,
+                geocodedAt: geocodedLocation.geocodedAt,
+                geocodingProvider: geocodedLocation.provider,
+                latitude: geocodedLocation.latitude,
+                longitude: geocodedLocation.longitude,
                 name: input.name,
                 organizationId: actor.organizationId,
-                regionId: input.regionId,
+                serviceAreaId: input.serviceAreaId,
                 town: input.town,
               });
               yield* Effect.annotateCurrentSpan("siteId", siteId);
@@ -108,9 +134,20 @@ export class SitesService extends Effect.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        if (input.regionId !== undefined) {
-          yield* Effect.annotateCurrentSpan("regionId", input.regionId);
+        if (input.serviceAreaId !== undefined) {
+          yield* Effect.annotateCurrentSpan(
+            "serviceAreaId",
+            input.serviceAreaId
+          );
+          yield* sitesRepository
+            .ensureServiceAreaInOrganization(
+              actor.organizationId,
+              input.serviceAreaId
+            )
+            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
         }
+
+        const geocodedLocation = yield* siteGeocoder.geocode(input);
 
         const site = yield* jobsRepository
           .withTransaction(
@@ -119,12 +156,15 @@ export class SitesService extends Effect.Service<SitesService>()(
                 accessNotes: input.accessNotes,
                 addressLine1: input.addressLine1,
                 addressLine2: input.addressLine2,
+                country: input.country,
                 county: input.county,
                 eircode: input.eircode,
-                latitude: input.latitude,
-                longitude: input.longitude,
+                geocodedAt: geocodedLocation.geocodedAt,
+                geocodingProvider: geocodedLocation.provider,
+                latitude: geocodedLocation.latitude,
+                longitude: geocodedLocation.longitude,
                 name: input.name,
-                regionId: input.regionId,
+                serviceAreaId: input.serviceAreaId,
                 town: input.town,
               })
               .pipe(Effect.map(Option.getOrUndefined))
@@ -145,7 +185,7 @@ export class SitesService extends Effect.Service<SitesService>()(
 
       const getOptions = Effect.fn("SitesService.getOptions")(function* () {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanView(actor);
+        yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
         yield* Effect.annotateCurrentSpan("action", "getOptions");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -154,13 +194,17 @@ export class SitesService extends Effect.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const [regions, sites] = yield* Effect.all([
-          sitesRepository.listRegions(actor.organizationId),
-          sitesRepository.listOptions(actor.organizationId),
-        ]).pipe(Effect.catchTag("SqlError", failSitesStorageError));
+        const sites = yield* sitesRepository
+          .listOptions(actor.organizationId)
+          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+        const serviceAreas = hasElevatedAccess(actor)
+          ? yield* configurationRepository
+              .listServiceAreaOptions(actor.organizationId)
+              .pipe(Effect.catchTag("SqlError", failSitesStorageError))
+          : deriveServiceAreaOptionsFromSites(sites);
 
         return {
-          regions,
+          serviceAreas,
           sites,
         } as const;
       });
@@ -183,4 +227,67 @@ function failSitesStorageError(
       message: "Sites storage operation failed",
     })
   );
+}
+
+function ensureCanViewOrganizationSiteOptions(
+  actor: JobsActor,
+  authorization: JobsAuthorization
+) {
+  return Effect.gen(function* () {
+    yield* authorization.ensureCanView(actor);
+
+    if (!isExternalOrganizationRole(actor.role)) {
+      return;
+    }
+
+    return yield* Effect.fail(
+      new JobAccessDeniedError({
+        message:
+          "External collaborators cannot view organization-wide site options",
+      })
+    );
+  });
+}
+
+function hasElevatedAccess(actor: { readonly role: string }): boolean {
+  return actor.role === "owner" || actor.role === "admin";
+}
+
+function deriveServiceAreaOptionsFromSites(
+  sites: readonly {
+    readonly serviceAreaId?: ServiceAreaOption["id"] | undefined;
+    readonly serviceAreaName?: string | undefined;
+  }[]
+): readonly ServiceAreaOption[] {
+  const serviceAreasById = new Map<
+    ServiceAreaOption["id"],
+    ServiceAreaOption
+  >();
+
+  for (const site of sites) {
+    if (
+      site.serviceAreaId === undefined ||
+      site.serviceAreaName === undefined
+    ) {
+      continue;
+    }
+
+    serviceAreasById.set(site.serviceAreaId, {
+      id: site.serviceAreaId,
+      name: site.serviceAreaName,
+    });
+  }
+
+  return [...serviceAreasById.values()].toSorted(compareServiceAreaOptions);
+}
+
+function compareServiceAreaOptions(
+  left: ServiceAreaOption,
+  right: ServiceAreaOption
+): number {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
 }

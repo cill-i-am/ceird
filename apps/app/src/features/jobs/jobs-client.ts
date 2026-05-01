@@ -13,6 +13,7 @@ import {
   JobsApiOriginResolutionError,
   normalizeJobsError,
 } from "./jobs-errors";
+import type { AppJobsError } from "./jobs-errors";
 
 export interface JobsClientOptions {
   readonly requestOrigin?: string | undefined;
@@ -78,14 +79,33 @@ export function provideBrowserJobsHttp<A, E, R>(
   return effect.pipe(Effect.provide(BrowserJobsHttpClientLive));
 }
 
-export async function runJobsClient<Response>(
+export function runBrowserJobsRequest<Response, RequestError>(
+  operation: string,
+  execute: (client: JobsApiClient) => Effect.Effect<Response, RequestError>
+): Effect.Effect<Response, AppJobsError, never> {
+  return Effect.gen(function* () {
+    yield* Effect.annotateCurrentSpan("jobs.operation", operation);
+    const client = yield* makeBrowserJobsClient();
+
+    return yield* execute(client);
+  }).pipe(
+    Effect.withSpan(operation),
+    Effect.mapError(normalizeJobsError),
+    provideBrowserJobsHttp
+  );
+}
+
+export async function runJobsClient<Response, RequestError>(
   options: JobsClientOptions,
-  execute: (client: JobsApiClient) => Effect.Effect<Response, unknown>
+  operation: string,
+  execute: (client: JobsApiClient) => Effect.Effect<Response, RequestError>
 ): Promise<Response> {
   const exit = await Effect.gen(function* () {
+    yield* Effect.annotateCurrentSpan("jobs.operation", operation);
     const client = yield* makeJobsClient(options);
     return yield* execute(client);
   }).pipe(
+    Effect.withSpan(operation),
     Effect.mapError(normalizeJobsError),
     Effect.provide(FetchHttpClient.layer),
     Effect.runPromiseExit

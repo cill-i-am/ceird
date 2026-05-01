@@ -11,14 +11,10 @@ import type {
   UpdateSiteInput,
   UpdateSiteResponse,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import {
-  makeBrowserJobsClient,
-  provideBrowserJobsHttp,
-} from "#/features/jobs/jobs-client";
+import { runBrowserJobsRequest } from "#/features/jobs/jobs-client";
 import type { AppJobsError } from "#/features/jobs/jobs-errors";
-import { normalizeJobsError } from "#/features/jobs/jobs-errors";
 import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
 export interface SitesNotice {
@@ -38,26 +34,13 @@ export const createSiteMutationAtom = Atom.fn<
   createBrowserSite(input).pipe(
     Effect.tap((createdSite) =>
       Effect.gen(function* () {
-        const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
-          Effect.either
-        );
-        const currentOptionsState = get(jobsOptionsStateAtom);
-        const nextOptions =
-          siteOptionsResult._tag === "Right"
-            ? mergeSiteOptions(
-                currentOptionsState.data,
-                siteOptionsResult.right
-              )
-            : upsertSiteOption(currentOptionsState.data, createdSite);
+        yield* refreshSiteOptionsOrUpsert(get, createdSite);
 
-        get.set(jobsOptionsStateAtom, {
-          data: nextOptions,
-          organizationId: currentOptionsState.organizationId,
-        });
-
-        get.set(sitesNoticeAtom, {
-          kind: "created",
-          name: createdSite.name,
+        yield* Effect.sync(() => {
+          get.set(sitesNoticeAtom, {
+            kind: "created",
+            name: createdSite.name,
+          });
         });
       })
     )
@@ -69,26 +52,13 @@ export const updateSiteMutationAtomFamily = Atom.family((siteId: SiteIdType) =>
     updateBrowserSite(siteId, input).pipe(
       Effect.tap((updatedSite) =>
         Effect.gen(function* () {
-          const siteOptionsResult = yield* getBrowserSiteOptions().pipe(
-            Effect.either
-          );
-          const currentOptionsState = get(jobsOptionsStateAtom);
-          const nextOptions =
-            siteOptionsResult._tag === "Right"
-              ? mergeSiteOptions(
-                  currentOptionsState.data,
-                  siteOptionsResult.right
-                )
-              : upsertSiteOption(currentOptionsState.data, updatedSite);
+          yield* refreshSiteOptionsOrUpsert(get, updatedSite);
 
-          get.set(jobsOptionsStateAtom, {
-            data: nextOptions,
-            organizationId: currentOptionsState.organizationId,
-          });
-
-          get.set(sitesNoticeAtom, {
-            kind: "updated",
-            name: updatedSite.name,
+          yield* Effect.sync(() => {
+            get.set(sitesNoticeAtom, {
+              kind: "updated",
+              name: updatedSite.name,
+            });
           });
         })
       )
@@ -118,36 +88,60 @@ function mergeSiteOptions(
 ): JobOptionsResponse {
   return {
     ...options,
-    regions: siteOptions.regions,
+    serviceAreas: siteOptions.serviceAreas,
     sites: siteOptions.sites,
   };
 }
 
 function createBrowserSite(input: CreateSiteInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.sites.createSite({ payload: input });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+  return runBrowserJobsRequest("SitesBrowser.createSite", (client) =>
+    client.sites.createSite({ payload: input })
+  );
 }
 
 function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.sites.updateSite({
+  return runBrowserJobsRequest("SitesBrowser.updateSite", (client) =>
+    client.sites.updateSite({
       path: { siteId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function getBrowserSiteOptions() {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
+  return runBrowserJobsRequest("SitesBrowser.getSiteOptions", (client) =>
+    client.sites.getSiteOptions()
+  );
+}
 
-    return yield* client.sites.getSiteOptions();
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+function refreshSiteOptionsOrUpsert(get: Atom.FnContext, site: JobSiteOption) {
+  return Effect.gen(function* () {
+    const siteOptions = yield* getBrowserSiteOptions().pipe(
+      Effect.tapError((error) =>
+        Effect.logWarning(
+          "Site options refresh failed; using optimistic site",
+          {
+            error: error.message,
+            siteId: site.id,
+          }
+        )
+      ),
+      Effect.option
+    );
+    const currentOptionsState = get(jobsOptionsStateAtom);
+    const nextOptions = Option.match(siteOptions, {
+      onNone: () => upsertSiteOption(currentOptionsState.data, site),
+      onSome: (freshOptions) =>
+        mergeSiteOptions(currentOptionsState.data, freshOptions),
+    });
+
+    yield* Effect.sync(() => {
+      get.set(jobsOptionsStateAtom, {
+        data: nextOptions,
+        organizationId: currentOptionsState.organizationId,
+      });
+    });
+  });
 }
 
 function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {

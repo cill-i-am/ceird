@@ -43,7 +43,10 @@ export function JobsCoverageMapCanvas({
         touchPitch={false}
       >
         <FitMapToGroups groups={groups} />
-        <MapControls position="bottom-right" showZoom showFullscreen />
+        <MapControls
+          position="bottom-right"
+          controls={["zoom", "fullscreen"]}
+        />
         {groups.map((group) => {
           const googleMapsUrl = buildGoogleMapsUrl(group.site);
 
@@ -55,13 +58,13 @@ export function JobsCoverageMapCanvas({
             >
               <MarkerContent
                 interactive
-                ariaLabel={`Open jobs at ${group.site.name ?? "Pinned site"}`}
+                ariaLabel={`Open jobs at ${group.site.name ?? "Mapped site"}`}
               >
                 <div className={markerToneClassName(group.tone)}>
                   {group.jobs.length}
                 </div>
                 <MarkerLabel visibility="hover">
-                  {group.site.name ?? "Pinned site"}
+                  {group.site.name ?? "Mapped site"}
                 </MarkerLabel>
               </MarkerContent>
               <MarkerPopup
@@ -73,16 +76,16 @@ export function JobsCoverageMapCanvas({
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">
-                        {group.site.name ?? "Pinned site"}
+                        {group.site.name ?? "Mapped site"}
                       </p>
                       <Badge variant="secondary">
                         {group.jobs.length} job
                         {group.jobs.length === 1 ? "" : "s"}
                       </Badge>
                     </div>
-                    {group.site.regionName ? (
+                    {group.site.serviceAreaName ? (
                       <p className="text-sm text-muted-foreground">
-                        {group.site.regionName}
+                        {group.site.serviceAreaName}
                       </p>
                     ) : null}
                     {buildSiteAddressLines(group.site).map((line) => (

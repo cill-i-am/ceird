@@ -1,5 +1,3 @@
-import { getRequestHeader } from "@tanstack/react-start/server";
-
 import { resolveApiOrigin } from "./api-origin";
 
 export interface ServerApiForwardedHeaders {
@@ -23,14 +21,17 @@ function isInternalHttpApiOrigin(apiOrigin: string): boolean {
   }
 }
 
-function readCurrentRequestOrigin(): string | undefined {
-  const host = getRequestHeader("host");
+function readCurrentRequestOrigin(input: {
+  readonly host: string | undefined;
+  readonly forwardedProto: string | undefined;
+}): string | undefined {
+  const { host } = input;
 
   if (!host) {
     return undefined;
   }
 
-  const forwardedProto = getRequestHeader("x-forwarded-proto");
+  const { forwardedProto } = input;
   let protocol: "http" | "https" = "http";
 
   if (forwardedProto === "http" || forwardedProto === "https") {
@@ -42,10 +43,11 @@ function readCurrentRequestOrigin(): string | undefined {
   return `${protocol}://${host}`;
 }
 
-export function readServerApiForwardedHeaders():
-  | ServerApiForwardedHeaders
-  | undefined {
-  const requestOrigin = readCurrentRequestOrigin();
+export function readServerApiForwardedHeaders(input: {
+  readonly host: string | undefined;
+  readonly forwardedProto: string | undefined;
+}): ServerApiForwardedHeaders | undefined {
+  const requestOrigin = readCurrentRequestOrigin(input);
   const publicApiOrigin = requestOrigin
     ? resolveApiOrigin(requestOrigin)
     : undefined;

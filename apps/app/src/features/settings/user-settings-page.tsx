@@ -8,7 +8,6 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import {
   getErrorText,
   getFormErrorText,
@@ -16,6 +15,8 @@ import {
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { activeElementIsInside } from "#/hotkeys/focus";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient, buildEmailChangeRedirectTo } from "#/lib/auth-client";
 
 import {
@@ -73,6 +74,9 @@ export function UserSettingsPage({
   const [passwordMessage, setPasswordMessage] = React.useState<string | null>(
     null
   );
+  const emailFormRef = React.useRef<HTMLFormElement | null>(null);
+  const passwordFormRef = React.useRef<HTMLFormElement | null>(null);
+  const profileFormRef = React.useRef<HTMLFormElement | null>(null);
 
   React.useEffect(() => {
     setEmailMessage(getEmailChangeStatusMessage(emailChangeStatus));
@@ -193,6 +197,45 @@ export function UserSettingsPage({
     },
   });
 
+  useAppHotkey(
+    "settingsSubmit",
+    () => {
+      if (!isHydrated) {
+        return;
+      }
+
+      if (activeElementIsInside(profileFormRef)) {
+        if (
+          profileForm.state.isSubmitting ||
+          profileForm.state.isDefaultValue
+        ) {
+          return;
+        }
+
+        profileFormRef.current?.requestSubmit();
+        return;
+      }
+
+      if (activeElementIsInside(emailFormRef)) {
+        if (emailForm.state.isSubmitting) {
+          return;
+        }
+
+        emailFormRef.current?.requestSubmit();
+        return;
+      }
+
+      if (activeElementIsInside(passwordFormRef)) {
+        if (passwordForm.state.isSubmitting) {
+          return;
+        }
+
+        passwordFormRef.current?.requestSubmit();
+      }
+    },
+    { enabled: isHydrated }
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
       <AppPageHeader
@@ -208,6 +251,7 @@ export function UserSettingsPage({
           className="xl:row-span-2"
         >
           <form
+            ref={profileFormRef}
             className="flex flex-col gap-5"
             method="post"
             noValidate
@@ -307,9 +351,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || isDefaultValue || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={isDefaultValue || !isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting ? "Saving profile..." : "Save profile"}
                 </Button>
               )}
@@ -331,6 +375,7 @@ export function UserSettingsPage({
           </div>
 
           <form
+            ref={emailFormRef}
             className="flex flex-col gap-5"
             method="post"
             noValidate
@@ -398,9 +443,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={!isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting
                     ? "Sending verification..."
                     : "Send verification email"}
@@ -415,6 +460,7 @@ export function UserSettingsPage({
           description="Use a password you have not used anywhere else. Other sessions are signed out after this changes."
         >
           <form
+            ref={passwordFormRef}
             className="flex flex-col gap-5"
             method="post"
             noValidate
@@ -544,9 +590,9 @@ export function UserSettingsPage({
                   type="submit"
                   size="lg"
                   className="w-full sm:w-auto"
-                  disabled={isSubmitting || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={!isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting ? "Updating password..." : "Update password"}
                 </Button>
               )}

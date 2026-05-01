@@ -1,4 +1,5 @@
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
+import type { OrganizationRole } from "@task-tracker/identity-core";
 import { WorkItemId } from "@task-tracker/jobs-core";
 import type { WorkItemIdType } from "@task-tracker/jobs-core";
 import { Schema } from "effect";
@@ -8,7 +9,10 @@ import {
   JobsDetailRouteContent,
 } from "#/features/jobs/jobs-route-content";
 import { getCurrentServerJobDetail } from "#/features/jobs/jobs-server";
-import { requireOrganizationAdministrationAccess } from "#/features/organizations/organization-access";
+import {
+  assertOrganizationAdministrationRouteContext,
+  requireOrganizationAdministrationAccess,
+} from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
@@ -30,10 +34,12 @@ export function loadJobDetailRouteData(
   workItemId: string | WorkItemIdType,
   organizationAccess?: {
     readonly activeOrganizationSync: ActiveOrganizationSync;
+    readonly currentOrganizationRole?: OrganizationRole | undefined;
   }
 ): Promise<JobDetailRouteData> {
   if (workItemId === "new") {
-    if (organizationAccess?.activeOrganizationSync.required) {
+    if (organizationAccess !== undefined) {
+      assertOrganizationAdministrationRouteContext(organizationAccess);
       return Promise.resolve(CREATE_JOB_ROUTE_DATA);
     }
 

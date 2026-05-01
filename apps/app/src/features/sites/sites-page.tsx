@@ -7,7 +7,7 @@ import {
   MapsSquare01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import {
@@ -34,6 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
 import {
   buildSiteAddressLines,
   hasSiteCoordinates,
@@ -44,6 +46,8 @@ import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 
 import { sitesNoticeAtom } from "./sites-state";
 
+const SITE_COMMAND_LIMIT = 25;
+
 export function SitesPage({
   children,
   viewer,
@@ -51,10 +55,50 @@ export function SitesPage({
   readonly children?: React.ReactNode;
   readonly viewer: JobsViewer;
 }) {
+  const navigate = useNavigate({ from: "/sites" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
   const notice = useAtomValue(sitesNoticeAtom);
   const setNotice = useAtomSet(sitesNoticeAtom);
   const canCreateSites = hasJobsElevatedAccess(viewer.role);
+  const sitesPageCommandActions = React.useMemo<
+    readonly CommandAction[]
+  >(() => {
+    const actions: CommandAction[] = options.sites
+      .slice(0, SITE_COMMAND_LIMIT)
+      .map((site) => ({
+        group: "Sites",
+        icon: Location01Icon,
+        id: `sites-open-${site.id}`,
+        keywords: [site.serviceAreaName, buildSiteAddressSummary(site)].filter(
+          (value): value is string => typeof value === "string"
+        ),
+        priority: 60,
+        run: () =>
+          navigate({
+            params: { siteId: site.id },
+            to: "/sites/$siteId",
+          }),
+        scope: "route",
+        subtitle: site.serviceAreaName ?? undefined,
+        title: `Open ${site.name}`,
+      }));
+
+    if (canCreateSites) {
+      actions.unshift({
+        group: "Current page",
+        icon: Add01Icon,
+        id: "sites-create",
+        priority: 80,
+        run: () => navigate({ to: "/sites/new" }),
+        scope: "route",
+        title: "Create site",
+      });
+    }
+
+    return actions;
+  }, [canCreateSites, navigate, options.sites]);
+
+  useRegisterCommandActions(sitesPageCommandActions);
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -107,9 +151,9 @@ export function SitesPage({
             <TableHeader>
               <TableRow>
                 <TableHead>Site</TableHead>
-                <TableHead>Region</TableHead>
+                <TableHead>Service area</TableHead>
                 <TableHead>Address</TableHead>
-                <TableHead className="w-28 text-right">Pin</TableHead>
+                <TableHead className="w-28 text-right">Map</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -125,10 +169,12 @@ export function SitesPage({
                     </Link>
                   </TableCell>
                   <TableCell>
-                    {site.regionName ? (
-                      <Badge variant="secondary">{site.regionName}</Badge>
+                    {site.serviceAreaName ? (
+                      <Badge variant="secondary">{site.serviceAreaName}</Badge>
                     ) : (
-                      <span className="text-muted-foreground">No region</span>
+                      <span className="text-muted-foreground">
+                        No service area
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
@@ -138,7 +184,7 @@ export function SitesPage({
                     {hasSiteCoordinates(site) ? (
                       <span>Mapped</span>
                     ) : (
-                      <span>No pin</span>
+                      <span>Unmapped</span>
                     )}
                   </TableCell>
                 </TableRow>

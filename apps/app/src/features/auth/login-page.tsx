@@ -5,7 +5,6 @@ import { Schema } from "effect";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 
@@ -240,9 +239,9 @@ export function LoginPage({
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting || !isHydrated}
+                loading={isSubmitting}
+                disabled={!isHydrated}
               >
-                {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                 {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>
             )}

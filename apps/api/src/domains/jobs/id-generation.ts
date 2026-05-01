@@ -2,7 +2,12 @@ import {
   ActivityId,
   CommentId,
   ContactId,
-  RegionId,
+  CostLineId,
+  JobCollaboratorId,
+  JobLabelId,
+  RateCardId,
+  RateCardLineId,
+  ServiceAreaId,
   SiteId,
   VisitId,
   WorkItemId,
@@ -11,7 +16,12 @@ import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
-  RegionIdType,
+  CostLineIdType,
+  JobCollaboratorIdType,
+  JobLabelIdType,
+  RateCardIdType,
+  RateCardLineIdType,
+  ServiceAreaIdType,
   SiteIdType,
   VisitIdType,
   WorkItemIdType,
@@ -22,7 +32,12 @@ import { v7 as uuidv7 } from "uuid";
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeContactId = Schema.decodeUnknownSync(ContactId);
-const decodeRegionId = Schema.decodeUnknownSync(RegionId);
+const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
+const decodeJobCollaboratorId = Schema.decodeUnknownSync(JobCollaboratorId);
+const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
+const decodeRateCardId = Schema.decodeUnknownSync(RateCardId);
+const decodeRateCardLineId = Schema.decodeUnknownSync(RateCardLineId);
+const decodeServiceAreaId = Schema.decodeUnknownSync(ServiceAreaId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
@@ -43,8 +58,28 @@ export function generateContactId(): ContactIdType {
   return decodeContactId(generateJobDomainUuid());
 }
 
-export function generateRegionId(): RegionIdType {
-  return decodeRegionId(generateJobDomainUuid());
+export function generateCostLineId(): CostLineIdType {
+  return decodeCostLineId(generateJobDomainUuid());
+}
+
+export function generateJobCollaboratorId(): JobCollaboratorIdType {
+  return decodeJobCollaboratorId(generateJobDomainUuid());
+}
+
+export function generateJobLabelId(): JobLabelIdType {
+  return decodeJobLabelId(generateJobDomainUuid());
+}
+
+export function generateRateCardId(): RateCardIdType {
+  return decodeRateCardId(generateJobDomainUuid());
+}
+
+export function generateRateCardLineId(): RateCardLineIdType {
+  return decodeRateCardLineId(generateJobDomainUuid());
+}
+
+export function generateServiceAreaId(): ServiceAreaIdType {
+  return decodeServiceAreaId(generateJobDomainUuid());
 }
 
 export function generateSiteId(): SiteIdType {

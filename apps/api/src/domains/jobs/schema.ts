@@ -1,9 +1,14 @@
 import type { JobActivityPayload } from "@task-tracker/jobs-core";
 import {
   JOB_ACTIVITY_EVENT_TYPES,
+  JOB_COLLABORATOR_ACCESS_LEVELS,
+  JOB_COLLABORATOR_SUBJECT_TYPES,
+  JOB_COST_LINE_TYPES,
   JOB_KINDS,
   JOB_PRIORITIES,
   JOB_STATUSES,
+  MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
+  RATE_CARD_LINE_KINDS,
 } from "@task-tracker/jobs-core";
 import { relations, sql } from "drizzle-orm";
 import {
@@ -11,9 +16,11 @@ import {
   check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -22,7 +29,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { organization, user } from "../identity/authentication/schema.js";
+import {
+  member,
+  organization,
+  user,
+} from "../identity/authentication/schema.js";
 import { generateJobDomainUuid } from "./id-generation.js";
 
 const jobsTimestamp = (name: string) =>
@@ -43,28 +54,97 @@ const kindValuesSql = sql.raw(
 const activityEventTypeValuesSql = sql.raw(
   JOB_ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
 );
+const collaboratorSubjectTypeValuesSql = sql.raw(
+  JOB_COLLABORATOR_SUBJECT_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const collaboratorAccessLevelValuesSql = sql.raw(
+  JOB_COLLABORATOR_ACCESS_LEVELS.map((value) => `'${value}'`).join(", ")
+);
+const jobLabelNameMaxLength = 48;
+const rateCardLineKindValuesSql = sql.raw(
+  RATE_CARD_LINE_KINDS.map((value) => `'${value}'`).join(", ")
+);
+const costLineTypeValuesSql = sql.raw(
+  JOB_COST_LINE_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const maxJobCostLineTaxRateBasisPointsSql = sql.raw(
+  String(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
+);
 
-export const serviceRegion = pgTable(
-  "service_regions",
+export const serviceArea = pgTable(
+  "service_areas",
   {
     id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    description: text("description"),
     slug: text("slug").notNull(),
     createdAt: jobsTimestamp("created_at"),
     updatedAt: jobsTimestamp("updated_at"),
     archivedAt: archivedAtColumn("archived_at"),
   },
   (table) => [
-    uniqueIndex("service_regions_organization_slug_idx").on(
+    uniqueIndex("service_areas_organization_slug_idx").on(
       table.organizationId,
       table.slug
     ),
-    index("service_regions_organization_name_idx").on(
+    index("service_areas_organization_name_idx").on(
       table.organizationId,
       table.name
+    ),
+  ]
+);
+
+export const rateCard = pgTable(
+  "rate_cards",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: jobsTimestamp("created_at"),
+    updatedAt: jobsTimestamp("updated_at"),
+    archivedAt: archivedAtColumn("archived_at"),
+  },
+  (table) => [
+    index("rate_cards_organization_updated_at_idx").on(
+      table.organizationId,
+      table.updatedAt.desc(),
+      table.id.desc()
+    ),
+    uniqueIndex("rate_cards_organization_name_idx").on(
+      table.organizationId,
+      table.name
+    ),
+  ]
+);
+
+export const rateCardLine = pgTable(
+  "rate_card_lines",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    rateCardId: uuid("rate_card_id")
+      .notNull()
+      .references(() => rateCard.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+    unit: text("unit").notNull(),
+    value: numeric("value", { precision: 12, scale: 2 }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("rate_card_lines_rate_card_position_unique_idx").on(
+      table.rateCardId,
+      table.position
+    ),
+    check("rate_card_lines_value_non_negative_chk", sql`${table.value} >= 0`),
+    check("rate_card_lines_position_positive_chk", sql`${table.position} > 0`),
+    check(
+      "rate_card_lines_kind_chk",
+      sql`${table.kind} in (${rateCardLineKindValuesSql})`
     ),
   ]
 );
@@ -76,18 +156,21 @@ export const site = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    regionId: uuid("region_id").references(() => serviceRegion.id, {
+    serviceAreaId: uuid("service_area_id").references(() => serviceArea.id, {
       onDelete: "set null",
     }),
-    name: text("name"),
-    addressLine1: text("address_line_1"),
+    name: text("name").notNull(),
+    addressLine1: text("address_line_1").notNull(),
     addressLine2: text("address_line_2"),
     town: text("town"),
-    county: text("county"),
+    county: text("county").notNull(),
+    country: text("country").notNull().default("IE"),
     eircode: text("eircode"),
     accessNotes: text("access_notes"),
-    latitude: doublePrecision("latitude"),
-    longitude: doublePrecision("longitude"),
+    latitude: doublePrecision("latitude").notNull(),
+    longitude: doublePrecision("longitude").notNull(),
+    geocodingProvider: text("geocoding_provider").notNull(),
+    geocodedAt: timestamp("geocoded_at", { withTimezone: true }).notNull(),
     createdAt: jobsTimestamp("created_at"),
     updatedAt: jobsTimestamp("updated_at"),
     archivedAt: archivedAtColumn("archived_at"),
@@ -98,9 +181,9 @@ export const site = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
-    index("sites_organization_region_idx").on(
+    index("sites_organization_service_area_idx").on(
       table.organizationId,
-      table.regionId
+      table.serviceAreaId
     ),
     index("sites_organization_active_name_idx")
       .on(
@@ -110,9 +193,22 @@ export const site = pgTable(
         table.id
       )
       .where(sql`${table.archivedAt} is null`),
+    check("sites_country_chk", sql`${table.country} in ('IE', 'GB')`),
+    check(
+      "sites_ie_eircode_required_chk",
+      sql`${table.country} <> 'IE' or ${table.eircode} is not null`
+    ),
+    check(
+      "sites_geocoding_provider_chk",
+      sql`${table.geocodingProvider} is null or ${table.geocodingProvider} in ('google', 'stub')`
+    ),
     check(
       "sites_coordinates_pair_check",
       sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`
+    ),
+    check(
+      "sites_geocoding_metadata_check",
+      sql`(${table.latitude} is null and ${table.longitude} is null and ${table.geocodingProvider} is null and ${table.geocodedAt} is null) or (${table.latitude} is not null and ${table.longitude} is not null and ${table.geocodingProvider} is not null and ${table.geocodedAt} is not null)`
     ),
     check(
       "sites_latitude_range_check",
@@ -152,6 +248,49 @@ export const contact = pgTable(
   ]
 );
 
+export const jobLabel = pgTable(
+  "job_labels",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdAt: jobsTimestamp("created_at"),
+    updatedAt: jobsTimestamp("updated_at"),
+    archivedAt: archivedAtColumn("archived_at"),
+  },
+  (table) => [
+    uniqueIndex("job_labels_organization_normalized_active_idx")
+      .on(table.organizationId, table.normalizedName)
+      .where(sql`${table.archivedAt} is null`),
+    uniqueIndex("job_labels_id_organization_idx").on(
+      table.id,
+      table.organizationId
+    ),
+    index("job_labels_organization_name_idx")
+      .on(table.organizationId, table.name, table.id)
+      .where(sql`${table.archivedAt} is null`),
+    check(
+      "job_labels_name_not_empty_chk",
+      sql`length(trim(${table.name})) > 0`
+    ),
+    check(
+      "job_labels_name_max_length_chk",
+      sql`length(trim(${table.name})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
+    ),
+    check(
+      "job_labels_normalized_name_not_empty_chk",
+      sql`length(trim(${table.normalizedName})) > 0`
+    ),
+    check(
+      "job_labels_normalized_name_max_length_chk",
+      sql`length(trim(${table.normalizedName})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
+    ),
+  ]
+);
+
 export const siteContact = pgTable(
   "site_contacts",
   {
@@ -182,6 +321,7 @@ export const workItem = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     title: text("title").notNull(),
+    externalReference: text("external_reference"),
     status: text("status").notNull(),
     priority: text("priority").notNull().default("none"),
     siteId: uuid("site_id").references(() => site.id, { onDelete: "set null" }),
@@ -260,9 +400,109 @@ export const workItem = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
+    uniqueIndex("work_items_id_organization_idx").on(
+      table.id,
+      table.organizationId
+    ),
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
+    index("work_items_title_trgm_idx").using(
+      "gin",
+      table.title.op("gin_trgm_ops")
+    ),
+    uniqueIndex("work_items_id_organization_id_idx").on(
+      table.id,
+      table.organizationId
+    ),
+  ]
+);
+
+export const workItemCollaborator = pgTable(
+  "work_item_collaborators",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    subjectType: text("subject_type").notNull().default("user"),
+    userId: text("user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+    roleLabel: text("role_label").notNull(),
+    accessLevel: text("access_level").notNull().default("comment"),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: jobsTimestamp("created_at"),
+    updatedAt: jobsTimestamp("updated_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_collaborators_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [member.organizationId, member.userId],
+      name: "work_item_collaborators_member_fk",
+    }).onDelete("cascade"),
+    check(
+      "work_item_collaborators_subject_type_chk",
+      sql`${table.subjectType} in (${collaboratorSubjectTypeValuesSql})`
+    ),
+    check(
+      "work_item_collaborators_user_subject_chk",
+      sql`${table.subjectType} <> 'user' or ${table.userId} is not null`
+    ),
+    check(
+      "work_item_collaborators_access_level_chk",
+      sql`${table.accessLevel} in (${collaboratorAccessLevelValuesSql})`
+    ),
+    check(
+      "work_item_collaborators_role_label_not_empty_chk",
+      sql`length(trim(${table.roleLabel})) > 0`
+    ),
+    uniqueIndex("work_item_collaborators_user_unique_idx")
+      .on(table.organizationId, table.workItemId, table.userId)
+      .where(sql`${table.subjectType} = 'user'`),
+    index("work_item_collaborators_user_lookup_idx").on(
+      table.organizationId,
+      table.userId,
+      table.workItemId
+    ),
+  ]
+);
+
+export const workItemLabel = pgTable(
+  "work_item_labels",
+  {
+    workItemId: uuid("work_item_id").notNull(),
+    labelId: uuid("label_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: jobsTimestamp("created_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workItemId, table.labelId] }),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_labels_work_item_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.labelId, table.organizationId],
+      foreignColumns: [jobLabel.id, jobLabel.organizationId],
+      name: "work_item_labels_label_org_fk",
+    }).onDelete("cascade"),
+    index("work_item_labels_label_work_item_idx").on(
+      table.organizationId,
+      table.labelId,
+      table.workItemId
+    ),
   ]
 );
 
@@ -320,6 +560,18 @@ export const workItemActivity = pgTable(
       table.createdAt.desc(),
       table.id.desc()
     ),
+    index("work_item_activity_organization_actor_created_at_idx").on(
+      table.organizationId,
+      table.actorUserId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("work_item_activity_organization_event_created_at_idx").on(
+      table.organizationId,
+      table.eventType,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
   ]
 );
 
@@ -363,15 +615,82 @@ export const workItemVisit = pgTable(
   ]
 );
 
-export const serviceRegionRelations = relations(
-  serviceRegion,
-  ({ many, one }) => ({
-    organization: one(organization, {
-      fields: [serviceRegion.organizationId],
-      references: [organization.id],
-    }),
-    sites: many(site),
-  })
+export const serviceAreaRelations = relations(serviceArea, ({ many, one }) => ({
+  organization: one(organization, {
+    fields: [serviceArea.organizationId],
+    references: [organization.id],
+  }),
+  sites: many(site),
+}));
+
+export const rateCardRelations = relations(rateCard, ({ many, one }) => ({
+  lines: many(rateCardLine),
+  organization: one(organization, {
+    fields: [rateCard.organizationId],
+    references: [organization.id],
+  }),
+}));
+
+export const rateCardLineRelations = relations(rateCardLine, ({ one }) => ({
+  rateCard: one(rateCard, {
+    fields: [rateCardLine.rateCardId],
+    references: [rateCard.id],
+  }),
+}));
+
+export const workItemCostLine = pgTable(
+  "work_item_cost_lines",
+  {
+    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
+    workItemId: uuid("work_item_id")
+      .notNull()
+      .references(() => workItem.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id),
+    type: text("type").notNull(),
+    description: text("description").notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    taxRateBasisPoints: integer("tax_rate_basis_points"),
+    createdAt: jobsTimestamp("created_at"),
+  },
+  (table) => [
+    check(
+      "work_item_cost_lines_type_chk",
+      sql`${table.type} in (${costLineTypeValuesSql})`
+    ),
+    check(
+      "work_item_cost_lines_quantity_positive_chk",
+      sql`${table.quantity} > 0`
+    ),
+    check(
+      "work_item_cost_lines_unit_price_non_negative_chk",
+      sql`${table.unitPriceMinor} >= 0`
+    ),
+    check(
+      "work_item_cost_lines_tax_rate_range_chk",
+      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${maxJobCostLineTaxRateBasisPointsSql})`
+    ),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_cost_lines_work_item_organization_fk",
+    }).onDelete("cascade"),
+    index("work_item_cost_lines_work_item_created_at_idx").on(
+      table.workItemId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("work_item_cost_lines_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+  ]
 );
 
 export const siteRelations = relations(site, ({ many, one }) => ({
@@ -380,9 +699,9 @@ export const siteRelations = relations(site, ({ many, one }) => ({
     fields: [site.organizationId],
     references: [organization.id],
   }),
-  region: one(serviceRegion, {
-    fields: [site.regionId],
-    references: [serviceRegion.id],
+  serviceArea: one(serviceArea, {
+    fields: [site.serviceAreaId],
+    references: [serviceArea.id],
   }),
   workItems: many(workItem),
 }));
@@ -394,6 +713,14 @@ export const contactRelations = relations(contact, ({ many, one }) => ({
   }),
   siteContacts: many(siteContact),
   workItems: many(workItem),
+}));
+
+export const jobLabelRelations = relations(jobLabel, ({ many, one }) => ({
+  organization: one(organization, {
+    fields: [jobLabel.organizationId],
+    references: [organization.id],
+  }),
+  workItems: many(workItemLabel),
 }));
 
 export const siteContactRelations = relations(siteContact, ({ one }) => ({
@@ -409,16 +736,52 @@ export const siteContactRelations = relations(siteContact, ({ one }) => ({
 
 export const workItemRelations = relations(workItem, ({ many, one }) => ({
   activity: many(workItemActivity),
+  workItemCollaborators: many(workItemCollaborator),
   comments: many(workItemComment),
   contact: one(contact, {
     fields: [workItem.contactId],
     references: [contact.id],
   }),
+  costLines: many(workItemCostLine),
   site: one(site, {
     fields: [workItem.siteId],
     references: [site.id],
   }),
+  labels: many(workItemLabel),
   visits: many(workItemVisit),
+}));
+
+export const workItemCollaboratorRelations = relations(
+  workItemCollaborator,
+  ({ one }) => ({
+    createdBy: one(user, {
+      fields: [workItemCollaborator.createdByUserId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [workItemCollaborator.organizationId],
+      references: [organization.id],
+    }),
+    user: one(user, {
+      fields: [workItemCollaborator.userId],
+      references: [user.id],
+    }),
+    workItem: one(workItem, {
+      fields: [workItemCollaborator.workItemId],
+      references: [workItem.id],
+    }),
+  })
+);
+
+export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
+  label: one(jobLabel, {
+    fields: [workItemLabel.labelId],
+    references: [jobLabel.id],
+  }),
+  workItem: one(workItem, {
+    fields: [workItemLabel.workItemId],
+    references: [workItem.id],
+  }),
 }));
 
 export const workItemCommentRelations = relations(
@@ -468,13 +831,37 @@ export const workItemVisitRelations = relations(workItemVisit, ({ one }) => ({
   }),
 }));
 
+export const workItemCostLineRelations = relations(
+  workItemCostLine,
+  ({ one }) => ({
+    author: one(user, {
+      fields: [workItemCostLine.authorUserId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [workItemCostLine.organizationId],
+      references: [organization.id],
+    }),
+    workItem: one(workItem, {
+      fields: [workItemCostLine.workItemId],
+      references: [workItem.id],
+    }),
+  })
+);
+
 export const jobsSchema = {
   contact,
-  serviceRegion,
+  jobLabel,
+  rateCard,
+  rateCardLine,
+  serviceArea,
   site,
   siteContact,
   workItem,
   workItemActivity,
+  workItemCollaborator,
+  workItemCostLine,
   workItemComment,
+  workItemLabel,
   workItemVisit,
 };

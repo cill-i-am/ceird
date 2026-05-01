@@ -19,6 +19,16 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "#/components/ui/sidebar";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
+
+const NAVIGATION_SHORTCUTS_BY_URL: Partial<Record<string, HotkeyDefinition>> = {
+  "/activity": HOTKEYS.goActivity,
+  "/jobs": HOTKEYS.goJobs,
+  "/members": HOTKEYS.goMembers,
+  "/sites": HOTKEYS.goSites,
+};
 
 export function NavMain({
   items,
@@ -92,7 +102,7 @@ export function NavMain({
                 isActive={isActive}
                 size="sm"
                 className="rounded-[calc(var(--radius)*2.1)]"
-                tooltip={item.title}
+                tooltip={getNavigationTooltip(item)}
                 render={<Link to={item.url} />}
               >
                 {item.icon}
@@ -129,4 +139,24 @@ export function NavMain({
       </SidebarMenu>
     </SidebarGroup>
   );
+}
+
+function getNavigationTooltip(item: {
+  readonly title: string;
+  readonly url: string;
+}) {
+  const shortcut = NAVIGATION_SHORTCUTS_BY_URL[item.url];
+
+  if (!shortcut) {
+    return item.title;
+  }
+
+  return {
+    children: (
+      <>
+        <span>{item.title}</span>
+        <ShortcutHint hotkey={shortcut.hotkey} label={shortcut.label} />
+      </>
+    ),
+  };
 }

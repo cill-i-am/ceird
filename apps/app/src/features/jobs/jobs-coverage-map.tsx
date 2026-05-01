@@ -18,6 +18,7 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { cn } from "#/lib/utils";
 
+import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
 import { buildGoogleMapsUrl, hasSiteCoordinates } from "./jobs-location";
 import type { SiteLocationLike } from "./jobs-location";
 
@@ -30,14 +31,7 @@ interface JobsCoverageMapProps {
   readonly sites: ReadonlyMap<string, SiteRecord>;
 }
 
-export const STATUS_LABELS = {
-  blocked: "Blocked",
-  canceled: "Canceled",
-  completed: "Completed",
-  in_progress: "In progress",
-  new: "New",
-  triaged: "Triaged",
-} as const;
+export { STATUS_LABELS };
 
 const JobsCoverageMapCanvas = React.lazy(async () => {
   const module = await import("./jobs-coverage-map-canvas");
@@ -82,7 +76,7 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{groupedSites.length} mapped</Badge>
           <Badge variant={unmappedJobs.length === 0 ? "secondary" : "outline"}>
-            {unmappedJobs.length} without pin
+            {unmappedJobs.length} unmapped
           </Badge>
         </div>
       </div>
@@ -102,8 +96,8 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
         {hasUnmappedJobs ? (
           <aside className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
             <div className="border-b px-3 py-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase">
-                Needs pin
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Needs location
               </p>
             </div>
             <ul className="flex min-h-0 flex-col overflow-y-auto">
@@ -181,7 +175,7 @@ function renderMapViewport(
         <EmptyHeader>
           <EmptyTitle>No mapped jobs.</EmptyTitle>
           <EmptyDescription>
-            Add a site pin to make this view useful.
+            Add a geocoded site address to make this view useful.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -209,11 +203,11 @@ function renderMapViewport(
                   ))}
                 </div>
                 <p className="font-medium">
-                  {group.site.name ?? "Pinned site"}
+                  {group.site.name ?? "Mapped site"}
                 </p>
-                {group.site.regionName ? (
+                {group.site.serviceAreaName ? (
                   <p className="text-sm text-muted-foreground">
-                    {group.site.regionName}
+                    {group.site.serviceAreaName}
                   </p>
                 ) : null}
               </div>

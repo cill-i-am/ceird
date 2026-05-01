@@ -248,7 +248,7 @@ function DropdownMenuShortcut({
     <span
       data-slot="dropdown-menu-shortcut"
       className={cn(
-        "ml-auto text-xs text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground",
+        "ml-auto flex shrink-0 items-center pl-3 text-xs text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground group-data-[highlighted]/dropdown-menu-item:text-accent-foreground [&_[data-slot=kbd]]:text-current",
         className
       )}
       {...props}

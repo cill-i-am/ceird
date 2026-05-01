@@ -3,30 +3,51 @@
 
 import { Atom } from "@effect-atom/atom-react";
 import type {
+  AddJobCostLineInput,
+  AddJobCostLineResponse,
   AddJobCommentInput,
   AddJobCommentResponse,
   AddJobVisitInput,
   AddJobVisitResponse,
+  AssignJobLabelInput,
+  AttachJobCollaboratorInput,
+  CreateJobLabelInput,
   Job,
+  JobCollaborator,
+  JobCollaboratorIdType,
   JobDetailResponse,
+  JobLabel,
+  JobLabelIdType,
+  UpdateJobCollaboratorInput,
   PatchJobInput,
   PatchJobResponse,
   TransitionJobInput,
   TransitionJobResponse,
   WorkItemIdType,
 } from "@task-tracker/jobs-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
-import { makeBrowserJobsClient, provideBrowserJobsHttp } from "./jobs-client";
+import { runBrowserJobsRequest } from "./jobs-client";
 import type { AppJobsError } from "./jobs-errors";
-import { normalizeJobsError } from "./jobs-errors";
-import { jobsListStateAtom, upsertJobListItem } from "./jobs-state";
+import {
+  jobsListStateAtom,
+  jobsOptionsStateAtom,
+  upsertJobListItem,
+} from "./jobs-state";
 
 export const jobDetailStateAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) => {
     void workItemId;
 
     return Atom.make<JobDetailResponse | null>(null);
+  }
+);
+
+export const jobCollaboratorsStateAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) => {
+    void workItemId;
+
+    return Atom.make<readonly JobCollaborator[]>([]);
   }
 );
 
@@ -43,21 +64,29 @@ export const refreshJobDetailAtomFamily = Atom.family(
     )
 );
 
+export const refreshJobCollaboratorsAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, readonly JobCollaborator[]>((_, get) =>
+      listBrowserJobCollaborators(workItemId).pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => {
+            get.set(
+              jobCollaboratorsStateAtomFamily(workItemId),
+              response.collaborators
+            );
+          })
+        ),
+        Effect.map((response) => response.collaborators)
+      )
+    )
+);
+
 export const transitionJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, TransitionJobResponse, TransitionJobInput>(
       (input, get) =>
         transitionBrowserJob(workItemId, input).pipe(
-          Effect.tap((job) =>
-            Effect.gen(function* () {
-              yield* Effect.sync(() => {
-                updateJobDetailJob(get, workItemId, job);
-                updateJobsListJob(get, job);
-              });
-
-              yield* refreshJobDetailIfPossible(get, workItemId);
-            })
-          )
+          Effect.tap((job) => syncChangedJob(get, workItemId, job))
         )
     )
 );
@@ -66,16 +95,7 @@ export const reopenJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, JobDetailResponse["job"]>((_, get) =>
       reopenBrowserJob(workItemId).pipe(
-        Effect.tap((job) =>
-          Effect.gen(function* () {
-            yield* Effect.sync(() => {
-              updateJobDetailJob(get, workItemId, job);
-              updateJobsListJob(get, job);
-            });
-
-            yield* refreshJobDetailIfPossible(get, workItemId);
-          })
-        )
+        Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
     )
 );
@@ -84,16 +104,7 @@ export const patchJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppJobsError, PatchJobResponse, PatchJobInput>((input, get) =>
       patchBrowserJob(workItemId, input).pipe(
-        Effect.tap((job) =>
-          Effect.gen(function* () {
-            yield* Effect.sync(() => {
-              updateJobDetailJob(get, workItemId, job);
-              updateJobsListJob(get, job);
-            });
-
-            yield* refreshJobDetailIfPossible(get, workItemId);
-          })
-        )
+        Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
     )
 );
@@ -133,77 +144,279 @@ export const addJobVisitMutationAtomFamily = Atom.family(
     )
 );
 
-function getBrowserJobDetail(workItemId: WorkItemIdType) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
+export const assignJobLabelMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobDetailResponse, AssignJobLabelInput>(
+      (input, get) =>
+        assignBrowserJobLabel(workItemId, input).pipe(
+          Effect.tap((detail) =>
+            Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
+          )
+        )
+    )
+);
 
-    return yield* client.jobs.getJobDetail({
+export const addJobCostLineMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, AddJobCostLineResponse, AddJobCostLineInput>(
+      (input, get) =>
+        addBrowserJobCostLine(workItemId, input).pipe(
+          Effect.tap((costLine) =>
+            Effect.gen(function* () {
+              yield* Effect.sync(() => {
+                insertJobCostLine(get, workItemId, costLine);
+              });
+
+              yield* refreshJobDetailIfPossible(get, workItemId);
+            })
+          )
+        )
+    )
+);
+
+export const attachJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobCollaborator, AttachJobCollaboratorInput>(
+      (input, get) =>
+        attachBrowserJobCollaborator(workItemId, input).pipe(
+          Effect.tap((collaborator) =>
+            Effect.sync(() =>
+              upsertJobCollaborator(get, workItemId, collaborator)
+            )
+          )
+        )
+    )
+);
+
+export const updateJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<
+      AppJobsError,
+      JobCollaborator,
+      {
+        readonly collaboratorId: JobCollaboratorIdType;
+        readonly input: UpdateJobCollaboratorInput;
+      }
+    >(({ collaboratorId, input }, get) =>
+      updateBrowserJobCollaborator(workItemId, collaboratorId, input).pipe(
+        Effect.tap((collaborator) =>
+          Effect.sync(() =>
+            upsertJobCollaborator(get, workItemId, collaborator)
+          )
+        )
+      )
+    )
+);
+
+export const detachJobCollaboratorMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobCollaborator, JobCollaboratorIdType>(
+      (collaboratorId, get) =>
+        detachBrowserJobCollaborator(workItemId, collaboratorId).pipe(
+          Effect.tap((collaborator) =>
+            Effect.sync(() => {
+              const current = get(jobCollaboratorsStateAtomFamily(workItemId));
+
+              get.set(
+                jobCollaboratorsStateAtomFamily(workItemId),
+                current.filter((item) => item.id !== collaborator.id)
+              );
+            })
+          )
+        )
+    )
+);
+
+export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobDetailResponse, CreateJobLabelInput>(
+      (input, get) =>
+        createBrowserJobLabel(input).pipe(
+          Effect.tap((label) =>
+            Effect.sync(() => upsertJobOptionLabel(get, label))
+          ),
+          Effect.flatMap((label) =>
+            assignBrowserJobLabel(workItemId, { labelId: label.id })
+          ),
+          Effect.tap((detail) =>
+            Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
+          )
+        )
+    )
+);
+
+export const removeJobLabelMutationAtomFamily = Atom.family(
+  (workItemId: WorkItemIdType) =>
+    Atom.fn<AppJobsError, JobDetailResponse, JobLabelIdType>((labelId, get) =>
+      removeBrowserJobLabel(workItemId, labelId).pipe(
+        Effect.tap((detail) =>
+          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
+        )
+      )
+    )
+);
+
+function getBrowserJobDetail(workItemId: WorkItemIdType) {
+  return runBrowserJobsRequest("JobsBrowser.getJobDetail", (client) =>
+    client.jobs.getJobDetail({
       path: { workItemId },
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function transitionBrowserJob(
   workItemId: WorkItemIdType,
   input: TransitionJobInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.transitionJob({
+  return runBrowserJobsRequest("JobsBrowser.transitionJob", (client) =>
+    client.jobs.transitionJob({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function reopenBrowserJob(workItemId: WorkItemIdType) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.reopenJob({
+  return runBrowserJobsRequest("JobsBrowser.reopenJob", (client) =>
+    client.jobs.reopenJob({
       path: { workItemId },
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function patchBrowserJob(workItemId: WorkItemIdType, input: PatchJobInput) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.patchJob({
+  return runBrowserJobsRequest("JobsBrowser.patchJob", (client) =>
+    client.jobs.patchJob({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function addBrowserJobComment(
   workItemId: WorkItemIdType,
   input: AddJobCommentInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.addJobComment({
+  return runBrowserJobsRequest("JobsBrowser.addJobComment", (client) =>
+    client.jobs.addJobComment({
       path: { workItemId },
       payload: input,
-    });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+    })
+  );
 }
 
 function addBrowserJobVisit(
   workItemId: WorkItemIdType,
   input: AddJobVisitInput
 ) {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* client.jobs.addJobVisit({
+  return runBrowserJobsRequest("JobsBrowser.addJobVisit", (client) =>
+    client.jobs.addJobVisit({
       path: { workItemId },
       payload: input,
+    })
+  );
+}
+
+function assignBrowserJobLabel(
+  workItemId: WorkItemIdType,
+  input: AssignJobLabelInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.assignJobLabel", (client) =>
+    client.jobs.assignJobLabel({
+      path: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function addBrowserJobCostLine(
+  workItemId: WorkItemIdType,
+  input: AddJobCostLineInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.addJobCostLine", (client) =>
+    client.jobs.addJobCostLine({
+      path: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function listBrowserJobCollaborators(workItemId: WorkItemIdType) {
+  return runBrowserJobsRequest("JobsBrowser.listJobCollaborators", (client) =>
+    client.jobs.listJobCollaborators({
+      path: { workItemId },
+    })
+  );
+}
+
+function attachBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  input: AttachJobCollaboratorInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.attachJobCollaborator", (client) =>
+    client.jobs.attachJobCollaborator({
+      path: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function updateBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  collaboratorId: JobCollaboratorIdType,
+  input: UpdateJobCollaboratorInput
+) {
+  return runBrowserJobsRequest("JobsBrowser.updateJobCollaborator", (client) =>
+    client.jobs.updateJobCollaborator({
+      path: { collaboratorId, workItemId },
+      payload: input,
+    })
+  );
+}
+
+function detachBrowserJobCollaborator(
+  workItemId: WorkItemIdType,
+  collaboratorId: JobCollaboratorIdType
+) {
+  return runBrowserJobsRequest("JobsBrowser.detachJobCollaborator", (client) =>
+    client.jobs.detachJobCollaborator({
+      path: { collaboratorId, workItemId },
+    })
+  );
+}
+
+function createBrowserJobLabel(input: CreateJobLabelInput) {
+  return runBrowserJobsRequest("JobsBrowser.createJobLabel", (client) =>
+    client.jobs.createJobLabel({
+      payload: input,
+    })
+  );
+}
+
+function removeBrowserJobLabel(
+  workItemId: WorkItemIdType,
+  labelId: JobLabelIdType
+) {
+  return runBrowserJobsRequest("JobsBrowser.removeJobLabel", (client) =>
+    client.jobs.removeJobLabel({
+      path: { labelId, workItemId },
+    })
+  );
+}
+
+function syncChangedJob(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  job: Job
+) {
+  return Effect.gen(function* () {
+    yield* Effect.sync(() => {
+      updateJobDetailJob(get, workItemId, job);
+      updateJobsListJob(get, job);
     });
-  }).pipe(Effect.mapError(normalizeJobsError), provideBrowserJobsHttp);
+
+    yield* refreshJobDetailIfPossible(get, workItemId);
+  });
 }
 
 function updateJobDetailJob(
@@ -217,8 +430,14 @@ function updateJobDetailJob(
     return;
   }
 
+  const { contact, site, ...detailWithoutContactAndSite } = currentDetail;
+  const matchingContact = contact?.id === job.contactId ? { contact } : {};
+  const matchingSite = site?.id === job.siteId ? { site } : {};
+
   get.set(jobDetailStateAtomFamily(workItemId), {
-    ...currentDetail,
+    ...detailWithoutContactAndSite,
+    ...matchingContact,
+    ...matchingSite,
     job,
   });
 }
@@ -233,17 +452,74 @@ function updateJobsListJob(get: Atom.FnContext, job: Job) {
   });
 }
 
+function syncChangedJobDetail(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  detail: JobDetailResponse
+) {
+  get.set(jobDetailStateAtomFamily(workItemId), detail);
+  updateJobsListJob(get, detail.job);
+}
+
+function upsertJobOptionLabel(get: Atom.FnContext, label: JobLabel) {
+  const currentOptionsState = get(jobsOptionsStateAtom);
+  const labels = [
+    label,
+    ...currentOptionsState.data.labels.filter(
+      (current) => current.id !== label.id
+    ),
+  ].sort(compareJobLabels);
+
+  get.set(jobsOptionsStateAtom, {
+    data: {
+      ...currentOptionsState.data,
+      labels,
+    },
+    organizationId: currentOptionsState.organizationId,
+  });
+}
+
+function upsertJobCollaborator(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  collaborator: JobCollaborator
+) {
+  const current = get(jobCollaboratorsStateAtomFamily(workItemId));
+
+  get.set(
+    jobCollaboratorsStateAtomFamily(workItemId),
+    [
+      collaborator,
+      ...current.filter((item) => item.id !== collaborator.id),
+    ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel))
+  );
+}
+
+function compareJobLabels(left: JobLabel, right: JobLabel) {
+  const nameOrder = left.name.localeCompare(right.name);
+
+  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
+}
+
 function refreshJobDetailIfPossible(
   get: Atom.FnContext,
   workItemId: WorkItemIdType
 ) {
   return getBrowserJobDetail(workItemId).pipe(
-    Effect.either,
-    Effect.tap((detailResult) =>
-      Effect.sync(() => {
-        if (detailResult._tag === "Right") {
-          get.set(jobDetailStateAtomFamily(workItemId), detailResult.right);
-        }
+    Effect.tapError((error) =>
+      Effect.logWarning("Job detail refresh failed; keeping optimistic state", {
+        error: error.message,
+        workItemId,
+      })
+    ),
+    Effect.option,
+    Effect.tap((detail) =>
+      Option.match(detail, {
+        onNone: () => Effect.void,
+        onSome: (freshDetail) =>
+          Effect.sync(() => {
+            get.set(jobDetailStateAtomFamily(workItemId), freshDetail);
+          }),
       })
     )
   );
@@ -292,5 +568,42 @@ function insertJobVisit(
         ? String(right.id).localeCompare(String(left.id))
         : dateOrder;
     }),
+  });
+}
+
+function insertJobCostLine(
+  get: Atom.FnContext,
+  workItemId: WorkItemIdType,
+  costLine: AddJobCostLineResponse
+) {
+  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
+
+  if (currentDetail === null) {
+    return;
+  }
+
+  const currentCostLines = currentDetail.costs?.lines ?? [];
+  const costLines = [
+    costLine,
+    ...currentCostLines.filter((current) => current.id !== costLine.id),
+  ].sort((left, right) => {
+    const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+
+    return createdAtOrder === 0
+      ? String(right.id).localeCompare(String(left.id))
+      : createdAtOrder;
+  });
+
+  get.set(jobDetailStateAtomFamily(workItemId), {
+    ...currentDetail,
+    costs: {
+      lines: costLines,
+      summary: {
+        subtotalMinor: costLines.reduce(
+          (subtotal, current) => subtotal + current.lineTotalMinor,
+          0
+        ),
+      },
+    },
   });
 }

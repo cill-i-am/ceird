@@ -3,11 +3,18 @@
 import { HttpApiSchema } from "@effect/platform";
 import { Schema } from "effect";
 
-import { JobStatusSchema } from "./domain.js";
+import {
+  JobLabelNameSchema,
+  JobStatusSchema,
+  SiteCountrySchema,
+} from "./domain.js";
 import {
   ContactId,
+  JobLabelId,
+  JobCollaboratorId,
   OrganizationId,
-  RegionId,
+  RateCardId,
+  ServiceAreaId,
   SiteId,
   UserId,
   VisitId,
@@ -47,6 +54,17 @@ export class JobListCursorInvalidError extends Schema.TaggedError<JobListCursorI
   HttpApiSchema.annotations({ status: 400 })
 ) {}
 
+export const ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG =
+  "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError" as const;
+export class OrganizationActivityCursorInvalidError extends Schema.TaggedError<OrganizationActivityCursorInvalidError>()(
+  ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
+  {
+    cursor: Schema.String,
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 400 })
+) {}
+
 export const JOB_STORAGE_ERROR_TAG =
   "@task-tracker/jobs-core/JobStorageError" as const;
 export class JobStorageError extends Schema.TaggedError<JobStorageError>()(
@@ -56,6 +74,17 @@ export class JobStorageError extends Schema.TaggedError<JobStorageError>()(
     cause: Schema.optional(Schema.String),
   },
   HttpApiSchema.annotations({ status: 503 })
+) {}
+
+export const JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCostSummaryLimitExceededError" as const;
+export class JobCostSummaryLimitExceededError extends Schema.TaggedError<JobCostSummaryLimitExceededError>()(
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
+  {
+    message: Schema.String,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 422 })
 ) {}
 
 export const INVALID_JOB_TRANSITION_ERROR_TAG =
@@ -107,6 +136,52 @@ export class VisitDurationIncrementError extends Schema.TaggedError<VisitDuratio
   HttpApiSchema.annotations({ status: 400 })
 ) {}
 
+export const JOB_LABEL_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/JobLabelNotFoundError" as const;
+export class JobLabelNotFoundError extends Schema.TaggedError<JobLabelNotFoundError>()(
+  JOB_LABEL_NOT_FOUND_ERROR_TAG,
+  {
+    labelId: Schema.optional(JobLabelId),
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const JOB_LABEL_NAME_CONFLICT_ERROR_TAG =
+  "@task-tracker/jobs-core/JobLabelNameConflictError" as const;
+export class JobLabelNameConflictError extends Schema.TaggedError<JobLabelNameConflictError>()(
+  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+  {
+    message: Schema.String,
+    name: JobLabelNameSchema,
+  },
+  HttpApiSchema.annotations({ status: 409 })
+) {}
+
+export const JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCollaboratorNotFoundError" as const;
+export class JobCollaboratorNotFoundError extends Schema.TaggedError<JobCollaboratorNotFoundError>()(
+  JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
+  {
+    collaboratorId: JobCollaboratorId,
+    message: Schema.String,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const JOB_COLLABORATOR_CONFLICT_ERROR_TAG =
+  "@task-tracker/jobs-core/JobCollaboratorConflictError" as const;
+export class JobCollaboratorConflictError extends Schema.TaggedError<JobCollaboratorConflictError>()(
+  JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
+  {
+    message: Schema.String,
+    userId: UserId,
+    workItemId: WorkItemId,
+  },
+  HttpApiSchema.annotations({ status: 409 })
+) {}
+
 export const SITE_NOT_FOUND_ERROR_TAG =
   "@task-tracker/jobs-core/SiteNotFoundError" as const;
 export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
@@ -116,6 +191,18 @@ export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
     siteId: SiteId,
   },
   HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const SITE_GEOCODING_FAILED_ERROR_TAG =
+  "@task-tracker/jobs-core/SiteGeocodingFailedError" as const;
+export class SiteGeocodingFailedError extends Schema.TaggedError<SiteGeocodingFailedError>()(
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+  {
+    message: Schema.String,
+    country: SiteCountrySchema,
+    eircode: Schema.optional(Schema.String),
+  },
+  HttpApiSchema.annotations({ status: 422 })
 ) {}
 
 export const CONTACT_NOT_FOUND_ERROR_TAG =
@@ -141,14 +228,26 @@ export class OrganizationMemberNotFoundError extends Schema.TaggedError<Organiza
   HttpApiSchema.annotations({ status: 404 })
 ) {}
 
-export const REGION_NOT_FOUND_ERROR_TAG =
-  "@task-tracker/jobs-core/RegionNotFoundError" as const;
-export class RegionNotFoundError extends Schema.TaggedError<RegionNotFoundError>()(
-  REGION_NOT_FOUND_ERROR_TAG,
+export const SERVICE_AREA_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/ServiceAreaNotFoundError" as const;
+export class ServiceAreaNotFoundError extends Schema.TaggedError<ServiceAreaNotFoundError>()(
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   {
     message: Schema.String,
     organizationId: OrganizationId,
-    regionId: RegionId,
+    serviceAreaId: ServiceAreaId,
+  },
+  HttpApiSchema.annotations({ status: 404 })
+) {}
+
+export const RATE_CARD_NOT_FOUND_ERROR_TAG =
+  "@task-tracker/jobs-core/RateCardNotFoundError" as const;
+export class RateCardNotFoundError extends Schema.TaggedError<RateCardNotFoundError>()(
+  RATE_CARD_NOT_FOUND_ERROR_TAG,
+  {
+    message: Schema.String,
+    organizationId: OrganizationId,
+    rateCardId: RateCardId,
   },
   HttpApiSchema.annotations({ status: 404 })
 ) {}
@@ -157,12 +256,20 @@ export type JobsError =
   | JobNotFoundError
   | JobAccessDeniedError
   | JobListCursorInvalidError
+  | OrganizationActivityCursorInvalidError
   | JobStorageError
+  | JobCostSummaryLimitExceededError
   | InvalidJobTransitionError
   | BlockedReasonRequiredError
   | CoordinatorMatchesAssigneeError
   | VisitDurationIncrementError
+  | JobLabelNotFoundError
+  | JobLabelNameConflictError
+  | JobCollaboratorNotFoundError
+  | JobCollaboratorConflictError
   | SiteNotFoundError
+  | SiteGeocodingFailedError
   | ContactNotFoundError
   | OrganizationMemberNotFoundError
-  | RegionNotFoundError;
+  | ServiceAreaNotFoundError
+  | RateCardNotFoundError;

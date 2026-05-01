@@ -1,30 +1,338 @@
 import { OpenApi } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
+import * as Vitest from "vitest";
 
 import {
+  AddJobCostLineInputSchema,
   AddJobCommentInputSchema,
   AddJobVisitInputSchema,
+  AttachJobCollaboratorInputSchema,
+  calculateJobCostLineTotalMinor,
+  calculateJobCostSummary,
   CreateJobInputSchema,
+  CreateRateCardInputSchema,
+  CreateServiceAreaInputSchema,
+  CreateServiceAreaResponseSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
+  JobActivityLabelAddedPayloadSchema,
+  JobCollaboratorSchema,
+  JobCollaboratorAccessLevelSchema,
+  JobCollaboratorRoleLabelSchema,
+  JobCollaboratorSubjectTypeSchema,
+  JobCollaboratorsResponseSchema,
+  JobDetailResponseSchema,
+  JobContactOptionSchema,
+  JobExternalMemberOptionsResponseSchema,
+  JOB_COLLABORATOR_ACCESS_LEVELS,
+  JOB_COLLABORATOR_SUBJECT_TYPES,
+  JobLabelNameSchema,
+  JobLabelSchema,
+  JobListItemSchema,
   JobListQuerySchema,
+  JobMemberOptionsResponseSchema,
   JobPrioritySchema,
+  JobOptionsResponseSchema,
   JobSiteOptionSchema,
   JobStatusSchema,
+  JobViewerAccessSchema,
   JobsApi,
   JobsApiGroup,
   JobsContextSchema,
+  JobCostSummaryLimitExceededError,
   JobTitleSchema,
+  OrganizationActivityCursor,
+  OrganizationActivityCursorInvalidError,
+  OrganizationActivityListResponseSchema,
+  OrganizationActivityQuerySchema,
   PatchJobInputSchema,
+  RateCardSchema,
+  RateCardsApiGroup,
+  ServiceAreasApiGroup,
+  ServiceAreaOptionSchema,
+  ServiceAreaSchema,
   SitesOptionsResponseSchema,
   SitesApiGroup,
+  SiteGeocodingFailedError,
+  UpdateJobCollaboratorInputSchema,
+  UpdateServiceAreaInputSchema,
+  UpdateServiceAreaResponseSchema,
+  UserId,
   VisitDurationIncrementError,
   WorkItemId,
+  normalizeJobLabelName,
 } from "./index.js";
 
+const { describe, expect, it } = Vitest;
+
 describe("jobs-core", () => {
+  it("decodes job collaborator domain contracts", () => {
+    expect(JOB_COLLABORATOR_SUBJECT_TYPES).toStrictEqual(["user"]);
+    expect(JOB_COLLABORATOR_ACCESS_LEVELS).toStrictEqual(["read", "comment"]);
+    expect(
+      Schema.decodeUnknownSync(JobCollaboratorSubjectTypeSchema)("user")
+    ).toBe("user");
+    expect(
+      Schema.decodeUnknownSync(JobCollaboratorAccessLevelSchema)("comment")
+    ).toBe("comment");
+    expect(
+      Schema.decodeUnknownSync(JobCollaboratorRoleLabelSchema)(
+        "  Site contact  "
+      )
+    ).toBe("Site contact");
+
+    expect(() =>
+      Schema.decodeUnknownSync(JobCollaboratorRoleLabelSchema)("   ")
+    ).toThrow(/Expected/);
+  });
+
+  it("decodes job collaborator DTO contracts", () => {
+    const collaborator = {
+      id: "11111111-1111-4111-8111-111111111111",
+      workItemId: "22222222-2222-4222-8222-222222222222",
+      subjectType: "user",
+      userId: "user_123",
+      roleLabel: "Reviewer",
+      accessLevel: "comment",
+      createdAt: "2026-04-29T10:00:00.000Z",
+      updatedAt: "2026-04-29T10:05:00.000Z",
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(JobCollaboratorSchema)(collaborator)
+    ).toStrictEqual(collaborator);
+    expect(
+      ParseResult.decodeUnknownSync(JobCollaboratorsResponseSchema)({
+        collaborators: [collaborator],
+      })
+    ).toStrictEqual({
+      collaborators: [collaborator],
+    });
+    expect(
+      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+        userId: "user_456",
+        roleLabel: "  Viewer  ",
+        accessLevel: "read",
+      })
+    ).toStrictEqual({
+      userId: "user_456",
+      roleLabel: "Viewer",
+      accessLevel: "read",
+    });
+  }, 5000);
+
+  it("keeps job collaborator mutation inputs strict and shapeable", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({})
+    ).toThrow(/Expected at least one collaborator field/);
+    expect(
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        roleLabel: "  Approver  ",
+      })
+    ).toStrictEqual({
+      roleLabel: "Approver",
+    });
+    expect(
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        accessLevel: "comment",
+      })
+    ).toStrictEqual({
+      accessLevel: "comment",
+    });
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+        userId: "user_456",
+        roleLabel: "Viewer",
+        accessLevel: "read",
+        extra: true,
+      })
+    ).toThrow(/unexpected/);
+    expect(() =>
+      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+        roleLabel: "Approver",
+        extra: true,
+      })
+    ).toThrow(/unexpected/);
+  }, 5000);
+
+  it("decodes service area contracts", () => {
+    const serviceArea = {
+      description: "North city and hospitals",
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "North Dublin",
+    };
+
+    expect(
+      Schema.decodeUnknownSync(ServiceAreaSchema)(serviceArea)
+    ).toStrictEqual(serviceArea);
+    expect(
+      Schema.decodeUnknownSync(CreateServiceAreaResponseSchema)(serviceArea)
+    ).toStrictEqual(serviceArea);
+    expect(
+      Schema.decodeUnknownSync(UpdateServiceAreaResponseSchema)(serviceArea)
+    ).toStrictEqual(serviceArea);
+
+    expect(
+      Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
+        description: "  Retail sites  ",
+        name: "  Retail  ",
+      })
+    ).toStrictEqual({
+      description: "Retail sites",
+      name: "Retail",
+    });
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
+        name: "",
+      })
+    ).toThrow(/Expected/);
+
+    expect(
+      Schema.decodeUnknownSync(UpdateServiceAreaInputSchema)({
+        description: null,
+        name: "  Retail Core  ",
+      })
+    ).toStrictEqual({
+      description: null,
+      name: "Retail Core",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(ServiceAreaOptionSchema)({
+        id: serviceArea.id,
+        name: serviceArea.name,
+      })
+    ).toStrictEqual({
+      id: serviceArea.id,
+      name: serviceArea.name,
+    });
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
+        name: "A".repeat(121),
+      })
+    ).toThrow(/maxLength/);
+  }, 5000);
+
+  it("decodes rate card input contracts", () => {
+    const decoded = Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+      lines: [
+        {
+          kind: "labour",
+          name: "  Labour  ",
+          position: 1,
+          unit: "hour",
+          value: 85,
+        },
+        {
+          kind: "material_markup",
+          name: "Materials markup",
+          position: 2,
+          unit: "percent",
+          value: 15,
+        },
+      ],
+      name: "  Standard  ",
+    });
+
+    expect(decoded.name).toBe("Standard");
+    expect(decoded.lines[0]?.name).toBe("Labour");
+    expect(decoded.lines[1]?.kind).toBe("material_markup");
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: [
+          {
+            kind: "custom",
+            name: "Bad",
+            position: 1,
+            unit: "hour",
+            value: -1,
+          },
+        ],
+        name: "Standard",
+      })
+    ).toThrow(/greaterThanOrEqualTo/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: [
+          {
+            kind: "labour",
+            name: "Labour",
+            position: 1,
+            unit: "hour",
+            value: 85,
+          },
+          {
+            kind: "callout",
+            name: "Callout",
+            position: 1,
+            unit: "visit",
+            value: 120,
+          },
+        ],
+        name: "Standard",
+      })
+    ).toThrow(/positions must be unique/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: Array.from({ length: 51 }, (_, index) => ({
+          kind: "custom",
+          name: `Line ${index + 1}`,
+          position: index + 1,
+          unit: "each",
+          value: index + 1,
+        })),
+        name: "Standard",
+      })
+    ).toThrow(/maxItems/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(CreateRateCardInputSchema)({
+        lines: [
+          {
+            kind: "custom",
+            name: "A".repeat(121),
+            position: 1,
+            unit: "each",
+            value: 1,
+          },
+        ],
+        name: "Standard",
+      })
+    ).toThrow(/maxLength/);
+  }, 5000);
+
+  it("decodes rate card response contracts", () => {
+    const rateCard = {
+      id: "550e8400-e29b-41d4-a716-446655440020",
+      name: "Standard",
+      createdAt: "2026-04-22T10:00:00.000Z",
+      updatedAt: "2026-04-22T11:00:00.000Z",
+      lines: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440021",
+          rateCardId: "550e8400-e29b-41d4-a716-446655440020",
+          kind: "callout",
+          name: "Callout",
+          position: 1,
+          unit: "visit",
+          value: 120,
+        },
+      ],
+    };
+
+    expect(Schema.decodeUnknownSync(RateCardSchema)(rateCard)).toStrictEqual(
+      rateCard
+    );
+  }, 5000);
+
   it("exports the closed job enums", () => {
     expect(ParseResult.decodeUnknownSync(JobStatusSchema)("in_progress")).toBe(
       "in_progress"
@@ -32,6 +340,113 @@ describe("jobs-core", () => {
     expect(ParseResult.decodeUnknownSync(JobPrioritySchema)("urgent")).toBe(
       "urgent"
     );
+  }, 5000);
+
+  it("rejects empty user ids at DTO boundaries", () => {
+    expect(() => ParseResult.decodeUnknownSync(UserId)("")).toThrow(
+      /Expected a non empty string/
+    );
+    expect(() =>
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+        activity: [],
+        comments: [],
+        job: {
+          createdAt: "2026-04-23T11:00:00.000Z",
+          createdByUserId: "",
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "job",
+          labels: [],
+          priority: "none",
+          status: "new",
+          title: "Inspect boiler",
+          updatedAt: "2026-04-23T12:00:00.000Z",
+        },
+        viewerAccess: {
+          visibility: "internal",
+          canComment: true,
+        },
+        visits: [],
+      })
+    ).toThrow(/Expected a non empty string/);
+  }, 5000);
+
+  it("decodes job detail with viewer access, optional costs, and selected site detail", () => {
+    const site = {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      name: "Docklands Campus",
+      addressLine1: "1 Custom House Quay",
+      county: "Dublin",
+      country: "IE",
+      eircode: "D01 X2X2",
+      latitude: 53.3498,
+      longitude: -6.2603,
+      geocodingProvider: "google",
+      geocodedAt: "2026-04-22T10:00:00.000Z",
+    };
+    const baseDetail = {
+      activity: [],
+      comments: [],
+      job: {
+        createdAt: "2026-04-23T11:00:00.000Z",
+        createdByUserId: "user_123",
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "job",
+        labels: [],
+        priority: "none",
+        siteId: site.id,
+        status: "new",
+        title: "Inspect boiler",
+        updatedAt: "2026-04-23T12:00:00.000Z",
+      },
+      site,
+      viewerAccess: {
+        visibility: "external",
+        canComment: true,
+      },
+      visits: [],
+    };
+
+    expect(
+      ParseResult.decodeUnknownSync(JobViewerAccessSchema)({
+        visibility: "internal",
+        canComment: false,
+      })
+    ).toStrictEqual({
+      visibility: "internal",
+      canComment: false,
+    });
+    expect(
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)(baseDetail)
+    ).toStrictEqual(baseDetail);
+    expect(
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+        ...baseDetail,
+        costs: {
+          lines: [],
+          summary: {
+            subtotalMinor: 0,
+          },
+        },
+        viewerAccess: {
+          visibility: "internal",
+          canComment: true,
+        },
+      }).costs
+    ).toStrictEqual({
+      lines: [],
+      summary: {
+        subtotalMinor: 0,
+      },
+    });
+    expect(() =>
+      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+        ...baseDetail,
+        costLines: [],
+        costSummary: {
+          subtotalMinor: 0,
+        },
+      })
+    ).toThrow(/unexpected/);
   }, 5000);
 
   it("decodes trimmed boundary DTOs", () => {
@@ -43,9 +458,11 @@ describe("jobs-core", () => {
           kind: "create",
           input: {
             name: "  Example Site  ",
+            addressLine1: "  1 Custom House Quay  ",
             town: "  Dublin  ",
-            latitude: 53.3498,
-            longitude: -6.2603,
+            county: "  Dublin  ",
+            country: "IE",
+            eircode: "  D01 X2X2  ",
           },
         },
         contact: {
@@ -60,9 +477,11 @@ describe("jobs-core", () => {
         kind: "create",
         input: {
           name: "Example Site",
+          addressLine1: "1 Custom House Quay",
           town: "Dublin",
-          latitude: 53.3498,
-          longitude: -6.2603,
+          county: "Dublin",
+          country: "IE",
+          eircode: "D01 X2X2",
         },
       },
       contact: {
@@ -78,21 +497,80 @@ describe("jobs-core", () => {
     ).toStrictEqual({
       body: "Confirmed on site",
     });
-  }, 5000);
 
-  it("requires site coordinates to be provided as a complete pair", () => {
-    expect(() =>
+    expect(
       ParseResult.decodeUnknownSync(CreateJobInputSchema)({
-        title: "Replace boiler",
-        site: {
+        title: "  Replace boiler  ",
+        externalReference: "  PO-4471  ",
+        contact: {
           kind: "create",
           input: {
-            name: "Docklands Campus",
-            latitude: 53.3498,
+            name: "  Alex Contact  ",
+            email: "  alex@example.com  ",
+            phone: "  +353 87 123 4567  ",
+            notes: "  Prefers morning calls.  ",
           },
         },
       })
-    ).toThrow(/Site coordinates must include both latitude and longitude/);
+    ).toStrictEqual({
+      title: "Replace boiler",
+      externalReference: "PO-4471",
+      contact: {
+        kind: "create",
+        input: {
+          name: "Alex Contact",
+          email: "alex@example.com",
+          phone: "+353 87 123 4567",
+          notes: "Prefers morning calls.",
+        },
+      },
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(JobContactOptionSchema)({
+        id: "550e8400-e29b-41d4-a716-446655440001",
+        name: "Alex Contact",
+        email: "alex@example.com",
+        phone: "+353 87 123 4567",
+        siteIds: [],
+      })
+    ).toStrictEqual({
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      name: "Alex Contact",
+      email: "alex@example.com",
+      phone: "+353 87 123 4567",
+      siteIds: [],
+    });
+  }, 5000);
+
+  it("rejects invalid contact emails at DTO boundaries", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+        title: "Replace boiler",
+        contact: {
+          kind: "create",
+          input: {
+            name: "Alex Contact",
+            email: "not-an-email",
+          },
+        },
+      })
+    ).toThrow(/a valid email/);
+  }, 5000);
+
+  it("rejects coordinates when creating a site", () => {
+    const rejectedCoordinate = /is unexpected/;
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "Docklands Campus",
+        addressLine1: "1 Custom House Quay",
+        county: "Dublin",
+        country: "IE",
+        eircode: "D01 X2X2",
+        latitude: 53.3498,
+      })
+    ).toThrow(rejectedCoordinate);
 
     expect(() =>
       ParseResult.decodeUnknownSync(CreateJobInputSchema)({
@@ -101,19 +579,37 @@ describe("jobs-core", () => {
           kind: "create",
           input: {
             name: "Docklands Campus",
+            addressLine1: "1 Custom House Quay",
+            county: "Dublin",
+            country: "IE",
+            eircode: "D01 X2X2",
             longitude: -6.2603,
           },
         },
       })
-    ).toThrow(/Site coordinates must include both latitude and longitude/);
+    ).toThrow(rejectedCoordinate);
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "Docklands Campus",
+        addressLine1: "1 Custom House Quay",
+        county: "Dublin",
+        country: "IE",
+        eircode: "D01 X2X2",
+        latitude: 53.3498,
+        longitude: -6.2603,
+      })
+    ).toThrow(rejectedCoordinate);
   }, 5000);
 
   it("reuses the site creation DTO for standalone and inline site creation", () => {
     const standaloneInput = {
       accessNotes: "  Enter via reception  ",
       addressLine1: "  1 Custom House Quay  ",
-      latitude: 53.3498,
-      longitude: -6.2603,
+      addressLine2: "  North Dock  ",
+      county: "  Dublin  ",
+      country: "IE",
+      eircode: "  D01 X2X2  ",
       name: "  Docklands Campus  ",
       town: "  Dublin  ",
     };
@@ -123,8 +619,10 @@ describe("jobs-core", () => {
     ).toStrictEqual({
       accessNotes: "Enter via reception",
       addressLine1: "1 Custom House Quay",
-      latitude: 53.3498,
-      longitude: -6.2603,
+      addressLine2: "North Dock",
+      county: "Dublin",
+      country: "IE",
+      eircode: "D01 X2X2",
       name: "Docklands Campus",
       town: "Dublin",
     });
@@ -141,8 +639,10 @@ describe("jobs-core", () => {
       input: {
         accessNotes: "Enter via reception",
         addressLine1: "1 Custom House Quay",
-        latitude: 53.3498,
-        longitude: -6.2603,
+        addressLine2: "North Dock",
+        county: "Dublin",
+        country: "IE",
+        eircode: "D01 X2X2",
         name: "Docklands Campus",
         town: "Dublin",
       },
@@ -152,17 +652,50 @@ describe("jobs-core", () => {
     expect(() =>
       ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
         name: "Docklands Campus",
-        latitude: 53.3498,
+        addressLine1: "1 Custom House Quay",
+        county: "Dublin",
+        country: "IE",
       })
-    ).toThrow(/Site coordinates must include both latitude and longitude/);
+    ).toThrow(/Irish sites require an Eircode/);
+  }, 5000);
+
+  it("requires an Eircode for Irish site creation", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "Docklands Campus",
+        addressLine1: "1 Custom House Quay",
+        county: "Dublin",
+        country: "IE",
+      })
+    ).toThrow(/Irish sites require an Eircode/);
+
+    expect(
+      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "London Depot",
+        addressLine1: "10 Downing Street",
+        county: "Greater London",
+        country: "GB",
+      })
+    ).toStrictEqual({
+      name: "London Depot",
+      addressLine1: "10 Downing Street",
+      county: "Greater London",
+      country: "GB",
+    });
   }, 5000);
 
   it("validates site option coordinates at response boundaries", () => {
     const siteOption = {
       id: "550e8400-e29b-41d4-a716-446655440010",
       name: "Docklands Campus",
+      addressLine1: "1 Custom House Quay",
+      county: "Dublin",
+      country: "IE",
+      eircode: "D01 X2X2",
       latitude: 53.3498,
       longitude: -6.2603,
+      geocodingProvider: "google",
+      geocodedAt: "2026-04-22T10:00:00.000Z",
     };
 
     expect(
@@ -178,9 +711,14 @@ describe("jobs-core", () => {
       ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
         id: siteOption.id,
         name: siteOption.name,
+        addressLine1: siteOption.addressLine1,
+        county: siteOption.county,
+        country: siteOption.country,
         latitude: 53.3498,
+        geocodingProvider: siteOption.geocodingProvider,
+        geocodedAt: siteOption.geocodedAt,
       })
-    ).toThrow(/Site coordinates must include both latitude and longitude/);
+    ).toThrow(/longitude/);
   }, 5000);
 
   it("keeps list filters and patch payloads shapeable", () => {
@@ -211,6 +749,74 @@ describe("jobs-core", () => {
         limit: "101",
       })
     ).toThrow(/lessThanOrEqualTo/);
+  }, 5000);
+
+  it("keeps job label DTOs shapeable", () => {
+    expect(
+      ParseResult.decodeUnknownSync(JobLabelNameSchema)("  Waiting on PO  ")
+    ).toBe("Waiting on PO");
+    expect(normalizeJobLabelName("  Waiting   on PO  ")).toBe("waiting on po");
+
+    expect(() =>
+      ParseResult.decodeUnknownSync(JobLabelNameSchema)(" ".repeat(4))
+    ).toThrow(/at least 1/);
+
+    const label = ParseResult.decodeUnknownSync(JobLabelSchema)({
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Waiting on PO",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:00:00.000Z",
+    });
+
+    expect(label.name).toBe("Waiting on PO");
+  }, 5000);
+
+  it("keeps job labels on list and detail responses", () => {
+    const label = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "No access",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:00:00.000Z",
+    };
+
+    const listItem = ParseResult.decodeUnknownSync(JobListItemSchema)({
+      createdAt: "2026-04-28T10:00:00.000Z",
+      id: "22222222-2222-4222-8222-222222222222",
+      kind: "job",
+      labels: [label],
+      priority: "none",
+      status: "new",
+      title: "Inspect access panel",
+      updatedAt: "2026-04-28T10:15:00.000Z",
+    });
+
+    expect(listItem.labels.map((jobLabel) => jobLabel.name)).toStrictEqual([
+      "No access",
+    ]);
+  }, 5000);
+
+  it("accepts label filters and label activity payloads", () => {
+    expect(
+      ParseResult.decodeUnknownSync(JobListQuerySchema)({
+        labelId: "11111111-1111-4111-8111-111111111111",
+        limit: "25",
+      })
+    ).toMatchObject({
+      labelId: "11111111-1111-4111-8111-111111111111",
+      limit: 25,
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(JobActivityLabelAddedPayloadSchema)({
+        eventType: "label_added",
+        labelId: "11111111-1111-4111-8111-111111111111",
+        labelName: "Parts ordered",
+      })
+    ).toStrictEqual({
+      eventType: "label_added",
+      labelId: "11111111-1111-4111-8111-111111111111",
+      labelName: "Parts ordered",
+    });
   }, 5000);
 
   it("keeps the activity and visit DTOs well-formed", () => {
@@ -267,6 +873,282 @@ describe("jobs-core", () => {
     });
   }, 5000);
 
+  it("exports organization activity query and response DTOs", () => {
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        actorUserId: "user_123",
+        cursor: "activity_cursor_1",
+        eventType: "status_changed",
+        fromDate: "2026-04-01",
+        jobTitle: "  Replace boiler  ",
+        limit: "25",
+        toDate: "2026-04-28",
+      })
+    ).toStrictEqual({
+      actorUserId: "user_123",
+      cursor: "activity_cursor_1",
+      eventType: "status_changed",
+      fromDate: "2026-04-01",
+      jobTitle: "Replace boiler",
+      limit: 25,
+      toDate: "2026-04-28",
+    });
+
+    expect(
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            actor: {
+              id: "user_123",
+              name: "Ada Lovelace",
+              email: "ada@example.com",
+            },
+            eventType: "status_changed",
+            payload: {
+              eventType: "status_changed",
+              fromStatus: "new",
+              toStatus: "in_progress",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+        nextCursor: "activity_cursor_2",
+      })
+    ).toStrictEqual({
+      items: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440020",
+          workItemId: "550e8400-e29b-41d4-a716-446655440000",
+          jobTitle: "Replace boiler",
+          actor: {
+            id: "user_123",
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+          },
+          eventType: "status_changed",
+          payload: {
+            eventType: "status_changed",
+            fromStatus: "new",
+            toStatus: "in_progress",
+          },
+          createdAt: "2026-04-23T11:00:00.000Z",
+        },
+      ],
+      nextCursor: "activity_cursor_2",
+    });
+
+    expect(OrganizationActivityCursor).toBeDefined();
+    expect(
+      ParseResult.decodeUnknownSync(JobMemberOptionsResponseSchema)({
+        members: [
+          {
+            id: "user_123",
+            name: "Ada Lovelace",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      members: [
+        {
+          id: "user_123",
+          name: "Ada Lovelace",
+        },
+      ],
+    });
+    expect(
+      ParseResult.decodeUnknownSync(JobExternalMemberOptionsResponseSchema)({
+        members: [
+          {
+            email: "ada@example.com",
+            id: "user_123",
+            name: "Ada Lovelace",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      members: [
+        {
+          email: "ada@example.com",
+          id: "user_123",
+          name: "Ada Lovelace",
+        },
+      ],
+    });
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+        limit: "101",
+      })
+    ).toThrow(/lessThanOrEqualTo/);
+  }, 5000);
+
+  it("rejects organization activity items whose event type differs from the payload", () => {
+    expect(() =>
+      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+        items: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440020",
+            workItemId: "550e8400-e29b-41d4-a716-446655440000",
+            jobTitle: "Replace boiler",
+            eventType: "status_changed",
+            payload: {
+              eventType: "priority_changed",
+              fromPriority: "none",
+              toPriority: "high",
+            },
+            createdAt: "2026-04-23T11:00:00.000Z",
+          },
+        ],
+      })
+    ).toThrow(/eventType/);
+  }, 5000);
+
+  it("validates add cost line input at the boundary", () => {
+    const decode = ParseResult.decodeUnknownSync(AddJobCostLineInputSchema);
+
+    expect(
+      decode({
+        description: "Install replacement valve",
+        quantity: 1.23,
+        taxRateBasisPoints: 2300,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toStrictEqual({
+      description: "Install replacement valve",
+      quantity: 1.23,
+      taxRateBasisPoints: 2300,
+      type: "labour",
+      unitPriceMinor: 6500,
+    });
+
+    expect(() =>
+      decode({
+        description: "",
+        quantity: 0,
+        type: "material",
+        unitPriceMinor: -1,
+      })
+    ).toThrow(/Expected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 6500,
+        unexpected: true,
+      })
+    ).toThrow(/unexpected/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: Number.POSITIVE_INFINITY,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/positive finite quantity/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1.234,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/at most two decimal places/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 10_000_000_000,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 9999999999.99/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 65.5,
+      })
+    ).toThrow(/Expected an integer/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        type: "labour",
+        unitPriceMinor: 2_147_483_648,
+      })
+    ).toThrow(/less than or equal to 2147483647/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 9_999_999_999.99,
+        type: "labour",
+        unitPriceMinor: 2_147_483_647,
+      })
+    ).toThrow(/safe integer line total/);
+
+    expect(() =>
+      decode({
+        description: "Install replacement valve",
+        quantity: 1,
+        taxRateBasisPoints: 10_001,
+        type: "labour",
+        unitPriceMinor: 6500,
+      })
+    ).toThrow(/less than or equal to 10000/);
+  }, 5000);
+
+  it("calculates line totals and job cost summaries in minor units", () => {
+    expect(
+      calculateJobCostLineTotalMinor({
+        quantity: 1.5,
+        unitPriceMinor: 6500,
+      })
+    ).toBe(9750);
+    expect(
+      calculateJobCostLineTotalMinor({
+        quantity: 0.29,
+        unitPriceMinor: 50,
+      })
+    ).toBe(15);
+
+    expect(
+      calculateJobCostSummary([
+        {
+          lineTotalMinor: 9750,
+        },
+        {
+          lineTotalMinor: 2599,
+        },
+      ])
+    ).toStrictEqual({
+      subtotalMinor: 12_349,
+    });
+  }, 5000);
+
+  it("rejects job cost summaries with unsafe aggregate subtotals", () => {
+    expect(() =>
+      calculateJobCostSummary([
+        {
+          lineTotalMinor: Number.MAX_SAFE_INTEGER,
+        },
+        {
+          lineTotalMinor: 1,
+        },
+      ])
+    ).toThrow(/safe integer job cost subtotal/);
+  }, 5000);
+
   it("keeps site options rich enough for maps and links", () => {
     const siteOption = {
       id: "550e8400-e29b-41d4-a716-446655440010",
@@ -275,12 +1157,15 @@ describe("jobs-core", () => {
       addressLine2: "North Dock",
       town: "Dublin",
       county: "Dublin",
+      country: "IE",
       eircode: "D01 X2X2",
       accessNotes: "Enter via reception",
       latitude: 53.3498,
       longitude: -6.2603,
-      regionId: "550e8400-e29b-41d4-a716-446655440011",
-      regionName: "Dublin",
+      geocodingProvider: "google",
+      geocodedAt: "2026-04-22T10:00:00.000Z",
+      serviceAreaId: "550e8400-e29b-41d4-a716-446655440011",
+      serviceAreaName: "Dublin",
     };
 
     expect(
@@ -292,12 +1177,15 @@ describe("jobs-core", () => {
       addressLine2: "North Dock",
       town: "Dublin",
       county: "Dublin",
+      country: "IE",
       eircode: "D01 X2X2",
       accessNotes: "Enter via reception",
       latitude: 53.3498,
       longitude: -6.2603,
-      regionId: "550e8400-e29b-41d4-a716-446655440011",
-      regionName: "Dublin",
+      geocodingProvider: "google",
+      geocodedAt: "2026-04-22T10:00:00.000Z",
+      serviceAreaId: "550e8400-e29b-41d4-a716-446655440011",
+      serviceAreaName: "Dublin",
     });
     expect(
       ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
@@ -312,11 +1200,25 @@ describe("jobs-core", () => {
     expect(Object.keys(spec.paths)).toStrictEqual([
       "/jobs",
       "/jobs/options",
+      "/jobs/member-options",
+      "/jobs/external-member-options",
+      "/activity",
       "/jobs/{workItemId}",
       "/jobs/{workItemId}/transitions",
       "/jobs/{workItemId}/reopen",
       "/jobs/{workItemId}/comments",
       "/jobs/{workItemId}/visits",
+      "/jobs/{workItemId}/labels",
+      "/jobs/{workItemId}/labels/{labelId}",
+      "/job-labels",
+      "/job-labels/{labelId}",
+      "/jobs/{workItemId}/cost-lines",
+      "/jobs/{workItemId}/collaborators",
+      "/jobs/{workItemId}/collaborators/{collaboratorId}",
+      "/service-areas",
+      "/service-areas/{serviceAreaId}",
+      "/rate-cards",
+      "/rate-cards/{rateCardId}",
       "/sites/options",
       "/sites",
       "/sites/{siteId}",
@@ -333,10 +1235,91 @@ describe("jobs-core", () => {
     expect(
       spec.paths["/jobs/{workItemId}/visits"]?.post?.responses["400"]
     ).toBeDefined();
+    expect(spec.paths["/jobs"]?.post?.responses["422"]).toBeDefined();
     expect(spec.paths["/sites/options"]?.get?.operationId).toBe(
       "sites.getSiteOptions"
     );
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
+  }, 5000);
+
+  it("documents job label api operations", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+
+    expect(spec.paths["/job-labels"]?.get?.operationId).toBe(
+      "jobs.listJobLabels"
+    );
+    expect(spec.paths["/job-labels"]?.post?.operationId).toBe(
+      "jobs.createJobLabel"
+    );
+    expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
+      "jobs.assignJobLabel"
+    );
+  }, 5000);
+
+  it("surfaces the rate cards api contract with the expected paths", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+
+    expect(spec.paths["/rate-cards"]?.get?.operationId).toBe(
+      "rateCards.listRateCards"
+    );
+    expect(spec.paths["/rate-cards"]?.post?.operationId).toBe(
+      "rateCards.createRateCard"
+    );
+    expect(spec.paths["/rate-cards"]?.post?.responses["201"]).toBeDefined();
+    expect(spec.paths["/rate-cards/{rateCardId}"]?.patch?.operationId).toBe(
+      "rateCards.updateRateCard"
+    );
+    expect(
+      spec.paths["/rate-cards/{rateCardId}"]?.patch?.responses["404"]
+    ).toBeDefined();
+  }, 5000);
+
+  it("surfaces the service areas api contract with the expected paths", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+
+    expect(spec.paths["/service-areas"]?.get?.operationId).toBe(
+      "serviceAreas.listServiceAreas"
+    );
+    expect(spec.paths["/service-areas"]?.post?.operationId).toBe(
+      "serviceAreas.createServiceArea"
+    );
+    expect(spec.paths["/service-areas"]?.post?.responses["201"]).toBeDefined();
+    expect(
+      spec.paths["/service-areas/{serviceAreaId}"]?.patch?.operationId
+    ).toBe("serviceAreas.updateServiceArea");
+    expect(
+      spec.paths["/service-areas/{serviceAreaId}"]?.patch?.responses["404"]
+    ).toBeDefined();
+  }, 5000);
+
+  it("surfaces the job cost line api contract", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const addCostLine =
+      spec.paths["/jobs/{workItemId}/cost-lines"]?.post ?? null;
+
+    expect(addCostLine?.operationId).toBe("jobs.addJobCostLine");
+    expect(addCostLine?.responses["422"]).toBeDefined();
+  }, 5000);
+
+  it("surfaces the job collaborators api contract", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const collaborators = spec.paths["/jobs/{workItemId}/collaborators"];
+    const collaborator =
+      spec.paths["/jobs/{workItemId}/collaborators/{collaboratorId}"];
+
+    expect(spec.paths["/jobs/external-member-options"]?.get?.operationId).toBe(
+      "jobs.getJobExternalMemberOptions"
+    );
+    expect(collaborators?.get?.operationId).toBe("jobs.listJobCollaborators");
+    expect(collaborators?.post?.operationId).toBe("jobs.attachJobCollaborator");
+    expect(collaborators?.post?.responses["201"]).toBeDefined();
+    expect(collaborators?.post?.responses["409"]).toBeDefined();
+    expect(collaborator?.patch?.operationId).toBe("jobs.updateJobCollaborator");
+    expect(collaborator?.delete?.operationId).toBe(
+      "jobs.detachJobCollaborator"
+    );
+    expect(collaborator?.patch?.responses["404"]).toBeDefined();
+    expect(collaborator?.delete?.responses["404"]).toBeDefined();
   }, 5000);
 
   it("documents standalone site creation responses", () => {
@@ -345,17 +1328,35 @@ describe("jobs-core", () => {
     expect(spec.paths["/sites"]?.post?.responses["201"]).toBeDefined();
     expect(spec.paths["/sites"]?.post?.responses["403"]).toBeDefined();
     expect(spec.paths["/sites"]?.post?.responses["404"]).toBeDefined();
+    expect(spec.paths["/sites"]?.post?.responses["422"]).toBeDefined();
+  }, 5000);
+
+  it("does not document create-site coordinates as request properties", () => {
+    const spec = OpenApi.fromApi(JobsApi);
+    const standaloneRequestBody = JSON.stringify(
+      spec.paths["/sites"]?.post?.requestBody
+    );
+    const jobsRequestBody = JSON.stringify(
+      spec.paths["/jobs"]?.post?.requestBody
+    );
+
+    expect(standaloneRequestBody).not.toContain('"latitude"');
+    expect(standaloneRequestBody).not.toContain('"longitude"');
+    expect(jobsRequestBody).not.toContain('"latitude"');
+    expect(jobsRequestBody).not.toContain('"longitude"');
   }, 5000);
 
   it("exports the shared api group", () => {
     expect(JobsApiGroup.identifier).toBe("jobs");
+    expect(RateCardsApiGroup.identifier).toBe("rateCards");
+    expect(ServiceAreasApiGroup.identifier).toBe("serviceAreas");
     expect(SitesApiGroup.identifier).toBe("sites");
   }, 5000);
 
   it("exports a lean sites options response", () => {
     expect(
       ParseResult.decodeUnknownSync(SitesOptionsResponseSchema)({
-        regions: [
+        serviceAreas: [
           {
             id: "550e8400-e29b-41d4-a716-446655440011",
             name: "Dublin",
@@ -365,11 +1366,19 @@ describe("jobs-core", () => {
           {
             id: "550e8400-e29b-41d4-a716-446655440010",
             name: "Docklands Campus",
+            addressLine1: "1 Custom House Quay",
+            county: "Dublin",
+            country: "IE",
+            eircode: "D01 X2X2",
+            latitude: 53.3498,
+            longitude: -6.2603,
+            geocodingProvider: "google",
+            geocodedAt: "2026-04-22T10:00:00.000Z",
           },
         ],
       })
     ).toStrictEqual({
-      regions: [
+      serviceAreas: [
         {
           id: "550e8400-e29b-41d4-a716-446655440011",
           name: "Dublin",
@@ -379,8 +1388,74 @@ describe("jobs-core", () => {
         {
           id: "550e8400-e29b-41d4-a716-446655440010",
           name: "Docklands Campus",
+          addressLine1: "1 Custom House Quay",
+          county: "Dublin",
+          country: "IE",
+          eircode: "D01 X2X2",
+          latitude: 53.3498,
+          longitude: -6.2603,
+          geocodingProvider: "google",
+          geocodedAt: "2026-04-22T10:00:00.000Z",
         },
       ],
+    });
+  }, 5000);
+
+  it("exports service areas in job options", () => {
+    expect(
+      ParseResult.decodeUnknownSync(JobOptionsResponseSchema)({
+        members: [],
+        serviceAreas: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440011",
+            name: "Dublin",
+          },
+        ],
+        sites: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440010",
+            name: "Docklands Campus",
+            serviceAreaId: "550e8400-e29b-41d4-a716-446655440011",
+            serviceAreaName: "Dublin",
+            addressLine1: "1 Custom House Quay",
+            county: "Dublin",
+            country: "IE",
+            eircode: "D01 X2X2",
+            latitude: 53.3498,
+            longitude: -6.2603,
+            geocodingProvider: "google",
+            geocodedAt: "2026-04-22T10:00:00.000Z",
+          },
+        ],
+        contacts: [],
+        labels: [],
+      })
+    ).toStrictEqual({
+      members: [],
+      serviceAreas: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440011",
+          name: "Dublin",
+        },
+      ],
+      sites: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440010",
+          name: "Docklands Campus",
+          serviceAreaId: "550e8400-e29b-41d4-a716-446655440011",
+          serviceAreaName: "Dublin",
+          addressLine1: "1 Custom House Quay",
+          county: "Dublin",
+          country: "IE",
+          eircode: "D01 X2X2",
+          latitude: 53.3498,
+          longitude: -6.2603,
+          geocodingProvider: "google",
+          geocodedAt: "2026-04-22T10:00:00.000Z",
+        },
+      ],
+      contacts: [],
+      labels: [],
     });
   }, 5000);
 
@@ -409,6 +1484,37 @@ describe("jobs-core", () => {
       "@task-tracker/jobs-core/VisitDurationIncrementError"
     );
     expect(error.durationMinutes).toBe(30);
+
+    const geocodingError = new SiteGeocodingFailedError({
+      message: "Could not geocode site",
+      country: "IE",
+      eircode: "D01 X2X2",
+    });
+
+    expect(geocodingError._tag).toBe(
+      "@task-tracker/jobs-core/SiteGeocodingFailedError"
+    );
+    expect(geocodingError.country).toBe("IE");
+
+    const costSummaryError = new JobCostSummaryLimitExceededError({
+      message: "Job cost summary subtotal would exceed a safe integer",
+      workItemId: Schema.decodeUnknownSync(WorkItemId)(
+        "550e8400-e29b-41d4-a716-446655440000"
+      ),
+    });
+
+    expect(costSummaryError._tag).toBe(
+      "@task-tracker/jobs-core/JobCostSummaryLimitExceededError"
+    );
+
+    const activityCursorError = new OrganizationActivityCursorInvalidError({
+      cursor: "bad-cursor",
+      message: "Organization activity cursor is invalid",
+    });
+
+    expect(activityCursorError._tag).toBe(
+      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
+    );
   }, 5000);
 
   it("keeps title schema trimming strict", () => {

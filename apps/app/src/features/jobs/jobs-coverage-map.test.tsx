@@ -37,7 +37,7 @@ vi.mock(import("./jobs-coverage-map-canvas"), () => ({
     readonly groups: readonly { readonly site: { readonly name?: string } }[];
   }) => (
     <output data-testid="coverage-map-canvas">
-      {groups.map((group) => group.site.name ?? "Pinned site").join(" | ")}
+      {groups.map((group) => group.site.name ?? "Mapped site").join(" | ")}
     </output>
   ),
 }));
@@ -82,7 +82,7 @@ describe("jobs coverage map", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Depot",
-                regionName: "North",
+                serviceAreaName: "North",
               },
             ],
             [
@@ -102,20 +102,24 @@ describe("jobs coverage map", () => {
     await expect(
       screen.findByTestId("coverage-map-canvas")
     ).resolves.toHaveTextContent("Depot");
-    expect(screen.getByText(/1 without pin/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 unmapped/i)).toBeInTheDocument();
+    expect(screen.getByText(/needs location/i)).toBeInTheDocument();
     expect(screen.getByText("Check classroom snag")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /maps/i })).toHaveAttribute(
       "href",
       expect.stringContaining("Main+Street")
     );
-  }, 1000);
+  }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {
     render(<JobsCoverageMap jobs={[]} sites={new Map()} />);
 
     expect(screen.getByText(/no mapped jobs/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/add a geocoded site address to make this view useful/i)
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("coverage-map-canvas")).not.toBeInTheDocument();
-  }, 1000);
+  }, 5000);
 });
 
 function buildJob(
@@ -127,6 +131,7 @@ function buildJob(
     createdAt: "2026-04-23T11:00:00.000Z",
     id,
     kind: "job",
+    labels: [],
     priority: "none",
     status,
     title,

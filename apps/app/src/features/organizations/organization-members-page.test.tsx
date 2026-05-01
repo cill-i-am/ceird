@@ -1,7 +1,9 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { decodeOrganizationId } from "@task-tracker/identity-core";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OrganizationMembersPage } from "./organization-members-page";
@@ -16,7 +18,7 @@ const { mockedInviteMember, mockedListInvitations } = vi.hoisted(() => ({
     (input: {
       email: string;
       organizationId: string;
-      role: "admin" | "member";
+      role: "admin" | "external" | "member";
     }) => Promise<{
       data: {
         id: string;
@@ -211,6 +213,95 @@ describe("organization members page", () => {
       screen.findByTitle("member@example.com")
     ).resolves.toBeVisible();
     expect(screen.getAllByText("2 open")).toHaveLength(1);
+  }, 10_000);
+
+  it("submits the invite form with the submit hotkey", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <OrganizationMembersPage activeOrganizationId={organizationId} />
+      </HotkeysProvider>
+    );
+
+    await user.type(screen.getByLabelText("Email"), "member@example.com");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    await waitFor(() => {
+      expect(mockedInviteMember).toHaveBeenCalledWith({
+        email: "member@example.com",
+        organizationId: "org_123",
+        role: "member",
+      });
+    });
+  }, 10_000);
+
+  it("opens the invite role picker with the role hotkey", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <OrganizationMembersPage activeOrganizationId={organizationId} />
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("r");
+
+    expect(screen.getByRole("combobox")).toHaveFocus();
+    expect(screen.getByRole("option", { name: "Admin" })).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: "External collaborator" })
+    ).toBeVisible();
+  }, 10_000);
+
+  it("submits external collaborator invites", async () => {
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await user.type(screen.getByLabelText("Email"), "vendor@example.com");
+    await chooseCommandOption(user, "Role", "External collaborator");
+    await user.click(screen.getByRole("button", { name: "Send invite" }));
+
+    await waitFor(() => {
+      expect(mockedInviteMember).toHaveBeenCalledWith({
+        email: "vendor@example.com",
+        organizationId: "org_123",
+        role: "external",
+      });
+    });
+  }, 10_000);
+
+  it("lists live members shortcuts in shortcut help", async () => {
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <HotkeysProvider>
+        <OrganizationMembersPage activeOrganizationId={organizationId} />
+      </HotkeysProvider>
+    );
+
+    await expect(
+      screen.findByText("pending@example.com")
+    ).resolves.toBeVisible();
+
+    rerender(
+      <HotkeysProvider>
+        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <ShortcutHelpOverlay activeScopes={["members"]} />
+      </HotkeysProvider>
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+
+    expect(within(dialog).getByText("Submit invite form")).toBeVisible();
+    expect(within(dialog).getByText("Focus invite role select")).toBeVisible();
   }, 10_000);
 
   it("shows a safe error when an invite fails", async () => {

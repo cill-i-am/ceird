@@ -55,6 +55,28 @@ describe("current jobs actor resolution", () => {
     );
   }, 10_000);
 
+  it("resolves an external organization membership role", async () => {
+    const exit = await runCurrentJobsActor({
+      rows: [{ role: "external" }],
+      session: {
+        session: {
+          activeOrganizationId: "org_123",
+        },
+        user: {
+          id: "user_123",
+        },
+      },
+    });
+
+    expect(exit).toStrictEqual(
+      Exit.succeed({
+        organizationId: "org_123",
+        role: "external",
+        userId: "user_123",
+      })
+    );
+  }, 10_000);
+
   it("fails with a session-required error when no authenticated session exists", async () => {
     const exit = await runCurrentJobsActor({
       session: null,

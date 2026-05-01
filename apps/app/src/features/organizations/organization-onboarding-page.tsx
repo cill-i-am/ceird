@@ -5,7 +5,6 @@ import { Schema } from "effect";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Spinner } from "#/components/ui/spinner";
 import {
   getErrorText,
   getFormErrorText,
@@ -24,7 +23,7 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your organization. Please try again.";
 
 export function OrganizationOnboardingPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/create-organization" });
   const isHydrated = useIsHydrated();
   const form = useForm({
     defaultValues: {
@@ -202,9 +201,9 @@ export function OrganizationOnboardingPage() {
                   type="submit"
                   size="lg"
                   className="w-full"
-                  disabled={isSubmitting || !isHydrated}
+                  loading={isSubmitting}
+                  disabled={!isHydrated}
                 >
-                  {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
                   {isSubmitting
                     ? "Creating organization..."
                     : "Create organization"}

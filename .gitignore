@@ -44,3 +44,4 @@ node-compile-cache/
 packages/infra/.alchemy/
 .env
 .env.local
+.auto-research/

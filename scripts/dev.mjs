@@ -9,6 +9,7 @@ const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
 const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
 const DEFAULT_CLOUDFLARE_ACCOUNT_ID = "cloudflare-account-test";
 const DEFAULT_CLOUDFLARE_API_TOKEN = "cloudflare-token-test";
+const DEFAULT_SITE_GEOCODER_MODE = "stub";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
   const proxyPort = baseEnvironment.PORTLESS_PORT ?? "1355";
@@ -30,6 +31,8 @@ export function createDevEnvironment(baseEnvironment = process.env) {
     CLOUDFLARE_API_TOKEN:
       baseEnvironment.CLOUDFLARE_API_TOKEN ?? DEFAULT_CLOUDFLARE_API_TOKEN,
     PORTLESS_PORT: proxyPort,
+    SITE_GEOCODER_MODE:
+      baseEnvironment.SITE_GEOCODER_MODE ?? DEFAULT_SITE_GEOCODER_MODE,
   };
 }
 
