@@ -30,6 +30,7 @@
         "AUTH_APP_ORIGIN",
         "AUTH_EMAIL_FROM",
         "AUTH_EMAIL_FROM_NAME",
+        "AUTH_EMAIL_TRANSPORT",
         "API_ORIGIN",
         "BETTER_AUTH_BASE_URL",
         "BETTER_AUTH_SECRET",

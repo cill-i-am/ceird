@@ -20,8 +20,8 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
       bytes: 32,
     });
-    let authEmailCloudflareEnv = {};
-    if (input.config.authEmailTransport === "cloudflare") {
+    let authEmailCloudflareApiEnv = {};
+    if (input.config.authEmailTransport === "cloudflare-api") {
       const authEmailApiToken = yield* Cloudflare.AccountApiToken(
         "AuthEmailApiToken",
         {
@@ -38,7 +38,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         }
       );
 
-      authEmailCloudflareEnv = {
+      authEmailCloudflareApiEnv = {
         CLOUDFLARE_ACCOUNT_ID: authEmailApiToken.accountId,
         CLOUDFLARE_API_TOKEN: authEmailApiToken.value,
       };
@@ -84,7 +84,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
         BETTER_AUTH_SECRET: betterAuthSecret.text,
         NODE_ENV: "production",
-        ...authEmailCloudflareEnv,
+        ...authEmailCloudflareApiEnv,
       },
       domain: input.config.apiHostname,
       observability: {
@@ -109,6 +109,20 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         },
       ],
     });
+
+    if (input.config.authEmailTransport === "cloudflare-binding") {
+      yield* api.bind`AuthEmailBinding`({
+        bindings: [
+          {
+            type: "send_email",
+            name: "AUTH_EMAIL",
+            allowedSenderAddresses: [
+              Redacted.value(input.config.authEmailFrom),
+            ],
+          },
+        ],
+      });
+    }
 
     yield* Cloudflare.QueueConsumer("AuthEmailConsumer", {
       queueId: authEmailQueue.queueId,

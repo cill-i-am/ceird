@@ -50,7 +50,7 @@ Use the Effect SQL layers when:
 
 The Cloudflare Alchemy POC keeps Postgres as the source of truth.
 
-PlanetScale database infrastructure and the Cloudflare runtime email token are
+PlanetScale database infrastructure and the Cloudflare Worker email binding are
 created by Alchemy, not manually in the dashboards and not through separate CLI
 steps. The required operator inputs are bootstrap credentials plus the database
 sizing choices:
@@ -62,7 +62,8 @@ sizing choices:
 5. Export bootstrap `CLOUDFLARE_API_TOKEN`.
 6. Set `CEIRD_ZONE_NAME`.
 7. Set `AUTH_EMAIL_FROM`.
-8. Set `AUTH_EMAIL_TRANSPORT=cloudflare`.
+8. Set `AUTH_EMAIL_TRANSPORT=cloudflare-binding` or omit it for the production
+   default.
 9. Set `CEIRD_PLANETSCALE_DATABASE_NAME`.
 10. Set `CEIRD_PLANETSCALE_DEFAULT_BRANCH`.
 11. Set `CEIRD_PLANETSCALE_REGION`, defaulting to `eu-west` for

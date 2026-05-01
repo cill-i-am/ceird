@@ -1,10 +1,21 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 export const InfraStage = Schema.Literals(["preview", "production"]);
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
+const INFRA_AUTH_EMAIL_TRANSPORT_MODES = [
+  "cloudflare-api",
+  "cloudflare-binding",
+  "noop",
+] as const;
+export const InfraAuthEmailTransport = Schema.Literals(
+  INFRA_AUTH_EMAIL_TRANSPORT_MODES
+);
+export type InfraAuthEmailTransport = Schema.Schema.Type<
+  typeof InfraAuthEmailTransport
+>;
 
 export type DomainName = string;
 
@@ -16,7 +27,7 @@ export interface InfraStageConfig {
   readonly apiHostname: DomainName;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
-  readonly authEmailTransport: string;
+  readonly authEmailTransport: InfraAuthEmailTransport;
   readonly planetScaleOrganization: string;
   readonly planetScaleDatabaseName: string;
   readonly planetScaleDefaultBranch: string;
@@ -27,6 +38,7 @@ export interface InfraStageConfig {
 
 const decodeStage = Schema.decodeUnknownSync(InfraStage);
 const domainNamePattern = /^[a-z0-9.-]+$/;
+const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
 const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
 const PlanetScaleRegionSlug = Schema.String.check(
@@ -39,6 +51,11 @@ const PlanetScaleClusterSize = Schema.String.check(
   Schema.isPattern(planetScaleClusterSizePattern, {
     message:
       "CEIRD_PLANETSCALE_CLUSTER_SIZE must be a PlanetScale cluster size such as PS-5",
+  })
+);
+const AuthEmailFromAddress = Schema.String.check(
+  Schema.isPattern(emailAddressPattern, {
+    message: "AUTH_EMAIL_FROM must be a plain email address",
   })
 );
 
@@ -81,6 +98,21 @@ function decodePlanetScaleClusterSize(value: string) {
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 }
 
+function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(AuthEmailFromAddress)(
+    Redacted.value(value)
+  ).pipe(
+    Effect.as(value),
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeInfraAuthEmailTransport(value: string) {
+  return Schema.decodeUnknownEffect(InfraAuthEmailTransport)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 export const loadInfraStageConfig = Effect.gen(function* () {
   const stage = yield* stringConfig(
     "CEIRD_INFRA_STAGE",
@@ -98,12 +130,15 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     "CEIRD_API_HOSTNAME",
     "TASK_TRACKER_API_HOSTNAME"
   ).pipe(Config.withDefault(`api.${zoneName}`), Config.map(decodeDomainName));
-  const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM");
+  const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
+    Config.mapOrFail(decodeAuthEmailFrom)
+  );
   const authEmailFromName = yield* Config.string("AUTH_EMAIL_FROM_NAME").pipe(
     Config.withDefault("Ceird")
   );
   const authEmailTransport = yield* Config.string("AUTH_EMAIL_TRANSPORT").pipe(
-    Config.withDefault("cloudflare")
+    Config.withDefault("cloudflare-binding"),
+    Config.mapOrFail(decodeInfraAuthEmailTransport)
   );
   const planetScaleOrganization = yield* Config.string(
     "PLANETSCALE_ORGANIZATION"

@@ -468,12 +468,14 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       buildComposeFallbackEnvironmentOverrides(baseRecord, {
         AUTH_EMAIL_FROM: "",
         AUTH_EMAIL_FROM_NAME: "",
+        AUTH_EMAIL_TRANSPORT: "noop",
         CLOUDFLARE_ACCOUNT_ID: "",
         CLOUDFLARE_API_TOKEN: "",
       })
     ).toMatchObject({
       AUTH_EMAIL_FROM: "",
       AUTH_EMAIL_FROM_NAME: "",
+      AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "",
       CLOUDFLARE_API_TOKEN: "",
       AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
@@ -501,6 +503,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
         [
           "AUTH_EMAIL_FROM=auth@example.com",
           "AUTH_EMAIL_FROM_NAME=Task Tracker Auth",
+          "AUTH_EMAIL_TRANSPORT=cloudflare-api",
           "CLOUDFLARE_ACCOUNT_ID=account_123",
           "CLOUDFLARE_API_TOKEN=token_123",
         ].join("\n")
@@ -527,6 +530,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
       ).resolves.toStrictEqual({
         AUTH_EMAIL_FROM: "auth@example.com",
         AUTH_EMAIL_FROM_NAME: "Task Tracker Auth",
+        AUTH_EMAIL_TRANSPORT: "cloudflare-api",
         CLOUDFLARE_ACCOUNT_ID: "account_123",
         CLOUDFLARE_API_TOKEN: "token_123",
       });
@@ -565,14 +569,13 @@ describe("authEmailSharedEnvironment", () => {
     expect(
       Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
         AUTH_EMAIL_FROM: "auth@example.com",
-        CLOUDFLARE_ACCOUNT_ID: "account_123",
-        CLOUDFLARE_API_TOKEN: "token_123",
       })
     ).toStrictEqual({
       AUTH_EMAIL_FROM: "auth@example.com",
       AUTH_EMAIL_FROM_NAME: "Task Tracker",
-      CLOUDFLARE_ACCOUNT_ID: "account_123",
-      CLOUDFLARE_API_TOKEN: "token_123",
+      AUTH_EMAIL_TRANSPORT: "noop",
+      CLOUDFLARE_ACCOUNT_ID: "",
+      CLOUDFLARE_API_TOKEN: "",
     });
   }, 10_000);
 
@@ -580,26 +583,41 @@ describe("authEmailSharedEnvironment", () => {
     expect(() =>
       Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
         AUTH_EMAIL_FROM: "not-an-email",
-        CLOUDFLARE_ACCOUNT_ID: "account_123",
-        CLOUDFLARE_API_TOKEN: "token_123",
       })
     ).toThrow(/AUTH_EMAIL_FROM/);
     expect(() =>
       Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
         AUTH_EMAIL_FROM: "not-an-email",
-        CLOUDFLARE_ACCOUNT_ID: "account_123",
-        CLOUDFLARE_API_TOKEN: "token_123",
       })
     ).toThrow(/valid email address/);
   }, 10_000);
 
+  it("accepts blank Cloudflare API credentials when sandbox email is noop", () => {
+    expect(
+      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        AUTH_EMAIL_FROM: "auth@example.com",
+        AUTH_EMAIL_FROM_NAME: "Task Tracker",
+        AUTH_EMAIL_TRANSPORT: "noop",
+        CLOUDFLARE_ACCOUNT_ID: "   ",
+        CLOUDFLARE_API_TOKEN: "\t",
+      })
+    ).toStrictEqual({
+      AUTH_EMAIL_FROM: "auth@example.com",
+      AUTH_EMAIL_FROM_NAME: "Task Tracker",
+      AUTH_EMAIL_TRANSPORT: "noop",
+      CLOUDFLARE_ACCOUNT_ID: "   ",
+      CLOUDFLARE_API_TOKEN: "\t",
+    });
+  }, 10_000);
+
   it.each(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"] as const)(
-    "rejects whitespace-only %s values",
+    "requires non-empty %s when sandbox email uses the Cloudflare API",
     (key) => {
       expect(() =>
         Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_TRANSPORT: "cloudflare-api",
           CLOUDFLARE_ACCOUNT_ID:
             key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
           CLOUDFLARE_API_TOKEN:
@@ -610,12 +628,13 @@ describe("authEmailSharedEnvironment", () => {
         Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_TRANSPORT: "cloudflare-api",
           CLOUDFLARE_ACCOUNT_ID:
             key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
           CLOUDFLARE_API_TOKEN:
             key === "CLOUDFLARE_API_TOKEN" ? "\t" : "token_123",
         })
-      ).toThrow(/must not be empty/);
+      ).toThrow(/must be set/);
     },
     10_000
   );

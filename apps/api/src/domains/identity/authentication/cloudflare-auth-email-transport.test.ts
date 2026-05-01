@@ -11,6 +11,7 @@ function makeConfigProvider() {
   return ConfigProvider.fromMap(
     new Map([
       ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+      ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
       ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
       ["AUTH_EMAIL_FROM_NAME", "Task Tracker Auth"],
       ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
@@ -171,7 +172,7 @@ describe("makeCloudflareAuthEmailTransport()", () => {
     expect(requests).toHaveLength(1);
   }, 10_000);
 
-  it("keeps request-failure reservations alive long enough to dedupe immediate retries", async () => {
+  it("releases request-failure reservations so queue retries can send again", async () => {
     const requests: unknown[] = [];
     let attempt = 0;
 
@@ -204,7 +205,7 @@ describe("makeCloudflareAuthEmailTransport()", () => {
 
     await Effect.runPromise(transport.send(makeMessage()));
 
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(2);
   }, 10_000);
 
   it("expires stale deliveryKey reservations after the ttl elapses", async () => {

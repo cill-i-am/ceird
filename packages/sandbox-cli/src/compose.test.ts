@@ -50,9 +50,10 @@ describe("renderComposeEnvironmentFile()", () => {
           AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_TRANSPORT: "noop",
           BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
-          CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
-          CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
+          CLOUDFLARE_ACCOUNT_ID: "",
+          CLOUDFLARE_API_TOKEN: "",
           DATABASE_URL:
             "postgresql://postgres:postgres@postgres:5432/task_tracker",
           SANDBOX_DEV_IMAGE: "tt-sbx-task-tracker-dev:123456789abc",
@@ -71,9 +72,10 @@ describe("renderComposeEnvironmentFile()", () => {
         "AUTH_APP_ORIGIN=http://127.0.0.1:4300",
         "AUTH_EMAIL_FROM=auth@example.com",
         "AUTH_EMAIL_FROM_NAME=Task Tracker",
+        "AUTH_EMAIL_TRANSPORT=noop",
         "BETTER_AUTH_BASE_URL=http://127.0.0.1:4301",
-        "CLOUDFLARE_ACCOUNT_ID=cloudflare-account-live",
-        "CLOUDFLARE_API_TOKEN=cloudflare-token-live",
+        "CLOUDFLARE_ACCOUNT_ID=",
+        "CLOUDFLARE_API_TOKEN=",
         "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/task_tracker",
         "SANDBOX_DEV_IMAGE=tt-sbx-task-tracker-dev:123456789abc",
         "SANDBOX_NODE_MODULES_VOLUME=tt-sbx-node-modules-123456789abc-def456789abc",
@@ -105,6 +107,8 @@ describe("sandbox.compose.yaml", () => {
     expect(composeFile).toContain(`image: ${sandboxDevImageVariable}`);
     expect(composeFile).toContain('command: ["api"]');
     expect(composeFile).toContain('command: ["app"]');
+    expect(composeFile).toContain("CLOUDFLARE_ACCOUNT_ID");
+    expect(composeFile).toContain("CLOUDFLARE_API_TOKEN");
     expect(composeFile).toContain(`name: ${pnpmStoreVolumeVariable}`);
     expect(composeFile).toContain(`name: ${nodeModulesVolumeVariable}`);
   }, 10_000);

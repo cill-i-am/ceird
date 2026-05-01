@@ -1,11 +1,13 @@
+import type { AuthEmailTransportMode } from "../../domains/identity/authentication/auth-email-config.js";
 import type { AuthEmailQueueMessage } from "../../domains/identity/authentication/auth-email-queue.js";
 
 export interface ApiWorkerEnv {
   readonly AUTH_APP_ORIGIN: string;
+  readonly AUTH_EMAIL?: SendEmail;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
   readonly AUTH_EMAIL_QUEUE: Queue<AuthEmailQueueMessage>;
-  readonly AUTH_EMAIL_TRANSPORT?: string;
+  readonly AUTH_EMAIL_TRANSPORT?: AuthEmailTransportMode;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
   readonly CLOUDFLARE_ACCOUNT_ID?: string;

@@ -1,6 +1,16 @@
-import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Runtime,
+} from "effect";
 
-import { AuthEmailPromiseBridge } from "./domains/identity/authentication/auth-email-promise-bridge.js";
+import { loadAuthEmailConfig } from "./domains/identity/authentication/auth-email-config.js";
+import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
+import { NoopAuthEmailTransportLive } from "./domains/identity/authentication/auth-email-promise-bridge.js";
 import {
   AuthEmailQueueDeliveryError,
   InvalidAuthEmailQueueMessageError,
@@ -8,10 +18,16 @@ import {
   makeCloudflareAuthenticationEmailSchedulerLive,
   sendAuthEmailQueueMessage,
 } from "./domains/identity/authentication/auth-email-queue.js";
+import { AuthEmailSender } from "./domains/identity/authentication/auth-email.js";
 import {
   AuthenticationBackgroundTaskHandler,
   makeAuthenticationHttpLive,
 } from "./domains/identity/authentication/auth.js";
+import { CloudflareAuthEmailTransportLive } from "./domains/identity/authentication/cloudflare-auth-email-transport.js";
+import {
+  CloudflareEmailBinding,
+  CloudflareEmailBindingAuthEmailTransportLive,
+} from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
 import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
@@ -45,11 +61,59 @@ function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
   );
 }
 
-function sendQueuedAuthEmail(body: unknown, env: ApiWorkerEnv) {
+function makeWorkerAuthEmailTransportLive(env: ApiWorkerEnv) {
+  return Layer.unwrapEffect(
+    loadAuthEmailConfig.pipe(
+      Effect.map(({ transportMode }) => {
+        switch (transportMode) {
+          case "noop": {
+            return NoopAuthEmailTransportLive;
+          }
+          case "cloudflare-api": {
+            return CloudflareAuthEmailTransportLive;
+          }
+          case "cloudflare-binding": {
+            const authEmail = env.AUTH_EMAIL;
+
+            if (!authEmail) {
+              return Layer.fail(
+                new AuthEmailConfigurationError({
+                  message:
+                    "AUTH_EMAIL_TRANSPORT=cloudflare-binding requires the AUTH_EMAIL Worker binding",
+                })
+              );
+            }
+
+            const cloudflareEmailBindingLive = Layer.succeed(
+              CloudflareEmailBinding,
+              {
+                send: (message) => authEmail.send(message),
+              }
+            );
+
+            return CloudflareEmailBindingAuthEmailTransportLive.pipe(
+              Layer.provide(cloudflareEmailBindingLive)
+            );
+          }
+          default: {
+            const exhaustive: never = transportMode;
+            return exhaustive;
+          }
+        }
+      })
+    )
+  );
+}
+
+function makeWorkerAuthEmailSenderLive(env: ApiWorkerEnv) {
+  return AuthEmailSender.Default.pipe(
+    Layer.provideMerge(makeWorkerAuthEmailTransportLive(env))
+  );
+}
+
+function sendQueuedAuthEmail(body: unknown) {
   return decodeAuthEmailQueueMessageEffect(body).pipe(
-    Effect.flatMap(sendAuthEmailQueueMessage),
-    Effect.provide(AuthEmailPromiseBridge.Default),
-    Effect.provide(makeWorkerBaseLive(env))
+    Effect.flatMap(sendAuthEmailQueueMessage)
   );
 }
 
@@ -65,10 +129,16 @@ export default {
   },
 
   async queue(batch: MessageBatch<unknown>, env: ApiWorkerEnv): Promise<void> {
+    const runtime = await Effect.runPromise(
+      Effect.runtime<AuthEmailSender>().pipe(
+        Effect.provide(makeWorkerAuthEmailSenderLive(env)),
+        Effect.provide(makeWorkerBaseLive(env))
+      )
+    );
+    const runQueuedAuthEmail = Runtime.runPromiseExit(runtime);
+
     for (const message of batch.messages) {
-      const exit = await Effect.runPromiseExit(
-        sendQueuedAuthEmail(message.body, env)
-      );
+      const exit = await runQueuedAuthEmail(sendQueuedAuthEmail(message.body));
 
       if (Exit.isSuccess(exit)) {
         message.ack();
@@ -104,7 +174,21 @@ export default {
               ...(failure.value.cause
                 ? { authEmailQueueFailureCause: failure.value.cause }
                 : {}),
+              ...(failure.value.deliveryKey
+                ? { authEmailQueueDeliveryKey: failure.value.deliveryKey }
+                : {}),
+              ...(failure.value.emailKind
+                ? { authEmailQueueEmailKind: failure.value.emailKind }
+                : {}),
               authEmailQueueFailureMessage: failure.value.message,
+              ...(failure.value.sourceCause
+                ? {
+                    authEmailQueueFailureSourceCause: failure.value.sourceCause,
+                  }
+                : {}),
+              ...(failure.value.sourceTag
+                ? { authEmailQueueFailureSourceTag: failure.value.sourceTag }
+                : {}),
               authEmailQueueFailureTag: failure.value._tag,
             })
           )

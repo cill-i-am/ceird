@@ -7,12 +7,11 @@ const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
 const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
 const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
-const DEFAULT_CLOUDFLARE_ACCOUNT_ID = "cloudflare-account-test";
-const DEFAULT_CLOUDFLARE_API_TOKEN = "cloudflare-token-test";
 const DEFAULT_SITE_GEOCODER_MODE = "stub";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
   const proxyPort = baseEnvironment.PORTLESS_PORT ?? "1355";
+  const authEmailTransport = baseEnvironment.AUTH_EMAIL_TRANSPORT ?? "noop";
 
   return {
     ...baseEnvironment,
@@ -23,13 +22,10 @@ export function createDevEnvironment(baseEnvironment = process.env) {
     AUTH_EMAIL_FROM: baseEnvironment.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME:
       baseEnvironment.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME,
+    AUTH_EMAIL_TRANSPORT: authEmailTransport,
     BETTER_AUTH_BASE_URL:
       baseEnvironment.BETTER_AUTH_BASE_URL ??
       `https://api.task-tracker.localhost:${proxyPort}`,
-    CLOUDFLARE_ACCOUNT_ID:
-      baseEnvironment.CLOUDFLARE_ACCOUNT_ID ?? DEFAULT_CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_TOKEN:
-      baseEnvironment.CLOUDFLARE_API_TOKEN ?? DEFAULT_CLOUDFLARE_API_TOKEN,
     PORTLESS_PORT: proxyPort,
     SITE_GEOCODER_MODE:
       baseEnvironment.SITE_GEOCODER_MODE ?? DEFAULT_SITE_GEOCODER_MODE,

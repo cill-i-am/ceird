@@ -108,12 +108,16 @@ The auth email boundary adds runtime config in
 Required values:
 
 - `AUTH_EMAIL_FROM`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
 
 Current defaulted value:
 
+- `AUTH_EMAIL_TRANSPORT`, which defaults to `"noop"` locally and is set to
+  `"cloudflare-binding"` by the Cloudflare infra stage
 - `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+
+`AUTH_EMAIL_TRANSPORT=cloudflare-api` is the local/manual opt-in path for real
+email delivery outside Workers. In that mode only, the API also requires
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
 ### Auth Email Delivery Boundary
 
@@ -125,8 +129,12 @@ boundary in `apps/api`:
   verification, and organization invitation mail
 - `AuthEmailSender` validates each payload, renders the auth email content,
   and keeps the transport contract provider-neutral through `deliveryKey`
+- `apps/api/src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.ts`
+  provides the Cloudflare Workers Email Service binding adapter for deployed
+  queue consumers
 - `apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts`
-  provides the current Cloudflare transport adapter behind that boundary
+  keeps the Cloudflare REST API adapter available for explicit local/manual
+  delivery
 
 Rule:
 
@@ -181,12 +189,12 @@ Current defaults by entry point:
   `https://<slug>.api.task-tracker.localhost:1355`
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
-- local dev and Playwright launchers also inject `AUTH_EMAIL_FROM`,
-  `AUTH_EMAIL_FROM_NAME`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`
-  and may substitute placeholder auth-email values when real delivery
-  credentials are unavailable
-- sandbox startup preflight still validates the same auth-email variables
-  before compose launch and does not rely on placeholder fallback
+- local dev and Playwright launchers inject `AUTH_EMAIL_FROM`,
+  `AUTH_EMAIL_FROM_NAME`, and `AUTH_EMAIL_TRANSPORT`
+- local dev selects `AUTH_EMAIL_TRANSPORT=cloudflare-api` when real Cloudflare
+  API credentials are present, otherwise it uses `noop`
+- sandbox startup preflight validates the auth email sender address and defaults
+  delivery to `noop`
 
 ### Trusted Origins and CORS
 

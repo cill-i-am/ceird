@@ -9,10 +9,6 @@ const playwrightAuthEmailFrom =
   process.env.AUTH_EMAIL_FROM ?? "auth@task-tracker.localhost";
 const playwrightAuthEmailFromName =
   process.env.AUTH_EMAIL_FROM_NAME ?? "Task Tracker";
-const playwrightCloudflareAccountId =
-  process.env.CLOUDFLARE_ACCOUNT_ID ?? "cloudflare-account-test";
-const playwrightCloudflareApiToken =
-  process.env.CLOUDFLARE_API_TOKEN ?? "cloudflare-token-test";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -49,8 +45,6 @@ export default defineConfig({
           AUTH_EMAIL_TRANSPORT: "noop",
           BETTER_AUTH_BASE_URL: playwrightApiUrl,
           BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-          CLOUDFLARE_ACCOUNT_ID: playwrightCloudflareAccountId,
-          CLOUDFLARE_API_TOKEN: playwrightCloudflareApiToken,
           PORT: "3001",
           SITE_GEOCODER_MODE: "stub",
         },

@@ -3,7 +3,11 @@ import { Config, Effect } from "effect";
 import { AuthEmailConfigurationError } from "./auth-email-errors.js";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const AUTH_EMAIL_TRANSPORT_MODES = ["cloudflare", "noop"] as const;
+const AUTH_EMAIL_TRANSPORT_MODES = [
+  "cloudflare-api",
+  "cloudflare-binding",
+  "noop",
+] as const;
 
 export type AuthEmailTransportMode =
   (typeof AUTH_EMAIL_TRANSPORT_MODES)[number];
@@ -23,7 +27,7 @@ export interface AuthEmailConfig {
 
 const baseAuthEmailConfig = Config.all({
   transportMode: Config.string("AUTH_EMAIL_TRANSPORT").pipe(
-    Config.withDefault("cloudflare"),
+    Config.withDefault("noop"),
     Config.validate({
       message: `AUTH_EMAIL_TRANSPORT must be one of ${AUTH_EMAIL_TRANSPORT_MODES.join(", ")}`,
       validation: (value): value is AuthEmailTransportMode =>
@@ -78,7 +82,10 @@ const AuthEmailConfigConfig = Effect.gen(
   function* AuthEmailConfigConfigEffect() {
     const config = yield* baseAuthEmailConfig;
 
-    if (config.transportMode === "noop") {
+    if (
+      config.transportMode === "noop" ||
+      config.transportMode === "cloudflare-binding"
+    ) {
       return {
         ...config,
         cloudflareAccountId: "",

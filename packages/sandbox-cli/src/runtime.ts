@@ -79,14 +79,11 @@ const SANDBOX_STOP_TIMEOUT_SECONDS = 2;
 const AUTH_EMAIL_SHARED_ENV_KEYS = [
   "AUTH_EMAIL_FROM",
   "AUTH_EMAIL_FROM_NAME",
+  "AUTH_EMAIL_TRANSPORT",
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_API_TOKEN",
 ] as const;
-const AUTH_EMAIL_REQUIRED_ENV_KEYS = [
-  "AUTH_EMAIL_FROM",
-  "CLOUDFLARE_ACCOUNT_ID",
-  "CLOUDFLARE_API_TOKEN",
-] as const;
+const AUTH_EMAIL_REQUIRED_ENV_KEYS = ["AUTH_EMAIL_FROM"] as const;
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isValidEmailAddress(value: string) {
@@ -103,21 +100,34 @@ const authEmailSharedEnvironmentFields = {
   AUTH_EMAIL_FROM_NAME: Schema.optionalWith(Schema.String, {
     default: () => "Task Tracker",
   }),
-  CLOUDFLARE_ACCOUNT_ID: Schema.String.pipe(
-    Schema.filter((value: string) => value.trim().length > 0),
-    Schema.annotations({
-      message: () => "CLOUDFLARE_ACCOUNT_ID must not be empty",
-    })
+  AUTH_EMAIL_TRANSPORT: Schema.optionalWith(
+    Schema.Literal("cloudflare-api", "noop"),
+    { default: () => "noop" }
   ),
-  CLOUDFLARE_API_TOKEN: Schema.String.pipe(
-    Schema.filter((value: string) => value.trim().length > 0),
-    Schema.annotations({
-      message: () => "CLOUDFLARE_API_TOKEN must not be empty",
-    })
-  ),
+  CLOUDFLARE_ACCOUNT_ID: Schema.optionalWith(Schema.String, {
+    default: () => "",
+  }),
+  CLOUDFLARE_API_TOKEN: Schema.optionalWith(Schema.String, {
+    default: () => "",
+  }),
 };
 export const AuthEmailSharedEnvironment = Schema.Struct(
   authEmailSharedEnvironmentFields
+).pipe(
+  Schema.filter((environment) => {
+    if (environment.AUTH_EMAIL_TRANSPORT !== "cloudflare-api") {
+      return true;
+    }
+
+    return (
+      environment.CLOUDFLARE_ACCOUNT_ID.trim().length > 0 &&
+      environment.CLOUDFLARE_API_TOKEN.trim().length > 0
+    );
+  }),
+  Schema.annotations({
+    message: () =>
+      "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set when AUTH_EMAIL_TRANSPORT=cloudflare-api",
+  })
 );
 type AuthEmailSharedEnvironment = Schema.Schema.Type<
   typeof AuthEmailSharedEnvironment
@@ -1125,7 +1135,12 @@ export function loadSandboxEnvironmentOrThrow(
       loadSandboxSharedEnvironment({
         repoRoot,
         requiredKeys: AUTH_EMAIL_REQUIRED_ENV_KEYS,
-        optionalKeys: ["AUTH_EMAIL_FROM_NAME"],
+        optionalKeys: [
+          "AUTH_EMAIL_FROM_NAME",
+          "AUTH_EMAIL_TRANSPORT",
+          "CLOUDFLARE_ACCOUNT_ID",
+          "CLOUDFLARE_API_TOKEN",
+        ],
         processEnv,
       })
     ),
@@ -1135,11 +1150,7 @@ export function loadSandboxEnvironmentOrThrow(
         : toPreflightError(error, "Sandbox shared environment is invalid")
     ),
     Effect.flatMap((environment) =>
-      Effect.try({
-        try: () =>
-          Schema.decodeUnknownSync(AuthEmailSharedEnvironment)(environment),
-        catch: (error) => error,
-      }).pipe(
+      Schema.decodeUnknown(AuthEmailSharedEnvironment)(environment).pipe(
         Effect.mapError((error) =>
           toPreflightError(error, "Sandbox auth email environment is invalid")
         )
@@ -1437,6 +1448,7 @@ export function buildComposeFallbackEnvironmentOverrides(
     AUTH_APP_ORIGIN: urls.fallbackApp,
     AUTH_EMAIL_FROM: sharedEnvironment.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: sharedEnvironment.AUTH_EMAIL_FROM_NAME,
+    AUTH_EMAIL_TRANSPORT: sharedEnvironment.AUTH_EMAIL_TRANSPORT,
     BETTER_AUTH_BASE_URL: urls.fallbackApi,
     BETTER_AUTH_SECRET: record.betterAuthSecret,
     DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
@@ -1456,7 +1468,10 @@ export function buildComposeFallbackEnvironmentOverrides(
 
 function makeBlankAuthEmailSharedEnvironmentOverrides(): AuthEmailSharedEnvironmentOverrides {
   return Object.fromEntries(
-    AUTH_EMAIL_SHARED_ENV_KEYS.map((key) => [key, ""])
+    AUTH_EMAIL_SHARED_ENV_KEYS.map((key) => [
+      key,
+      key === "AUTH_EMAIL_TRANSPORT" ? "noop" : "",
+    ])
   ) as AuthEmailSharedEnvironmentOverrides;
 }
 

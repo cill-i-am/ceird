@@ -59,7 +59,7 @@ export type SandboxRuntimeAssets = Schema.Schema.Type<
 
 export const SharedSandboxEnvironment = Schema.Record({
   key: Schema.String,
-  value: Schema.NonEmptyString,
+  value: Schema.String,
 });
 export type SharedSandboxEnvironment = Schema.Schema.Type<
   typeof SharedSandboxEnvironment
@@ -72,6 +72,7 @@ const BaseSandboxRuntimeOverrides = Schema.Struct({
   AUTH_APP_ORIGIN: SandboxHttpUrl,
   AUTH_EMAIL_FROM: Schema.NonEmptyString,
   AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
+  AUTH_EMAIL_TRANSPORT: Schema.Literal("cloudflare-api", "noop"),
   BETTER_AUTH_BASE_URL: SandboxHttpUrl,
   BETTER_AUTH_SECRET: Schema.NonEmptyString,
   DATABASE_URL: SandboxPostgresUrl,
@@ -117,6 +118,8 @@ export function buildSandboxRuntimeOverrides(input: {
     AUTH_APP_ORIGIN: input.urls.fallbackApp,
     AUTH_EMAIL_FROM: input.sharedEnvironment.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: input.sharedEnvironment.AUTH_EMAIL_FROM_NAME,
+    AUTH_EMAIL_TRANSPORT:
+      input.sharedEnvironment.AUTH_EMAIL_TRANSPORT ?? "noop",
     BETTER_AUTH_BASE_URL: input.urls.fallbackApi,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
     DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",

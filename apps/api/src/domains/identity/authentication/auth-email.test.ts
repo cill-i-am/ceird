@@ -610,12 +610,37 @@ describe("auth email config loading", () => {
     expect(result.left.cause).toMatch(/AUTH_EMAIL_FROM/);
   }, 10_000);
 
-  it("loads auth email config with defaults", async () => {
+  it("loads noop auth email config by default without Cloudflare credentials", async () => {
     const config = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
             new Map([
+              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+            ])
+          )
+        )
+      )
+    );
+
+    expect(config).toStrictEqual({
+      transportMode: "noop",
+      appOrigin: "https://app.task-tracker.localhost",
+      from: "auth@task-tracker.localhost",
+      fromName: "Task Tracker",
+      cloudflareAccountId: "",
+      cloudflareApiToken: "",
+    });
+  }, 10_000);
+
+  it("loads cloudflare-api auth email config with Cloudflare credentials", async () => {
+    const config = await Effect.runPromise(
+      loadAuthEmailConfig.pipe(
+        Effect.withConfigProvider(
+          ConfigProvider.fromMap(
+            new Map([
+              ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
               ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
@@ -627,7 +652,7 @@ describe("auth email config loading", () => {
     );
 
     expect(config).toStrictEqual({
-      transportMode: "cloudflare",
+      transportMode: "cloudflare-api",
       appOrigin: "https://app.task-tracker.localhost",
       from: "auth@task-tracker.localhost",
       fromName: "Task Tracker",
@@ -636,13 +661,13 @@ describe("auth email config loading", () => {
     });
   }, 10_000);
 
-  it("loads noop auth email config without Cloudflare credentials", async () => {
+  it("loads cloudflare-binding auth email config without Cloudflare API credentials", async () => {
     const config = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
             new Map([
-              ["AUTH_EMAIL_TRANSPORT", "noop"],
+              ["AUTH_EMAIL_TRANSPORT", "cloudflare-binding"],
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
             ])
@@ -652,7 +677,7 @@ describe("auth email config loading", () => {
     );
 
     expect(config).toStrictEqual({
-      transportMode: "noop",
+      transportMode: "cloudflare-binding",
       appOrigin: "https://app.task-tracker.localhost",
       from: "auth@task-tracker.localhost",
       fromName: "Task Tracker",
@@ -682,12 +707,13 @@ describe("auth email config loading", () => {
     expect(result.left.cause).toMatch(/AUTH_APP_ORIGIN/);
   }, 10_000);
 
-  it("maps missing Cloudflare config into AuthEmailConfigurationError", async () => {
+  it("maps missing Cloudflare API config into AuthEmailConfigurationError", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
             new Map([
+              ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
               ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
               ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
             ])
