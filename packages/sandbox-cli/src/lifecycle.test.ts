@@ -39,6 +39,7 @@ describe("bringSandboxUp()", () => {
           }),
         determineAliasesHealthy: () => Effect.succeed(true),
         startComposeProject: () => Effect.void,
+        migrateDatabase: () => Effect.void,
         waitForHealth: (_, options) =>
           Effect.forEach(
             [
@@ -84,6 +85,8 @@ describe("bringSandboxUp()", () => {
       "done:portless",
       "running:compose",
       "done:compose",
+      "running:migrations",
+      "done:migrations",
       "running:postgres",
       "running:api",
       "running:app",
@@ -118,6 +121,7 @@ describe("bringSandboxUp()", () => {
           }),
         determineAliasesHealthy: () => Effect.succeed(true),
         startComposeProject: () => Effect.void,
+        migrateDatabase: () => Effect.void,
         waitForHealth: (_, options) =>
           options.onReadinessChanged({
             postgres: true,
@@ -156,6 +160,7 @@ describe("bringSandboxUp()", () => {
           }),
         determineAliasesHealthy: () => Effect.succeed(true),
         startComposeProject: () => Effect.void,
+        migrateDatabase: () => Effect.void,
         waitForHealth: (_, options) =>
           options.onReadinessChanged({
             postgres: true,
@@ -207,6 +212,10 @@ describe("bringSandboxUp()", () => {
             events.push("start:fallback");
             events.push("start");
           }),
+        migrateDatabase: () =>
+          Effect.sync(() => {
+            events.push("migrate");
+          }),
         waitForHealth: (_, options) =>
           Effect.sync(() => {
             events.push("health");
@@ -243,6 +252,7 @@ describe("bringSandboxUp()", () => {
       "persist:provisioning",
       "start:fallback",
       "start",
+      "migrate",
       "health",
       "persist:degraded",
     ]);
@@ -279,6 +289,10 @@ describe("bringSandboxUp()", () => {
             Effect.sync(() => {
               events.push("start");
             }),
+          migrateDatabase: () =>
+            Effect.sync(() => {
+              events.push("migrate");
+            }),
           waitForHealth: (_, options) =>
             Effect.sync(() => {
               events.push("health");
@@ -308,7 +322,12 @@ describe("bringSandboxUp()", () => {
       )
     ).rejects.toThrow("health timeout");
 
-    expect(events).toStrictEqual(["persist:provisioning", "start", "health"]);
+    expect(events).toStrictEqual([
+      "persist:provisioning",
+      "start",
+      "migrate",
+      "health",
+    ]);
   }, 10_000);
 
   it("fails before persisting or starting when shared env loading fails", async () => {
@@ -344,6 +363,10 @@ describe("bringSandboxUp()", () => {
           startComposeProject: () =>
             Effect.sync(() => {
               events.push("start");
+            }),
+          migrateDatabase: () =>
+            Effect.sync(() => {
+              events.push("migrate");
             }),
           waitForHealth: () =>
             Effect.sync(() => {
@@ -387,6 +410,7 @@ describe("bringSandboxUp()", () => {
           }),
         determineAliasesHealthy: () => Effect.succeed(true),
         startComposeProject: () => Effect.void,
+        migrateDatabase: () => Effect.void,
         waitForHealth: () => Effect.void,
         persist: () => Effect.void,
         reportProgress: () => Effect.void,

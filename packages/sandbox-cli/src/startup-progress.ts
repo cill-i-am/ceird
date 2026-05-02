@@ -11,6 +11,7 @@ export type SandboxStartupStep =
   | "ports"
   | "portless"
   | "compose"
+  | "migrations"
   | "postgres"
   | "api"
   | "app";

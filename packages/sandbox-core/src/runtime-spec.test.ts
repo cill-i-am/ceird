@@ -98,8 +98,11 @@ describe("buildSandboxRuntimeSpec()", () => {
         SANDBOX_PNPM_STORE_VOLUME: "tt-sbx-pnpm-store",
         SITE_GEOCODER_MODE: "stub",
         TASK_TRACKER_SANDBOX: "1",
-        AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
-        BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
+        AUTH_APP_ORIGIN: "https://agent-one.app.task-tracker.localhost:1355",
+        AUTH_RATE_LIMIT_ENABLED: "false",
+        BETTER_AUTH_BASE_URL:
+          "https://agent-one.api.task-tracker.localhost:1355",
+        VITE_API_ORIGIN: "https://agent-one.api.task-tracker.localhost:1355",
         AUTH_EMAIL_FROM: "auth@example.com",
         AUTH_EMAIL_FROM_NAME: "Task Tracker",
         AUTH_EMAIL_TRANSPORT: "noop",

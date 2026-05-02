@@ -102,6 +102,7 @@ function formatStartupStepLabel(
     Match.when("ports", () => "Ports"),
     Match.when("portless", () => "Portless"),
     Match.when("compose", () => "Compose"),
+    Match.when("migrations", () => "Migrations"),
     Match.when("postgres", () => "Postgres"),
     Match.when("api", () => "API"),
     Match.when("app", () => "App"),

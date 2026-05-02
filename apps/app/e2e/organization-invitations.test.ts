@@ -161,7 +161,6 @@ async function seedOwnerOrganization(
     },
     cookieJar,
     forwardedFor,
-    origin: API_ORIGIN,
   });
 }
 

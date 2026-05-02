@@ -28,6 +28,7 @@ export interface SandboxRuntimeSpec {
   readonly sandboxName: SandboxName;
   readonly composeProjectName: ComposeProjectName;
   readonly hostnameSlug: HostnameSlug;
+  readonly aliasesHealthy: boolean;
   readonly ports: SandboxPorts;
   readonly urls: SandboxUrls;
   readonly runtimeAssets: SandboxRuntimeAssets;
@@ -65,14 +66,12 @@ export type SharedSandboxEnvironment = Schema.Schema.Type<
   typeof SharedSandboxEnvironment
 >;
 
-const BaseSandboxRuntimeOverrides = Schema.Struct({
+const SandboxRuntimeBaseOverrides = Schema.Struct({
   API_HOST_PORT: Schema.String,
   API_ORIGIN: SandboxHttpUrl,
   APP_HOST_PORT: Schema.String,
   AUTH_APP_ORIGIN: SandboxHttpUrl,
-  AUTH_EMAIL_FROM: Schema.NonEmptyString,
-  AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
-  AUTH_EMAIL_TRANSPORT: Schema.Literal("cloudflare-api", "noop"),
+  AUTH_RATE_LIMIT_ENABLED: Schema.Literal("false"),
   BETTER_AUTH_BASE_URL: SandboxHttpUrl,
   BETTER_AUTH_SECRET: Schema.NonEmptyString,
   DATABASE_URL: SandboxPostgresUrl,
@@ -89,6 +88,20 @@ const BaseSandboxRuntimeOverrides = Schema.Struct({
   VITE_API_ORIGIN: SandboxHttpUrl,
 });
 
+export type SandboxRuntimeBaseOverrides = Schema.Schema.Type<
+  typeof SandboxRuntimeBaseOverrides
+>;
+
+const RequiredSandboxRuntimeOverrides = SandboxRuntimeBaseOverrides.pipe(
+  Schema.extend(
+    Schema.Struct({
+      AUTH_EMAIL_FROM: Schema.NonEmptyString,
+      AUTH_EMAIL_FROM_NAME: Schema.NonEmptyString,
+      AUTH_EMAIL_TRANSPORT: Schema.Literal("cloudflare-api", "noop"),
+    })
+  )
+);
+
 export const SandboxRuntimeOverrides = Schema.Record({
   key: Schema.String,
   value: Schema.String,
@@ -97,7 +110,38 @@ export const SandboxRuntimeOverrides = Schema.Record({
 export type SandboxRuntimeOverrides = Schema.Schema.Type<
   typeof SandboxRuntimeOverrides
 > &
-  Schema.Schema.Type<typeof BaseSandboxRuntimeOverrides>;
+  Schema.Schema.Type<typeof RequiredSandboxRuntimeOverrides>;
+
+export function buildSandboxRuntimeBaseOverrides(input: {
+  readonly ports: SandboxPorts;
+  readonly urls: SandboxUrls;
+  readonly runtimeAssets: SandboxRuntimeAssets;
+  readonly betterAuthSecret: string;
+  readonly sandboxId: SandboxId;
+  readonly sandboxName: SandboxName;
+}): SandboxRuntimeBaseOverrides {
+  return Schema.decodeUnknownSync(SandboxRuntimeBaseOverrides)({
+    API_HOST_PORT: String(input.ports.api),
+    API_ORIGIN: `http://api:${input.ports.api}`,
+    APP_HOST_PORT: String(input.ports.app),
+    AUTH_APP_ORIGIN: input.urls.app,
+    AUTH_RATE_LIMIT_ENABLED: "false",
+    BETTER_AUTH_BASE_URL: input.urls.api,
+    BETTER_AUTH_SECRET: input.betterAuthSecret,
+    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
+    HOST: "0.0.0.0",
+    PORT: String(input.ports.api),
+    POSTGRES_HOST_PORT: String(input.ports.postgres),
+    SANDBOX_ID: input.sandboxId,
+    SANDBOX_DEV_IMAGE: input.runtimeAssets.devImage,
+    SANDBOX_NODE_MODULES_VOLUME: input.runtimeAssets.nodeModulesVolume,
+    SANDBOX_NAME: input.sandboxName,
+    SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
+    SITE_GEOCODER_MODE: "stub",
+    TASK_TRACKER_SANDBOX: "1",
+    VITE_API_ORIGIN: input.urls.api,
+  });
+}
 
 export function buildSandboxRuntimeOverrides(input: {
   readonly ports: SandboxPorts;
@@ -111,34 +155,18 @@ export function buildSandboxRuntimeOverrides(input: {
   const sharedEnvironment = Schema.decodeUnknownSync(SharedSandboxEnvironment)(
     input.sharedEnvironment
   );
-  const baseOverrides = Schema.decodeUnknownSync(BaseSandboxRuntimeOverrides)({
-    API_HOST_PORT: String(input.ports.api),
-    API_ORIGIN: `http://api:${input.ports.api}`,
-    APP_HOST_PORT: String(input.ports.app),
-    AUTH_APP_ORIGIN: input.urls.fallbackApp,
+  const overrides = {
+    ...sharedEnvironment,
+    ...buildSandboxRuntimeBaseOverrides(input),
     AUTH_EMAIL_FROM: input.sharedEnvironment.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: input.sharedEnvironment.AUTH_EMAIL_FROM_NAME,
     AUTH_EMAIL_TRANSPORT:
       input.sharedEnvironment.AUTH_EMAIL_TRANSPORT ?? "noop",
-    BETTER_AUTH_BASE_URL: input.urls.fallbackApi,
-    BETTER_AUTH_SECRET: input.betterAuthSecret,
-    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
-    HOST: "0.0.0.0",
-    PORT: String(input.ports.api),
-    POSTGRES_HOST_PORT: String(input.ports.postgres),
-    SANDBOX_ID: input.sandboxId,
-    SANDBOX_DEV_IMAGE: input.runtimeAssets.devImage,
-    SANDBOX_NODE_MODULES_VOLUME: input.runtimeAssets.nodeModulesVolume,
-    SANDBOX_NAME: input.sandboxName,
-    SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
-    SITE_GEOCODER_MODE: "stub",
-    TASK_TRACKER_SANDBOX: "1",
-    VITE_API_ORIGIN: input.urls.fallbackApi,
-  });
+  };
 
   return Schema.decodeUnknownSync(SandboxRuntimeOverrides)({
     ...sharedEnvironment,
-    ...baseOverrides,
+    ...Schema.decodeUnknownSync(RequiredSandboxRuntimeOverrides)(overrides),
   }) as SandboxRuntimeOverrides;
 }
 
@@ -196,6 +224,7 @@ export const buildSandboxRuntimeSpec = Effect.fn("SandboxRuntimeSpec.build")(
         composeProjectName
       ),
       hostnameSlug,
+      aliasesHealthy: input.aliasesHealthy,
       ports: input.ports,
       urls,
       runtimeAssets: input.runtimeAssets,

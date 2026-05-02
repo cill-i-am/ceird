@@ -30,6 +30,26 @@ This project uses [Vitest](https://vitest.dev/) for testing. You can run the tes
 npm run test
 ```
 
+### Sandbox E2E
+
+Use the workspace sandbox for full app/API/Postgres testing:
+
+```bash
+pnpm sandbox:up
+pnpm --filter app e2e
+```
+
+`pnpm sandbox:up` applies API database migrations before reporting the sandbox
+ready. When portless aliases are available, the app and API both use the
+matching `*.task-tracker.localhost` origins so Better Auth can set cookies for
+the browser-visible app.
+
+The Playwright E2E auth flows intentionally hit Better Auth sign-up, sign-in,
+invitation, and verification endpoints, and those endpoints use database-backed
+rate limiting outside automation. The sandbox and Playwright web server set
+`AUTH_RATE_LIMIT_ENABLED=false` so repeated local E2E runs do not lock
+themselves out while still covering the complete browser workflow.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

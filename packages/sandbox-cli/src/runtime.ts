@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildSandboxRuntimeBaseOverrides,
   buildSandboxUrls,
   reconcileSandboxRecord,
 } from "@task-tracker/sandbox-core";
@@ -842,6 +843,11 @@ function makeSandboxLifecycle(input: {
             yield* input.composeEngine.startStack(record);
           });
         },
+        migrateDatabase: (spec) =>
+          runSandboxDatabaseMigrations(
+            input.sandboxProcess,
+            toSandboxRecord(spec, context, existingRecord)
+          ),
         waitForHealth: (spec, listener) =>
           input.healthChecker.waitForReady(
             toSandboxRecord(spec, context, existingRecord),
@@ -1095,7 +1101,7 @@ export function cleanupFailedSandboxUp(input: {
       { concurrency: "unbounded" }
     );
     const failures = cleanupErrors.filter(
-      (message): message is string => message !== undefined
+      (message): message is string => typeof message === "string"
     );
 
     if (failures.length > 0) {
@@ -1331,6 +1337,68 @@ function checkLocalPortOpen(
   return sandboxProcess.isPortOpen(port);
 }
 
+function waitForLocalPortOpen(input: {
+  readonly sandboxProcess: SandboxProcess;
+  readonly port: number;
+  readonly timeoutMs: number;
+  readonly intervalMs: number;
+  readonly serviceName: string;
+}): SandboxPreflightEffect<void> {
+  const poll = (remainingMs: number): SandboxPreflightEffect<void> =>
+    checkLocalPortOpen(input.sandboxProcess, input.port).pipe(
+      Effect.flatMap((isOpen) => {
+        if (isOpen) {
+          return Effect.void;
+        }
+
+        const nextRemainingMs = remainingMs - input.intervalMs;
+
+        if (nextRemainingMs <= 0) {
+          return Effect.fail(
+            new SandboxPreflightError({
+              message: `${input.serviceName} did not open port ${input.port} within ${Math.round(
+                input.timeoutMs / 1000
+              )} seconds`,
+            })
+          );
+        }
+
+        return tryPromisePreflight(
+          `${input.serviceName} readiness polling failed`,
+          () => delay(input.intervalMs)
+        ).pipe(Effect.zipRight(poll(nextRemainingMs)));
+      })
+    );
+
+  return poll(input.timeoutMs);
+}
+
+function runSandboxDatabaseMigrations(
+  sandboxProcess: SandboxProcess,
+  record: SandboxRecord
+): SandboxPreflightEffect<void> {
+  return Effect.gen(function* () {
+    yield* waitForLocalPortOpen({
+      sandboxProcess,
+      port: record.ports.postgres,
+      timeoutMs: SANDBOX_READY_TIMEOUT_MS,
+      intervalMs: SANDBOX_READY_POLL_INTERVAL_MS,
+      serviceName: "Postgres",
+    });
+    const processEnv = yield* sandboxProcess.env();
+
+    yield* exec(
+      sandboxProcess.runCommand("pnpm", ["--filter", "api", "db:migrate"], {
+        cwd: record.worktreePath,
+        env: {
+          ...processEnv,
+          DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${record.ports.postgres}/task_tracker`,
+        },
+      })
+    );
+  });
+}
+
 function checkLocalPortAvailable(
   sandboxProcess: SandboxProcess,
   port: number
@@ -1350,8 +1418,6 @@ function toSandboxRecord(
   context: WorktreeContext,
   existingRecord: SandboxRegistryRecord | undefined
 ): SandboxRecord {
-  const aliasesHealthy =
-    spec.overrides.BETTER_AUTH_BASE_URL.startsWith("https://");
   const now = new Date().toISOString();
 
   return {
@@ -1363,8 +1429,8 @@ function toSandboxRecord(
     hostnameSlug: spec.hostnameSlug,
     betterAuthSecret: spec.overrides.BETTER_AUTH_SECRET,
     runtimeAssets: spec.runtimeAssets,
-    aliasesHealthy,
-    status: aliasesHealthy ? "ready" : "degraded",
+    aliasesHealthy: spec.aliasesHealthy,
+    status: spec.aliasesHealthy ? "ready" : "degraded",
     ports: spec.ports,
     timestamps: {
       createdAt: existingRecord?.timestamps.createdAt ?? now,
@@ -1442,27 +1508,14 @@ export function buildComposeFallbackEnvironmentOverrides(
 
   return {
     ...sharedEnvironment,
-    API_HOST_PORT: String(record.ports.api),
-    API_ORIGIN: `http://api:${record.ports.api}`,
-    APP_HOST_PORT: String(record.ports.app),
-    AUTH_APP_ORIGIN: urls.fallbackApp,
-    AUTH_EMAIL_FROM: sharedEnvironment.AUTH_EMAIL_FROM,
-    AUTH_EMAIL_FROM_NAME: sharedEnvironment.AUTH_EMAIL_FROM_NAME,
-    AUTH_EMAIL_TRANSPORT: sharedEnvironment.AUTH_EMAIL_TRANSPORT,
-    BETTER_AUTH_BASE_URL: urls.fallbackApi,
-    BETTER_AUTH_SECRET: record.betterAuthSecret,
-    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
-    HOST: "0.0.0.0",
-    PORT: String(record.ports.api),
-    POSTGRES_HOST_PORT: String(record.ports.postgres),
-    SANDBOX_ID: record.sandboxId,
-    SANDBOX_DEV_IMAGE: record.runtimeAssets.devImage,
-    SANDBOX_NODE_MODULES_VOLUME: record.runtimeAssets.nodeModulesVolume,
-    SANDBOX_NAME: record.sandboxName,
-    SANDBOX_PNPM_STORE_VOLUME: record.runtimeAssets.pnpmStoreVolume,
-    SITE_GEOCODER_MODE: "stub",
-    TASK_TRACKER_SANDBOX: "1",
-    VITE_API_ORIGIN: urls.fallbackApi,
+    ...buildSandboxRuntimeBaseOverrides({
+      ports: record.ports,
+      urls,
+      runtimeAssets: record.runtimeAssets,
+      betterAuthSecret: record.betterAuthSecret,
+      sandboxId: record.sandboxId,
+      sandboxName: record.sandboxName,
+    }),
   };
 }
 

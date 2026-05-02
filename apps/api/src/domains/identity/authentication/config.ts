@@ -82,6 +82,7 @@ export interface AuthenticationEnvironment {
   readonly portlessUrl?: string | undefined;
   readonly secret: string;
   readonly databaseUrl: string;
+  readonly rateLimitEnabled?: boolean | undefined;
 }
 
 export interface AuthenticationConfig {
@@ -99,7 +100,7 @@ export interface AuthenticationConfig {
     };
   };
   readonly rateLimit: {
-    readonly enabled: true;
+    readonly enabled: boolean;
     readonly storage: "database";
     readonly customRules: {
       readonly "/sign-in/email": {
@@ -252,7 +253,7 @@ export function makeAuthenticationConfig(
         : {}),
     },
     rateLimit: {
-      enabled: true,
+      enabled: environment.rateLimitEnabled ?? true,
       storage: "database",
       customRules: {
         "/sign-in/email": {
@@ -313,6 +314,9 @@ export const loadAuthenticationConfig = Effect.gen(
       })
     );
     const databaseUrl = yield* authenticationDatabaseUrlConfig;
+    const rateLimitEnabled = yield* Config.boolean(
+      "AUTH_RATE_LIMIT_ENABLED"
+    ).pipe(Config.withDefault(true));
 
     return makeAuthenticationConfig({
       appOrigin: Option.getOrUndefined(appOrigin),
@@ -320,6 +324,7 @@ export const loadAuthenticationConfig = Effect.gen(
       portlessUrl: Option.getOrUndefined(portlessUrl),
       secret,
       databaseUrl,
+      rateLimitEnabled,
     });
   }
 );

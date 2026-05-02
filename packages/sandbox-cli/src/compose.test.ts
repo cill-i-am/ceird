@@ -51,6 +51,7 @@ describe("renderComposeEnvironmentFile()", () => {
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Task Tracker",
           AUTH_EMAIL_TRANSPORT: "noop",
+          AUTH_RATE_LIMIT_ENABLED: "false",
           BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
           CLOUDFLARE_ACCOUNT_ID: "",
           CLOUDFLARE_API_TOKEN: "",
@@ -73,6 +74,7 @@ describe("renderComposeEnvironmentFile()", () => {
         "AUTH_EMAIL_FROM=auth@example.com",
         "AUTH_EMAIL_FROM_NAME=Task Tracker",
         "AUTH_EMAIL_TRANSPORT=noop",
+        "AUTH_RATE_LIMIT_ENABLED=false",
         "BETTER_AUTH_BASE_URL=http://127.0.0.1:4301",
         "CLOUDFLARE_ACCOUNT_ID=",
         "CLOUDFLARE_API_TOKEN=",
@@ -108,6 +110,7 @@ describe("sandbox.compose.yaml", () => {
     expect(composeFile).toContain('command: ["api"]');
     expect(composeFile).toContain('command: ["app"]');
     expect(composeFile).toContain("CLOUDFLARE_ACCOUNT_ID");
+    expect(composeFile).toContain("AUTH_RATE_LIMIT_ENABLED");
     expect(composeFile).toContain("CLOUDFLARE_API_TOKEN");
     expect(composeFile).toContain(`name: ${pnpmStoreVolumeVariable}`);
     expect(composeFile).toContain(`name: ${nodeModulesVolumeVariable}`);

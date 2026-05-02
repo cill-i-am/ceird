@@ -121,6 +121,24 @@ describe("makeAuthenticationConfig()", () => {
     });
   }, 10_000);
 
+  it("allows local automation to disable auth rate limiting explicitly", async () => {
+    await withEnvironment(
+      {
+        AUTH_RATE_LIMIT_ENABLED: "false",
+        BETTER_AUTH_BASE_URL: "http://127.0.0.1:3001",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL:
+          "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      },
+      async () => {
+        const config = await Effect.runPromise(loadAuthenticationConfig);
+
+        // eslint-disable-next-line vitest/prefer-to-be-falsy
+        expect(config.rateLimit.enabled).toBe(false);
+      }
+    );
+  }, 10_000);
+
   it("applies dedicated sensitive account settings rate limits", () => {
     const config = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3001",
@@ -710,6 +728,7 @@ async function withEnvironment(
   const previousEnvironment = { ...process.env };
 
   delete process.env.AUTH_APP_ORIGIN;
+  delete process.env.AUTH_RATE_LIMIT_ENABLED;
   delete process.env.BETTER_AUTH_BASE_URL;
   delete process.env.BETTER_AUTH_SECRET;
   delete process.env.DATABASE_URL;

@@ -51,6 +51,9 @@ export interface BringSandboxUpOptions {
   readonly startComposeProject: (
     spec: SandboxRuntimeSpec
   ) => SandboxLifecycleEffect<void>;
+  readonly migrateDatabase: (
+    spec: SandboxRuntimeSpec
+  ) => SandboxLifecycleEffect<void>;
   readonly waitForHealth: (
     spec: SandboxRuntimeSpec,
     listener: SandboxHealthProgressListener
@@ -163,6 +166,9 @@ export const bringSandboxUp = Effect.fn("SandboxLifecycle.bringSandboxUp")(
     yield* reportStep("compose", "running", "starting docker compose stack");
     yield* options.startComposeProject(spec);
     yield* reportStep("compose", "done");
+    yield* reportStep("migrations", "running", "applying database schema");
+    yield* options.migrateDatabase(spec);
+    yield* reportStep("migrations", "done");
 
     let previousReadiness:
       | Parameters<SandboxHealthProgressListener["onReadinessChanged"]>[0]

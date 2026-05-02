@@ -53,6 +53,7 @@ export {
   SandboxDockerVolumeName,
   SandboxRuntimeAssets,
   SandboxRuntimeOverrides,
+  buildSandboxRuntimeBaseOverrides,
   buildSandboxRuntimeOverrides,
   buildSandboxRuntimeSpec,
 } from "./runtime-spec.js";
@@ -60,6 +61,7 @@ export type {
   SandboxDockerImageReference as SandboxDockerImageReferenceType,
   SandboxDockerVolumeName as SandboxDockerVolumeNameType,
   SandboxRuntimeAssets as SandboxRuntimeAssetsShape,
+  SandboxRuntimeBaseOverrides,
   SandboxRuntimeSpec,
   SandboxRuntimeOverrides as SandboxRuntimeOverridesShape,
   SharedSandboxEnvironment as SharedSandboxEnvironmentShape,
