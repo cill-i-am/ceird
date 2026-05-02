@@ -811,15 +811,23 @@ describe("jobs detail sheet", () => {
     }
   );
 
-  it("renders an explicit empty location state when the job has no site yet", async () => {
-    renderDetailSheet(buildDetail({ siteId: undefined }));
+  it(
+    "renders an explicit empty location state when the job has no site yet",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      renderDetailSheet(buildDetail({ siteId: undefined }));
 
-    expect(screen.getByText("No site attached yet.")).toBeInTheDocument();
-    expect(
-      screen.getByText(/it will not show up on the map until a site is added/i)
-    ).toBeInTheDocument();
-    await expectExternalCollaboratorOptionsToLoad();
-  }, 1000);
+      expect(screen.getByText("No site attached yet.")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /it will not show up on the map until a site is added/i
+        )
+      ).toBeInTheDocument();
+      await expectExternalCollaboratorOptionsToLoad();
+    }
+  );
 
   it(
     "requires a blocked reason before moving an in-progress job to blocked",

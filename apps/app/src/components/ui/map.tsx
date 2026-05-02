@@ -7,7 +7,11 @@ import { Cause, Effect, Exit, Option } from "effect";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { X, Minus, Plus, Locate, Maximize } from "lucide-react";
 import MapLibreGL from "maplibre-gl";
-import type { PopupOptions, MarkerOptions } from "maplibre-gl";
+import type {
+  LayerSpecification,
+  PopupOptions,
+  MarkerOptions,
+} from "maplibre-gl";
 import {
   createContext,
   use,
@@ -1347,10 +1351,9 @@ interface MapArcEvent<T extends MapArcDatum = MapArcDatum> {
   originalEvent: MapLibreGL.MapMouseEvent;
 }
 
-type MapArcLinePaint = NonNullable<MapLibreGL.LineLayerSpecification["paint"]>;
-type MapArcLineLayout = NonNullable<
-  MapLibreGL.LineLayerSpecification["layout"]
->;
+type MapArcLineLayer = Extract<LayerSpecification, { type: "line" }>;
+type MapArcLinePaint = NonNullable<MapArcLineLayer["paint"]>;
+type MapArcLineLayout = NonNullable<MapArcLineLayer["layout"]>;
 
 interface MapArcProps<T extends MapArcDatum = MapArcDatum> {
   /** Array of arcs to render. Each arc must have a unique `id`. */
@@ -1602,18 +1605,10 @@ function MapArc<T extends MapArcDatum = MapArcDatum>({
       return;
     }
     for (const [key, value] of Object.entries(mergedPaint)) {
-      map.setPaintProperty(
-        layerId,
-        key as keyof MapArcLinePaint,
-        value as never
-      );
+      map.setPaintProperty(layerId, key, value as never);
     }
     for (const [key, value] of Object.entries(mergedLayout)) {
-      map.setLayoutProperty(
-        layerId,
-        key as keyof MapArcLineLayout,
-        value as never
-      );
+      map.setLayoutProperty(layerId, key, value as never);
     }
     if (map.getLayer(hitLayerId)) {
       map.setPaintProperty(hitLayerId, "line-width", hitWidth);

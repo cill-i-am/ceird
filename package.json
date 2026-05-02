@@ -13,7 +13,7 @@
     "infra:deploy": "pnpm --filter @task-tracker/infra run deploy",
     "infra:destroy": "pnpm --filter @task-tracker/infra run destroy",
     "infra:dev": "pnpm --filter @task-tracker/infra run dev",
-    "lint": "oxlint . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
+    "lint": "oxlint --config .oxlintrc.mjs . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
     "prebuild": "pnpm run opensrc:sync",
@@ -27,14 +27,14 @@
     "test": "turbo run test"
   },
   "devDependencies": {
-    "lefthook": "^2.1.4",
+    "lefthook": "^2.1.6",
     "opensrc": "^0.6.0",
     "oxfmt": "^0.43.0",
-    "oxlint": "^1.58.0",
-    "portless": "^0.9.1",
-    "turbo": "^2.9.3",
+    "oxlint": "^1.62.0",
+    "portless": "^0.9.6",
+    "turbo": "^2.9.7",
     "typescript": "5.9.2",
-    "ultracite": "^7.4.2"
+    "ultracite": "^7.6.2"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.60.1"
