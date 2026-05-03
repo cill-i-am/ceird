@@ -1,0 +1,48 @@
+version = 1
+name = "Ceird sandbox"
+
+[setup]
+script = "bash scripts/setup-local-environment.sh"
+
+[cleanup]
+script = "bash scripts/teardown-local-environment.sh"
+
+[[actions]]
+name = "Start sandbox"
+icon = "run"
+command = "pnpm sandbox:up"
+
+[[actions]]
+name = "Sandbox URLs"
+icon = "tool"
+command = "pnpm sandbox:url"
+
+[[actions]]
+name = "Sandbox status"
+icon = "debug"
+command = "pnpm sandbox:status"
+
+[[actions]]
+name = "Sandbox logs"
+icon = "debug"
+command = "pnpm sandbox:logs"
+
+[[actions]]
+name = "Stop sandbox"
+icon = "tool"
+command = "bash scripts/teardown-local-environment.sh"
+
+[[actions]]
+name = "Check types"
+icon = "test"
+command = "pnpm check-types"
+
+[[actions]]
+name = "Run tests"
+icon = "test"
+command = "pnpm test"
+
+[[actions]]
+name = "Check all"
+icon = "test"
+command = "pnpm check"
