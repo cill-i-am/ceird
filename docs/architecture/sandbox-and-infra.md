@@ -1,0 +1,147 @@
+# Sandbox And Infrastructure
+
+## Local Sandbox
+
+The sandbox gives each worktree an isolated app/API/Postgres runtime. It is the
+preferred development path for linked git worktrees and for browser workflows
+that need real auth cookies, API calls, and database state.
+
+Root commands wrap the sandbox CLI:
+
+```bash
+pnpm sandbox:up
+pnpm sandbox:status
+pnpm sandbox:list
+pnpm sandbox:url
+pnpm sandbox:logs -- --service api
+pnpm sandbox:down
+```
+
+Valid log services are `app`, `api`, and `postgres`.
+
+## Sandbox Startup Flow
+
+`packages/sandbox-cli/src/lifecycle.ts` coordinates startup:
+
+1. Derive or validate the sandbox name.
+2. Load `.env`, `.env.local`, and process environment values.
+3. Resolve Docker runtime assets.
+4. Allocate app, API, and Postgres ports.
+5. Check Portless alias health.
+6. Build a runtime spec with URLs, env vars, volumes, and compose project name.
+7. Persist a provisional registry record.
+8. Start Docker Compose.
+9. Apply API Drizzle migrations.
+10. Wait for app/API/Postgres health.
+11. Persist a ready or degraded registry record.
+
+When Portless aliases are healthy, URLs use the
+`*.task-tracker.localhost:1355` proxy. When aliases are unavailable, the CLI
+reports loopback fallback URLs.
+
+## Sandbox Runtime
+
+Docker assets live in `packages/sandbox-cli/docker`.
+
+`sandbox.compose.yaml` starts:
+
+- `postgres`, using `postgres:16-alpine`
+- `api`, running the workspace API in a sandbox dev image
+- `app`, running the workspace app in the same sandbox dev image
+
+The API receives auth, email, database, geocoder, sandbox, and Cloudflare
+environment values. The app receives API origin, Vite API origin, host/port, and
+sandbox identifiers. Both app and API mount the current worktree into
+`/workspace` and share external pnpm and root `node_modules` volumes.
+
+The API health endpoint is `GET /health`; the app health route is `/health`.
+
+## Sandbox Environment
+
+`packages/sandbox-core/src/node/env.ts` reads `.env`, `.env.local`, and process
+environment, then decodes only the keys requested by the CLI. Missing required
+keys fail preflight before Docker starts.
+
+Common sandbox variables include:
+
+| Variable                  | Purpose                                                  |
+| ------------------------- | -------------------------------------------------------- |
+| `AUTH_APP_ORIGIN`         | Browser app origin used by auth redirects and emails.    |
+| `AUTH_EMAIL_FROM`         | Sender address for auth emails.                          |
+| `AUTH_EMAIL_FROM_NAME`    | Sender display name.                                     |
+| `AUTH_EMAIL_TRANSPORT`    | `noop`, `cloudflare-api`, or `cloudflare-binding`.       |
+| `AUTH_RATE_LIMIT_ENABLED` | Disabled during automation to avoid local auth lockouts. |
+| `BETTER_AUTH_BASE_URL`    | API auth URL.                                            |
+| `BETTER_AUTH_SECRET`      | Stable sandbox auth secret.                              |
+| `DATABASE_URL`            | Sandbox Postgres URL.                                    |
+| `SITE_GEOCODER_MODE`      | Site geocoder behavior for local runs.                   |
+| `TASK_TRACKER_SANDBOX`    | Marks sandbox runtime.                                   |
+
+Cloudflare email API credentials are optional unless
+`AUTH_EMAIL_TRANSPORT=cloudflare-api`.
+
+## Production Infrastructure
+
+`packages/infra` defines infrastructure with Alchemy v2. The stack entrypoint is
+`packages/infra/alchemy.run.ts`.
+
+The stack provisions:
+
+- PlanetScale Postgres database, roles, and connection URLs
+- Cloudflare Hyperdrive for Postgres connectivity
+- Cloudflare Worker API from `apps/api/src/worker.ts`
+- Cloudflare Vite app from `apps/app`
+- Cloudflare Queue for auth email
+- Cloudflare dead-letter queue for auth email failures
+- Optional Cloudflare account API token for `cloudflare-api` email transport
+- Optional Cloudflare Email Worker binding for `cloudflare-binding` transport
+
+The API Worker is configured with `nodejs_compat`, Better Auth env vars,
+database Hyperdrive binding, auth email queue binding, observability logs, and
+traces. The app is configured with app/API origins and Cloudflare-specific Vite
+flags.
+
+## Infra Configuration
+
+`packages/infra/src/stages.ts` loads deployment config. It supports both
+`CEIRD_*` names and selected `TASK_TRACKER_*` legacy names.
+
+| Variable                                                                       | Default              | Purpose                                   |
+| ------------------------------------------------------------------------------ | -------------------- | ----------------------------------------- |
+| `CEIRD_INFRA_STAGE` / `TASK_TRACKER_INFRA_STAGE`                               | `production`         | `preview` or `production`.                |
+| `CEIRD_ZONE_NAME` / `TASK_TRACKER_ZONE_NAME`                                   | required             | Cloudflare zone.                          |
+| `CEIRD_APP_HOSTNAME` / `TASK_TRACKER_APP_HOSTNAME`                             | `app.<zone>`         | App hostname.                             |
+| `CEIRD_API_HOSTNAME` / `TASK_TRACKER_API_HOSTNAME`                             | `api.<zone>`         | API hostname.                             |
+| `AUTH_EMAIL_FROM`                                                              | required             | Sender email address.                     |
+| `AUTH_EMAIL_FROM_NAME`                                                         | `Ceird`              | Sender display name.                      |
+| `AUTH_EMAIL_TRANSPORT`                                                         | `cloudflare-binding` | Auth email transport mode.                |
+| `PLANETSCALE_ORGANIZATION`                                                     | required             | PlanetScale organization.                 |
+| `CEIRD_PLANETSCALE_DATABASE_NAME` / `TASK_TRACKER_PLANETSCALE_DATABASE_NAME`   | `ceird-<stage>`      | PlanetScale database name.                |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH` / `TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH` | `main`               | PlanetScale branch.                       |
+| `CEIRD_PLANETSCALE_REGION` / `TASK_TRACKER_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                  |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE` / `TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE`     | `PS-5`               | PlanetScale cluster size.                 |
+| `APPLY_MIGRATIONS` / `TASK_TRACKER_APPLY_MIGRATIONS`                           | `false`              | Run API Drizzle migrations during deploy. |
+
+Resource names use `ceird-<stage>-<suffix>`.
+
+## Deployment Commands
+
+From the repo root:
+
+```bash
+pnpm infra:check-types
+pnpm infra:deploy
+pnpm infra:destroy
+```
+
+From the infra package:
+
+```bash
+pnpm --filter @task-tracker/infra check-types
+pnpm --filter @task-tracker/infra deploy
+pnpm --filter @task-tracker/infra destroy
+pnpm --filter @task-tracker/infra dev
+```
+
+Use the Stripe Projects CLI guidance in `AGENTS.md` when managing third-party
+service access for this project.
