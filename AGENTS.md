@@ -20,6 +20,19 @@ This repo keeps fetched dependency source code in `opensrc/` for local agent con
 - Use those local sources when behavior is unclear from types alone.
 - Do not commit files from `opensrc/`; the directory is intentionally gitignored.
 
+## Documentation And Source Of Truth
+
+Treat current source code and architecture guides as the authority, and treat
+historical plans as decision context only.
+
+- Start with `README.md`, `docs/README.md`, and the relevant guide under
+  `docs/architecture/` when orienting on an unfamiliar area.
+- When code changes affect routes, API contracts, persistence, shared package
+  boundaries, sandbox behavior, or infrastructure, update the matching
+  architecture guide in the same change.
+- Use `docs/superpowers/specs` and `docs/superpowers/plans` to understand prior
+  intent, but verify current behavior against source before relying on them.
+
 ## Worktrees And Sandboxes
 
 When working from a linked git worktree, prefer the sandbox workflow over the host-level dev scripts.
@@ -45,6 +58,20 @@ Model runtime and type safety according to the boundary the code is crossing.
 - Prefer inferred types from `Schema` for shared DTOs and domain payloads that cross module or service boundaries.
 - Keep plain TypeScript interfaces and types for simple internal computed objects that stay inside a trusted local implementation and do not need runtime decoding.
 - Do not add runtime schemas for internal shapes unless they provide a clear boundary-level benefit such as decoding, validation, serialization, or contract sharing.
+
+## Verification
+
+Run the narrowest relevant checks while iterating, then broaden when the change
+touches shared behavior.
+
+- Use package filters such as `pnpm --filter app test`, `pnpm --filter api test`,
+  or `pnpm --filter @task-tracker/jobs-core test` for focused feedback.
+- For cross-package or handoff-ready changes, prefer `pnpm check-types`,
+  `pnpm test`, `pnpm lint`, and `pnpm format`.
+- For browser workflows that depend on auth cookies, API calls, or database
+  state, use `pnpm sandbox:up` and run the affected Playwright tests.
+- For database schema changes, generate and inspect the Drizzle migration under
+  `apps/api/drizzle`, then verify the API and sandbox migration path.
 
 <!-- stripe-projects-cli managed:agents-md:start -->
 

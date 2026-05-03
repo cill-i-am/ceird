@@ -8,3 +8,16 @@ This app owns the Task Tracker HTTP API, authentication runtime, database access
 - Keep Drizzle schema, migrations, and repository code aligned. Persistence changes should include tests that exercise the database boundary when behavior changes.
 - Keep Node and Cloudflare Worker entrypoints thin. Shared API behavior should live behind reusable layers such as the web handler and domain services.
 - Domain packages such as `@task-tracker/identity-core`, `@task-tracker/jobs-core`, and `@task-tracker/sandbox-core` own shared contracts; this app owns authorization, persistence, runtime effects, and HTTP wiring.
+
+## Contract And Persistence Changes
+
+- Change shared jobs endpoint shapes in `@task-tracker/jobs-core` first, then
+  update handlers, services, repositories, app clients, and tests together.
+- Public jobs errors that the app needs to branch on should come from the shared
+  `Schema.TaggedError` contract, not API-local ad hoc response objects.
+- Better Auth owns standard `/api/auth/*` behavior. Keep custom identity
+  extensions narrow and backed by shared `identity-core` schemas where payloads
+  cross app/API boundaries.
+- Persistence changes should keep the owning domain schema, schema barrel,
+  generated Drizzle migration, repository behavior, and integration tests in
+  sync.
