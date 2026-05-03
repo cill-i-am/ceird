@@ -897,13 +897,26 @@ function makeSandboxLifecycle(input: {
       options: SandboxCommandOptions = {}
     ) {
       const record = yield* resolveSandboxRecord(options);
+      const aliasRefreshedRecord = yield* refreshSandboxAliases({
+        record,
+        portlessService: input.portlessService,
+      });
       const servicesPresent =
-        yield* input.composeEngine.runningServices(record);
+        yield* input.composeEngine.runningServices(aliasRefreshedRecord);
       const [appOpen, apiOpen, postgresOpen] = yield* Effect.all(
         [
-          checkLocalPortOpen(input.sandboxProcess, record.ports.app),
-          checkLocalPortOpen(input.sandboxProcess, record.ports.api),
-          checkLocalPortOpen(input.sandboxProcess, record.ports.postgres),
+          checkLocalPortOpen(
+            input.sandboxProcess,
+            aliasRefreshedRecord.ports.app
+          ),
+          checkLocalPortOpen(
+            input.sandboxProcess,
+            aliasRefreshedRecord.ports.api
+          ),
+          checkLocalPortOpen(
+            input.sandboxProcess,
+            aliasRefreshedRecord.ports.postgres
+          ),
         ],
         { concurrency: "unbounded" }
       );
@@ -919,7 +932,7 @@ function makeSandboxLifecycle(input: {
         portsInUse.add(record.ports.postgres);
       }
 
-      const reconciled = reconcileSandboxRecord(record, {
+      const reconciled = reconcileSandboxRecord(aliasRefreshedRecord, {
         servicesPresent,
         portsInUse,
         now: new Date().toISOString(),
@@ -1179,6 +1192,35 @@ export function ensureSandboxProxyHealthy(input: {
       )
     ),
     Effect.orElseSucceed(() => false)
+  );
+}
+
+export function refreshSandboxAliases(input: {
+  readonly record: SandboxRegistryRecord;
+  readonly portlessService: Pick<
+    PortlessService,
+    "ensureProxyRunning" | "registerAliases"
+  >;
+}): Effect.Effect<SandboxRegistryRecord, never, never> {
+  if (!input.record.aliasesHealthy) {
+    return Effect.succeed(input.record);
+  }
+
+  return input.portlessService.ensureProxyRunning().pipe(
+    Effect.zipRight(
+      input.portlessService.registerAliases(
+        input.record.sandboxName,
+        input.record.ports
+      )
+    ),
+    Effect.as(input.record),
+    Effect.catchAll(() =>
+      Effect.succeed({
+        ...input.record,
+        aliasesHealthy: false,
+        status: "degraded" as const,
+      })
+    )
   );
 }
 

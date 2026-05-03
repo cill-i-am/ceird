@@ -2,7 +2,6 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_root"
 
 echo "Preparing local environment in $repo_root"
@@ -43,18 +42,6 @@ if [[ -n "${LOCAL_ENV_SOURCE:-}" ]]; then
   fi
 fi
 
-if [[ -z "$env_source" ]]; then
-  while IFS= read -r line; do
-    if [[ "$line" == worktree\ * ]]; then
-      worktree_path="${line#worktree }"
-      if [[ "$worktree_path" != "$repo_root" && -f "$worktree_path/.env.local" ]]; then
-        env_source="$worktree_path/.env.local"
-        break
-      fi
-    fi
-  done < <(git worktree list --porcelain)
-fi
-
 if [[ -n "$env_source" ]]; then
   cp "$env_source" "$env_temp"
   chmod 600 "$env_temp"
@@ -64,25 +51,5 @@ if [[ -n "$env_source" ]]; then
   exit 0
 fi
 
-LOCAL_ENV_DEV_SCRIPT="$script_dir/dev.mjs" node --input-type=module > "$env_temp" <<'NODE'
-import { pathToFileURL } from "node:url";
-
-const { createDevEnvironment } = await import(
-  pathToFileURL(process.env.LOCAL_ENV_DEV_SCRIPT).href
-);
-
-const env = createDevEnvironment({ PATH: process.env.PATH ?? "" });
-
-for (const key of [
-  "AUTH_EMAIL_FROM",
-  "AUTH_EMAIL_FROM_NAME",
-  "AUTH_EMAIL_TRANSPORT",
-]) {
-  console.log(`${key}=${String(env[key]).replaceAll("\n", "")}`);
-}
-NODE
-chmod 600 "$env_temp"
-mv "$env_temp" "$env_target"
-trap - EXIT
-
-echo "Created minimal .env.local for noop-email sandbox development"
+echo "Missing .env.local. Create one at the repo root or set LOCAL_ENV_SOURCE to an env file or directory containing .env.local." >&2
+exit 1

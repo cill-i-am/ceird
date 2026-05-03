@@ -6,7 +6,6 @@ import { repairPortlessRoutesFile } from "./portless-state.mjs";
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
 const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
-const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
 const DEFAULT_SITE_GEOCODER_MODE = "stub";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
@@ -15,7 +14,9 @@ export function createDevEnvironment(baseEnvironment = process.env) {
 
   return {
     ...baseEnvironment,
-    API_ORIGIN: baseEnvironment.API_ORIGIN ?? DEFAULT_API_ORIGIN,
+    API_ORIGIN:
+      baseEnvironment.API_ORIGIN ??
+      `https://api.task-tracker.localhost:${proxyPort}`,
     AUTH_APP_ORIGIN:
       baseEnvironment.AUTH_APP_ORIGIN ??
       `https://app.task-tracker.localhost:${proxyPort}`,

@@ -18,6 +18,7 @@ import {
   finalizeSandboxRename,
   removeAliasesBestEffort,
   loadSandboxEnvironmentOrThrow,
+  refreshSandboxAliases,
   resolveRepoRootFromGitPaths,
   selectSandboxRecord,
   waitForSandboxServicesReady,
@@ -329,6 +330,54 @@ describe("ensureSandboxProxyHealthy()", () => {
       )
       // eslint-disable-next-line vitest/prefer-strict-boolean-matchers, vitest/prefer-to-be-falsy
     ).resolves.toBe(false);
+  }, 10_000);
+});
+
+describe("refreshSandboxAliases()", () => {
+  it("repairs a stale healthy registry record by re-registering aliases", async () => {
+    const calls: string[] = [];
+
+    await expect(
+      Effect.runPromise(
+        refreshSandboxAliases({
+          record: baseRecord,
+          portlessService: {
+            ensureProxyRunning: () =>
+              Effect.sync(() => {
+                calls.push("proxy");
+              }),
+            registerAliases: (sandboxName, ports) =>
+              Effect.sync(() => {
+                calls.push(`${sandboxName}:${ports.app}:${ports.api}`);
+              }),
+          },
+        })
+      )
+    ).resolves.toStrictEqual(baseRecord);
+
+    expect(calls).toStrictEqual(["proxy", "alpha:4300:4301"]);
+  }, 10_000);
+
+  it("downgrades a healthy registry record when alias repair fails", async () => {
+    await expect(
+      Effect.runPromise(
+        refreshSandboxAliases({
+          record: baseRecord,
+          portlessService: {
+            ensureProxyRunning: () => Effect.void,
+            registerAliases: () =>
+              Effect.fail(
+                new SandboxPreflightError({
+                  message: "portless aliases unavailable",
+                })
+              ),
+          },
+        })
+      )
+    ).resolves.toMatchObject({
+      aliasesHealthy: false,
+      status: "degraded",
+    });
   }, 10_000);
 });
 

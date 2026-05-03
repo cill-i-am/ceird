@@ -68,7 +68,7 @@ test("setup preserves an existing .env.local", async (t) => {
   );
 });
 
-test("setup copies .env.local from another git worktree", async (t) => {
+test("setup fails when no existing .env.local or LOCAL_ENV_SOURCE is available", async (t) => {
   const fixture = await createFixture();
   t.after(fixture.cleanup);
   const sourceWorktree = path.join(fixture.tempDir, "source-worktree");
@@ -84,30 +84,32 @@ test("setup copies .env.local from another git worktree", async (t) => {
 
   const result = runScript(setupScript, fixture);
 
-  assert.equal(result.status, 0, result.stderr);
+  assert.notEqual(result.status, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    /Missing \.env\.local\. Create one at the repo root or set LOCAL_ENV_SOURCE/
+  );
   assert.equal(
-    await readFile(path.join(fixture.repoDir, ".env.local"), "utf8"),
-    "AUTH_EMAIL_FROM=worktree@example.com\n"
+    await pathExists(path.join(fixture.repoDir, ".env.local")),
+    false
   );
 });
 
-test("setup creates a minimal fallback .env.local when no source exists", async (t) => {
+test("setup fails when no env source exists", async (t) => {
   const fixture = await createFixture();
   t.after(fixture.cleanup);
 
   const result = runScript(setupScript, fixture);
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(
-    await readFile(path.join(fixture.repoDir, ".env.local"), "utf8"),
-    [
-      "AUTH_EMAIL_FROM=auth@task-tracker.localhost",
-      "AUTH_EMAIL_FROM_NAME=Task Tracker",
-      "AUTH_EMAIL_TRANSPORT=noop",
-      "",
-    ].join("\n")
+  assert.notEqual(result.status, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    /Missing \.env\.local\. Create one at the repo root or set LOCAL_ENV_SOURCE/
   );
-  assert.equal(await fileMode(path.join(fixture.repoDir, ".env.local")), 0o600);
+  assert.equal(
+    await pathExists(path.join(fixture.repoDir, ".env.local")),
+    false
+  );
 });
 
 test("setup does not leave a partial .env.local when fallback generation fails", async (t) => {

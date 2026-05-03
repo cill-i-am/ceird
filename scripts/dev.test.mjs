@@ -3,17 +3,18 @@ import test from "node:test";
 
 import { createDevEnvironment } from "./dev.mjs";
 
-test("adds a default Better Auth base URL for local portless dev", () => {
+test("adds default static portless URLs for local dev", () => {
   const env = createDevEnvironment({
     PATH: process.env.PATH ?? "",
     PORTLESS_PORT: "1355",
   });
 
-  assert.equal(env.API_ORIGIN, "http://127.0.0.1:3001");
+  assert.equal(env.API_ORIGIN, "https://api.task-tracker.localhost:1355");
   assert.equal(
     env.BETTER_AUTH_BASE_URL,
     "https://api.task-tracker.localhost:1355"
   );
+  assert.equal(env.AUTH_APP_ORIGIN, "https://app.task-tracker.localhost:1355");
   assert.equal(env.AUTH_EMAIL_FROM, "auth@task-tracker.localhost");
   assert.equal(env.AUTH_EMAIL_FROM_NAME, "Task Tracker");
   assert.equal(env.AUTH_EMAIL_TRANSPORT, "noop");
