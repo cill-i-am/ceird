@@ -1,0 +1,232 @@
+diff --git a/lib/Agent/process/process.js b/lib/Agent/process/process.js
+index dc7358cd329b54d596e8564c6a83341ce6252e83..d9fb286b6bc7f2c5971fba0b1ce3940f739d4374 100644
+--- a/lib/Agent/process/process.js
++++ b/lib/Agent/process/process.js
+@@ -1,3 +1,3 @@
+-import { defineAspect } from "../Aspect";
++import { defineAspect } from "../Aspect.js";
+ export const Process = defineAspect("process");
+ //# sourceMappingURL=process.js.map
+\ No newline at end of file
+diff --git a/lib/Cli/commands/_shared.js b/lib/Cli/commands/_shared.js
+index 616caf0360f6a7e0f9f4ee9165e3883faeab96ab..413659648526fb0026f91289e2c02c22c6cd4e5d 100644
+--- a/lib/Cli/commands/_shared.js
++++ b/lib/Cli/commands/_shared.js
+@@ -16,9 +16,9 @@ import * as S from "effect/Schema";
+ import * as Argument from "effect/unstable/cli/Argument";
+ import * as CliError from "effect/unstable/cli/CliError";
+ import * as Flag from "effect/unstable/cli/Flag";
+-import { AuthError } from "../../Auth/AuthProvider";
+-import { recordCli } from "../../Telemetry/Metrics";
+-import { PromptCancelled } from "../../Util/Clank";
++import { AuthError } from "../../Auth/AuthProvider.js";
++import { recordCli } from "../../Telemetry/Metrics.js";
++import { PromptCancelled } from "../../Util/Clank.js";
+ export const USER = Config.string("USER").pipe(Config.orElse(() => Config.string("USERNAME")), Config.withDefault("unknown"));
+ export const STAGE = Config.string("stage").pipe(Config.option, (a) => a.asEffect(), Effect.map(Option.getOrUndefined));
+ /**
+diff --git a/lib/Cli/commands/bootstrap.js b/lib/Cli/commands/bootstrap.js
+index 5e6d9c8667f5e6e36d1e1d974ea5c741c4f8850c..048a8758dee2f5ff894ff3add925179619384ba3 100644
+--- a/lib/Cli/commands/bootstrap.js
++++ b/lib/Cli/commands/bootstrap.js
+@@ -8,18 +8,18 @@ import * as Option from "effect/Option";
+ import { Path } from "effect/Path";
+ import * as Command from "effect/unstable/cli/Command";
+ import * as Flag from "effect/unstable/cli/Flag";
+-import { bootstrap as bootstrapAws, destroyBootstrap as destroyBootstrapAws, } from "../../AWS/Bootstrap";
+-import * as AWSCredentials from "../../AWS/Credentials";
+-import * as AWSEnvironment from "../../AWS/Environment";
+-import * as AWSRegion from "../../AWS/Region";
+-import { AuthProviders } from "../../Auth/AuthProvider";
+-import { withProfileOverride } from "../../Auth/Profile";
+-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider";
+-import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment";
+-import * as CloudflareCredentials from "../../Cloudflare/Credentials";
+-import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State";
+-import { loadConfigProvider } from "../../Util/ConfigProvider";
+-import { fileLogger } from "../../Util/FileLogger";
++import { bootstrap as bootstrapAws, destroyBootstrap as destroyBootstrapAws, } from "../../AWS/Bootstrap.js";
++import * as AWSCredentials from "../../AWS/Credentials.js";
++import * as AWSEnvironment from "../../AWS/Environment.js";
++import * as AWSRegion from "../../AWS/Region.js";
++import { AuthProviders } from "../../Auth/AuthProvider.js";
++import { withProfileOverride } from "../../Auth/Profile.js";
++import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.js";
++import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.js";
++import * as CloudflareCredentials from "../../Cloudflare/Credentials.js";
++import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State.js";
++import { loadConfigProvider } from "../../Util/ConfigProvider.js";
++import { fileLogger } from "../../Util/FileLogger.js";
+ import { envFile, instrumentCommand, profile } from "./_shared.js";
+ const awsProfile = Flag.string("profile").pipe(Flag.withDescription("AWS profile to use for credentials"), Flag.optional, Flag.map(Option.getOrElse(() => "default")));
+ const awsRegion = Flag.string("region").pipe(Flag.withDescription("AWS region to bootstrap (defaults to AWS_REGION env var)"), Flag.optional, Flag.map(Option.getOrUndefined));
+diff --git a/lib/Cli/commands/deploy.js b/lib/Cli/commands/deploy.js
+index b3eb6934bd046feb3308c7fcf9d7cd1352450ae8..9432a4a03f0cbadf6fbb993661d249cabdd7e16d 100644
+--- a/lib/Cli/commands/deploy.js
++++ b/lib/Cli/commands/deploy.js
+@@ -7,17 +7,17 @@ import * as Option from "effect/Option";
+ import * as Schema from "effect/Schema";
+ import * as Command from "effect/unstable/cli/Command";
+ import * as Flag from "effect/unstable/cli/Flag";
+-import { AdoptPolicy } from "../../AdoptPolicy";
+-import { AlchemyContext } from "../../AlchemyContext";
+-import { apply } from "../../Apply";
+-import { ArtifactStore, createArtifactStore } from "../../Artifacts";
+-import { AuthProviders } from "../../Auth/AuthProvider";
+-import { withProfileOverride } from "../../Auth/Profile";
++import { AdoptPolicy } from "../../AdoptPolicy.js";
++import { AlchemyContext } from "../../AlchemyContext.js";
++import { apply } from "../../Apply.js";
++import { ArtifactStore, createArtifactStore } from "../../Artifacts.js";
++import { AuthProviders } from "../../Auth/AuthProvider.js";
++import { withProfileOverride } from "../../Auth/Profile.js";
+ import * as CLI from "../../Cli/Cli.js";
+-import * as Plan from "../../Plan";
+-import { Stage } from "../../Stage";
+-import { loadConfigProvider } from "../../Util/ConfigProvider";
+-import { fileLogger } from "../../Util/FileLogger";
++import * as Plan from "../../Plan.js";
++import { Stage } from "../../Stage.js";
++import { loadConfigProvider } from "../../Util/ConfigProvider.js";
++import { fileLogger } from "../../Util/FileLogger.js";
+ import { dryRun as dryRunFlag, envFile, force, importStack, instrumentCommand, profile, script, stage, yes, } from "./_shared.js";
+ export const ExecStackOptions = Schema.Struct({
+     main: Schema.String,
+diff --git a/lib/Cli/commands/login.js b/lib/Cli/commands/login.js
+index ce8129851aef4bb3dcd512b1baf3ef35c2ae696f..23e47f4647139c8d6488dbb99fe801ec9235f1d0 100644
+--- a/lib/Cli/commands/login.js
++++ b/lib/Cli/commands/login.js
+@@ -6,12 +6,12 @@ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
+ import * as Logger from "effect/Logger";
+ import { Command, Flag } from "effect/unstable/cli";
+-import { AuthProviders } from "../..//Auth/AuthProvider";
+-import { getProfile, setProfile, withProfileOverride, } from "../..//Auth/Profile";
+-import { Stage } from "../..//Stage";
+-import * as State from "../..//State/index";
+-import { loadConfigProvider } from "../..//Util/ConfigProvider";
+-import { fileLogger } from "../..//Util/FileLogger";
++import { AuthProviders } from "../..//Auth/AuthProvider.js";
++import { getProfile, setProfile, withProfileOverride, } from "../..//Auth/Profile.js";
++import { Stage } from "../..//Stage.js";
++import * as State from "../..//State/index.js";
++import { loadConfigProvider } from "../..//Util/ConfigProvider.js";
++import { fileLogger } from "../..//Util/FileLogger.js";
+ import { envFile, importStack, instrumentCommand, profile, script, stage, } from "./_shared.js";
+ const loginConfigure = Flag.boolean("configure").pipe(Flag.withDescription("Run the provider's interactive configure step before logging in"), Flag.withDefault(false));
+ export const loginCommand = Command.make("login", {
+diff --git a/lib/Cli/commands/logs.js b/lib/Cli/commands/logs.js
+index 0c722f5b8c7303fec75738c2d895c64fe94becde..d4c0a8ecab7b5be9becf75da584d0ee31ce73cae 100644
+--- a/lib/Cli/commands/logs.js
++++ b/lib/Cli/commands/logs.js
+@@ -5,13 +5,13 @@ import * as Layer from "effect/Layer";
+ import * as Logger from "effect/Logger";
+ import * as Option from "effect/Option";
+ import { Command, Flag } from "effect/unstable/cli";
+-import { findProviderByType } from "../..//Provider";
+-import { Stage } from "../..//Stage";
+-import * as State from "../..//State/index";
+-import { loadConfigProvider } from "../..//Util/ConfigProvider";
+-import { fileLogger } from "../..//Util/FileLogger";
+-import { AuthProviders } from "../..//Auth/AuthProvider";
+-import { withProfileOverride } from "../..//Auth/Profile";
++import { findProviderByType } from "../..//Provider.js";
++import { Stage } from "../..//Stage.js";
++import * as State from "../..//State/index.js";
++import { loadConfigProvider } from "../..//Util/ConfigProvider.js";
++import { fileLogger } from "../..//Util/FileLogger.js";
++import { AuthProviders } from "../..//Auth/AuthProvider.js";
++import { withProfileOverride } from "../..//Auth/Profile.js";
+ import { envFile, formatLocalTimestamp, importStack, instrumentCommand, parseResourceFilter, parseSince, profile, resourceFilter, script, stage, TAIL_COLORS, TAIL_RESET, } from "./_shared.js";
+ const logsLimit = Flag.integer("limit").pipe(Flag.withDescription("Number of log entries to fetch"), Flag.withDefault(100));
+ const logsSince = Flag.string("since").pipe(Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"), Flag.optional, Flag.map(Option.getOrUndefined));
+diff --git a/lib/Cli/commands/profile.js b/lib/Cli/commands/profile.js
+index 30dd84122c82b3fc6145dc585ab96d20c9c3d686..0c42a89c455508cfc538303b4885533c1b1ced53 100644
+--- a/lib/Cli/commands/profile.js
++++ b/lib/Cli/commands/profile.js
+@@ -4,13 +4,13 @@ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
+ import * as Logger from "effect/Logger";
+ import { Command } from "effect/unstable/cli";
+-import { AuthProviders } from "../..//Auth/AuthProvider";
+-import { deleteProfileCredentials } from "../..//Auth/Credentials";
+-import { deleteProfile, getProfile, readConfig, withProfileOverride, } from "../..//Auth/Profile";
+-import { AwsAuth } from "../..//AWS/AuthProvider";
+-import { CloudflareAuth } from "../..//Cloudflare/Auth/AuthProvider";
+-import { loadConfigProvider } from "../..//Util/ConfigProvider";
+-import { fileLogger } from "../../Util/FileLogger";
++import { AuthProviders } from "../..//Auth/AuthProvider.js";
++import { deleteProfileCredentials } from "../..//Auth/Credentials.js";
++import { deleteProfile, getProfile, readConfig, withProfileOverride, } from "../..//Auth/Profile.js";
++import { AwsAuth } from "../..//AWS/AuthProvider.js";
++import { CloudflareAuth } from "../..//Cloudflare/Auth/AuthProvider.js";
++import { loadConfigProvider } from "../..//Util/ConfigProvider.js";
++import { fileLogger } from "../../Util/FileLogger.js";
+ import { envFile, instrumentCommand, profile } from "./_shared.js";
+ const showCommand = Command.make("show", { profile, envFile }, instrumentCommand("profile.show", (a) => ({
+     "alchemy.profile": a.profile,
+diff --git a/lib/Cli/commands/state.js b/lib/Cli/commands/state.js
+index f2a786e0e421ce3bd0e9f4dcb475435d3eef2394..9ac261bc6ac4b2d91f61f982195b03bb8a1574ab 100644
+--- a/lib/Cli/commands/state.js
++++ b/lib/Cli/commands/state.js
+@@ -5,14 +5,14 @@ import * as Layer from "effect/Layer";
+ import * as Logger from "effect/Logger";
+ import * as Option from "effect/Option";
+ import { Argument, Command, Flag } from "effect/unstable/cli";
+-import { AuthProviders } from "../../Auth/AuthProvider";
+-import { withProfileOverride } from "../../Auth/Profile";
+-import { Stage } from "../../Stage";
+-import * as State from "../../State/index";
+-import { encodeState } from "../../State/StateEncoding";
+-import * as Clank from "../../Util/Clank";
+-import { loadConfigProvider } from "../../Util/ConfigProvider";
+-import { fileLogger } from "../../Util/FileLogger";
++import { AuthProviders } from "../../Auth/AuthProvider.js";
++import { withProfileOverride } from "../../Auth/Profile.js";
++import { Stage } from "../../Stage.js";
++import * as State from "../../State/index.js";
++import { encodeState } from "../../State/StateEncoding.js";
++import * as Clank from "../../Util/Clank.js";
++import { loadConfigProvider } from "../../Util/ConfigProvider.js";
++import { fileLogger } from "../../Util/FileLogger.js";
+ import { envFile, importStack, instrumentCommand, profile, script, stage, yes, } from "./_shared.js";
+ /**
+  * When set, the State service is replaced with the on-disk
+diff --git a/lib/Cli/commands/tail.js b/lib/Cli/commands/tail.js
+index aa0b3dca1a576f58be58ddbeeb884b6b747f7719..1df132ada7d4f7834da1c2d98e1ced9672330266 100644
+--- a/lib/Cli/commands/tail.js
++++ b/lib/Cli/commands/tail.js
+@@ -5,13 +5,13 @@ import * as Layer from "effect/Layer";
+ import * as Logger from "effect/Logger";
+ import * as Stream from "effect/Stream";
+ import * as Command from "effect/unstable/cli/Command";
+-import { findProviderByType } from "../..//Provider";
+-import { Stage } from "../..//Stage";
+-import * as State from "../..//State/index";
+-import { loadConfigProvider } from "../..//Util/ConfigProvider";
+-import { fileLogger } from "../..//Util/FileLogger";
+-import { AuthProviders } from "../..//Auth/AuthProvider";
+-import { withProfileOverride } from "../..//Auth/Profile";
++import { findProviderByType } from "../..//Provider.js";
++import { Stage } from "../..//Stage.js";
++import * as State from "../..//State/index.js";
++import { loadConfigProvider } from "../..//Util/ConfigProvider.js";
++import { fileLogger } from "../..//Util/FileLogger.js";
++import { AuthProviders } from "../..//Auth/AuthProvider.js";
++import { withProfileOverride } from "../..//Auth/Profile.js";
+ import { envFile, formatLocalTimestamp, importStack, instrumentCommand, parseResourceFilter, profile, resourceFilter, script, stage, TAIL_COLORS, TAIL_RESET, } from "./_shared.js";
+ export const tailCommand = Command.make("tail", {
+     main: script,
+diff --git a/lib/Cli/exec.js b/lib/Cli/exec.js
+index 30d64f9f37df4ca324e80c65e140b9e7d96c03cb..b4cd7033bff523fc7af77542098dca5841ab1710 100644
+--- a/lib/Cli/exec.js
++++ b/lib/Cli/exec.js
+@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
+ import * as Schema from "effect/Schema";
+ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+-import { AlchemyContextLive } from "../AlchemyContext";
++import { AlchemyContextLive } from "../AlchemyContext.js";
+ import { PlatformServices } from "../Util/PlatformServices.js";
+ import { execStack, ExecStackOptions } from "./commands/deploy.js";
+ import { inkCLI } from "./tui/InkCLI.js";
