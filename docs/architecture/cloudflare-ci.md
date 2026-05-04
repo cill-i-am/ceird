@@ -17,6 +17,7 @@ from `CEIRD_INFRA_STAGE`. Both must be stable in CI.
 For the mainline deployment:
 
 - `ALCHEMY_STAGE=main`
+- `AUTH_EMAIL_TRANSPORT=cloudflare-binding`
 - `CEIRD_ALCHEMY_STAGE=main`
 - `CEIRD_INFRA_STAGE=production`
 

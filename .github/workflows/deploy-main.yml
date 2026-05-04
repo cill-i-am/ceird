@@ -25,7 +25,7 @@ permissions:
 
 env:
   ALCHEMY_STAGE: main
-  AUTH_EMAIL_TRANSPORT: cloudflare
+  AUTH_EMAIL_TRANSPORT: cloudflare-binding
   CEIRD_ALCHEMY_STAGE: main
   CEIRD_API_HOSTNAME: api.ceird.app
   CEIRD_APP_HOSTNAME: app.ceird.app
