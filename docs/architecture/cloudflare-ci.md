@@ -73,6 +73,11 @@ The workflow:
 Use the manual `apply_migrations=false` input only when intentionally testing a
 deploy that must not touch the database schema.
 
+The infra package currently pins `alchemy@2.0.0-beta.28` with a pnpm patch that
+adds missing `.js` extensions to the package's published CLI imports. Without
+that patch, the Node-based GitHub Actions deploy job fails while loading the
+Alchemy CLI before it can bootstrap the Cloudflare state store.
+
 ## Alchemy Docs Notes
 
 The Alchemy v2 CI guide recommends:
