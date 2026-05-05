@@ -262,7 +262,7 @@ function renderListContent({
         <div className="px-3 py-2 text-sm text-muted-foreground">
           Couldn't load organizations.
         </div>
-        <DropdownMenuItem onSelect={onRetry}>
+        <DropdownMenuItem closeOnClick={false} onClick={onRetry}>
           <HugeiconsIcon
             aria-hidden="true"
             icon={RefreshIcon}
