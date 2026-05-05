@@ -8,6 +8,8 @@ import { AuthenticatedAppLayout } from "./authenticated-app-layout";
 const { mockedUseRouteContext, mockedAppLayout } = vi.hoisted(() => ({
   mockedUseRouteContext: vi.fn<
     (...args: unknown[]) => {
+      activeOrganizationId?: AppLayoutProps["activeOrganizationId"];
+      currentOrganizationRole?: AppLayoutProps["currentOrganizationRole"];
       session: {
         user:
           | (NonNullable<AppLayoutProps["user"]> & {
@@ -52,6 +54,8 @@ describe("authenticated app layout", () => {
     },
     () => {
       mockedUseRouteContext.mockReturnValue({
+        activeOrganizationId: undefined,
+        currentOrganizationRole: undefined,
         session: {
           user: {
             name: "Taylor Example",
@@ -69,6 +73,7 @@ describe("authenticated app layout", () => {
       });
       expect(mockedAppLayout).toHaveBeenCalledOnce();
       expect(mockedAppLayout.mock.calls[0]?.[0]).toStrictEqual({
+        activeOrganizationId: undefined,
         currentOrganizationRole: undefined,
         user: {
           name: "Taylor Example",

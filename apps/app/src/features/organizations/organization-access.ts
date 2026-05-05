@@ -81,8 +81,12 @@ export async function ensureActiveOrganizationId() {
     throw redirect(getLoginNavigationTarget());
   }
 
-  const { activeOrganization, activeOrganizationId, activeOrganizationSync } =
-    await resolveOrganizationAccessState(session);
+  const {
+    activeOrganization,
+    activeOrganizationId,
+    activeOrganizationSync,
+    organizations,
+  } = await resolveOrganizationAccessState(session);
 
   if (!activeOrganizationId) {
     throw redirect({ href: "/create-organization" });
@@ -92,6 +96,7 @@ export async function ensureActiveOrganizationId() {
     activeOrganization,
     activeOrganizationId,
     activeOrganizationSync,
+    organizations,
     session,
   };
 }
@@ -287,7 +292,7 @@ function decodeNullableOrganizationId(
 }
 
 export async function setActiveOrganization(
-  organizationId: OrganizationIdType
+  organizationId: OrganizationIdType | null
 ) {
   const result = await authClient.organization.setActive({
     organizationId,
@@ -302,10 +307,6 @@ export async function synchronizeClientActiveOrganization(
   activeOrganizationSync: ActiveOrganizationSync
 ) {
   if (!activeOrganizationSync.required) {
-    return;
-  }
-
-  if (!activeOrganizationSync.targetOrganizationId) {
     return;
   }
 

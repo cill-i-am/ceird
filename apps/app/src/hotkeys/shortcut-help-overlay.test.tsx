@@ -19,11 +19,13 @@ function RegisteredShortcut({
 }
 
 function RegisteredShortcutSequence({
+  enabled,
   id,
 }: {
+  readonly enabled?: boolean;
   readonly id: Parameters<typeof useAppHotkeySequence>[0];
 }) {
-  useAppHotkeySequence(id, vi.fn());
+  useAppHotkeySequence(id, vi.fn(), enabled === undefined ? {} : { enabled });
 
   return null;
 }
@@ -73,6 +75,9 @@ describe("shortcut help overlay", () => {
       expect(within(dialog).getByText("Toggle sidebar")).toBeVisible();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
       expect(within(dialog).getByText("Switch organization")).toBeVisible();
+      expect(
+        within(dialog).getByText("Multiple organizations are available")
+      ).toBeVisible();
       expect(within(dialog).queryByText("Go to Sites")).not.toBeInTheDocument();
       expect(within(dialog).queryByText("Search jobs")).not.toBeInTheDocument();
     }
@@ -116,6 +121,28 @@ describe("shortcut help overlay", () => {
 
     expect(
       within(dialog).queryByText("Toggle sidebar")
+    ).not.toBeInTheDocument();
+  }, 1000);
+
+  it("does not list disabled registered shortcut sequences", async () => {
+    renderShortcutHelpOverlay(
+      ["global"],
+      <RegisteredShortcutSequence
+        id="openOrganizationSwitcher"
+        enabled={false}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+
+    expect(
+      within(dialog).queryByText("Switch organization")
     ).not.toBeInTheDocument();
   }, 1000);
 

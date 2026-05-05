@@ -2,6 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
+import { Button } from "#/components/ui/button";
 import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 
 import type { ActiveOrganizationSync } from "./organization-access";
@@ -20,6 +21,7 @@ export function OrganizationActiveSyncBoundary({
 }: OrganizationActiveSyncBoundaryProps) {
   const router = useRouter();
   const { required, targetOrganizationId } = activeOrganizationSync;
+  const [retryCount, setRetryCount] = useState(0);
   const [syncState, setSyncState] = useState<SyncState>(
     required ? "syncing" : "ready"
   );
@@ -57,21 +59,31 @@ export function OrganizationActiveSyncBoundary({
     return () => {
       cancelled = true;
     };
-  }, [required, router, targetOrganizationId]);
+  }, [required, retryCount, router, targetOrganizationId]);
 
   if (syncState === "syncing") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center">
+      <div className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center">
         <DotMatrixLoadingState label="Loading your organization" />
-      </main>
+      </div>
     );
   }
 
   if (syncState === "error") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center text-sm text-destructive">
-        We couldn&apos;t load your organization. Refresh and try again.
-      </main>
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm">
+        <p className="text-destructive">
+          We couldn&apos;t load your organization.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setRetryCount((currentCount) => currentCount + 1)}
+        >
+          Try again
+        </Button>
+      </div>
     );
   }
 

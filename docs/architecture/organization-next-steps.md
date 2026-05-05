@@ -30,11 +30,13 @@ and acceptance:
 Implemented behavior:
 
 - the authenticated sidebar shows the active organization on organization
-  routes
+  routes and falls back to the `_app` session active organization on other
+  authenticated routes
 - users with multiple organizations can switch explicitly through Better Auth's
   native organization client APIs
 - switching invalidates TanStack Router state synchronously so organization
-  data and role-scoped navigation refresh together
+  data and role-scoped navigation refresh together, with a hard reload fallback
+  if the session switch succeeds but router refresh fails
 - the switcher handles loading, empty, single-organization, failed-list, and
   failed-switch states
 

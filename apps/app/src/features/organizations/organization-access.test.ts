@@ -9,6 +9,7 @@ import {
   requireOrganizationAdministrationAccess,
   requireOrganizationAccess,
   setActiveOrganization,
+  synchronizeClientActiveOrganization,
 } from "./organization-access";
 import type { OrganizationSummary } from "./organization-access";
 
@@ -164,6 +165,34 @@ describe("organization access helpers", () => {
     expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
       organizationId: "org_next",
     });
+  });
+
+  it("clears the client active organization when sync targets no organization", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+
+    await expect(
+      synchronizeClientActiveOrganization({
+        required: true,
+        targetOrganizationId: null,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: null,
+    });
+  });
+
+  it("skips active organization sync when no change is required", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+
+    await expect(
+      synchronizeClientActiveOrganization({
+        required: false,
+        targetOrganizationId: null,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   });
 
   it("rethrows active organization switch failures", async () => {
@@ -327,6 +356,13 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_current",
       },
+      organizations: [
+        {
+          id: "org_current",
+          name: "Current Org",
+          slug: "current-org",
+        },
+      ],
       session: {
         session: {
           activeOrganizationId: "org_stale",
@@ -373,6 +409,18 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_first",
       },
+      organizations: [
+        {
+          id: "org_first",
+          name: "First Org",
+          slug: "first-org",
+        },
+        {
+          id: "org_second",
+          name: "Second Org",
+          slug: "second-org",
+        },
+      ],
       session: {
         session: {},
         user: {
@@ -489,6 +537,13 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_server",
       },
+      organizations: [
+        {
+          id: "org_server",
+          name: "Server Org",
+          slug: "server-org",
+        },
+      ],
       session: {
         session: {
           id: "session_123",

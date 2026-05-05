@@ -1,5 +1,5 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
-import type { OrganizationSummary } from "@ceird/identity-core";
+import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
@@ -21,6 +21,18 @@ const { mockedRadioCancel, mockedRouterInvalidate } = vi.hoisted(() => ({
   mockedRadioCancel: vi.fn<() => void>(),
   mockedRouterInvalidate: vi.fn<() => Promise<void>>(),
 }));
+
+const { mockedSidebarState } = vi.hoisted(() => ({
+  mockedSidebarState: {
+    isMobile: false,
+  },
+}));
+
+const { mockedReloadAfterActiveOrganizationRefreshFailure } = vi.hoisted(
+  () => ({
+    mockedReloadAfterActiveOrganizationRefreshFailure: vi.fn<() => void>(),
+  })
+);
 
 const promiseWithResolvers = Promise as unknown as {
   withResolvers<Value>(): {
@@ -53,6 +65,16 @@ vi.mock(import("./organization-access"), async (importActual) => {
   };
 });
 
+vi.mock(import("./organization-refresh-recovery"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    reloadAfterActiveOrganizationRefreshFailure:
+      mockedReloadAfterActiveOrganizationRefreshFailure as typeof actual.reloadAfterActiveOrganizationRefreshFailure,
+  };
+});
+
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
 
@@ -61,11 +83,13 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
     SidebarMenuButton: (({
       children,
       render: renderSlot,
+      tooltip: _tooltip,
       ...props
     }: ComponentProps<"button"> & {
       children?: ReactNode;
       render?: ReactNode;
       size?: string;
+      tooltip?: unknown;
     }) => (
       <button type="button" {...props}>
         {renderSlot}
@@ -78,7 +102,7 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
       setOpen: () => {},
       openMobile: false,
       setOpenMobile: () => {},
-      isMobile: false,
+      isMobile: mockedSidebarState.isMobile,
       toggleSidebar: () => {},
     }),
   };
@@ -108,14 +132,24 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
         <div data-testid="dropdown-menu">{children}</div>
       </DropdownMenuOpenContext.Provider>
     )) as typeof actual.DropdownMenu,
-    DropdownMenuContent: (({ children }: { children?: ReactNode }) => {
+    DropdownMenuContent: (({
+      children,
+      side,
+    }: {
+      children?: ReactNode;
+      side?: string;
+    }) => {
       const dropdownMenu = React.useContext(DropdownMenuOpenContext);
 
       if (!dropdownMenu?.open) {
         return null;
       }
 
-      return <div data-testid="dropdown-menu-content">{children}</div>;
+      return (
+        <div data-side={side} data-testid="dropdown-menu-content">
+          {children}
+        </div>
+      );
     }) as typeof actual.DropdownMenuContent,
     DropdownMenuGroup: (({ children }: { children?: ReactNode }) => (
       <div data-testid="dropdown-menu-group">{children}</div>
@@ -261,10 +295,18 @@ function organization(input: {
   };
 }
 
-function renderSwitcher(activeOrganization: OrganizationSummary | null) {
+function renderSwitcher(
+  activeOrganization: OrganizationSummary | null,
+  organizations?: readonly OrganizationSummary[],
+  activeOrganizationId: OrganizationId | null = activeOrganization?.id ?? null
+) {
   return render(
     <HotkeysProvider>
-      <OrganizationSwitcher activeOrganization={activeOrganization} />
+      <OrganizationSwitcher
+        activeOrganization={activeOrganization}
+        activeOrganizationId={activeOrganizationId}
+        organizations={organizations}
+      />
     </HotkeysProvider>
   );
 }
@@ -273,8 +315,10 @@ describe("organization switcher", () => {
   beforeEach(() => {
     mockedListOrganizations.mockReset();
     mockedRadioCancel.mockReset();
+    mockedReloadAfterActiveOrganizationRefreshFailure.mockReset();
     mockedSetActiveOrganization.mockReset();
     mockedRouterInvalidate.mockReset();
+    mockedSidebarState.isMobile = false;
   });
 
   it("shows a loading state while organizations are loading", async () => {
@@ -414,6 +458,66 @@ describe("organization switcher", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses provided organizations without loading the list again", async () => {
+    const organizations = [
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ];
+
+    const user = userEvent.setup();
+    renderSwitcher(organizations[0], organizations);
+
+    expect(mockedListOrganizations).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /acme field ops/i }));
+
+    expect(
+      screen.getByRole("menuitemradio", { name: /beta builds/i })
+    ).toBeInTheDocument();
+  });
+
+  it("opens the organization menu below the trigger on mobile", async () => {
+    mockedSidebarState.isMobile = true;
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+
+    expect(screen.getByTestId("dropdown-menu-content")).toHaveAttribute(
+      "data-side",
+      "bottom"
+    );
+  });
+
+  it("resolves the active organization from the listed organizations", async () => {
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(null, undefined, decodeOrganizationId("org_acme"));
+
+    const trigger = await screen.findByRole("button", {
+      name: /acme field ops/i,
+    });
+
+    expect(trigger).toBeEnabled();
+    await user.click(trigger);
+
+    expect(
+      screen.getByRole("menuitemradio", { name: /beta builds/i })
+    ).toBeInTheDocument();
+  });
+
   it("keeps the current organization visible when switching fails", async () => {
     mockedListOrganizations.mockResolvedValue([
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
@@ -443,6 +547,37 @@ describe("organization switcher", () => {
     expect(
       screen.getByRole("button", { name: /acme field ops/i })
     ).toBeInTheDocument();
+  });
+
+  it("reloads the page when active organization refresh fails after switching", async () => {
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockRejectedValue(new Error("refresh failed"));
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
+    expect(
+      mockedReloadAfterActiveOrganizationRefreshFailure
+    ).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByText(/couldn't switch organizations/i)
+    ).not.toBeInTheDocument();
   });
 
   it("does not call setActive for the already active organization", async () => {

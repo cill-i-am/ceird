@@ -38,6 +38,7 @@ export const Route = createFileRoute("/_app/_org")({
       currentUserId: decodeOrganizationViewerUserId(
         organizationAccess.session.user.id
       ),
+      organizations: organizationAccess.organizations,
     };
   },
   component: OrganizationRouteComponent,

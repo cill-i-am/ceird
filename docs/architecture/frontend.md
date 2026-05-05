@@ -47,13 +47,17 @@ initialization script before hydration, loads global CSS, wraps the app in
 `TooltipProvider` and `HotkeysProvider`, and lazily loads TanStack devtools in
 development.
 
-The sidebar header shows the active organization on organization-scoped routes.
-Multi-organization users can open the organization switcher from the sidebar or
-with `G O`. The switcher calls Better Auth's organization list and set-active
-client APIs through `features/organizations/organization-access.ts`, then calls
+The sidebar header shows the active organization in the authenticated app shell,
+using `_app/_org` route data on organization routes and the `_app` session
+fallback elsewhere. Multi-organization users can open the organization switcher
+from the sidebar or with `G O`. The switcher calls Better Auth's organization
+list and set-active client APIs through
+`features/organizations/organization-access.ts`, then calls
 `router.invalidate({ sync: true })` after a successful switch so `_app`,
 `_app/_org`, and child route loaders refresh session, active organization, role,
-and organization-owned data together.
+and organization-owned data together. If Better Auth accepts the switch but the
+router refresh fails, the app reloads to avoid showing stale organization data
+against the new active session.
 
 Authenticated layout and navigation live under:
 

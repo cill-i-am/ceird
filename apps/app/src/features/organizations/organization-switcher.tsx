@@ -23,7 +23,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
-import { SidebarMenuButton } from "#/components/ui/sidebar";
+import { SidebarMenuButton, useSidebar } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -33,6 +33,7 @@ import {
   listOrganizations,
   setActiveOrganization,
 } from "./organization-access";
+import { reloadAfterActiveOrganizationRefreshFailure } from "./organization-refresh-recovery";
 
 type ListState =
   | {
@@ -58,19 +59,162 @@ type SwitchState =
 
 export function OrganizationSwitcher({
   activeOrganization,
+  activeOrganizationId: fallbackActiveOrganizationId = null,
+  organizations: initialOrganizations,
 }: {
   readonly activeOrganization?: OrganizationSummary | null;
+  readonly activeOrganizationId?: OrganizationId | null | undefined;
+  readonly organizations?: readonly OrganizationSummary[] | undefined;
 }) {
   const router = useRouter();
+  const { isMobile } = useSidebar();
   const [open, setOpen] = React.useState(false);
-  const [listState, setListState] = React.useState<ListState>({
-    status: "loading",
-    organizations: activeOrganization ? [activeOrganization] : [],
-  });
+  const { listState, loadOrganizations } = useOrganizationListState(
+    activeOrganization,
+    initialOrganizations
+  );
   const [switchState, setSwitchState] = React.useState<SwitchState>({
     status: "idle",
     organizationId: null,
   });
+  const currentActiveOrganizationId =
+    activeOrganization?.id ?? fallbackActiveOrganizationId;
+
+  const handleSwitchOrganization = React.useCallback(
+    async (nextOrganizationId: OrganizationId) => {
+      if (currentActiveOrganizationId === nextOrganizationId) {
+        return;
+      }
+
+      setSwitchState({
+        status: "switching",
+        organizationId: nextOrganizationId,
+      });
+
+      try {
+        await setActiveOrganization(nextOrganizationId);
+      } catch {
+        setSwitchState({
+          status: "error",
+          organizationId: nextOrganizationId,
+        });
+
+        return;
+      }
+
+      try {
+        await router.invalidate({ sync: true });
+        setOpen(false);
+        setSwitchState({ status: "idle", organizationId: null });
+      } catch {
+        reloadAfterActiveOrganizationRefreshFailure();
+      }
+    },
+    [currentActiveOrganizationId, router]
+  );
+
+  const { organizations } = listState;
+  const resolvedActiveOrganization = resolveActiveOrganization({
+    activeOrganization,
+    fallbackActiveOrganizationId,
+    organizations,
+  });
+  const activeOrganizationId =
+    resolvedActiveOrganization?.id ?? fallbackActiveOrganizationId;
+  const canSwitchOrganizations =
+    listState.status === "ready" && organizations.length > 1;
+  const activeOrganizationName =
+    resolvedActiveOrganization?.name ?? "No active organization";
+  const activeOrganizationDescription =
+    resolvedActiveOrganization?.slug ?? "Organization";
+  const triggerDisabled =
+    listState.status !== "error" &&
+    listState.status === "ready" &&
+    organizations.length <= 1;
+
+  useAppHotkeySequence(
+    "openOrganizationSwitcher",
+    () => {
+      setOpen(true);
+    },
+    { enabled: canSwitchOrganizations && switchState.status !== "switching" }
+  );
+
+  const triggerTrailing = renderTriggerTrailing({
+    canSwitchOrganizations,
+    listState,
+  });
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={
+          <SidebarMenuButton
+            aria-busy={listState.status === "loading" ? true : undefined}
+            disabled={triggerDisabled}
+            size="lg"
+            className="w-full justify-start gap-2.5"
+            tooltip={getTriggerTooltip({
+              activeOrganizationName,
+              canSwitchOrganizations,
+            })}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sidebar-accent-foreground">
+              <HugeiconsIcon
+                aria-hidden="true"
+                icon={Building03Icon}
+                strokeWidth={2}
+                className="size-4"
+              />
+            </span>
+            <span className="grid min-w-0 flex-1 gap-0.5 text-left leading-tight">
+              <span className="truncate font-medium">
+                {activeOrganizationName}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {activeOrganizationDescription}
+              </span>
+            </span>
+            {triggerTrailing}
+          </SidebarMenuButton>
+        }
+      />
+      <DropdownMenuContent
+        align="start"
+        side={isMobile ? "bottom" : "right"}
+        className="w-64"
+      >
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">Organizations</span>
+          {canSwitchOrganizations ? (
+            <DropdownMenuShortcut>
+              <ShortcutHint
+                hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
+                label={HOTKEYS.openOrganizationSwitcher.label}
+              />
+            </DropdownMenuShortcut>
+          ) : null}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {renderListContent({
+          activeOrganizationId,
+          listState,
+          switchState,
+          onRetry: loadOrganizations,
+          onSwitchOrganization: handleSwitchOrganization,
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function useOrganizationListState(
+  activeOrganization: OrganizationSummary | null | undefined,
+  initialOrganizations: readonly OrganizationSummary[] | undefined
+) {
+  const [listState, setListState] = React.useState<ListState>(
+    getInitialListState(activeOrganization, initialOrganizations)
+  );
   const requestIdRef = React.useRef(0);
 
   const loadOrganizations = React.useCallback(() => {
@@ -109,137 +253,118 @@ export function OrganizationSwitcher({
   }, []);
 
   React.useEffect(() => {
+    if (initialOrganizations) {
+      requestIdRef.current += 1;
+      setListState({
+        status: "ready",
+        organizations: initialOrganizations,
+      });
+
+      return;
+    }
+
     loadOrganizations();
 
     return () => {
       requestIdRef.current += 1;
     };
-  }, [loadOrganizations]);
+  }, [initialOrganizations, loadOrganizations]);
 
-  const handleSwitchOrganization = React.useCallback(
-    async (nextOrganizationId: OrganizationId) => {
-      if (activeOrganization?.id === nextOrganizationId) {
-        return;
-      }
+  return { listState, loadOrganizations };
+}
 
-      setSwitchState({
-        status: "switching",
-        organizationId: nextOrganizationId,
-      });
+function getInitialListState(
+  activeOrganization: OrganizationSummary | null | undefined,
+  initialOrganizations: readonly OrganizationSummary[] | undefined
+): ListState {
+  return {
+    status: initialOrganizations ? "ready" : "loading",
+    organizations:
+      initialOrganizations ?? (activeOrganization ? [activeOrganization] : []),
+  };
+}
 
-      try {
-        await setActiveOrganization(nextOrganizationId);
-        await router.invalidate({ sync: true });
-        setOpen(false);
-        setSwitchState({ status: "idle", organizationId: null });
-      } catch {
-        setSwitchState({
-          status: "error",
-          organizationId: nextOrganizationId,
-        });
-      }
-    },
-    [activeOrganization?.id, router]
-  );
+function resolveActiveOrganization({
+  activeOrganization,
+  fallbackActiveOrganizationId,
+  organizations,
+}: {
+  readonly activeOrganization: OrganizationSummary | null | undefined;
+  readonly fallbackActiveOrganizationId: OrganizationId | null;
+  readonly organizations: readonly OrganizationSummary[];
+}) {
+  if (activeOrganization) {
+    return activeOrganization;
+  }
 
-  const { organizations } = listState;
-  const canSwitchOrganizations =
-    listState.status === "ready" && organizations.length > 1;
-  const activeOrganizationName =
-    activeOrganization?.name ?? "No active organization";
-  const activeOrganizationDescription =
-    activeOrganization?.slug ?? "Organization";
-  const triggerDisabled =
-    listState.status !== "error" &&
-    (!activeOrganization ||
-      (listState.status === "ready" && organizations.length <= 1));
-
-  useAppHotkeySequence(
-    "openOrganizationSwitcher",
-    () => {
-      setOpen(true);
-    },
-    { enabled: canSwitchOrganizations && switchState.status !== "switching" }
-  );
-
-  let triggerTrailing: React.ReactNode = null;
-
-  if (listState.status === "loading") {
-    triggerTrailing = <DotMatrixButtonLoader />;
-  } else if (canSwitchOrganizations) {
-    triggerTrailing = (
-      <HugeiconsIcon
-        aria-hidden="true"
-        icon={UnfoldMoreIcon}
-        strokeWidth={2}
-        className="ml-auto size-4 text-muted-foreground"
-      />
-    );
+  if (!fallbackActiveOrganizationId) {
+    return null;
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger
-        render={
-          <SidebarMenuButton
-            aria-busy={listState.status === "loading" ? true : undefined}
-            disabled={triggerDisabled}
-            size="lg"
-            className="w-full justify-start gap-2.5"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sidebar-accent-foreground">
-              <HugeiconsIcon
-                aria-hidden="true"
-                icon={Building03Icon}
-                strokeWidth={2}
-                className="size-4"
-              />
-            </span>
-            <span className="grid min-w-0 flex-1 gap-0.5 text-left leading-tight">
-              <span className="truncate font-medium">
-                {activeOrganizationName}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {activeOrganizationDescription}
-              </span>
-            </span>
-            {triggerTrailing}
-          </SidebarMenuButton>
-        }
-      />
-      <DropdownMenuContent align="start" side="right" className="w-64">
-        <DropdownMenuLabel className="flex items-center gap-2">
-          <span className="min-w-0 flex-1">Organizations</span>
-          {canSwitchOrganizations ? (
-            <DropdownMenuShortcut>
-              <ShortcutHint
-                hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
-                label={HOTKEYS.openOrganizationSwitcher.label}
-              />
-            </DropdownMenuShortcut>
-          ) : null}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {renderListContent({
-          activeOrganization,
-          listState,
-          switchState,
-          onRetry: loadOrganizations,
-          onSwitchOrganization: handleSwitchOrganization,
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    organizations.find(
+      (organization) => organization.id === fallbackActiveOrganizationId
+    ) ?? null
   );
 }
 
+function renderTriggerTrailing({
+  canSwitchOrganizations,
+  listState,
+}: {
+  readonly canSwitchOrganizations: boolean;
+  readonly listState: ListState;
+}) {
+  if (listState.status === "loading") {
+    return <DotMatrixButtonLoader />;
+  }
+
+  if (!canSwitchOrganizations) {
+    return null;
+  }
+
+  return (
+    <HugeiconsIcon
+      aria-hidden="true"
+      icon={UnfoldMoreIcon}
+      strokeWidth={2}
+      className="ml-auto size-4 text-muted-foreground"
+    />
+  );
+}
+
+function getTriggerTooltip({
+  activeOrganizationName,
+  canSwitchOrganizations,
+}: {
+  readonly activeOrganizationName: string;
+  readonly canSwitchOrganizations: boolean;
+}) {
+  if (!canSwitchOrganizations) {
+    return activeOrganizationName;
+  }
+
+  return {
+    children: (
+      <>
+        <span>{activeOrganizationName}</span>
+        <ShortcutHint
+          hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
+          label={HOTKEYS.openOrganizationSwitcher.label}
+        />
+      </>
+    ),
+  };
+}
+
 function renderListContent({
-  activeOrganization,
+  activeOrganizationId,
   listState,
   switchState,
   onRetry,
   onSwitchOrganization,
 }: {
-  readonly activeOrganization?: OrganizationSummary | null;
+  readonly activeOrganizationId: OrganizationId | null;
   readonly listState: ListState;
   readonly switchState: SwitchState;
   readonly onRetry: () => void;
@@ -307,7 +432,7 @@ function renderListContent({
         </div>
       ) : null}
       <DropdownMenuRadioGroup
-        value={activeOrganization?.id}
+        value={activeOrganizationId ?? undefined}
         onValueChange={(selectedValue, eventDetails) => {
           eventDetails.cancel();
 

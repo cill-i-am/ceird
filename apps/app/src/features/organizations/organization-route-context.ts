@@ -25,6 +25,14 @@ export function useActiveOrganizationIdFromMatches() {
   });
 }
 
+export function useOrganizationsFromMatches() {
+  return useMatch({
+    from: "/_app/_org",
+    shouldThrow: false,
+    select: (match) => match.context.organizations,
+  });
+}
+
 export function useIsInOrganizationRoute() {
   return Boolean(
     useMatch({
