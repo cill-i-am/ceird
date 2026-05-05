@@ -6,7 +6,7 @@ organization invitations follow-up.
 ## Next Product Steps
 
 1. Organization switching for users who belong to multiple organizations
-2. Workspace and domain data under the active organization
+2. Strengthen the current organization-scoped domain workflows
 3. Role-specific organization management polish such as invitation revocation
    and richer member administration
 
@@ -40,8 +40,26 @@ When multi-org support arrives:
 
 The first organizations slice adds the tenant boundary, not the domain model.
 
-Later work can add:
+Workspace remains parked for now. We should not add a user-facing workspace
+model until there is a clear product need for multiple operational spaces inside
+one organization, such as separate divisions, branches, regions, or permission
+scopes.
 
-- workspaces under the active organization if product needs it
+If a workspace model is introduced early for future migration safety, it should
+start as an internal hidden default workspace:
+
+- every organization gets one default workspace
+- the UI remains organization-scoped, with no workspace switcher, settings page,
+  or naming surface
+- permissions remain organization-level until a concrete workspace-level policy
+  exists
+- domain records can attach to the default workspace server-side, but app routes
+  and user flows should not ask users to choose a workspace
+- multi-workspace support should be an additive reveal later, not a concept the
+  current product forces before it is useful
+
+Until that need is real, prefer improving the existing organization-owned
+workflows:
+
 - organization-owned tasks, projects, or field workflows
 - richer authorization once domain actions require it
