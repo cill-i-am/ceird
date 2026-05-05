@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
+import type { OrganizationSummary } from "@ceird/identity-core";
 import {
   Building03Icon,
   RefreshIcon,
@@ -40,11 +40,6 @@ type ListState =
       readonly organizations: readonly OrganizationSummary[];
     };
 
-type SwitchState =
-  | { readonly status: "idle"; readonly organizationId: null }
-  | { readonly status: "switching"; readonly organizationId: OrganizationId }
-  | { readonly status: "error"; readonly organizationId: OrganizationId };
-
 export function OrganizationSwitcher({
   activeOrganization,
 }: {
@@ -53,10 +48,6 @@ export function OrganizationSwitcher({
   const [listState, setListState] = React.useState<ListState>({
     status: "loading",
     organizations: activeOrganization ? [activeOrganization] : [],
-  });
-  const [switchState] = React.useState<SwitchState>({
-    status: "idle",
-    organizationId: null,
   });
   const requestIdRef = React.useRef(0);
 
@@ -105,9 +96,9 @@ export function OrganizationSwitcher({
   const activeOrganizationName =
     activeOrganization?.name ?? "No active organization";
   const triggerDisabled =
-    !activeOrganization ||
-    (listState.status === "ready" && organizations.length <= 1) ||
-    switchState.status === "switching";
+    listState.status !== "error" &&
+    (!activeOrganization ||
+      (listState.status === "ready" && organizations.length <= 1));
   const triggerDescription =
     listState.status === "ready" && organizations.length === 1
       ? "Only organization"

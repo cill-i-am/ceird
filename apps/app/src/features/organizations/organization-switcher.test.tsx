@@ -280,4 +280,30 @@ describe("organization switcher", () => {
       await screen.findByRole("menuitemradio", { name: /beta builds/i })
     ).toBeInTheDocument();
   });
+
+  it("keeps retry reachable when organization loading fails without an active organization", async () => {
+    mockedListOrganizations.mockRejectedValueOnce(new Error("network down"));
+    mockedListOrganizations.mockResolvedValueOnce([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(null);
+
+    const trigger = await screen.findByRole("button", {
+      name: /no active organization/i,
+    });
+
+    expect(trigger).toBeEnabled();
+    expect(
+      await screen.findByText(/couldn't load organizations/i)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    ).toBeInTheDocument();
+  });
 });
