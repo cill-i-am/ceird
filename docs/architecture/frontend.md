@@ -99,6 +99,16 @@ routes are owned by Better Auth rather than the jobs `HttpApi` contract:
 - `features/organizations/organization-server.ts`
 - `features/auth/sign-out.ts`
 
+The `/members` route uses Better Auth organization client methods directly for
+both active members and pending invitations. It loads current members with
+`authClient.organization.listMembers`, keeps pending invitation management on
+`listInvitations`, `inviteMember`, and `cancelInvitation`, and uses
+`updateMemberRole` and `removeMember` for member row actions. The route remains
+owner/admin gated through organization route context; row actions stay
+menu-driven instead of hotkey-driven because role changes and removals are
+per-row administrative actions that benefit from explicit focus, labels, and
+disabled/pending states over global shortcuts.
+
 Use `lib/server-api-forwarded-headers.ts` when server-side calls need the API to
 preserve the original browser host/protocol for trusted proxy and cookie logic.
 

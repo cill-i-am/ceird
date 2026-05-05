@@ -1,5 +1,13 @@
-import type { OrganizationRole } from "@ceird/identity-core";
-import { createFileRoute, useRouteContext } from "@tanstack/react-router";
+import type {
+  OrganizationId,
+  OrganizationRole,
+  UserId,
+} from "@ceird/identity-core";
+import {
+  createFileRoute,
+  useRouteContext,
+  useRouter,
+} from "@tanstack/react-router";
 
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
@@ -27,19 +35,53 @@ export function loadMembersRouteData(context: {
   };
 }
 
+export function createOrganizationMembersPageProps({
+  activeOrganizationId,
+  currentMemberRole,
+  currentUserId,
+  onCurrentMemberAccessChanged,
+  session,
+}: {
+  readonly activeOrganizationId: OrganizationId;
+  readonly currentMemberRole?: OrganizationRole | undefined;
+  readonly currentUserId?: UserId | undefined;
+  readonly onCurrentMemberAccessChanged: () => void | Promise<void>;
+  readonly session: {
+    readonly user: {
+      readonly email: string;
+      readonly name: string;
+    };
+  };
+}) {
+  return {
+    activeOrganizationId,
+    currentMember: {
+      email: session.user.email,
+      name: session.user.name,
+      role: currentMemberRole ?? "member",
+    },
+    currentUserId,
+    onCurrentMemberAccessChanged,
+  };
+}
+
 function MembersRoute() {
-  const { activeOrganizationId } = useRouteContext({ from: "/_app/_org" });
+  const router = useRouter();
+  const { activeOrganizationId, currentUserId } = useRouteContext({
+    from: "/_app/_org",
+  });
   const { session } = useRouteContext({ from: "/_app" });
   const { currentMemberRole } = Route.useRouteContext();
 
   return (
     <OrganizationMembersPage
-      activeOrganizationId={activeOrganizationId}
-      currentMember={{
-        email: session.user.email,
-        name: session.user.name,
-        role: currentMemberRole ?? "member",
-      }}
+      {...createOrganizationMembersPageProps({
+        activeOrganizationId,
+        currentMemberRole,
+        currentUserId,
+        onCurrentMemberAccessChanged: () => router.invalidate(),
+        session,
+      })}
     />
   );
 }
