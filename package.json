@@ -10,6 +10,7 @@
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
+    "infra:bootstrap:cloudflare": "pnpm --filter @ceird/infra run bootstrap:cloudflare",
     "infra:check-types": "pnpm --filter @ceird/infra check-types",
     "infra:deploy": "pnpm --filter @ceird/infra run deploy",
     "infra:destroy": "pnpm --filter @ceird/infra run destroy",

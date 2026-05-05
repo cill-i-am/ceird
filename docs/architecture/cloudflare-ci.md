@@ -67,9 +67,9 @@ The workflow:
 
 - installs dependencies with pnpm
 - type-checks the app and infra package
-- deploys through `pnpm --filter @ceird/infra run deploy`
+- deploys through `pnpm infra:deploy`
 - serializes deploys with a GitHub Actions concurrency group
-- applies migrations by default through `APPLY_MIGRATIONS=true`
+- applies migrations by default through `CEIRD_APPLY_MIGRATIONS=true`
 
 Use the manual `apply_migrations=false` input only when intentionally testing a
 deploy that must not touch the database schema.

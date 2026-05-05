@@ -70,7 +70,7 @@ sizing choices:
     PlanetScale's Dublin region.
 12. Set `CEIRD_PLANETSCALE_CLUSTER_SIZE`, defaulting to the cheapest
     Postgres size, `PS-5`.
-13. Set `APPLY_MIGRATIONS=true` only when the deploy should apply Drizzle
+13. Set `CEIRD_APPLY_MIGRATIONS=true` only when the deploy should apply Drizzle
     migrations.
 14. Run `ALCHEMY_STAGE=main CEIRD_INFRA_STAGE=production pnpm infra:deploy` to
     create or update the database, roles, Hyperdrive config, Workers, queues,
@@ -90,7 +90,7 @@ The API Worker receives a `DATABASE` Hyperdrive binding and resolves the runtime
 Postgres URL from `env.DATABASE.connectionString`. Local Node and sandbox
 runtimes still read `DATABASE_URL`.
 
-The Worker does not run migrations. When `APPLY_MIGRATIONS=true`, a custom
+The Worker does not run migrations. When `CEIRD_APPLY_MIGRATIONS=true`, a custom
 `Drizzle.Migrations` Alchemy resource runs Drizzle's programmatic Node migrator
 from the deployment process using the Alchemy-created PlanetScale migration
 role.
