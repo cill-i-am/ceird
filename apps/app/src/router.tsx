@@ -1,6 +1,11 @@
+import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
+import {
+  createClientSentryOptions,
+  sanitizeReplayRecordingEvent,
+} from "./sentry-config";
 
 export function getRouter() {
   const router = createTanStackRouter({
@@ -10,7 +15,26 @@ export function getRouter() {
     defaultPreloadStaleTime: 0,
   });
 
+  if (shouldInitializeClientSentry()) {
+    Sentry.init(
+      createClientSentryOptions({
+        environment: import.meta.env.MODE,
+        replayIntegration: Sentry.replayIntegration({
+          beforeAddRecordingEvent: sanitizeReplayRecordingEvent,
+          blockAllMedia: true,
+          maskAllText: true,
+        }),
+        tracingIntegration:
+          Sentry.tanstackRouterBrowserTracingIntegration(router),
+      })
+    );
+  }
+
   return router;
+}
+
+export function shouldInitializeClientSentry() {
+  return typeof window !== "undefined";
 }
 
 declare module "@tanstack/react-router" {

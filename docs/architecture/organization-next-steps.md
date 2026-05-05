@@ -7,8 +7,8 @@ organization invitations follow-up.
 
 1. Organization switching for users who belong to multiple organizations
 2. Strengthen the current organization-scoped domain workflows
-3. Role-specific organization management polish such as invitation revocation
-   and richer member administration
+3. Role-specific organization management polish beyond Better Auth's current
+   organization member and invitation controls
 
 ## Invite Acceptance
 
@@ -24,6 +24,27 @@ and acceptance:
 - show pending invitation expiry metadata on the `/members` page
 - report organization invitation delivery failures through the shared auth
   email observability path
+
+## Member Administration
+
+The `/members` page now covers active organization member administration for
+owners and admins:
+
+- load current members through Better Auth's organization member listing API
+- keep pending invitation resend and cancellation behavior alongside the member
+  list
+- update member roles with Better Auth's organization role update API
+- remove members with Better Auth's organization member removal API
+- keep self and last-owner cases non-actionable in the UI while Better Auth
+  remains the authoritative permission boundary
+- refresh member data after successful role or removal mutations
+- invalidate active route context after current-user access changes so route
+  guards can re-evaluate organization administration access
+
+Row-level role and removal actions intentionally remain menu/button driven
+rather than shortcut driven. They are contextual administrative changes, not a
+single primary workflow, and explicit row focus keeps keyboard operation
+discoverable without adding global shortcuts that could target the wrong member.
 
 ## Multi-Organization Switching
 

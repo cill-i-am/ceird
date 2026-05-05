@@ -1,8 +1,10 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationRole } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
 
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 
 const readySync: ActiveOrganizationSync = {
   required: false,
@@ -62,6 +64,36 @@ describe("members route loader", () => {
       })
     ).toStrictEqual({
       currentMemberRole: undefined,
+    });
+  }, 10_000);
+
+  it("builds members page props with the current user id and access refresh", async () => {
+    const { createOrganizationMembersPageProps } =
+      await import("./_app._org.members");
+    const onCurrentMemberAccessChanged = vi.fn<() => void>();
+
+    expect(
+      createOrganizationMembersPageProps({
+        activeOrganizationId: decodeOrganizationId("org_123"),
+        currentMemberRole: "admin",
+        currentUserId: decodeOrganizationViewerUserId("user_123"),
+        onCurrentMemberAccessChanged,
+        session: {
+          user: {
+            email: "admin@example.com",
+            name: "Admin Example",
+          },
+        },
+      })
+    ).toStrictEqual({
+      activeOrganizationId: "org_123",
+      currentMember: {
+        email: "admin@example.com",
+        name: "Admin Example",
+        role: "admin",
+      },
+      currentUserId: "user_123",
+      onCurrentMemberAccessChanged,
     });
   }, 10_000);
 });

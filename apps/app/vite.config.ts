@@ -1,3 +1,4 @@
+import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -12,6 +13,11 @@ const clientApiOrigin =
     ? process.env.VITE_API_ORIGIN
     : serverApiOrigin;
 const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
+const shouldUploadSentrySourceMaps = Boolean(
+  process.env.SENTRY_AUTH_TOKEN &&
+  process.env.SENTRY_ORG &&
+  process.env.SENTRY_PROJECT
+);
 
 const config = defineConfig({
   build: isCloudflareBuild
@@ -27,11 +33,21 @@ const config = defineConfig({
     "import.meta.env.VITE_API_ORIGIN": JSON.stringify(clientApiOrigin),
   },
   plugins: [
-    tanstackStart(),
+    tanstackStart({
+      server: {
+        entry: "./src/server.ts",
+      },
+    }),
     devtools(),
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
     viteReact(),
+    sentryTanstackStart({
+      silent: !shouldUploadSentrySourceMaps,
+      sourcemaps: {
+        disable: !shouldUploadSentrySourceMaps,
+      },
+    }),
   ],
 });
 

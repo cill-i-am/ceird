@@ -59,6 +59,24 @@ Authenticated layout and navigation live under:
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
 
+## Observability
+
+The app initializes Sentry from `apps/app/src/router.tsx` using
+`@sentry/tanstackstart-react`. Client-side Sentry is guarded behind a browser
+runtime check because the router module is also used during SSR. Browser
+instrumentation includes TanStack Router tracing, structured logs, and Session
+Replay with text and media masking enabled. Shared DSN, production-safe
+sample-rate defaults, and Sentry URL/query sanitization live in
+`apps/app/src/sentry-config.ts`. The sanitizer redacts sensitive query
+parameters such as reset tokens, OAuth codes, state values, and invitations
+before events, transactions, spans, logs, or replay recording events leave the
+app.
+
+Server-side app requests use the explicit TanStack Start server entry at
+`apps/app/src/server.ts`, which imports `apps/app/src/sentry-server.ts` and
+wraps the Start fetch handler with `wrapFetchWithSentry` so server request and
+server-function tracing is captured.
+
 ## Feature Folders
 
 | Folder                   | Responsibility                                                                                                                                                               |
@@ -98,6 +116,16 @@ routes are owned by Better Auth rather than the jobs `HttpApi` contract:
 - `features/auth/server-session.ts`
 - `features/organizations/organization-server.ts`
 - `features/auth/sign-out.ts`
+
+The `/members` route uses Better Auth organization client methods directly for
+both active members and pending invitations. It loads current members with
+`authClient.organization.listMembers`, keeps pending invitation management on
+`listInvitations`, `inviteMember`, and `cancelInvitation`, and uses
+`updateMemberRole` and `removeMember` for member row actions. The route remains
+owner/admin gated through organization route context; row actions stay
+menu-driven instead of hotkey-driven because role changes and removals are
+per-row administrative actions that benefit from explicit focus, labels, and
+disabled/pending states over global shortcuts.
 
 Use `lib/server-api-forwarded-headers.ts` when server-side calls need the API to
 preserve the original browser host/protocol for trusted proxy and cookie logic.

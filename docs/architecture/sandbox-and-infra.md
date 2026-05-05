@@ -125,7 +125,9 @@ on Node.js compatibility APIs run consistently across both deployable surfaces.
 The API Worker is also configured with Better Auth env vars, Sentry env vars,
 database Hyperdrive binding, auth email queue binding, observability logs, and
 traces. The app is configured with app/API origins and Cloudflare-specific Vite
-flags.
+flags, Sentry tracing, Sentry structured logs, and Session Replay. Sentry is
+initialized client-side only for browser replay/tracing and sanitizes sensitive
+query parameters before telemetry leaves the app.
 
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource

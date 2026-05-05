@@ -7,13 +7,27 @@ import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OrganizationMembersPage } from "./organization-members-page";
+import { decodeOrganizationViewerUserId } from "./organization-viewer";
 
+type ListMembersResult = Awaited<ReturnType<typeof mockedListMembers>>;
 type ListInvitationsResult = Awaited<ReturnType<typeof mockedListInvitations>>;
+type UpdateMemberRoleResult = Awaited<
+  ReturnType<typeof mockedUpdateMemberRole>
+>;
 type CancelInvitationInput = Parameters<
   typeof AuthClient.organization.cancelInvitation
 >[0];
 type InviteMemberInput = Parameters<
   typeof AuthClient.organization.inviteMember
+>[0];
+type ListMembersInput = Parameters<
+  typeof AuthClient.organization.listMembers
+>[0];
+type RemoveMemberInput = Parameters<
+  typeof AuthClient.organization.removeMember
+>[0];
+type UpdateMemberRoleInput = Parameters<
+  typeof AuthClient.organization.updateMemberRole
 >[0];
 interface InvitationPayload {
   readonly email: string;
@@ -22,49 +36,110 @@ interface InvitationPayload {
   readonly role: string;
   readonly status: string;
 }
+interface MemberPayload {
+  readonly createdAt: Date | string;
+  readonly id: string;
+  readonly organizationId: string;
+  readonly role: string;
+  readonly user: {
+    readonly email: string;
+    readonly id: string;
+    readonly image?: string | null;
+    readonly name: string;
+  };
+  readonly userId: string;
+}
 
 const organizationId = decodeOrganizationId("org_123");
 const organizationOneId = decodeOrganizationId("org_1");
 const organizationTwoId = decodeOrganizationId("org_2");
+const currentUserId = decodeOrganizationViewerUserId("user_owner");
 const defaultInvitationExpiresAt = "2026-04-12T09:30:00.000Z";
 
-const { mockedCancelInvitation, mockedInviteMember, mockedListInvitations } =
-  vi.hoisted(() => ({
-    mockedCancelInvitation: vi.fn<
-      (input: CancelInvitationInput) => Promise<{
-        data: {
-          id: string;
-        } | null;
-        error: {
-          message: string;
-          status: number;
-          statusText: string;
-        } | null;
-      }>
-    >(),
-    mockedInviteMember: vi.fn<
-      (input: InviteMemberInput) => Promise<{
-        data: {
-          id: string;
-        } | null;
-        error: {
-          message: string;
-          status: number;
-          statusText: string;
-        } | null;
-      }>
-    >(),
-    mockedListInvitations: vi.fn<
-      (input: { query: { organizationId: string } }) => Promise<{
-        data: InvitationPayload[] | null;
-        error: {
-          message: string;
-          status: number;
-          statusText: string;
-        } | null;
-      }>
-    >(),
-  }));
+const {
+  mockedCancelInvitation,
+  mockedInviteMember,
+  mockedListInvitations,
+  mockedListMembers,
+  mockedRemoveMember,
+  mockedUpdateMemberRole,
+} = vi.hoisted(() => ({
+  mockedCancelInvitation: vi.fn<
+    (input: CancelInvitationInput) => Promise<{
+      data: {
+        id: string;
+      } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedInviteMember: vi.fn<
+    (input: InviteMemberInput) => Promise<{
+      data: {
+        id: string;
+      } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedListInvitations: vi.fn<
+    (input: { query: { organizationId: string } }) => Promise<{
+      data: InvitationPayload[] | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedListMembers: vi.fn<
+    (input: ListMembersInput) => Promise<{
+      data: {
+        members: MemberPayload[];
+        total: number;
+      } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedRemoveMember: vi.fn<
+    (input: RemoveMemberInput) => Promise<{
+      data: {
+        member: Pick<
+          MemberPayload,
+          "id" | "organizationId" | "role" | "userId"
+        >;
+      } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedUpdateMemberRole: vi.fn<
+    (input: UpdateMemberRoleInput) => Promise<{
+      data: Pick<
+        MemberPayload,
+        "id" | "organizationId" | "role" | "userId"
+      > | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+}));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
@@ -72,6 +147,9 @@ vi.mock(import("#/lib/auth-client"), () => ({
       cancelInvitation: mockedCancelInvitation,
       inviteMember: mockedInviteMember,
       listInvitations: mockedListInvitations,
+      listMembers: mockedListMembers,
+      removeMember: mockedRemoveMember,
+      updateMemberRole: mockedUpdateMemberRole,
     },
   } as unknown as typeof AuthClient,
 }));
@@ -85,8 +163,8 @@ async function chooseCommandOption(
   await user.click(screen.getByRole("option", { name: optionLabel }));
 }
 
-function createDeferredListInvitationsResult() {
-  const { promise, resolve } = (
+function createDeferredResult<Value>() {
+  const { promise, reject, resolve } = (
     Promise as unknown as {
       withResolvers: <Value>() => {
         promise: Promise<Value>;
@@ -94,9 +172,9 @@ function createDeferredListInvitationsResult() {
         resolve: (value: Value) => void;
       };
     }
-  ).withResolvers<ListInvitationsResult>();
+  ).withResolvers<Value>();
 
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function createInvitation(
@@ -112,8 +190,58 @@ function createInvitation(
   };
 }
 
+function createMember(overrides: Partial<MemberPayload> = {}): MemberPayload {
+  return {
+    createdAt: "2026-04-01T09:30:00.000Z",
+    id: "mem_owner",
+    organizationId: "org_123",
+    role: "owner",
+    user: {
+      email: "owner@example.com",
+      id: "user_owner",
+      image: null,
+      name: "Owner Example",
+    },
+    userId: "user_owner",
+    ...overrides,
+  };
+}
+
+function createMemberList(
+  members: MemberPayload[] = [
+    createMember(),
+    createMember({
+      id: "mem_member",
+      role: "member",
+      user: {
+        email: "apprentice@example.com",
+        id: "user_member",
+        image: null,
+        name: "Apprentice Example",
+      },
+      userId: "user_member",
+    }),
+  ]
+) {
+  return {
+    data: {
+      members,
+      total: members.length,
+    },
+    error: null,
+  };
+}
+
 describe("organization members page", () => {
   beforeEach(() => {
+    mockedListMembers.mockReset();
+    mockedListInvitations.mockReset();
+    mockedInviteMember.mockReset();
+    mockedCancelInvitation.mockReset();
+    mockedRemoveMember.mockReset();
+    mockedUpdateMemberRole.mockReset();
+
+    mockedListMembers.mockResolvedValue(createMemberList());
     mockedListInvitations.mockResolvedValue({
       data: [createInvitation()],
       error: null,
@@ -127,6 +255,26 @@ describe("organization members page", () => {
     mockedCancelInvitation.mockResolvedValue({
       data: {
         id: "inv_123",
+      },
+      error: null,
+    });
+    mockedRemoveMember.mockResolvedValue({
+      data: {
+        member: {
+          id: "mem_member",
+          organizationId: "org_123",
+          role: "member",
+          userId: "user_member",
+        },
+      },
+      error: null,
+    });
+    mockedUpdateMemberRole.mockResolvedValue({
+      data: {
+        id: "mem_member",
+        organizationId: "org_123",
+        role: "admin",
+        userId: "user_member",
       },
       error: null,
     });
@@ -169,6 +317,728 @@ describe("organization members page", () => {
         organizationId: "org_123",
       },
     });
+  }, 10_000);
+
+  it("loads current organization members for the active organization", async () => {
+    mockedListMembers.mockResolvedValue(
+      createMemberList([
+        createMember(),
+        createMember({
+          id: "mem_admin",
+          role: "admin",
+          user: {
+            email: "foreperson@example.com",
+            id: "user_admin",
+            image: null,
+            name: "Foreperson Example",
+          },
+          userId: "user_admin",
+        }),
+      ])
+    );
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    const members = await screen.findByRole("list", {
+      name: "Current members",
+    });
+
+    expect(within(members).getByText("Owner Example")).toBeVisible();
+    expect(within(members).getByText("owner@example.com")).toBeVisible();
+    expect(within(members).getByText("Foreperson Example")).toBeVisible();
+    expect(within(members).getByText("foreperson@example.com")).toBeVisible();
+    expect(screen.getByText("2 active")).toBeVisible();
+    expect(mockedListMembers).toHaveBeenCalledWith({
+      query: {
+        limit: 100,
+        offset: 0,
+        organizationId: "org_123",
+      },
+    });
+  }, 10_000);
+
+  it("loads every member page and reports Better Auth's total", async () => {
+    const firstPageMembers = Array.from({ length: 100 }, (_, index) =>
+      createMember({
+        id: `mem_${index}`,
+        role: index === 0 ? "owner" : "member",
+        user: {
+          email: `member-${index}@example.com`,
+          id: index === 0 ? "user_owner" : `user_${index}`,
+          image: null,
+          name: `Member ${index}`,
+        },
+        userId: index === 0 ? "user_owner" : `user_${index}`,
+      })
+    );
+    const lastMember = createMember({
+      id: "mem_100",
+      role: "member",
+      user: {
+        email: "member-100@example.com",
+        id: "user_100",
+        image: null,
+        name: "Member 100",
+      },
+      userId: "user_100",
+    });
+
+    mockedListMembers
+      .mockResolvedValueOnce({
+        data: {
+          members: firstPageMembers,
+          total: 101,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          members: [lastMember],
+          total: 101,
+        },
+        error: null,
+      });
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("Member 100")).resolves.toBeVisible();
+    expect(screen.getByText("101 active")).toBeVisible();
+    expect(mockedListMembers).toHaveBeenNthCalledWith(1, {
+      query: {
+        limit: 100,
+        offset: 0,
+        organizationId: "org_123",
+      },
+    });
+    expect(mockedListMembers).toHaveBeenNthCalledWith(2, {
+      query: {
+        limit: 100,
+        offset: 100,
+        organizationId: "org_123",
+      },
+    });
+  }, 10_000);
+
+  it("shows a load error when active members cannot be loaded", async () => {
+    mockedListMembers.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Forbidden",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("We couldn't load members right now. Please try again.")
+    ).resolves.toBeVisible();
+  }, 10_000);
+
+  it("shows a load error when member payload roles violate the app contract", async () => {
+    mockedListMembers.mockResolvedValue(
+      createMemberList([
+        createMember({
+          id: "mem_bad_role",
+          role: "billing-manager",
+          user: {
+            email: "bad-role@example.com",
+            id: "user_bad_role",
+            image: null,
+            name: "Bad Role Example",
+          },
+          userId: "user_bad_role",
+        }),
+      ])
+    );
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("We couldn't load members right now. Please try again.")
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Bad Role Example")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("updates a member role and reloads members after success", async () => {
+    mockedListMembers
+      .mockResolvedValueOnce(createMemberList())
+      .mockResolvedValueOnce(
+        createMemberList([
+          createMember(),
+          createMember({
+            id: "mem_member",
+            role: "admin",
+            user: {
+              email: "apprentice@example.com",
+              id: "user_member",
+              image: null,
+              name: "Apprentice Example",
+            },
+            userId: "user_member",
+          }),
+        ])
+      );
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Make admin" })
+    );
+
+    await waitFor(() => {
+      expect(mockedUpdateMemberRole).toHaveBeenCalledWith({
+        memberId: "mem_member",
+        organizationId: "org_123",
+        role: "admin",
+      });
+    });
+    await expect(
+      screen.findByText("Apprentice Example is now Admin.")
+    ).resolves.toBeVisible();
+    await waitFor(() => {
+      expect(mockedListMembers).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
+  }, 10_000);
+
+  it("shows a per-row error when a member role update fails", async () => {
+    mockedUpdateMemberRole.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Forbidden",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Make admin" })
+    );
+
+    await expect(
+      screen.findByText("We couldn't update Apprentice Example's role.")
+    ).resolves.toBeVisible();
+    expect(screen.getByText("Apprentice Example")).toBeVisible();
+  }, 10_000);
+
+  it("keeps the updated role visible when the success refresh fails", async () => {
+    mockedListMembers
+      .mockResolvedValueOnce(createMemberList())
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: "Member refresh failed",
+          status: 500,
+          statusText: "Internal Server Error",
+        },
+      });
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Make admin" })
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example is now Admin.")
+    ).resolves.toBeVisible();
+    expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("We couldn't load members right now. Please try again.")
+    ).toBeVisible();
+  }, 10_000);
+
+  it("removes a member and reloads members after success", async () => {
+    mockedListMembers
+      .mockResolvedValueOnce(createMemberList())
+      .mockResolvedValueOnce(createMemberList([createMember()]));
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Remove member" })
+    );
+    await expect(
+      screen.findByRole("dialog", { name: "Remove Apprentice Example?" })
+    ).resolves.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Remove member" }));
+
+    await waitFor(() => {
+      expect(mockedRemoveMember).toHaveBeenCalledWith({
+        memberIdOrEmail: "mem_member",
+        organizationId: "org_123",
+      });
+    });
+    await expect(
+      screen.findByText("Apprentice Example was removed.")
+    ).resolves.toBeVisible();
+    await waitFor(() => {
+      expect(screen.queryByText("Apprentice Example")).not.toBeInTheDocument();
+    });
+  }, 10_000);
+
+  it("shows a per-row error when member removal fails", async () => {
+    mockedRemoveMember.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Forbidden",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Remove member" })
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Remove member" })
+    );
+
+    await expect(
+      screen.findByText("We couldn't remove Apprentice Example.")
+    ).resolves.toBeVisible();
+    expect(screen.getByText("Apprentice Example")).toBeVisible();
+  }, 10_000);
+
+  it("does not expose row actions for the signed-in member or only owner", async () => {
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("Owner Example")).resolves.toBeVisible();
+
+    expect(
+      screen.queryByRole("button", {
+        name: "Member actions for Owner Example",
+      })
+    ).not.toBeInTheDocument();
+    expect(mockedUpdateMemberRole).not.toHaveBeenCalled();
+    expect(mockedRemoveMember).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("does not expose member management actions to non-admin viewers", async () => {
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentMember={{
+          email: "member@example.com",
+          name: "Member Example",
+          role: "member",
+        }}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+
+    expect(
+      screen.queryByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("uses the membership user id to identify the signed-in member", async () => {
+    mockedListMembers.mockResolvedValue(
+      createMemberList([
+        createMember({
+          user: {
+            email: "owner@example.com",
+            id: "stale_joined_user",
+            image: null,
+            name: "Owner Example",
+          },
+          userId: "user_owner",
+        }),
+        createMember({
+          id: "mem_member",
+          role: "member",
+          user: {
+            email: "apprentice@example.com",
+            id: "user_member",
+            image: null,
+            name: "Apprentice Example",
+          },
+          userId: "user_member",
+        }),
+      ])
+    );
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("Owner Example")).resolves.toBeVisible();
+    expect(screen.getByText("You")).toBeVisible();
+    expect(
+      screen.queryByRole("button", {
+        name: "Member actions for Owner Example",
+      })
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("clears stale members while another organization loads", async () => {
+    const orgTwoMembers = createDeferredResult<ListMembersResult>();
+
+    mockedListMembers
+      .mockResolvedValueOnce(
+        createMemberList([
+          createMember({
+            organizationId: "org_1",
+            user: {
+              email: "old-org@example.com",
+              id: "user_owner",
+              image: null,
+              name: "Old Org Owner",
+            },
+          }),
+        ])
+      )
+      .mockReturnValueOnce(orgTwoMembers.promise);
+
+    const { rerender } = render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationOneId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("Old Org Owner")).resolves.toBeVisible();
+
+    rerender(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationTwoId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Old Org Owner")).not.toBeInTheDocument();
+    });
+
+    orgTwoMembers.resolve(
+      createMemberList([
+        createMember({
+          organizationId: "org_2",
+          user: {
+            email: "new-org@example.com",
+            id: "user_owner",
+            image: null,
+            name: "New Org Owner",
+          },
+        }),
+      ])
+    );
+
+    await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
+  }, 10_000);
+
+  it("ignores member list results that finish after the organization changes", async () => {
+    const orgOneMembers = createDeferredResult<ListMembersResult>();
+    const orgTwoMembers = createDeferredResult<ListMembersResult>();
+
+    mockedListMembers
+      .mockReturnValueOnce(orgOneMembers.promise)
+      .mockReturnValueOnce(orgTwoMembers.promise);
+
+    const { rerender } = render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationOneId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    rerender(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationTwoId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    orgTwoMembers.resolve(
+      createMemberList([
+        createMember({
+          organizationId: "org_2",
+          user: {
+            email: "new-org@example.com",
+            id: "user_owner",
+            image: null,
+            name: "New Org Owner",
+          },
+        }),
+      ])
+    );
+
+    await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
+
+    orgOneMembers.resolve(
+      createMemberList([
+        createMember({
+          organizationId: "org_1",
+          user: {
+            email: "old-org@example.com",
+            id: "user_owner",
+            image: null,
+            name: "Old Org Owner",
+          },
+        }),
+      ])
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Old Org Owner")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("New Org Owner")).toBeVisible();
+  }, 10_000);
+
+  it("ignores member role results that finish after the organization changes", async () => {
+    const updateRole = createDeferredResult<UpdateMemberRoleResult>();
+
+    mockedListMembers
+      .mockResolvedValueOnce(createMemberList())
+      .mockResolvedValueOnce(
+        createMemberList([
+          createMember({
+            organizationId: "org_2",
+            user: {
+              email: "new-org@example.com",
+              id: "user_owner",
+              image: null,
+              name: "New Org Owner",
+            },
+          }),
+        ])
+      );
+    mockedUpdateMemberRole.mockReturnValueOnce(updateRole.promise);
+
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationOneId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Make admin" })
+    );
+
+    rerender(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationTwoId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
+
+    updateRole.resolve({
+      data: {
+        id: "mem_member",
+        organizationId: "org_1",
+        role: "admin",
+        userId: "user_member",
+      },
+      error: null,
+    });
+
+    await waitFor(() => {
+      expect(mockedUpdateMemberRole).toHaveBeenCalledOnce();
+    });
+    expect(mockedListMembers).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByText("Apprentice Example is now Admin.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("New Org Owner")).toBeVisible();
+  }, 10_000);
+
+  it("ignores member removal errors that finish after the organization changes", async () => {
+    const removeMember =
+      createDeferredResult<Awaited<ReturnType<typeof mockedRemoveMember>>>();
+
+    mockedListMembers
+      .mockResolvedValueOnce(createMemberList())
+      .mockResolvedValueOnce(
+        createMemberList([
+          createMember({
+            organizationId: "org_2",
+            user: {
+              email: "new-org@example.com",
+              id: "user_owner",
+              image: null,
+              name: "New Org Owner",
+            },
+          }),
+        ])
+      );
+    mockedRemoveMember.mockReturnValueOnce(removeMember.promise);
+
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationOneId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(
+      screen.findByText("Apprentice Example")
+    ).resolves.toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Member actions for Apprentice Example",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Remove member" })
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Remove member" })
+    );
+
+    rerender(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationTwoId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
+
+    removeMember.resolve({
+      data: null,
+      error: {
+        message: "Forbidden",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    await waitFor(() => {
+      expect(mockedRemoveMember).toHaveBeenCalledOnce();
+    });
+    expect(
+      screen.queryByText("We couldn't remove Apprentice Example.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("New Org Owner")).toBeVisible();
   }, 10_000);
 
   it("loads pending invitations when the auth client returns Date expiry values", async () => {
@@ -548,7 +1418,7 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("clears stale pending invitations while another organization loads", async () => {
-    const orgTwoInvitations = createDeferredListInvitationsResult();
+    const orgTwoInvitations = createDeferredResult<ListInvitationsResult>();
 
     mockedListInvitations
       .mockResolvedValueOnce({
