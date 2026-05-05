@@ -120,9 +120,15 @@ The stack provisions:
 - Optional Cloudflare Email Worker binding for `cloudflare-binding` transport
 
 The API Worker is configured with `nodejs_compat`, Better Auth env vars,
-database Hyperdrive binding, auth email queue binding, observability logs, and
-traces. The app is configured with app/API origins and Cloudflare-specific Vite
-flags.
+Sentry env vars, database Hyperdrive binding, auth email queue binding,
+observability logs, and traces. The app is configured with app/API origins,
+`nodejs_compat`, and Cloudflare-specific Vite flags.
+
+Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
+rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
+builds hidden source maps and sends `.map` files as Worker script modules with
+the `application/source-map` content type during the multipart upload. There is
+no separate `upload_source_maps` flag in our Alchemy resource config.
 
 ## Infra Configuration
 
@@ -142,6 +148,8 @@ flags.
 | `CEIRD_PLANETSCALE_DEFAULT_BRANCH` | `main`               | PlanetScale branch.                       |
 | `CEIRD_PLANETSCALE_REGION`         | `eu-west`            | PlanetScale region slug.                  |
 | `CEIRD_PLANETSCALE_CLUSTER_SIZE`   | `PS-5`               | PlanetScale cluster size.                 |
+| `SENTRY_DSN`                       | Ceird API DSN        | Sentry project DSN for the API Worker.    |
+| `SENTRY_TRACES_SAMPLE_RATE`        | `1`                  | Sentry trace sample rate from 0 to 1.     |
 | `CEIRD_APPLY_MIGRATIONS`           | `false`              | Run API Drizzle migrations during deploy. |
 
 Resource names use `ceird-<stage>-<suffix>`.

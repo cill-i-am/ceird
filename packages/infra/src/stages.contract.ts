@@ -15,6 +15,8 @@ const configWithoutCloudflareBootstrapSecrets = {
   planetScaleDefaultBranch: "main",
   planetScaleOrganization: "example",
   planetScaleRegionSlug: "eu-west",
+  sentryDsn: "https://public@example.com/1",
+  sentryTracesSampleRate: 1,
   stage: "production",
   zoneName: "example.com",
 } satisfies InfraStageConfig;

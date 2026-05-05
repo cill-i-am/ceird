@@ -70,7 +70,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       name: resourceName(input.config, "api"),
       main: "../../apps/api/src/worker.ts",
       compatibility: {
-        date: "2026-04-30",
+        date: "2026-05-05",
         flags: ["nodejs_compat"],
       },
       bindings: {
@@ -84,6 +84,9 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
         BETTER_AUTH_SECRET: betterAuthSecret.text,
         NODE_ENV: "production",
+        SENTRY_DSN: input.config.sentryDsn,
+        SENTRY_ENVIRONMENT: input.config.stage,
+        SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
         ...authEmailCloudflareApiEnv,
       },
       domain: input.config.apiHostname,
@@ -140,7 +143,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       name: resourceName(input.config, "app"),
       rootDir: "../../apps/app",
       compatibility: {
-        date: "2026-04-30",
+        date: "2026-05-05",
         flags: ["nodejs_compat"],
       },
       env: {
