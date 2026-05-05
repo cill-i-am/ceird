@@ -3,7 +3,10 @@ import {
   INVITABLE_ORGANIZATION_ROLES,
   InvitableOrganizationRole,
 } from "@ceird/identity-core";
-import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import type {
+  InvitableOrganizationRole as InvitableOrganizationRoleType,
+  OrganizationId,
+} from "@ceird/identity-core";
 import { useForm } from "@tanstack/react-form";
 import { Schema } from "effect";
 import * as React from "react";
@@ -11,6 +14,7 @@ import * as React from "react";
 import { AppPageHeader } from "#/components/app-page-header";
 import {
   AppRowList,
+  AppRowListActions,
   AppRowListItem,
   AppRowListLeading,
   AppRowListMeta,
@@ -39,7 +43,7 @@ import type { OrganizationMemberInviteInput } from "./organization-member-invite
 interface InvitationSummary {
   readonly email: string;
   readonly id: string;
-  readonly role: OrganizationRole;
+  readonly role: InvitableOrganizationRoleType;
   readonly status: string;
 }
 
@@ -49,10 +53,16 @@ interface CurrentMemberSummary {
   readonly role: string;
 }
 
+const DEFAULT_INVITE_VALUES: OrganizationMemberInviteInput = {
+  email: "",
+  role: "member",
+};
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the details and try again.";
 const INVITATION_LOAD_FAILURE_MESSAGE =
   "We couldn't load invitations right now. Please try again.";
+const INVITATION_ACTION_FAILURE_MESSAGE =
+  "We couldn't update that invitation. Please try again.";
 const INVITE_ROLE_LABELS = {
   admin: "Admin",
   external: "External collaborator",
@@ -68,6 +78,8 @@ const ROLE_SELECTION_GROUPS = [
   },
 ] satisfies readonly CommandSelectGroup[];
 const isInviteRole = Schema.is(InvitableOrganizationRole);
+
+type InvitationAction = "cancel" | "resend";
 
 function formatRoleLabel(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -100,6 +112,14 @@ export function OrganizationMembersPage({
   const [loadErrorMessage, setLoadErrorMessage] = React.useState<string | null>(
     null
   );
+  const [invitationActionErrorMessage, setInvitationActionErrorMessage] =
+    React.useState<string | null>(null);
+  const [invitationActionSuccessMessage, setInvitationActionSuccessMessage] =
+    React.useState<string | null>(null);
+  const [activeInvitationAction, setActiveInvitationAction] = React.useState<{
+    readonly invitationId: string;
+    readonly type: InvitationAction;
+  } | null>(null);
   const [isLoadingInvitations, setIsLoadingInvitations] = React.useState(false);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null
@@ -155,13 +175,8 @@ export function OrganizationMembersPage({
     void loadInvitations();
   }, [loadInvitations]);
 
-  const defaultValues: OrganizationMemberInviteInput = {
-    email: "",
-    role: "member",
-  };
-
   const form = useForm({
-    defaultValues,
+    defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
       onSubmit: Schema.standardSchemaV1(organizationMemberInviteSchema),
     },
@@ -170,6 +185,8 @@ export function OrganizationMembersPage({
         onSubmit: undefined,
       });
       setErrorMessage(null);
+      setInvitationActionErrorMessage(null);
+      setInvitationActionSuccessMessage(null);
       setSuccessMessage(null);
 
       const invite = decodeOrganizationMemberInviteInput(value);
@@ -189,6 +206,55 @@ export function OrganizationMembersPage({
       await loadInvitations();
     },
   });
+
+  const handleInvitationAction = React.useCallback(
+    async (invitation: InvitationSummary, action: InvitationAction) => {
+      setActiveInvitationAction({
+        invitationId: invitation.id,
+        type: action,
+      });
+      setErrorMessage(null);
+      setInvitationActionErrorMessage(null);
+      setInvitationActionSuccessMessage(null);
+      setSuccessMessage(null);
+
+      try {
+        const result =
+          action === "resend"
+            ? await authClient.organization.inviteMember({
+                email: invitation.email,
+                organizationId: activeOrganizationId,
+                resend: true,
+                role: invitation.role,
+              })
+            : await authClient.organization.cancelInvitation({
+                invitationId: invitation.id,
+              });
+
+        if (result.error) {
+          setInvitationActionErrorMessage(INVITATION_ACTION_FAILURE_MESSAGE);
+          return;
+        }
+
+        if (action === "cancel") {
+          setInvitations((current) =>
+            current.filter((item) => item.id !== invitation.id)
+          );
+        }
+
+        setInvitationActionSuccessMessage(
+          action === "resend"
+            ? `Invitation resent to ${invitation.email}.`
+            : `Invitation canceled for ${invitation.email}.`
+        );
+      } catch {
+        setInvitationActionErrorMessage(INVITATION_ACTION_FAILURE_MESSAGE);
+      } finally {
+        setActiveInvitationAction(null);
+      }
+    },
+    [activeOrganizationId]
+  );
 
   useAppHotkey(
     "membersSubmit",
@@ -218,7 +284,11 @@ export function OrganizationMembersPage({
   );
 
   const shouldRenderInvitationsSection =
-    isLoadingInvitations || invitations.length > 0 || Boolean(loadErrorMessage);
+    isLoadingInvitations ||
+    invitations.length > 0 ||
+    Boolean(loadErrorMessage) ||
+    Boolean(invitationActionErrorMessage) ||
+    Boolean(invitationActionSuccessMessage);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -402,33 +472,30 @@ export function OrganizationMembersPage({
                 <AlertDescription>{loadErrorMessage}</AlertDescription>
               </Alert>
             ) : null}
+            {invitationActionErrorMessage ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {invitationActionErrorMessage}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {invitationActionSuccessMessage ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {invitationActionSuccessMessage}
+              </p>
+            ) : null}
             {invitations.length > 0 ? (
               <AppRowList aria-label="Pending invitations">
                 {invitations.map((invitation) => (
-                  <AppRowListItem key={invitation.id}>
-                    <AppRowListLeading aria-hidden="true">
-                      {invitation.email.charAt(0).toUpperCase()}
-                    </AppRowListLeading>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <p
-                        className="text-sm font-medium break-all text-foreground"
-                        title={invitation.email}
-                      >
-                        {invitation.email}
-                      </p>
-                      <p className="text-sm/6 text-muted-foreground">
-                        Awaiting acceptance from the invited teammate.
-                      </p>
-                    </div>
-                    <AppRowListMeta>
-                      <Badge variant="secondary">
-                        {formatRoleLabel(invitation.role)}
-                      </Badge>
-                      <Badge variant="outline">
-                        {formatRoleLabel(invitation.status)}
-                      </Badge>
-                    </AppRowListMeta>
-                  </AppRowListItem>
+                  <PendingInvitationRow
+                    key={invitation.id}
+                    activeAction={activeInvitationAction}
+                    actionsDisabled={
+                      !isHydrated || Boolean(activeInvitationAction)
+                    }
+                    invitation={invitation}
+                    onInvitationAction={handleInvitationAction}
+                  />
                 ))}
               </AppRowList>
             ) : null}
@@ -436,6 +503,82 @@ export function OrganizationMembersPage({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function PendingInvitationRow({
+  activeAction,
+  actionsDisabled,
+  invitation,
+  onInvitationAction,
+}: {
+  readonly activeAction: {
+    readonly invitationId: string;
+    readonly type: InvitationAction;
+  } | null;
+  readonly actionsDisabled: boolean;
+  readonly invitation: InvitationSummary;
+  readonly onInvitationAction: (
+    invitation: InvitationSummary,
+    action: InvitationAction
+  ) => Promise<void>;
+}) {
+  const isResending =
+    activeAction?.invitationId === invitation.id &&
+    activeAction.type === "resend";
+  const isCanceling =
+    activeAction?.invitationId === invitation.id &&
+    activeAction.type === "cancel";
+
+  return (
+    <AppRowListItem>
+      <AppRowListLeading aria-hidden="true">
+        {invitation.email.charAt(0).toUpperCase()}
+      </AppRowListLeading>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p
+          className="text-sm font-medium break-all text-foreground"
+          title={invitation.email}
+        >
+          {invitation.email}
+        </p>
+        <p className="text-sm/6 text-muted-foreground">
+          Awaiting acceptance from the invited teammate.
+        </p>
+      </div>
+      <AppRowListMeta>
+        <Badge variant="secondary">{formatRoleLabel(invitation.role)}</Badge>
+        <Badge variant="outline">{formatRoleLabel(invitation.status)}</Badge>
+      </AppRowListMeta>
+      <AppRowListActions>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          loading={isResending}
+          disabled={actionsDisabled}
+          aria-label={`Resend invitation to ${invitation.email}`}
+          onClick={() => {
+            void onInvitationAction(invitation, "resend");
+          }}
+        >
+          Resend
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          loading={isCanceling}
+          disabled={actionsDisabled}
+          aria-label={`Cancel invitation to ${invitation.email}`}
+          onClick={() => {
+            void onInvitationAction(invitation, "cancel");
+          }}
+        >
+          Cancel
+        </Button>
+      </AppRowListActions>
+    </AppRowListItem>
   );
 }
 
@@ -449,10 +592,16 @@ function toInvitation(input: {
   readonly role: string;
   readonly status: string;
 }): InvitationSummary {
+  const role = decodeOrganizationRole(input.role);
+
+  if (!isInviteRole(role)) {
+    throw new Error("Invitation role is not invitable.");
+  }
+
   return {
     email: input.email,
     id: input.id,
-    role: decodeOrganizationRole(input.role),
+    role,
     status: input.status,
   };
 }

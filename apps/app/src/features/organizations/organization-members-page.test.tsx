@@ -9,49 +9,65 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 import { OrganizationMembersPage } from "./organization-members-page";
 
 type ListInvitationsResult = Awaited<ReturnType<typeof mockedListInvitations>>;
+type CancelInvitationInput = Parameters<
+  typeof AuthClient.organization.cancelInvitation
+>[0];
+type InviteMemberInput = Parameters<
+  typeof AuthClient.organization.inviteMember
+>[0];
 const organizationId = decodeOrganizationId("org_123");
 const organizationOneId = decodeOrganizationId("org_1");
 const organizationTwoId = decodeOrganizationId("org_2");
 
-const { mockedInviteMember, mockedListInvitations } = vi.hoisted(() => ({
-  mockedInviteMember: vi.fn<
-    (input: {
-      email: string;
-      organizationId: string;
-      role: "admin" | "external" | "member";
-    }) => Promise<{
-      data: {
-        id: string;
-      } | null;
-      error: {
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedListInvitations: vi.fn<
-    (input: { query: { organizationId: string } }) => Promise<{
-      data:
-        | {
-            email: string;
-            id: string;
-            role: string;
-            status: string;
-          }[]
-        | null;
-      error: {
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-}));
+const { mockedCancelInvitation, mockedInviteMember, mockedListInvitations } =
+  vi.hoisted(() => ({
+    mockedCancelInvitation: vi.fn<
+      (input: CancelInvitationInput) => Promise<{
+        data: {
+          id: string;
+        } | null;
+        error: {
+          message: string;
+          status: number;
+          statusText: string;
+        } | null;
+      }>
+    >(),
+    mockedInviteMember: vi.fn<
+      (input: InviteMemberInput) => Promise<{
+        data: {
+          id: string;
+        } | null;
+        error: {
+          message: string;
+          status: number;
+          statusText: string;
+        } | null;
+      }>
+    >(),
+    mockedListInvitations: vi.fn<
+      (input: { query: { organizationId: string } }) => Promise<{
+        data:
+          | {
+              email: string;
+              id: string;
+              role: string;
+              status: string;
+            }[]
+          | null;
+        error: {
+          message: string;
+          status: number;
+          statusText: string;
+        } | null;
+      }>
+    >(),
+  }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
     organization: {
+      cancelInvitation: mockedCancelInvitation,
       inviteMember: mockedInviteMember,
       listInvitations: mockedListInvitations,
     },
@@ -97,6 +113,12 @@ describe("organization members page", () => {
     mockedInviteMember.mockResolvedValue({
       data: {
         id: "inv_456",
+      },
+      error: null,
+    });
+    mockedCancelInvitation.mockResolvedValue({
+      data: {
+        id: "inv_123",
       },
       error: null,
     });
@@ -272,6 +294,149 @@ describe("organization members page", () => {
     });
   }, 10_000);
 
+  it("resends pending invitations from the pending list", async () => {
+    mockedListInvitations.mockResolvedValueOnce({
+      data: [
+        {
+          email: "pending@example.com",
+          id: "inv_123",
+          role: "admin",
+          status: "pending",
+        },
+      ],
+      error: null,
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("pending@example.com")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Resend invitation to pending@example.com",
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockedInviteMember).toHaveBeenCalledWith({
+        email: "pending@example.com",
+        organizationId: "org_123",
+        resend: true,
+        role: "admin",
+      });
+    });
+    await expect(
+      screen.findByText("Invitation resent to pending@example.com.")
+    ).resolves.toBeInTheDocument();
+    expect(mockedListInvitations).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  it("shows a safe error when resending a pending invitation fails", async () => {
+    mockedInviteMember.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Invitation email failed",
+        status: 500,
+        statusText: "Internal Server Error",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("pending@example.com")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Resend invitation to pending@example.com",
+      })
+    );
+
+    await expect(
+      screen.findByText("We couldn't update that invitation. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByTitle("pending@example.com")).toBeVisible();
+  }, 10_000);
+
+  it("cancels pending invitations from the pending list", async () => {
+    mockedListInvitations.mockResolvedValueOnce({
+      data: [
+        {
+          email: "pending@example.com",
+          id: "inv_123",
+          role: "member",
+          status: "pending",
+        },
+      ],
+      error: null,
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("pending@example.com")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Cancel invitation to pending@example.com",
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockedCancelInvitation).toHaveBeenCalledWith({
+        invitationId: "inv_123",
+      });
+    });
+    await expect(
+      screen.findByText("Invitation canceled for pending@example.com.")
+    ).resolves.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByTitle("pending@example.com")
+      ).not.toBeInTheDocument();
+    });
+  }, 10_000);
+
+  it("shows a safe error when canceling a pending invitation fails", async () => {
+    mockedCancelInvitation.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Forbidden",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("pending@example.com")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Cancel invitation to pending@example.com",
+      })
+    );
+
+    await expect(
+      screen.findByText("We couldn't update that invitation. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByTitle("pending@example.com")).toBeVisible();
+  }, 10_000);
+
   it("lists live members shortcuts in shortcut help", async () => {
     const user = userEvent.setup();
 
@@ -356,7 +521,7 @@ describe("organization members page", () => {
         {
           email: "bad-role@example.com",
           id: "inv_bad_role",
-          role: "admin,member",
+          role: "owner",
           status: "pending",
         },
       ],

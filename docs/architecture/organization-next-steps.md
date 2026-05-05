@@ -20,10 +20,10 @@ and acceptance:
   them to the invitation after auth
 - set the invited organization active after acceptance
 - expose authenticated member invitation management from the `/members` page
+- allow pending invitations to be resent or canceled from the `/members` page
 
 Follow-up improvements for this slice:
 
-- allow invitation cancellation or resend from the members page
 - expose more invitation metadata such as expiry timestamps in the UI
 - add stronger operational observability around invitation delivery failures
 
