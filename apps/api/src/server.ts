@@ -1,9 +1,14 @@
 import { createServer } from "node:http";
 
 import { makeHealthPayloadFromSandboxIdInput } from "@ceird/sandbox-core";
-import { HttpApiBuilder } from "@effect/platform";
+import {
+  HttpApiBuilder,
+  HttpMiddleware,
+  HttpServerError,
+  HttpServerRequest,
+} from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Config, Effect, Layer } from "effect";
+import { Config, Context, Effect, Layer } from "effect";
 
 import {
   AuthenticationHttpLive,
@@ -70,7 +75,66 @@ export const ServerConfig = Config.all({
   port: Config.port("PORT").pipe(Config.withDefault(3000)),
 });
 
-export const ServerLive = HttpApiBuilder.serve().pipe(
+export const apiRequestLogger: typeof HttpMiddleware.logger =
+  HttpMiddleware.make((httpApp) => {
+    let counter = 0;
+
+    return Effect.withFiberRuntime((fiber) => {
+      const request = Context.unsafeGet(
+        fiber.currentContext,
+        HttpServerRequest.HttpServerRequest
+      );
+      const path = requestPathname(request.url);
+
+      counter += 1;
+
+      return Effect.withLogSpan(
+        Effect.flatMap(Effect.exit(httpApp), (exit) => {
+          if (
+            fiber.getFiberRef(HttpMiddleware.loggerDisabled) ||
+            shouldSkipRequestLog(path)
+          ) {
+            return exit;
+          }
+
+          const status =
+            exit._tag === "Failure"
+              ? HttpServerError.causeResponseStripped(exit.cause)[0].status
+              : exit.value.status;
+          const log =
+            status >= 500
+              ? Effect.logWarning("Sent HTTP error response")
+              : Effect.logInfo("Sent HTTP response");
+
+          return Effect.zipRight(
+            log.pipe(
+              Effect.annotateLogs({
+                "http.method": request.method,
+                "http.path": path,
+                "http.status": status,
+              })
+            ),
+            exit
+          );
+        }),
+        `http.request.${counter}`
+      );
+    });
+  });
+
+function requestPathname(url: string) {
+  try {
+    return new URL(url, "http://ceird.local").pathname;
+  } catch {
+    return url.split("?")[0] ?? url;
+  }
+}
+
+function shouldSkipRequestLog(path: string) {
+  return path === "/health";
+}
+
+export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
   Layer.provide(
     Layer.mergeAll(
       ApiLive,
@@ -89,5 +153,7 @@ export const makeApiWebHandler = (
     NodeHttpServer.layerContext
   ).pipe(Layer.provide(baseLive));
 
-  return HttpApiBuilder.toWebHandler(apiLayer);
+  return HttpApiBuilder.toWebHandler(apiLayer, {
+    middleware: apiRequestLogger,
+  });
 };

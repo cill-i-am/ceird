@@ -459,6 +459,148 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
+  it("reports organization invitation delivery failures", async () => {
+    const reportedFailures: unknown[] = [];
+    const deliveryError = new Error("invitation transport unavailable");
+    const pool = new Pool({
+      connectionString: DEFAULT_AUTH_DATABASE_URL,
+      allowExitOnIdle: true,
+    });
+
+    try {
+      const auth = createAuthentication({
+        appOrigin: "http://127.0.0.1:4173",
+        backgroundTaskHandler: () => {},
+        config: makeAuthenticationConfig({
+          baseUrl: "http://127.0.0.1:3000",
+          secret: "0123456789abcdef0123456789abcdef",
+          databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+        }),
+        database: drizzle(pool, { schema: authSchema }),
+        reportOrganizationInvitationEmailFailure: (error) => {
+          reportedFailures.push(error);
+        },
+        reportPasswordResetEmailFailure: () => {},
+        reportVerificationEmailFailure: () => {},
+        sendOrganizationInvitationEmail: () => Promise.reject(deliveryError),
+        sendPasswordResetEmail: async () => {},
+        sendVerificationEmail: async () => {},
+      });
+
+      const organizationPlugin = auth.options.plugins.find(
+        (plugin) => plugin.id === "organization"
+      ) as
+        | {
+            readonly options?: {
+              readonly sendInvitationEmail?: (data: {
+                readonly email: string;
+                readonly id: string;
+                readonly inviter: {
+                  readonly user: {
+                    readonly email: string;
+                  };
+                };
+                readonly organization: {
+                  readonly name: string;
+                };
+                readonly role: string;
+              }) => Promise<void>;
+            };
+          }
+        | undefined;
+
+      await expect(
+        organizationPlugin?.options?.sendInvitationEmail?.({
+          email: "member@example.com",
+          id: "inv_123",
+          inviter: {
+            user: {
+              email: "owner@example.com",
+            },
+          },
+          organization: {
+            name: "Acme Field Ops",
+          },
+          role: "member",
+        })
+      ).rejects.toThrow(deliveryError);
+
+      expect(reportedFailures).toStrictEqual([deliveryError]);
+    } finally {
+      await pool.end();
+    }
+  }, 10_000);
+
+  it("preserves organization invitation delivery failures when reporting fails", async () => {
+    const deliveryError = new Error("invitation transport unavailable");
+    const reporterError = new Error("reporter unavailable");
+    const pool = new Pool({
+      connectionString: DEFAULT_AUTH_DATABASE_URL,
+      allowExitOnIdle: true,
+    });
+
+    try {
+      const auth = createAuthentication({
+        appOrigin: "http://127.0.0.1:4173",
+        backgroundTaskHandler: () => {},
+        config: makeAuthenticationConfig({
+          baseUrl: "http://127.0.0.1:3000",
+          secret: "0123456789abcdef0123456789abcdef",
+          databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+        }),
+        database: drizzle(pool, { schema: authSchema }),
+        reportOrganizationInvitationEmailFailure: () => {
+          throw reporterError;
+        },
+        reportPasswordResetEmailFailure: () => {},
+        reportVerificationEmailFailure: () => {},
+        sendOrganizationInvitationEmail: () => Promise.reject(deliveryError),
+        sendPasswordResetEmail: async () => {},
+        sendVerificationEmail: async () => {},
+      });
+
+      const organizationPlugin = auth.options.plugins.find(
+        (plugin) => plugin.id === "organization"
+      ) as
+        | {
+            readonly options?: {
+              readonly sendInvitationEmail?: (data: {
+                readonly email: string;
+                readonly id: string;
+                readonly inviter: {
+                  readonly user: {
+                    readonly email: string;
+                  };
+                };
+                readonly organization: {
+                  readonly name: string;
+                };
+                readonly role: string;
+              }) => Promise<void>;
+            };
+          }
+        | undefined;
+
+      await expect(
+        organizationPlugin?.options?.sendInvitationEmail?.({
+          email: "member@example.com",
+          id: "inv_123",
+          inviter: {
+            user: {
+              email: "owner@example.com",
+            },
+          },
+          organization: {
+            name: "Acme Field Ops",
+          },
+          role: "member",
+        })
+      ).rejects.toThrow(deliveryError);
+    } finally {
+      await pool.end();
+    }
+  }, 10_000);
+
   it("requires current-email confirmation before verified email changes", async () => {
     const sentVerificationEmails: unknown[] = [];
     const pool = new Pool({

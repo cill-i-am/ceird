@@ -232,6 +232,7 @@ export function createAuthentication(options: {
   readonly database: NodePgDatabase<typeof authSchema>;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
   readonly reportEmailChangeConfirmationFailure?: (error: unknown) => void;
+  readonly reportOrganizationInvitationEmailFailure?: (error: unknown) => void;
   readonly sendOrganizationInvitationEmail: (
     input: OrganizationInvitationEmailInput
   ) => Promise<void>;
@@ -330,18 +331,24 @@ export function createAuthentication(options: {
             }),
         },
         sendInvitationEmail: async (organizationInvitation) => {
-          await sendOrganizationInvitationEmail({
-            deliveryKey: `organization-invitation/${organizationInvitation.id}`,
-            invitationUrl: new URL(
-              `/accept-invitation/${organizationInvitation.id}`,
-              options.appOrigin
-            ).toString(),
-            inviterEmail: organizationInvitation.inviter.user.email,
-            organizationName: organizationInvitation.organization.name,
-            recipientEmail: organizationInvitation.email,
-            recipientName: organizationInvitation.email,
-            role: decodeOrganizationRole(organizationInvitation.role),
-          } as const satisfies OrganizationInvitationEmailInput);
+          await deliverAuthEmail({
+            reportFailure:
+              options.reportOrganizationInvitationEmailFailure ??
+              options.reportVerificationEmailFailure,
+            send: sendOrganizationInvitationEmail,
+            input: {
+              deliveryKey: `organization-invitation/${organizationInvitation.id}`,
+              invitationUrl: new URL(
+                `/accept-invitation/${organizationInvitation.id}`,
+                options.appOrigin
+              ).toString(),
+              inviterEmail: organizationInvitation.inviter.user.email,
+              organizationName: organizationInvitation.organization.name,
+              recipientEmail: organizationInvitation.email,
+              recipientName: organizationInvitation.email,
+              role: decodeOrganizationRole(organizationInvitation.role),
+            } as const satisfies OrganizationInvitationEmailInput,
+          });
         },
       }),
     ],
@@ -438,7 +445,11 @@ async function deliverAuthEmail<Input>(options: {
   try {
     await options.send(options.input);
   } catch (error) {
-    options.reportFailure(error);
+    try {
+      options.reportFailure(error);
+    } catch {
+      // Observability must never replace the delivery failure Better Auth sees.
+    }
     throw error;
   }
 }
@@ -755,6 +766,10 @@ export class Authentication extends Effect.Service<Authentication>()(
         runtime,
         "Email change confirmation delivery failed"
       );
+      const reportOrganizationInvitationEmailFailure = makeEmailFailureReporter(
+        runtime,
+        "Organization invitation email delivery failed"
+      );
 
       return createAuthentication({
         appOrigin: authEmailConfig.appOrigin,
@@ -762,6 +777,7 @@ export class Authentication extends Effect.Service<Authentication>()(
         config,
         database: authDb,
         reportEmailChangeConfirmationFailure,
+        reportOrganizationInvitationEmailFailure,
         reportPasswordResetEmailFailure,
         sendOrganizationInvitationEmail:
           authEmailScheduler.sendOrganizationInvitationEmail,

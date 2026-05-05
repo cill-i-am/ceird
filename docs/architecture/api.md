@@ -23,6 +23,25 @@ System endpoints are defined in `src/server.ts`:
 - `GET /` returns a plain API marker string.
 - `GET /health` returns a sandbox-compatible `HealthPayload`.
 
+## Observability
+
+The API enables a custom Effect HTTP request logger for both the Node server and
+the Cloudflare/web-handler path. It records method, status, and redacted path
+only; query strings are not logged, and `/health` is skipped to keep probe noise
+out of operational logs. Typed domain HTTP handlers also wrap service calls with
+`observeApiOperation`, which adds an operation log span and emits structured
+fields when a jobs, rate-card, labels, sites, or service-area operation fails.
+Storage failures and defects log at warning level, while expected typed domain
+failures log at info level. Those fields include the API domain, service,
+operation, failure tag, failure message, safe entity identifiers when present,
+and failure cause when present.
+
+Background auth email delivery uses the same structured failure vocabulary.
+Password reset, verification, email-change confirmation, and organization
+invitation delivery failures are reported through the authentication failure
+reporters. Cloudflare queue delivery failures log the email kind, delivery key,
+source tag, and source cause before retrying.
+
 ## Authentication Domain
 
 Authentication lives in `src/domains/identity/authentication`.

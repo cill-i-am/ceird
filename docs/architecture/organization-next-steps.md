@@ -22,10 +22,8 @@ and acceptance:
 - expose authenticated member invitation management from the `/members` page
 - allow pending invitations to be resent or canceled from the `/members` page
 - show pending invitation expiry metadata on the `/members` page
-
-Follow-up improvements for this slice:
-
-- add stronger operational observability around invitation delivery failures
+- report organization invitation delivery failures through the shared auth
+  email observability path
 
 ## Multi-Organization Switching
 
