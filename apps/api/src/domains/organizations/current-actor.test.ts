@@ -1,10 +1,10 @@
-import { JobStorageError } from "@task-tracker/jobs-core";
 import { Cause, Effect, Exit, Option } from "effect";
 
-import { resolveCurrentJobsActor } from "./current-jobs-actor.js";
+import { resolveCurrentOrganizationActor } from "./current-actor.js";
 import {
-  JobsSessionIdentityInvalidError,
-  JobsSessionRequiredError,
+  OrganizationActorStorageError,
+  OrganizationSessionIdentityInvalidError,
+  OrganizationSessionRequiredError,
 } from "./errors.js";
 
 interface SessionLike {
@@ -16,19 +16,21 @@ interface SessionLike {
   };
 }
 
-function runCurrentJobsActor(options?: {
+function runCurrentOrganizationActor(options?: {
   readonly rows?: readonly { readonly role: string }[];
-  readonly session?: SessionLike | null;
+  readonly session?: SessionLike | null | undefined;
   readonly sessionError?: Error;
 }) {
   return Effect.runPromiseExit(
-    resolveCurrentJobsActor({
+    resolveCurrentOrganizationActor({
       getSession: () => {
         if (options?.sessionError) {
           return Promise.reject(options.sessionError);
         }
 
-        return Promise.resolve(options?.session ?? null);
+        return Promise.resolve(
+          options !== undefined && "session" in options ? options.session : null
+        );
       },
       headers: new Headers(),
       loadMembershipRoles: () =>
@@ -37,9 +39,9 @@ function runCurrentJobsActor(options?: {
   );
 }
 
-describe("current jobs actor resolution", () => {
+describe("current organization actor resolution", () => {
   it("resolves the current actor from the active organization session", async () => {
-    const exit = await runCurrentJobsActor({
+    const exit = await runCurrentOrganizationActor({
       session: {
         session: {
           activeOrganizationId: "org_123",
@@ -60,7 +62,7 @@ describe("current jobs actor resolution", () => {
   }, 10_000);
 
   it("resolves an external organization membership role", async () => {
-    const exit = await runCurrentJobsActor({
+    const exit = await runCurrentOrganizationActor({
       rows: [{ role: "external" }],
       session: {
         session: {
@@ -82,26 +84,45 @@ describe("current jobs actor resolution", () => {
   }, 10_000);
 
   it("fails with a session-required error when no authenticated session exists", async () => {
-    const exit = await runCurrentJobsActor({
+    const exit = await runCurrentOrganizationActor({
       session: null,
     });
 
     expect(exit._tag).toBe("Failure");
 
     if (Exit.isSuccess(exit)) {
-      throw new Error("Expected jobs actor lookup to fail.");
+      throw new Error("Expected organization actor lookup to fail.");
     }
 
     const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
 
-    expect(failure).toBeInstanceOf(JobsSessionRequiredError);
+    expect(failure).toBeInstanceOf(OrganizationSessionRequiredError);
     expect(failure).toMatchObject({
-      message: "Authentication is required to access jobs",
+      message: "Authentication is required to access the organization",
+    });
+  }, 10_000);
+
+  it("fails with a session-required error when auth returns an undefined session", async () => {
+    const exit = await runCurrentOrganizationActor({
+      session: undefined,
+    });
+
+    expect(exit._tag).toBe("Failure");
+
+    if (Exit.isSuccess(exit)) {
+      throw new Error("Expected organization actor lookup to fail.");
+    }
+
+    const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
+
+    expect(failure).toBeInstanceOf(OrganizationSessionRequiredError);
+    expect(failure).toMatchObject({
+      message: "Authentication is required to access the organization",
     });
   }, 10_000);
 
   it("fails with a typed actor error when the session identity is invalid", async () => {
-    const exit = await runCurrentJobsActor({
+    const exit = await runCurrentOrganizationActor({
       session: {
         session: {
           activeOrganizationId: "",
@@ -115,12 +136,12 @@ describe("current jobs actor resolution", () => {
     expect(exit._tag).toBe("Failure");
 
     if (Exit.isSuccess(exit)) {
-      throw new Error("Expected jobs actor lookup to fail.");
+      throw new Error("Expected organization actor lookup to fail.");
     }
 
     const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
 
-    expect(failure).toBeInstanceOf(JobsSessionIdentityInvalidError);
+    expect(failure).toBeInstanceOf(OrganizationSessionIdentityInvalidError);
     expect(failure).toMatchObject({
       field: "activeOrganizationId",
       message: "Session active organization id is invalid",
@@ -129,22 +150,22 @@ describe("current jobs actor resolution", () => {
 
   it("fails with a typed storage error when the auth session lookup throws", async () => {
     const sessionError = new Error("Auth backend unavailable");
-    const exit = await runCurrentJobsActor({
+    const exit = await runCurrentOrganizationActor({
       sessionError,
     });
 
     expect(exit._tag).toBe("Failure");
 
     if (Exit.isSuccess(exit)) {
-      throw new Error("Expected jobs actor lookup to fail.");
+      throw new Error("Expected organization actor lookup to fail.");
     }
 
     const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
 
-    expect(failure).toBeInstanceOf(JobStorageError);
+    expect(failure).toBeInstanceOf(OrganizationActorStorageError);
     expect(failure).toMatchObject({
       cause: sessionError.message,
-      message: "Jobs session lookup failed",
+      message: "Organization actor session lookup failed",
     });
   }, 10_000);
 });

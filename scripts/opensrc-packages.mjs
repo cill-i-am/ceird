@@ -28,7 +28,7 @@ export function buildOpensrcSourceList(workspacePackageJsons) {
 
   for (const packageJson of workspacePackageJsons) {
     for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
-      if (dependency.startsWith("@task-tracker/")) {
+      if (dependency.startsWith("@ceird/")) {
         continue;
       }
 

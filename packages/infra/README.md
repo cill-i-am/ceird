@@ -1,6 +1,6 @@
 # Infra
 
-`@task-tracker/infra` defines production infrastructure with Alchemy v2.
+`@ceird/infra` defines production infrastructure with Alchemy v2.
 
 ## Commands
 
@@ -15,10 +15,10 @@ pnpm infra:destroy
 From this package:
 
 ```bash
-pnpm --filter @task-tracker/infra check-types
-pnpm --filter @task-tracker/infra deploy
-pnpm --filter @task-tracker/infra destroy
-pnpm --filter @task-tracker/infra dev
+pnpm --filter @ceird/infra check-types
+pnpm --filter @ceird/infra deploy
+pnpm --filter @ceird/infra destroy
+pnpm --filter @ceird/infra dev
 ```
 
 ## Important Paths

@@ -1,34 +1,32 @@
-/* oxlint-disable unicorn/no-array-sort */
 "use client";
-
-import { Atom } from "@effect-atom/atom-react";
 import type {
-  AddJobCostLineInput,
-  AddJobCostLineResponse,
   AddJobCommentInput,
   AddJobCommentResponse,
+  AddJobCostLineInput,
+  AddJobCostLineResponse,
   AddJobVisitInput,
   AddJobVisitResponse,
   AssignJobLabelInput,
   AttachJobCollaboratorInput,
-  CreateJobLabelInput,
   Job,
   JobCollaborator,
   JobCollaboratorIdType,
   JobDetailResponse,
-  JobLabel,
-  JobLabelIdType,
-  UpdateJobCollaboratorInput,
   PatchJobInput,
   PatchJobResponse,
   TransitionJobInput,
   TransitionJobResponse,
+  UpdateJobCollaboratorInput,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { CreateLabelInput, Label, LabelIdType } from "@ceird/labels-core";
+/* oxlint-disable unicorn/no-array-sort */
+import { Atom } from "@effect-atom/atom-react";
 import { Effect, Option } from "effect";
 
-import { runBrowserJobsRequest } from "./jobs-client";
-import type { AppJobsError } from "./jobs-errors";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import type { AppApiError } from "#/features/api/app-api-errors";
+
 import {
   jobsListStateAtom,
   jobsOptionsStateAtom,
@@ -53,7 +51,7 @@ export const jobCollaboratorsStateAtomFamily = Atom.family(
 
 export const refreshJobDetailAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobDetailResponse>((_, get) =>
+    Atom.fn<AppApiError, JobDetailResponse>((_, get) =>
       getBrowserJobDetail(workItemId).pipe(
         Effect.tap((detail) =>
           Effect.sync(() => {
@@ -66,7 +64,7 @@ export const refreshJobDetailAtomFamily = Atom.family(
 
 export const refreshJobCollaboratorsAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, readonly JobCollaborator[]>((_, get) =>
+    Atom.fn<AppApiError, readonly JobCollaborator[]>((_, get) =>
       listBrowserJobCollaborators(workItemId).pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
@@ -83,7 +81,7 @@ export const refreshJobCollaboratorsAtomFamily = Atom.family(
 
 export const transitionJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, TransitionJobResponse, TransitionJobInput>(
+    Atom.fn<AppApiError, TransitionJobResponse, TransitionJobInput>(
       (input, get) =>
         transitionBrowserJob(workItemId, input).pipe(
           Effect.tap((job) => syncChangedJob(get, workItemId, job))
@@ -93,7 +91,7 @@ export const transitionJobMutationAtomFamily = Atom.family(
 
 export const reopenJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobDetailResponse["job"]>((_, get) =>
+    Atom.fn<AppApiError, JobDetailResponse["job"]>((_, get) =>
       reopenBrowserJob(workItemId).pipe(
         Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
@@ -102,7 +100,7 @@ export const reopenJobMutationAtomFamily = Atom.family(
 
 export const patchJobMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, PatchJobResponse, PatchJobInput>((input, get) =>
+    Atom.fn<AppApiError, PatchJobResponse, PatchJobInput>((input, get) =>
       patchBrowserJob(workItemId, input).pipe(
         Effect.tap((job) => syncChangedJob(get, workItemId, job))
       )
@@ -111,7 +109,7 @@ export const patchJobMutationAtomFamily = Atom.family(
 
 export const addJobCommentMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, AddJobCommentResponse, AddJobCommentInput>(
+    Atom.fn<AppApiError, AddJobCommentResponse, AddJobCommentInput>(
       (input, get) =>
         addBrowserJobComment(workItemId, input).pipe(
           Effect.tap((comment) =>
@@ -129,7 +127,7 @@ export const addJobCommentMutationAtomFamily = Atom.family(
 
 export const addJobVisitMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, AddJobVisitResponse, AddJobVisitInput>((input, get) =>
+    Atom.fn<AppApiError, AddJobVisitResponse, AddJobVisitInput>((input, get) =>
       addBrowserJobVisit(workItemId, input).pipe(
         Effect.tap((visit) =>
           Effect.gen(function* () {
@@ -146,19 +144,18 @@ export const addJobVisitMutationAtomFamily = Atom.family(
 
 export const assignJobLabelMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobDetailResponse, AssignJobLabelInput>(
-      (input, get) =>
-        assignBrowserJobLabel(workItemId, input).pipe(
-          Effect.tap((detail) =>
-            Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
-          )
+    Atom.fn<AppApiError, JobDetailResponse, AssignJobLabelInput>((input, get) =>
+      assignBrowserJobLabel(workItemId, input).pipe(
+        Effect.tap((detail) =>
+          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
         )
+      )
     )
 );
 
 export const addJobCostLineMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, AddJobCostLineResponse, AddJobCostLineInput>(
+    Atom.fn<AppApiError, AddJobCostLineResponse, AddJobCostLineInput>(
       (input, get) =>
         addBrowserJobCostLine(workItemId, input).pipe(
           Effect.tap((costLine) =>
@@ -176,7 +173,7 @@ export const addJobCostLineMutationAtomFamily = Atom.family(
 
 export const attachJobCollaboratorMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobCollaborator, AttachJobCollaboratorInput>(
+    Atom.fn<AppApiError, JobCollaborator, AttachJobCollaboratorInput>(
       (input, get) =>
         attachBrowserJobCollaborator(workItemId, input).pipe(
           Effect.tap((collaborator) =>
@@ -191,7 +188,7 @@ export const attachJobCollaboratorMutationAtomFamily = Atom.family(
 export const updateJobCollaboratorMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<
-      AppJobsError,
+      AppApiError,
       JobCollaborator,
       {
         readonly collaboratorId: JobCollaboratorIdType;
@@ -210,7 +207,7 @@ export const updateJobCollaboratorMutationAtomFamily = Atom.family(
 
 export const detachJobCollaboratorMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobCollaborator, JobCollaboratorIdType>(
+    Atom.fn<AppApiError, JobCollaborator, JobCollaboratorIdType>(
       (collaboratorId, get) =>
         detachBrowserJobCollaborator(workItemId, collaboratorId).pipe(
           Effect.tap((collaborator) =>
@@ -229,25 +226,24 @@ export const detachJobCollaboratorMutationAtomFamily = Atom.family(
 
 export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobDetailResponse, CreateJobLabelInput>(
-      (input, get) =>
-        createBrowserJobLabel(input).pipe(
-          Effect.tap((label) =>
-            Effect.sync(() => upsertJobOptionLabel(get, label))
-          ),
-          Effect.flatMap((label) =>
-            assignBrowserJobLabel(workItemId, { labelId: label.id })
-          ),
-          Effect.tap((detail) =>
-            Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
-          )
+    Atom.fn<AppApiError, JobDetailResponse, CreateLabelInput>((input, get) =>
+      createBrowserLabel(input).pipe(
+        Effect.tap((label) =>
+          Effect.sync(() => upsertJobOptionLabel(get, label))
+        ),
+        Effect.flatMap((label) =>
+          assignBrowserJobLabel(workItemId, { labelId: label.id })
+        ),
+        Effect.tap((detail) =>
+          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
         )
+      )
     )
 );
 
 export const removeJobLabelMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppJobsError, JobDetailResponse, JobLabelIdType>((labelId, get) =>
+    Atom.fn<AppApiError, JobDetailResponse, LabelIdType>((labelId, get) =>
       removeBrowserJobLabel(workItemId, labelId).pipe(
         Effect.tap((detail) =>
           Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
@@ -257,7 +253,7 @@ export const removeJobLabelMutationAtomFamily = Atom.family(
 );
 
 function getBrowserJobDetail(workItemId: WorkItemIdType) {
-  return runBrowserJobsRequest("JobsBrowser.getJobDetail", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.getJobDetail", (client) =>
     client.jobs.getJobDetail({
       path: { workItemId },
     })
@@ -268,7 +264,7 @@ function transitionBrowserJob(
   workItemId: WorkItemIdType,
   input: TransitionJobInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.transitionJob", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.transitionJob", (client) =>
     client.jobs.transitionJob({
       path: { workItemId },
       payload: input,
@@ -277,7 +273,7 @@ function transitionBrowserJob(
 }
 
 function reopenBrowserJob(workItemId: WorkItemIdType) {
-  return runBrowserJobsRequest("JobsBrowser.reopenJob", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.reopenJob", (client) =>
     client.jobs.reopenJob({
       path: { workItemId },
     })
@@ -285,7 +281,7 @@ function reopenBrowserJob(workItemId: WorkItemIdType) {
 }
 
 function patchBrowserJob(workItemId: WorkItemIdType, input: PatchJobInput) {
-  return runBrowserJobsRequest("JobsBrowser.patchJob", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.patchJob", (client) =>
     client.jobs.patchJob({
       path: { workItemId },
       payload: input,
@@ -297,7 +293,7 @@ function addBrowserJobComment(
   workItemId: WorkItemIdType,
   input: AddJobCommentInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.addJobComment", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.addJobComment", (client) =>
     client.jobs.addJobComment({
       path: { workItemId },
       payload: input,
@@ -309,7 +305,7 @@ function addBrowserJobVisit(
   workItemId: WorkItemIdType,
   input: AddJobVisitInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.addJobVisit", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.addJobVisit", (client) =>
     client.jobs.addJobVisit({
       path: { workItemId },
       payload: input,
@@ -321,7 +317,7 @@ function assignBrowserJobLabel(
   workItemId: WorkItemIdType,
   input: AssignJobLabelInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.assignJobLabel", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.assignJobLabel", (client) =>
     client.jobs.assignJobLabel({
       path: { workItemId },
       payload: input,
@@ -333,7 +329,7 @@ function addBrowserJobCostLine(
   workItemId: WorkItemIdType,
   input: AddJobCostLineInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.addJobCostLine", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.addJobCostLine", (client) =>
     client.jobs.addJobCostLine({
       path: { workItemId },
       payload: input,
@@ -342,7 +338,7 @@ function addBrowserJobCostLine(
 }
 
 function listBrowserJobCollaborators(workItemId: WorkItemIdType) {
-  return runBrowserJobsRequest("JobsBrowser.listJobCollaborators", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.listJobCollaborators", (client) =>
     client.jobs.listJobCollaborators({
       path: { workItemId },
     })
@@ -353,11 +349,13 @@ function attachBrowserJobCollaborator(
   workItemId: WorkItemIdType,
   input: AttachJobCollaboratorInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.attachJobCollaborator", (client) =>
-    client.jobs.attachJobCollaborator({
-      path: { workItemId },
-      payload: input,
-    })
+  return runBrowserAppApiRequest(
+    "JobsBrowser.attachJobCollaborator",
+    (client) =>
+      client.jobs.attachJobCollaborator({
+        path: { workItemId },
+        payload: input,
+      })
   );
 }
 
@@ -366,11 +364,13 @@ function updateBrowserJobCollaborator(
   collaboratorId: JobCollaboratorIdType,
   input: UpdateJobCollaboratorInput
 ) {
-  return runBrowserJobsRequest("JobsBrowser.updateJobCollaborator", (client) =>
-    client.jobs.updateJobCollaborator({
-      path: { collaboratorId, workItemId },
-      payload: input,
-    })
+  return runBrowserAppApiRequest(
+    "JobsBrowser.updateJobCollaborator",
+    (client) =>
+      client.jobs.updateJobCollaborator({
+        path: { collaboratorId, workItemId },
+        payload: input,
+      })
   );
 }
 
@@ -378,16 +378,18 @@ function detachBrowserJobCollaborator(
   workItemId: WorkItemIdType,
   collaboratorId: JobCollaboratorIdType
 ) {
-  return runBrowserJobsRequest("JobsBrowser.detachJobCollaborator", (client) =>
-    client.jobs.detachJobCollaborator({
-      path: { collaboratorId, workItemId },
-    })
+  return runBrowserAppApiRequest(
+    "JobsBrowser.detachJobCollaborator",
+    (client) =>
+      client.jobs.detachJobCollaborator({
+        path: { collaboratorId, workItemId },
+      })
   );
 }
 
-function createBrowserJobLabel(input: CreateJobLabelInput) {
-  return runBrowserJobsRequest("JobsBrowser.createJobLabel", (client) =>
-    client.jobs.createJobLabel({
+function createBrowserLabel(input: CreateLabelInput) {
+  return runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
+    client.labels.createLabel({
       payload: input,
     })
   );
@@ -395,9 +397,9 @@ function createBrowserJobLabel(input: CreateJobLabelInput) {
 
 function removeBrowserJobLabel(
   workItemId: WorkItemIdType,
-  labelId: JobLabelIdType
+  labelId: LabelIdType
 ) {
-  return runBrowserJobsRequest("JobsBrowser.removeJobLabel", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.removeJobLabel", (client) =>
     client.jobs.removeJobLabel({
       path: { labelId, workItemId },
     })
@@ -461,14 +463,14 @@ function syncChangedJobDetail(
   updateJobsListJob(get, detail.job);
 }
 
-function upsertJobOptionLabel(get: Atom.FnContext, label: JobLabel) {
+function upsertJobOptionLabel(get: Atom.FnContext, label: Label) {
   const currentOptionsState = get(jobsOptionsStateAtom);
   const labels = [
     label,
     ...currentOptionsState.data.labels.filter(
       (current) => current.id !== label.id
     ),
-  ].sort(compareJobLabels);
+  ].sort(compareLabels);
 
   get.set(jobsOptionsStateAtom, {
     data: {
@@ -495,7 +497,7 @@ function upsertJobCollaborator(
   );
 }
 
-function compareJobLabels(left: JobLabel, right: JobLabel) {
+function compareLabels(left: Label, right: Label) {
   const nameOrder = left.name.localeCompare(right.name);
 
   return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;

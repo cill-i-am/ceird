@@ -13,7 +13,7 @@ export interface SandboxFileSystem {
 }
 
 export class SandboxFileSystemService extends Effect.Service<SandboxFileSystemService>()(
-  "@task-tracker/sandbox-cli/SandboxFileSystemService",
+  "@ceird/sandbox-cli/SandboxFileSystemService",
   {
     accessors: true,
     effect: Effect.succeed<SandboxFileSystem>({

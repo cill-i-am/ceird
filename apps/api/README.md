@@ -45,7 +45,7 @@ The API owns:
 - Public invitation preview under `/api/public/invitations/:invitationId/preview`.
 - System routes `GET /` and `GET /health`.
 - Jobs, sites, labels, cost lines, collaborators, activity, service areas, and
-  rate-card endpoints defined by `@task-tracker/jobs-core`.
+  rate-card endpoints defined by `@ceird/jobs-core`.
 - Database schema and migrations.
 - Authorization and business invariants for app-domain mutations.
 - Auth email scheduling and transport integration.

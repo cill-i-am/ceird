@@ -112,7 +112,7 @@ future costing, not final invoices.
 
 ## API Design
 
-Extend `@task-tracker/jobs-core` with service-area and rate-card schemas, IDs,
+Extend `@ceird/jobs-core` with service-area and rate-card schemas, IDs,
 DTOs, and `HttpApi` groups.
 
 Service area endpoints:

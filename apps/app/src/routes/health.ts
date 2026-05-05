@@ -1,5 +1,5 @@
+import { makeHealthPayloadFromSandboxIdInput } from "@ceird/sandbox-core";
 import { createFileRoute } from "@tanstack/react-router";
-import { makeHealthPayloadFromSandboxIdInput } from "@task-tracker/sandbox-core";
 import { Config, Effect } from "effect";
 
 const AppRuntimeConfig = Config.all({

@@ -1,16 +1,15 @@
 "use client";
-
-import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
-import type { Result } from "@effect-atom/atom-react";
-import { Delete02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { RATE_CARD_LINE_KINDS } from "@task-tracker/jobs-core";
+import { RATE_CARD_LINE_KINDS } from "@ceird/jobs-core";
 import type {
   RateCard,
   RateCardLine,
   RateCardLineInput,
   RateCardLineKind,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
+import type { Result } from "@effect-atom/atom-react";
+import { Delete02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Exit } from "effect";
 import * as React from "react";
 

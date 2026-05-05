@@ -36,7 +36,7 @@ function readCurrentRequestOrigin(input: {
 
   if (forwardedProto === "http" || forwardedProto === "https") {
     protocol = forwardedProto;
-  } else if (host.includes("task-tracker.localhost")) {
+  } else if (host.includes("ceird.localhost")) {
     protocol = "https";
   }
 

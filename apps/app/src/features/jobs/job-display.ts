@@ -1,5 +1,4 @@
-import type { JobPriority, JobStatus } from "@task-tracker/jobs-core";
-
+import type { JobPriority, JobStatus } from "@ceird/jobs-core";
 export const JOB_PRIORITY_LABELS: Record<JobPriority, string> = {
   high: "High",
   low: "Low",

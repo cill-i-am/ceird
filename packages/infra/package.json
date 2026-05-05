@@ -1,5 +1,5 @@
 {
-  "name": "@task-tracker/infra",
+  "name": "@ceird/infra",
   "private": true,
   "type": "module",
   "scripts": {

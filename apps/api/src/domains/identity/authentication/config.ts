@@ -40,15 +40,15 @@ export function matchesTrustedOrigin(
 }
 
 export const DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN = makeTrustedOriginPattern(
-  "http://*.app.task-tracker.localhost:1355"
+  "http://*.app.ceird.localhost:1355"
 );
 export const DEFAULT_SANDBOX_APP_ORIGIN_HTTPS_PATTERN =
-  makeTrustedOriginPattern("https://*.app.task-tracker.localhost:1355");
+  makeTrustedOriginPattern("https://*.app.ceird.localhost:1355");
 export const DEFAULT_PORTLESS_APP_ORIGIN_HTTP = makeTrustedOriginPattern(
-  "http://app.task-tracker.localhost:1355"
+  "http://app.ceird.localhost:1355"
 );
 export const DEFAULT_PORTLESS_APP_ORIGIN_HTTPS = makeTrustedOriginPattern(
-  "https://app.task-tracker.localhost:1355"
+  "https://app.ceird.localhost:1355"
 );
 
 const DEFAULT_LOCAL_APP_ORIGIN_STRINGS = [
@@ -86,7 +86,7 @@ export interface AuthenticationEnvironment {
 }
 
 export interface AuthenticationConfig {
-  readonly appName: "Task Tracker";
+  readonly appName: "Ceird";
   readonly basePath: typeof DEFAULT_AUTH_BASE_PATH;
   readonly baseURL: string;
   readonly trustedOrigins: TrustedOriginPattern[];
@@ -143,7 +143,7 @@ export interface AuthenticationConfig {
 }
 
 export class AuthenticationConfigService extends Effect.Service<AuthenticationConfigService>()(
-  "@task-tracker/domains/identity/authentication/AuthenticationConfigService",
+  "@ceird/domains/identity/authentication/AuthenticationConfigService",
   {
     effect: Effect.gen(function* AuthenticationConfigServiceEffect() {
       return yield* loadAuthenticationConfig;
@@ -151,8 +151,8 @@ export class AuthenticationConfigService extends Effect.Service<AuthenticationCo
   }
 ) {}
 
-const TASK_TRACKER_LOCALHOST_SUFFIX = ".task-tracker.localhost";
-const TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN = "task-tracker.localhost";
+const CEIRD_LOCALHOST_SUFFIX = ".ceird.localhost";
+const CEIRD_LOCALHOST_COOKIE_DOMAIN = "ceird.localhost";
 
 function readHostname(value: string | undefined): string | undefined {
   if (!value) {
@@ -180,10 +180,10 @@ export function resolveCrossSubDomainCookieDomain(
 
   return hostnames.some(
     (hostname) =>
-      hostname === TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN ||
-      hostname?.endsWith(TASK_TRACKER_LOCALHOST_SUFFIX) === true
+      hostname === CEIRD_LOCALHOST_COOKIE_DOMAIN ||
+      hostname?.endsWith(CEIRD_LOCALHOST_SUFFIX) === true
   )
-    ? TASK_TRACKER_LOCALHOST_COOKIE_DOMAIN
+    ? CEIRD_LOCALHOST_COOKIE_DOMAIN
     : undefined;
 }
 
@@ -201,13 +201,13 @@ export function makeAuthenticationTrustedOrigins(
   if (environment.portlessUrl) {
     try {
       const appUrl = new URL(environment.portlessUrl);
-      if (appUrl.hostname.includes(".api.task-tracker.localhost")) {
+      if (appUrl.hostname.includes(".api.ceird.localhost")) {
         appUrl.hostname = appUrl.hostname.replace(
-          ".api.task-tracker.localhost",
-          ".app.task-tracker.localhost"
+          ".api.ceird.localhost",
+          ".app.ceird.localhost"
         );
-      } else if (appUrl.hostname === "api.task-tracker.localhost") {
-        appUrl.hostname = "app.task-tracker.localhost";
+      } else if (appUrl.hostname === "api.ceird.localhost") {
+        appUrl.hostname = "app.ceird.localhost";
       }
       trustedOrigins.add(makeTrustedOriginPattern(appUrl.origin));
     } catch {
@@ -235,7 +235,7 @@ export function makeAuthenticationConfig(
     resolveCrossSubDomainCookieDomain(environment);
 
   return {
-    appName: "Task Tracker",
+    appName: "Ceird",
     basePath: DEFAULT_AUTH_BASE_PATH,
     baseURL: environment.baseUrl,
     trustedOrigins: makeAuthenticationTrustedOrigins(environment),

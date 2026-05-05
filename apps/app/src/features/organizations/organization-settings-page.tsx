@@ -1,17 +1,14 @@
+import { normalizeLabelName } from "@ceird/labels-core";
+import type {
+  CreateLabelInput,
+  Label,
+  LabelIdType,
+  UpdateLabelInput,
+} from "@ceird/labels-core";
 /* oxlint-disable unicorn/no-array-sort */
 import { RegistryProvider } from "@effect-atom/atom-react";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
-import type {
-  CreateJobLabelInput,
-  JobLabel,
-  JobLabelIdType,
-  UpdateJobLabelInput,
-} from "@task-tracker/jobs-core";
-import {
-  JobLabelNameSchema,
-  normalizeJobLabelName,
-} from "@task-tracker/jobs-core";
 import { Effect, Schema } from "effect";
 import { Archive, Check, Pencil, Plus, X } from "lucide-react";
 import * as React from "react";
@@ -21,12 +18,13 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
   getErrorText,
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
-import { runBrowserJobsRequest } from "#/features/jobs/jobs-client";
+import { validateLabelName } from "#/features/labels/label-name-validation";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
@@ -50,13 +48,12 @@ const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before creating it.";
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
 const INVALID_LABEL_NAME_MESSAGE =
   "Keep label names between 1 and 48 characters.";
-const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
 
 export function OrganizationSettingsPage({
-  jobLabels = [],
+  organizationLabels = [],
   organization,
 }: {
-  readonly jobLabels?: readonly JobLabel[];
+  readonly organizationLabels?: readonly Label[];
   readonly organization: OrganizationSummary;
 }) {
   const router = useRouter();
@@ -67,10 +64,12 @@ export function OrganizationSettingsPage({
   const [savedOrganizationName, setSavedOrganizationName] = React.useState(
     organization.name
   );
-  const [labels, setLabels] = React.useState(() => sortJobLabels(jobLabels));
+  const [labels, setLabels] = React.useState(() =>
+    sortLabels(organizationLabels)
+  );
   const [newLabelName, setNewLabelName] = React.useState("");
   const [editingLabelId, setEditingLabelId] =
-    React.useState<JobLabelIdType | null>(null);
+    React.useState<LabelIdType | null>(null);
   const [editingLabelName, setEditingLabelName] = React.useState("");
   const [labelError, setLabelError] = React.useState<string | null>(null);
   const [labelErrorTarget, setLabelErrorTarget] = React.useState<
@@ -86,11 +85,11 @@ export function OrganizationSettingsPage({
     id: organization.id,
     name: organization.name,
   });
-  const jobLabelsKey = React.useMemo(
-    () => getJobLabelsKey(jobLabels),
-    [jobLabels]
+  const organizationLabelsKey = React.useMemo(
+    () => getLabelsKey(organizationLabels),
+    [organizationLabels]
   );
-  const previousJobLabelsKeyRef = React.useRef(jobLabelsKey);
+  const previousLabelsKeyRef = React.useRef(organizationLabelsKey);
 
   const form = useForm({
     defaultValues: {
@@ -165,16 +164,17 @@ export function OrganizationSettingsPage({
     const isSameOrganizationRemoteNameChange =
       previousOrganization.id === organization.id &&
       previousOrganization.name !== organization.name;
-    const labelsChanged = previousJobLabelsKeyRef.current !== jobLabelsKey;
+    const labelsChanged =
+      previousLabelsKeyRef.current !== organizationLabelsKey;
 
     previousOrganizationRef.current = {
       id: organization.id,
       name: organization.name,
     };
-    previousJobLabelsKeyRef.current = jobLabelsKey;
+    previousLabelsKeyRef.current = organizationLabelsKey;
 
     if (labelsChanged || isNewOrganization) {
-      setLabels(sortJobLabels(jobLabels));
+      setLabels(sortLabels(organizationLabels));
       setEditingLabelId(null);
       setEditingLabelName("");
       setLabelError(null);
@@ -197,7 +197,13 @@ export function OrganizationSettingsPage({
         name: organization.name,
       });
     }
-  }, [form, jobLabels, jobLabelsKey, organization.id, organization.name]);
+  }, [
+    form,
+    organizationLabels,
+    organizationLabelsKey,
+    organization.id,
+    organization.name,
+  ]);
 
   useAppHotkey(
     "settingsSubmit",
@@ -267,9 +273,9 @@ export function OrganizationSettingsPage({
     setPendingLabelAction("create");
 
     try {
-      const label = await createBrowserJobLabel({ name: decodedName.name });
+      const label = await createBrowserLabel({ name: decodedName.name });
 
-      setLabels((current) => upsertJobLabel(current, label));
+      setLabels((current) => upsertLabel(current, label));
       setNewLabelName("");
       setLabelStatus("Label created.");
       await refreshRouteData();
@@ -281,7 +287,7 @@ export function OrganizationSettingsPage({
     }
   }
 
-  async function handleUpdateLabel(labelId: JobLabelIdType) {
+  async function handleUpdateLabel(labelId: LabelIdType) {
     const decodedName = validateLabelName(editingLabelName);
 
     setLabelError(null);
@@ -315,11 +321,11 @@ export function OrganizationSettingsPage({
     setPendingLabelAction("update");
 
     try {
-      const label = await updateBrowserJobLabel(labelId, {
+      const label = await updateBrowserLabel(labelId, {
         name: decodedName.name,
       });
 
-      setLabels((current) => upsertJobLabel(current, label));
+      setLabels((current) => upsertLabel(current, label));
       setEditingLabelId(null);
       setEditingLabelName("");
       setLabelStatus("Label updated.");
@@ -332,14 +338,14 @@ export function OrganizationSettingsPage({
     }
   }
 
-  async function handleArchiveLabel(labelId: JobLabelIdType) {
+  async function handleArchiveLabel(labelId: LabelIdType) {
     setLabelError(null);
     setLabelErrorTarget(null);
     setLabelStatus(null);
     setPendingLabelAction("archive");
 
     try {
-      await archiveBrowserJobLabel(labelId);
+      await archiveBrowserLabel(labelId);
       setLabels((current) => current.filter((label) => label.id !== labelId));
       setLabelStatus("Label archived.");
 
@@ -377,7 +383,7 @@ export function OrganizationSettingsPage({
         <div className="grid max-w-5xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
           <AppUtilityPanel
             title="General"
-            description="Update the name your team sees across Task Tracker."
+            description="Update the name your team sees across Ceird."
             className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
           >
             <form
@@ -458,7 +464,7 @@ export function OrganizationSettingsPage({
 
           <AppUtilityPanel
             title="Identity"
-            description="These values are used when Task Tracker identifies this workspace."
+            description="These values are used when Ceird identifies this workspace."
           >
             <dl className="flex flex-col gap-4">
               <div className="flex flex-col gap-1 border-t border-border/60 pt-4 first:border-t-0 first:pt-0">
@@ -483,8 +489,8 @@ export function OrganizationSettingsPage({
 
         <div className="grid max-w-5xl gap-6">
           <AppUtilityPanel
-            title="Job labels"
-            description="Manage the labels used to sort and filter work across jobs."
+            title="Labels"
+            description="Manage organization labels used to sort and filter work."
             className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
           >
             <div className="flex max-w-3xl flex-col gap-5">
@@ -540,7 +546,7 @@ export function OrganizationSettingsPage({
               <div className="overflow-hidden rounded-lg border border-border/60">
                 {labels.length === 0 ? (
                   <p className="px-4 py-6 text-sm text-muted-foreground">
-                    No job labels yet.
+                    No labels yet.
                   </p>
                 ) : (
                   <ul className="divide-y divide-border/60">
@@ -669,23 +675,23 @@ function IconButton({
   );
 }
 
-function createBrowserJobLabel(input: CreateJobLabelInput): Promise<JobLabel> {
+function createBrowserLabel(input: CreateLabelInput): Promise<Label> {
   return Effect.runPromise(
-    runBrowserJobsRequest("JobsBrowser.createJobLabel", (client) =>
-      client.jobs.createJobLabel({
+    runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
+      client.labels.createLabel({
         payload: input,
       })
     )
   );
 }
 
-function updateBrowserJobLabel(
-  labelId: JobLabelIdType,
-  input: UpdateJobLabelInput
-): Promise<JobLabel> {
+function updateBrowserLabel(
+  labelId: LabelIdType,
+  input: UpdateLabelInput
+): Promise<Label> {
   return Effect.runPromise(
-    runBrowserJobsRequest("JobsBrowser.updateJobLabel", (client) =>
-      client.jobs.updateJobLabel({
+    runBrowserAppApiRequest("LabelsBrowser.updateLabel", (client) =>
+      client.labels.updateLabel({
         path: { labelId },
         payload: input,
       })
@@ -693,67 +699,47 @@ function updateBrowserJobLabel(
   );
 }
 
-function archiveBrowserJobLabel(labelId: JobLabelIdType): Promise<JobLabel> {
+function archiveBrowserLabel(labelId: LabelIdType): Promise<Label> {
   return Effect.runPromise(
-    runBrowserJobsRequest("JobsBrowser.archiveJobLabel", (client) =>
-      client.jobs.deleteJobLabel({
+    runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
+      client.labels.deleteLabel({
         path: { labelId },
       })
     )
   );
-}
-
-function validateLabelName(
-  input: string
-):
-  | { readonly kind: "empty" }
-  | { readonly kind: "invalid" }
-  | { readonly kind: "valid"; readonly name: CreateJobLabelInput["name"] } {
-  if (input.trim().length === 0) {
-    return { kind: "empty" };
-  }
-
-  try {
-    return {
-      kind: "valid",
-      name: decodeJobLabelName(input),
-    };
-  } catch {
-    return { kind: "invalid" };
-  }
 }
 
 function hasDuplicateLabelName(
-  labels: readonly JobLabel[],
+  labels: readonly Label[],
   name: string,
-  ignoredLabelId?: JobLabelIdType
+  ignoredLabelId?: LabelIdType
 ) {
-  const normalizedName = normalizeJobLabelName(name);
+  const normalizedName = normalizeLabelName(name);
 
   return labels.some(
     (label) =>
       label.id !== ignoredLabelId &&
-      normalizeJobLabelName(label.name) === normalizedName
+      normalizeLabelName(label.name) === normalizedName
   );
 }
 
-function upsertJobLabel(labels: readonly JobLabel[], label: JobLabel) {
-  return sortJobLabels([
+function upsertLabel(labels: readonly Label[], label: Label) {
+  return sortLabels([
     label,
     ...labels.filter((currentLabel) => currentLabel.id !== label.id),
   ]);
 }
 
-function sortJobLabels(labels: readonly JobLabel[]) {
-  return [...labels].sort(compareJobLabels);
+function sortLabels(labels: readonly Label[]) {
+  return [...labels].sort(compareLabels);
 }
 
-function compareJobLabels(left: JobLabel, right: JobLabel) {
+function compareLabels(left: Label, right: Label) {
   const nameOrder = left.name.localeCompare(right.name);
 
   return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
 }
 
-function getJobLabelsKey(labels: readonly JobLabel[]) {
+function getLabelsKey(labels: readonly Label[]) {
   return labels.map((label) => `${label.id}:${label.name}`).join("|");
 }

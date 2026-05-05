@@ -1,18 +1,16 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
 import {
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SiteGeocodingFailedError,
-} from "@task-tracker/jobs-core";
-import type { ServiceAreaIdType, SiteIdType } from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
 import type { ReactNode } from "react";
 
-import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
-
 import { SitesCreateSheet } from "./sites-create-sheet";
-import { createSiteMutationAtom } from "./sites-state";
+import { createSiteMutationAtom, sitesOptionsStateAtom } from "./sites-state";
 
 type AsyncMutationMock = (...args: unknown[]) => Promise<unknown>;
 type AtomSetterMock = (atom: unknown) => unknown;
@@ -117,11 +115,9 @@ describe("sites create sheet", () => {
         return mockedCreateResult;
       }
 
-      if (atom === jobsOptionsStateAtom) {
+      if (atom === sitesOptionsStateAtom) {
         return {
           data: {
-            contacts: [],
-            members: [],
             serviceAreas: [
               {
                 id: serviceAreaId,

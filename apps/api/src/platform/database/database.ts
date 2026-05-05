@@ -17,13 +17,13 @@ export interface AppDatabaseService {
 }
 
 export class AppDatabaseUrl extends Context.Tag(
-  "@task-tracker/platform/database/AppDatabaseUrl"
+  "@ceird/platform/database/AppDatabaseUrl"
 )<AppDatabaseUrl, string>() {}
 
 export const AppDatabaseUrlLive = Layer.effect(AppDatabaseUrl, nodeDatabaseUrl);
 
 export class AppDatabase extends Effect.Service<AppDatabase>()(
-  "@task-tracker/platform/database/AppDatabase",
+  "@ceird/platform/database/AppDatabase",
   {
     scoped: Effect.gen(function* AppDatabaseLiveEffect() {
       const databaseUrl = yield* AppDatabaseUrl;
@@ -79,7 +79,7 @@ export interface AppEffectDrizzleService {
 }
 
 export const AppEffectDrizzle = Context.GenericTag<AppEffectDrizzleService>(
-  "@task-tracker/platform/database/AppEffectDrizzle"
+  "@ceird/platform/database/AppEffectDrizzle"
 );
 
 export const AppEffectDrizzleLive = Layer.effect(
@@ -89,14 +89,21 @@ export const AppEffectDrizzleLive = Layer.effect(
 
 export const makeAppEffectSqlRuntimeLive = <Error, Requirements>(
   appDatabaseLive: Layer.Layer<AppDatabase, Error, Requirements>
-) => AppEffectSqlLive.pipe(Layer.provideMerge(appDatabaseLive));
+) =>
+  Layer.mergeAll(
+    appDatabaseLive,
+    AppEffectSqlLive.pipe(Layer.provide(appDatabaseLive))
+  );
 
 export const makeAppDatabaseRuntimeLive = <Error, Requirements>(
   appDatabaseLive: Layer.Layer<AppDatabase, Error, Requirements>
 ) => {
   const appEffectSqlRuntimeLive = makeAppEffectSqlRuntimeLive(appDatabaseLive);
 
-  return AppEffectDrizzleLive.pipe(Layer.provideMerge(appEffectSqlRuntimeLive));
+  return Layer.mergeAll(
+    appEffectSqlRuntimeLive,
+    AppEffectDrizzleLive.pipe(Layer.provide(appEffectSqlRuntimeLive))
+  );
 };
 
 export const AppEffectSqlRuntimeLive =

@@ -1,4 +1,9 @@
 import {
+  isAdministrativeOrganizationRole,
+  isInternalOrganizationRole,
+} from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
+import {
   Activity01Icon,
   Briefcase01Icon,
   CommandIcon,
@@ -6,11 +11,6 @@ import {
   Location01Icon,
 } from "@hugeicons/core-free-icons";
 import type { HugeiconsIcon } from "@hugeicons/react";
-import {
-  isAdministrativeOrganizationRole,
-  isInternalOrganizationRole,
-} from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 import type * as React from "react";
 
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];

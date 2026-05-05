@@ -1,6 +1,7 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { UserId as UserIdType } from "@ceird/identity-core";
+import type { SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { SiteIdType, UserIdType } from "@task-tracker/jobs-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
@@ -38,7 +39,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
   };
 });
 
-vi.mock("#/features/jobs/jobs-server", () => ({
+vi.mock("#/features/api/app-api-server", () => ({
   getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
 }));
 
@@ -87,9 +88,6 @@ describe("sites route loader", () => {
         })
       ).resolves.toStrictEqual({
         options: {
-          contacts: [],
-          labels: [],
-          members: [],
           serviceAreas: [],
           sites: [],
         },
@@ -140,9 +138,6 @@ describe("sites route loader", () => {
         <SitesRouteContent
           activeOrganizationId={organizationId}
           options={{
-            contacts: [],
-            labels: [],
-            members: [],
             serviceAreas: [],
             sites: [
               {

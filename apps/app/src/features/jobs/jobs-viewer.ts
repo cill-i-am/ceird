@@ -1,19 +1,19 @@
+import { isInternalOrganizationRole } from "@ceird/identity-core";
+import type { JobStatus } from "@ceird/jobs-core";
+
 import {
-  isAdministrativeOrganizationRole,
-  isExternalOrganizationRole,
-  isInternalOrganizationRole,
-} from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
-import { UserId } from "@task-tracker/jobs-core";
-import type { JobStatus, UserIdType } from "@task-tracker/jobs-core";
-import { ParseResult } from "effect";
+  decodeOrganizationViewerUserId,
+  hasOrganizationElevatedAccess,
+  isExternalOrganizationViewer,
+} from "#/features/organizations/organization-viewer";
+import type {
+  OrganizationViewer,
+  OrganizationViewerRole,
+} from "#/features/organizations/organization-viewer";
 
-export type JobsViewerRole = OrganizationRole;
+export type JobsViewerRole = OrganizationViewerRole;
 
-export interface JobsViewer {
-  readonly role: JobsViewerRole;
-  readonly userId: UserIdType;
-}
+export type JobsViewer = OrganizationViewer;
 
 const ELEVATED_TRANSITION_OPTIONS: Readonly<
   Record<JobStatus, readonly JobStatus[]>
@@ -40,13 +40,13 @@ export const MEMBER_TRANSITION_OPTIONS: Readonly<
 const NO_TRANSITION_OPTIONS: readonly JobStatus[] = [];
 
 export function hasJobsElevatedAccess(role: JobsViewerRole): boolean {
-  return isAdministrativeOrganizationRole(role);
+  return hasOrganizationElevatedAccess(role);
 }
 
 export function isExternalJobsViewer(
   viewer: Pick<JobsViewer, "role">
 ): boolean {
-  return isExternalOrganizationRole(viewer.role);
+  return isExternalOrganizationViewer(viewer);
 }
 
 export function canViewOrganizationJobs(
@@ -67,7 +67,7 @@ export function canCommentOnJob(viewer: Pick<JobsViewer, "role">): boolean {
 
 export function hasAssignedJobAccess(
   viewer: JobsViewer,
-  assigneeId: UserIdType | undefined
+  assigneeId: JobsViewer["userId"] | undefined
 ): boolean {
   return (
     isInternalOrganizationRole(viewer.role) &&
@@ -78,7 +78,7 @@ export function hasAssignedJobAccess(
 export function getAvailableJobTransitions(
   viewer: JobsViewer,
   job: {
-    readonly assigneeId?: UserIdType | undefined;
+    readonly assigneeId?: JobsViewer["userId"] | undefined;
     readonly status: JobStatus;
   }
 ): readonly JobStatus[] {
@@ -91,6 +91,6 @@ export function getAvailableJobTransitions(
     : NO_TRANSITION_OPTIONS;
 }
 
-export function decodeJobsViewerUserId(input: unknown): UserIdType {
-  return ParseResult.decodeUnknownSync(UserId)(input);
+export function decodeJobsViewerUserId(input: unknown): JobsViewer["userId"] {
+  return decodeOrganizationViewerUserId(input);
 }

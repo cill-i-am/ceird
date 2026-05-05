@@ -20,7 +20,7 @@ export interface AuthenticationEmailSchedulerService {
 }
 
 export class AuthenticationEmailScheduler extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthenticationEmailScheduler"
+  "@ceird/domains/identity/authentication/AuthenticationEmailScheduler"
 )<AuthenticationEmailScheduler, AuthenticationEmailSchedulerService>() {}
 
 export const AuthenticationEmailSchedulerLive = Layer.effect(

@@ -1,5 +1,5 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 

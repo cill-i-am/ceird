@@ -1,8 +1,8 @@
-import { SiteGeocodingFailedError } from "@task-tracker/jobs-core";
-import type { CreateSiteInput } from "@task-tracker/jobs-core";
+import { SiteGeocodingFailedError } from "@ceird/sites-core";
+import type { CreateSiteInput } from "@ceird/sites-core";
 import { ConfigProvider, Effect } from "effect";
 
-import { makeGoogleSiteGeocoder, SiteGeocoder } from "./site-geocoder.js";
+import { makeGoogleSiteGeocoder, SiteGeocoder } from "../sites/geocoder.js";
 
 const FAILED_MESSAGE =
   "We could not locate that site address. Check the Eircode and address details.";

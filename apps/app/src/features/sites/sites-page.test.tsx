@@ -1,11 +1,11 @@
-import { RegistryProvider } from "@effect-atom/atom-react";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { UserId as UserIdType } from "@ceird/identity-core";
 import type {
-  JobOptionsResponse,
   ServiceAreaIdType,
   SiteIdType,
-  UserIdType,
-} from "@task-tracker/jobs-core";
+  SitesOptionsResponse,
+} from "@ceird/sites-core";
+import { RegistryProvider } from "@effect-atom/atom-react";
 import {
   fireEvent,
   render,
@@ -17,12 +17,9 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
-import {
-  jobsOptionsStateAtom,
-  seedJobsOptionsState,
-} from "#/features/jobs/jobs-state";
 
 import { SitesPage } from "./sites-page";
+import { seedSitesOptionsState, sitesOptionsStateAtom } from "./sites-state";
 
 const serviceAreaId =
   "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
@@ -30,10 +27,7 @@ const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const userId = "user_123" as UserIdType;
 const organizationId = decodeOrganizationId("org_123");
 
-const options: JobOptionsResponse = {
-  contacts: [],
-  labels: [],
-  members: [],
+const options: SitesOptionsResponse = {
   serviceAreas: [
     {
       id: serviceAreaId,
@@ -186,7 +180,7 @@ function renderSitesPage({
   role = "owner",
   withCommandBar = false,
 }: {
-  readonly options?: JobOptionsResponse;
+  readonly options?: SitesOptionsResponse;
   readonly role?: "owner" | "admin" | "member";
   readonly withCommandBar?: boolean;
 } = {}) {
@@ -194,8 +188,8 @@ function renderSitesPage({
     <RegistryProvider
       initialValues={[
         [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(organizationId, pageOptions),
+          sitesOptionsStateAtom,
+          seedSitesOptionsState(organizationId, pageOptions),
         ],
       ]}
     >

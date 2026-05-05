@@ -1,71 +1,60 @@
-import { OrganizationId as IdentityOrganizationId } from "@task-tracker/identity-core";
-import type { OrganizationId as OrganizationIdType } from "@task-tracker/identity-core";
+import {
+  OrganizationId as IdentityOrganizationId,
+  UserId as IdentityUserId,
+} from "@ceird/identity-core";
+import type {
+  OrganizationId as OrganizationIdType,
+  UserId as UserIdType,
+} from "@ceird/identity-core";
 import { Schema } from "effect";
 
 export const OrganizationId = IdentityOrganizationId;
 export type OrganizationId = OrganizationIdType;
 
-export const UserId = Schema.NonEmptyString.pipe(
-  Schema.brand("@task-tracker/jobs-core/UserId")
-);
-export type UserId = Schema.Schema.Type<typeof UserId>;
+export const UserId = IdentityUserId;
+export type UserId = UserIdType;
 
 export const WorkItemId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/WorkItemId")
+  Schema.brand("@ceird/jobs-core/WorkItemId")
 );
 export type WorkItemId = Schema.Schema.Type<typeof WorkItemId>;
 
-export const ServiceAreaId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/ServiceAreaId")
-);
-export type ServiceAreaId = Schema.Schema.Type<typeof ServiceAreaId>;
-
 export const RateCardId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/RateCardId")
+  Schema.brand("@ceird/jobs-core/RateCardId")
 );
 export type RateCardId = Schema.Schema.Type<typeof RateCardId>;
 
 export const RateCardLineId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/RateCardLineId")
+  Schema.brand("@ceird/jobs-core/RateCardLineId")
 );
 export type RateCardLineId = Schema.Schema.Type<typeof RateCardLineId>;
 
-export const SiteId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/SiteId")
-);
-export type SiteId = Schema.Schema.Type<typeof SiteId>;
-
 export const ContactId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/ContactId")
+  Schema.brand("@ceird/jobs-core/ContactId")
 );
 export type ContactId = Schema.Schema.Type<typeof ContactId>;
 
 export const CommentId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/CommentId")
+  Schema.brand("@ceird/jobs-core/CommentId")
 );
 export type CommentId = Schema.Schema.Type<typeof CommentId>;
 
 export const ActivityId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/ActivityId")
+  Schema.brand("@ceird/jobs-core/ActivityId")
 );
 export type ActivityId = Schema.Schema.Type<typeof ActivityId>;
 
 export const VisitId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/VisitId")
+  Schema.brand("@ceird/jobs-core/VisitId")
 );
 export type VisitId = Schema.Schema.Type<typeof VisitId>;
 
-export const JobLabelId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/JobLabelId")
-);
-export type JobLabelId = Schema.Schema.Type<typeof JobLabelId>;
-
 export const JobCollaboratorId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/JobCollaboratorId")
+  Schema.brand("@ceird/jobs-core/JobCollaboratorId")
 );
 export type JobCollaboratorId = Schema.Schema.Type<typeof JobCollaboratorId>;
 
 export const CostLineId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/CostLineId")
+  Schema.brand("@ceird/jobs-core/CostLineId")
 );
 export type CostLineId = Schema.Schema.Type<typeof CostLineId>;

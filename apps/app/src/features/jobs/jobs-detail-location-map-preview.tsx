@@ -1,10 +1,8 @@
 "use client";
-
 import * as React from "react";
 
 import { Skeleton } from "#/components/ui/skeleton";
-
-import type { SiteLocationLike } from "./jobs-location";
+import type { SiteLocationLike } from "#/features/sites/site-location";
 
 const JobsDetailLocationMapPreviewCanvas = React.lazy(async () => {
   const module = await import("./jobs-detail-location-map-preview-canvas");

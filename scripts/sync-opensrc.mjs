@@ -9,7 +9,7 @@ if (process.env.CI === "true") {
   process.exit(0);
 }
 
-if (process.env.TASK_TRACKER_SANDBOX === "1") {
+if (process.env.CEIRD_SANDBOX === "1") {
   console.log("Skipping opensrc sync inside sandbox containers.");
   process.exit(0);
 }

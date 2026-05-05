@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 export const SANDBOX_COMMAND_ERROR_TAG =
-  "@task-tracker/sandbox-cli/SandboxCommandError" as const;
+  "@ceird/sandbox-cli/SandboxCommandError" as const;
 
 export class SandboxCommandError extends Schema.TaggedError<SandboxCommandError>()(
   SANDBOX_COMMAND_ERROR_TAG,

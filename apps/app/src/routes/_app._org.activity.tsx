@@ -1,12 +1,9 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import type {
   JobMemberOptionsResponse,
   OrganizationActivityListResponse,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 
 import {
   decodeActivitySearch,

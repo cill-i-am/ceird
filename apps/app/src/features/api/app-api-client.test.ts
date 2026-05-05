@@ -1,29 +1,33 @@
+import { JOB_NOT_FOUND_ERROR_TAG, JobNotFoundError } from "@ceird/jobs-core";
 import type {
-  CreateSiteResponse,
   JobDetailResponse,
   JobListResponse,
-  SitesOptionsResponse,
-  SiteIdType,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import {
-  JOB_NOT_FOUND_ERROR_TAG,
-  JobNotFoundError,
-} from "@task-tracker/jobs-core";
+  LABEL_NOT_FOUND_ERROR_TAG,
+  LabelNotFoundError,
+} from "@ceird/labels-core";
+import type { LabelIdType } from "@ceird/labels-core";
+import type {
+  CreateSiteResponse,
+  SiteIdType,
+  SitesOptionsResponse,
+} from "@ceird/sites-core";
 import { Effect, Either } from "effect";
 
 import {
-  makeBrowserJobsClient,
-  provideBrowserJobsHttp,
-  runBrowserJobsRequest,
-  runJobsClient,
-} from "./jobs-client";
+  makeBrowserAppApiClient,
+  provideBrowserAppApiHttp,
+  runBrowserAppApiRequest,
+  runAppApiClient,
+} from "#/features/api/app-api-client";
 import {
-  JOBS_API_ORIGIN_RESOLUTION_ERROR_TAG,
-  JOBS_REQUEST_ERROR_TAG,
-  normalizeJobsError,
-} from "./jobs-errors";
+  APP_API_ORIGIN_RESOLUTION_ERROR_TAG,
+  APP_API_REQUEST_ERROR_TAG,
+  normalizeAppApiError,
+} from "#/features/api/app-api-errors";
 
 const listResponse: JobListResponse = {
   items: [
@@ -86,7 +90,7 @@ const siteOptionsResponse: SitesOptionsResponse = {
   sites: [createSiteResponse],
 };
 
-describe("jobs client", () => {
+describe("app API client", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -99,9 +103,9 @@ describe("jobs client", () => {
       .mockResolvedValue(Response.json(listResponse));
 
     await expect(
-      runJobsClient(
+      runAppApiClient(
         {
-          requestOrigin: "https://agent-one.app.task-tracker.localhost:1355",
+          requestOrigin: "https://agent-one.app.ceird.localhost:1355",
           cookie: "better-auth.session_token=session-token",
         },
         "JobsServer.test.listJobs",
@@ -111,9 +115,7 @@ describe("jobs client", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe(
-      "https://agent-one.api.task-tracker.localhost:1355/jobs"
-    );
+    expect(String(url)).toBe("https://agent-one.api.ceird.localhost:1355/jobs");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
@@ -125,8 +127,8 @@ describe("jobs client", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(detailResponse));
 
-    const client = await makeBrowserJobsClient("http://127.0.0.1:3000").pipe(
-      provideBrowserJobsHttp,
+    const client = await makeBrowserAppApiClient("http://127.0.0.1:3000").pipe(
+      provideBrowserAppApiHttp,
       Effect.runPromise
     );
 
@@ -138,7 +140,7 @@ describe("jobs client", () => {
               "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
           },
         })
-        .pipe(provideBrowserJobsHttp, Effect.runPromise)
+        .pipe(provideBrowserAppApiHttp, Effect.runPromise)
     ).resolves.toStrictEqual(detailResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
@@ -150,13 +152,13 @@ describe("jobs client", () => {
     expect(requestInit?.credentials).toBe("include");
   }, 1000);
 
-  it("creates standalone sites through the shared jobs API client", async () => {
+  it("creates standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(createSiteResponse, { status: 201 }));
 
     await expect(
-      runJobsClient(
+      runAppApiClient(
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
@@ -181,13 +183,13 @@ describe("jobs client", () => {
     expect(requestInit?.method).toBe("POST");
   }, 1000);
 
-  it("loads standalone site options through the shared jobs API client", async () => {
+  it("loads standalone site options through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(siteOptionsResponse));
 
     await expect(
-      runJobsClient(
+      runAppApiClient(
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
@@ -202,10 +204,10 @@ describe("jobs client", () => {
     expect(requestInit?.method).toBe("GET");
   }, 1000);
 
-  it("does not invoke fetch when the jobs API origin cannot be resolved", async () => {
+  it("does not invoke fetch when the Ceird API origin cannot be resolved", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    const capturedError = await runJobsClient(
+    const capturedError = await runAppApiClient(
       {},
       "JobsServer.test.unresolvedOrigin",
       (client) => client.jobs.listJobs({ urlParams: {} })
@@ -215,16 +217,16 @@ describe("jobs client", () => {
     );
 
     expect(capturedError).toMatchObject({
-      _tag: JOBS_API_ORIGIN_RESOLUTION_ERROR_TAG,
-      message: "Cannot resolve the jobs API origin.",
+      _tag: APP_API_ORIGIN_RESOLUTION_ERROR_TAG,
+      message: "Cannot resolve the Ceird API origin.",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 
-  it("normalizes transport failures into a stable jobs request error", async () => {
+  it("normalizes transport failures into a stable app API request error", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
 
-    const capturedError = await runJobsClient(
+    const capturedError = await runAppApiClient(
       {
         requestOrigin: "http://127.0.0.1:3000",
       },
@@ -236,7 +238,7 @@ describe("jobs client", () => {
     );
 
     expect(capturedError).toMatchObject({
-      _tag: JOBS_REQUEST_ERROR_TAG,
+      _tag: APP_API_REQUEST_ERROR_TAG,
       message: expect.stringContaining("Transport"),
     });
   }, 1000);
@@ -249,7 +251,7 @@ describe("jobs client", () => {
       .mockRejectedValueOnce(new Error("network down"));
 
     await expect(
-      runBrowserJobsRequest("JobsBrowser.test.listJobs", (client) =>
+      runBrowserAppApiRequest("JobsBrowser.test.listJobs", (client) =>
         client.jobs.listJobs({ urlParams: {} })
       ).pipe(Effect.runPromise)
     ).resolves.toStrictEqual(listResponse);
@@ -257,7 +259,7 @@ describe("jobs client", () => {
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];
     expect(requestInit?.credentials).toBe("include");
 
-    const failure = await runBrowserJobsRequest(
+    const failure = await runBrowserAppApiRequest(
       "JobsBrowser.test.listJobs.failure",
       (client) => client.jobs.listJobs({ urlParams: {} })
     ).pipe(Effect.either, Effect.runPromise);
@@ -266,7 +268,7 @@ describe("jobs client", () => {
       throw new Error("Expected browser request to fail");
     }
     expect(failure.left).toMatchObject({
-      _tag: JOBS_REQUEST_ERROR_TAG,
+      _tag: APP_API_REQUEST_ERROR_TAG,
       message: expect.stringContaining("Transport"),
     });
   }, 1000);
@@ -277,10 +279,23 @@ describe("jobs client", () => {
       workItemId: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
     });
 
-    expect(normalizeJobsError(domainError)).toBe(domainError);
-    expect(normalizeJobsError(domainError)).toMatchObject({
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
       _tag: JOB_NOT_FOUND_ERROR_TAG,
       message: "Job not found",
+    });
+  }, 1000);
+
+  it("preserves labels-core tagged domain errors", () => {
+    const domainError = new LabelNotFoundError({
+      labelId: "44444444-4444-4444-8444-444444444444" as LabelIdType,
+      message: "Label not found",
+    });
+
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
+      _tag: LABEL_NOT_FOUND_ERROR_TAG,
+      message: "Label not found",
     });
   }, 1000);
 });

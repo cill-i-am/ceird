@@ -1,4 +1,4 @@
-import { validateSandboxName } from "@task-tracker/sandbox-core";
+import { validateSandboxName } from "@ceird/sandbox-core";
 
 import { makePortlessAliasCommands } from "./portless.js";
 
@@ -20,7 +20,7 @@ describe("makePortlessAliasCommands()", () => {
           "exec",
           "portless",
           "alias",
-          "agent-one.app.task-tracker",
+          "agent-one.app.ceird",
           "4300",
           "--force",
         ],
@@ -29,7 +29,7 @@ describe("makePortlessAliasCommands()", () => {
           "exec",
           "portless",
           "alias",
-          "agent-one.api.task-tracker",
+          "agent-one.api.ceird",
           "4301",
           "--force",
         ],
@@ -41,7 +41,7 @@ describe("makePortlessAliasCommands()", () => {
           "portless",
           "alias",
           "--remove",
-          "agent-one.app.task-tracker",
+          "agent-one.app.ceird",
         ],
         [
           "pnpm",
@@ -49,7 +49,7 @@ describe("makePortlessAliasCommands()", () => {
           "portless",
           "alias",
           "--remove",
-          "agent-one.api.task-tracker",
+          "agent-one.api.ceird",
         ],
       ],
     });

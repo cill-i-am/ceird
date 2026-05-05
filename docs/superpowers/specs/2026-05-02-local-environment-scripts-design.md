@@ -76,8 +76,8 @@ The names describe the repository workflow rather than a specific agent or UI.
    noop email delivery:
 
 ```dotenv
-AUTH_EMAIL_FROM=auth@task-tracker.localhost
-AUTH_EMAIL_FROM_NAME=Task Tracker
+AUTH_EMAIL_FROM=auth@ceird.localhost
+AUTH_EMAIL_FROM_NAME=Ceird
 AUTH_EMAIL_TRANSPORT=noop
 ```
 

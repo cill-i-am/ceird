@@ -11,7 +11,7 @@ describe("auth split shell", () => {
         context={
           <AuthContextPanel
             badge="Invitation flow"
-            kicker="Task Tracker"
+            kicker="Ceird"
             title="Keep the invited account moving."
             description="Review the invitation details and continue without losing the handoff."
           >

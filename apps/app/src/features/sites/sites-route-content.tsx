@@ -1,14 +1,12 @@
+import type { OrganizationId } from "@ceird/identity-core";
+import type { SitesOptionsResponse } from "@ceird/sites-core";
 import { RegistryProvider } from "@effect-atom/atom-react";
-import type { OrganizationId } from "@task-tracker/identity-core";
-import type { JobOptionsResponse } from "@task-tracker/jobs-core";
 import type { ReactNode } from "react";
 
-import {
-  jobsOptionsStateAtom,
-  seedJobsOptionsState,
-} from "#/features/jobs/jobs-state";
-import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { SitesPage } from "#/features/sites/sites-page";
+
+import { seedSitesOptionsState, sitesOptionsStateAtom } from "./sites-state";
 
 export function SitesRouteContent({
   activeOrganizationId,
@@ -18,16 +16,16 @@ export function SitesRouteContent({
 }: {
   readonly activeOrganizationId: OrganizationId;
   readonly children?: ReactNode;
-  readonly options: JobOptionsResponse;
-  readonly viewer: JobsViewer;
+  readonly options: SitesOptionsResponse;
+  readonly viewer: OrganizationViewer;
 }) {
   return (
     <RegistryProvider
       key={activeOrganizationId}
       initialValues={[
         [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(activeOrganizationId, options),
+          sitesOptionsStateAtom,
+          seedSitesOptionsState(activeOrganizationId, options),
         ],
       ]}
     >

@@ -10,7 +10,7 @@ import {
 import { SandboxRuntimeAssets } from "../runtime-spec.js";
 
 export const SANDBOX_REGISTRY_ERROR_TAG =
-  "@task-tracker/sandbox-core/SandboxRegistryError" as const;
+  "@ceird/sandbox-core/SandboxRegistryError" as const;
 
 export class SandboxRegistryError extends Schema.TaggedError<SandboxRegistryError>()(
   SANDBOX_REGISTRY_ERROR_TAG,

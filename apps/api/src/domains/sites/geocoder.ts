@@ -3,21 +3,21 @@ import {
   SiteGeocodingFailedError,
   SiteLatitudeSchema,
   SiteLongitudeSchema,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
 import type {
   CreateSiteInput,
   IsoDateTimeStringType,
   SiteGeocodingProvider,
   SiteLatitude,
   SiteLongitude,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
 import { Duration, Effect, Layer, Schema } from "effect";
 
 import {
   loadGoogleGeocodingRequestTimeoutMs,
   loadGoogleMapsApiKey,
   loadSiteGeocodingConfig,
-} from "./site-geocoding-config.js";
+} from "./geocoding-config.js";
 
 const GOOGLE_GEOCODING_URL =
   "https://maps.googleapis.com/maps/api/geocode/json";
@@ -364,7 +364,7 @@ export function makeGoogleSiteGeocoder(
       const decoded = yield* decodeGoogleGeocodeResponse(
         requestResult.payload
       ).pipe(
-        Effect.catchAll((cause) =>
+        Effect.catchTag("ParseError", (cause) =>
           logAndFailSiteGeocoding(input, {
             cause,
             reason: "response_parse_failed",
@@ -397,7 +397,7 @@ export function makeGoogleSiteGeocoder(
 
       const location = yield* decodeGoogleGeocodeResult(firstResult).pipe(
         Effect.map((result) => result.geometry.location),
-        Effect.catchAll((cause) =>
+        Effect.catchTag("ParseError", (cause) =>
           logAndFailSiteGeocoding(input, {
             cause,
             providerStatus: decoded.status,
@@ -419,7 +419,7 @@ export function makeGoogleSiteGeocoder(
 }
 
 export class SiteGeocoder extends Effect.Service<SiteGeocoder>()(
-  "@task-tracker/domains/jobs/SiteGeocoder",
+  "@ceird/domains/sites/SiteGeocoder",
   {
     accessors: true,
     effect: Effect.gen(function* SiteGeocoderLive() {

@@ -7,15 +7,15 @@ describe("sandbox registry record", () => {
     const value = Schema.decodeUnknownSync(SandboxRegistryRecord)({
       sandboxId: "abc123def456",
       sandboxName: "agent-one",
-      composeProjectName: "tt-sbx-agent-one",
+      composeProjectName: "ceird-sbx-agent-one",
       hostnameSlug: "agent-one",
-      repoRoot: "/Users/me/task-tracker",
-      worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+      repoRoot: "/Users/me/ceird",
+      worktreePath: "/Users/me/ceird/.worktrees/agent-one",
       betterAuthSecret: "0123456789abcdef0123456789abcdef",
       runtimeAssets: {
-        devImage: "tt-sbx-task-tracker-dev:123456789abc",
-        nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-        pnpmStoreVolume: "tt-sbx-pnpm-store",
+        devImage: "ceird-sbx-ceird-dev:123456789abc",
+        nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+        pnpmStoreVolume: "ceird-sbx-pnpm-store",
       },
       aliasesHealthy: true,
       ports: { app: 4300, api: 4301, postgres: 5439 },
@@ -26,7 +26,7 @@ describe("sandbox registry record", () => {
       },
     });
 
-    expect(value.composeProjectName).toBe("tt-sbx-agent-one");
+    expect(value.composeProjectName).toBe("ceird-sbx-agent-one");
     expect(value.sandboxName).toBe("agent-one");
     expect(value.status).toBe("ready");
   }, 10_000);
@@ -36,15 +36,15 @@ describe("sandbox registry record", () => {
       Schema.decodeUnknownSync(SandboxRegistryRecord)({
         sandboxId: "sandbox alpha",
         sandboxName: "agent-one",
-        composeProjectName: "tt-sbx-agent-one",
+        composeProjectName: "ceird-sbx-agent-one",
         hostnameSlug: "agent-one",
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         betterAuthSecret: "0123456789abcdef0123456789abcdef",
         runtimeAssets: {
-          devImage: "tt-sbx-task-tracker-dev:123456789abc",
-          nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-          pnpmStoreVolume: "tt-sbx-pnpm-store",
+          devImage: "ceird-sbx-ceird-dev:123456789abc",
+          nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+          pnpmStoreVolume: "ceird-sbx-pnpm-store",
         },
         aliasesHealthy: true,
         ports: { app: 4300, api: 4301, postgres: 5439 },

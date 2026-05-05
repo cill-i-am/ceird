@@ -1,8 +1,6 @@
-import { createIsomorphicFn } from "@tanstack/react-start";
 import type {
   JobDetailResponse,
   JobExternalMemberOptionsResponse,
-  JobLabelsResponse,
   JobListItem,
   JobListQuery,
   JobListResponse,
@@ -10,14 +8,13 @@ import type {
   JobOptionsResponse,
   OrganizationActivityListResponse,
   OrganizationActivityQuery,
-  SitesOptionsResponse,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import { createIsomorphicFn } from "@tanstack/react-start";
 import { Effect } from "effect";
 
-import { makeBrowserJobsClient, provideBrowserJobsHttp } from "./jobs-client";
-import type { JobsApiClient } from "./jobs-client";
-import { normalizeJobsError } from "./jobs-errors";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import type { AppApiClient } from "#/features/api/app-api-client";
 
 const importJobsServerSsr = () => import("./jobs-server-ssr");
 
@@ -61,12 +58,6 @@ const getCurrentServerJobOptionsIsomorphic = createIsomorphicFn()
   })
   .client(() => getCurrentBrowserJobOptions());
 
-const getCurrentServerJobLabelsIsomorphic = createIsomorphicFn()
-  .server(async () => {
-    const { getCurrentServerJobLabelsDirect } = await importJobsServerSsr();
-    return await getCurrentServerJobLabelsDirect();
-  })
-  .client(() => getCurrentBrowserJobLabels());
 const getCurrentServerJobMemberOptionsIsomorphic = createIsomorphicFn()
   .server(async () => {
     const { getCurrentServerJobMemberOptionsDirect } =
@@ -83,31 +74,17 @@ const getCurrentServerJobExternalMemberOptionsIsomorphic = createIsomorphicFn()
   })
   .client(() => getCurrentBrowserJobExternalMemberOptions());
 
-const getCurrentServerSiteOptionsIsomorphic = createIsomorphicFn()
-  .server(async () => {
-    const { getCurrentServerSiteOptionsDirect } = await importJobsServerSsr();
-    return await getCurrentServerSiteOptionsDirect();
-  })
-  .client(() => getCurrentBrowserSiteOptions());
-
-function runBrowserJobsClient<Response>(
-  execute: (client: JobsApiClient) => Effect.Effect<Response, unknown>
+function runBrowserAppApiClient<Response>(
+  operation: string,
+  execute: (client: AppApiClient) => Effect.Effect<Response, unknown>
 ): Promise<Response> {
-  return Effect.gen(function* () {
-    const client = yield* makeBrowserJobsClient();
-
-    return yield* execute(client);
-  }).pipe(
-    Effect.mapError(normalizeJobsError),
-    provideBrowserJobsHttp,
-    Effect.runPromise
-  );
+  return Effect.runPromise(runBrowserAppApiRequest(operation, execute));
 }
 
 async function listCurrentBrowserJobs(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
-  return await runBrowserJobsClient((client) =>
+  return await runBrowserAppApiClient("JobsClient.listJobs", (client) =>
     client.jobs.listJobs({
       urlParams: query,
     })
@@ -142,43 +119,41 @@ async function listAllCurrentBrowserJobs(
 async function listCurrentBrowserOrganizationActivity(
   query: OrganizationActivityQuery = {}
 ): Promise<OrganizationActivityListResponse> {
-  return await runBrowserJobsClient((client) =>
-    client.jobs.listOrganizationActivity({
-      urlParams: query,
-    })
+  return await runBrowserAppApiClient(
+    "JobsClient.listOrganizationActivity",
+    (client) =>
+      client.jobs.listOrganizationActivity({
+        urlParams: query,
+      })
   );
 }
 
 async function getCurrentBrowserJobDetail(
   workItemId: WorkItemIdType
 ): Promise<JobDetailResponse> {
-  return await runBrowserJobsClient((client) =>
+  return await runBrowserAppApiClient("JobsClient.getJobDetail", (client) =>
     client.jobs.getJobDetail({ path: { workItemId } })
   );
 }
 
 async function getCurrentBrowserJobOptions(): Promise<JobOptionsResponse> {
-  return await runBrowserJobsClient((client) => client.jobs.getJobOptions());
-}
-
-async function getCurrentBrowserJobLabels(): Promise<JobLabelsResponse> {
-  return await runBrowserJobsClient((client) => client.jobs.listJobLabels());
+  return await runBrowserAppApiClient("JobsClient.getJobOptions", (client) =>
+    client.jobs.getJobOptions()
+  );
 }
 
 async function getCurrentBrowserJobMemberOptions(): Promise<JobMemberOptionsResponse> {
-  return await runBrowserJobsClient((client) =>
-    client.jobs.getJobMemberOptions()
+  return await runBrowserAppApiClient(
+    "JobsClient.getJobMemberOptions",
+    (client) => client.jobs.getJobMemberOptions()
   );
 }
 
 async function getCurrentBrowserJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
-  return await runBrowserJobsClient((client) =>
-    client.jobs.getJobExternalMemberOptions()
+  return await runBrowserAppApiClient(
+    "JobsClient.getJobExternalMemberOptions",
+    (client) => client.jobs.getJobExternalMemberOptions()
   );
-}
-
-async function getCurrentBrowserSiteOptions(): Promise<SitesOptionsResponse> {
-  return await runBrowserJobsClient((client) => client.sites.getSiteOptions());
 }
 
 export function listCurrentServerJobs(
@@ -209,18 +184,10 @@ export function getCurrentServerJobOptions(): Promise<JobOptionsResponse> {
   return getCurrentServerJobOptionsIsomorphic();
 }
 
-export function getCurrentServerJobLabels(): Promise<JobLabelsResponse> {
-  return getCurrentServerJobLabelsIsomorphic();
-}
-
 export function getCurrentServerJobMemberOptions(): Promise<JobMemberOptionsResponse> {
   return getCurrentServerJobMemberOptionsIsomorphic();
 }
 
 export function getCurrentServerJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
   return getCurrentServerJobExternalMemberOptionsIsomorphic();
-}
-
-export function getCurrentServerSiteOptions(): Promise<SitesOptionsResponse> {
-  return getCurrentServerSiteOptionsIsomorphic();
 }

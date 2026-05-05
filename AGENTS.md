@@ -65,7 +65,7 @@ Run the narrowest relevant checks while iterating, then broaden when the change
 touches shared behavior.
 
 - Use package filters such as `pnpm --filter app test`, `pnpm --filter api test`,
-  or `pnpm --filter @task-tracker/jobs-core test` for focused feedback.
+  or `pnpm --filter @ceird/jobs-core test` for focused feedback.
 - For cross-package or handoff-ready changes, prefer `pnpm check-types`,
   `pnpm test`, `pnpm lint`, and `pnpm format`.
 - For browser workflows that depend on auth cookies, API calls, or database
@@ -77,7 +77,7 @@ touches shared behavior.
 
 ## Stripe Projects CLI
 
-This repository is initialized for the Stripe project "task-tracker".
+This repository is initialized for the Stripe project "ceird".
 
 ## Tools used
 

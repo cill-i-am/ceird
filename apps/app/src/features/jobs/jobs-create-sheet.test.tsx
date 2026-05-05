@@ -1,13 +1,10 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import type {
-  ContactIdType,
-  ServiceAreaIdType,
-  SiteIdType,
-} from "@task-tracker/jobs-core";
+import type { ContactIdType } from "@ceird/jobs-core";
 import {
   SITE_NOT_FOUND_ERROR_TAG,
   SiteGeocodingFailedError,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";

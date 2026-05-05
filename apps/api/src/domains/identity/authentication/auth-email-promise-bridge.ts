@@ -63,7 +63,7 @@ const makeAuthEmailPromiseBridgeEffect = Effect.gen(
 );
 
 export class AuthEmailPromiseBridge extends Effect.Service<AuthEmailPromiseBridge>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailPromiseBridge",
+  "@ceird/domains/identity/authentication/AuthEmailPromiseBridge",
   {
     accessors: true,
     dependencies: [

@@ -1,16 +1,15 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
 import type {
-  CommentIdType,
   ActivityIdType,
-  JobDetailResponse,
+  CommentIdType,
   JobCollaboratorIdType,
-  JobLabelIdType,
-  JobSiteOption,
-  SiteIdType,
+  JobDetailResponse,
   UserIdType,
-  WorkItemIdType,
   VisitIdType,
-} from "@task-tracker/jobs-core";
+  WorkItemIdType,
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
@@ -36,9 +35,9 @@ const secondExternalUserId =
   "45454545-4545-4454-8454-454545454545" as UserIdType;
 const collaboratorId =
   "23232323-2323-4232-8232-232323232323" as JobCollaboratorIdType;
-const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
-const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
-const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as JobLabelIdType;
+const urgentLabelId = "99999999-9999-4999-8999-999999999999" as LabelIdType;
+const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as LabelIdType;
+const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as LabelIdType;
 
 const {
   mockedGetExternalMemberOptions,
@@ -73,7 +72,7 @@ const mockedRemoveLabel = vi.fn<AsyncMutationMock>();
 const mockedRefreshCollaborators = vi.fn<AsyncMutationMock>();
 const mockedAddCostLine = vi.fn<AsyncMutationMock>();
 const mockedUpdateCollaborator = vi.fn<AsyncMutationMock>();
-let lookupSiteById: Map<SiteIdType, JobSiteOption>;
+let lookupSiteById: Map<SiteIdType, SiteOption>;
 let collaboratorState: readonly ReturnType<typeof buildCollaborator>[];
 
 vi.mock("@tanstack/react-router", () => ({
@@ -774,7 +773,7 @@ describe("jobs detail sheet", () => {
       const user = userEvent.setup();
       renderDetailSheet(
         buildDetail({
-          labels: [buildJobLabel(waitingLabelId, "Waiting on PO")],
+          labels: [buildLabel(waitingLabelId, "Waiting on PO")],
         })
       );
 
@@ -1375,7 +1374,7 @@ describe("jobs detail sheet", () => {
 function buildDetail(overrides?: {
   readonly comments?: JobDetailResponse["comments"];
   readonly costs?: JobDetailResponse["costs"];
-  readonly labels?: ReturnType<typeof buildJobLabel>[];
+  readonly labels?: ReturnType<typeof buildLabel>[];
   readonly site?: JobDetailResponse["site"];
   readonly siteId?: SiteIdType | undefined;
   readonly status?: "blocked" | "in_progress" | "completed";
@@ -1428,7 +1427,7 @@ function buildDetail(overrides?: {
       id: workItemId,
       kind: "job" as const,
       labels: overrides?.labels ?? [
-        buildJobLabel(urgentLabelId, "Urgent callout"),
+        buildLabel(urgentLabelId, "Urgent callout"),
       ],
       priority: "medium" as const,
       siteId: overrides && "siteId" in overrides ? overrides.siteId : siteId,
@@ -1450,7 +1449,7 @@ function buildDetail(overrides?: {
   };
 }
 
-function buildSiteOption(): JobSiteOption {
+function buildSiteOption(): SiteOption {
   return {
     accessNotes: "Use the south gate and ring reception.",
     addressLine1: "1 Custom House Quay",
@@ -1496,7 +1495,7 @@ function buildCollaborator(
   };
 }
 
-function buildJobLabel(id: JobLabelIdType, name: string) {
+function buildLabel(id: LabelIdType, name: string) {
   return {
     createdAt: "2026-04-23T09:00:00.000Z",
     id,

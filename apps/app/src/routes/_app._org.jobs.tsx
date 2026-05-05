@@ -1,3 +1,13 @@
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import type {
+  JobContactOption,
+  JobDetailResponse,
+  JobListResponse,
+  JobOptionsResponse,
+  UserIdType,
+} from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
+import type { ServiceAreaOption, SiteOption } from "@ceird/sites-core";
 import {
   Outlet,
   createFileRoute,
@@ -5,20 +15,6 @@ import {
   useRouteContext,
   useRouterState,
 } from "@tanstack/react-router";
-import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
-import type {
-  JobContactOption,
-  JobDetailResponse,
-  JobLabel,
-  JobListResponse,
-  JobOptionsResponse,
-  JobSiteOption,
-  ServiceAreaOption,
-  UserIdType,
-} from "@task-tracker/jobs-core";
 
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
 import { decodeJobsSearch } from "#/features/jobs/jobs-search";
@@ -97,11 +93,14 @@ export async function loadJobsRouteData(
     role: activeRole,
     userId: resolvedOrganizationAccess.currentUserId,
   } satisfies JobsViewer;
+  const internalOptionsPromise = canUseInternalJobOptions(viewer)
+    ? getCurrentServerJobOptions()
+    : undefined;
   const list = await listPromise;
-  let options: JobOptionsResponse = EMPTY_JOBS_OPTIONS;
+  let options = EMPTY_JOBS_OPTIONS;
 
-  if (canUseInternalJobOptions(viewer)) {
-    options = await getCurrentServerJobOptions();
+  if (internalOptionsPromise) {
+    options = await internalOptionsPromise;
   } else if (isExternalJobsViewer(viewer)) {
     options = await loadExternalJobsScopedOptions(list);
   }
@@ -127,12 +126,12 @@ export function deriveExternalJobsScopedOptions(
   details: readonly JobDetailResponse[]
 ): JobOptionsResponse {
   const contactsById = new Map<JobContactOption["id"], JobContactOption>();
-  const labelsById = new Map<JobLabel["id"], JobLabel>();
+  const labelsById = new Map<Label["id"], Label>();
   const serviceAreasById = new Map<
     ServiceAreaOption["id"],
     ServiceAreaOption
   >();
-  const sitesById = new Map<JobSiteOption["id"], JobSiteOption>();
+  const sitesById = new Map<SiteOption["id"], SiteOption>();
 
   for (const detail of details) {
     for (const label of detail.job.labels) {

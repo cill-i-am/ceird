@@ -86,7 +86,7 @@ describe("AuthEmailSender", () => {
       recipientEmail: "person@example.com",
       recipientName: "Taylor Example",
       resetUrl:
-        "https://app.task-tracker.localhost:1355/reset-password?token=test-token",
+        "https://app.ceird.localhost:1355/reset-password?token=test-token",
     }).pipe(
       Effect.provide(
         Layer.succeed(AuthEmailTransport, {
@@ -120,7 +120,7 @@ describe("AuthEmailSender", () => {
       recipientEmail: "person@example.com",
       recipientName: "Taylor Example",
       resetUrl:
-        "https://app.task-tracker.localhost:1355/reset-password?token=test-token",
+        "https://app.ceird.localhost:1355/reset-password?token=test-token",
     }).pipe(
       Effect.provide(
         Layer.succeed(AuthEmailTransport, {
@@ -157,7 +157,7 @@ Create `apps/api/src/domains/identity/authentication/auth-email-errors.ts`:
 import { Schema } from "effect";
 
 export class AuthEmailConfigurationError extends Schema.TaggedError<AuthEmailConfigurationError>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailConfigurationError",
+  "@ceird/domains/identity/authentication/AuthEmailConfigurationError",
   {
     message: Schema.String,
     path: Schema.optional(Schema.String),
@@ -165,7 +165,7 @@ export class AuthEmailConfigurationError extends Schema.TaggedError<AuthEmailCon
 ) {}
 
 export class AuthEmailDeliveryError extends Schema.TaggedError<AuthEmailDeliveryError>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailDeliveryError",
+  "@ceird/domains/identity/authentication/AuthEmailDeliveryError",
   {
     message: Schema.String,
     provider: Schema.String,
@@ -174,7 +174,7 @@ export class AuthEmailDeliveryError extends Schema.TaggedError<AuthEmailDelivery
 ) {}
 
 export class PasswordResetDeliveryError extends Schema.TaggedError<PasswordResetDeliveryError>()(
-  "@task-tracker/domains/identity/authentication/PasswordResetDeliveryError",
+  "@ceird/domains/identity/authentication/PasswordResetDeliveryError",
   {
     message: Schema.String,
     recipientEmail: Schema.String,
@@ -207,7 +207,7 @@ export const loadAuthEmailConfig = Effect.gen(function* () {
     )
   );
   const fromName = yield* Config.string("AUTH_EMAIL_FROM_NAME").pipe(
-    Config.withDefault("Task Tracker")
+    Config.withDefault("Ceird")
   );
   const resendApiKey = yield* Config.string("RESEND_API_KEY").pipe(
     Config.mapError(
@@ -259,7 +259,7 @@ export interface TransportMessage {
 }
 
 export class AuthEmailTransport extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthEmailTransport"
+  "@ceird/domains/identity/authentication/AuthEmailTransport"
 )<
   AuthEmailTransport,
   {
@@ -270,7 +270,7 @@ export class AuthEmailTransport extends Context.Tag(
 >() {}
 
 export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailSender",
+  "@ceird/domains/identity/authentication/AuthEmailSender",
   {
     effect: Effect.gen(function* () {
       const transport = yield* AuthEmailTransport;
@@ -347,8 +347,8 @@ describe("makeResendAuthEmailTransport", () => {
     const sent: unknown[] = [];
     const transport = makeResendAuthEmailTransport({
       config: {
-        from: "auth@task-tracker.example.com",
-        fromName: "Task Tracker",
+        from: "auth@ceird.example.com",
+        fromName: "Ceird",
         resendApiKey: "test-key",
       },
       resend: {
@@ -372,7 +372,7 @@ describe("makeResendAuthEmailTransport", () => {
 
     expect(sent).toEqual([
       expect.objectContaining({
-        from: "Task Tracker <auth@task-tracker.example.com>",
+        from: "Ceird <auth@ceird.example.com>",
         to: "person@example.com",
         subject: "Reset your password",
       }),
@@ -382,8 +382,8 @@ describe("makeResendAuthEmailTransport", () => {
   it("maps resend failures into AuthEmailDeliveryError", async () => {
     const transport = makeResendAuthEmailTransport({
       config: {
-        from: "auth@task-tracker.example.com",
-        fromName: "Task Tracker",
+        from: "auth@ceird.example.com",
+        fromName: "Ceird",
         resendApiKey: "test-key",
       },
       resend: {

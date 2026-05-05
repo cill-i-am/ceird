@@ -1,6 +1,6 @@
 # Identity Core
 
-`@task-tracker/identity-core` contains shared identity and organization
+`@ceird/identity-core` contains shared identity and organization
 contracts used by the app, API, and jobs core package.
 
 ## Exports
@@ -18,9 +18,9 @@ contracts used by the app, API, and jobs core package.
 ## Commands
 
 ```bash
-pnpm --filter @task-tracker/identity-core test
-pnpm --filter @task-tracker/identity-core check-types
-pnpm --filter @task-tracker/identity-core build
+pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/identity-core check-types
+pnpm --filter @ceird/identity-core build
 ```
 
 ## Boundary

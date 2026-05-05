@@ -19,7 +19,7 @@ const repoRoot = path.resolve(
 );
 const scriptPath = path.join(repoRoot, "scripts/test-with-sandbox.mjs");
 const defaultSandboxUrlOutput =
-  '{"urls":{"postgres":"postgresql://postgres:postgres@127.0.0.1:5442/task_tracker"}}\n';
+  '{"urls":{"postgres":"postgresql://postgres:postgres@127.0.0.1:5442/ceird"}}\n';
 
 test("runs all tests with the current sandbox Postgres URL", async (t) => {
   const fixture = await createFixture();
@@ -34,7 +34,7 @@ test("runs all tests with the current sandbox Postgres URL", async (t) => {
       "pnpm sandbox:up",
       "pnpm --silent sandbox:url -- --format json",
       "pnpm test",
-      "API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5442/task_tracker",
+      "API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5442/ceird",
       "",
     ].join("\n")
   );
@@ -57,7 +57,7 @@ test("runs filtered API tests with extra Vitest arguments", async (t) => {
       "pnpm sandbox:up",
       "pnpm --silent sandbox:url -- --format json",
       "pnpm --filter api test -- src/domains/jobs/http.integration.test.ts",
-      "API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5442/task_tracker",
+      "API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5442/ceird",
       "",
     ].join("\n")
   );
@@ -99,7 +99,7 @@ for (const [name, failCommand, args] of [
 async function createFixture(options) {
   const sandboxUrlOutput = options?.sandboxUrlOutput ?? defaultSandboxUrlOutput;
   const tempDir = await mkdtemp(
-    path.join(os.tmpdir(), "task-tracker-test-with-sandbox-")
+    path.join(os.tmpdir(), "ceird-test-with-sandbox-")
   );
   const binDir = path.join(tempDir, "bin");
   const callLog = path.join(tempDir, "calls.log");

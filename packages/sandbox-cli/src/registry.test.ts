@@ -5,11 +5,11 @@ import path from "node:path";
 import {
   makeComposeProjectName,
   validateSandboxName,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import {
   SandboxRegistryError,
   SandboxRegistryRecord,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 import { Effect, Either, Schema } from "effect";
 
 import {
@@ -27,14 +27,12 @@ describe("registry paths", () => {
     const sandboxName = validateSandboxName("agent-one");
 
     expect(getSandboxStateDir(sandboxName)).toMatch(
-      /\.task-tracker\/sandboxes\/agent-one$/
+      /\.ceird\/sandboxes\/agent-one$/
     );
     expect(getComposeEnvFilePath(sandboxName)).toMatch(
-      /\.task-tracker\/sandboxes\/agent-one\/compose\.env$/
+      /\.ceird\/sandboxes\/agent-one\/compose\.env$/
     );
-    expect(getRegistryPath()).toMatch(
-      /\.task-tracker\/sandboxes\/registry\.json$/
-    );
+    expect(getRegistryPath()).toMatch(/\.ceird\/sandboxes\/registry\.json$/);
   }, 10_000);
 });
 
@@ -60,7 +58,7 @@ describe("readRegistry()", () => {
 
     const registryPath = path.join(
       tempHome,
-      ".task-tracker",
+      ".ceird",
       "sandboxes",
       "registry.json"
     );
@@ -95,9 +93,9 @@ describe("readRegistry()", () => {
       worktreePath: "/repo/.worktrees/agent-one",
       betterAuthSecret: "secret-alpha",
       runtimeAssets: {
-        devImage: "tt-sbx-task-tracker-dev:123456789abc",
-        nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-        pnpmStoreVolume: "tt-sbx-pnpm-store",
+        devImage: "ceird-sbx-ceird-dev:123456789abc",
+        nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+        pnpmStoreVolume: "ceird-sbx-pnpm-store",
       },
       aliasesHealthy: true,
       ports: { app: 4300, api: 4301, postgres: 5439 },

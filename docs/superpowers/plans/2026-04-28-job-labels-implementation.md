@@ -4,7 +4,7 @@
 
 **Goal:** Add organization-scoped job labels that can be created, managed, assigned to jobs, filtered on the jobs list, and shown in job activity without replacing canonical job statuses.
 
-**Architecture:** Labels are reusable organization records stored separately from jobs, and assignments live in a `work_item_labels` join table. Shared `@task-tracker/jobs-core` schemas define IDs, DTOs, API payloads, and activity events; the API owns validation, permissions, transactions, and activity logging; the app consumes labels through the existing jobs list/detail/options flow and adds inline creation plus organization settings management.
+**Architecture:** Labels are reusable organization records stored separately from jobs, and assignments live in a `work_item_labels` join table. Shared `@ceird/jobs-core` schemas define IDs, DTOs, API payloads, and activity events; the API owns validation, permissions, transactions, and activity logging; the app consumes labels through the existing jobs list/detail/options flow and adds inline creation plus organization settings management.
 
 **Tech Stack:** Effect Schema, `@effect/platform` HTTP API, Effect services, Drizzle/Postgres, raw SQL repositories, TanStack Start/Router frontend, `@effect-atom/atom-react`, existing shadcn/Base UI components, Vitest, Testing Library, Playwright.
 
@@ -180,7 +180,7 @@ expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts -t "label|api contract"
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts -t "label|api contract"
 ```
 
 Expected: FAIL because `JobLabelId`, label DTO schemas, label activity payloads, query `labelId`, and label endpoints do not exist yet.
@@ -191,7 +191,7 @@ Update `packages/jobs-core/src/ids.ts`:
 
 ```ts
 export const JobLabelId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/JobLabelId")
+  Schema.brand("@ceird/jobs-core/JobLabelId")
 );
 export type JobLabelId = Schema.Schema.Type<typeof JobLabelId>;
 ```
@@ -320,7 +320,7 @@ Update `packages/jobs-core/src/errors.ts`:
 
 ```ts
 export const JOB_LABEL_NOT_FOUND_ERROR_TAG =
-  "@task-tracker/jobs-core/JobLabelNotFoundError" as const;
+  "@ceird/jobs-core/JobLabelNotFoundError" as const;
 
 export class JobLabelNotFoundError extends Schema.TaggedError<JobLabelNotFoundError>()(
   JOB_LABEL_NOT_FOUND_ERROR_TAG,
@@ -332,7 +332,7 @@ export class JobLabelNotFoundError extends Schema.TaggedError<JobLabelNotFoundEr
 ) {}
 
 export const JOB_LABEL_NAME_CONFLICT_ERROR_TAG =
-  "@task-tracker/jobs-core/JobLabelNameConflictError" as const;
+  "@ceird/jobs-core/JobLabelNameConflictError" as const;
 
 export class JobLabelNameConflictError extends Schema.TaggedError<JobLabelNameConflictError>()(
   JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
@@ -411,7 +411,7 @@ Add endpoints to `jobsGroup`:
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts
 ```
 
 Expected: PASS.
@@ -583,7 +583,7 @@ import {
   SiteId,
   VisitId,
   WorkItemId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -593,7 +593,7 @@ import type {
   SiteIdType,
   VisitIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 
 const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
 
@@ -857,7 +857,7 @@ export interface AssignJobLabelRecordInput {
 }
 
 export class JobLabelsRepository extends Effect.Service<JobLabelsRepository>()(
-  "@task-tracker/domains/jobs/JobLabelsRepository",
+  "@ceird/domains/jobs/JobLabelsRepository",
   {
     accessors: true,
     effect: Effect.gen(function* JobLabelsRepositoryLive() {
@@ -1681,7 +1681,7 @@ import type {
   RegionIdType,
   SiteIdType,
   UserIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 ```
 
 Add `labelId` to `JobsListFilters` and `defaultJobsListFilters`:
@@ -2320,7 +2320,7 @@ import type {
   JobLabelResponse,
   JobLabelsResponse,
   UpdateJobLabelInput,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { Effect } from "effect";
 
 import { runBrowserJobsRequest } from "#/features/jobs/jobs-client";
@@ -2450,7 +2450,7 @@ import {
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { JobLabel } from "@task-tracker/jobs-core";
+import type { JobLabel } from "@ceird/jobs-core";
 import { Exit } from "effect";
 import * as React from "react";
 
@@ -2687,7 +2687,7 @@ git commit -m "feat: manage job labels in organization settings"
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test
+pnpm --filter @ceird/jobs-core test
 ```
 
 Expected: PASS.

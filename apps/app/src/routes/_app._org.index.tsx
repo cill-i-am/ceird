@@ -1,8 +1,5 @@
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute } from "@tanstack/react-router";
-import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
 
 import { AuthenticatedShellHome } from "#/features/auth/authenticated-shell-home";
 import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-access";

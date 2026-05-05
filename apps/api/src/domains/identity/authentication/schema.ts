@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ORGANIZATION_ROLES } from "@task-tracker/identity-core";
+import { ORGANIZATION_ROLES } from "@ceird/identity-core";
 import { relations, sql } from "drizzle-orm";
 import {
   check,

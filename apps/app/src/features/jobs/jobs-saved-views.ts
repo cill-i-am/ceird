@@ -1,4 +1,4 @@
-import type { UserIdType } from "@task-tracker/jobs-core";
+import type { UserIdType } from "@ceird/jobs-core";
 
 import {
   defaultJobsListFilters,

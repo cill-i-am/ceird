@@ -1,29 +1,31 @@
 # Jobs Core
 
-`@task-tracker/jobs-core` is the shared jobs contract package. It is consumed by
+`@ceird/jobs-core` is the shared jobs contract package. It is consumed by
 the API handlers and the app's typed Effect HTTP client.
 
 ## Important Files
 
-| File              | Purpose                                                                                                                                 |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/ids.ts`      | Branded IDs for work items, sites, contacts, service areas, rate cards, labels, collaborators, visits, costs, users, and organizations. |
-| `src/domain.ts`   | Domain literals and field schemas for jobs, contacts, sites, activity, labels, visits, and costs.                                       |
-| `src/dto.ts`      | Input, output, list, detail, option, activity, site, configuration, and cost DTO schemas.                                               |
-| `src/errors.ts`   | Typed public errors with HTTP status annotations.                                                                                       |
-| `src/http-api.ts` | Effect `HttpApi` contract for jobs, sites, service areas, and rate cards.                                                               |
-| `src/index.ts`    | Public package exports.                                                                                                                 |
+| File              | Purpose                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/ids.ts`      | Branded IDs for work items, contacts, rate cards, collaborators, visits, costs, users, and organizations.                   |
+| `src/domain.ts`   | Domain literals and field schemas for jobs, contacts, collaborators, activity, rate cards, visits, and costs.               |
+| `src/dto.ts`      | Input, output, list, detail, option, activity, job-site/job-contact selection, rate-card, and cost DTO schemas.             |
+| `src/errors.ts`   | Typed public errors with HTTP status annotations.                                                                           |
+| `src/http-api.ts` | Effect `HttpApi` contract for jobs, rate cards, job-label assignment, collaborators, visits, comments, costs, and activity. |
+| `src/index.ts`    | Public package exports.                                                                                                     |
 
 ## Commands
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test
-pnpm --filter @task-tracker/jobs-core check-types
-pnpm --filter @task-tracker/jobs-core build
+pnpm --filter @ceird/jobs-core test
+pnpm --filter @ceird/jobs-core check-types
+pnpm --filter @ceird/jobs-core build
 ```
 
 ## Boundary
 
 Put runtime schemas, DTOs, branded IDs, cost helpers, and public typed errors
-here when they cross the app/API boundary. Keep SQL repositories in `apps/api`
-and React state in `apps/app`.
+here when they are job-owned and cross the app/API boundary. Site primitives
+belong in `@ceird/sites-core`; organization label definitions belong in
+`@ceird/labels-core`. Keep SQL repositories in `apps/api` and React state in
+`apps/app`.

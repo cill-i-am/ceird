@@ -1,6 +1,6 @@
 # Infra Package Context
 
-This package owns infrastructure-as-code and deployment orchestration for Task Tracker.
+This package owns infrastructure-as-code and deployment orchestration for Ceird.
 
 - Keep Alchemy, Distilled Cloud, Cloudflare, PlanetScale, Hyperdrive, queue, and deployment-stage concerns inside this package.
 - Do not leak Effect 4 beta, Alchemy, or provider SDK dependencies into runtime apps or shared domain packages.

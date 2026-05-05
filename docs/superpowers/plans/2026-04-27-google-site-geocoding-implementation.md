@@ -6,7 +6,7 @@
 
 **Architecture:** Coordinates become derived persistence data. The shared jobs contract accepts structured site address fields but not latitude/longitude on create, the API geocodes site addresses before writing site records, and the frontend renders stored coordinates without exposing coordinate editing or pin placement. Google lives behind an Effect service so another Eircode-capable provider can replace it without changing UI components or DTO consumers.
 
-**Tech Stack:** Effect services and Config, `@effect/platform` HTTP API, Drizzle/Postgres, shared `@task-tracker/jobs-core` Schema DTOs, TanStack React frontend, existing MapLibre/MapCN-style map primitives.
+**Tech Stack:** Effect services and Config, `@effect/platform` HTTP API, Drizzle/Postgres, shared `@ceird/jobs-core` Schema DTOs, TanStack React frontend, existing MapLibre/MapCN-style map primitives.
 
 ---
 
@@ -156,7 +156,7 @@ it("keeps geocoded coordinates on site option responses", () => {
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts
 ```
 
 Expected: FAIL because `country`, `geocodingProvider`, `geocodedAt`, and `SiteGeocodingFailedError` do not exist yet, and create schemas still accept coordinates.
@@ -219,7 +219,7 @@ In `packages/jobs-core/src/errors.ts`, add:
 
 ```ts
 export const SITE_GEOCODING_FAILED_ERROR_TAG =
-  "@task-tracker/jobs-core/SiteGeocodingFailedError" as const;
+  "@ceird/jobs-core/SiteGeocodingFailedError" as const;
 export class SiteGeocodingFailedError extends Schema.TaggedError<SiteGeocodingFailedError>()(
   SITE_GEOCODING_FAILED_ERROR_TAG,
   {
@@ -262,8 +262,8 @@ and the corresponding `SiteCountry` and `SiteGeocodingProvider` types.
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts
+pnpm --filter @ceird/jobs-core check-types
 ```
 
 Expected: PASS.
@@ -293,7 +293,7 @@ Create `apps/api/src/domains/jobs/site-geocoder.test.ts` with tests for stub mod
 import {
   SITE_GEOCODING_FAILED_ERROR_TAG,
   type CreateSiteInput,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { ConfigProvider, Effect, Either } from "effect";
 
 import { makeGoogleSiteGeocoder, SiteGeocoder } from "./site-geocoder.js";
@@ -457,7 +457,7 @@ import {
   SiteGeocodingFailedError,
   type CreateSiteInput,
   type SiteGeocodingProvider,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { Effect, Layer } from "effect";
 
 import { loadSiteGeocodingConfig } from "./site-geocoding-config.js";
@@ -470,7 +470,7 @@ export interface GeocodedSiteLocation {
 }
 
 export class SiteGeocoder extends Effect.Service<SiteGeocoder>()(
-  "@task-tracker/domains/jobs/SiteGeocoder",
+  "@ceird/domains/jobs/SiteGeocoder",
   {
     accessors: true,
     effect: Effect.gen(function* () {
@@ -1063,8 +1063,8 @@ and does not require `GOOGLE_MAPS_API_KEY` for sandbox startup.
 Run:
 
 ```bash
-pnpm --filter @task-tracker/sandbox-core test -- src/runtime-spec.test.ts
-pnpm --filter @task-tracker/sandbox-cli test -- src/lifecycle.test.ts src/cli.test.ts
+pnpm --filter @ceird/sandbox-core test -- src/runtime-spec.test.ts
+pnpm --filter @ceird/sandbox-cli test -- src/lifecycle.test.ts src/cli.test.ts
 ```
 
 Expected: FAIL because sandbox env does not include geocoder mode yet.
@@ -1119,10 +1119,10 @@ SITE_GEOCODER_MODE: ${SITE_GEOCODER_MODE}
 Run:
 
 ```bash
-pnpm --filter @task-tracker/sandbox-core test -- src/runtime-spec.test.ts
-pnpm --filter @task-tracker/sandbox-cli test -- src/lifecycle.test.ts src/cli.test.ts
-pnpm --filter @task-tracker/sandbox-core check-types
-pnpm --filter @task-tracker/sandbox-cli check-types
+pnpm --filter @ceird/sandbox-core test -- src/runtime-spec.test.ts
+pnpm --filter @ceird/sandbox-cli test -- src/lifecycle.test.ts src/cli.test.ts
+pnpm --filter @ceird/sandbox-core check-types
+pnpm --filter @ceird/sandbox-cli check-types
 ```
 
 Expected: PASS.
@@ -1440,7 +1440,7 @@ git commit -m "docs: describe geocoded site locations"
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test
+pnpm --filter @ceird/jobs-core test
 pnpm --filter api test -- src/domains/jobs/site-geocoder.test.ts src/domains/jobs/sites-service.test.ts src/domains/jobs/service.test.ts src/domains/jobs/repositories.integration.test.ts src/domains/jobs/http.integration.test.ts
 pnpm --filter app test -- src/features/sites/sites-create-sheet.test.tsx src/features/jobs/jobs-detail-sheet.integration.test.tsx src/features/jobs/jobs-coverage-map.test.tsx
 ```
@@ -1452,11 +1452,11 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core check-types
 pnpm --filter api check-types
 pnpm --filter app check-types
-pnpm --filter @task-tracker/sandbox-core check-types
-pnpm --filter @task-tracker/sandbox-cli check-types
+pnpm --filter @ceird/sandbox-core check-types
+pnpm --filter @ceird/sandbox-cli check-types
 ```
 
 Expected: PASS.

@@ -1,11 +1,10 @@
 "use client";
-
-import { useNavigate } from "@tanstack/react-router";
 import {
   isAdministrativeOrganizationRole,
   isInternalOrganizationRole,
-} from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
+import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import { useAppHotkeySequence } from "./use-app-hotkey";

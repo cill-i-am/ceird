@@ -1,11 +1,10 @@
 "use client";
-
+import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@ceird/sites-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Location01Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@task-tracker/jobs-core";
-import type { JobSiteOption, SiteIdType } from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
 
@@ -24,9 +23,8 @@ import { Input } from "#/components/ui/input";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
-import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
-import { hasJobsElevatedAccess } from "#/features/jobs/jobs-viewer";
-import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
+import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 
 import {
   SITE_CREATE_NONE_VALUE,
@@ -40,12 +38,15 @@ import type {
   SiteCreateDraft as SitesCreateFormState,
   SiteCreateFieldErrors as SitesCreateFieldErrors,
 } from "./site-create-form";
-import { updateSiteMutationAtomFamily } from "./sites-state";
+import {
+  sitesOptionsStateAtom,
+  updateSiteMutationAtomFamily,
+} from "./sites-state";
 
 interface SitesDetailSheetProps {
-  readonly initialSite: JobSiteOption | null;
+  readonly initialSite: SiteOption | null;
   readonly siteId: SiteIdType;
-  readonly viewer: JobsViewer;
+  readonly viewer: OrganizationViewer;
 }
 
 export function SitesDetailSheet({
@@ -54,14 +55,14 @@ export function SitesDetailSheet({
   viewer,
 }: SitesDetailSheetProps) {
   const navigate = useNavigate({ from: "/sites/$siteId" });
-  const options = useAtomValue(jobsOptionsStateAtom).data;
+  const options = useAtomValue(sitesOptionsStateAtom).data;
   const currentSite =
     options.sites.find((site) => site.id === siteId) ?? initialSite;
   const updateResult = useAtomValue(updateSiteMutationAtomFamily(siteId));
   const updateSite = useAtomSet(updateSiteMutationAtomFamily(siteId), {
     mode: "promiseExit",
   });
-  const canEdit = hasJobsElevatedAccess(viewer.role);
+  const canEdit = hasOrganizationElevatedAccess(viewer.role);
   const serviceAreaGroups = React.useMemo(
     () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
     [options.serviceAreas]
@@ -374,7 +375,7 @@ export function SitesDetailSheet({
   );
 }
 
-function buildFormStateFromSite(site: JobSiteOption): SitesCreateFormState {
+function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {
   return {
     accessNotes: site.accessNotes ?? "",
     addressLine1: site.addressLine1 ?? "",

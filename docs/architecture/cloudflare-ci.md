@@ -28,7 +28,7 @@ prevents GitHub Actions from falling back to Alchemy's default
 runner.
 
 The current live resource names are intended to be `ceird-production-*`. The
-original local POC used `task-tracker-preview-*` under the local
+original local POC used `ceird-preview-*` under the local
 `dev_cillianbarron` Alchemy stage; those resources should be destroyed before
 the first `ceird-production` deploy, rather than adopted into CI.
 
@@ -67,7 +67,7 @@ The workflow:
 
 - installs dependencies with pnpm
 - type-checks the app and infra package
-- deploys through `pnpm --filter @task-tracker/infra run deploy`
+- deploys through `pnpm --filter @ceird/infra run deploy`
 - serializes deploys with a GitHub Actions concurrency group
 - applies migrations by default through `APPLY_MIGRATIONS=true`
 

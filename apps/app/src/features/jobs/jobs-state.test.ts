@@ -1,9 +1,9 @@
 import type {
   CreateJobResponse,
-  JobLabelIdType,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
 
 import { toJobListItem } from "./jobs-state";
 
@@ -11,7 +11,7 @@ describe("jobs state", () => {
   it("preserves labels when converting a job response to a list item", () => {
     const label = {
       createdAt: "2026-04-23T10:00:00.000Z",
-      id: "12121212-1212-4121-8121-121212121212" as JobLabelIdType,
+      id: "12121212-1212-4121-8121-121212121212" as LabelIdType,
       name: "Compliance",
       updatedAt: "2026-04-23T10:00:00.000Z",
     };

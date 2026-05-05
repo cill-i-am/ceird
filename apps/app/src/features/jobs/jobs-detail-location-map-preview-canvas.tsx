@@ -1,5 +1,4 @@
 "use client";
-
 import { MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -10,9 +9,8 @@ import {
   MarkerContent,
   MarkerLabel,
 } from "#/components/ui/map";
-
-import { hasSiteCoordinates } from "./jobs-location";
-import type { SiteLocationLike } from "./jobs-location";
+import { hasSiteCoordinates } from "#/features/sites/site-location";
+import type { SiteLocationLike } from "#/features/sites/site-location";
 
 interface JobsDetailLocationMapPreviewCanvasProps {
   readonly site: SiteLocationLike;

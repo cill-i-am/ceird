@@ -1,5 +1,4 @@
 "use client";
-
 import { MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
@@ -18,15 +17,15 @@ import {
   MarkerPopup,
   useMap,
 } from "#/components/ui/map";
-
-import type { MappedSiteGroup } from "./jobs-coverage-map";
-import { markerToneClassName, STATUS_LABELS } from "./jobs-coverage-map";
 import {
   buildGoogleMapsUrl,
   buildSiteAddressLines,
-  DEFAULT_JOBS_MAP_CENTER,
-  DEFAULT_JOBS_MAP_ZOOM,
-} from "./jobs-location";
+  DEFAULT_SITE_MAP_CENTER,
+  DEFAULT_SITE_MAP_ZOOM,
+} from "#/features/sites/site-location";
+
+import type { MappedSiteGroup } from "./jobs-coverage-map";
+import { markerToneClassName, STATUS_LABELS } from "./jobs-coverage-map";
 
 export function JobsCoverageMapCanvas({
   groups,
@@ -36,8 +35,8 @@ export function JobsCoverageMapCanvas({
   return (
     <div className="h-full min-h-[520px]">
       <Map
-        center={[DEFAULT_JOBS_MAP_CENTER[0], DEFAULT_JOBS_MAP_CENTER[1]]}
-        zoom={DEFAULT_JOBS_MAP_ZOOM}
+        center={[DEFAULT_SITE_MAP_CENTER[0], DEFAULT_SITE_MAP_CENTER[1]]}
+        zoom={DEFAULT_SITE_MAP_ZOOM}
         dragRotate={false}
         pitchWithRotate={false}
         touchPitch={false}

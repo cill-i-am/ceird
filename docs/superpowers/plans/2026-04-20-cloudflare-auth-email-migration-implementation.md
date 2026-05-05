@@ -142,7 +142,7 @@ Keep all runtime configuration loading inside `Config`.
 Rules:
 
 - validate `AUTH_EMAIL_FROM` as an email address
-- default `AUTH_EMAIL_FROM_NAME` to `"Task Tracker"`
+- default `AUTH_EMAIL_FROM_NAME` to `"Ceird"`
 - validate `CLOUDFLARE_ACCOUNT_ID` as non-empty
 - validate `CLOUDFLARE_API_TOKEN` as non-empty
 - map failures into `AuthEmailConfigurationError`

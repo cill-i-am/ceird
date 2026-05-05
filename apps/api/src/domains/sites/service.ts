@@ -1,58 +1,66 @@
-import { isExternalOrganizationRole } from "@task-tracker/identity-core";
-import {
-  JobAccessDeniedError,
-  JobStorageError,
-  SiteNotFoundError,
-} from "@task-tracker/jobs-core";
 import type {
   CreateSiteInput,
   ServiceAreaOption,
   SiteIdType as SiteId,
   UpdateSiteInput,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+import {
+  SiteAccessDeniedError,
+  SiteNotFoundError,
+  SiteStorageError,
+} from "@ceird/sites-core";
 import { Effect, Option } from "effect";
 
-import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
-import { JobsAuthorization } from "./authorization.js";
-import { CurrentJobsActor } from "./current-jobs-actor.js";
-import type { JobsActor } from "./current-jobs-actor.js";
+import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
-  ConfigurationRepository,
-  JobsRepositoriesLive,
-  JobsRepository,
-  SitesRepository,
-} from "./repositories.js";
-import { SiteGeocoder } from "./site-geocoder.js";
+  hasElevatedOrganizationAccess,
+  isExternalOrganizationActor,
+  OrganizationAuthorization,
+} from "../organizations/authorization.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
+import { SiteGeocoder } from "./geocoder.js";
+import { ServiceAreasRepository, SitesRepository } from "./repositories.js";
 
 export class SitesService extends Effect.Service<SitesService>()(
-  "@task-tracker/domains/jobs/SitesService",
+  "@ceird/domains/sites/SitesService",
   {
     accessors: true,
     dependencies: [
-      CurrentJobsActor.Default,
-      JobsAuthorization.Default,
-      JobsRepositoriesLive,
+      CurrentOrganizationActor.Default,
+      OrganizationAuthorization.Default,
+      ServiceAreasRepository.Default,
+      SitesRepository.Default,
       SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* SitesServiceLive() {
-      const authorization = yield* JobsAuthorization;
-      const configurationRepository = yield* ConfigurationRepository;
-      const currentJobsActor = yield* CurrentJobsActor;
-      const jobsRepository = yield* JobsRepository;
+      const authorization = yield* OrganizationAuthorization;
+      const serviceAreasRepository = yield* ServiceAreasRepository;
+      const currentOrganizationActor = yield* CurrentOrganizationActor;
       const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
-        return yield* currentJobsActor
+        return yield* currentOrganizationActor
           .get()
-          .pipe(mapActorResolutionErrorsToAccessDenied());
+          .pipe(
+            mapSitesActorErrors,
+            Effect.catchTag(
+              ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
+              failSitesStorageError
+            )
+          );
       });
 
       const create = Effect.fn("SitesService.create")(function* (
         input: CreateSiteInput
       ) {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanCreateSite(actor);
+        yield* authorization
+          .ensureCanCreateSite(actor)
+          .pipe(Effect.mapError(mapAuthorizationDenied));
         yield* Effect.annotateCurrentSpan("action", "create");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -66,17 +74,11 @@ export class SitesService extends Effect.Service<SitesService>()(
             "serviceAreaId",
             input.serviceAreaId
           );
-          yield* sitesRepository
-            .ensureServiceAreaInOrganization(
-              actor.organizationId,
-              input.serviceAreaId
-            )
-            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
         }
 
         const geocodedLocation = yield* siteGeocoder.geocode(input);
 
-        return yield* jobsRepository
+        return yield* sitesRepository
           .withTransaction(
             Effect.gen(function* () {
               const siteId = yield* sitesRepository.create({
@@ -124,7 +126,9 @@ export class SitesService extends Effect.Service<SitesService>()(
         input: UpdateSiteInput
       ) {
         const actor = yield* loadActor();
-        yield* authorization.ensureCanCreateSite(actor);
+        yield* authorization
+          .ensureCanCreateSite(actor)
+          .pipe(Effect.mapError(mapAuthorizationDenied));
         yield* Effect.annotateCurrentSpan("action", "update");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -139,17 +143,11 @@ export class SitesService extends Effect.Service<SitesService>()(
             "serviceAreaId",
             input.serviceAreaId
           );
-          yield* sitesRepository
-            .ensureServiceAreaInOrganization(
-              actor.organizationId,
-              input.serviceAreaId
-            )
-            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
         }
 
         const geocodedLocation = yield* siteGeocoder.geocode(input);
 
-        const site = yield* jobsRepository
+        const site = yield* sitesRepository
           .withTransaction(
             sitesRepository
               .update(actor.organizationId, siteId, {
@@ -194,14 +192,21 @@ export class SitesService extends Effect.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const sites = yield* sitesRepository
-          .listOptions(actor.organizationId)
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
-        const serviceAreas = hasElevatedAccess(actor)
-          ? yield* configurationRepository
-              .listServiceAreaOptions(actor.organizationId)
-              .pipe(Effect.catchTag("SqlError", failSitesStorageError))
-          : deriveServiceAreaOptionsFromSites(sites);
+        const [sites, serviceAreas] = hasElevatedOrganizationAccess(actor)
+          ? yield* Effect.all([
+              sitesRepository.listOptions(actor.organizationId),
+              serviceAreasRepository.listOptions(actor.organizationId),
+            ]).pipe(Effect.catchTag("SqlError", failSitesStorageError))
+          : yield* sitesRepository.listOptions(actor.organizationId).pipe(
+              Effect.map(
+                (siteOptions) =>
+                  [
+                    siteOptions,
+                    deriveServiceAreaOptionsFromSites(siteOptions),
+                  ] as const
+              ),
+              Effect.catchTag("SqlError", failSitesStorageError)
+            );
 
         return {
           serviceAreas,
@@ -220,9 +225,9 @@ export class SitesService extends Effect.Service<SitesService>()(
 
 function failSitesStorageError(
   error: unknown
-): Effect.Effect<never, JobStorageError> {
+): Effect.Effect<never, SiteStorageError> {
   return Effect.fail(
-    new JobStorageError({
+    new SiteStorageError({
       cause: error instanceof Error ? error.message : String(error),
       message: "Sites storage operation failed",
     })
@@ -230,27 +235,31 @@ function failSitesStorageError(
 }
 
 function ensureCanViewOrganizationSiteOptions(
-  actor: JobsActor,
-  authorization: JobsAuthorization
+  actor: OrganizationActor,
+  authorization: OrganizationAuthorization
 ) {
   return Effect.gen(function* () {
-    yield* authorization.ensureCanView(actor);
-
-    if (!isExternalOrganizationRole(actor.role)) {
-      return;
+    if (isExternalOrganizationActor(actor)) {
+      return yield* Effect.fail(
+        new SiteAccessDeniedError({
+          message:
+            "External collaborators cannot view organization-wide site options",
+        })
+      );
     }
 
-    return yield* Effect.fail(
-      new JobAccessDeniedError({
-        message:
-          "External collaborators cannot view organization-wide site options",
-      })
-    );
+    yield* authorization
+      .ensureCanViewOrganizationData(actor)
+      .pipe(Effect.mapError(mapAuthorizationDenied));
   });
 }
 
-function hasElevatedAccess(actor: { readonly role: string }): boolean {
-  return actor.role === "owner" || actor.role === "admin";
+const mapSitesActorErrors = mapOrganizationActorResolutionErrors(
+  (message) => new SiteAccessDeniedError({ message })
+);
+
+function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
+  return new SiteAccessDeniedError({ message: error.message });
 }
 
 function deriveServiceAreaOptionsFromSites(

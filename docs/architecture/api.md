@@ -2,9 +2,10 @@
 
 ## Scope
 
-`apps/api` is the backend service. It exposes an Effect HTTP API for system and
-jobs routes, mounts Better Auth under `/api/auth/*`, owns database schema and
-migrations, and can run as either a Node dev server or a Cloudflare Worker.
+`apps/api` is the backend service. It exposes Effect HTTP APIs for system,
+jobs, sites, labels, and organization configuration routes, mounts Better Auth
+under `/api/auth/*`, owns database schema and migrations, and can run as either
+a Node dev server or a Cloudflare Worker.
 
 ## Entry Points
 
@@ -46,32 +47,29 @@ a public invitation preview route matched by
 organization name, and role for pending non-expired invitations.
 
 Organization rules are enforced through Better Auth plugin hooks and shared
-decoders from `@task-tracker/identity-core`. Only organization name can be
+decoders from `@ceird/identity-core`. Only organization name can be
 updated through the supported update path, and writable roles are decoded
 against the shared role schema.
 
 ## Jobs Domain
 
-Jobs live in `src/domains/jobs` and are exposed through the shared
-`@task-tracker/jobs-core` `JobsApi` contract.
+Jobs live in `src/domains/jobs` and are exposed through `@ceird/jobs-core`.
+Jobs may reference sites and organization labels, but site definitions and
+label definitions are owned by their own API domains.
 
 Core files:
 
-| File                       | Responsibility                                                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `http.ts`                  | Binds contract endpoints to Effect services and configures CORS.                                                           |
-| `service.ts`               | Main jobs use cases: list, create, patch, transition, reopen, comments, visits, labels, collaborators, costs, and options. |
-| `sites-service.ts`         | Site creation, update, and options.                                                                                        |
-| `configuration-service.ts` | Service areas and rate cards.                                                                                              |
-| `repositories.ts`          | SQL repository layer for jobs, sites, contacts, labels, configuration, activity, and members.                              |
-| `authorization.ts`         | Role and access checks for jobs operations.                                                                                |
-| `current-jobs-actor.ts`    | Current actor resolution from auth/session context.                                                                        |
-| `actor-access.ts`          | Actor resolution error mapping.                                                                                            |
-| `activity-recorder.ts`     | Work item activity events.                                                                                                 |
-| `site-geocoder.ts`         | Site geocoding boundary.                                                                                                   |
-| `site-geocoding-config.ts` | Geocoder runtime mode/config.                                                                                              |
-| `schema.ts`                | Jobs Drizzle tables and relations.                                                                                         |
-| `errors.ts`                | API-domain error helpers where needed.                                                                                     |
+| File                       | Responsibility                                                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `http.ts`                  | Binds jobs and rate-card contract endpoints to Effect services and configures CORS.                                                      |
+| `service.ts`               | Main jobs use cases: list, create, patch, transition, reopen, comments, visits, job-label assignment, collaborators, costs, and options. |
+| `configuration-service.ts` | Rate-card configuration.                                                                                                                 |
+| `repositories.ts`          | SQL repository layer for jobs, contacts, rate cards, activity, members, and job-label assignment rows.                                   |
+| `authorization.ts`         | Role and access checks for jobs operations.                                                                                              |
+| `actor-access.ts`          | Actor resolution error mapping.                                                                                                          |
+| `activity-recorder.ts`     | Work item activity events.                                                                                                               |
+| `schema.ts`                | Jobs-owned Drizzle tables and relations, including job-label assignment rows.                                                            |
+| `errors.ts`                | API-domain error helpers where needed.                                                                                                   |
 
 The jobs service flow is:
 
@@ -80,17 +78,18 @@ The jobs service flow is:
 3. Enforce authorization for the requested operation.
 4. Read or mutate through repositories.
 5. Record activity for auditable changes.
-6. Return DTOs defined in `@task-tracker/jobs-core`.
+6. Return DTOs defined in the owning shared core package.
 
-Current actor resolution treats Better Auth session data as an untrusted
-boundary: session user and active organization IDs are decoded into branded
-jobs-core IDs, malformed identity data fails with a typed actor-resolution
-error, and session lookup failures remain typed storage failures instead of
-defects.
+Current actor resolution lives in `src/domains/organizations` because sites,
+labels, and jobs all need the same organization actor boundary. Better Auth
+session data is treated as untrusted: session user and active organization IDs
+are decoded into branded IDs, malformed identity data fails with a typed
+actor-resolution error, and session lookup failures remain typed storage
+failures instead of defects.
 
 External organization members can have collaborator-style access to specific
-jobs. Elevated internal roles can manage organization-wide jobs configuration
-such as labels, service areas, and rate cards.
+jobs. Elevated internal roles can manage organization-wide configuration such
+as labels, service areas, sites, and rate cards through the owning domain.
 
 ## Jobs API Endpoints
 
@@ -113,24 +112,75 @@ live in `apps/api/src/domains/jobs/http.ts`.
 | `POST`   | `/jobs/:workItemId/visits`                        | `addJobVisit`                 |
 | `POST`   | `/jobs/:workItemId/labels`                        | `assignJobLabel`              |
 | `DELETE` | `/jobs/:workItemId/labels/:labelId`               | `removeJobLabel`              |
-| `GET`    | `/job-labels`                                     | `listJobLabels`               |
-| `POST`   | `/job-labels`                                     | `createJobLabel`              |
-| `PATCH`  | `/job-labels/:labelId`                            | `updateJobLabel`              |
-| `DELETE` | `/job-labels/:labelId`                            | `deleteJobLabel`              |
 | `POST`   | `/jobs/:workItemId/cost-lines`                    | `addJobCostLine`              |
 | `GET`    | `/jobs/:workItemId/collaborators`                 | `listJobCollaborators`        |
 | `POST`   | `/jobs/:workItemId/collaborators`                 | `attachJobCollaborator`       |
 | `PATCH`  | `/jobs/:workItemId/collaborators/:collaboratorId` | `updateJobCollaborator`       |
 | `DELETE` | `/jobs/:workItemId/collaborators/:collaboratorId` | `detachJobCollaborator`       |
-| `GET`    | `/service-areas`                                  | `listServiceAreas`            |
-| `POST`   | `/service-areas`                                  | `createServiceArea`           |
-| `PATCH`  | `/service-areas/:serviceAreaId`                   | `updateServiceArea`           |
 | `GET`    | `/rate-cards`                                     | `listRateCards`               |
 | `POST`   | `/rate-cards`                                     | `createRateCard`              |
 | `PATCH`  | `/rate-cards/:rateCardId`                         | `updateRateCard`              |
-| `GET`    | `/sites/options`                                  | `getSiteOptions`              |
-| `POST`   | `/sites`                                          | `createSite`                  |
-| `PATCH`  | `/sites/:siteId`                                  | `updateSite`                  |
+
+## Labels Domain
+
+Labels live in `src/domains/labels` and are exposed through
+`@ceird/labels-core`. Labels are organization-level definitions; job-specific
+label behavior is limited to assigning or removing those labels on a job.
+
+Core files:
+
+| File               | Responsibility                                                              |
+| ------------------ | --------------------------------------------------------------------------- |
+| `http.ts`          | Binds label contract endpoints to `LabelsService` and configures CORS.      |
+| `service.ts`       | Label list, create, update, and archive use cases with organization auth.   |
+| `repositories.ts`  | SQL repository layer for the `labels` table and cleanup of job assignments. |
+| `schema.ts`        | Labels Drizzle table and relations.                                         |
+| `id-generation.ts` | Label ID generation.                                                        |
+
+## Sites Domain
+
+Sites live in `src/domains/sites` and are exposed through
+`@ceird/sites-core`. Sites and service areas are independent organization data
+that jobs can reference.
+
+Core files:
+
+| File                       | Responsibility                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS. |
+| `service.ts`               | Site create, update, and options use cases.                                             |
+| `service-areas-service.ts` | Service-area list, create, and update use cases.                                        |
+| `repositories.ts`          | SQL repository layer for sites, service areas, and site-contact links.                  |
+| `schema.ts`                | Sites and service-area Drizzle tables and relations.                                    |
+| `geocoder.ts`              | Site geocoding boundary.                                                                |
+| `geocoding-config.ts`      | Geocoder runtime mode/config.                                                           |
+| `id-generation.ts`         | Site and service-area ID generation.                                                    |
+
+## Labels API Endpoints
+
+Endpoint definitions live in `packages/labels-core/src/http-api.ts`; API
+handlers live in `apps/api/src/domains/labels/http.ts`.
+
+| Method   | Path               | Handler name  |
+| -------- | ------------------ | ------------- |
+| `GET`    | `/labels`          | `listLabels`  |
+| `POST`   | `/labels`          | `createLabel` |
+| `PATCH`  | `/labels/:labelId` | `updateLabel` |
+| `DELETE` | `/labels/:labelId` | `deleteLabel` |
+
+## Sites API Endpoints
+
+Endpoint definitions live in `packages/sites-core/src/http-api.ts`; API
+handlers live in `apps/api/src/domains/sites/http.ts`.
+
+| Method  | Path                            | Handler name        |
+| ------- | ------------------------------- | ------------------- |
+| `GET`   | `/service-areas`                | `listServiceAreas`  |
+| `POST`  | `/service-areas`                | `createServiceArea` |
+| `PATCH` | `/service-areas/:serviceAreaId` | `updateServiceArea` |
+| `GET`   | `/sites/options`                | `getSiteOptions`    |
+| `POST`  | `/sites`                        | `createSite`        |
+| `PATCH` | `/sites/:siteId`                | `updateSite`        |
 
 ## Database
 
@@ -145,14 +195,16 @@ The API uses Drizzle with Postgres.
 | Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
-`databaseSchema` merges authentication and jobs tables. Keep schema changes in
-the domain that owns the tables, then export through the schema barrel.
+`databaseSchema` merges authentication, labels, sites, and jobs tables. Keep
+schema changes in the domain that owns the tables, then export through the
+schema barrel.
 
 ## Errors And Runtime Schemas
 
-Public API errors for jobs live in `packages/jobs-core/src/errors.ts` as
-`Schema.TaggedError` classes annotated with HTTP status codes. API code should
-return those shared errors when a frontend client needs typed behavior.
+Public API errors live in the package that owns the contract:
+`packages/jobs-core/src/errors.ts`, `packages/sites-core/src/errors.ts`, and
+`packages/labels-core/src/errors.ts`. API code should return those shared
+errors when a frontend client needs typed behavior.
 
 Use Effect `Config` for environment loading and Effect `Schema` for external
 payload boundaries. Plain TypeScript types are fine for internal computed

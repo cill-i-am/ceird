@@ -1,28 +1,28 @@
-/* oxlint-disable unicorn/no-array-sort */
-
 "use client";
-
-import { Atom } from "@effect-atom/atom-react";
 import type {
   CreateRateCardInput,
   CreateRateCardResponse,
-  CreateServiceAreaInput,
-  CreateServiceAreaResponse,
   RateCard,
   RateCardIdType,
   RateCardListResponse,
+  UpdateRateCardInput,
+  UpdateRateCardResponse,
+} from "@ceird/jobs-core";
+import type {
+  CreateServiceAreaInput,
+  CreateServiceAreaResponse,
   ServiceArea,
   ServiceAreaIdType,
   ServiceAreaListResponse,
-  UpdateRateCardInput,
-  UpdateRateCardResponse,
   UpdateServiceAreaInput,
   UpdateServiceAreaResponse,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+/* oxlint-disable unicorn/no-array-sort */
+import { Atom } from "@effect-atom/atom-react";
 import { Effect } from "effect";
 
-import { runBrowserJobsRequest } from "#/features/jobs/jobs-client";
-import type { AppJobsError } from "#/features/jobs/jobs-errors";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import type { AppApiError } from "#/features/api/app-api-errors";
 
 export const organizationServiceAreasStateAtom =
   Atom.make<ServiceAreaListResponse>({
@@ -34,7 +34,7 @@ export const organizationRateCardsStateAtom = Atom.make<RateCardListResponse>({
 }).pipe(Atom.keepAlive);
 
 export const listServiceAreasAtom = Atom.fn<
-  AppJobsError,
+  AppApiError,
   ServiceAreaListResponse
 >((_, get) =>
   listBrowserServiceAreas().pipe(
@@ -50,7 +50,7 @@ export const listServiceAreasAtom = Atom.fn<
 ).pipe(Atom.keepAlive);
 
 export const createServiceAreaMutationAtom = Atom.fn<
-  AppJobsError,
+  AppApiError,
   CreateServiceAreaResponse,
   CreateServiceAreaInput
 >((input, get) =>
@@ -68,7 +68,7 @@ export const createServiceAreaMutationAtom = Atom.fn<
 
 export const updateServiceAreaMutationAtomFamily = Atom.family(
   (serviceAreaId: ServiceAreaIdType) =>
-    Atom.fn<AppJobsError, UpdateServiceAreaResponse, UpdateServiceAreaInput>(
+    Atom.fn<AppApiError, UpdateServiceAreaResponse, UpdateServiceAreaInput>(
       (input, get) =>
         updateBrowserServiceArea(serviceAreaId, input).pipe(
           Effect.tap((serviceArea) =>
@@ -86,7 +86,7 @@ export const updateServiceAreaMutationAtomFamily = Atom.family(
     )
 );
 
-export const listRateCardsAtom = Atom.fn<AppJobsError, RateCardListResponse>(
+export const listRateCardsAtom = Atom.fn<AppApiError, RateCardListResponse>(
   (_, get) =>
     listBrowserRateCards().pipe(
       Effect.tap((response) =>
@@ -101,7 +101,7 @@ export const listRateCardsAtom = Atom.fn<AppJobsError, RateCardListResponse>(
 ).pipe(Atom.keepAlive);
 
 export const createRateCardMutationAtom = Atom.fn<
-  AppJobsError,
+  AppApiError,
   CreateRateCardResponse,
   CreateRateCardInput
 >((input, get) =>
@@ -119,7 +119,7 @@ export const createRateCardMutationAtom = Atom.fn<
 
 export const updateRateCardMutationAtomFamily = Atom.family(
   (rateCardId: RateCardIdType) =>
-    Atom.fn<AppJobsError, UpdateRateCardResponse, UpdateRateCardInput>(
+    Atom.fn<AppApiError, UpdateRateCardResponse, UpdateRateCardInput>(
       (input, get) =>
         updateBrowserRateCard(rateCardId, input).pipe(
           Effect.tap((rateCard) =>
@@ -135,14 +135,14 @@ export const updateRateCardMutationAtomFamily = Atom.family(
 );
 
 function listBrowserServiceAreas() {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.listServiceAreas",
     (client) => client.serviceAreas.listServiceAreas()
   );
 }
 
 function createBrowserServiceArea(input: CreateServiceAreaInput) {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.createServiceArea",
     (client) =>
       client.serviceAreas.createServiceArea({
@@ -155,7 +155,7 @@ function updateBrowserServiceArea(
   serviceAreaId: ServiceAreaIdType,
   input: UpdateServiceAreaInput
 ) {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.updateServiceArea",
     (client) =>
       client.serviceAreas.updateServiceArea({
@@ -166,14 +166,14 @@ function updateBrowserServiceArea(
 }
 
 function listBrowserRateCards() {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.listRateCards",
     (client) => client.rateCards.listRateCards()
   );
 }
 
 function createBrowserRateCard(input: CreateRateCardInput) {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.createRateCard",
     (client) =>
       client.rateCards.createRateCard({
@@ -186,7 +186,7 @@ function updateBrowserRateCard(
   rateCardId: RateCardIdType,
   input: UpdateRateCardInput
 ) {
-  return runBrowserJobsRequest(
+  return runBrowserAppApiRequest(
     "OrganizationConfigurationBrowser.updateRateCard",
     (client) =>
       client.rateCards.updateRateCard({

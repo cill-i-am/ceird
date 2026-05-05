@@ -23,7 +23,7 @@ test("keeps non-local lines", () => {
   assert.equal(shouldHideViteLine("  ➜  Network: use --host to expose"), false);
   assert.equal(
     shouldHideViteLine(
-      "Running: PORTLESS_URL=https://app.task-tracker.localhost:1355 vite dev"
+      "Running: PORTLESS_URL=https://app.ceird.localhost:1355 vite dev"
     ),
     false
   );

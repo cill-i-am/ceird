@@ -1,5 +1,4 @@
 "use client";
-
 /* oxlint-disable max-classes-per-file */
 
 import { Effect, Schema } from "effect";

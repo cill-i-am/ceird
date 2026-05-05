@@ -1,8 +1,8 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
+import type { OrganizationActivityQuery } from "@ceird/jobs-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
-import type { OrganizationActivityQuery } from "@task-tracker/jobs-core";
 
 type ActivityLookupMock = (
   query?: OrganizationActivityQuery

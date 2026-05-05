@@ -1,8 +1,8 @@
 import {
   SITE_GEOCODING_PROVIDERS,
   SiteGeocodingProviderSchema,
-} from "@task-tracker/jobs-core";
-import type { SiteGeocodingProvider } from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+import type { SiteGeocodingProvider } from "@ceird/sites-core";
 import { Config, Effect, Schema } from "effect";
 
 export type SiteGeocoderMode = SiteGeocodingProvider;

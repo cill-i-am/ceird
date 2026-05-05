@@ -1,5 +1,6 @@
 "use client";
-
+import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
 import {
   AccountSetting01Icon,
   LogoutIcon,
@@ -8,8 +9,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import { isAdministrativeOrganizationRole } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";

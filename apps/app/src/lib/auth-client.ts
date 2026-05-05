@@ -1,8 +1,8 @@
-import { decodePublicInvitationPreview } from "@task-tracker/identity-core";
+import { decodePublicInvitationPreview } from "@ceird/identity-core";
 import type {
   OrganizationRole,
   PublicInvitationPreview,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 import { organizationClient } from "better-auth/client/plugins";
 import type { Role } from "better-auth/plugins/access";
 import {
@@ -57,7 +57,7 @@ export function resolveApiBaseURL(
   return new URL(API_BASE_PATH, apiOrigin).toString();
 }
 
-export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
+export function createCeirdAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
     plugins: [
@@ -71,7 +71,7 @@ export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
 
 function createUnavailableAuthClient(
   error: AuthClientConfigurationError
-): ReturnType<typeof createTaskTrackerAuthClient> {
+): ReturnType<typeof createCeirdAuthClient> {
   const unavailable = new Proxy(
     function unavailableAuthClient() {
       return null;
@@ -86,9 +86,7 @@ function createUnavailableAuthClient(
     }
   );
 
-  return unavailable as unknown as ReturnType<
-    typeof createTaskTrackerAuthClient
-  >;
+  return unavailable as unknown as ReturnType<typeof createCeirdAuthClient>;
 }
 
 const defaultApiBaseURL =
@@ -132,7 +130,7 @@ export async function getPublicInvitationPreview(
   }
 }
 
-export function createBrowserTaskTrackerAuthClient(
+export function createBrowserCeirdAuthClient(
   origin: string,
   explicitAuthOrigin?: string | undefined
 ) {
@@ -146,7 +144,7 @@ export function createBrowserTaskTrackerAuthClient(
     );
   }
 
-  return createTaskTrackerAuthClient(baseURL);
+  return createCeirdAuthClient(baseURL);
 }
 
 export function buildPasswordResetRedirectTo(
@@ -178,8 +176,5 @@ export function buildEmailChangeRedirectTo(origin: string): string {
 
 export const authClient =
   typeof window === "undefined"
-    ? createTaskTrackerAuthClient()
-    : createBrowserTaskTrackerAuthClient(
-        window.location.origin,
-        configuredApiOrigin
-      );
+    ? createCeirdAuthClient()
+    : createBrowserCeirdAuthClient(window.location.origin, configuredApiOrigin);

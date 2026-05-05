@@ -11,7 +11,7 @@ describe("getInstallLockTimeoutMs()", () => {
   it("respects a custom timeout in seconds", () => {
     expect(
       getInstallLockTimeoutMs({
-        TASK_TRACKER_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "12",
+        CEIRD_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "12",
       })
     ).toBe(12_000);
   }, 10_000);
@@ -19,12 +19,12 @@ describe("getInstallLockTimeoutMs()", () => {
   it("falls back to the default timeout for invalid values", () => {
     expect(
       getInstallLockTimeoutMs({
-        TASK_TRACKER_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "0",
+        CEIRD_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "0",
       })
     ).toBe(300_000);
     expect(
       getInstallLockTimeoutMs({
-        TASK_TRACKER_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "nope",
+        CEIRD_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS: "nope",
       })
     ).toBe(300_000);
   }, 10_000);

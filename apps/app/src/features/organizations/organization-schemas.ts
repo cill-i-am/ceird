@@ -3,8 +3,8 @@ export {
   UpdateOrganizationInputSchema as organizationSettingsSchema,
   decodeCreateOrganizationInput,
   decodeUpdateOrganizationInput,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 export type {
   CreateOrganizationInput,
   UpdateOrganizationInput,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";

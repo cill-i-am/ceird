@@ -13,8 +13,8 @@ export interface SiteLocationLike {
   readonly town?: string;
 }
 
-export const DEFAULT_JOBS_MAP_CENTER = [-8.243_89, 53.412_91] as const;
-export const DEFAULT_JOBS_MAP_ZOOM = 5.8;
+export const DEFAULT_SITE_MAP_CENTER = [-8.243_89, 53.412_91] as const;
+export const DEFAULT_SITE_MAP_ZOOM = 5.8;
 
 function compactLocationParts(parts: readonly (string | undefined)[]) {
   return parts.filter(Boolean).join(", ");

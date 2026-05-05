@@ -2,16 +2,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { SandboxNameType as SandboxName } from "@task-tracker/sandbox-core";
+import type { SandboxNameType as SandboxName } from "@ceird/sandbox-core";
 import {
   SandboxRegistryError,
   SandboxRegistryPayload,
-} from "@task-tracker/sandbox-core/node";
-import type { SandboxRegistryRecord } from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
+import type { SandboxRegistryRecord } from "@ceird/sandbox-core/node";
 import { Effect, Schema } from "effect";
 
 export function getSandboxStateRoot(): string {
-  return path.join(os.homedir(), ".task-tracker", "sandboxes");
+  return path.join(os.homedir(), ".ceird", "sandboxes");
 }
 
 export function getRegistryPath(): string {

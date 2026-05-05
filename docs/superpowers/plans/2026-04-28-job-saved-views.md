@@ -74,7 +74,7 @@ Use these definitions for the first version:
 In `jobs-viewer.ts`, add `UserIdType` to the jobs-core import:
 
 ```ts
-import type { JobStatus, UserIdType } from "@task-tracker/jobs-core";
+import type { JobStatus, UserIdType } from "@ceird/jobs-core";
 ```
 
 Then change:
@@ -95,8 +95,8 @@ In `_app._org.jobs.tsx`, add these imports:
 
 ```ts
 import { ParseResult } from "effect";
-import { UserId } from "@task-tracker/jobs-core";
-import type { UserIdType } from "@task-tracker/jobs-core";
+import { UserId } from "@ceird/jobs-core";
+import type { UserIdType } from "@ceird/jobs-core";
 ```
 
 Change `JobsRouteOrganizationAccess.currentUserId` to:
@@ -143,7 +143,7 @@ Expected: PASS.
 Add:
 
 ```ts
-import type { UserIdType } from "@task-tracker/jobs-core";
+import type { UserIdType } from "@ceird/jobs-core";
 
 import { defaultJobsListFilters, type JobsListFilters } from "./jobs-state";
 

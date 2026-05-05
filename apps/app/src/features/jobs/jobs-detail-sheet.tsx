@@ -1,6 +1,23 @@
-/* oxlint-disable complexity */
 "use client";
-
+/* oxlint-disable unicorn/no-array-sort */
+import {
+  JOB_COLLABORATOR_ACCESS_LEVELS,
+  JobCollaboratorAccessLevelSchema,
+} from "@ceird/jobs-core";
+import type {
+  JobCollaborator,
+  JobCollaboratorAccessLevel,
+  JobContactDetail,
+  JobContactOption,
+  JobDetailResponse,
+  JobStatus,
+  UserIdType,
+} from "@ceird/jobs-core";
+import { normalizeLabelName } from "@ceird/labels-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
+import { SiteId } from "@ceird/sites-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
+/* oxlint-disable complexity */
 import {
   Result,
   useAtomInitialValues,
@@ -19,27 +36,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  JOB_COLLABORATOR_ACCESS_LEVELS,
-  JobCollaboratorAccessLevelSchema,
-  JobLabelNameSchema,
-  SiteId,
-  normalizeJobLabelName,
-} from "@task-tracker/jobs-core";
-import type {
-  CreateJobLabelInput,
-  JobCollaborator,
-  JobCollaboratorAccessLevel,
-  JobContactDetail,
-  JobContactOption,
-  JobDetailResponse,
-  JobLabel,
-  JobLabelIdType,
-  JobSiteOption,
-  JobStatus,
-  SiteIdType,
-  UserIdType,
-} from "@task-tracker/jobs-core";
 import { Exit, Option, Schema } from "effect";
 import * as React from "react";
 
@@ -84,6 +80,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { validateLabelName } from "#/features/labels/label-name-validation";
 import { cn } from "#/lib/utils";
 
 import {
@@ -345,15 +342,15 @@ export function JobsDetailSheet({
     () => buildSiteSelectionGroups([...lookup.siteById.values()]),
     [lookup.siteById]
   );
-  const organizationLabels = React.useMemo<readonly JobLabel[]>(
-    () => getSortedJobLabels([...lookup.labelById.values()]),
+  const organizationLabels = React.useMemo<readonly Label[]>(
+    () => getSortedLabels([...lookup.labelById.values()]),
     [lookup.labelById]
   );
-  const assignedLabelIds = React.useMemo<ReadonlySet<JobLabelIdType>>(
+  const assignedLabelIds = React.useMemo<ReadonlySet<LabelIdType>>(
     () => new Set(detail.job.labels.map((label) => label.id)),
     [detail.job.labels]
   );
-  const availableLabels = React.useMemo<readonly JobLabel[]>(
+  const availableLabels = React.useMemo<readonly Label[]>(
     () => organizationLabels.filter((label) => !assignedLabelIds.has(label.id)),
     [assignedLabelIds, organizationLabels]
   );
@@ -600,7 +597,7 @@ export function JobsDetailSheet({
     }
   }
 
-  async function handleAssignLabel(labelId: JobLabelIdType) {
+  async function handleAssignLabel(labelId: LabelIdType) {
     if (!canAssignLabels) {
       return;
     }
@@ -630,7 +627,7 @@ export function JobsDetailSheet({
     await createAndAssignJobLabel({ name: decodedName.name });
   }
 
-  async function handleRemoveLabel(labelId: JobLabelIdType) {
+  async function handleRemoveLabel(labelId: LabelIdType) {
     if (!canAssignLabels) {
       return;
     }
@@ -1745,15 +1742,15 @@ function JobDetailLabels({
   onRemoveLabel,
   organizationLabels,
 }: {
-  readonly availableLabels: readonly JobLabel[];
+  readonly availableLabels: readonly Label[];
   readonly canAssignLabels: boolean;
   readonly canCreateLabels: boolean;
   readonly disabled: boolean;
-  readonly labels: readonly JobLabel[];
-  readonly onAssignLabel: (labelId: JobLabelIdType) => void;
+  readonly labels: readonly Label[];
+  readonly onAssignLabel: (labelId: LabelIdType) => void;
   readonly onCreateAndAssignLabel: (name: string) => void;
-  readonly onRemoveLabel: (labelId: JobLabelIdType) => void;
-  readonly organizationLabels: readonly JobLabel[];
+  readonly onRemoveLabel: (labelId: LabelIdType) => void;
+  readonly organizationLabels: readonly Label[];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -1786,7 +1783,7 @@ function JobDetailLabels({
       )}
 
       {canAssignLabels ? (
-        <JobLabelPicker
+        <LabelPicker
           availableLabels={availableLabels}
           canCreateLabels={canCreateLabels}
           disabled={disabled}
@@ -1799,7 +1796,7 @@ function JobDetailLabels({
   );
 }
 
-function JobLabelPicker({
+function LabelPicker({
   availableLabels,
   canCreateLabels,
   disabled,
@@ -1807,23 +1804,23 @@ function JobLabelPicker({
   onCreateAndAssignLabel,
   organizationLabels,
 }: {
-  readonly availableLabels: readonly JobLabel[];
+  readonly availableLabels: readonly Label[];
   readonly canCreateLabels: boolean;
   readonly disabled: boolean;
-  readonly onAssignLabel: (labelId: JobLabelIdType) => void;
+  readonly onAssignLabel: (labelId: LabelIdType) => void;
   readonly onCreateAndAssignLabel: (name: string) => void;
-  readonly organizationLabels: readonly JobLabel[];
+  readonly organizationLabels: readonly Label[];
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const createLabelName = query.trim();
-  const normalizedCreateName = normalizeJobLabelName(createLabelName);
+  const normalizedCreateName = normalizeLabelName(createLabelName);
   const canCreateLabelName =
     validateLabelName(createLabelName).kind === "valid";
   const hasExistingLabelName =
     normalizedCreateName.length > 0 &&
     organizationLabels.some(
-      (label) => normalizeJobLabelName(label.name) === normalizedCreateName
+      (label) => normalizeLabelName(label.name) === normalizedCreateName
     );
   const showCreate =
     canCreateLabels && canCreateLabelName && !hasExistingLabelName;
@@ -1977,7 +1974,7 @@ function getStatusCommandLabel(status: JobStatus) {
   return `Mark job ${STATUS_LABELS[status].toLowerCase()}`;
 }
 
-function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
+function buildSiteSelectionGroups(sites: readonly SiteOption[]) {
   const sortedSites = getSortedSites(sites);
 
   return [
@@ -1996,77 +1993,25 @@ function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
   ] satisfies readonly CommandSelectGroup[];
 }
 
-function getSortedSites(sites: readonly JobSiteOption[]) {
-  let sortedSites: readonly JobSiteOption[] = [];
-
-  for (const site of sites) {
-    sortedSites = insertSortedSite(sortedSites, site);
-  }
-
-  return sortedSites;
+function getSortedSites(sites: readonly SiteOption[]) {
+  return [...sites].sort(compareSiteOptions);
 }
 
-function compareSiteOptions(left: JobSiteOption, right: JobSiteOption) {
+function compareSiteOptions(left: SiteOption, right: SiteOption) {
   const nameOrder = left.name.localeCompare(right.name);
 
   return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
 }
 
-function insertSortedSite(
-  sortedSites: readonly JobSiteOption[],
-  site: JobSiteOption
-) {
-  const insertIndex = sortedSites.findIndex(
-    (sortedSite) => compareSiteOptions(site, sortedSite) < 0
-  );
-
-  if (insertIndex === -1) {
-    return [...sortedSites, site];
-  }
-
-  return [
-    ...sortedSites.slice(0, insertIndex),
-    site,
-    ...sortedSites.slice(insertIndex),
-  ];
+function getSortedLabels(labels: readonly Label[]) {
+  return [...labels].sort(compareLabels);
 }
 
-function getSortedJobLabels(labels: readonly JobLabel[]) {
-  let sortedLabels: readonly JobLabel[] = [];
-
-  for (const label of labels) {
-    sortedLabels = insertSortedJobLabel(sortedLabels, label);
-  }
-
-  return sortedLabels;
-}
-
-function compareJobLabels(left: JobLabel, right: JobLabel) {
+function compareLabels(left: Label, right: Label) {
   const nameOrder = left.name.localeCompare(right.name);
 
   return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
 }
-
-function insertSortedJobLabel(
-  sortedLabels: readonly JobLabel[],
-  label: JobLabel
-) {
-  const insertIndex = sortedLabels.findIndex(
-    (sortedLabel) => compareJobLabels(label, sortedLabel) < 0
-  );
-
-  if (insertIndex === -1) {
-    return [...sortedLabels, label];
-  }
-
-  return [
-    ...sortedLabels.slice(0, insertIndex),
-    label,
-    ...sortedLabels.slice(insertIndex),
-  ];
-}
-
-const decodeJobLabelName = Schema.decodeUnknownSync(JobLabelNameSchema);
 
 function toExternalMemberOptions(
   members: readonly {
@@ -2108,26 +2053,6 @@ function insertSortedExternalMember(
     member,
     ...members.slice(insertIndex),
   ];
-}
-
-function validateLabelName(
-  input: string
-):
-  | { readonly kind: "empty" }
-  | { readonly kind: "invalid" }
-  | { readonly kind: "valid"; readonly name: CreateJobLabelInput["name"] } {
-  if (input.trim().length === 0) {
-    return { kind: "empty" };
-  }
-
-  try {
-    return {
-      kind: "valid",
-      name: decodeJobLabelName(input),
-    };
-  } catch {
-    return { kind: "invalid" };
-  }
 }
 
 function renderMutationError(

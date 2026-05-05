@@ -1,15 +1,14 @@
-import { RegistryProvider } from "@effect-atom/atom-react";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type {
-  JobLabelIdType,
   ContactIdType,
   JobListResponse,
   JobOptionsResponse,
-  ServiceAreaIdType,
-  SiteIdType,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+import { RegistryProvider } from "@effect-atom/atom-react";
 import {
   fireEvent,
   render,
@@ -41,9 +40,8 @@ const serviceAreaWestId =
   "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType;
 const siteDepotId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 const siteSchoolId = "66666666-6666-4666-8666-666666666666" as SiteIdType;
-const labelComplianceId =
-  "12121212-1212-4121-8121-121212121212" as JobLabelIdType;
-const labelAccessId = "34343434-3434-4343-8343-343434343434" as JobLabelIdType;
+const labelComplianceId = "12121212-1212-4121-8121-121212121212" as LabelIdType;
+const labelAccessId = "34343434-3434-4343-8343-343434343434" as LabelIdType;
 const organizationId = decodeOrganizationId("org_123");
 const originalInnerWidth = window.innerWidth;
 

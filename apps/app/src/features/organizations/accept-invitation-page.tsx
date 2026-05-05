@@ -1,6 +1,6 @@
+import { decodeOrganizationRole } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { decodeOrganizationRole } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import { Alert, AlertDescription } from "#/components/ui/alert";

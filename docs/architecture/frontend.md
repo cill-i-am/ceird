@@ -76,10 +76,14 @@ Shared app components live in `src/components`. shadcn-style primitives live in
 
 ## API Access From The App
 
-Jobs API access is contract-based:
+Domain API access is contract-based:
 
-- `features/jobs/jobs-client.ts` builds an Effect `HttpApiClient` from
-  `@task-tracker/jobs-core`.
+- `features/jobs/jobs-client.ts` builds a composed Effect `HttpApiClient` from
+  jobs, labels, sites, service-area, and rate-card API groups exported by
+  `@ceird/jobs-core`, `@ceird/labels-core`, and `@ceird/sites-core`.
+  App code imports site-owned DTOs from `@ceird/sites-core` and
+  organization-label DTOs from `@ceird/labels-core`; `@ceird/jobs-core` only
+  supplies job-owned DTOs and the job-label assignment contract.
 - `features/jobs/jobs-server.ts` exposes isomorphic helpers. On the server it
   imports `jobs-server-ssr.ts`; in the browser it calls the same API through
   `fetch`.
@@ -101,7 +105,8 @@ preserve the original browser host/protocol for trusted proxy and cookie logic.
 ## State And Validation
 
 Runtime payloads that cross the app/API boundary are decoded with shared Effect
-schemas from `@task-tracker/jobs-core` and `@task-tracker/identity-core`.
+schemas from `@ceird/jobs-core`, `@ceird/sites-core`, `@ceird/labels-core`, and
+`@ceird/identity-core`.
 Feature-local form/search schemas live next to the feature that owns them, for
 example:
 

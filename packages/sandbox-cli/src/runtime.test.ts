@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { validateSandboxName } from "@task-tracker/sandbox-core";
+import { validateSandboxName } from "@ceird/sandbox-core";
 import {
   SandboxRegistryError,
   SandboxRegistryRecord,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 import { Effect, Either, Exit, Schema } from "effect";
 
 import type { SandboxProcess } from "./process.js";
@@ -30,15 +30,15 @@ import { SandboxPreflightError } from "./sandbox-preflight-error.js";
 const baseRecord = Schema.decodeUnknownSync(SandboxRegistryRecord)({
   sandboxId: "abc123def456",
   sandboxName: "alpha",
-  composeProjectName: "tt-sbx-alpha",
+  composeProjectName: "ceird-sbx-alpha",
   hostnameSlug: "alpha",
   repoRoot: "/repo",
   worktreePath: "/repo/.worktrees/alpha",
   betterAuthSecret: "secret-alpha",
   runtimeAssets: {
-    devImage: "tt-sbx-task-tracker-dev:123456789abc",
-    nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-    pnpmStoreVolume: "tt-sbx-pnpm-store",
+    devImage: "ceird-sbx-ceird-dev:123456789abc",
+    nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+    pnpmStoreVolume: "ceird-sbx-pnpm-store",
   },
   aliasesHealthy: true,
   ports: {
@@ -593,10 +593,10 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "",
       CLOUDFLARE_API_TOKEN: "",
-      AUTH_APP_ORIGIN: "https://alpha.app.task-tracker.localhost:1355",
+      AUTH_APP_ORIGIN: "https://alpha.app.ceird.localhost:1355",
       AUTH_RATE_LIMIT_ENABLED: "false",
-      BETTER_AUTH_BASE_URL: "https://alpha.api.task-tracker.localhost:1355",
-      VITE_API_ORIGIN: "https://alpha.api.task-tracker.localhost:1355",
+      BETTER_AUTH_BASE_URL: "https://alpha.api.ceird.localhost:1355",
+      VITE_API_ORIGIN: "https://alpha.api.ceird.localhost:1355",
       SANDBOX_NAME: "alpha",
     });
   }, 10_000);
@@ -605,7 +605,7 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
 describe("loadSandboxEnvironmentOrThrow()", () => {
   it("preserves an explicit AUTH_EMAIL_FROM_NAME override from sandbox env files", async () => {
     const repoRoot = await fs.mkdtemp(
-      path.join(os.tmpdir(), "task-tracker-sandbox-env-")
+      path.join(os.tmpdir(), "ceird-sandbox-env-")
     );
     const previousEnv = {
       AUTH_EMAIL_FROM: process.env.AUTH_EMAIL_FROM,
@@ -619,7 +619,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
         path.join(repoRoot, ".env"),
         [
           "AUTH_EMAIL_FROM=auth@example.com",
-          "AUTH_EMAIL_FROM_NAME=Task Tracker Auth",
+          "AUTH_EMAIL_FROM_NAME=Ceird Auth",
           "AUTH_EMAIL_TRANSPORT=cloudflare-api",
           "CLOUDFLARE_ACCOUNT_ID=account_123",
           "CLOUDFLARE_API_TOKEN=token_123",
@@ -646,7 +646,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
         )
       ).resolves.toStrictEqual({
         AUTH_EMAIL_FROM: "auth@example.com",
-        AUTH_EMAIL_FROM_NAME: "Task Tracker Auth",
+        AUTH_EMAIL_FROM_NAME: "Ceird Auth",
         AUTH_EMAIL_TRANSPORT: "cloudflare-api",
         CLOUDFLARE_ACCOUNT_ID: "account_123",
         CLOUDFLARE_API_TOKEN: "token_123",
@@ -689,7 +689,7 @@ describe("authEmailSharedEnvironment", () => {
       })
     ).toStrictEqual({
       AUTH_EMAIL_FROM: "auth@example.com",
-      AUTH_EMAIL_FROM_NAME: "Task Tracker",
+      AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "",
       CLOUDFLARE_API_TOKEN: "",
@@ -713,14 +713,14 @@ describe("authEmailSharedEnvironment", () => {
     expect(
       Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
         AUTH_EMAIL_FROM: "auth@example.com",
-        AUTH_EMAIL_FROM_NAME: "Task Tracker",
+        AUTH_EMAIL_FROM_NAME: "Ceird",
         AUTH_EMAIL_TRANSPORT: "noop",
         CLOUDFLARE_ACCOUNT_ID: "   ",
         CLOUDFLARE_API_TOKEN: "\t",
       })
     ).toStrictEqual({
       AUTH_EMAIL_FROM: "auth@example.com",
-      AUTH_EMAIL_FROM_NAME: "Task Tracker",
+      AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "   ",
       CLOUDFLARE_API_TOKEN: "\t",
@@ -733,7 +733,7 @@ describe("authEmailSharedEnvironment", () => {
       expect(() =>
         Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_FROM_NAME: "Ceird",
           AUTH_EMAIL_TRANSPORT: "cloudflare-api",
           CLOUDFLARE_ACCOUNT_ID:
             key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",
@@ -744,7 +744,7 @@ describe("authEmailSharedEnvironment", () => {
       expect(() =>
         Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_FROM_NAME: "Ceird",
           AUTH_EMAIL_TRANSPORT: "cloudflare-api",
           CLOUDFLARE_ACCOUNT_ID:
             key === "CLOUDFLARE_ACCOUNT_ID" ? "   " : "account_123",

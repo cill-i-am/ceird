@@ -1,3 +1,25 @@
+import {
+  LabelsApi,
+  LabelNameSchema,
+  LabelSchema,
+  normalizeLabelName,
+} from "@ceird/labels-core";
+import {
+  CreateServiceAreaInputSchema,
+  CreateServiceAreaResponseSchema,
+  CreateSiteInputSchema,
+  CreateSiteResponseSchema,
+  ServiceAreasApiGroup,
+  ServiceAreaOptionSchema,
+  ServiceAreaSchema,
+  SiteGeocodingFailedError,
+  SiteOptionSchema,
+  SitesApi,
+  SitesApiGroup,
+  SitesOptionsResponseSchema,
+  UpdateServiceAreaInputSchema,
+  UpdateServiceAreaResponseSchema,
+} from "@ceird/sites-core";
 import { OpenApi } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
 import * as Vitest from "vitest";
@@ -11,10 +33,6 @@ import {
   calculateJobCostSummary,
   CreateJobInputSchema,
   CreateRateCardInputSchema,
-  CreateServiceAreaInputSchema,
-  CreateServiceAreaResponseSchema,
-  CreateSiteInputSchema,
-  CreateSiteResponseSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
   JobActivityJobCreatedPayloadSchema,
   JobActivityLabelAddedPayloadSchema,
@@ -28,14 +46,11 @@ import {
   JobExternalMemberOptionsResponseSchema,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
-  JobLabelNameSchema,
-  JobLabelSchema,
   JobListItemSchema,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
   JobPrioritySchema,
   JobOptionsResponseSchema,
-  JobSiteOptionSchema,
   JobStatusSchema,
   JobViewerAccessSchema,
   JobsApi,
@@ -50,19 +65,10 @@ import {
   PatchJobInputSchema,
   RateCardSchema,
   RateCardsApiGroup,
-  ServiceAreasApiGroup,
-  ServiceAreaOptionSchema,
-  ServiceAreaSchema,
-  SitesOptionsResponseSchema,
-  SitesApiGroup,
-  SiteGeocodingFailedError,
   UpdateJobCollaboratorInputSchema,
-  UpdateServiceAreaInputSchema,
-  UpdateServiceAreaResponseSchema,
   UserId,
   VisitDurationIncrementError,
   WorkItemId,
-  normalizeJobLabelName,
 } from "./index.js";
 
 const { describe, expect, it } = Vitest;
@@ -753,15 +759,15 @@ describe("jobs-core", () => {
 
   it("keeps job label DTOs shapeable", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobLabelNameSchema)("  Waiting on PO  ")
+      ParseResult.decodeUnknownSync(LabelNameSchema)("  Waiting on PO  ")
     ).toBe("Waiting on PO");
-    expect(normalizeJobLabelName("  Waiting   on PO  ")).toBe("waiting on po");
+    expect(normalizeLabelName("  Waiting   on PO  ")).toBe("waiting on po");
 
     expect(() =>
-      ParseResult.decodeUnknownSync(JobLabelNameSchema)(" ".repeat(4))
+      ParseResult.decodeUnknownSync(LabelNameSchema)(" ".repeat(4))
     ).toThrow(/at least 1/);
 
-    const label = ParseResult.decodeUnknownSync(JobLabelSchema)({
+    const label = ParseResult.decodeUnknownSync(LabelSchema)({
       id: "11111111-1111-4111-8111-111111111111",
       name: "Waiting on PO",
       createdAt: "2026-04-28T10:00:00.000Z",
@@ -1169,7 +1175,7 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(JobSiteOptionSchema)(siteOption)
+      ParseResult.decodeUnknownSync(SiteOptionSchema)(siteOption)
     ).toStrictEqual({
       id: "550e8400-e29b-41d4-a716-446655440010",
       name: "Docklands Campus",
@@ -1190,7 +1196,7 @@ describe("jobs-core", () => {
     expect(
       ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
     ).toStrictEqual(
-      ParseResult.decodeUnknownSync(JobSiteOptionSchema)(siteOption)
+      ParseResult.decodeUnknownSync(SiteOptionSchema)(siteOption)
     );
   }, 5000);
 
@@ -1210,18 +1216,11 @@ describe("jobs-core", () => {
       "/jobs/{workItemId}/visits",
       "/jobs/{workItemId}/labels",
       "/jobs/{workItemId}/labels/{labelId}",
-      "/job-labels",
-      "/job-labels/{labelId}",
       "/jobs/{workItemId}/cost-lines",
       "/jobs/{workItemId}/collaborators",
       "/jobs/{workItemId}/collaborators/{collaboratorId}",
-      "/service-areas",
-      "/service-areas/{serviceAreaId}",
       "/rate-cards",
       "/rate-cards/{rateCardId}",
-      "/sites/options",
-      "/sites",
-      "/sites/{siteId}",
     ]);
 
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
@@ -1236,22 +1235,19 @@ describe("jobs-core", () => {
       spec.paths["/jobs/{workItemId}/visits"]?.post?.responses["400"]
     ).toBeDefined();
     expect(spec.paths["/jobs"]?.post?.responses["422"]).toBeDefined();
-    expect(spec.paths["/sites/options"]?.get?.operationId).toBe(
-      "sites.getSiteOptions"
-    );
-    expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
   }, 5000);
 
   it("documents job label api operations", () => {
-    const spec = OpenApi.fromApi(JobsApi);
+    const labelsSpec = OpenApi.fromApi(LabelsApi);
+    const jobsSpec = OpenApi.fromApi(JobsApi);
 
-    expect(spec.paths["/job-labels"]?.get?.operationId).toBe(
-      "jobs.listJobLabels"
+    expect(labelsSpec.paths["/labels"]?.get?.operationId).toBe(
+      "labels.listLabels"
     );
-    expect(spec.paths["/job-labels"]?.post?.operationId).toBe(
-      "jobs.createJobLabel"
+    expect(labelsSpec.paths["/labels"]?.post?.operationId).toBe(
+      "labels.createLabel"
     );
-    expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
+    expect(jobsSpec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
       "jobs.assignJobLabel"
     );
   }, 5000);
@@ -1275,7 +1271,7 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("surfaces the service areas api contract with the expected paths", () => {
-    const spec = OpenApi.fromApi(JobsApi);
+    const spec = OpenApi.fromApi(SitesApi);
 
     expect(spec.paths["/service-areas"]?.get?.operationId).toBe(
       "serviceAreas.listServiceAreas"
@@ -1323,7 +1319,7 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("documents standalone site creation responses", () => {
-    const spec = OpenApi.fromApi(JobsApi);
+    const spec = OpenApi.fromApi(SitesApi);
 
     expect(spec.paths["/sites"]?.post?.responses["201"]).toBeDefined();
     expect(spec.paths["/sites"]?.post?.responses["403"]).toBeDefined();
@@ -1332,12 +1328,13 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("does not document create-site coordinates as request properties", () => {
-    const spec = OpenApi.fromApi(JobsApi);
+    const sitesSpec = OpenApi.fromApi(SitesApi);
+    const jobsSpec = OpenApi.fromApi(JobsApi);
     const standaloneRequestBody = JSON.stringify(
-      spec.paths["/sites"]?.post?.requestBody
+      sitesSpec.paths["/sites"]?.post?.requestBody
     );
     const jobsRequestBody = JSON.stringify(
-      spec.paths["/jobs"]?.post?.requestBody
+      jobsSpec.paths["/jobs"]?.post?.requestBody
     );
 
     expect(standaloneRequestBody).not.toContain('"latitude"');
@@ -1480,9 +1477,7 @@ describe("jobs-core", () => {
       durationMinutes: 30,
     });
 
-    expect(error._tag).toBe(
-      "@task-tracker/jobs-core/VisitDurationIncrementError"
-    );
+    expect(error._tag).toBe("@ceird/jobs-core/VisitDurationIncrementError");
     expect(error.durationMinutes).toBe(30);
 
     const geocodingError = new SiteGeocodingFailedError({
@@ -1492,7 +1487,7 @@ describe("jobs-core", () => {
     });
 
     expect(geocodingError._tag).toBe(
-      "@task-tracker/jobs-core/SiteGeocodingFailedError"
+      "@ceird/sites-core/SiteGeocodingFailedError"
     );
     expect(geocodingError.country).toBe("IE");
 
@@ -1504,7 +1499,7 @@ describe("jobs-core", () => {
     });
 
     expect(costSummaryError._tag).toBe(
-      "@task-tracker/jobs-core/JobCostSummaryLimitExceededError"
+      "@ceird/jobs-core/JobCostSummaryLimitExceededError"
     );
 
     const activityCursorError = new OrganizationActivityCursorInvalidError({
@@ -1513,7 +1508,7 @@ describe("jobs-core", () => {
     });
 
     expect(activityCursorError._tag).toBe(
-      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
+      "@ceird/jobs-core/OrganizationActivityCursorInvalidError"
     );
   }, 5000);
 

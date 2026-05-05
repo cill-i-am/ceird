@@ -91,7 +91,7 @@ Remove or replace:
 - the current `/about` starter page
 - documentation and social links that exist only because this began as a
   template
-- fake “Task Tracker / starter workspace” shell user data
+- fake “Ceird / starter workspace” shell user data
 - any nav items whose only purpose is to demo the starter
 
 Keep only what is needed for a real minimal app:

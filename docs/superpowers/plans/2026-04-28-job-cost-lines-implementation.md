@@ -127,7 +127,7 @@ In `packages/jobs-core/src/ids.ts`, add after `VisitId`:
 
 ```ts
 export const CostLineId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/CostLineId")
+  Schema.brand("@ceird/jobs-core/CostLineId")
 );
 export type CostLineId = Schema.Schema.Type<typeof CostLineId>;
 ```

@@ -1,13 +1,10 @@
-import type {
-  JobActivityPayload,
-  JobLabelIdType,
-  VisitIdType,
-} from "@task-tracker/jobs-core";
+import type { JobActivityPayload, VisitIdType } from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
 
 import { describeJobActivity } from "./activity-formatting";
 
 const visitId = "88888888-8888-4888-8888-888888888888" as VisitIdType;
-const labelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
+const labelId = "99999999-9999-4999-8999-999999999999" as LabelIdType;
 
 describe("job activity formatting", () => {
   it.each([

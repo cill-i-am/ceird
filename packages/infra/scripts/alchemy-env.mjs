@@ -10,7 +10,6 @@ const envFile = resolve(repoRoot, ".env.local");
 const [command = "deploy", ...args] = process.argv.slice(2);
 const stageAwareCommands = new Set(["deploy", "destroy", "dev", "plan"]);
 const promptlessCommands = new Set(["deploy", "destroy"]);
-const env = (primary, legacy) => process.env[primary] ?? process.env[legacy];
 
 if (existsSync(envFile)) {
   for (const line of readFileSync(envFile, "utf8").split(/\r?\n/u)) {
@@ -33,36 +32,31 @@ if (existsSync(envFile)) {
 
 if (
   !process.env.API_ORIGIN &&
-  typeof env("CEIRD_API_HOSTNAME", "TASK_TRACKER_API_HOSTNAME") === "string" &&
-  env("CEIRD_API_HOSTNAME", "TASK_TRACKER_API_HOSTNAME").length > 0
+  typeof process.env.CEIRD_API_HOSTNAME === "string" &&
+  process.env.CEIRD_API_HOSTNAME.length > 0
 ) {
-  process.env.API_ORIGIN = `https://${env(
-    "CEIRD_API_HOSTNAME",
-    "TASK_TRACKER_API_HOSTNAME"
-  )}`;
+  process.env.API_ORIGIN = `https://${process.env.CEIRD_API_HOSTNAME}`;
 }
 
 process.env.VITE_API_ORIGIN ??= process.env.API_ORIGIN;
 process.env.CEIRD_CLOUDFLARE ??= "1";
-process.env.TASK_TRACKER_CLOUDFLARE ??= "1";
 
 const hasFlag = (flag) =>
   args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`));
 
 const resolvedAlchemyProfile =
-  process.env.ALCHEMY_PROFILE ??
-  env("CEIRD_ALCHEMY_PROFILE", "TASK_TRACKER_ALCHEMY_PROFILE");
+  process.env.ALCHEMY_PROFILE ?? process.env.CEIRD_ALCHEMY_PROFILE;
 const profileArgs =
   resolvedAlchemyProfile || process.env.CI !== "true"
-    ? ["--profile", resolvedAlchemyProfile ?? "task-tracker-bootstrap"]
+    ? ["--profile", resolvedAlchemyProfile ?? "ceird-bootstrap"]
     : [];
 const stageArgs =
   stageAwareCommands.has(command) && !hasFlag("--stage")
     ? [
         "--stage",
         process.env.ALCHEMY_STAGE ??
-          env("CEIRD_ALCHEMY_STAGE", "TASK_TRACKER_ALCHEMY_STAGE") ??
-          env("CEIRD_INFRA_STAGE", "TASK_TRACKER_INFRA_STAGE") ??
+          process.env.CEIRD_ALCHEMY_STAGE ??
+          process.env.CEIRD_INFRA_STAGE ??
           "production",
       ]
     : [];
@@ -97,7 +91,7 @@ const child = spawn("alchemy", alchemyArgs, {
     ...process.env,
     ...(resolvedAlchemyProfile || process.env.CI !== "true"
       ? {
-          ALCHEMY_PROFILE: resolvedAlchemyProfile ?? "task-tracker-bootstrap",
+          ALCHEMY_PROFILE: resolvedAlchemyProfile ?? "ceird-bootstrap",
         }
       : {}),
     CI: process.env.CI ?? "false",

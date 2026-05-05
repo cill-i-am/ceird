@@ -212,7 +212,7 @@ Password reset already established the first version of this boundary in
 That boundary now contributes runtime config at auth startup:
 
 - `AUTH_EMAIL_FROM`
-- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Ceird"`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 

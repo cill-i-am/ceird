@@ -8,28 +8,28 @@ const SANDBOX_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const SandboxId = Schema.String.pipe(
   Schema.pattern(/^[a-f0-9]+$/),
-  Schema.brand("@task-tracker/SandboxId")
+  Schema.brand("@ceird/SandboxId")
 );
 
 export type SandboxId = Schema.Schema.Type<typeof SandboxId>;
 
 export const SandboxName = Schema.String.pipe(
   Schema.pattern(SANDBOX_NAME_PATTERN),
-  Schema.brand("@task-tracker/SandboxName")
+  Schema.brand("@ceird/SandboxName")
 );
 
 export type SandboxName = Schema.Schema.Type<typeof SandboxName>;
 
 export const HostnameSlug = Schema.String.pipe(
   Schema.pattern(SANDBOX_NAME_PATTERN),
-  Schema.brand("@task-tracker/HostnameSlug")
+  Schema.brand("@ceird/HostnameSlug")
 );
 
 export type HostnameSlug = Schema.Schema.Type<typeof HostnameSlug>;
 
 export const ComposeProjectName = Schema.String.pipe(
-  Schema.pattern(/^tt-sbx-[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  Schema.brand("@task-tracker/ComposeProjectName")
+  Schema.pattern(/^ceird-sbx-[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  Schema.brand("@ceird/ComposeProjectName")
 );
 
 export type ComposeProjectName = Schema.Schema.Type<typeof ComposeProjectName>;
@@ -67,7 +67,9 @@ export function validateSandboxName(name: string): SandboxName {
 export function makeComposeProjectName(
   sandboxName: SandboxName
 ): ComposeProjectName {
-  return Schema.decodeUnknownSync(ComposeProjectName)(`tt-sbx-${sandboxName}`);
+  return Schema.decodeUnknownSync(ComposeProjectName)(
+    `ceird-sbx-${sandboxName}`
+  );
 }
 
 export function hashSandboxSeed(

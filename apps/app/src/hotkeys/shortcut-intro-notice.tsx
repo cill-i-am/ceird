@@ -1,10 +1,9 @@
 "use client";
-
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
 
-const SHORTCUT_INTRO_STORAGE_KEY = "task-tracker-shortcut-intro-seen";
+const SHORTCUT_INTRO_STORAGE_KEY = "ceird-shortcut-intro-seen";
 
 function getShortcutIntroSeen() {
   try {

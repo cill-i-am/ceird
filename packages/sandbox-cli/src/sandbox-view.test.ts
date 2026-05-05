@@ -3,7 +3,7 @@ import {
   makeComposeProjectName,
   validateHostnameSlug,
   validateSandboxName,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 
 import {
   formatSandboxJsonLines,
@@ -40,11 +40,11 @@ describe("formatSandboxViewLines()", () => {
     ).toStrictEqual([
       "Sandbox ready",
       "  sandbox: feature-branch",
-      "  compose project: tt-sbx-feature-branch",
+      "  compose project: ceird-sbx-feature-branch",
       "  status: ready",
-      "  app url: https://feature-branch.app.task-tracker.localhost:1355",
-      "  api url: https://feature-branch.api.task-tracker.localhost:1355",
-      "  postgres url: postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      "  app url: https://feature-branch.app.ceird.localhost:1355",
+      "  api url: https://feature-branch.api.ceird.localhost:1355",
+      "  postgres url: postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       "  app fallback url: http://127.0.0.1:4300",
       "  api fallback url: http://127.0.0.1:4301",
     ]);
@@ -77,12 +77,12 @@ describe("formatSandboxJsonLines()", () => {
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0] ?? "")).toStrictEqual({
       sandbox: "feature-branch",
-      composeProject: "tt-sbx-feature-branch",
+      composeProject: "ceird-sbx-feature-branch",
       status: "ready",
       urls: {
-        app: "https://feature-branch.app.task-tracker.localhost:1355",
-        api: "https://feature-branch.api.task-tracker.localhost:1355",
-        postgres: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+        app: "https://feature-branch.app.ceird.localhost:1355",
+        api: "https://feature-branch.api.ceird.localhost:1355",
+        postgres: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
         fallbackApp: "http://127.0.0.1:4300",
         fallbackApi: "http://127.0.0.1:4301",
       },
@@ -119,11 +119,11 @@ describe("formatSandboxStartupTimeoutLines()", () => {
     ).toStrictEqual([
       "Sandbox startup timed out after 60 seconds.",
       "  sandbox: feature-branch",
-      "  compose project: tt-sbx-feature-branch",
+      "  compose project: ceird-sbx-feature-branch",
       "  postgres ready: yes",
       "  api ready: no",
       "  app ready: no",
-      "  postgres url: postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      "  postgres url: postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       "  app fallback url: http://127.0.0.1:4300",
       "  api fallback url: http://127.0.0.1:4301",
       "  next step: pnpm sandbox:logs -- --name feature-branch --service api",
@@ -219,7 +219,7 @@ describe("detectSandboxTerminalStyle()", () => {
     expect(
       detectSandboxTerminalStyle({
         env: {
-          TASK_TRACKER_SANDBOX_ASCII: "1",
+          CEIRD_SANDBOX_ASCII: "1",
         },
         stdoutIsTTY: true,
       })

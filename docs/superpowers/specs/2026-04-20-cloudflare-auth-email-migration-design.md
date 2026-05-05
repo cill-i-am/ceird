@@ -258,7 +258,7 @@ arbitrary headers in this pass.
 Replace the current config contract with Cloudflare-native values:
 
 - `AUTH_EMAIL_FROM`
-- `AUTH_EMAIL_FROM_NAME` with default `"Task Tracker"`
+- `AUTH_EMAIL_FROM_NAME` with default `"Ceird"`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 

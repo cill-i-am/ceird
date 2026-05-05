@@ -9,14 +9,11 @@ test("adds default static portless URLs for local dev", () => {
     PORTLESS_PORT: "1355",
   });
 
-  assert.equal(env.API_ORIGIN, "https://api.task-tracker.localhost:1355");
-  assert.equal(
-    env.BETTER_AUTH_BASE_URL,
-    "https://api.task-tracker.localhost:1355"
-  );
-  assert.equal(env.AUTH_APP_ORIGIN, "https://app.task-tracker.localhost:1355");
-  assert.equal(env.AUTH_EMAIL_FROM, "auth@task-tracker.localhost");
-  assert.equal(env.AUTH_EMAIL_FROM_NAME, "Task Tracker");
+  assert.equal(env.API_ORIGIN, "https://api.ceird.localhost:1355");
+  assert.equal(env.BETTER_AUTH_BASE_URL, "https://api.ceird.localhost:1355");
+  assert.equal(env.AUTH_APP_ORIGIN, "https://app.ceird.localhost:1355");
+  assert.equal(env.AUTH_EMAIL_FROM, "auth@ceird.localhost");
+  assert.equal(env.AUTH_EMAIL_FROM_NAME, "Ceird");
   assert.equal(env.AUTH_EMAIL_TRANSPORT, "noop");
   assert.equal(env.CLOUDFLARE_ACCOUNT_ID, undefined);
   assert.equal(env.CLOUDFLARE_API_TOKEN, undefined);

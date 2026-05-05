@@ -65,8 +65,7 @@ it("composes the expected email verification message", async () => {
       idempotencyKey: "email-verification/user-123/token-verify123",
       recipientEmail: "alice@example.com",
       recipientName: "Alice",
-      verificationUrl:
-        "https://app.task-tracker.localhost/verify-email?success=1",
+      verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
     }).pipe(
       Effect.provide(
         makeAuthEmailSenderTestLayer((message) =>
@@ -87,11 +86,11 @@ it("composes the expected email verification message", async () => {
         "Hello Alice,",
         "",
         "Use this link to verify your email:",
-        "https://app.task-tracker.localhost/verify-email?success=1",
+        "https://app.ceird.localhost/verify-email?success=1",
       ].join("\\n"),
       html: [
         "<p>Hello Alice,</p>",
-        '<p><a href="https://app.task-tracker.localhost/verify-email?success=1">Verify your email</a></p>',
+        '<p><a href="https://app.ceird.localhost/verify-email?success=1">Verify your email</a></p>',
       ].join(""),
     },
   ]);
@@ -103,8 +102,7 @@ it("maps provider failures into EmailVerificationDeliveryError", async () => {
       idempotencyKey: "email-verification/user-123/token-verify123",
       recipientEmail: "alice@example.com",
       recipientName: "Alice",
-      verificationUrl:
-        "https://app.task-tracker.localhost/verify-email?success=1",
+      verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
     }).pipe(
       Effect.either,
       Effect.provide(
@@ -847,7 +845,7 @@ pnpm dlx shadcn@latest add alert
 Working directory:
 
 ```bash
-cd /Users/cillianbarron/Documents/Development/task-tracker/apps/app
+cd /Users/cillianbarron/Documents/Development/ceird/apps/app
 ```
 
 Expected: `apps/app/src/components/ui/alert.tsx` is created using the project’s `base-luma` shadcn config.

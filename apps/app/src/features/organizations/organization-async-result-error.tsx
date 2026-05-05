@@ -1,5 +1,4 @@
 "use client";
-
 import { Result } from "@effect-atom/atom-react";
 
 export function OrganizationAsyncResultError({

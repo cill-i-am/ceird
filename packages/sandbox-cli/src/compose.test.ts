@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   makeComposeProjectName,
   validateSandboxName,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 
 import {
   buildComposeCommandArgs,
@@ -16,8 +16,7 @@ describe("buildComposeCommandArgs()", () => {
     expect(
       buildComposeCommandArgs({
         composeFile: "/repo/packages/sandbox-cli/docker/sandbox.compose.yaml",
-        composeEnvFile:
-          "/Users/me/.task-tracker/sandboxes/agent-one/compose.env",
+        composeEnvFile: "/Users/me/.ceird/sandboxes/agent-one/compose.env",
         composeProjectName: makeComposeProjectName(
           validateSandboxName("agent-one")
         ),
@@ -28,9 +27,9 @@ describe("buildComposeCommandArgs()", () => {
       "--file",
       "/repo/packages/sandbox-cli/docker/sandbox.compose.yaml",
       "--project-name",
-      "tt-sbx-agent-one",
+      "ceird-sbx-agent-one",
       "--env-file",
-      "/Users/me/.task-tracker/sandboxes/agent-one/compose.env",
+      "/Users/me/.ceird/sandboxes/agent-one/compose.env",
       "up",
       "-d",
     ]);
@@ -49,18 +48,17 @@ describe("renderComposeEnvironmentFile()", () => {
           APP_HOST_PORT: "4300",
           AUTH_APP_ORIGIN: "http://127.0.0.1:4300",
           AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_FROM_NAME: "Ceird",
           AUTH_EMAIL_TRANSPORT: "noop",
           AUTH_RATE_LIMIT_ENABLED: "false",
           BETTER_AUTH_BASE_URL: "http://127.0.0.1:4301",
           CLOUDFLARE_ACCOUNT_ID: "",
           CLOUDFLARE_API_TOKEN: "",
-          DATABASE_URL:
-            "postgresql://postgres:postgres@postgres:5432/task_tracker",
-          SANDBOX_DEV_IMAGE: "tt-sbx-task-tracker-dev:123456789abc",
+          DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/ceird",
+          SANDBOX_DEV_IMAGE: "ceird-sbx-ceird-dev:123456789abc",
           SANDBOX_NODE_MODULES_VOLUME:
-            "tt-sbx-node-modules-123456789abc-def456789abc",
-          SANDBOX_PNPM_STORE_VOLUME: "tt-sbx-pnpm-store",
+            "ceird-sbx-node-modules-123456789abc-def456789abc",
+          SANDBOX_PNPM_STORE_VOLUME: "ceird-sbx-pnpm-store",
         },
       })
     ).toBe(
@@ -72,16 +70,16 @@ describe("renderComposeEnvironmentFile()", () => {
         "APP_HOST_PORT=4300",
         "AUTH_APP_ORIGIN=http://127.0.0.1:4300",
         "AUTH_EMAIL_FROM=auth@example.com",
-        "AUTH_EMAIL_FROM_NAME=Task Tracker",
+        "AUTH_EMAIL_FROM_NAME=Ceird",
         "AUTH_EMAIL_TRANSPORT=noop",
         "AUTH_RATE_LIMIT_ENABLED=false",
         "BETTER_AUTH_BASE_URL=http://127.0.0.1:4301",
         "CLOUDFLARE_ACCOUNT_ID=",
         "CLOUDFLARE_API_TOKEN=",
-        "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/task_tracker",
-        "SANDBOX_DEV_IMAGE=tt-sbx-task-tracker-dev:123456789abc",
-        "SANDBOX_NODE_MODULES_VOLUME=tt-sbx-node-modules-123456789abc-def456789abc",
-        "SANDBOX_PNPM_STORE_VOLUME=tt-sbx-pnpm-store",
+        "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ceird",
+        "SANDBOX_DEV_IMAGE=ceird-sbx-ceird-dev:123456789abc",
+        "SANDBOX_NODE_MODULES_VOLUME=ceird-sbx-node-modules-123456789abc-def456789abc",
+        "SANDBOX_PNPM_STORE_VOLUME=ceird-sbx-pnpm-store",
         "",
       ].join("\n")
     );

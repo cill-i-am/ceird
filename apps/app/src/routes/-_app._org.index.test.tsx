@@ -1,7 +1,7 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 const organizationId = decodeOrganizationId("org_123");
 

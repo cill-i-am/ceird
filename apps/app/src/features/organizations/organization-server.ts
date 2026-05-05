@@ -1,14 +1,14 @@
-import { createServerOnlyFn } from "@tanstack/react-start";
 import {
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummaryList,
   OrganizationId,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
   OrganizationMemberRoleResponse,
   OrganizationSummary,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
+import { createServerOnlyFn } from "@tanstack/react-start";
 import { Schema } from "effect";
 
 import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";

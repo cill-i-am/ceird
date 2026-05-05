@@ -1,10 +1,10 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import { RegistryProvider } from "@effect-atom/atom-react";
 import type {
   RateCard,
   RateCardIdType,
   RateCardLineIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
+import { RegistryProvider } from "@effect-atom/atom-react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -25,27 +25,27 @@ const secondLineId =
 const {
   mockedCreateRateCard,
   mockedListRateCards,
-  mockedMakeBrowserJobsClient,
+  mockedMakeBrowserAppApiClient,
   mockedUpdateRateCard,
 } = vi.hoisted(() => ({
   mockedCreateRateCard: vi.fn<EffectClientMock>(),
   mockedListRateCards: vi.fn<EffectClientMock>(),
-  mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
+  mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedUpdateRateCard: vi.fn<EffectClientMock>(),
 }));
 
-vi.mock("#/features/jobs/jobs-client", async () => {
+vi.mock("#/features/api/app-api-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
 
   return {
-    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-    provideBrowserJobsHttp: (effect: unknown) => effect,
-    runBrowserJobsRequest: (
+    makeBrowserAppApiClient: mockedMakeBrowserAppApiClient,
+    provideBrowserAppApiHttp: (effect: unknown) => effect,
+    runBrowserAppApiRequest: (
       _operation: string,
       execute: (client: unknown) => unknown
     ) =>
-      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+      (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
           (client) => execute(client) as Effect.Effect<unknown, unknown>
         )
@@ -59,7 +59,7 @@ describe("organization rate card section", () => {
   beforeEach(() => {
     mockedCreateRateCard.mockReset();
     mockedListRateCards.mockReset();
-    mockedMakeBrowserJobsClient.mockReset();
+    mockedMakeBrowserAppApiClient.mockReset();
     mockedUpdateRateCard.mockReset();
 
     mockedListRateCards.mockReturnValue(
@@ -73,7 +73,7 @@ describe("organization rate card section", () => {
     mockedUpdateRateCard.mockReturnValue(
       Effect.succeed(buildRateCard("Standard", standardRateCardId))
     );
-    mockedMakeBrowserJobsClient.mockImplementation(() =>
+    mockedMakeBrowserAppApiClient.mockImplementation(() =>
       Effect.succeed({
         rateCards: {
           createRateCard: mockedCreateRateCard,

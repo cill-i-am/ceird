@@ -3,7 +3,7 @@ import {
   deriveSandboxIdentity,
   validateHostnameSlug,
   validateSandboxName,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import type {
   SandboxNameType as SandboxName,
   SandboxPorts,
@@ -11,11 +11,11 @@ import type {
   SandboxRuntimeAssetsShape as SandboxRuntimeAssets,
   SandboxRuntimeSpec,
   SandboxUrls,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import type {
   SandboxRegistryError,
   SharedSandboxEnvironmentInput,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 import { Array as EffectArray, Effect } from "effect";
 
 import type { SandboxPreflightError } from "./sandbox-preflight-error.js";

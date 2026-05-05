@@ -4,16 +4,16 @@ import type {
   Job,
   JobActivityPayload,
   JobCostLineType,
-  JobLabel,
   VisitIdType as VisitId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
 import { Effect } from "effect";
 
-import type { JobsActor } from "./current-jobs-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
 export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()(
-  "@task-tracker/domains/jobs/JobsActivityRecorder",
+  "@ceird/domains/jobs/JobsActivityRecorder",
   {
     accessors: true,
     dependencies: [JobsRepository.Default],
@@ -21,7 +21,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const repository = yield* JobsRepository;
 
       const recordCreated = Effect.fn("JobsActivityRecorder.recordCreated")(
-        function* (actor: JobsActor, job: Job) {
+        function* (actor: OrganizationActor, job: Job) {
           yield* repository.addActivity({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
@@ -37,7 +37,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       );
 
       const recordPatched = Effect.fn("JobsActivityRecorder.recordPatched")(
-        function* (actor: JobsActor, before: Job, after: Job) {
+        function* (actor: OrganizationActor, before: Job, after: Job) {
           yield* recordActivities(
             actor,
             before.id,
@@ -48,7 +48,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       const recordTransition = Effect.fn(
         "JobsActivityRecorder.recordTransition"
-      )(function* (actor: JobsActor, before: Job, after: Job) {
+      )(function* (actor: OrganizationActor, before: Job, after: Job) {
         yield* recordActivities(
           actor,
           before.id,
@@ -59,7 +59,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordActivities = Effect.fn(
         "JobsActivityRecorder.recordActivities"
       )(function* (
-        actor: JobsActor,
+        actor: OrganizationActor,
         workItemId: Job["id"],
         events: readonly JobActivityPayload[]
       ) {
@@ -74,7 +74,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       });
 
       const recordReopened = Effect.fn("JobsActivityRecorder.recordReopened")(
-        function* (actor: JobsActor, job: Job) {
+        function* (actor: OrganizationActor, job: Job) {
           yield* repository.addActivity({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
@@ -88,7 +88,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       const recordLabelAssigned = Effect.fn(
         "JobsActivityRecorder.recordLabelAssigned"
-      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+      )(function* (actor: OrganizationActor, job: Job, label: Label) {
         yield* repository.addActivity({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
@@ -103,13 +103,17 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
 
       const recordLabelRemoved = Effect.fn(
         "JobsActivityRecorder.recordLabelRemoved"
-      )(function* (actor: JobsActor, job: Job, label: JobLabel) {
+      )(function* (actor: OrganizationActor, job: Job, label: Label) {
         yield* recordLabelRemovedFromWorkItem(actor, job.id, label);
       });
 
       const recordLabelRemovedFromWorkItem = Effect.fn(
         "JobsActivityRecorder.recordLabelRemovedFromWorkItem"
-      )(function* (actor: JobsActor, workItemId: Job["id"], label: JobLabel) {
+      )(function* (
+        actor: OrganizationActor,
+        workItemId: Job["id"],
+        label: Label
+      ) {
         yield* repository.addActivity({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
@@ -125,7 +129,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordVisitLogged = Effect.fn(
         "JobsActivityRecorder.recordVisitLogged"
       )(function* (
-        actor: JobsActor,
+        actor: OrganizationActor,
         input: {
           readonly visitId: VisitId;
           readonly workItemId: Job["id"];
@@ -145,7 +149,7 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       const recordCostLineAdded = Effect.fn(
         "JobsActivityRecorder.recordCostLineAdded"
       )(function* (
-        actor: JobsActor,
+        actor: OrganizationActor,
         input: {
           readonly costLineId: CostLineIdType;
           readonly costLineType: JobCostLineType;

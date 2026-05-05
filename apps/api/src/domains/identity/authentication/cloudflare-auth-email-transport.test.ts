@@ -10,10 +10,10 @@ import { makeCloudflareAuthEmailTransport } from "./cloudflare-auth-email-transp
 function makeConfigProvider() {
   return ConfigProvider.fromMap(
     new Map([
-      ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+      ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
       ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
-      ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-      ["AUTH_EMAIL_FROM_NAME", "Task Tracker Auth"],
+      ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
+      ["AUTH_EMAIL_FROM_NAME", "Ceird Auth"],
       ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
       ["CLOUDFLARE_API_TOKEN", "token_123"],
     ])
@@ -63,8 +63,8 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       {
         account_id: "account_123",
         from: {
-          address: "auth@task-tracker.localhost",
-          name: "Task Tracker Auth",
+          address: "auth@ceird.localhost",
+          name: "Ceird Auth",
         },
         to: ["alice@example.com"],
         subject: "Reset your password",
@@ -105,8 +105,8 @@ describe("makeCloudflareAuthEmailTransport()", () => {
       {
         account_id: "account_123",
         from: {
-          address: "auth@task-tracker.localhost",
-          name: "Task Tracker Auth",
+          address: "auth@ceird.localhost",
+          name: "Ceird Auth",
         },
         to: ["alice@example.com"],
         subject: "Reset your password",

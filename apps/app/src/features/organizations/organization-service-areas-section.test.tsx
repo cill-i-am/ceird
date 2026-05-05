@@ -1,6 +1,6 @@
+import type { ServiceArea, ServiceAreaIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { RegistryProvider } from "@effect-atom/atom-react";
-import type { ServiceArea, ServiceAreaIdType } from "@task-tracker/jobs-core";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -18,27 +18,27 @@ const secondServiceAreaId =
 const {
   mockedCreateServiceArea,
   mockedListServiceAreas,
-  mockedMakeBrowserJobsClient,
+  mockedMakeBrowserAppApiClient,
   mockedUpdateServiceArea,
 } = vi.hoisted(() => ({
   mockedCreateServiceArea: vi.fn<EffectClientMock>(),
   mockedListServiceAreas: vi.fn<EffectClientMock>(),
-  mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
+  mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedUpdateServiceArea: vi.fn<EffectClientMock>(),
 }));
 
-vi.mock("#/features/jobs/jobs-client", async () => {
+vi.mock("#/features/api/app-api-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
 
   return {
-    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-    provideBrowserJobsHttp: (effect: unknown) => effect,
-    runBrowserJobsRequest: (
+    makeBrowserAppApiClient: mockedMakeBrowserAppApiClient,
+    provideBrowserAppApiHttp: (effect: unknown) => effect,
+    runBrowserAppApiRequest: (
       _operation: string,
       execute: (client: unknown) => unknown
     ) =>
-      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+      (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
           (client) => execute(client) as Effect.Effect<unknown, unknown>
         )
@@ -52,7 +52,7 @@ describe("organization service areas section", () => {
   beforeEach(() => {
     mockedCreateServiceArea.mockReset();
     mockedListServiceAreas.mockReset();
-    mockedMakeBrowserJobsClient.mockReset();
+    mockedMakeBrowserAppApiClient.mockReset();
     mockedUpdateServiceArea.mockReset();
 
     mockedListServiceAreas.mockReturnValue(
@@ -66,7 +66,7 @@ describe("organization service areas section", () => {
     mockedUpdateServiceArea.mockReturnValue(
       Effect.succeed(buildServiceArea("Dublin Core", "City centre"))
     );
-    mockedMakeBrowserJobsClient.mockImplementation(() =>
+    mockedMakeBrowserAppApiClient.mockImplementation(() =>
       Effect.succeed({
         serviceAreas: {
           createServiceArea: mockedCreateServiceArea,

@@ -1,4 +1,4 @@
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 
 import {
   getCurrentServerOrganizationSession,
@@ -76,7 +76,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -86,7 +86,7 @@ describe("server organization lookup", () => {
       organizations
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("organization/list", "http://tt-sbx-api:4301/api/auth/"),
+      new URL("organization/list", "http://ceird-sbx-api:4301/api/auth/"),
       {
         headers: {
           accept: "application/json",
@@ -123,7 +123,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -133,7 +133,7 @@ describe("server organization lookup", () => {
       authSession
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("get-session", "http://tt-sbx-api:4301/api/auth/"),
+      new URL("get-session", "http://ceird-sbx-api:4301/api/auth/"),
       {
         headers: {
           accept: "application/json",
@@ -172,7 +172,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(authSession));
 
@@ -204,7 +204,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(null));
 
@@ -215,7 +215,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("boom", { status: 503, statusText: "Service Unavailable" })
@@ -235,7 +235,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({
@@ -264,7 +264,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("boom", { status: 503, statusText: "Service Unavailable" })
@@ -284,7 +284,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
 
@@ -302,7 +302,7 @@ describe("server organization lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -313,7 +313,7 @@ describe("server organization lookup", () => {
     ).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("organization/set-active", "http://tt-sbx-api:4301/api/auth/"),
+      new URL("organization/set-active", "http://ceird-sbx-api:4301/api/auth/"),
       {
         body: JSON.stringify({ organizationId: "org_123" }),
         headers: {

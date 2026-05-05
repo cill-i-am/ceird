@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { decodePublicInvitationPreview } from "@task-tracker/identity-core";
+import { decodePublicInvitationPreview } from "@ceird/identity-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";

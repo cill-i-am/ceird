@@ -1,8 +1,5 @@
-import type {
-  JobListItem,
-  SiteIdType,
-  WorkItemIdType,
-} from "@task-tracker/jobs-core";
+import type { JobListItem, WorkItemIdType } from "@ceird/jobs-core";
+import type { SiteIdType } from "@ceird/sites-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 

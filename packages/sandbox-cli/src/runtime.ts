@@ -9,7 +9,7 @@ import {
   buildSandboxRuntimeBaseOverrides,
   buildSandboxUrls,
   reconcileSandboxRecord,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import type {
   SandboxDockerVolumeNameType as SandboxDockerVolumeName,
   MissingSandboxResource,
@@ -19,16 +19,16 @@ import type {
   SandboxRuntimeAssetsShape as SandboxRuntimeAssets,
   SandboxRuntimeSpec,
   SandboxUrls,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import {
   loadSandboxSharedEnvironment,
   SANDBOX_REGISTRY_ERROR_TAG,
   SandboxEnvironmentError,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 import type {
   SandboxRegistryError,
   SandboxRegistryRecord,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 import { Effect, Layer, Schema } from "effect";
 
 import {
@@ -99,7 +99,7 @@ const authEmailSharedEnvironmentFields = {
     })
   ),
   AUTH_EMAIL_FROM_NAME: Schema.optionalWith(Schema.String, {
-    default: () => "Task Tracker",
+    default: () => "Ceird",
   }),
   AUTH_EMAIL_TRANSPORT: Schema.optionalWith(
     Schema.Literal("cloudflare-api", "noop"),
@@ -277,7 +277,7 @@ interface RegisteredAliases {
 }
 
 export class SandboxWorktreeResolverService extends Effect.Service<SandboxWorktreeResolverService>()(
-  "@task-tracker/sandbox-cli/SandboxWorktreeResolverService",
+  "@ceird/sandbox-cli/SandboxWorktreeResolverService",
   {
     accessors: true,
     dependencies: [SandboxProcessService.Default],
@@ -289,7 +289,7 @@ export class SandboxWorktreeResolverService extends Effect.Service<SandboxWorktr
 ) {}
 
 export class SandboxRegistryService extends Effect.Service<SandboxRegistryService>()(
-  "@task-tracker/sandbox-cli/SandboxRegistryService",
+  "@ceird/sandbox-cli/SandboxRegistryService",
   {
     accessors: true,
     effect: Effect.succeed(makeSandboxRegistryService()),
@@ -297,7 +297,7 @@ export class SandboxRegistryService extends Effect.Service<SandboxRegistryServic
 ) {}
 
 export class SandboxPortAllocatorService extends Effect.Service<SandboxPortAllocatorService>()(
-  "@task-tracker/sandbox-cli/SandboxPortAllocatorService",
+  "@ceird/sandbox-cli/SandboxPortAllocatorService",
   {
     accessors: true,
     dependencies: [SandboxProcessService.Default],
@@ -309,7 +309,7 @@ export class SandboxPortAllocatorService extends Effect.Service<SandboxPortAlloc
 ) {}
 
 export class SandboxComposeEngineService extends Effect.Service<SandboxComposeEngineService>()(
-  "@task-tracker/sandbox-cli/SandboxComposeEngineService",
+  "@ceird/sandbox-cli/SandboxComposeEngineService",
   {
     accessors: true,
     dependencies: [
@@ -325,7 +325,7 @@ export class SandboxComposeEngineService extends Effect.Service<SandboxComposeEn
 ) {}
 
 export class SandboxPortlessService extends Effect.Service<SandboxPortlessService>()(
-  "@task-tracker/sandbox-cli/SandboxPortlessService",
+  "@ceird/sandbox-cli/SandboxPortlessService",
   {
     accessors: true,
     dependencies: [SandboxProcessService.Default],
@@ -337,7 +337,7 @@ export class SandboxPortlessService extends Effect.Service<SandboxPortlessServic
 ) {}
 
 export class SandboxHealthCheckerService extends Effect.Service<SandboxHealthCheckerService>()(
-  "@task-tracker/sandbox-cli/SandboxHealthCheckerService",
+  "@ceird/sandbox-cli/SandboxHealthCheckerService",
   {
     accessors: true,
     dependencies: [
@@ -353,7 +353,7 @@ export class SandboxHealthCheckerService extends Effect.Service<SandboxHealthChe
 ) {}
 
 export class SandboxLifecycleService extends Effect.Service<SandboxLifecycleService>()(
-  "@task-tracker/sandbox-cli/SandboxLifecycleService",
+  "@ceird/sandbox-cli/SandboxLifecycleService",
   {
     accessors: true,
     dependencies: [
@@ -1454,7 +1454,7 @@ function runSandboxDatabaseMigrations(
         cwd: record.worktreePath,
         env: {
           ...processEnv,
-          DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${record.ports.postgres}/task_tracker`,
+          DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${record.ports.postgres}/ceird`,
         },
       })
     );

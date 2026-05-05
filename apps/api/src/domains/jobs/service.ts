@@ -1,8 +1,7 @@
-import { isExternalOrganizationRole } from "@task-tracker/identity-core";
+import { isExternalOrganizationRole } from "@ceird/identity-core";
 import {
   BlockedReasonRequiredError,
   CoordinatorMatchesAssigneeError,
-  JobLabelNotFoundError,
   InvalidJobTransitionError,
   JOB_NOT_FOUND_ERROR_TAG,
   JobAccessDeniedError,
@@ -10,14 +9,13 @@ import {
   JobStorageError,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
   VisitDurationIncrementError,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import type {
   AddJobCommentInput,
   AddJobCostLineInput,
   AddJobVisitInput,
   AssignJobLabelInput,
   ContactIdType as ContactId,
-  CreateJobLabelInput,
   CreateJobContactInput,
   CreateJobInput,
   CreateJobSiteInput,
@@ -28,67 +26,76 @@ import type {
   JobCollaboratorsResponse,
   JobDetail,
   JobExternalMemberOptionsResponse,
-  JobLabelIdType as JobLabelId,
   JobMemberOptionsResponse,
   JobListQuery,
   OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
   PatchJobInput,
-  ServiceAreaOption,
-  SiteIdType as SiteId,
   TransitionJobInput,
   UpdateJobCollaboratorInput,
-  UpdateJobLabelInput,
   WorkItemIdType as WorkItemId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType as LabelId } from "@ceird/labels-core";
+import type {
+  ServiceAreaOption,
+  SiteIdType as SiteId,
+} from "@ceird/sites-core";
 import { Effect, Either, Option } from "effect";
 
+import { LabelsRepository } from "../labels/repositories.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
+import type { GeocodedSiteLocation } from "../sites/geocoder.js";
+import { SiteGeocoder } from "../sites/geocoder.js";
+import {
+  ServiceAreasRepository,
+  SitesRepository,
+} from "../sites/repositories.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
-import { CurrentJobsActor } from "./current-jobs-actor.js";
-import type { JobsActor } from "./current-jobs-actor.js";
 import {
   ContactsRepository,
-  ConfigurationRepository,
-  JobLabelsRepository,
+  JobLabelAssignmentsRepository,
   JobsRepositoriesLive,
   JobsRepository,
-  SitesRepository,
 } from "./repositories.js";
 import type { JobsRepositoryAccess } from "./repositories.js";
-import type { GeocodedSiteLocation } from "./site-geocoder.js";
-import { SiteGeocoder } from "./site-geocoder.js";
 
 const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
-  "@task-tracker/domains/jobs/WorkItemOrganizationMismatchError" as const;
+  "@ceird/domains/jobs/WorkItemOrganizationMismatchError" as const;
 
 export class JobsService extends Effect.Service<JobsService>()(
-  "@task-tracker/domains/jobs/JobsService",
+  "@ceird/domains/jobs/JobsService",
   {
     accessors: true,
     dependencies: [
-      CurrentJobsActor.Default,
+      CurrentOrganizationActor.Default,
       JobsAuthorization.Default,
       JobsActivityRecorder.Default,
       JobsRepositoriesLive,
+      LabelsRepository.Default,
+      ServiceAreasRepository.Default,
+      SitesRepository.Default,
       SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* JobsServiceLive() {
       const activityRecorder = yield* JobsActivityRecorder;
       const authorization = yield* JobsAuthorization;
-      const configurationRepository = yield* ConfigurationRepository;
       const contactsRepository = yield* ContactsRepository;
-      const currentJobsActor = yield* CurrentJobsActor;
-      const jobLabelsRepository = yield* JobLabelsRepository;
+      const currentOrganizationActor = yield* CurrentOrganizationActor;
+      const jobLabelAssignmentsRepository =
+        yield* JobLabelAssignmentsRepository;
+      const labelsRepository = yield* LabelsRepository;
       const jobsRepository = yield* JobsRepository;
+      const serviceAreasRepository = yield* ServiceAreasRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("JobsService.loadActor")(function* (
         workItemId?: WorkItemId
       ) {
-        return yield* currentJobsActor
+        return yield* currentOrganizationActor
           .get()
           .pipe(mapActorResolutionErrorsToAccessDenied(workItemId));
       });
@@ -108,39 +115,40 @@ export class JobsService extends Effect.Service<JobsService>()(
         const actor = yield* loadActor();
         yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
+        if (hasElevatedAccess(actor)) {
+          const [members, sites, contacts, labels, serviceAreas] =
+            yield* Effect.all([
+              jobsRepository.listMemberOptions(actor.organizationId),
+              sitesRepository.listOptions(actor.organizationId),
+              contactsRepository.listOptions(actor.organizationId),
+              labelsRepository.list(actor.organizationId),
+              serviceAreasRepository.listOptions(actor.organizationId),
+            ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
+
+          return {
+            contacts,
+            labels,
+            members,
+            serviceAreas,
+            sites,
+          } as const;
+        }
+
         const [members, sites, contacts, labels] = yield* Effect.all([
           jobsRepository.listMemberOptions(actor.organizationId),
           sitesRepository.listOptions(actor.organizationId),
           contactsRepository.listOptions(actor.organizationId),
-          jobLabelsRepository.list(actor.organizationId),
+          labelsRepository.list(actor.organizationId),
         ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
-        const serviceAreas = hasElevatedAccess(actor)
-          ? yield* configurationRepository
-              .listServiceAreaOptions(actor.organizationId)
-              .pipe(Effect.catchTag("SqlError", failJobsStorageError))
-          : deriveServiceAreaOptionsFromSites(sites);
 
         return {
           contacts,
           labels,
           members,
-          serviceAreas,
+          serviceAreas: deriveServiceAreaOptionsFromSites(sites),
           sites,
         } as const;
       });
-
-      const listJobLabels = Effect.fn("JobsService.listJobLabels")(
-        function* () {
-          const actor = yield* loadActor();
-          yield* ensureCanViewOrganizationJobsData(actor, authorization);
-
-          const labels = yield* jobLabelsRepository
-            .list(actor.organizationId)
-            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
-
-          return { labels } as const;
-        }
-      );
 
       const getMemberOptions = Effect.fn("JobsService.getMemberOptions")(
         function* () {
@@ -171,109 +179,6 @@ export class JobsService extends Effect.Service<JobsService>()(
           members,
         } satisfies JobExternalMemberOptionsResponse;
       });
-
-      const createJobLabel = Effect.fn("JobsService.createJobLabel")(function* (
-        input: CreateJobLabelInput
-      ) {
-        const actor = yield* loadActor();
-        yield* authorization.ensureCanManageLabels(actor);
-
-        return yield* jobLabelsRepository
-          .create({
-            name: input.name,
-            organizationId: actor.organizationId,
-          })
-          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
-      });
-
-      const updateJobLabel = Effect.fn("JobsService.updateJobLabel")(function* (
-        labelId: JobLabelId,
-        input: UpdateJobLabelInput
-      ) {
-        const actor = yield* loadActor();
-        yield* authorization.ensureCanManageLabels(actor);
-
-        const label = yield* jobLabelsRepository
-          .update(actor.organizationId, labelId, {
-            name: input.name,
-          })
-          .pipe(
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.map(Option.getOrUndefined)
-          );
-
-        if (label !== undefined) {
-          return label;
-        }
-
-        return yield* Effect.fail(
-          new JobLabelNotFoundError({
-            labelId,
-            message: "Job label does not exist in the organization",
-          })
-        );
-      });
-
-      const archiveJobLabel = Effect.fn("JobsService.archiveJobLabel")(
-        function* (labelId: JobLabelId) {
-          const actor = yield* loadActor();
-          yield* authorization.ensureCanManageLabels(actor);
-
-          const result = yield* Effect.gen(function* () {
-            const archived = yield* jobLabelsRepository
-              .archive(actor.organizationId, labelId)
-              .pipe(Effect.map(Option.getOrUndefined));
-
-            if (archived === undefined) {
-              return yield* Effect.fail(
-                new JobLabelNotFoundError({
-                  labelId,
-                  message: "Job label does not exist in the organization",
-                })
-              );
-            }
-
-            yield* Effect.all(
-              archived.removedWorkItemIds.map((workItemId) =>
-                activityRecorder.recordLabelRemovedFromWorkItem(
-                  actor,
-                  workItemId,
-                  archived.label
-                )
-              )
-            );
-
-            return archived.label;
-          }).pipe(Effect.either);
-
-          if (Either.isRight(result)) {
-            return result.right;
-          }
-
-          switch (result.left._tag) {
-            case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-              return yield* result.left.userId === actor.userId
-                ? Effect.fail(
-                    new JobAccessDeniedError({
-                      message:
-                        "Your organization access changed while the request was running",
-                    })
-                  )
-                : Effect.die(result.left);
-            }
-            case JOB_NOT_FOUND_ERROR_TAG:
-            case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-              return yield* Effect.die(result.left);
-            }
-            case "SqlError": {
-              return yield* failJobsStorageError(result.left);
-            }
-            default: {
-              return yield* Effect.fail(result.left);
-            }
-          }
-        }
-      );
 
       const listOrganizationActivity = Effect.fn(
         "JobsService.listOrganizationActivity"
@@ -324,7 +229,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               );
 
               if (siteId !== undefined && contactId !== undefined) {
-                yield* sitesRepository.linkContact({
+                yield* jobsRepository.linkSiteContact({
                   contactId,
                   organizationId: actor.organizationId,
                   siteId,
@@ -459,7 +364,7 @@ export class JobsService extends Effect.Service<JobsService>()(
               }
 
               if (nextSiteId !== undefined && nextContactId !== undefined) {
-                yield* sitesRepository.linkContact({
+                yield* jobsRepository.linkSiteContact({
                   contactId: nextContactId,
                   organizationId: actor.organizationId,
                   siteId: nextSiteId,
@@ -751,7 +656,7 @@ export class JobsService extends Effect.Service<JobsService>()(
         }
       });
 
-      const assignJobLabel = Effect.fn("JobsService.assignJobLabel")(function* (
+      const assignLabel = Effect.fn("JobsService.assignLabel")(function* (
         workItemId: WorkItemId,
         input: AssignJobLabelInput
       ) {
@@ -775,11 +680,12 @@ export class JobsService extends Effect.Service<JobsService>()(
 
               yield* authorization.ensureCanAssignLabels(actor, job);
 
-              const assignment = yield* jobLabelsRepository.assignToJob({
-                labelId: input.labelId,
-                organizationId: actor.organizationId,
-                workItemId,
-              });
+              const assignment =
+                yield* jobLabelAssignmentsRepository.assignToJob({
+                  labelId: input.labelId,
+                  organizationId: actor.organizationId,
+                  workItemId,
+                });
 
               if (assignment.changed) {
                 yield* activityRecorder.recordLabelAssigned(
@@ -824,9 +730,9 @@ export class JobsService extends Effect.Service<JobsService>()(
         }
       });
 
-      const removeJobLabel = Effect.fn("JobsService.removeJobLabel")(function* (
+      const removeLabel = Effect.fn("JobsService.removeLabel")(function* (
         workItemId: WorkItemId,
-        labelId: JobLabelId
+        labelId: LabelId
       ) {
         const actor = yield* loadActor(workItemId);
 
@@ -848,11 +754,12 @@ export class JobsService extends Effect.Service<JobsService>()(
 
               yield* authorization.ensureCanAssignLabels(actor, job);
 
-              const assignment = yield* jobLabelsRepository.removeFromJob({
-                labelId,
-                organizationId: actor.organizationId,
-                workItemId,
-              });
+              const assignment =
+                yield* jobLabelAssignmentsRepository.removeFromJob({
+                  labelId,
+                  organizationId: actor.organizationId,
+                  workItemId,
+                });
 
               if (assignment.changed) {
                 yield* activityRecorder.recordLabelRemoved(
@@ -1132,26 +1039,22 @@ export class JobsService extends Effect.Service<JobsService>()(
         addComment,
         addCostLine,
         addVisit,
-        archiveJobLabel,
         attachCollaborator,
-        assignJobLabel,
+        assignLabel,
         create,
-        createJobLabel,
         getDetail,
         getExternalMemberOptions,
         getMemberOptions,
         getOptions,
         list,
         listCollaborators,
-        listJobLabels,
         listOrganizationActivity,
         patch,
         removeCollaborator,
-        removeJobLabel,
+        removeLabel,
         reopen,
         transition,
         updateCollaborator,
-        updateJobLabel,
       };
     }),
   }
@@ -1195,7 +1098,7 @@ function loadJobOrFail(
 }
 
 function loadExternalGrantIfNeeded(
-  actor: JobsActor,
+  actor: OrganizationActor,
   workItemId: WorkItemId,
   jobsRepository: JobsRepository
 ): Effect.Effect<JobCollaborator | undefined, JobStorageError> {
@@ -1213,7 +1116,7 @@ function loadExternalGrantIfNeeded(
 }
 
 function getRepositoryAccess(
-  actor: JobsActor,
+  actor: OrganizationActor,
   grant?: JobCollaborator | undefined
 ): JobsRepositoryAccess {
   return isExternalOrganizationRole(actor.role)
@@ -1232,7 +1135,7 @@ function dieWorkItemOrganizationMismatch(error: unknown) {
 }
 
 function ensureCanViewOrganizationJobsData(
-  actor: JobsActor,
+  actor: OrganizationActor,
   authorization: JobsAuthorization
 ) {
   return Effect.gen(function* () {

@@ -1,5 +1,4 @@
 "use client";
-
 import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
 import * as React from "react";
 

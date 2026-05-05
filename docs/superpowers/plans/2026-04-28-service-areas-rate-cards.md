@@ -132,7 +132,7 @@ Also update existing option payload tests so `JobOptionsResponseSchema` and
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts -t "service area"
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts -t "service area"
 ```
 
 Expected: FAIL because service-area exports do not exist yet.
@@ -143,7 +143,7 @@ In `packages/jobs-core/src/ids.ts`, replace `RegionId` exports with:
 
 ```ts
 export const ServiceAreaId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/ServiceAreaId")
+  Schema.brand("@ceird/jobs-core/ServiceAreaId")
 );
 export type ServiceAreaId = Schema.Schema.Type<typeof ServiceAreaId>;
 ```
@@ -239,8 +239,8 @@ Update `packages/jobs-core/src/index.ts` to export `ServiceAreaId`,
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts
+pnpm --filter @ceird/jobs-core check-types
 ```
 
 Expected: PASS.
@@ -308,7 +308,7 @@ expect(() =>
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts -t "rate card"
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts -t "rate card"
 ```
 
 Expected: FAIL because rate-card schemas do not exist.
@@ -319,12 +319,12 @@ In `packages/jobs-core/src/ids.ts`, add branded UUID IDs:
 
 ```ts
 export const RateCardId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/RateCardId")
+  Schema.brand("@ceird/jobs-core/RateCardId")
 );
 export type RateCardId = Schema.Schema.Type<typeof RateCardId>;
 
 export const RateCardLineId = Schema.UUID.pipe(
-  Schema.brand("@task-tracker/jobs-core/RateCardLineId")
+  Schema.brand("@ceird/jobs-core/RateCardLineId")
 );
 export type RateCardLineId = Schema.Schema.Type<typeof RateCardLineId>;
 ```
@@ -372,8 +372,8 @@ types, constants, and errors.
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core test -- src/index.test.ts
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core test -- src/index.test.ts
+pnpm --filter @ceird/jobs-core check-types
 ```
 
 Expected: PASS.
@@ -542,7 +542,7 @@ createServiceArea({ organizationId, name, description });
 updateServiceArea(organizationId, serviceAreaId, input);
 ```
 
-Decode all outputs with shared schemas from `@task-tracker/jobs-core`.
+Decode all outputs with shared schemas from `@ceird/jobs-core`.
 
 - [ ] **Step 5: Add rate-card repository methods**
 

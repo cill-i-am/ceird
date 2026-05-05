@@ -103,8 +103,8 @@ describe("buildSandboxRuntimeSpec()", () => {
   it("builds a compose project name, urls, and overrides from an explicit name", () => {
     expect(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: "agent-one",
         takenNames: new Set(["other-sandbox"]),
         ports: {
@@ -118,17 +118,16 @@ describe("buildSandboxRuntimeSpec()", () => {
       })
     ).toMatchObject({
       sandboxName: "agent-one",
-      composeProjectName: "tt-sbx-agent-one",
+      composeProjectName: "ceird-sbx-agent-one",
       hostnameSlug: "agent-one",
       urls: {
-        app: "https://agent-one.app.task-tracker.localhost:1355",
-        api: "https://agent-one.api.task-tracker.localhost:1355",
+        app: "https://agent-one.app.ceird.localhost:1355",
+        api: "https://agent-one.api.ceird.localhost:1355",
       },
       overrides: {
         SANDBOX_ID: expect.any(String),
-        TASK_TRACKER_SANDBOX: "1",
-        BETTER_AUTH_BASE_URL:
-          "https://agent-one.api.task-tracker.localhost:1355",
+        CEIRD_SANDBOX: "1",
+        BETTER_AUTH_BASE_URL: "https://agent-one.api.ceird.localhost:1355",
       },
     });
   });
@@ -146,9 +145,9 @@ describe("reconcileSandboxRecord()", () => {
         {
           sandboxId: "abc123def456",
           sandboxName: "agent-one",
-          composeProjectName: "tt-sbx-agent-one",
-          worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
-          repoRoot: "/Users/me/task-tracker",
+          composeProjectName: "ceird-sbx-agent-one",
+          worktreePath: "/Users/me/ceird/.worktrees/agent-one",
+          repoRoot: "/Users/me/ceird",
           hostnameSlug: "agent-one",
           status: "ready",
           ports: { app: 4300, api: 4301, postgres: 5439 },
@@ -183,7 +182,7 @@ describe("makeHealthPayload()", () => {
 
 - [ ] **Step 2: Run the new `sandbox-core` tests to verify they fail for missing exports and types**
 
-Run: `pnpm --filter @task-tracker/sandbox-core test`
+Run: `pnpm --filter @ceird/sandbox-core test`
 Expected: FAIL with missing-module, missing-export, or type errors for `runtime-spec.ts`, `domain.ts`, and the new record shape.
 
 - [ ] **Step 3: Implement the browser-safe domain modules and runtime-spec helpers**
@@ -220,7 +219,7 @@ export function validateSandboxName(name: string): string {
 }
 
 export function makeComposeProjectName(sandboxName: string): string {
-  return `tt-sbx-${validateSandboxName(sandboxName)}`;
+  return `ceird-sbx-${validateSandboxName(sandboxName)}`;
 }
 ```
 
@@ -287,12 +286,12 @@ export function buildSandboxRuntimeSpec(input: {
     urls,
     overrides: {
       SANDBOX_ID: sandboxId,
-      TASK_TRACKER_SANDBOX: "1",
+      CEIRD_SANDBOX: "1",
       HOST: "0.0.0.0",
       APP_PORT: String(input.ports.app),
       API_PORT: String(input.ports.api),
       POSTGRES_PORT: String(input.ports.postgres),
-      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/ceird",
       BETTER_AUTH_SECRET: input.betterAuthSecret,
       BETTER_AUTH_BASE_URL: urls.api,
       AUTH_ORIGIN: `http://api:${input.ports.api}`,
@@ -332,7 +331,7 @@ export * from "./runtime-spec.js";
 
 - [ ] **Step 4: Re-run the `sandbox-core` test suite and verify the new modules pass**
 
-Run: `pnpm --filter @task-tracker/sandbox-core test`
+Run: `pnpm --filter @ceird/sandbox-core test`
 Expected: PASS with the existing health/url tests still green and the new runtime-spec tests passing.
 
 - [ ] **Step 5: Commit the `sandbox-core` browser-safe split**
@@ -394,7 +393,7 @@ describe("loadSandboxSharedEnvironment()", () => {
           if (filePath.endsWith(".env")) {
             return [
               "AUTH_EMAIL_FROM=auth@example.com",
-              "AUTH_EMAIL_FROM_NAME=Task Tracker",
+              "AUTH_EMAIL_FROM_NAME=Ceird",
               "RESEND_API_KEY=re_live_123",
             ].join("\n");
           }
@@ -424,10 +423,10 @@ describe("SandboxRegistryRecord", () => {
     const value = Schema.decodeUnknownSync(SandboxRegistryRecord)({
       sandboxId: "abc123def456",
       sandboxName: "agent-one",
-      composeProjectName: "tt-sbx-agent-one",
+      composeProjectName: "ceird-sbx-agent-one",
       hostnameSlug: "agent-one",
-      repoRoot: "/Users/me/task-tracker",
-      worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+      repoRoot: "/Users/me/ceird",
+      worktreePath: "/Users/me/ceird/.worktrees/agent-one",
       betterAuthSecret: "0123456789abcdef0123456789abcdef",
       ports: { app: 4300, api: 4301, postgres: 5439 },
       status: "ready",
@@ -437,14 +436,14 @@ describe("SandboxRegistryRecord", () => {
       },
     });
 
-    expect(value.composeProjectName).toBe("tt-sbx-agent-one");
+    expect(value.composeProjectName).toBe("ceird-sbx-agent-one");
   });
 });
 ```
 
 - [ ] **Step 2: Run the `sandbox-core` test suite again to verify the new Node-only tests fail**
 
-Run: `pnpm --filter @task-tracker/sandbox-core test`
+Run: `pnpm --filter @ceird/sandbox-core test`
 Expected: FAIL because `./node/env.ts`, `./node/state.ts`, and `./node/index.ts` do not exist yet.
 
 - [ ] **Step 3: Implement the Node-only env/state modules under the new `./node` export**
@@ -561,11 +560,11 @@ export * from "./state.js";
 
 - [ ] **Step 4: Re-run the `sandbox-core` tests and type-check the package**
 
-Run: `pnpm --filter @task-tracker/sandbox-core test`
+Run: `pnpm --filter @ceird/sandbox-core test`
 Expected: PASS with the new `env` and `state` tests green.
 
-Run: `pnpm --filter @task-tracker/sandbox-core check-types`
-Expected: PASS with no Node-import leakage through the root `@task-tracker/sandbox-core` export.
+Run: `pnpm --filter @ceird/sandbox-core check-types`
+Expected: PASS with no Node-import leakage through the root `@ceird/sandbox-core` export.
 
 - [ ] **Step 5: Commit the Node-only `sandbox-core` env/state layer**
 
@@ -604,9 +603,8 @@ describe("buildComposeCommandArgs()", () => {
     expect(
       buildComposeCommandArgs({
         composeFile: "/repo/packages/sandbox-cli/docker/sandbox.compose.yaml",
-        composeEnvFile:
-          "/Users/me/.task-tracker/sandboxes/agent-one/compose.env",
-        composeProjectName: "tt-sbx-agent-one",
+        composeEnvFile: "/Users/me/.ceird/sandboxes/agent-one/compose.env",
+        composeProjectName: "ceird-sbx-agent-one",
         subcommand: ["up", "-d", "--wait"],
       })
     ).toStrictEqual([
@@ -614,9 +612,9 @@ describe("buildComposeCommandArgs()", () => {
       "--file",
       "/repo/packages/sandbox-cli/docker/sandbox.compose.yaml",
       "--project-name",
-      "tt-sbx-agent-one",
+      "ceird-sbx-agent-one",
       "--env-file",
-      "/Users/me/.task-tracker/sandboxes/agent-one/compose.env",
+      "/Users/me/.ceird/sandboxes/agent-one/compose.env",
       "up",
       "-d",
       "--wait",
@@ -635,9 +633,8 @@ describe("renderComposeEnvironmentFile()", () => {
           APP_PORT: "4300",
           API_PORT: "4301",
           AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
-          BETTER_AUTH_BASE_URL:
-            "https://agent-one.api.task-tracker.localhost:1355",
+          AUTH_EMAIL_FROM_NAME: "Ceird",
+          BETTER_AUTH_BASE_URL: "https://agent-one.api.ceird.localhost:1355",
           RESEND_API_KEY: "re_live_123",
         },
       })
@@ -648,7 +645,7 @@ describe("renderComposeEnvironmentFile()", () => {
 
 - [ ] **Step 2: Run the `sandbox-cli` tests to verify the compose helper tests fail**
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: FAIL with missing-module errors for `compose.ts` and missing compose helper exports.
 
 - [ ] **Step 3: Implement the compose file, env-file renderer, and docker helper changes**
@@ -659,13 +656,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: task_tracker
+      POSTGRES_DB: ceird
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
     ports:
       - "127.0.0.1:${POSTGRES_PORT}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d task_tracker"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ceird"]
       interval: 2s
       timeout: 2s
       retries: 60
@@ -680,7 +677,7 @@ services:
       HOST: 0.0.0.0
       PORT: ${API_PORT}
       SANDBOX_ID: ${SANDBOX_ID}
-      TASK_TRACKER_SANDBOX: ${TASK_TRACKER_SANDBOX}
+      CEIRD_SANDBOX: ${CEIRD_SANDBOX}
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_BASE_URL: ${BETTER_AUTH_BASE_URL}
@@ -713,7 +710,7 @@ services:
       HOST: 0.0.0.0
       PORT: ${APP_PORT}
       SANDBOX_ID: ${SANDBOX_ID}
-      TASK_TRACKER_SANDBOX: ${TASK_TRACKER_SANDBOX}
+      CEIRD_SANDBOX: ${CEIRD_SANDBOX}
       AUTH_ORIGIN: ${AUTH_ORIGIN}
       VITE_AUTH_ORIGIN: ${VITE_AUTH_ORIGIN}
       PNPM_STORE_DIR: /pnpm/store
@@ -822,7 +819,7 @@ exec pnpm exec turbo run sandbox:dev --filter="$filter"
 
 - [ ] **Step 4: Re-run the `sandbox-cli` tests that cover compose helpers**
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: PASS for the new `compose.test.ts`, with the existing portless and view tests still green.
 
 - [ ] **Step 5: Commit the compose infrastructure**
@@ -887,15 +884,15 @@ import { bringSandboxUp } from "./lifecycle.js";
 describe("bringSandboxUp()", () => {
   it("prefers the explicit sandbox name over the worktree-derived one", async () => {
     const result = await bringSandboxUp({
-      repoRoot: "/Users/me/task-tracker",
-      worktreePath: "/Users/me/task-tracker/.worktrees/random-dir",
+      repoRoot: "/Users/me/ceird",
+      worktreePath: "/Users/me/ceird/.worktrees/random-dir",
       explicitSandboxName: "agent-one",
       now: "2026-04-05T10:00:00.000Z",
       existingRecord: undefined,
       loadSharedEnvironment: () =>
         Promise.resolve({
           AUTH_EMAIL_FROM: "auth@example.com",
-          AUTH_EMAIL_FROM_NAME: "Task Tracker",
+          AUTH_EMAIL_FROM_NAME: "Ceird",
           RESEND_API_KEY: "re_live_123",
         }),
       generateBetterAuthSecret: () => "0123456789abcdef0123456789abcdef",
@@ -908,7 +905,7 @@ describe("bringSandboxUp()", () => {
     });
 
     expect(result.record.sandboxName).toBe("agent-one");
-    expect(result.record.composeProjectName).toBe("tt-sbx-agent-one");
+    expect(result.record.composeProjectName).toBe("ceird-sbx-agent-one");
   });
 });
 ```
@@ -931,7 +928,7 @@ describe("makePortlessAliasCommands()", () => {
           "exec",
           "portless",
           "alias",
-          "agent-one.app.task-tracker",
+          "agent-one.app.ceird",
           "4300",
           "--force",
         ],
@@ -940,7 +937,7 @@ describe("makePortlessAliasCommands()", () => {
           "exec",
           "portless",
           "alias",
-          "agent-one.api.task-tracker",
+          "agent-one.api.ceird",
           "4301",
           "--force",
         ],
@@ -952,7 +949,7 @@ describe("makePortlessAliasCommands()", () => {
           "portless",
           "alias",
           "--remove",
-          "agent-one.app.task-tracker",
+          "agent-one.app.ceird",
         ],
         [
           "pnpm",
@@ -960,7 +957,7 @@ describe("makePortlessAliasCommands()", () => {
           "portless",
           "alias",
           "--remove",
-          "agent-one.api.task-tracker",
+          "agent-one.api.ceird",
         ],
       ],
     });
@@ -970,7 +967,7 @@ describe("makePortlessAliasCommands()", () => {
 
 - [ ] **Step 2: Run the `sandbox-cli` test suite and verify the lifecycle/CLI tests fail**
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: FAIL because the lifecycle API does not accept `explicitSandboxName`, the CLI exposes no `--name` option, and portless commands still assume a bare `portless` binary.
 
 - [ ] **Step 3: Implement the compose-backed lifecycle, registry, and CLI option parsing**
@@ -982,14 +979,14 @@ import os from "node:os";
 import path from "node:path";
 
 import { Schema } from "effect";
-import { SandboxRegistryRecord } from "@task-tracker/sandbox-core/node";
+import { SandboxRegistryRecord } from "@ceird/sandbox-core/node";
 
 const RegistryPayload = Schema.Struct({
   sandboxes: Schema.Array(SandboxRegistryRecord),
 });
 
 export function getRegistryPath(): string {
-  return path.join(os.homedir(), ".task-tracker", "sandboxes", "registry.json");
+  return path.join(os.homedir(), ".ceird", "sandboxes", "registry.json");
 }
 
 export async function readRegistry(): Promise<
@@ -1007,14 +1004,14 @@ export async function readRegistry(): Promise<
 
 ```ts
 // packages/sandbox-cli/src/portless.ts
-import type { SandboxPorts } from "@task-tracker/sandbox-core";
+import type { SandboxPorts } from "@ceird/sandbox-core";
 
 export function makePortlessAliasCommands(input: {
   readonly sandboxName: string;
   readonly ports: SandboxPorts;
 }) {
-  const appName = `${input.sandboxName}.app.task-tracker`;
-  const apiName = `${input.sandboxName}.api.task-tracker`;
+  const appName = `${input.sandboxName}.app.ceird`;
+  const apiName = `${input.sandboxName}.api.ceird`;
 
   return {
     add: [
@@ -1098,11 +1095,11 @@ const logsCommand = Command.make(
 import {
   buildSandboxRuntimeSpec,
   deriveSandboxIdentity,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import {
   loadSandboxSharedEnvironment,
   type SandboxRegistryRecord,
-} from "@task-tracker/sandbox-core/node";
+} from "@ceird/sandbox-core/node";
 
 export async function bringSandboxUp(options: {
   readonly repoRoot: string;
@@ -1180,11 +1177,11 @@ export async function bringSandboxUp(options: {
 
 - [ ] **Step 4: Re-run the `sandbox-cli` tests and targeted type-checking**
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: PASS for the new CLI option, registry, and lifecycle tests.
 
-Run: `pnpm --filter @task-tracker/sandbox-cli check-types`
-Expected: PASS with the CLI importing env/state only from `@task-tracker/sandbox-core/node`.
+Run: `pnpm --filter @ceird/sandbox-cli check-types`
+Expected: PASS with the CLI importing env/state only from `@ceird/sandbox-core/node`.
 
 - [ ] **Step 5: Commit the CLI and lifecycle refactor**
 
@@ -1225,24 +1222,24 @@ describe("formatSandboxViewLines()", () => {
     expect(
       formatSandboxViewLines("Sandbox ready", {
         sandboxName: "agent-one",
-        composeProjectName: "tt-sbx-agent-one",
+        composeProjectName: "ceird-sbx-agent-one",
         status: "degraded",
         urls: {
           app: "http://127.0.0.1:4300",
           api: "http://127.0.0.1:4301",
-          postgres: "postgresql://127.0.0.1:5439/task_tracker",
+          postgres: "postgresql://127.0.0.1:5439/ceird",
           fallbackApp: "http://127.0.0.1:4300",
           fallbackApi: "http://127.0.0.1:4301",
         },
       })
-    ).toContain("compose project: tt-sbx-agent-one");
+    ).toContain("compose project: ceird-sbx-agent-one");
   });
 });
 ```
 
 - [ ] **Step 2: Run the `sandbox-cli` tests to verify the final rendering/turbo contract still fails**
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: FAIL because the render helpers still use the old slug-only shape and the final compose project output is missing.
 
 - [ ] **Step 3: Update Turborepo env declarations, final rendering, and remove old docker-run assumptions**
@@ -1266,7 +1263,7 @@ Expected: FAIL because the render helpers still use the old slug-only shape and 
         "PORT",
         "RESEND_API_KEY",
         "SANDBOX_ID",
-        "TASK_TRACKER_SANDBOX",
+        "CEIRD_SANDBOX",
         "VITE_AUTH_ORIGIN"
       ]
     }
@@ -1312,28 +1309,28 @@ export function formatSandboxViewLines(
 
 - [ ] **Step 4: Run the full verification sequence, including one real compose-backed sandbox boot**
 
-Run: `pnpm --filter @task-tracker/sandbox-core test`
+Run: `pnpm --filter @ceird/sandbox-core test`
 Expected: PASS
 
-Run: `pnpm --filter @task-tracker/sandbox-cli test`
+Run: `pnpm --filter @ceird/sandbox-cli test`
 Expected: PASS
 
-Run: `pnpm --filter @task-tracker/sandbox-core check-types`
+Run: `pnpm --filter @ceird/sandbox-core check-types`
 Expected: PASS
 
-Run: `pnpm --filter @task-tracker/sandbox-cli check-types`
+Run: `pnpm --filter @ceird/sandbox-cli check-types`
 Expected: PASS
 
-Run: `pnpm --filter @task-tracker/sandbox-cli sandbox:up -- --name plan-smoke`
-Expected: PASS with output showing `compose project: tt-sbx-plan-smoke` and app/api URLs.
+Run: `pnpm --filter @ceird/sandbox-cli sandbox:up -- --name plan-smoke`
+Expected: PASS with output showing `compose project: ceird-sbx-plan-smoke` and app/api URLs.
 
-Run: `pnpm --filter @task-tracker/sandbox-cli sandbox:status -- --name plan-smoke`
+Run: `pnpm --filter @ceird/sandbox-cli sandbox:status -- --name plan-smoke`
 Expected: PASS with `status: ready` or `status: degraded` plus explicit portless guidance.
 
-Run: `pnpm --filter @task-tracker/sandbox-cli sandbox:logs -- --name plan-smoke api`
+Run: `pnpm --filter @ceird/sandbox-cli sandbox:logs -- --name plan-smoke api`
 Expected: PASS with API service logs only.
 
-Run: `pnpm --filter @task-tracker/sandbox-cli sandbox:down -- --name plan-smoke`
+Run: `pnpm --filter @ceird/sandbox-cli sandbox:down -- --name plan-smoke`
 Expected: PASS with the compose project removed and the registry cleaned up.
 
 - [ ] **Step 5: Commit the verification-ready compose sandbox**

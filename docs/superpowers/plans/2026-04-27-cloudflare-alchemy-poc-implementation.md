@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an isolated Alchemy IaC package and use it to deploy the Task Tracker app Worker, API Worker, PlanetScale Postgres Hyperdrive binding, and durable auth email queues as a proof of concept.
+**Goal:** Add an isolated Alchemy IaC package and use it to deploy the Ceird app Worker, API Worker, PlanetScale Postgres Hyperdrive binding, and durable auth email queues as a proof of concept.
 
 **Architecture:** Keep runtime application ownership in `apps/app` and `apps/api`, and put Cloudflare infrastructure ownership in a new `packages/infra` workspace. The API keeps Postgres as the source of truth and connects to a new PlanetScale Postgres database through Hyperdrive. Auth email background work moves from process-local scheduling to Cloudflare Queues.
 
@@ -26,10 +26,10 @@ Current infra decisions:
 - The TanStack Start app is deployed with `Cloudflare.Vite`.
 - Queue consumption uses `Cloudflare.QueueConsumer`.
 - Alchemy state uses `Cloudflare.state({ workerName:
-"task-tracker-alchemy-state" })`.
+"ceird-alchemy-state" })`.
 - CI deploys pin Alchemy's CLI stage to `main` through
-  `ALCHEMY_STAGE`/`TASK_TRACKER_ALCHEMY_STAGE`; this is separate from the
-  historical POC resource naming stage in `TASK_TRACKER_INFRA_STAGE`.
+  `ALCHEMY_STAGE`/`CEIRD_ALCHEMY_STAGE`; this is separate from the
+  historical POC resource naming stage in `CEIRD_INFRA_STAGE`.
 - No Wrangler config is introduced.
 
 PlanetScale and Hyperdrive are not first-class Alchemy v2 resources in the beta
@@ -49,18 +49,18 @@ Required deploy inputs now include:
 - `PLANETSCALE_ORGANIZATION`
 - `PLANETSCALE_API_TOKEN_ID`
 - `PLANETSCALE_API_TOKEN`
-- `TASK_TRACKER_ZONE_NAME`
+- `CEIRD_ZONE_NAME`
 - `AUTH_EMAIL_FROM`
 
 Optional/defaulted deploy inputs:
 
-- `TASK_TRACKER_INFRA_STAGE`
-- `TASK_TRACKER_APP_HOSTNAME`
-- `TASK_TRACKER_API_HOSTNAME`
-- `TASK_TRACKER_PLANETSCALE_DATABASE_NAME`
-- `TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH`
-- `TASK_TRACKER_PLANETSCALE_REGION` defaults to `eu-west` for Dublin
-- `TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE` defaults to the cheapest Postgres
+- `CEIRD_INFRA_STAGE`
+- `CEIRD_APP_HOSTNAME`
+- `CEIRD_API_HOSTNAME`
+- `CEIRD_PLANETSCALE_DATABASE_NAME`
+- `CEIRD_PLANETSCALE_DEFAULT_BRANCH`
+- `CEIRD_PLANETSCALE_REGION` defaults to `eu-west` for Dublin
+- `CEIRD_PLANETSCALE_CLUSTER_SIZE` defaults to the cheapest Postgres
   size, `PS-5`
 - `APPLY_MIGRATIONS`
 
@@ -140,7 +140,7 @@ Create `packages/infra/package.json`:
 
 ```json
 {
-  "name": "@task-tracker/infra",
+  "name": "@ceird/infra",
   "private": true,
   "type": "module",
   "scripts": {
@@ -197,10 +197,10 @@ Modify the root `package.json` scripts:
 ```json
 {
   "scripts": {
-    "infra:check-types": "pnpm --filter @task-tracker/infra check-types",
-    "infra:deploy": "pnpm --filter @task-tracker/infra deploy",
-    "infra:destroy": "pnpm --filter @task-tracker/infra destroy",
-    "infra:dev": "pnpm --filter @task-tracker/infra dev"
+    "infra:check-types": "pnpm --filter @ceird/infra check-types",
+    "infra:deploy": "pnpm --filter @ceird/infra deploy",
+    "infra:destroy": "pnpm --filter @ceird/infra destroy",
+    "infra:dev": "pnpm --filter @ceird/infra dev"
   }
 }
 ```
@@ -244,18 +244,18 @@ const decodeStage = Schema.decodeUnknownSync(InfraStage);
 const decodeDomainName = Schema.decodeUnknownSync(DomainName);
 
 export const loadInfraStageConfig = Effect.gen(function* () {
-  const stage = yield* Config.string("TASK_TRACKER_INFRA_STAGE").pipe(
+  const stage = yield* Config.string("CEIRD_INFRA_STAGE").pipe(
     Config.withDefault("preview"),
     Config.map(decodeStage)
   );
-  const zoneName = yield* Config.string("TASK_TRACKER_ZONE_NAME").pipe(
+  const zoneName = yield* Config.string("CEIRD_ZONE_NAME").pipe(
     Config.map(decodeDomainName)
   );
-  const appHostname = yield* Config.string("TASK_TRACKER_APP_HOSTNAME").pipe(
+  const appHostname = yield* Config.string("CEIRD_APP_HOSTNAME").pipe(
     Config.withDefault(`app.${zoneName}`),
     Config.map(decodeDomainName)
   );
-  const apiHostname = yield* Config.string("TASK_TRACKER_API_HOSTNAME").pipe(
+  const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
     Config.withDefault(`api.${zoneName}`),
     Config.map(decodeDomainName)
   );
@@ -263,23 +263,23 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     "PLANETSCALE_ORGANIZATION"
   );
   const planetScaleDatabaseName = yield* Config.string(
-    "TASK_TRACKER_PLANETSCALE_DATABASE_NAME"
-  ).pipe(Config.withDefault(`task-tracker-${stage}`));
+    "CEIRD_PLANETSCALE_DATABASE_NAME"
+  ).pipe(Config.withDefault(`ceird-${stage}`));
   const planetScaleDefaultBranch = yield* Config.string(
-    "TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH"
+    "CEIRD_PLANETSCALE_DEFAULT_BRANCH"
   ).pipe(Config.withDefault("main"));
   const planetScaleRegionSlug = yield* Config.string(
-    "TASK_TRACKER_PLANETSCALE_REGION"
+    "CEIRD_PLANETSCALE_REGION"
   ).pipe(Config.withDefault("eu-west"));
   const planetScaleClusterSize = yield* Config.string(
-    "TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE"
+    "CEIRD_PLANETSCALE_CLUSTER_SIZE"
   ).pipe(Config.withDefault("PS-5"));
   const applyMigrations = yield* Config.boolean("APPLY_MIGRATIONS").pipe(
     Config.withDefault(false)
   );
 
   return {
-    appName: "task-tracker",
+    appName: "ceird",
     stage,
     zoneName,
     appHostname,
@@ -412,14 +412,14 @@ sizing choices:
 3. Export `PLANETSCALE_API_TOKEN`.
 4. Export bootstrap `CLOUDFLARE_ACCOUNT_ID`.
 5. Export bootstrap `CLOUDFLARE_API_TOKEN`.
-6. Set `TASK_TRACKER_PLANETSCALE_DATABASE_NAME`.
-7. Set `TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH`.
-8. Set `TASK_TRACKER_PLANETSCALE_REGION`.
-9. Set `TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE`.
+6. Set `CEIRD_PLANETSCALE_DATABASE_NAME`.
+7. Set `CEIRD_PLANETSCALE_DEFAULT_BRANCH`.
+8. Set `CEIRD_PLANETSCALE_REGION`.
+9. Set `CEIRD_PLANETSCALE_CLUSTER_SIZE`.
 10. Set `AUTH_EMAIL_TRANSPORT=cloudflare`.
 11. Set `APPLY_MIGRATIONS=true` only when the deploy should apply Drizzle
     migrations programmatically.
-12. Run `CI=true ALCHEMY_PROFILE=task-tracker-bootstrap pnpm infra:deploy` to
+12. Run `CI=true ALCHEMY_PROFILE=ceird-bootstrap pnpm infra:deploy` to
     create the database, roles, Hyperdrive config, Workers, queues, runtime email
     token, and routes.
 13. Let the Alchemy deploy run migrations using the Alchemy-created migration
@@ -647,7 +647,7 @@ const program = Effect.gen(function* () {
   } as const;
 });
 
-const app = await alchemy("task-tracker");
+const app = await alchemy("ceird");
 const outputs = await Effect.runPromise(program);
 
 console.log({
@@ -749,7 +749,7 @@ import { Context } from "effect";
 import { nodeDatabaseUrl } from "./database-url.js";
 
 export class AppDatabaseUrl extends Context.Tag(
-  "@task-tracker/platform/database/AppDatabaseUrl"
+  "@ceird/platform/database/AppDatabaseUrl"
 )<AppDatabaseUrl, string>() {}
 
 export const AppDatabaseUrlLive = Layer.effect(AppDatabaseUrl, nodeDatabaseUrl);
@@ -894,7 +894,7 @@ const decodeAuthEmailQueueMessage = Schema.decodeUnknownSync(
 );
 
 export class AuthEmailQueue extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthEmailQueue"
+  "@ceird/domains/identity/authentication/AuthEmailQueue"
 )<
   AuthEmailQueue,
   {
@@ -1109,7 +1109,7 @@ current TanStack Start plugin version no longer accepts the older
 let Alchemy's `TanStackStart` resource own platform packaging.
 
 ```ts
-const isCloudflareBuild = process.env.TASK_TRACKER_CLOUDFLARE === "1";
+const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
 
 // in Vite build config:
 build: isCloudflareBuild
@@ -1133,7 +1133,7 @@ Modify `apps/app/package.json` scripts:
 ```json
 {
   "scripts": {
-    "build:cloudflare": "TASK_TRACKER_CLOUDFLARE=1 vite build"
+    "build:cloudflare": "CEIRD_CLOUDFLARE=1 vite build"
   }
 }
 ```
@@ -1169,18 +1169,18 @@ git commit -m "app: add cloudflare build target"
 Set the required deployment environment locally or in the chosen secure shell:
 
 ```bash
-export TASK_TRACKER_INFRA_STAGE='preview'
-export TASK_TRACKER_ZONE_NAME='<domain.example>'
-export TASK_TRACKER_APP_HOSTNAME='app.<domain.example>'
-export TASK_TRACKER_API_HOSTNAME='api.<domain.example>'
+export CEIRD_INFRA_STAGE='preview'
+export CEIRD_ZONE_NAME='<domain.example>'
+export CEIRD_APP_HOSTNAME='app.<domain.example>'
+export CEIRD_API_HOSTNAME='api.<domain.example>'
 export AUTH_EMAIL_FROM='no-reply@<domain.example>'
 export PLANETSCALE_ORGANIZATION='<planetscale-org-name>'
 export PLANETSCALE_API_TOKEN_ID='<planetscale-api-token-id>'
 export PLANETSCALE_API_TOKEN='<planetscale-api-token-with-database-and-role-scopes>'
-export TASK_TRACKER_PLANETSCALE_DATABASE_NAME='task-tracker-preview'
-export TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH='main'
-export TASK_TRACKER_PLANETSCALE_REGION='eu-west'
-export TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE='PS-5'
+export CEIRD_PLANETSCALE_DATABASE_NAME='ceird-preview'
+export CEIRD_PLANETSCALE_DEFAULT_BRANCH='main'
+export CEIRD_PLANETSCALE_REGION='eu-west'
+export CEIRD_PLANETSCALE_CLUSTER_SIZE='PS-5'
 export APPLY_MIGRATIONS='true'
 export AUTH_EMAIL_TRANSPORT='cloudflare'
 export CLOUDFLARE_ACCOUNT_ID='<cloudflare-account-id>'
@@ -1198,7 +1198,7 @@ the deploy should apply Drizzle migrations.
 Run:
 
 ```bash
-CI=true ALCHEMY_PROFILE=task-tracker-bootstrap pnpm infra:deploy
+CI=true ALCHEMY_PROFILE=ceird-bootstrap pnpm infra:deploy
 ```
 
 Expected: Alchemy creates or updates the PlanetScale Postgres database,
@@ -1215,7 +1215,7 @@ database manually as a workaround.
 Run:
 
 ```bash
-curl -fsS "https://${TASK_TRACKER_API_HOSTNAME}/health"
+curl -fsS "https://${CEIRD_API_HOSTNAME}/health"
 ```
 
 Expected: JSON health payload for the API Worker.
@@ -1225,7 +1225,7 @@ Expected: JSON health payload for the API Worker.
 Run:
 
 ```bash
-curl -fsS "https://${TASK_TRACKER_APP_HOSTNAME}/health"
+curl -fsS "https://${CEIRD_APP_HOSTNAME}/health"
 ```
 
 Expected: app health route returns successfully.

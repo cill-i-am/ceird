@@ -1,7 +1,6 @@
 "use client";
-
+import type { OrganizationRole } from "@ceird/identity-core";
 import { Outlet } from "@tanstack/react-router";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { AppSidebar } from "#/components/app-sidebar";
 import type { NavUserAccount } from "#/components/nav-user";

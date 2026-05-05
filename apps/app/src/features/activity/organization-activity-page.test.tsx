@@ -1,12 +1,12 @@
 import type {
   ActivityIdType,
   CostLineIdType,
-  JobLabelIdType,
   OrganizationActivityItem,
   OrganizationActivityListResponse,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -43,7 +43,7 @@ const mixedActivity = {
       jobTitle: "Paint lobby",
       payload: {
         eventType: "label_added",
-        labelId: "22222222-2222-4222-8222-222222222222" as JobLabelIdType,
+        labelId: "22222222-2222-4222-8222-222222222222" as LabelIdType,
         labelName: "Urgent",
       },
       workItemId: "22222222-2222-4222-8222-222222222222" as WorkItemIdType,

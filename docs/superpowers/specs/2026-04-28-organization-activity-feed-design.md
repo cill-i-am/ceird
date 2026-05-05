@@ -213,7 +213,7 @@ Use Effect Schema at HTTP boundaries:
 
 Repository mapping should decode rows into shared DTOs before returning them.
 The frontend should consume the generated/shared DTO types from
-`@task-tracker/jobs-core`.
+`@ceird/jobs-core`.
 
 ## Testing Strategy
 

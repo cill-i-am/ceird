@@ -1,0 +1,24 @@
+{
+  "name": "@ceird/sites-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --globals"
+  },
+  "dependencies": {
+    "@ceird/identity-core": "workspace:*",
+    "@effect/platform": "^0.96.1",
+    "effect": "^3.21.2"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.84.3",
+    "@types/node": "^25.6.0",
+    "typescript": "5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -76,7 +76,7 @@ export function colorizeSandboxDetail(
 function detectColorSupport(
   options: DetectSandboxTerminalStyleOptions
 ): boolean {
-  if (options.env.TASK_TRACKER_SANDBOX_ASCII === "1") {
+  if (options.env.CEIRD_SANDBOX_ASCII === "1") {
     return false;
   }
 
@@ -94,5 +94,5 @@ function detectColorSupport(
 function detectUnicodeSupport(
   options: DetectSandboxTerminalStyleOptions
 ): boolean {
-  return options.env.TASK_TRACKER_SANDBOX_ASCII !== "1";
+  return options.env.CEIRD_SANDBOX_ASCII !== "1";
 }

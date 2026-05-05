@@ -1,19 +1,18 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
   CostLineIdType,
   JobDetailResponse,
-  JobLabelIdType,
-  ServiceAreaIdType,
-  SiteIdType,
   UserIdType,
   VisitIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
+import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -37,8 +36,8 @@ const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const actorUserId = "22222222-2222-4222-8222-222222222222" as UserIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
-const urgentLabelId = "99999999-9999-4999-8999-999999999999" as JobLabelIdType;
-const newLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as JobLabelIdType;
+const urgentLabelId = "99999999-9999-4999-8999-999999999999" as LabelIdType;
+const newLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as LabelIdType;
 const serviceAreaId =
   "55555555-5555-4555-8555-555555555555" as ServiceAreaIdType;
 const organizationId = decodeOrganizationId("org_123");
@@ -48,10 +47,10 @@ const {
   mockedAddJobComment,
   mockedAddJobVisit,
   mockedAssignJobLabel,
-  mockedCreateJobLabel,
+  mockedCreateLabel,
   mockedGetJobDetail,
   mockedListJobs,
-  mockedMakeBrowserJobsClient,
+  mockedMakeBrowserAppApiClient,
   mockedNavigate,
   mockedRemoveJobLabel,
   mockedPatchJob,
@@ -62,10 +61,10 @@ const {
   mockedAddJobComment: vi.fn<EffectClientMock>(),
   mockedAddJobVisit: vi.fn<EffectClientMock>(),
   mockedAssignJobLabel: vi.fn<EffectClientMock>(),
-  mockedCreateJobLabel: vi.fn<EffectClientMock>(),
+  mockedCreateLabel: vi.fn<EffectClientMock>(),
   mockedGetJobDetail: vi.fn<EffectClientMock>(),
   mockedListJobs: vi.fn<EffectClientMock>(),
-  mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
+  mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedNavigate: vi.fn<NavigateMock>(),
   mockedRemoveJobLabel: vi.fn<EffectClientMock>(),
   mockedPatchJob: vi.fn<EffectClientMock>(),
@@ -178,18 +177,18 @@ vi.mock("#/components/ui/popover", () => ({
   ),
 }));
 
-vi.mock("./jobs-client", async () => {
+vi.mock("#/features/api/app-api-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
 
   return {
-    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-    provideBrowserJobsHttp: (effect: unknown) => effect,
-    runBrowserJobsRequest: (
+    makeBrowserAppApiClient: mockedMakeBrowserAppApiClient,
+    provideBrowserAppApiHttp: (effect: unknown) => effect,
+    runBrowserAppApiRequest: (
       _operation: string,
       execute: (client: unknown) => unknown
     ) =>
-      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+      (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
           (client) => execute(client) as Effect.Effect<unknown, unknown>
         )
@@ -203,30 +202,32 @@ describe("jobs detail sheet integration", () => {
     mockedAddJobComment.mockReset();
     mockedAddJobVisit.mockReset();
     mockedAssignJobLabel.mockReset();
-    mockedCreateJobLabel.mockReset();
+    mockedCreateLabel.mockReset();
     mockedGetJobDetail.mockReset();
     mockedListJobs.mockReset();
-    mockedMakeBrowserJobsClient.mockReset();
+    mockedMakeBrowserAppApiClient.mockReset();
     mockedNavigate.mockReset();
     mockedRemoveJobLabel.mockReset();
     mockedPatchJob.mockReset();
     mockedReopenJob.mockReset();
     mockedTransitionJob.mockReset();
 
-    mockedMakeBrowserJobsClient.mockImplementation(() =>
+    mockedMakeBrowserAppApiClient.mockImplementation(() =>
       Effect.succeed({
         jobs: {
           addJobCostLine: mockedAddJobCostLine,
           addJobComment: mockedAddJobComment,
           addJobVisit: mockedAddJobVisit,
           assignJobLabel: mockedAssignJobLabel,
-          createJobLabel: mockedCreateJobLabel,
           getJobDetail: mockedGetJobDetail,
           listJobs: mockedListJobs,
           removeJobLabel: mockedRemoveJobLabel,
           patchJob: mockedPatchJob,
           reopenJob: mockedReopenJob,
           transitionJob: mockedTransitionJob,
+        },
+        labels: {
+          createLabel: mockedCreateLabel,
         },
       })
     );
@@ -313,7 +314,7 @@ describe("jobs detail sheet integration", () => {
     },
     async () => {
       const newLabel = buildLabel(newLabelId, "Warranty");
-      mockedCreateJobLabel.mockReturnValue(Effect.succeed(newLabel));
+      mockedCreateLabel.mockReturnValue(Effect.succeed(newLabel));
       mockedAssignJobLabel.mockReturnValue(
         Effect.succeed(
           buildDetail({
@@ -343,7 +344,7 @@ describe("jobs detail sheet integration", () => {
         "Urgent | Warranty"
       );
       expect(screen.getByTestId("list-labels")).toHaveTextContent("Warranty");
-      expect(mockedCreateJobLabel).toHaveBeenCalledWith({
+      expect(mockedCreateLabel).toHaveBeenCalledWith({
         payload: { name: "Warranty" },
       });
       expect(mockedAssignJobLabel).toHaveBeenCalledWith({
@@ -920,7 +921,7 @@ function buildDetail(
   };
 }
 
-function buildLabel(id: JobLabelIdType, name: string) {
+function buildLabel(id: LabelIdType, name: string) {
   return {
     createdAt: "2026-04-23T09:00:00.000Z",
     id,
@@ -931,7 +932,7 @@ function buildLabel(id: JobLabelIdType, name: string) {
 
 function buildLabelActivity(
   eventType: "label_added" | "label_removed",
-  labelId: JobLabelIdType,
+  labelId: LabelIdType,
   labelName: string
 ): JobDetailResponse["activity"][number] {
   return {

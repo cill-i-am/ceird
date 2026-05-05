@@ -16,7 +16,7 @@ describe("root route head", () => {
           typeof (meta as Record<string, unknown>).title === "string"
       )?.title;
 
-      expect(title).toBe("Task Tracker");
+      expect(title).toBe("Ceird");
     }
   );
 });

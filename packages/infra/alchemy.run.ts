@@ -17,7 +17,7 @@ import { loadInfraStageConfig } from "./src/stages.ts";
 
 const stackName =
   process.env.CEIRD_ALCHEMY_STACK_NAME ??
-  process.env.TASK_TRACKER_ALCHEMY_STACK_NAME ??
+  process.env.CEIRD_ALCHEMY_STACK_NAME ??
   "ceird";
 
 export default Alchemy.Stack(

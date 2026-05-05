@@ -12,16 +12,16 @@ function toURL(input: string): URL | undefined {
 function mapAppOriginToApiOrigin(url: URL): URL | undefined {
   const mapped = new URL(url.toString());
 
-  if (mapped.hostname.includes(".app.task-tracker.localhost")) {
+  if (mapped.hostname.includes(".app.ceird.localhost")) {
     mapped.hostname = mapped.hostname.replace(
-      ".app.task-tracker.localhost",
-      ".api.task-tracker.localhost"
+      ".app.ceird.localhost",
+      ".api.ceird.localhost"
     );
     return mapped;
   }
 
-  if (mapped.hostname === "app.task-tracker.localhost") {
-    mapped.hostname = "api.task-tracker.localhost";
+  if (mapped.hostname === "app.ceird.localhost") {
+    mapped.hostname = "api.ceird.localhost";
     return mapped;
   }
 

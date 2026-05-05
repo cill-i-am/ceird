@@ -25,9 +25,9 @@ describe("api origin resolution", () => {
   }, 1000);
 
   it("maps the app portless origin to the API origin", () => {
-    expect(
-      resolveApiOrigin("https://agent-one.app.task-tracker.localhost:1355")
-    ).toBe("https://agent-one.api.task-tracker.localhost:1355");
+    expect(resolveApiOrigin("https://agent-one.app.ceird.localhost:1355")).toBe(
+      "https://agent-one.api.ceird.localhost:1355"
+    );
   }, 1000);
 
   it("maps the raw local app dev origin to the local API origin", () => {
@@ -47,28 +47,28 @@ describe("api origin resolution", () => {
   it("falls back to host-based mapping when the injected API origin is invalid", () => {
     expect(
       resolveApiOrigin(
-        "https://agent-one.app.task-tracker.localhost:1355",
+        "https://agent-one.app.ceird.localhost:1355",
         "not-a-url"
       )
-    ).toBe("https://agent-one.api.task-tracker.localhost:1355");
+    ).toBe("https://agent-one.api.ceird.localhost:1355");
   }, 1000);
 
   it("maps conventional app subdomains to matching API subdomains", () => {
-    expect(resolveApiOrigin("https://app.task-tracker.example.com")).toBe(
-      "https://api.task-tracker.example.com"
+    expect(resolveApiOrigin("https://app.ceird.example.com")).toBe(
+      "https://api.ceird.example.com"
     );
   }, 1000);
 
   it("falls back to conventional app subdomain mapping when the injected API origin is invalid", () => {
-    expect(
-      resolveApiOrigin("https://app.task-tracker.example.com", "not-a-url")
-    ).toBe("https://api.task-tracker.example.com");
+    expect(resolveApiOrigin("https://app.ceird.example.com", "not-a-url")).toBe(
+      "https://api.ceird.example.com"
+    );
   }, 1000);
 
   it("reads the injected server API origin", () => {
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
-    expect(readConfiguredServerApiOrigin()).toBe("http://tt-sbx-api:4301");
+    expect(readConfiguredServerApiOrigin()).toBe("http://ceird-sbx-api:4301");
   }, 1000);
 
   it("returns undefined when no server API origin is injected", () => {

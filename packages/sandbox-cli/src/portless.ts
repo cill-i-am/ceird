@@ -1,7 +1,7 @@
 import type {
   SandboxNameType as SandboxName,
   SandboxPorts,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 
 export interface PortlessAliasCommands {
   readonly add: readonly (readonly [string, ...string[]])[];
@@ -12,8 +12,8 @@ export function makePortlessAliasCommands(input: {
   readonly sandboxName: SandboxName;
   readonly ports: SandboxPorts;
 }): PortlessAliasCommands {
-  const appName = `${input.sandboxName}.app.task-tracker`;
-  const apiName = `${input.sandboxName}.api.task-tracker`;
+  const appName = `${input.sandboxName}.app.ceird`;
+  const apiName = `${input.sandboxName}.api.ceird`;
 
   return {
     add: [

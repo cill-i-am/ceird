@@ -1,5 +1,6 @@
 "use client";
-
+import type { JobListItem, JobPriority, UserIdType } from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
@@ -15,12 +16,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type {
-  JobLabel,
-  JobListItem,
-  JobPriority,
-  UserIdType,
-} from "@task-tracker/jobs-core";
 import * as React from "react";
 
 import {
@@ -75,6 +70,7 @@ import {
 } from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { hasSiteCoordinates } from "#/features/sites/site-location";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
@@ -85,7 +81,6 @@ import {
   JOB_STATUS_LABELS as STATUS_LABELS,
 } from "./job-display";
 import { JobsCoverageMap } from "./jobs-coverage-map";
-import { hasSiteCoordinates } from "./jobs-location";
 import {
   buildJobSavedViews,
   findMatchingJobSavedView,
@@ -931,7 +926,7 @@ function JobIssueTableRow({
             <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
           </span>
           <span className="min-w-0 truncate font-medium">{job.title}</span>
-          <JobLabelBadges labels={job.labels} />
+          <LabelBadges labels={job.labels} />
           {site && hasSiteCoordinates(site) ? (
             <HugeiconsIcon
               icon={Location01Icon}
@@ -1001,7 +996,7 @@ function JobIssueRow({
           <span className="truncate font-medium">{job.title}</span>
           <StatusBadge status={job.status} />
           <PriorityBadge priority={job.priority} />
-          <JobLabelBadges labels={job.labels} />
+          <LabelBadges labels={job.labels} />
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{site?.name ?? "No site"}</span>
@@ -1105,7 +1100,7 @@ function PriorityBadge({ priority }: { readonly priority: JobPriority }) {
   );
 }
 
-function JobLabelBadges({ labels }: { readonly labels: readonly JobLabel[] }) {
+function LabelBadges({ labels }: { readonly labels: readonly Label[] }) {
   if (labels.length === 0) {
     return null;
   }

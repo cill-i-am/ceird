@@ -4,7 +4,7 @@
 
 **Goal:** Add a lightweight admin-only organization settings page where an organization admin can update the active organization name and see the immutable slug.
 
-**Architecture:** Keep organization mutation on Better Auth's organization plugin instead of adding a parallel app API. Add a shared `UpdateOrganizationInputSchema` in `@task-tracker/identity-core`, validate Better Auth organization updates with the same boundary schema on the API, and build a focused TanStack Router page under `/_app/_org/settings`. Surface the settings entry point from the account dropdown beside sign out, not from the primary sidebar navigation.
+**Architecture:** Keep organization mutation on Better Auth's organization plugin instead of adding a parallel app API. Add a shared `UpdateOrganizationInputSchema` in `@ceird/identity-core`, validate Better Auth organization updates with the same boundary schema on the API, and build a focused TanStack Router page under `/_app/_org/settings`. Surface the settings entry point from the account dropdown beside sign out, not from the primary sidebar navigation.
 
 **Tech Stack:** Better Auth organization plugin, Effect Schema, TanStack Start, TanStack Router, TanStack Form, Vitest, Testing Library, Playwright
 
@@ -89,7 +89,7 @@ describe("updateOrganizationInputSchema", () => {
 Run:
 
 ```bash
-pnpm --filter @task-tracker/identity-core test -- src/index.test.ts -t updateOrganizationInputSchema
+pnpm --filter @ceird/identity-core test -- src/index.test.ts -t updateOrganizationInputSchema
 ```
 
 Expected: FAIL because `decodeUpdateOrganizationInput` is not exported yet.
@@ -121,7 +121,7 @@ Keep `CreateOrganizationInputSchema` unchanged so create still requires both `na
 Run:
 
 ```bash
-pnpm --filter @task-tracker/identity-core test -- src/index.test.ts -t "organizationInputSchema"
+pnpm --filter @ceird/identity-core test -- src/index.test.ts -t "organizationInputSchema"
 ```
 
 Expected: PASS for both create and update schema tests.
@@ -244,7 +244,7 @@ import {
   decodeCreateOrganizationInput,
   decodePublicInvitationPreview,
   decodeUpdateOrganizationInput,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 ```
 
 Add this hook beside the existing `beforeCreateOrganization` hook:
@@ -543,7 +543,7 @@ export function OrganizationSettingsPage({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(18rem,0.45fr)]">
         <AppUtilityPanel
           title="General"
-          description="Update the display name your team sees throughout Task Tracker."
+          description="Update the display name your team sees throughout Ceird."
           className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
         >
           <form
@@ -633,8 +633,8 @@ Create `apps/app/src/features/organizations/organization-settings-schemas.ts`:
 export {
   UpdateOrganizationInputSchema as organizationSettingsSchema,
   decodeUpdateOrganizationInput,
-} from "@task-tracker/identity-core";
-export type { UpdateOrganizationInput } from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
+export type { UpdateOrganizationInput } from "@ceird/identity-core";
 ```
 
 - [ ] **Step 4: Run the focused page test and verify it passes**
@@ -951,7 +951,7 @@ git commit -m "test: cover organization settings"
 Run:
 
 ```bash
-pnpm --filter @task-tracker/identity-core test
+pnpm --filter @ceird/identity-core test
 pnpm --filter api test
 pnpm --filter app test
 pnpm --filter app check-types
@@ -982,7 +982,7 @@ Expected:
 
 - no unrelated files changed
 - no slug mutation UI or API behavior added
-- organization name validation uses `@task-tracker/identity-core`
+- organization name validation uses `@ceird/identity-core`
 - settings route is admin-gated with `requireOrganizationAdministrationAccess`
 
 - [ ] **Step 4: Commit generated route tree changes if present**

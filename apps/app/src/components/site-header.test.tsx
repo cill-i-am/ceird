@@ -176,7 +176,7 @@ describe("site header", () => {
       expect(screen.queryByRole("search")).not.toBeInTheDocument();
       expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
       expect(screen.getByText("Jobs")).toBeInTheDocument();
-      expect(screen.queryByText("Task Tracker")).not.toBeInTheDocument();
+      expect(screen.queryByText("Ceird")).not.toBeInTheDocument();
       expect(screen.queryByText("Your work")).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /theme mode/i })

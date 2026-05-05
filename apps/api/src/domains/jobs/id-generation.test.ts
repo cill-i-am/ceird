@@ -7,8 +7,6 @@ import {
   generateJobDomainUuid,
   generateRateCardId,
   generateRateCardLineId,
-  generateServiceAreaId,
-  generateSiteId,
   generateVisitId,
   generateWorkItemId,
 } from "./id-generation.js";
@@ -19,10 +17,8 @@ describe("job id generation", () => {
     expect(version(generateActivityId())).toBe(7);
     expect(version(generateCommentId())).toBe(7);
     expect(version(generateContactId())).toBe(7);
-    expect(version(generateServiceAreaId())).toBe(7);
     expect(version(generateRateCardId())).toBe(7);
     expect(version(generateRateCardLineId())).toBe(7);
-    expect(version(generateSiteId())).toBe(7);
     expect(version(generateVisitId())).toBe(7);
     expect(version(generateWorkItemId())).toBe(7);
   }, 5000);

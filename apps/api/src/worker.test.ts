@@ -56,7 +56,7 @@ function makeEnv(
       send: sendEmail as SendEmail["send"],
     },
     AUTH_EMAIL_FROM: "auth@example.com",
-    AUTH_EMAIL_FROM_NAME: "Task Tracker",
+    AUTH_EMAIL_FROM_NAME: "Ceird",
     AUTH_EMAIL_QUEUE: {
       send: () => Promise.resolve(),
     } as unknown as Queue<AuthEmailQueueMessage>,

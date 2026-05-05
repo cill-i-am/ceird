@@ -15,15 +15,15 @@ import {
 import { SandboxRuntimeAssets } from "./runtime-spec.js";
 
 const runtimeAssets = Schema.decodeUnknownSync(SandboxRuntimeAssets)({
-  devImage: "tt-sbx-task-tracker-dev:123456789abc",
-  nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-  pnpmStoreVolume: "tt-sbx-pnpm-store",
+  devImage: "ceird-sbx-ceird-dev:123456789abc",
+  nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+  pnpmStoreVolume: "ceird-sbx-pnpm-store",
 });
 
 describe("deriveSandboxIdentity()", () => {
   it("derives a stable sandbox id and slug from the repo and worktree path", () => {
-    const repoRoot = "/Users/me/task-tracker";
-    const worktreePath = "/Users/me/task-tracker/.worktrees/agent-one";
+    const repoRoot = "/Users/me/ceird";
+    const worktreePath = "/Users/me/ceird/.worktrees/agent-one";
 
     const first = deriveSandboxIdentity({ repoRoot, worktreePath });
     const second = deriveSandboxIdentity({ repoRoot, worktreePath });
@@ -36,8 +36,8 @@ describe("deriveSandboxIdentity()", () => {
 
   it("adds a hash suffix when the preferred hostname slug is already taken", () => {
     const identity = deriveSandboxIdentity({
-      repoRoot: "/Users/me/task-tracker",
-      worktreePath: "/Users/me/task-tracker/.worktrees/Agent One",
+      repoRoot: "/Users/me/ceird",
+      worktreePath: "/Users/me/ceird/.worktrees/Agent One",
       takenSlugs: new Set([validateHostnameSlug("agent-one")]),
     });
 
@@ -46,7 +46,7 @@ describe("deriveSandboxIdentity()", () => {
 
   it("prefers the branch name over the worktree basename when one is available", () => {
     const identity = deriveSandboxIdentity({
-      repoRoot: "/Users/me/task-tracker",
+      repoRoot: "/Users/me/ceird",
       worktreePath: "/Users/me/.codex/worktrees/1188/ceird",
       preferredName: "codex/add-sandbox-aware-tests",
     });
@@ -57,8 +57,8 @@ describe("deriveSandboxIdentity()", () => {
 
   it("falls back to a sandbox-prefixed slug when the worktree name sanitizes to empty", () => {
     const identity = deriveSandboxIdentity({
-      repoRoot: "/Users/me/task-tracker",
-      worktreePath: "/Users/me/task-tracker/.worktrees/!!!",
+      repoRoot: "/Users/me/ceird",
+      worktreePath: "/Users/me/ceird/.worktrees/!!!",
     });
 
     expect(identity.hostnameSlug).toMatch(/^sandbox-[a-f0-9]{6}$/);
@@ -73,8 +73,8 @@ describe("reconcileSandboxRecord()", () => {
       composeProjectName: makeComposeProjectName(
         validateSandboxName("agent-one")
       ),
-      worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
-      repoRoot: "/Users/me/task-tracker",
+      worktreePath: "/Users/me/ceird/.worktrees/agent-one",
+      repoRoot: "/Users/me/ceird",
       hostnameSlug: validateHostnameSlug("agent-one"),
       betterAuthSecret: "0123456789abcdef0123456789abcdef",
       runtimeAssets,
@@ -109,8 +109,8 @@ describe("reconcileSandboxRecord()", () => {
       composeProjectName: makeComposeProjectName(
         validateSandboxName("agent-one")
       ),
-      worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
-      repoRoot: "/Users/me/task-tracker",
+      worktreePath: "/Users/me/ceird/.worktrees/agent-one",
+      repoRoot: "/Users/me/ceird",
       hostnameSlug: validateHostnameSlug("agent-one"),
       betterAuthSecret: "0123456789abcdef0123456789abcdef",
       runtimeAssets,
@@ -214,9 +214,9 @@ describe("buildSandboxUrls()", () => {
         }
       )
     ).toStrictEqual({
-      app: "https://agent-one.app.task-tracker.localhost:1355",
-      api: "https://agent-one.api.task-tracker.localhost:1355",
-      postgres: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      app: "https://agent-one.app.ceird.localhost:1355",
+      api: "https://agent-one.api.ceird.localhost:1355",
+      postgres: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       fallbackApp: "http://127.0.0.1:4300",
       fallbackApi: "http://127.0.0.1:4301",
     });
@@ -241,7 +241,7 @@ describe("buildSandboxUrls()", () => {
     ).toStrictEqual({
       app: "http://127.0.0.1:4300",
       api: "http://127.0.0.1:4301",
-      postgres: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      postgres: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       fallbackApp: "http://127.0.0.1:4300",
       fallbackApi: "http://127.0.0.1:4301",
     });

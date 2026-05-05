@@ -1,4 +1,4 @@
-import type { ComposeProjectNameType as ComposeProjectName } from "@task-tracker/sandbox-core";
+import type { ComposeProjectNameType as ComposeProjectName } from "@ceird/sandbox-core";
 
 export function buildComposeCommandArgs(input: {
   readonly composeFile: string;

@@ -384,8 +384,8 @@
       },
       "isRLSEnabled": false
     },
-    "public.job_labels": {
-      "name": "job_labels",
+    "public.labels": {
+      "name": "labels",
       "schema": "",
       "columns": {
         "id": {
@@ -434,8 +434,8 @@
         }
       },
       "indexes": {
-        "job_labels_organization_normalized_active_idx": {
-          "name": "job_labels_organization_normalized_active_idx",
+        "labels_organization_normalized_active_idx": {
+          "name": "labels_organization_normalized_active_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -451,13 +451,13 @@
             }
           ],
           "isUnique": true,
-          "where": "\"job_labels\".\"archived_at\" is null",
+          "where": "\"labels\".\"archived_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "job_labels_id_organization_idx": {
-          "name": "job_labels_id_organization_idx",
+        "labels_id_organization_idx": {
+          "name": "labels_id_organization_idx",
           "columns": [
             {
               "expression": "id",
@@ -477,8 +477,8 @@
           "method": "btree",
           "with": {}
         },
-        "job_labels_organization_name_idx": {
-          "name": "job_labels_organization_name_idx",
+        "labels_organization_name_idx": {
+          "name": "labels_organization_name_idx",
           "columns": [
             {
               "expression": "organization_id",
@@ -500,16 +500,16 @@
             }
           ],
           "isUnique": false,
-          "where": "\"job_labels\".\"archived_at\" is null",
+          "where": "\"labels\".\"archived_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "job_labels_organization_id_organization_id_fk": {
-          "name": "job_labels_organization_id_organization_id_fk",
-          "tableFrom": "job_labels",
+        "labels_organization_id_organization_id_fk": {
+          "name": "labels_organization_id_organization_id_fk",
+          "tableFrom": "labels",
           "tableTo": "organization",
           "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],
@@ -521,21 +521,21 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "job_labels_name_not_empty_chk": {
-          "name": "job_labels_name_not_empty_chk",
-          "value": "length(trim(\"job_labels\".\"name\")) > 0"
+        "labels_name_not_empty_chk": {
+          "name": "labels_name_not_empty_chk",
+          "value": "length(trim(\"labels\".\"name\")) > 0"
         },
-        "job_labels_name_max_length_chk": {
-          "name": "job_labels_name_max_length_chk",
-          "value": "length(trim(\"job_labels\".\"name\")) <= 48"
+        "labels_name_max_length_chk": {
+          "name": "labels_name_max_length_chk",
+          "value": "length(trim(\"labels\".\"name\")) <= 48"
         },
-        "job_labels_normalized_name_not_empty_chk": {
-          "name": "job_labels_normalized_name_not_empty_chk",
-          "value": "length(trim(\"job_labels\".\"normalized_name\")) > 0"
+        "labels_normalized_name_not_empty_chk": {
+          "name": "labels_normalized_name_not_empty_chk",
+          "value": "length(trim(\"labels\".\"normalized_name\")) > 0"
         },
-        "job_labels_normalized_name_max_length_chk": {
-          "name": "job_labels_normalized_name_max_length_chk",
-          "value": "length(trim(\"job_labels\".\"normalized_name\")) <= 48"
+        "labels_normalized_name_max_length_chk": {
+          "name": "labels_normalized_name_max_length_chk",
+          "value": "length(trim(\"labels\".\"normalized_name\")) <= 48"
         }
       },
       "isRLSEnabled": false
@@ -1992,27 +1992,6 @@
           "method": "btree",
           "with": {}
         },
-        "work_items_id_organization_idx": {
-          "name": "work_items_id_organization_idx",
-          "columns": [
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "work_items_organization_active_updated_at_idx": {
           "name": "work_items_organization_active_updated_at_idx",
           "columns": [
@@ -2744,7 +2723,7 @@
         "work_item_labels_label_org_fk": {
           "name": "work_item_labels_label_org_fk",
           "tableFrom": "work_item_labels",
-          "tableTo": "job_labels",
+          "tableTo": "labels",
           "columnsFrom": ["label_id", "organization_id"],
           "columnsTo": ["id", "organization_id"],
           "onDelete": "cascade",

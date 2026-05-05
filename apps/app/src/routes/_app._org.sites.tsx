@@ -1,29 +1,27 @@
+import type {
+  OrganizationId,
+  OrganizationRole,
+  UserId as UserIdType,
+} from "@ceird/identity-core";
+import type { SitesOptionsResponse } from "@ceird/sites-core";
 import {
   Outlet,
   createFileRoute,
   useRouteContext,
 } from "@tanstack/react-router";
-import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
-import type { JobOptionsResponse, UserIdType } from "@task-tracker/jobs-core";
 
-import { getCurrentServerSiteOptions } from "#/features/jobs/jobs-server";
-import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
-import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import { getCurrentServerSiteOptions } from "#/features/api/app-api-server";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   assertOrganizationInternalRole,
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
+import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
+import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { SitesRouteContent } from "#/features/sites/sites-route-content";
 
-const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
-  contacts: [],
-  labels: [],
-  members: [],
+const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   serviceAreas: [],
   sites: [],
 };
@@ -41,7 +39,9 @@ function toSitesRouteOrganizationAccess(
   return {
     activeOrganizationId: organizationAccess.activeOrganizationId,
     activeOrganizationSync: organizationAccess.activeOrganizationSync,
-    currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
+    currentUserId: decodeOrganizationViewerUserId(
+      organizationAccess.session.user.id
+    ),
   };
 }
 
@@ -54,11 +54,11 @@ export async function loadSitesRouteData(
 
   if (resolvedOrganizationAccess.activeOrganizationSync.required) {
     return {
-      options: EMPTY_JOBS_OPTIONS,
+      options: EMPTY_SITE_OPTIONS,
       viewer: {
         role: "member",
         userId: resolvedOrganizationAccess.currentUserId,
-      } satisfies JobsViewer,
+      } satisfies OrganizationViewer,
     };
   }
 
@@ -71,17 +71,11 @@ export async function loadSitesRouteData(
   const siteOptions = await getCurrentServerSiteOptions();
 
   return {
-    options: {
-      contacts: [],
-      labels: [],
-      members: [],
-      serviceAreas: siteOptions.serviceAreas,
-      sites: siteOptions.sites,
-    },
+    options: siteOptions,
     viewer: {
       role: activeRole,
       userId: resolvedOrganizationAccess.currentUserId,
-    } satisfies JobsViewer,
+    } satisfies OrganizationViewer,
   };
 }
 

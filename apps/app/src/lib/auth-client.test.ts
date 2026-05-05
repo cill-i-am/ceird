@@ -55,8 +55,8 @@ describe("auth client", () => {
 
   it("uses the same app-to-api origin mapping for public endpoints", () => {
     expect(
-      resolveApiBaseURL("https://agent-one.app.task-tracker.localhost:1355")
-    ).toBe("https://agent-one.api.task-tracker.localhost:1355/api");
+      resolveApiBaseURL("https://agent-one.app.ceird.localhost:1355")
+    ).toBe("https://agent-one.api.ceird.localhost:1355/api");
   }, 1000);
 
   it("builds the email change callback URL for the settings page", () => {

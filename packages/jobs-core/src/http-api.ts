@@ -1,3 +1,9 @@
+import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
+import {
+  ServiceAreaNotFoundError,
+  SiteGeocodingFailedError,
+  SiteNotFoundError,
+} from "@ceird/sites-core";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
 import { Schema } from "effect";
 
@@ -10,21 +16,14 @@ import {
   AddJobVisitResponseSchema,
   AssignJobLabelInputSchema,
   AttachJobCollaboratorInputSchema,
-  CreateJobLabelInputSchema,
   CreateJobInputSchema,
   CreateJobResponseSchema,
   CreateRateCardInputSchema,
   CreateRateCardResponseSchema,
-  CreateServiceAreaInputSchema,
-  CreateServiceAreaResponseSchema,
-  CreateSiteInputSchema,
-  CreateSiteResponseSchema,
   JobDetailResponseSchema,
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
   JobExternalMemberOptionsResponseSchema,
-  JobLabelResponseSchema,
-  JobLabelsResponseSchema,
   JobMemberOptionsResponseSchema,
   JobListQuerySchema,
   JobOptionsResponseSchema,
@@ -35,18 +34,11 @@ import {
   PatchJobResponseSchema,
   RateCardListResponseSchema,
   ReopenJobResponseSchema,
-  ServiceAreaListResponseSchema,
-  SitesOptionsResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
   UpdateJobCollaboratorInputSchema,
-  UpdateJobLabelInputSchema,
   UpdateRateCardInputSchema,
   UpdateRateCardResponseSchema,
-  UpdateServiceAreaInputSchema,
-  UpdateServiceAreaResponseSchema,
-  UpdateSiteInputSchema,
-  UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
   BlockedReasonRequiredError,
@@ -57,27 +49,15 @@ import {
   JobCostSummaryLimitExceededError,
   JobCollaboratorConflictError,
   JobCollaboratorNotFoundError,
-  JobLabelNameConflictError,
-  JobLabelNotFoundError,
   JobListCursorInvalidError,
   JobNotFoundError,
   JobStorageError,
   OrganizationActivityCursorInvalidError,
   OrganizationMemberNotFoundError,
   RateCardNotFoundError,
-  ServiceAreaNotFoundError,
-  SiteGeocodingFailedError,
-  SiteNotFoundError,
   VisitDurationIncrementError,
 } from "./errors.js";
-import {
-  JobLabelId,
-  JobCollaboratorId,
-  RateCardId,
-  ServiceAreaId,
-  SiteId,
-  WorkItemId,
-} from "./ids.js";
+import { JobCollaboratorId, RateCardId, WorkItemId } from "./ids.js";
 
 const jobsGroup = HttpApiGroup.make("jobs")
   .add(
@@ -194,50 +174,18 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .setPayload(AssignJobLabelInputSchema)
       .addSuccess(JobDetailResponseSchema)
       .addError(JobNotFoundError)
-      .addError(JobLabelNotFoundError)
+      .addError(LabelNotFoundError)
       .addError(JobAccessDeniedError)
       .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.del("removeJobLabel", "/jobs/:workItemId/labels/:labelId")
-      .setPath(Schema.Struct({ workItemId: WorkItemId, labelId: JobLabelId }))
+      .setPath(Schema.Struct({ workItemId: WorkItemId, labelId: LabelId }))
       .addSuccess(JobDetailResponseSchema)
       .addError(JobNotFoundError)
-      .addError(JobLabelNotFoundError)
-      .addError(JobAccessDeniedError)
+      .addError(LabelNotFoundError)
       .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.get("listJobLabels", "/job-labels")
-      .addSuccess(JobLabelsResponseSchema)
       .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.post("createJobLabel", "/job-labels")
-      .setPayload(CreateJobLabelInputSchema)
-      .addSuccess(JobLabelResponseSchema, { status: 201 })
-      .addError(JobAccessDeniedError)
-      .addError(JobLabelNameConflictError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.patch("updateJobLabel", "/job-labels/:labelId")
-      .setPath(Schema.Struct({ labelId: JobLabelId }))
-      .setPayload(UpdateJobLabelInputSchema)
-      .addSuccess(JobLabelResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobLabelNotFoundError)
-      .addError(JobLabelNameConflictError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.del("deleteJobLabel", "/job-labels/:labelId")
-      .setPath(Schema.Struct({ labelId: JobLabelId }))
-      .addSuccess(JobLabelResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobLabelNotFoundError)
-      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines")
@@ -312,32 +260,6 @@ const jobsGroup = HttpApiGroup.make("jobs")
 
 export const JobsApiGroup = jobsGroup;
 
-const serviceAreasGroup = HttpApiGroup.make("serviceAreas")
-  .add(
-    HttpApiEndpoint.get("listServiceAreas", "/service-areas")
-      .addSuccess(ServiceAreaListResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.post("createServiceArea", "/service-areas")
-      .setPayload(CreateServiceAreaInputSchema)
-      .addSuccess(CreateServiceAreaResponseSchema, { status: 201 })
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.patch("updateServiceArea", "/service-areas/:serviceAreaId")
-      .setPath(Schema.Struct({ serviceAreaId: ServiceAreaId }))
-      .setPayload(UpdateServiceAreaInputSchema)
-      .addSuccess(UpdateServiceAreaResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(JobStorageError)
-  );
-
-export const ServiceAreasApiGroup = serviceAreasGroup;
-
 const rateCardsGroup = HttpApiGroup.make("rateCards")
   .add(
     HttpApiEndpoint.get("listRateCards", "/rate-cards")
@@ -364,44 +286,10 @@ const rateCardsGroup = HttpApiGroup.make("rateCards")
 
 export const RateCardsApiGroup = rateCardsGroup;
 
-const sitesGroup = HttpApiGroup.make("sites")
-  .add(
-    HttpApiEndpoint.get("getSiteOptions", "/sites/options")
-      .addSuccess(SitesOptionsResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.post("createSite", "/sites")
-      .setPayload(CreateSiteInputSchema)
-      .addSuccess(CreateSiteResponseSchema, { status: 201 })
-      .addError(JobAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteGeocodingFailedError)
-      .addError(JobStorageError)
-  )
-  .add(
-    HttpApiEndpoint.patch("updateSite", "/sites/:siteId")
-      .setPath(Schema.Struct({ siteId: SiteId }))
-      .setPayload(UpdateSiteInputSchema)
-      .addSuccess(UpdateSiteResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteNotFoundError)
-      .addError(SiteGeocodingFailedError)
-      .addError(JobStorageError)
-  );
-
-export const SitesApiGroup = sitesGroup;
-
 export const JobsApi = HttpApi.make("JobsApi")
   .add(JobsApiGroup)
-  .add(ServiceAreasApiGroup)
-  .add(RateCardsApiGroup)
-  .add(SitesApiGroup);
+  .add(RateCardsApiGroup);
 
 export type JobsApiGroupType = typeof JobsApiGroup;
 export type RateCardsApiGroupType = typeof RateCardsApiGroup;
-export type ServiceAreasApiGroupType = typeof ServiceAreasApiGroup;
-export type SitesApiGroupType = typeof SitesApiGroup;
 export type JobsApiType = typeof JobsApi;

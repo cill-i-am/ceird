@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
 
-import { OrganizationRole } from "@task-tracker/identity-core";
+import { OrganizationRole } from "@ceird/identity-core";
 import { Context, Effect, ParseResult, Schema } from "effect";
 
 import type {
@@ -160,7 +160,7 @@ export type EmailVerificationEmailError =
   | EmailVerificationEmailRequestError;
 
 export class AuthEmailTransport extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthEmailTransport"
+  "@ceird/domains/identity/authentication/AuthEmailTransport"
 )<
   AuthEmailTransport,
   {
@@ -187,7 +187,7 @@ function decodeAuthEmailInput<Input, ErrorType>(options: {
 }
 
 export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailSender",
+  "@ceird/domains/identity/authentication/AuthEmailSender",
   {
     accessors: true,
     effect: Effect.gen(function* effect() {
@@ -259,7 +259,7 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
             }),
         });
 
-        const subject = `Join ${input.organizationName} on Task Tracker`;
+        const subject = `Join ${input.organizationName} on Ceird`;
         const text = [
           `Hello ${input.recipientName},`,
           "",

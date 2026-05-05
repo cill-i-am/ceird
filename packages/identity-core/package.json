@@ -1,5 +1,5 @@
 {
-  "name": "@task-tracker/identity-core",
+  "name": "@ceird/identity-core",
   "private": true,
   "type": "module",
   "exports": {

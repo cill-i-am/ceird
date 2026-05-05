@@ -1,28 +1,19 @@
-/* eslint-disable typescript-eslint/no-explicit-any */
 import { createServer } from "node:http";
 
-import {
-  HttpApi,
-  HttpApiBuilder,
-  HttpApiEndpoint,
-  HttpApiGroup,
-} from "@effect/platform";
+import { makeHealthPayloadFromSandboxIdInput } from "@ceird/sandbox-core";
+import { HttpApiBuilder } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
+import { Config, Effect, Layer } from "effect";
+
 import {
-  HealthPayload,
-  makeHealthPayloadFromSandboxIdInput,
-} from "@task-tracker/sandbox-core";
-import { Config, Effect, Layer, Schema } from "effect";
-
-import { AuthenticationHttpLive } from "./domains/identity/authentication/auth.js";
+  AuthenticationHttpLive,
+  AuthenticationLive,
+} from "./domains/identity/authentication/auth.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
+import { LabelsHttpLive } from "./domains/labels/http.js";
+import { SitesHttpLive } from "./domains/sites/http.js";
+import { AppApi } from "./http-api.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
-
-const Api = HttpApi.make("TaskTrackerApi").add(
-  HttpApiGroup.make("system")
-    .add(HttpApiEndpoint.get("root", "/").addSuccess(Schema.String))
-    .add(HttpApiEndpoint.get("health", "/health").addSuccess(HealthPayload))
-);
 
 const RuntimeConfig = Config.all({
   sandboxId: Config.string("SANDBOX_ID").pipe(
@@ -30,9 +21,9 @@ const RuntimeConfig = Config.all({
   ),
 }).pipe(Effect.orDie);
 
-const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
+const SystemLive = HttpApiBuilder.group(AppApi, "system", (handlers) =>
   handlers
-    .handle("root", () => Effect.succeed("task-tracker api"))
+    .handle("root", () => Effect.succeed("ceird api"))
     .handle("health", () =>
       RuntimeConfig.pipe(
         Effect.map(({ sandboxId }) =>
@@ -42,29 +33,37 @@ const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
     )
 );
 
-const ApiContractLive = HttpApiBuilder.api(Api).pipe(Layer.provide(SystemLive));
-
-const makeApiHandlersLive = (
-  authenticationHttpLive: Layer.Layer<never, any, any>
-) => Layer.mergeAll(ApiContractLive, authenticationHttpLive, JobsHttpLive);
-
-const ApiHandlersLive = Layer.mergeAll(
-  ApiContractLive,
-  AuthenticationHttpLive,
-  JobsHttpLive
-);
-
-export const makeApiLive = (
-  databaseRuntimeLive: Layer.Layer<any, any, any>,
-  authenticationHttpLive: Layer.Layer<never, any, any> = AuthenticationHttpLive
-) =>
-  makeApiHandlersLive(authenticationHttpLive).pipe(
-    Layer.provide(databaseRuntimeLive)
+const makeApiHandlersLive = () =>
+  HttpApiBuilder.api(AppApi).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        SystemLive,
+        AuthenticationHttpLive,
+        JobsHttpLive,
+        LabelsHttpLive,
+        SitesHttpLive
+      )
+    )
   );
 
-export const ApiLive = ApiHandlersLive.pipe(
-  Layer.provide(AppDatabaseRuntimeLive)
-);
+type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
+type ApiAuthenticationLive = typeof AuthenticationLive;
+type ApiBaseLive = Layer.Layer<never, never, never>;
+
+export const makeApiLive = (
+  databaseRuntimeLive: ApiDatabaseRuntimeLive,
+  authenticationLive: ApiAuthenticationLive = AuthenticationLive
+) =>
+  makeApiHandlersLive().pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        databaseRuntimeLive,
+        authenticationLive.pipe(Layer.provide(databaseRuntimeLive))
+      )
+    )
+  );
+
+export const ApiLive = makeApiLive(AppDatabaseRuntimeLive, AuthenticationLive);
 
 export const ServerConfig = Config.all({
   host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
@@ -78,19 +77,17 @@ export const ServerLive = HttpApiBuilder.serve().pipe(
       NodeHttpServer.layerConfig(createServer, ServerConfig)
     )
   )
-) as Layer.Layer<never, never, never>;
+);
 
 export const makeApiWebHandler = (
-  databaseRuntimeLive: Layer.Layer<any, any, any> = AppDatabaseRuntimeLive,
-  authenticationHttpLive: Layer.Layer<never, any, any> = AuthenticationHttpLive,
-  baseLive: Layer.Layer<never> = Layer.empty
+  databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
+  authenticationLive: ApiAuthenticationLive = AuthenticationLive,
+  baseLive: ApiBaseLive = Layer.empty
 ) => {
   const apiLayer = Layer.mergeAll(
-    makeApiLive(databaseRuntimeLive, authenticationHttpLive),
+    makeApiLive(databaseRuntimeLive, authenticationLive),
     NodeHttpServer.layerContext
-  ).pipe(Layer.provide(baseLive)) as Parameters<
-    typeof HttpApiBuilder.toWebHandler
-  >[0];
+  ).pipe(Layer.provide(baseLive));
 
   return HttpApiBuilder.toWebHandler(apiLayer);
 };

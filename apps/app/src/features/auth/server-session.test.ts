@@ -87,7 +87,7 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -95,7 +95,7 @@ describe("server session lookup", () => {
 
     await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("get-session", "http://tt-sbx-api:4301/api/auth/"),
+      new URL("get-session", "http://ceird-sbx-api:4301/api/auth/"),
       {
         headers: {
           accept: "application/json",
@@ -112,7 +112,7 @@ describe("server session lookup", () => {
       }
 
       if (name === "host") {
-        return "linear-ui-refresh.app.task-tracker.localhost:1355";
+        return "linear-ui-refresh.app.ceird.localhost:1355";
       }
 
       if (name === "x-forwarded-proto") {
@@ -133,8 +133,7 @@ describe("server session lookup", () => {
           accept: "application/json",
           cookie:
             "__Secure-better-auth.session_token=session-token; better-auth.session_token=session-token",
-          "x-forwarded-host":
-            "linear-ui-refresh.api.task-tracker.localhost:1355",
+          "x-forwarded-host": "linear-ui-refresh.api.ceird.localhost:1355",
           "x-forwarded-proto": "https",
         },
       }
@@ -145,7 +144,7 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://tt-sbx-api:4301";
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({

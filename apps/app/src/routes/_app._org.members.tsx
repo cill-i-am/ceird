@@ -1,5 +1,5 @@
+import type { OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";

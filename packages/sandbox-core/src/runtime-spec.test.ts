@@ -7,13 +7,13 @@ import {
 } from "./runtime-spec.js";
 
 const runtimeAssets = Schema.decodeUnknownSync(SandboxRuntimeAssets)({
-  devImage: "tt-sbx-task-tracker-dev:123456789abc",
-  nodeModulesVolume: "tt-sbx-node-modules-123456789abc-def456789abc",
-  pnpmStoreVolume: "tt-sbx-pnpm-store",
+  devImage: "ceird-sbx-ceird-dev:123456789abc",
+  nodeModulesVolume: "ceird-sbx-node-modules-123456789abc-def456789abc",
+  pnpmStoreVolume: "ceird-sbx-pnpm-store",
 });
 const sharedEnvironment = {
   AUTH_EMAIL_FROM: "auth@example.com",
-  AUTH_EMAIL_FROM_NAME: "Task Tracker",
+  AUTH_EMAIL_FROM_NAME: "Ceird",
   AUTH_EMAIL_TRANSPORT: "noop",
 };
 const noopSharedEnvironmentWithBlankCloudflareCredentials = {
@@ -30,8 +30,8 @@ describe("validateSandboxName()", () => {
   it("accepts blank Cloudflare API credentials when sandbox email is noop", async () => {
     const result = await Effect.runPromise(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: validateSandboxName("agent-noop-email"),
         takenNames: new Set(),
         ports: {
@@ -65,8 +65,8 @@ describe("buildSandboxRuntimeSpec()", () => {
   it("builds a compose project name, urls, and overrides from an explicit name", async () => {
     const result = await Effect.runPromise(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: validateSandboxName("agent-one"),
         takenNames: new Set([validateSandboxName("other-sandbox")]),
         ports: {
@@ -84,27 +84,26 @@ describe("buildSandboxRuntimeSpec()", () => {
 
     expect(result).toMatchObject({
       sandboxName: "agent-one",
-      composeProjectName: "tt-sbx-agent-one",
+      composeProjectName: "ceird-sbx-agent-one",
       hostnameSlug: "agent-one",
       urls: {
-        app: "https://agent-one.app.task-tracker.localhost:1355",
-        api: "https://agent-one.api.task-tracker.localhost:1355",
+        app: "https://agent-one.app.ceird.localhost:1355",
+        api: "https://agent-one.api.ceird.localhost:1355",
       },
       overrides: {
         SANDBOX_ID: expect.any(String),
-        SANDBOX_DEV_IMAGE: "tt-sbx-task-tracker-dev:123456789abc",
+        SANDBOX_DEV_IMAGE: "ceird-sbx-ceird-dev:123456789abc",
         SANDBOX_NODE_MODULES_VOLUME:
-          "tt-sbx-node-modules-123456789abc-def456789abc",
-        SANDBOX_PNPM_STORE_VOLUME: "tt-sbx-pnpm-store",
+          "ceird-sbx-node-modules-123456789abc-def456789abc",
+        SANDBOX_PNPM_STORE_VOLUME: "ceird-sbx-pnpm-store",
         SITE_GEOCODER_MODE: "stub",
-        TASK_TRACKER_SANDBOX: "1",
-        AUTH_APP_ORIGIN: "https://agent-one.app.task-tracker.localhost:1355",
+        CEIRD_SANDBOX: "1",
+        AUTH_APP_ORIGIN: "https://agent-one.app.ceird.localhost:1355",
         AUTH_RATE_LIMIT_ENABLED: "false",
-        BETTER_AUTH_BASE_URL:
-          "https://agent-one.api.task-tracker.localhost:1355",
-        VITE_API_ORIGIN: "https://agent-one.api.task-tracker.localhost:1355",
+        BETTER_AUTH_BASE_URL: "https://agent-one.api.ceird.localhost:1355",
+        VITE_API_ORIGIN: "https://agent-one.api.ceird.localhost:1355",
         AUTH_EMAIL_FROM: "auth@example.com",
-        AUTH_EMAIL_FROM_NAME: "Task Tracker",
+        AUTH_EMAIL_FROM_NAME: "Ceird",
         AUTH_EMAIL_TRANSPORT: "noop",
       },
     });
@@ -113,8 +112,8 @@ describe("buildSandboxRuntimeSpec()", () => {
   it("fails when the requested sandbox name is already taken", async () => {
     const exit = await Effect.runPromiseExit(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: validateSandboxName("agent-one"),
         takenNames: new Set([validateSandboxName("agent-one")]),
         ports: {
@@ -138,8 +137,8 @@ describe("buildSandboxRuntimeSpec()", () => {
   it("builds loopback-first urls when aliases are unavailable", async () => {
     const result = await Effect.runPromise(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: validateSandboxName("agent-two"),
         takenNames: new Set(),
         ports: {
@@ -166,8 +165,8 @@ describe("buildSandboxRuntimeSpec()", () => {
   it("retains typed conflict details when the requested sandbox name is taken", async () => {
     const result = await Effect.runPromise(
       buildSandboxRuntimeSpec({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/feature-sandbox",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/feature-sandbox",
         sandboxName: validateSandboxName("agent-one"),
         takenNames: new Set([validateSandboxName("agent-one")]),
         ports: {

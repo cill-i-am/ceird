@@ -1,13 +1,12 @@
 "use client";
-
-import { Link } from "@tanstack/react-router";
+import { JOB_ACTIVITY_EVENT_TYPES } from "@ceird/jobs-core";
 import type {
-  OrganizationActivityItem,
-  JobMemberOptionsResponse,
-  OrganizationActivityListResponse,
   JobActivityEventType,
-} from "@task-tracker/jobs-core";
-import { JOB_ACTIVITY_EVENT_TYPES } from "@task-tracker/jobs-core";
+  JobMemberOptionsResponse,
+  OrganizationActivityItem,
+  OrganizationActivityListResponse,
+} from "@ceird/jobs-core";
+import { Link } from "@tanstack/react-router";
 import type * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 

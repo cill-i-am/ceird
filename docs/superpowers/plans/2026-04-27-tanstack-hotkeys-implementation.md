@@ -707,7 +707,7 @@ import * as React from "react";
 
 import { Button } from "#/components/ui/button";
 
-const STORAGE_KEY = "task-tracker-shortcut-intro-seen";
+const STORAGE_KEY = "ceird-shortcut-intro-seen";
 
 export function ShortcutIntroNotice() {
   const [visible, setVisible] = React.useState(false);

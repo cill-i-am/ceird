@@ -1,5 +1,4 @@
 "use client";
-
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
@@ -36,15 +35,14 @@ import {
 } from "#/components/ui/table";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
+import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import {
   buildSiteAddressLines,
   hasSiteCoordinates,
-} from "#/features/jobs/jobs-location";
-import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
-import { hasJobsElevatedAccess } from "#/features/jobs/jobs-viewer";
-import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+} from "#/features/sites/site-location";
 
-import { sitesNoticeAtom } from "./sites-state";
+import { sitesNoticeAtom, sitesOptionsStateAtom } from "./sites-state";
 
 const SITE_COMMAND_LIMIT = 25;
 
@@ -53,13 +51,13 @@ export function SitesPage({
   viewer,
 }: {
   readonly children?: React.ReactNode;
-  readonly viewer: JobsViewer;
+  readonly viewer: OrganizationViewer;
 }) {
   const navigate = useNavigate({ from: "/sites" });
-  const options = useAtomValue(jobsOptionsStateAtom).data;
+  const options = useAtomValue(sitesOptionsStateAtom).data;
   const notice = useAtomValue(sitesNoticeAtom);
   const setNotice = useAtomSet(sitesNoticeAtom);
-  const canCreateSites = hasJobsElevatedAccess(viewer.role);
+  const canCreateSites = hasOrganizationElevatedAccess(viewer.role);
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {

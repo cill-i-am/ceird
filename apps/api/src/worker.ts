@@ -21,7 +21,7 @@ import {
 import { AuthEmailSender } from "./domains/identity/authentication/auth-email.js";
 import {
   AuthenticationBackgroundTaskHandler,
-  makeAuthenticationHttpLive,
+  makeAuthenticationLive,
 } from "./domains/identity/authentication/auth.js";
 import { CloudflareAuthEmailTransportLive } from "./domains/identity/authentication/cloudflare-auth-email-transport.js";
 import {
@@ -47,18 +47,14 @@ function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
   const databaseRuntimeLive = makeAppDatabaseRuntimeLive(
     makeAppDatabaseLive(env.DATABASE.connectionString)
   );
-  const authenticationHttpLive = makeAuthenticationHttpLive(
+  const authenticationLive = makeAuthenticationLive(
     makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE),
     Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
       context.waitUntil(task);
     })
   );
 
-  return makeApiWebHandler(
-    databaseRuntimeLive,
-    authenticationHttpLive,
-    baseLive
-  );
+  return makeApiWebHandler(databaseRuntimeLive, authenticationLive, baseLive);
 }
 
 function makeWorkerAuthEmailTransportLive(env: ApiWorkerEnv) {

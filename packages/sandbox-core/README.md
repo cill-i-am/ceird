@@ -1,6 +1,6 @@
 # Sandbox Core
 
-`@task-tracker/sandbox-core` contains pure sandbox primitives shared by the API,
+`@ceird/sandbox-core` contains pure sandbox primitives shared by the API,
 app, and sandbox CLI.
 
 ## Exports
@@ -22,12 +22,12 @@ The `./node` export provides:
 ## Commands
 
 ```bash
-pnpm --filter @task-tracker/sandbox-core test
-pnpm --filter @task-tracker/sandbox-core check-types
-pnpm --filter @task-tracker/sandbox-core build
+pnpm --filter @ceird/sandbox-core test
+pnpm --filter @ceird/sandbox-core check-types
+pnpm --filter @ceird/sandbox-core build
 ```
 
 ## Boundary
 
 Keep deterministic logic here. Docker Compose execution, process handling,
-terminal output, and command parsing belong in `@task-tracker/sandbox-cli`.
+terminal output, and command parsing belong in `@ceird/sandbox-cli`.

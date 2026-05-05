@@ -6,16 +6,22 @@ import {
   JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
   JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   OrganizationId,
-  ServiceAreaId,
-  SiteId,
   UserId,
   WorkItemId,
-  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import {
+  LABEL_NAME_CONFLICT_ERROR_TAG,
+  LABEL_NOT_FOUND_ERROR_TAG,
+} from "@ceird/labels-core";
+import {
+  ServiceAreaId,
+  SITE_NOT_FOUND_ERROR_TAG,
+  SiteId,
+} from "@ceird/sites-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Cause, ConfigProvider, Effect, Exit, Option, Schema } from "effect";
 
-import { AppEffectSqlRuntimeLive } from "../../platform/database/database.js";
+import { AppEffectSqlRuntimeLive } from "../platform/database/database.js";
 import {
   member,
   organization,
@@ -24,25 +30,28 @@ import {
   user,
   workItem,
   workItemActivity,
-} from "../../platform/database/schema.js";
+} from "../platform/database/schema.js";
 import {
   applyAllMigrations,
   canConnect,
   createTestDatabase,
   withPool,
-} from "../../platform/database/test-database.js";
+} from "../platform/database/test-database.js";
 import {
-  ConfigurationRepository,
   ContactsRepository,
-  JobLabelsRepository,
+  JobLabelAssignmentsRepository,
   JobsRepositoriesLive,
   JobsRepository,
   RateCardsRepository,
-  SitesRepository,
   withJobsTransaction,
-} from "./repositories.js";
+} from "./jobs/repositories.js";
+import { LabelsRepository } from "./labels/repositories.js";
+import {
+  ServiceAreasRepository as ConfigurationRepository,
+  SitesRepository,
+} from "./sites/repositories.js";
 
-describe("jobs repositories integration", () => {
+describe("domain persistence integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
 
   afterAll(async () => {
@@ -124,7 +133,7 @@ describe("jobs repositories integration", () => {
 
     await runJobsEffect(
       databaseUrl,
-      SitesRepository.linkContact({
+      JobsRepository.linkSiteContact({
         contactId: createdContactId,
         isPrimary: true,
         organizationId: identity.organizationId,
@@ -133,7 +142,7 @@ describe("jobs repositories integration", () => {
     );
     await runJobsEffect(
       databaseUrl,
-      SitesRepository.linkContact({
+      JobsRepository.linkSiteContact({
         contactId: createdContactId,
         organizationId: identity.organizationId,
         siteId: overflowSiteId,
@@ -828,7 +837,7 @@ describe("jobs repositories integration", () => {
     expectFailureTag(missingRemoveExit, JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG);
   }, 30_000);
 
-  it("creates, assigns, removes, archives, and filters organization job labels", async (context: {
+  it("creates, assigns, removes, archives, and filters organization labels", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createTestDatabase({ prefix: "jobs_labels" });
@@ -861,7 +870,7 @@ describe("jobs repositories integration", () => {
 
     const label = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: "Waiting on PO",
         organizationId: identity.organizationId,
       })
@@ -869,7 +878,7 @@ describe("jobs repositories integration", () => {
 
     const sameNameInOtherOrg = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: "Waiting on PO",
         organizationId: foreignIdentity.organizationId,
       })
@@ -880,7 +889,7 @@ describe("jobs repositories integration", () => {
 
     const conflictingLabel = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: "Needs Review",
         organizationId: identity.organizationId,
       })
@@ -888,18 +897,18 @@ describe("jobs repositories integration", () => {
 
     const duplicateLabelExit = await runJobsEffectExit(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: " waiting on po ",
         organizationId: identity.organizationId,
       })
     );
 
-    expectFailureTag(duplicateLabelExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+    expectFailureTag(duplicateLabelExit, LABEL_NAME_CONFLICT_ERROR_TAG);
 
     const updatedLabel = expectSome(
       await runJobsEffect(
         databaseUrl,
-        JobLabelsRepository.update(identity.organizationId, label.id, {
+        LabelsRepository.update(identity.organizationId, label.id, {
           name: "Awaiting PO",
         })
       )
@@ -911,16 +920,16 @@ describe("jobs repositories integration", () => {
 
     const updateConflictExit = await runJobsEffectExit(
       databaseUrl,
-      JobLabelsRepository.update(identity.organizationId, conflictingLabel.id, {
+      LabelsRepository.update(identity.organizationId, conflictingLabel.id, {
         name: " awaiting po ",
       })
     );
 
-    expectFailureTag(updateConflictExit, JOB_LABEL_NAME_CONFLICT_ERROR_TAG);
+    expectFailureTag(updateConflictExit, LABEL_NAME_CONFLICT_ERROR_TAG);
 
     const activeLabels = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.list(identity.organizationId)
+      LabelsRepository.list(identity.organizationId)
     );
     expect(activeLabels.map((jobLabel) => jobLabel.name)).toStrictEqual([
       "Awaiting PO",
@@ -929,7 +938,7 @@ describe("jobs repositories integration", () => {
 
     const assigned = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.assignToJob({
+      JobLabelAssignmentsRepository.assignToJob({
         labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
@@ -943,7 +952,7 @@ describe("jobs repositories integration", () => {
 
     const duplicateAssigned = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.assignToJob({
+      JobLabelAssignmentsRepository.assignToJob({
         labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
@@ -1012,7 +1021,7 @@ describe("jobs repositories integration", () => {
 
     const removed = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.removeFromJob({
+      JobLabelAssignmentsRepository.removeFromJob({
         labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
@@ -1025,7 +1034,7 @@ describe("jobs repositories integration", () => {
 
     const secondRemoved = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.removeFromJob({
+      JobLabelAssignmentsRepository.removeFromJob({
         labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
@@ -1046,7 +1055,7 @@ describe("jobs repositories integration", () => {
 
     await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.assignToJob({
+      JobLabelAssignmentsRepository.assignToJob({
         labelId: updatedLabel.id,
         organizationId: identity.organizationId,
         workItemId: createdJob.id,
@@ -1055,14 +1064,11 @@ describe("jobs repositories integration", () => {
 
     const archived = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.archive(identity.organizationId, updatedLabel.id)
+      LabelsRepository.archive(identity.organizationId, updatedLabel.id)
     );
     expect(Option.getOrUndefined(archived)).toMatchObject({
-      label: {
-        id: updatedLabel.id,
-        name: updatedLabel.name,
-      },
-      removedWorkItemIds: [createdJob.id],
+      id: updatedLabel.id,
+      name: updatedLabel.name,
     });
 
     const detailAfterArchive = expectSome(
@@ -1083,14 +1089,14 @@ describe("jobs repositories integration", () => {
 
     const labelsAfterArchive = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.list(identity.organizationId)
+      LabelsRepository.list(identity.organizationId)
     );
     expect(labelsAfterArchive.map((jobLabel) => jobLabel.id)).not.toContain(
       updatedLabel.id
     );
   }, 30_000);
 
-  it("rejects invalid job label names at the database boundary", async (context: {
+  it("rejects invalid label names at the database boundary", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
@@ -1117,7 +1123,7 @@ describe("jobs repositories integration", () => {
       await expect(
         pool.query(
           `
-            insert into job_labels (
+            insert into labels (
               id,
               organization_id,
               name,
@@ -1136,13 +1142,13 @@ describe("jobs repositories integration", () => {
         )
       ).rejects.toMatchObject({
         code: "23514",
-        constraint: "job_labels_name_max_length_chk",
+        constraint: "labels_name_max_length_chk",
       });
 
       await expect(
         pool.query(
           `
-            insert into job_labels (
+            insert into labels (
               id,
               organization_id,
               name,
@@ -1161,7 +1167,7 @@ describe("jobs repositories integration", () => {
         )
       ).rejects.toMatchObject({
         code: "23514",
-        constraint: "job_labels_normalized_name_max_length_chk",
+        constraint: "labels_normalized_name_max_length_chk",
       });
     });
   }, 30_000);
@@ -1412,11 +1418,11 @@ describe("jobs repositories integration", () => {
     ]);
     expectFailureTag(
       malformedCursorExit,
-      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
+      "@ceird/jobs-core/OrganizationActivityCursorInvalidError"
     );
     expectFailureTag(
       nonUuidCursorExit,
-      "@task-tracker/jobs-core/OrganizationActivityCursorInvalidError"
+      "@ceird/jobs-core/OrganizationActivityCursorInvalidError"
     );
   }, 30_000);
 
@@ -1660,6 +1666,49 @@ describe("jobs repositories integration", () => {
         organizationId: foreignIdentity.organizationId,
       })
     );
+    const archivedPrimarySiteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        country: "IE",
+        addressLine1: "Archived Primary Site",
+        county: "Cork",
+        eircode: "T12 Y2Y2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        name: "Archived Primary Site",
+        organizationId: primaryIdentity.organizationId,
+        serviceAreaId: primaryServiceAreaId,
+        latitude: 51.899,
+        longitude: -8.475,
+      })
+    );
+    const archivedPrimaryContactId = await runJobsEffect(
+      databaseUrl,
+      ContactsRepository.create({
+        name: "Archived Primary Contact",
+        organizationId: primaryIdentity.organizationId,
+      })
+    );
+    const jobWithArchivedContact = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        contactId: archivedPrimaryContactId,
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        title: "Job whose contact is archived later",
+      })
+    );
+
+    await withPool(databaseUrl, async (pool) => {
+      await pool.query("update sites set archived_at = now() where id = $1", [
+        archivedPrimarySiteId,
+      ]);
+      await pool.query(
+        "update contacts set archived_at = now() where id = $1",
+        [archivedPrimaryContactId]
+      );
+    });
+
     const primaryJob = await runJobsEffect(
       databaseUrl,
       JobsRepository.create({
@@ -1670,19 +1719,26 @@ describe("jobs repositories integration", () => {
     );
     const primaryLabel = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: "Primary label",
         organizationId: primaryIdentity.organizationId,
       })
     );
     const foreignLabel = await runJobsEffect(
       databaseUrl,
-      JobLabelsRepository.create({
+      LabelsRepository.create({
         name: "Foreign label",
         organizationId: foreignIdentity.organizationId,
       })
     );
 
+    const archivedContactDetail = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.getDetail(
+        primaryIdentity.organizationId,
+        jobWithArchivedContact.id
+      )
+    );
     const createWithForeignContactExit = await runJobsEffectExit(
       databaseUrl,
       JobsRepository.create({
@@ -1692,9 +1748,36 @@ describe("jobs repositories integration", () => {
         title: "Should fail",
       })
     );
+    const createWithForeignSiteExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        siteId: foreignSiteId,
+        title: "Should fail",
+      })
+    );
+    const createWithArchivedContactExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.create({
+        contactId: archivedPrimaryContactId,
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        title: "Should fail",
+      })
+    );
+    const createWithArchivedSiteExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: primaryIdentity.ownerUserId,
+        organizationId: primaryIdentity.organizationId,
+        siteId: archivedPrimarySiteId,
+        title: "Should fail",
+      })
+    );
     const linkForeignContactExit = await runJobsEffectExit(
       databaseUrl,
-      SitesRepository.linkContact({
+      JobsRepository.linkSiteContact({
         contactId: foreignContactId,
         organizationId: primaryIdentity.organizationId,
         siteId: primarySiteId,
@@ -1702,10 +1785,26 @@ describe("jobs repositories integration", () => {
     );
     const linkForeignSiteExit = await runJobsEffectExit(
       databaseUrl,
-      SitesRepository.linkContact({
+      JobsRepository.linkSiteContact({
         contactId: foreignContactId,
         organizationId: primaryIdentity.organizationId,
         siteId: foreignSiteId,
+      })
+    );
+    const linkArchivedContactExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.linkSiteContact({
+        contactId: archivedPrimaryContactId,
+        organizationId: primaryIdentity.organizationId,
+        siteId: primarySiteId,
+      })
+    );
+    const linkArchivedSiteExit = await runJobsEffectExit(
+      databaseUrl,
+      JobsRepository.linkSiteContact({
+        contactId: archivedPrimaryContactId,
+        organizationId: primaryIdentity.organizationId,
+        siteId: archivedPrimarySiteId,
       })
     );
     const commentFromForeignMemberExit = await runJobsEffectExit(
@@ -1730,7 +1829,7 @@ describe("jobs repositories integration", () => {
     );
     const assignForeignLabelExit = await runJobsEffectExit(
       databaseUrl,
-      JobLabelsRepository.assignToJob({
+      JobLabelAssignmentsRepository.assignToJob({
         labelId: foreignLabel.id,
         organizationId: primaryIdentity.organizationId,
         workItemId: primaryJob.id,
@@ -1768,30 +1867,152 @@ describe("jobs repositories integration", () => {
 
     expectFailureTag(
       createWithForeignContactExit,
-      "@task-tracker/jobs-core/ContactNotFoundError"
+      "@ceird/jobs-core/ContactNotFoundError"
     );
+    expect(expectSome(archivedContactDetail).contact).toBeUndefined();
+    expectFailureTag(createWithForeignSiteExit, SITE_NOT_FOUND_ERROR_TAG);
+    expectFailureTag(
+      createWithArchivedContactExit,
+      "@ceird/jobs-core/ContactNotFoundError"
+    );
+    expectFailureTag(createWithArchivedSiteExit, SITE_NOT_FOUND_ERROR_TAG);
     expectFailureTag(
       linkForeignContactExit,
-      "@task-tracker/jobs-core/ContactNotFoundError"
+      "@ceird/jobs-core/ContactNotFoundError"
     );
+    expectFailureTag(linkForeignSiteExit, SITE_NOT_FOUND_ERROR_TAG);
     expectFailureTag(
-      linkForeignSiteExit,
-      "@task-tracker/jobs-core/SiteNotFoundError"
+      linkArchivedContactExit,
+      "@ceird/jobs-core/ContactNotFoundError"
     );
+    expectFailureTag(linkArchivedSiteExit, SITE_NOT_FOUND_ERROR_TAG);
     expectFailureTag(
       commentFromForeignMemberExit,
-      "@task-tracker/jobs-core/OrganizationMemberNotFoundError"
+      "@ceird/jobs-core/OrganizationMemberNotFoundError"
     );
     expectFailureTag(
       visitWithForeignOrganizationExit,
-      "@task-tracker/domains/jobs/WorkItemOrganizationMismatchError"
+      "@ceird/domains/jobs/WorkItemOrganizationMismatchError"
     );
-    expectFailureTag(
-      assignForeignLabelExit,
-      "@task-tracker/jobs-core/JobLabelNotFoundError"
-    );
+    expectFailureTag(assignForeignLabelExit, LABEL_NOT_FOUND_ERROR_TAG);
 
     await withPool(databaseUrl, async (pool) => {
+      await expect(
+        pool.query(
+          `
+            insert into work_items (
+              id,
+              organization_id,
+              kind,
+              title,
+              status,
+              priority,
+              site_id,
+              created_by_user_id
+            )
+            values ($1, $2, 'job', 'Cross-org site raw insert', 'new', 'none', $3, $4)
+          `,
+          [
+            randomUUID(),
+            primaryIdentity.organizationId,
+            foreignSiteId,
+            primaryIdentity.ownerUserId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_items_site_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into work_items (
+              id,
+              organization_id,
+              kind,
+              title,
+              status,
+              priority,
+              contact_id,
+              created_by_user_id
+            )
+            values ($1, $2, 'job', 'Cross-org contact raw insert', 'new', 'none', $3, $4)
+          `,
+          [
+            randomUUID(),
+            primaryIdentity.organizationId,
+            foreignContactId,
+            primaryIdentity.ownerUserId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_items_contact_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into site_contacts (
+              site_id,
+              contact_id,
+              organization_id
+            )
+            values ($1, $2, $3)
+          `,
+          [primarySiteId, foreignContactId, primaryIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "site_contacts_contact_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into work_item_activity (
+              id,
+              work_item_id,
+              organization_id,
+              event_type,
+              payload
+            )
+            values ($1, $2, $3, 'job_created', '{}'::jsonb)
+          `,
+          [randomUUID(), primaryJob.id, foreignIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_activity_work_item_organization_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into work_item_visits (
+              id,
+              work_item_id,
+              organization_id,
+              author_user_id,
+              visit_date,
+              duration_minutes,
+              note
+            )
+            values ($1, $2, $3, $4, '2026-04-21', 60, 'Cross-org raw visit')
+          `,
+          [
+            randomUUID(),
+            primaryJob.id,
+            foreignIdentity.organizationId,
+            foreignIdentity.ownerUserId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_visits_work_item_organization_fk",
+      });
+
       await expect(
         pool.query(
           `
@@ -2105,7 +2326,7 @@ describe("jobs repositories integration", () => {
 
     const createdServiceArea = await runJobsEffect(
       databaseUrl,
-      ConfigurationRepository.createServiceArea({
+      ConfigurationRepository.create({
         description: "City centre jobs",
         name: "Dublin",
         organizationId: identity.organizationId,
@@ -2113,7 +2334,7 @@ describe("jobs repositories integration", () => {
     );
     const updatedServiceArea = await runJobsEffect(
       databaseUrl,
-      ConfigurationRepository.updateServiceArea(
+      ConfigurationRepository.update(
         identity.organizationId,
         createdServiceArea.id,
         {
@@ -2124,7 +2345,7 @@ describe("jobs repositories integration", () => {
     );
     const serviceAreas = await runJobsEffect(
       databaseUrl,
-      ConfigurationRepository.listServiceAreas(identity.organizationId)
+      ConfigurationRepository.list(identity.organizationId)
     );
 
     expect(updatedServiceArea).toMatchObject({
@@ -2136,7 +2357,7 @@ describe("jobs repositories integration", () => {
 
     const clearedServiceArea = await runJobsEffect(
       databaseUrl,
-      ConfigurationRepository.updateServiceArea(
+      ConfigurationRepository.update(
         identity.organizationId,
         createdServiceArea.id,
         {
@@ -2253,6 +2474,9 @@ function prepareJobsEffect<Value, Error, Requirements>(
   effect: Effect.Effect<Value, Error, Requirements>
 ) {
   return effect.pipe(
+    Effect.provide(LabelsRepository.Default),
+    Effect.provide(ConfigurationRepository.Default),
+    Effect.provide(SitesRepository.Default),
     Effect.provide(JobsRepositoriesLive),
     Effect.provide(AppEffectSqlRuntimeLive),
     Effect.withConfigProvider(makeConfigProvider(databaseUrl))

@@ -1,4 +1,4 @@
-import type { JobActivityPayload } from "@task-tracker/jobs-core";
+import type { JobActivityPayload } from "@ceird/jobs-core";
 import {
   JOB_ACTIVITY_EVENT_TYPES,
   JOB_COLLABORATOR_ACCESS_LEVELS,
@@ -9,13 +9,12 @@ import {
   JOB_STATUSES,
   MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
   RATE_CARD_LINE_KINDS,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   check,
   date,
-  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -34,6 +33,8 @@ import {
   organization,
   user,
 } from "../identity/authentication/schema.js";
+import { label } from "../labels/schema.js";
+import { site } from "../sites/schema.js";
 import { generateJobDomainUuid } from "./id-generation.js";
 
 const jobsTimestamp = (name: string) =>
@@ -60,7 +61,6 @@ const collaboratorSubjectTypeValuesSql = sql.raw(
 const collaboratorAccessLevelValuesSql = sql.raw(
   JOB_COLLABORATOR_ACCESS_LEVELS.map((value) => `'${value}'`).join(", ")
 );
-const jobLabelNameMaxLength = 48;
 const rateCardLineKindValuesSql = sql.raw(
   RATE_CARD_LINE_KINDS.map((value) => `'${value}'`).join(", ")
 );
@@ -69,32 +69,6 @@ const costLineTypeValuesSql = sql.raw(
 );
 const maxJobCostLineTaxRateBasisPointsSql = sql.raw(
   String(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
-);
-
-export const serviceArea = pgTable(
-  "service_areas",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    description: text("description"),
-    slug: text("slug").notNull(),
-    createdAt: jobsTimestamp("created_at"),
-    updatedAt: jobsTimestamp("updated_at"),
-    archivedAt: archivedAtColumn("archived_at"),
-  },
-  (table) => [
-    uniqueIndex("service_areas_organization_slug_idx").on(
-      table.organizationId,
-      table.slug
-    ),
-    index("service_areas_organization_name_idx").on(
-      table.organizationId,
-      table.name
-    ),
-  ]
 );
 
 export const rateCard = pgTable(
@@ -149,78 +123,6 @@ export const rateCardLine = pgTable(
   ]
 );
 
-export const site = pgTable(
-  "sites",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    serviceAreaId: uuid("service_area_id").references(() => serviceArea.id, {
-      onDelete: "set null",
-    }),
-    name: text("name").notNull(),
-    addressLine1: text("address_line_1").notNull(),
-    addressLine2: text("address_line_2"),
-    town: text("town"),
-    county: text("county").notNull(),
-    country: text("country").notNull().default("IE"),
-    eircode: text("eircode"),
-    accessNotes: text("access_notes"),
-    latitude: doublePrecision("latitude").notNull(),
-    longitude: doublePrecision("longitude").notNull(),
-    geocodingProvider: text("geocoding_provider").notNull(),
-    geocodedAt: timestamp("geocoded_at", { withTimezone: true }).notNull(),
-    createdAt: jobsTimestamp("created_at"),
-    updatedAt: jobsTimestamp("updated_at"),
-    archivedAt: archivedAtColumn("archived_at"),
-  },
-  (table) => [
-    index("sites_organization_updated_at_idx").on(
-      table.organizationId,
-      table.updatedAt.desc(),
-      table.id.desc()
-    ),
-    index("sites_organization_service_area_idx").on(
-      table.organizationId,
-      table.serviceAreaId
-    ),
-    index("sites_organization_active_name_idx")
-      .on(
-        table.organizationId,
-        table.name.asc().nullsLast(),
-        table.createdAt,
-        table.id
-      )
-      .where(sql`${table.archivedAt} is null`),
-    check("sites_country_chk", sql`${table.country} in ('IE', 'GB')`),
-    check(
-      "sites_ie_eircode_required_chk",
-      sql`${table.country} <> 'IE' or ${table.eircode} is not null`
-    ),
-    check(
-      "sites_geocoding_provider_chk",
-      sql`${table.geocodingProvider} is null or ${table.geocodingProvider} in ('google', 'stub')`
-    ),
-    check(
-      "sites_coordinates_pair_check",
-      sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`
-    ),
-    check(
-      "sites_geocoding_metadata_check",
-      sql`(${table.latitude} is null and ${table.longitude} is null and ${table.geocodingProvider} is null and ${table.geocodedAt} is null) or (${table.latitude} is not null and ${table.longitude} is not null and ${table.geocodingProvider} is not null and ${table.geocodedAt} is not null)`
-    ),
-    check(
-      "sites_latitude_range_check",
-      sql`${table.latitude} is null or (${table.latitude} >= -90 and ${table.latitude} <= 90)`
-    ),
-    check(
-      "sites_longitude_range_check",
-      sql`${table.longitude} is null or (${table.longitude} >= -180 and ${table.longitude} <= 180)`
-    ),
-  ]
-);
-
 export const contact = pgTable(
   "contacts",
   {
@@ -245,48 +147,9 @@ export const contact = pgTable(
       table.organizationId,
       table.email
     ),
-  ]
-);
-
-export const jobLabel = pgTable(
-  "job_labels",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    normalizedName: text("normalized_name").notNull(),
-    createdAt: jobsTimestamp("created_at"),
-    updatedAt: jobsTimestamp("updated_at"),
-    archivedAt: archivedAtColumn("archived_at"),
-  },
-  (table) => [
-    uniqueIndex("job_labels_organization_normalized_active_idx")
-      .on(table.organizationId, table.normalizedName)
-      .where(sql`${table.archivedAt} is null`),
-    uniqueIndex("job_labels_id_organization_idx").on(
+    uniqueIndex("contacts_id_organization_idx").on(
       table.id,
       table.organizationId
-    ),
-    index("job_labels_organization_name_idx")
-      .on(table.organizationId, table.name, table.id)
-      .where(sql`${table.archivedAt} is null`),
-    check(
-      "job_labels_name_not_empty_chk",
-      sql`length(trim(${table.name})) > 0`
-    ),
-    check(
-      "job_labels_name_max_length_chk",
-      sql`length(trim(${table.name})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
-    ),
-    check(
-      "job_labels_normalized_name_not_empty_chk",
-      sql`length(trim(${table.normalizedName})) > 0`
-    ),
-    check(
-      "job_labels_normalized_name_max_length_chk",
-      sql`length(trim(${table.normalizedName})) <= ${sql.raw(String(jobLabelNameMaxLength))}`
     ),
   ]
 );
@@ -294,17 +157,26 @@ export const jobLabel = pgTable(
 export const siteContact = pgTable(
   "site_contacts",
   {
-    siteId: uuid("site_id")
+    siteId: uuid("site_id").notNull(),
+    contactId: uuid("contact_id").notNull(),
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => site.id, { onDelete: "cascade" }),
-    contactId: uuid("contact_id")
-      .notNull()
-      .references(() => contact.id, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
     isPrimary: boolean("is_primary").notNull().default(false),
     createdAt: jobsTimestamp("created_at"),
   },
   (table) => [
     primaryKey({ columns: [table.siteId, table.contactId] }),
+    foreignKey({
+      columns: [table.siteId, table.organizationId],
+      foreignColumns: [site.id, site.organizationId],
+      name: "site_contacts_site_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.contactId, table.organizationId],
+      foreignColumns: [contact.id, contact.organizationId],
+      name: "site_contacts_contact_org_fk",
+    }).onDelete("cascade"),
     index("site_contacts_contact_site_idx").on(table.contactId, table.siteId),
     uniqueIndex("site_contacts_primary_site_idx")
       .on(table.siteId)
@@ -324,10 +196,8 @@ export const workItem = pgTable(
     externalReference: text("external_reference"),
     status: text("status").notNull(),
     priority: text("priority").notNull().default("none"),
-    siteId: uuid("site_id").references(() => site.id, { onDelete: "set null" }),
-    contactId: uuid("contact_id").references(() => contact.id, {
-      onDelete: "set null",
-    }),
+    siteId: uuid("site_id"),
+    contactId: uuid("contact_id"),
     assigneeId: text("assignee_id").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -400,10 +270,6 @@ export const workItem = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
-    uniqueIndex("work_items_id_organization_idx").on(
-      table.id,
-      table.organizationId
-    ),
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),
@@ -415,6 +281,16 @@ export const workItem = pgTable(
       table.id,
       table.organizationId
     ),
+    foreignKey({
+      columns: [table.siteId, table.organizationId],
+      foreignColumns: [site.id, site.organizationId],
+      name: "work_items_site_org_fk",
+    }),
+    foreignKey({
+      columns: [table.contactId, table.organizationId],
+      foreignColumns: [contact.id, contact.organizationId],
+      name: "work_items_contact_org_fk",
+    }),
   ]
 );
 
@@ -495,7 +371,7 @@ export const workItemLabel = pgTable(
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.labelId, table.organizationId],
-      foreignColumns: [jobLabel.id, jobLabel.organizationId],
+      foreignColumns: [label.id, label.organizationId],
       name: "work_item_labels_label_org_fk",
     }).onDelete("cascade"),
     index("work_item_labels_label_work_item_idx").on(
@@ -532,9 +408,7 @@ export const workItemActivity = pgTable(
   "work_item_activity",
   {
     id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    workItemId: uuid("work_item_id")
-      .notNull()
-      .references(() => workItem.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -550,6 +424,11 @@ export const workItemActivity = pgTable(
       "work_item_activity_event_type_chk",
       sql`${table.eventType} in (${activityEventTypeValuesSql})`
     ),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_activity_work_item_organization_fk",
+    }).onDelete("cascade"),
     index("work_item_activity_work_item_created_at_idx").on(
       table.workItemId,
       table.createdAt.desc(),
@@ -579,9 +458,7 @@ export const workItemVisit = pgTable(
   "work_item_visits",
   {
     id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    workItemId: uuid("work_item_id")
-      .notNull()
-      .references(() => workItem.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -602,6 +479,11 @@ export const workItemVisit = pgTable(
       "work_item_visits_duration_hour_increment_chk",
       sql`${table.durationMinutes} % 60 = 0`
     ),
+    foreignKey({
+      columns: [table.workItemId, table.organizationId],
+      foreignColumns: [workItem.id, workItem.organizationId],
+      name: "work_item_visits_work_item_organization_fk",
+    }).onDelete("cascade"),
     index("work_item_visits_work_item_visit_date_idx").on(
       table.workItemId,
       table.visitDate.desc(),
@@ -614,14 +496,6 @@ export const workItemVisit = pgTable(
     ),
   ]
 );
-
-export const serviceAreaRelations = relations(serviceArea, ({ many, one }) => ({
-  organization: one(organization, {
-    fields: [serviceArea.organizationId],
-    references: [organization.id],
-  }),
-  sites: many(site),
-}));
 
 export const rateCardRelations = relations(rateCard, ({ many, one }) => ({
   lines: many(rateCardLine),
@@ -693,19 +567,6 @@ export const workItemCostLine = pgTable(
   ]
 );
 
-export const siteRelations = relations(site, ({ many, one }) => ({
-  contacts: many(siteContact),
-  organization: one(organization, {
-    fields: [site.organizationId],
-    references: [organization.id],
-  }),
-  serviceArea: one(serviceArea, {
-    fields: [site.serviceAreaId],
-    references: [serviceArea.id],
-  }),
-  workItems: many(workItem),
-}));
-
 export const contactRelations = relations(contact, ({ many, one }) => ({
   organization: one(organization, {
     fields: [contact.organizationId],
@@ -713,14 +574,6 @@ export const contactRelations = relations(contact, ({ many, one }) => ({
   }),
   siteContacts: many(siteContact),
   workItems: many(workItem),
-}));
-
-export const jobLabelRelations = relations(jobLabel, ({ many, one }) => ({
-  organization: one(organization, {
-    fields: [jobLabel.organizationId],
-    references: [organization.id],
-  }),
-  workItems: many(workItemLabel),
 }));
 
 export const siteContactRelations = relations(siteContact, ({ one }) => ({
@@ -774,9 +627,9 @@ export const workItemCollaboratorRelations = relations(
 );
 
 export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
-  label: one(jobLabel, {
+  label: one(label, {
     fields: [workItemLabel.labelId],
-    references: [jobLabel.id],
+    references: [label.id],
   }),
   workItem: one(workItem, {
     fields: [workItemLabel.workItemId],
@@ -851,11 +704,8 @@ export const workItemCostLineRelations = relations(
 
 export const jobsSchema = {
   contact,
-  jobLabel,
   rateCard,
   rateCardLine,
-  serviceArea,
-  site,
   siteContact,
   workItem,
   workItemActivity,

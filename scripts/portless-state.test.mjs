@@ -7,7 +7,7 @@ import test from "node:test";
 import { repairPortlessRoutesFile } from "./portless-state.mjs";
 
 function withTempDir(fn) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "task-tracker-portless-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "ceird-portless-"));
 
   try {
     fn(dir);

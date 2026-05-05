@@ -1,6 +1,6 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute } from "@tanstack/react-router";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { AuthenticatedAppLayout } from "#/features/auth/authenticated-app-layout";
 import { requireAuthenticatedSession } from "#/features/auth/require-authenticated-session";

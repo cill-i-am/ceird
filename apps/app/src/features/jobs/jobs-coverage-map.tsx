@@ -1,10 +1,9 @@
-/* oxlint-disable unicorn/no-array-sort */
 "use client";
-
+import type { JobListItem } from "@ceird/jobs-core";
+/* oxlint-disable unicorn/no-array-sort */
 import { Location01Icon, MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import type { JobListItem } from "@task-tracker/jobs-core";
 import * as React from "react";
 
 import { Badge } from "#/components/ui/badge";
@@ -16,11 +15,14 @@ import {
   EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
+import {
+  buildGoogleMapsUrl,
+  hasSiteCoordinates,
+} from "#/features/sites/site-location";
+import type { SiteLocationLike } from "#/features/sites/site-location";
 import { cn } from "#/lib/utils";
 
 import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
-import { buildGoogleMapsUrl, hasSiteCoordinates } from "./jobs-location";
-import type { SiteLocationLike } from "./jobs-location";
 
 type SiteRecord = SiteLocationLike & {
   readonly id: string;

@@ -527,7 +527,7 @@ Update `apps/app/src/lib/auth-client.ts`:
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
-export function createTaskTrackerAuthClient(baseURL?: string | undefined) {
+export function createCeirdAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
     ...(baseURL ? { baseURL } : {}),
@@ -992,7 +992,7 @@ export function OrganizationOnboardingPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Create your organization</CardTitle>
           <CardDescription>
-            Set up the organization that will own your work in Task Tracker.
+            Set up the organization that will own your work in Ceird.
           </CardDescription>
         </CardHeader>
         <CardContent>

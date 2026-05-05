@@ -146,7 +146,6 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       env: {
         API_ORIGIN: `https://${input.config.apiHostname}`,
         CEIRD_CLOUDFLARE: "1",
-        TASK_TRACKER_CLOUDFLARE: "1",
         VITE_API_ORIGIN: `https://${input.config.apiHostname}`,
       },
       domain: input.config.appHostname,

@@ -12,8 +12,8 @@ import {
 
 describe("toDockerNameSegment()", () => {
   it("normalizes repository names for docker resources", () => {
-    expect(toDockerNameSegment("Task Tracker")).toBe("task-tracker");
-    expect(toDockerNameSegment("___Task Tracker___")).toBe("task-tracker");
+    expect(toDockerNameSegment("Ceird")).toBe("ceird");
+    expect(toDockerNameSegment("___Ceird___")).toBe("ceird");
   }, 10_000);
 
   it("falls back to a safe default for empty names", () => {
@@ -25,14 +25,14 @@ describe("buildSandboxRuntimeAssets()", () => {
   it("derives a shared dev image and lockfile-keyed node_modules volume", () => {
     expect(
       buildSandboxRuntimeAssets({
-        repositorySlug: "task-tracker",
+        repositorySlug: "ceird",
         assetHash: "1234567890abcdef1234567890abcdef",
         lockfileHash: "abcdef1234567890abcdef1234567890",
       })
     ).toStrictEqual({
-      devImage: "tt-sbx-task-tracker-dev:1234567890ab",
-      nodeModulesVolume: "tt-sbx-node-modules-1234567890ab-abcdef123456",
-      pnpmStoreVolume: "tt-sbx-pnpm-store",
+      devImage: "ceird-sbx-ceird-dev:1234567890ab",
+      nodeModulesVolume: "ceird-sbx-node-modules-1234567890ab-abcdef123456",
+      pnpmStoreVolume: "ceird-sbx-pnpm-store",
     });
   }, 10_000);
 
@@ -49,13 +49,13 @@ describe("buildSandboxRuntimeAssets()", () => {
     const [first, second] = await Promise.all([
       Effect.runPromise(
         resolveSandboxRuntimeAssets({
-          repoRoot: "/Users/me/task-tracker",
+          repoRoot: "/Users/me/ceird",
           worktreePath: firstWorktree,
         })
       ),
       Effect.runPromise(
         resolveSandboxRuntimeAssets({
-          repoRoot: "/Users/me/task-tracker",
+          repoRoot: "/Users/me/ceird",
           worktreePath: secondWorktree,
         })
       ),

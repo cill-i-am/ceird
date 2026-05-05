@@ -80,7 +80,7 @@ The canonical config lives in
 Current config decisions:
 
 - `basePath` is always `/api/auth`
-- `appName` is `"Task Tracker"`
+- `appName` is `"Ceird"`
 - email/password auth is enabled
 - Better Auth remains the native owner of
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
@@ -113,7 +113,7 @@ Current defaulted value:
 
 - `AUTH_EMAIL_TRANSPORT`, which defaults to `"noop"` locally and is set to
   `"cloudflare-binding"` by the Cloudflare infra stage
-- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Task Tracker"`
+- `AUTH_EMAIL_FROM_NAME`, which defaults to `"Ceird"`
 
 `AUTH_EMAIL_TRANSPORT=cloudflare-api` is the local/manual opt-in path for real
 email delivery outside Workers. In that mode only, the API also requires
@@ -181,12 +181,12 @@ Rules:
 
 Current defaults by entry point:
 
-- local Portless dev injects `https://api.task-tracker.localhost:1355`
+- local Portless dev injects `https://api.ceird.localhost:1355`
 - Playwright auth e2e injects `http://127.0.0.1:3001`
 - sandbox containers inject one explicit auth origin into both sides:
   `BETTER_AUTH_BASE_URL` for the API and `VITE_AUTH_ORIGIN` for the app
 - when sandbox aliases are healthy, that injected origin is
-  `https://<slug>.api.task-tracker.localhost:1355`
+  `https://<slug>.api.ceird.localhost:1355`
 - when sandbox aliases are unavailable, that injected origin falls back to the
   loopback API URL such as `http://127.0.0.1:4301`
 - local dev and Playwright launchers inject `AUTH_EMAIL_FROM`,
@@ -206,10 +206,10 @@ Allowed by default:
 - `http://localhost:3000`
 - `http://127.0.0.1:4173`
 - `http://localhost:4173`
-- `http://app.task-tracker.localhost:1355`
-- `https://app.task-tracker.localhost:1355`
-- sandbox app origins matching `http://*.app.task-tracker.localhost:1355`
-- sandbox app origins matching `https://*.app.task-tracker.localhost:1355`
+- `http://app.ceird.localhost:1355`
+- `https://app.ceird.localhost:1355`
+- sandbox app origins matching `http://*.app.ceird.localhost:1355`
+- sandbox app origins matching `https://*.app.ceird.localhost:1355`
 - the app-side origin derived from a configured `PORTLESS_URL`
 
 Rules:
@@ -294,8 +294,8 @@ Portless-style development.
 
 Current mappings:
 
-- `*.app.task-tracker.localhost` -> `*.api.task-tracker.localhost`
-- `app.task-tracker.localhost` -> `api.task-tracker.localhost`
+- `*.app.ceird.localhost` -> `*.api.ceird.localhost`
+- `app.ceird.localhost` -> `api.ceird.localhost`
 - `localhost:3000` or `127.0.0.1:3000` -> port `3001`
 - `localhost:4173` or `127.0.0.1:4173` -> port `3001`
 

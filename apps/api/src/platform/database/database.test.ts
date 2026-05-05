@@ -14,7 +14,7 @@ import {
 const IMPOSSIBLE_DATABASE_URL =
   "postgresql://postgres:postgres@127.0.0.1:1/should-not-be-used";
 const SHARED_POOL_DATABASE_URL =
-  "postgresql://postgres:postgres@127.0.0.1:5432/task_tracker_shared_pool";
+  "postgresql://postgres:postgres@127.0.0.1:5432/ceird_shared_pool";
 
 describe("shared app database effect layers", () => {
   it("builds the Effect SQL client from AppDatabase.pool", async () => {
@@ -87,7 +87,7 @@ function makeTestPool(): Pool {
     ending: false,
     on: vi.fn<() => void>(),
     options: {
-      application_name: "@task-tracker/test",
+      application_name: "@ceird/test",
       connectionString: SHARED_POOL_DATABASE_URL,
     },
     query: vi.fn<() => void>(),

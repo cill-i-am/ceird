@@ -59,7 +59,7 @@ const baseAuthEmailConfig = Config.all({
     })
   ),
   fromName: Config.string("AUTH_EMAIL_FROM_NAME").pipe(
-    Config.withDefault("Task Tracker")
+    Config.withDefault("Ceird")
   ),
 });
 
@@ -111,7 +111,7 @@ const AuthEmailConfigConfig = Effect.gen(
 );
 
 export class AuthEmailConfigService extends Effect.Service<AuthEmailConfigService>()(
-  "@task-tracker/domains/identity/authentication/AuthEmailConfigService",
+  "@ceird/domains/identity/authentication/AuthEmailConfigService",
   {
     effect: AuthEmailConfigConfig,
   }

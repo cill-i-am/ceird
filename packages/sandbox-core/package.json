@@ -1,5 +1,5 @@
 {
-  "name": "@task-tracker/sandbox-core",
+  "name": "@ceird/sandbox-core",
   "private": true,
   "type": "module",
   "exports": {

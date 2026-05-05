@@ -259,8 +259,7 @@ export function AuthenticatedShellHome() {
           Your work
         </h1>
         <p className="text-muted-foreground">
-          The app shell is now protected and ready for real task-tracker
-          features.
+          The app shell is now protected and ready for real ceird features.
         </p>
       </section>
 

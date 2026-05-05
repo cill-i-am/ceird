@@ -1,28 +1,26 @@
 "use client";
-
-import { Atom } from "@effect-atom/atom-react";
-import type { OrganizationId } from "@task-tracker/identity-core";
+import type { OrganizationId } from "@ceird/identity-core";
 import type {
   CreateJobInput,
   CreateJobResponse,
+  Job,
   JobContactOption,
-  JobLabelIdType,
   JobListCursorType,
-  JobListQuery,
   JobListItem,
+  JobListQuery,
   JobListResponse,
   JobOptionsResponse,
   JobPriority,
   JobStatus,
-  Job,
-  ServiceAreaIdType,
-  SiteIdType,
   UserIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+import { Atom } from "@effect-atom/atom-react";
 import { Effect, Option } from "effect";
 
-import { runBrowserJobsRequest } from "./jobs-client";
-import type { AppJobsError } from "./jobs-errors";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import type { AppApiError } from "#/features/api/app-api-errors";
 
 export type JobsStatusFilter = "active" | "all" | JobStatus;
 
@@ -34,7 +32,7 @@ export type JobsAssigneeFilter =
 export interface JobsListFilters {
   readonly assigneeId: JobsAssigneeFilter;
   readonly coordinatorId: UserIdType | "all";
-  readonly labelId: JobLabelIdType | "all";
+  readonly labelId: LabelIdType | "all";
   readonly priority: JobPriority | "all";
   readonly query: string;
   readonly serviceAreaId: ServiceAreaIdType | "all";
@@ -157,7 +155,7 @@ export const jobsSummaryAtom = Atom.make((get) => {
   return counts;
 }).pipe(Atom.keepAlive);
 
-export const refreshJobsListAtom = Atom.fn<AppJobsError, JobListResponse>(
+export const refreshJobsListAtom = Atom.fn<AppApiError, JobListResponse>(
   (_, get) =>
     listAllBrowserJobs().pipe(
       Effect.tap((response) =>
@@ -174,7 +172,7 @@ export const refreshJobsListAtom = Atom.fn<AppJobsError, JobListResponse>(
     )
 ).pipe(Atom.keepAlive);
 
-export const refreshJobOptionsAtom = Atom.fn<AppJobsError, JobOptionsResponse>(
+export const refreshJobOptionsAtom = Atom.fn<AppApiError, JobOptionsResponse>(
   (_, get) =>
     getBrowserJobOptions().pipe(
       Effect.tap((response) =>
@@ -191,7 +189,7 @@ export const refreshJobOptionsAtom = Atom.fn<AppJobsError, JobOptionsResponse>(
 ).pipe(Atom.keepAlive);
 
 export const createJobMutationAtom = Atom.fn<
-  AppJobsError,
+  AppApiError,
   CreateJobResponse,
   CreateJobInput
 >((input, get) =>
@@ -254,7 +252,7 @@ export function deriveContactsForSite(
 }
 
 function listAllBrowserJobs() {
-  return runBrowserJobsRequest("JobsBrowser.listAllJobs", (client) => {
+  return runBrowserAppApiRequest("JobsBrowser.listAllJobs", (client) => {
     const loadPage = (cursor: JobListQuery["cursor"]) =>
       client.jobs.listJobs({
         urlParams: cursor ? { cursor } : {},
@@ -282,13 +280,13 @@ function listAllBrowserJobs() {
 }
 
 function getBrowserJobOptions() {
-  return runBrowserJobsRequest("JobsBrowser.getJobOptions", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.getJobOptions", (client) =>
     client.jobs.getJobOptions()
   );
 }
 
 function createBrowserJob(input: CreateJobInput) {
-  return runBrowserJobsRequest("JobsBrowser.createJob", (client) =>
+  return runBrowserAppApiRequest("JobsBrowser.createJob", (client) =>
     client.jobs.createJob({ payload: input })
   );
 }

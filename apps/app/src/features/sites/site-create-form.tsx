@@ -1,10 +1,9 @@
 "use client";
-
 import type {
   CreateSiteInput,
   ServiceAreaOption,
   SiteCountry,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
 
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";

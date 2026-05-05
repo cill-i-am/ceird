@@ -1,4 +1,4 @@
-import { InvitableOrganizationRole } from "@task-tracker/identity-core";
+import { InvitableOrganizationRole } from "@ceird/identity-core";
 import { ParseResult, Schema } from "effect";
 
 import { accountEmailSchema } from "#/features/auth/auth-schemas";

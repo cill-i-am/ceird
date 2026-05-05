@@ -1,4 +1,3 @@
-import { redirect } from "@tanstack/react-router";
 import {
   decodeOrganizationId,
   decodeOrganizationMemberRoleResponse,
@@ -6,12 +5,13 @@ import {
   isAdministrativeOrganizationRole,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
   OrganizationRole,
   OrganizationSummary,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
+import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
@@ -20,8 +20,7 @@ import { isServerEnvironment } from "../auth/runtime-environment";
 
 const importOrganizationServer = () => import("./organization-server");
 
-export type { OrganizationSummary } from "@task-tracker/identity-core";
-
+export type { OrganizationSummary } from "@ceird/identity-core";
 export interface ActiveOrganizationSync {
   readonly required: boolean;
   readonly targetOrganizationId: OrganizationIdType | null;

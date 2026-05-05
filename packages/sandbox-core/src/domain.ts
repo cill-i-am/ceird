@@ -102,13 +102,13 @@ export interface BuildSandboxUrlsOptions {
 
 export const SandboxHttpUrl = Schema.String.pipe(
   Schema.pattern(/^https?:\/\//),
-  Schema.brand("@task-tracker/SandboxHttpUrl")
+  Schema.brand("@ceird/SandboxHttpUrl")
 );
 export type SandboxHttpUrl = Schema.Schema.Type<typeof SandboxHttpUrl>;
 
 export const SandboxPostgresUrl = Schema.String.pipe(
   Schema.pattern(/^postgresql:\/\//),
-  Schema.brand("@task-tracker/SandboxPostgresUrl")
+  Schema.brand("@ceird/SandboxPostgresUrl")
 );
 export type SandboxPostgresUrl = Schema.Schema.Type<typeof SandboxPostgresUrl>;
 
@@ -235,13 +235,13 @@ export function buildSandboxUrls(
     `http://127.0.0.1:${input.ports.api}`
   );
   const preferredApp = Schema.decodeUnknownSync(SandboxHttpUrl)(
-    `https://${input.hostnameSlug}.app.task-tracker.localhost:${options.proxyPort}`
+    `https://${input.hostnameSlug}.app.ceird.localhost:${options.proxyPort}`
   );
   const preferredApi = Schema.decodeUnknownSync(SandboxHttpUrl)(
-    `https://${input.hostnameSlug}.api.task-tracker.localhost:${options.proxyPort}`
+    `https://${input.hostnameSlug}.api.ceird.localhost:${options.proxyPort}`
   );
   const postgres = Schema.decodeUnknownSync(SandboxPostgresUrl)(
-    `postgresql://postgres:postgres@127.0.0.1:${input.ports.postgres}/task_tracker`
+    `postgresql://postgres:postgres@127.0.0.1:${input.ports.postgres}/ceird`
   );
 
   return {

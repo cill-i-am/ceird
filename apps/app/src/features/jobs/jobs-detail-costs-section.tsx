@@ -1,18 +1,17 @@
 "use client";
-
-import { Briefcase01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   calculateJobCostLineTotalMinor,
   MAX_JOB_COST_LINE_QUANTITY,
   MAX_JOB_COST_LINE_UNIT_PRICE_MINOR,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import type {
   AddJobCostLineInput,
   AddJobCostLineResponse,
   JobDetailResponse,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import { Briefcase01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Exit } from "effect";
 import * as React from "react";
 

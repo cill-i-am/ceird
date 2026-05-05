@@ -1,4 +1,4 @@
-import { validateSandboxName } from "@task-tracker/sandbox-core";
+import { validateSandboxName } from "@ceird/sandbox-core";
 import { Effect, Either } from "effect";
 
 import { bringSandboxUp } from "./lifecycle.js";
@@ -7,7 +7,7 @@ import { buildSandboxRuntimeAssets } from "./runtime-assets.js";
 import { SandboxPreflightError } from "./sandbox-preflight-error.js";
 
 const runtimeAssets = buildSandboxRuntimeAssets({
-  repositorySlug: "task-tracker",
+  repositorySlug: "ceird",
   assetHash: "123456789abc123456789abc12345678",
   lockfileHash: "def456789abc123456789abc12345678",
 });
@@ -18,8 +18,8 @@ describe("bringSandboxUp()", () => {
 
     await Effect.runPromise(
       bringSandboxUp({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         explicitSandboxName: validateSandboxName("agent-one"),
         now: "2026-04-01T12:00:00.000Z",
         takenNames: new Set(),
@@ -27,7 +27,7 @@ describe("bringSandboxUp()", () => {
         loadSharedEnvironment: () =>
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
-            AUTH_EMAIL_FROM_NAME: "Task Tracker",
+            AUTH_EMAIL_FROM_NAME: "Ceird",
             CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
             CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
@@ -100,8 +100,8 @@ describe("bringSandboxUp()", () => {
   it("persists a Better Auth secret and reuses an existing one", async () => {
     const first = await Effect.runPromise(
       bringSandboxUp({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         explicitSandboxName: undefined,
         now: "2026-04-01T12:00:00.000Z",
         takenNames: new Set(),
@@ -109,7 +109,7 @@ describe("bringSandboxUp()", () => {
         loadSharedEnvironment: () =>
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
-            AUTH_EMAIL_FROM_NAME: "Task Tracker",
+            AUTH_EMAIL_FROM_NAME: "Ceird",
             CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
             CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
@@ -139,8 +139,8 @@ describe("bringSandboxUp()", () => {
 
     const second = await Effect.runPromise(
       bringSandboxUp({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         explicitSandboxName: undefined,
         now: "2026-04-01T12:05:00.000Z",
         takenNames: new Set(),
@@ -148,7 +148,7 @@ describe("bringSandboxUp()", () => {
         loadSharedEnvironment: () =>
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
-            AUTH_EMAIL_FROM_NAME: "Task Tracker",
+            AUTH_EMAIL_FROM_NAME: "Ceird",
             CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
             CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
@@ -183,8 +183,8 @@ describe("bringSandboxUp()", () => {
 
     const result = await Effect.runPromise(
       bringSandboxUp({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         explicitSandboxName: validateSandboxName("agent-one"),
         now: "2026-04-01T12:00:00.000Z",
         takenNames: new Set(),
@@ -192,7 +192,7 @@ describe("bringSandboxUp()", () => {
         loadSharedEnvironment: () =>
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
-            AUTH_EMAIL_FROM_NAME: "Task Tracker",
+            AUTH_EMAIL_FROM_NAME: "Ceird",
             CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
             CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
@@ -246,7 +246,7 @@ describe("bringSandboxUp()", () => {
     expect(result.record.status).toBe("degraded");
     expect(result.record.betterAuthSecret).toBe("generated-secret");
     expect(result.record.sandboxName).toBe("agent-one");
-    expect(result.record.composeProjectName).toBe("tt-sbx-agent-one");
+    expect(result.record.composeProjectName).toBe("ceird-sbx-agent-one");
     expect(persistedStatus).toBe("degraded");
     expect(events).toStrictEqual([
       "aliases",
@@ -265,8 +265,8 @@ describe("bringSandboxUp()", () => {
     await expect(
       Effect.runPromise(
         bringSandboxUp({
-          repoRoot: "/Users/me/task-tracker",
-          worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+          repoRoot: "/Users/me/ceird",
+          worktreePath: "/Users/me/ceird/.worktrees/agent-one",
           explicitSandboxName: validateSandboxName("agent-one"),
           now: "2026-04-01T12:00:00.000Z",
           takenNames: new Set(),
@@ -274,7 +274,7 @@ describe("bringSandboxUp()", () => {
           loadSharedEnvironment: () =>
             Effect.succeed({
               AUTH_EMAIL_FROM: "auth@example.com",
-              AUTH_EMAIL_FROM_NAME: "Task Tracker",
+              AUTH_EMAIL_FROM_NAME: "Ceird",
               CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
               CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
             }),
@@ -337,8 +337,8 @@ describe("bringSandboxUp()", () => {
     await expect(
       Effect.runPromise(
         bringSandboxUp({
-          repoRoot: "/Users/me/task-tracker",
-          worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+          repoRoot: "/Users/me/ceird",
+          worktreePath: "/Users/me/ceird/.worktrees/agent-one",
           explicitSandboxName: validateSandboxName("agent-one"),
           now: "2026-04-01T12:00:00.000Z",
           takenNames: new Set(),
@@ -389,8 +389,8 @@ describe("bringSandboxUp()", () => {
   it("preserves sandbox conflict context when the requested name is already taken", async () => {
     const result = await Effect.runPromise(
       bringSandboxUp({
-        repoRoot: "/Users/me/task-tracker",
-        worktreePath: "/Users/me/task-tracker/.worktrees/agent-one",
+        repoRoot: "/Users/me/ceird",
+        worktreePath: "/Users/me/ceird/.worktrees/agent-one",
         explicitSandboxName: validateSandboxName("agent-one"),
         now: "2026-04-01T12:00:00.000Z",
         takenNames: new Set([validateSandboxName("agent-one")]),
@@ -398,7 +398,7 @@ describe("bringSandboxUp()", () => {
         loadSharedEnvironment: () =>
           Effect.succeed({
             AUTH_EMAIL_FROM: "auth@example.com",
-            AUTH_EMAIL_FROM_NAME: "Task Tracker",
+            AUTH_EMAIL_FROM_NAME: "Ceird",
             CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
             CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
           }),
@@ -444,7 +444,7 @@ describe("bringSandboxUp()", () => {
 
     expect(result.record.sandboxName).toMatch(/^ceird-[a-f0-9]{6}$/);
     expect(result.urls.postgres).toBe(
-      "postgresql://postgres:postgres@127.0.0.1:5443/task_tracker"
+      "postgresql://postgres:postgres@127.0.0.1:5443/ceird"
     );
   }, 10_000);
 
@@ -482,7 +482,7 @@ function makeBasicBringSandboxUpOptions(
   overrides: Partial<BringSandboxUpOptions>
 ): BringSandboxUpOptions {
   return {
-    repoRoot: "/Users/me/task-tracker",
+    repoRoot: "/Users/me/ceird",
     worktreePath: "/Users/me/.codex/worktrees/1188/ceird",
     explicitSandboxName: undefined,
     now: "2026-04-01T12:00:00.000Z",
@@ -491,7 +491,7 @@ function makeBasicBringSandboxUpOptions(
     loadSharedEnvironment: () =>
       Effect.succeed({
         AUTH_EMAIL_FROM: "auth@example.com",
-        AUTH_EMAIL_FROM_NAME: "Task Tracker",
+        AUTH_EMAIL_FROM_NAME: "Ceird",
         CLOUDFLARE_ACCOUNT_ID: "cloudflare-account-live",
         CLOUDFLARE_API_TOKEN: "cloudflare-token-live",
       }),

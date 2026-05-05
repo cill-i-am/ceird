@@ -11,10 +11,10 @@ import {
 function makeConfigProvider() {
   return ConfigProvider.fromMap(
     new Map([
-      ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+      ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
       ["AUTH_EMAIL_TRANSPORT", "cloudflare-binding"],
-      ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-      ["AUTH_EMAIL_FROM_NAME", "Task Tracker Auth"],
+      ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
+      ["AUTH_EMAIL_FROM_NAME", "Ceird Auth"],
     ])
   );
 }
@@ -59,8 +59,8 @@ describe("cloudflare email binding auth email transport", () => {
     expect(requests).toStrictEqual([
       {
         from: {
-          email: "auth@task-tracker.localhost",
-          name: "Task Tracker Auth",
+          email: "auth@ceird.localhost",
+          name: "Ceird Auth",
         },
         to: "alice@example.com",
         subject: "Reset your password",

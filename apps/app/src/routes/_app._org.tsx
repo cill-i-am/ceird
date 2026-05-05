@@ -1,17 +1,17 @@
+import type { OrganizationRole } from "@ceird/identity-core";
 import {
   Outlet,
   createFileRoute,
   useRouteContext,
 } from "@tanstack/react-router";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
-import { decodeJobsViewerUserId } from "#/features/jobs/jobs-viewer";
 import {
   getCurrentOrganizationMemberRole,
   requireOrganizationAccess,
 } from "#/features/organizations/organization-access";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
+import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 
 export const Route = createFileRoute("/_app/_org")({
   beforeLoad: async ({ context }) => {
@@ -35,7 +35,9 @@ export const Route = createFileRoute("/_app/_org")({
       activeOrganizationId: organizationAccess.activeOrganizationId,
       activeOrganizationSync: organizationAccess.activeOrganizationSync,
       currentOrganizationRole,
-      currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
+      currentUserId: decodeOrganizationViewerUserId(
+        organizationAccess.session.user.id
+      ),
     };
   },
   component: OrganizationRouteComponent,

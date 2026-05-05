@@ -86,7 +86,7 @@ export function EntryShell(props: EntryShellProps) {
     badge,
     children,
     description,
-    kicker = "Task Tracker",
+    kicker = "Ceird",
     mode = "full",
     supportingContent,
     title,

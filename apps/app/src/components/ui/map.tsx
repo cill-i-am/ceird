@@ -1,5 +1,4 @@
 "use client";
-
 /* oxlint-disable eqeqeq, no-eq-null, no-inline-comments, prefer-destructuring, react/jsx-no-constructed-context-values */
 
 import { Cause, Effect, Exit, Option } from "effect";

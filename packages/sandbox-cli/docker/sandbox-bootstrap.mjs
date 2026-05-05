@@ -21,7 +21,7 @@ const SANDBOX_TARGETS = {
 };
 
 export function getInstallLockTimeoutMs(env) {
-  const rawValue = env.TASK_TRACKER_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS;
+  const rawValue = env.CEIRD_SANDBOX_INSTALL_LOCK_TIMEOUT_SECONDS;
 
   if (rawValue === undefined) {
     return DEFAULT_INSTALL_LOCK_TIMEOUT_MS;
@@ -72,8 +72,7 @@ async function ensureDependenciesInstalled() {
     .update(await fs.readFile("/workspace/pnpm-lock.yaml"))
     .digest("hex");
   const cacheFile = "/workspace/node_modules/.sandbox-lock.sha256";
-  const installLock =
-    "/workspace/node_modules/.task-tracker-sandbox-install.lock";
+  const installLock = "/workspace/node_modules/.ceird-sandbox-install.lock";
 
   await fs.mkdir("/workspace/node_modules", { recursive: true });
 

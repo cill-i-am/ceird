@@ -44,7 +44,7 @@ describe("makeAuthenticationConfig()", () => {
     const config = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3001",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(config).toMatchObject({
@@ -55,11 +55,11 @@ describe("makeAuthenticationConfig()", () => {
         "http://localhost:3000",
         "http://127.0.0.1:4173",
         "http://localhost:4173",
-        "http://*.app.task-tracker.localhost:1355",
-        "https://*.app.task-tracker.localhost:1355",
+        "http://*.app.ceird.localhost:1355",
+        "https://*.app.ceird.localhost:1355",
       ]),
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       rateLimit: {
         enabled: true,
         storage: "database",
@@ -110,7 +110,7 @@ describe("makeAuthenticationConfig()", () => {
     const config = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3001",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(
@@ -127,8 +127,7 @@ describe("makeAuthenticationConfig()", () => {
         AUTH_RATE_LIMIT_ENABLED: "false",
         BETTER_AUTH_BASE_URL: "http://127.0.0.1:3001",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-        DATABASE_URL:
-          "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
       async () => {
         const config = await Effect.runPromise(loadAuthenticationConfig);
@@ -143,7 +142,7 @@ describe("makeAuthenticationConfig()", () => {
     const config = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3001",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(config.rateLimit.customRules).toMatchObject({
@@ -162,7 +161,7 @@ describe("makeAuthenticationConfig()", () => {
     const config = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3001",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(config.user.changeEmail).toStrictEqual({
@@ -173,23 +172,23 @@ describe("makeAuthenticationConfig()", () => {
   it("adds the matching app origin for a portless sandbox URL", () => {
     expect(
       makeAuthenticationTrustedOrigins({
-        portlessUrl: "https://task-tracker.api.task-tracker.localhost:1355",
+        portlessUrl: "https://ceird.api.ceird.localhost:1355",
       })
-    ).toContain("https://task-tracker.app.task-tracker.localhost:1355");
+    ).toContain("https://ceird.app.ceird.localhost:1355");
   }, 10_000);
 
-  it("shares auth cookies across task-tracker.localhost subdomains", () => {
+  it("shares auth cookies across ceird.localhost subdomains", () => {
     const config = makeAuthenticationConfig({
-      appOrigin: "https://linear-ui-refresh.app.task-tracker.localhost:1355",
-      baseUrl: "https://linear-ui-refresh.api.task-tracker.localhost:1355",
-      portlessUrl: "https://linear-ui-refresh.api.task-tracker.localhost:1355",
+      appOrigin: "https://linear-ui-refresh.app.ceird.localhost:1355",
+      baseUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
+      portlessUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
       enabled: true,
-      domain: "task-tracker.localhost",
+      domain: "ceird.localhost",
     });
     if (config.advanced?.trustedProxyHeaders !== true) {
       throw new Error("Expected trusted proxy headers to be enabled.");
@@ -201,7 +200,7 @@ describe("makeAuthenticationConfig()", () => {
       appOrigin: "http://127.0.0.1:4173",
       baseUrl: "http://127.0.0.1:3001",
       secret: "super-secret-value",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     expect(config.advanced).toStrictEqual({
@@ -221,9 +220,8 @@ describe("makeAuthenticationConfig()", () => {
     await withEnvironment(
       {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-        DATABASE_URL:
-          "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
-        PORTLESS_URL: "https://task-tracker.api.task-tracker.localhost:1355",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+        PORTLESS_URL: "https://ceird.api.ceird.localhost:1355",
       },
       async () => {
         const result = Effect.runPromise(loadAuthenticationConfig);
@@ -237,33 +235,31 @@ describe("makeAuthenticationConfig()", () => {
     await withEnvironment(
       {
         AUTH_APP_ORIGIN: "http://127.0.0.1:4304",
-        BETTER_AUTH_BASE_URL: "https://api.task-tracker.localhost:1355",
+        BETTER_AUTH_BASE_URL: "https://api.ceird.localhost:1355",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-        DATABASE_URL:
-          "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
-        PORTLESS_URL: "https://api.task-tracker.localhost:1355",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+        PORTLESS_URL: "https://api.ceird.localhost:1355",
       },
       async () => {
         const config = await Effect.runPromise(loadAuthenticationConfig);
 
-        expect(config.baseURL).toBe("https://api.task-tracker.localhost:1355");
+        expect(config.baseURL).toBe("https://api.ceird.localhost:1355");
         expect(config.trustedOrigins).toContain(
-          "https://app.task-tracker.localhost:1355"
+          "https://app.ceird.localhost:1355"
         );
         expect(config.trustedOrigins).toContain("http://127.0.0.1:4304");
       }
     );
   }, 10_000);
 
-  it("derives the shared cookie domain from task-tracker.localhost hosts", () => {
+  it("derives the shared cookie domain from ceird.localhost hosts", () => {
     expect(
       resolveCrossSubDomainCookieDomain({
-        appOrigin: "https://linear-ui-refresh.app.task-tracker.localhost:1355",
-        baseUrl: "https://linear-ui-refresh.api.task-tracker.localhost:1355",
-        portlessUrl:
-          "https://linear-ui-refresh.api.task-tracker.localhost:1355",
+        appOrigin: "https://linear-ui-refresh.app.ceird.localhost:1355",
+        baseUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
+        portlessUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
       })
-    ).toBe("task-tracker.localhost");
+    ).toBe("ceird.localhost");
 
     expect(
       resolveCrossSubDomainCookieDomain({
@@ -637,12 +633,12 @@ describe("createAuthentication()", () => {
   it("matches wildcard trusted origins for sandbox aliases", () => {
     expect({
       api: matchesTrustedOrigin(
-        "https://organization-invitations.api.task-tracker.localhost:1355",
-        ["https://*.app.task-tracker.localhost:1355"]
+        "https://organization-invitations.api.ceird.localhost:1355",
+        ["https://*.app.ceird.localhost:1355"]
       ),
       app: matchesTrustedOrigin(
-        "https://organization-invitations.app.task-tracker.localhost:1355",
-        ["https://*.app.task-tracker.localhost:1355"]
+        "https://organization-invitations.app.ceird.localhost:1355",
+        ["https://*.app.ceird.localhost:1355"]
       ),
     }).toStrictEqual({
       api: false,

@@ -1,7 +1,7 @@
 import type {
   OrganizationRole,
   PublicInvitationPreview,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";

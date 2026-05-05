@@ -1,5 +1,3 @@
-import { HttpServerRequest } from "@effect/platform";
-import { SqlError } from "@effect/sql/SqlError";
 import {
   ActivityId,
   BlockedReasonRequiredError,
@@ -8,20 +6,17 @@ import {
   CommentId,
   CostLineId,
   JobCollaboratorId,
-  JobLabelId,
   JobAccessDeniedError,
   JobCostSummaryLimitExceededError,
   JobSchema,
   JobStorageError,
   OrganizationMemberNotFoundError,
-  ServiceAreaNotFoundError,
   VisitId,
   VisitDurationIncrementError,
   WorkItemId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import type {
   ContactIdType as ContactId,
-  CreateSiteInput,
   Job,
   JobComment,
   JobCostLine,
@@ -30,20 +25,27 @@ import type {
   JobActivity,
   JobActivityPayload,
   JobDetail,
-  JobLabel,
   JobListResponse,
   JobMemberOption,
   JobOptionsResponse,
-  ServiceArea,
-  JobSiteOption,
   JobVisit,
   OrganizationActivityListResponse,
   OrganizationActivityQuery,
   OrganizationIdType as OrganizationId,
+  UserId,
+} from "@ceird/jobs-core";
+import { LabelId } from "@ceird/labels-core";
+import type { Label } from "@ceird/labels-core";
+import { ServiceAreaNotFoundError } from "@ceird/sites-core";
+import type {
+  CreateSiteInput,
+  ServiceArea,
   ServiceAreaIdType as ServiceAreaId,
   SiteIdType as SiteId,
-  UserId,
-} from "@task-tracker/jobs-core";
+  SiteOption as JobSiteOption,
+} from "@ceird/sites-core";
+import { HttpServerRequest } from "@effect/platform";
+import { SqlError } from "@effect/sql/SqlError";
 import {
   Cause,
   Effect,
@@ -54,25 +56,28 @@ import {
   Schema,
 } from "effect";
 
+import { LabelsRepository } from "../labels/repositories.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
+import { SiteGeocoder } from "../sites/geocoder.js";
+import {
+  ServiceAreasRepository as ConfigurationRepository,
+  SitesRepository,
+} from "../sites/repositories.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { JobsAuthorization } from "./authorization.js";
-import { CurrentJobsActor } from "./current-jobs-actor.js";
-import type { JobsActor } from "./current-jobs-actor.js";
 import {
-  ConfigurationRepository,
   ContactsRepository,
   JobsRepository,
-  JobLabelsRepository,
-  SitesRepository,
+  JobLabelAssignmentsRepository,
 } from "./repositories.js";
 import { JobsService } from "./service.js";
-import { SiteGeocoder } from "./site-geocoder.js";
 
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeJobCollaboratorId = Schema.decodeUnknownSync(JobCollaboratorId);
-const decodeJobLabelId = Schema.decodeUnknownSync(JobLabelId);
+const decodeLabelId = Schema.decodeUnknownSync(LabelId);
 const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
@@ -84,7 +89,7 @@ const contactId = "33333333-3333-4333-8333-333333333333" as ContactId;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
 const serviceAreaId = "99999999-9999-4999-8999-999999999999" as ServiceAreaId;
 const visitId = decodeVisitId("55555555-5555-4555-8555-555555555555");
-const labelId = decodeJobLabelId("88888888-8888-4888-8888-888888888888");
+const labelId = decodeLabelId("88888888-8888-4888-8888-888888888888");
 const costLineId = decodeCostLineId("99999999-9999-4999-8999-999999999998");
 const collaboratorId = decodeJobCollaboratorId(
   "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -101,9 +106,9 @@ const inlineSiteInput = {
 } satisfies CreateSiteInput;
 
 function makeActor(
-  role: JobsActor["role"],
-  overrides: Partial<JobsActor> = {}
-): JobsActor {
+  role: OrganizationActor["role"],
+  overrides: Partial<OrganizationActor> = {}
+): OrganizationActor {
   return {
     organizationId: "org_123" as OrganizationId,
     role,
@@ -135,7 +140,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
 }
 
 interface JobsServiceHarnessOptions {
-  readonly actor?: JobsActor;
+  readonly actor?: OrganizationActor;
   readonly archiveRemovedWorkItemIds?: readonly WorkItemId[];
   readonly assignLabelChanged?: boolean;
   readonly lockedJob?: Job;
@@ -167,7 +172,7 @@ interface JobsServiceHarness {
     listLabels: number;
     listExternalMemberOptions: number;
     listMemberOptions: number;
-    linkContact: number;
+    linkSiteContact: number;
     listOrganizationActivity: number;
     patch: number;
     attachCollaborator: number;
@@ -206,7 +211,7 @@ function makeHarness(
     listLabels: 0,
     listExternalMemberOptions: 0,
     listMemberOptions: 0,
-    linkContact: 0,
+    linkSiteContact: 0,
     listOrganizationActivity: 0,
     patch: 0,
     attachCollaborator: 0,
@@ -217,12 +222,12 @@ function makeHarness(
     updateLabel: 0,
     updateCollaborator: 0,
   };
-  const jobLabel = {
+  const organizationLabel = {
     createdAt: "2026-04-22T10:00:00.000Z",
     id: labelId,
     name: "Waiting on PO",
     updatedAt: "2026-04-22T10:00:00.000Z",
-  } satisfies JobLabel;
+  } satisfies Label;
   const activityPayloads: JobActivityPayload[] = [];
   const collaborator = {
     accessLevel: options.grantAccessLevel ?? "comment",
@@ -405,7 +410,7 @@ function makeHarness(
             ...lockedJob,
             labels:
               calls.assignLabel > calls.removeLabel
-                ? [jobLabel]
+                ? [organizationLabel]
                 : lockedJob.labels,
           },
           viewerAccess: {
@@ -471,6 +476,15 @@ function makeHarness(
           nextCursor: undefined,
         } satisfies OrganizationActivityListResponse;
       }),
+    linkSiteContact: (_input: {
+      readonly contactId: ContactId;
+      readonly isPrimary?: boolean;
+      readonly organizationId: OrganizationId;
+      readonly siteId: SiteId;
+    }) =>
+      Effect.sync(() => {
+        calls.linkSiteContact += 1;
+      }).pipe(Effect.as(undefinedValue)),
     patch: (
       _organizationId: OrganizationId,
       _workItemId: Job["id"],
@@ -597,15 +611,6 @@ function makeHarness(
       Effect.succeed(Option.some(siteId)),
     getOptionById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.none()),
-    linkContact: (_input: {
-      readonly contactId: ContactId;
-      readonly isPrimary?: boolean;
-      readonly organizationId: OrganizationId;
-      readonly siteId: SiteId;
-    }) =>
-      Effect.sync(() => {
-        calls.linkContact += 1;
-      }).pipe(Effect.as(undefinedValue)),
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobSiteOption[]),
     update: (
@@ -613,16 +618,19 @@ function makeHarness(
       _siteId: SiteId,
       _input: unknown
     ) => Effect.succeed(Option.none()),
+    withTransaction: <Value, Error, Requirements>(
+      effect: Effect.Effect<Value, Error, Requirements>
+    ) => effect,
   });
 
   const configurationRepository = ConfigurationRepository.make({
-    createServiceArea: (_input: unknown) =>
+    create: (_input: unknown) =>
       Effect.die(new Error("Unexpected repository call: createServiceArea")),
-    listServiceAreaOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies JobOptionsResponse["serviceAreas"]),
-    listServiceAreas: (_organizationId: OrganizationId) =>
+    list: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly ServiceArea[]),
-    updateServiceArea: (
+    listOptions: (_organizationId: OrganizationId) =>
+      Effect.succeed([] satisfies JobOptionsResponse["serviceAreas"]),
+    update: (
       _organizationId: OrganizationId,
       _serviceAreaId: ServiceAreaId,
       _input: unknown
@@ -636,23 +644,37 @@ function makeHarness(
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies JobOptionsResponse["contacts"]),
   });
-  const jobLabelsRepository = JobLabelsRepository.make({
+  const labelsRepository = LabelsRepository.make({
     archive: (
-      organizationId: OrganizationId,
-      requestedLabelId: JobLabel["id"]
-    ) =>
+      _organizationId: OrganizationId,
+      _requestedLabelId: Label["id"]
+    ) => Effect.die(new Error("Unexpected repository call: archive label")),
+    create: (_input: unknown) =>
+      Effect.die(new Error("Unexpected repository call: create label")),
+    findById: (
+      _organizationId: OrganizationId,
+      _requestedLabelId: Label["id"]
+    ) => Effect.succeed(Option.some(organizationLabel)),
+    getActiveLabelOrFail: (
+      _organizationId: OrganizationId,
+      _requestedLabelId: Label["id"]
+    ) => Effect.succeed(organizationLabel),
+    list: (_organizationId: OrganizationId) =>
       Effect.sync(() => {
-        calls.archiveLabel += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedLabelId).toBe(labelId);
+        calls.listLabels += 1;
 
-        return Option.some({
-          label: jobLabel,
-          removedWorkItemIds: options.archiveRemovedWorkItemIds ?? [],
-        });
+        return [organizationLabel];
       }),
+    update: (
+      _organizationId: OrganizationId,
+      _requestedLabelId: Label["id"],
+      _input: unknown
+    ) => Effect.die(new Error("Unexpected repository call: update label")),
+  });
+
+  const jobLabelAssignmentsRepository = JobLabelAssignmentsRepository.make({
     assignToJob: (input: {
-      readonly labelId: JobLabel["id"];
+      readonly labelId: Label["id"];
       readonly organizationId: OrganizationId;
       readonly workItemId: Job["id"];
     }) =>
@@ -666,35 +688,11 @@ function makeHarness(
 
         return {
           changed: options.assignLabelChanged ?? true,
-          label: jobLabel,
+          label: organizationLabel,
         };
       }),
-    create: (input: {
-      readonly name: JobLabel["name"];
-      readonly organizationId: OrganizationId;
-    }) =>
-      Effect.sync(() => {
-        calls.createLabel += 1;
-        expect(input).toStrictEqual({
-          name: "Waiting on PO",
-          organizationId: actor.organizationId,
-        });
-
-        return jobLabel;
-      }),
-    findById: (
-      _organizationId: OrganizationId,
-      _requestedLabelId: JobLabel["id"]
-    ) => Effect.succeed(Option.some(jobLabel)),
-    list: (organizationId: OrganizationId) =>
-      Effect.sync(() => {
-        calls.listLabels += 1;
-        expect(organizationId).toBe(actor.organizationId);
-
-        return [jobLabel];
-      }),
     removeFromJob: (input: {
-      readonly labelId: JobLabel["id"];
+      readonly labelId: Label["id"];
       readonly organizationId: OrganizationId;
       readonly workItemId: Job["id"];
     }) =>
@@ -708,21 +706,8 @@ function makeHarness(
 
         return {
           changed: options.removeLabelChanged ?? true,
-          label: jobLabel,
+          label: organizationLabel,
         };
-      }),
-    update: (
-      organizationId: OrganizationId,
-      requestedLabelId: JobLabel["id"],
-      input: { readonly name: JobLabel["name"] }
-    ) =>
-      Effect.sync(() => {
-        calls.updateLabel += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedLabelId).toBe(labelId);
-        expect(input).toStrictEqual({ name: "Waiting on PO" });
-
-        return Option.some(jobLabel);
       }),
   });
   const siteGeocoder = SiteGeocoder.make({
@@ -742,7 +727,8 @@ function makeHarness(
 
   const repositoriesLayer = Layer.mergeAll(
     Layer.succeed(JobsRepository, jobsRepository),
-    Layer.succeed(JobLabelsRepository, jobLabelsRepository),
+    Layer.succeed(JobLabelAssignmentsRepository, jobLabelAssignmentsRepository),
+    Layer.succeed(LabelsRepository, labelsRepository),
     Layer.succeed(SitesRepository, sitesRepository),
     Layer.succeed(ConfigurationRepository, configurationRepository),
     Layer.succeed(ContactsRepository, contactsRepository),
@@ -756,8 +742,8 @@ function makeHarness(
 
   const serviceDependencies = Layer.mergeAll(
     Layer.succeed(
-      CurrentJobsActor,
-      CurrentJobsActor.make({
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.make({
         get: () => Effect.succeed(actor),
       })
     ),
@@ -833,45 +819,7 @@ describe("jobs service", () => {
     expect(harness.calls.listOrganizationActivity).toBe(1);
   }, 10_000);
 
-  it("lets elevated users create, list, update, and archive organization job labels", async () => {
-    const harness = makeHarness();
-
-    await expect(
-      runJobsService(
-        Effect.gen(function* () {
-          const jobs = yield* JobsService;
-
-          const created = yield* jobs.createJobLabel({
-            name: "Waiting on PO",
-          });
-          const labels = yield* jobs.listJobLabels();
-          const updated = yield* jobs.updateJobLabel(labelId, {
-            name: "Waiting on PO",
-          });
-          const archived = yield* jobs.archiveJobLabel(labelId);
-
-          return { archived, created, labels, updated };
-        }),
-        harness
-      )
-    ).resolves.toStrictEqual({
-      archived: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
-      created: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
-      labels: {
-        labels: [
-          expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
-        ],
-      },
-      updated: expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
-    });
-
-    expect(harness.calls.createLabel).toBe(1);
-    expect(harness.calls.listLabels).toBe(1);
-    expect(harness.calls.updateLabel).toBe(1);
-    expect(harness.calls.archiveLabel).toBe(1);
-  }, 10_000);
-
-  it("records runtime-valid activity when assigning and removing a job label", async () => {
+  it("records runtime-valid activity when assigning and removing a label", async () => {
     const harness = makeHarness({
       lockedJob: makeJob({ labels: [] }),
     });
@@ -881,8 +829,8 @@ describe("jobs service", () => {
         Effect.gen(function* () {
           const jobs = yield* JobsService;
 
-          const assigned = yield* jobs.assignJobLabel(workItemId, { labelId });
-          const removed = yield* jobs.removeJobLabel(workItemId, labelId);
+          const assigned = yield* jobs.assignLabel(workItemId, { labelId });
+          const removed = yield* jobs.removeLabel(workItemId, labelId);
 
           return { assigned, removed };
         }),
@@ -918,33 +866,6 @@ describe("jobs service", () => {
     ]);
   }, 10_000);
 
-  it("records label removal activity for jobs affected by archived labels", async () => {
-    const harness = makeHarness({
-      archiveRemovedWorkItemIds: [workItemId],
-    });
-
-    await expect(
-      runJobsService(
-        Effect.gen(function* () {
-          const jobs = yield* JobsService;
-
-          return yield* jobs.archiveJobLabel(labelId);
-        }),
-        harness
-      )
-    ).resolves.toMatchObject({ id: labelId, name: "Waiting on PO" });
-
-    expect(harness.calls.archiveLabel).toBe(1);
-    expect(harness.calls.addActivity).toBe(1);
-    expect(harness.activityPayloads).toStrictEqual([
-      {
-        eventType: "label_removed",
-        labelId,
-        labelName: "Waiting on PO",
-      },
-    ]);
-  }, 10_000);
-
   it("lets assigned members assign and remove labels on their jobs", async () => {
     const actor = makeActor("member");
     const harness = makeHarness({
@@ -957,8 +878,8 @@ describe("jobs service", () => {
         Effect.gen(function* () {
           const jobs = yield* JobsService;
 
-          const assigned = yield* jobs.assignJobLabel(workItemId, { labelId });
-          const removed = yield* jobs.removeJobLabel(workItemId, labelId);
+          const assigned = yield* jobs.assignLabel(workItemId, { labelId });
+          const removed = yield* jobs.removeLabel(workItemId, labelId);
 
           return { assigned, removed };
         }),
@@ -994,8 +915,8 @@ describe("jobs service", () => {
         Effect.gen(function* () {
           const jobs = yield* JobsService;
 
-          yield* jobs.assignJobLabel(workItemId, { labelId });
-          yield* jobs.removeJobLabel(workItemId, labelId);
+          yield* jobs.assignLabel(workItemId, { labelId });
+          yield* jobs.removeLabel(workItemId, labelId);
         }),
         harness
       )
@@ -1218,14 +1139,6 @@ describe("jobs service", () => {
         Effect.gen(function* () {
           const jobs = yield* JobsService;
 
-          return yield* jobs.listJobLabels();
-        }),
-        harness
-      ),
-      runJobsServiceExit(
-        Effect.gen(function* () {
-          const jobs = yield* JobsService;
-
           return yield* jobs.getMemberOptions();
         }),
         harness
@@ -1237,10 +1150,6 @@ describe("jobs service", () => {
     );
 
     expect(failures).toStrictEqual([
-      new JobAccessDeniedError({
-        message:
-          "External collaborators cannot view organization-wide jobs data",
-      }),
       new JobAccessDeniedError({
         message:
           "External collaborators cannot view organization-wide jobs data",
@@ -1636,7 +1545,7 @@ describe("jobs service", () => {
 
     expect(harness.calls.findByIdForUpdate).toBe(1);
     expect(harness.calls.patch).toBe(0);
-    expect(harness.calls.linkContact).toBe(0);
+    expect(harness.calls.linkSiteContact).toBe(0);
     expect(harness.calls.addActivity).toBe(0);
   }, 10_000);
 

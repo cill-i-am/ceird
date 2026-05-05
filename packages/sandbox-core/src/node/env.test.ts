@@ -121,7 +121,7 @@ describe("loadSandboxSharedEnvironment()", () => {
         },
         readFile: (filePath) => {
           if (filePath.endsWith(".env")) {
-            return Effect.succeed('EMAIL_SENDER_NAME="Task Tracker Auth"');
+            return Effect.succeed('EMAIL_SENDER_NAME="Ceird Auth"');
           }
 
           return Effect.succeed("");
@@ -132,7 +132,7 @@ describe("loadSandboxSharedEnvironment()", () => {
     expect(result).toStrictEqual({
       EMAIL_SENDER: "auth@example.com",
       EMAIL_PROVIDER_TOKEN: "live-token",
-      EMAIL_SENDER_NAME: "Task Tracker Auth",
+      EMAIL_SENDER_NAME: "Ceird Auth",
     });
   }, 10_000);
 
@@ -149,7 +149,7 @@ describe("loadSandboxSharedEnvironment()", () => {
         },
         readFile: (filePath) => {
           if (filePath.endsWith(".env")) {
-            return Effect.succeed('EMAIL_SENDER_NAME="Task Tracker Auth"');
+            return Effect.succeed('EMAIL_SENDER_NAME="Ceird Auth"');
           }
 
           return Effect.succeed("");

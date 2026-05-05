@@ -40,7 +40,7 @@ or Postgres URL.
 11. Persist a ready or degraded registry record.
 
 When Portless aliases are healthy, URLs use the
-`*.task-tracker.localhost:1355` proxy. When aliases are unavailable, the CLI
+`*.ceird.localhost:1355` proxy. When aliases are unavailable, the CLI
 reports loopback fallback URLs.
 
 ## Sandbox-Aware Tests
@@ -98,7 +98,7 @@ Common sandbox variables include:
 | `BETTER_AUTH_SECRET`      | Stable sandbox auth secret.                              |
 | `DATABASE_URL`            | Sandbox Postgres URL.                                    |
 | `SITE_GEOCODER_MODE`      | Site geocoder behavior for local runs.                   |
-| `TASK_TRACKER_SANDBOX`    | Marks sandbox runtime.                                   |
+| `CEIRD_SANDBOX`           | Marks sandbox runtime.                                   |
 
 Cloudflare email API credentials are optional unless
 `AUTH_EMAIL_TRANSPORT=cloudflare-api`.
@@ -126,24 +126,23 @@ flags.
 
 ## Infra Configuration
 
-`packages/infra/src/stages.ts` loads deployment config. It supports both
-`CEIRD_*` names and selected `TASK_TRACKER_*` legacy names.
+`packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
 
-| Variable                                                                       | Default              | Purpose                                   |
-| ------------------------------------------------------------------------------ | -------------------- | ----------------------------------------- |
-| `CEIRD_INFRA_STAGE` / `TASK_TRACKER_INFRA_STAGE`                               | `production`         | `preview` or `production`.                |
-| `CEIRD_ZONE_NAME` / `TASK_TRACKER_ZONE_NAME`                                   | required             | Cloudflare zone.                          |
-| `CEIRD_APP_HOSTNAME` / `TASK_TRACKER_APP_HOSTNAME`                             | `app.<zone>`         | App hostname.                             |
-| `CEIRD_API_HOSTNAME` / `TASK_TRACKER_API_HOSTNAME`                             | `api.<zone>`         | API hostname.                             |
-| `AUTH_EMAIL_FROM`                                                              | required             | Sender email address.                     |
-| `AUTH_EMAIL_FROM_NAME`                                                         | `Ceird`              | Sender display name.                      |
-| `AUTH_EMAIL_TRANSPORT`                                                         | `cloudflare-binding` | Auth email transport mode.                |
-| `PLANETSCALE_ORGANIZATION`                                                     | required             | PlanetScale organization.                 |
-| `CEIRD_PLANETSCALE_DATABASE_NAME` / `TASK_TRACKER_PLANETSCALE_DATABASE_NAME`   | `ceird-<stage>`      | PlanetScale database name.                |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH` / `TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH` | `main`               | PlanetScale branch.                       |
-| `CEIRD_PLANETSCALE_REGION` / `TASK_TRACKER_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                  |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE` / `TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE`     | `PS-5`               | PlanetScale cluster size.                 |
-| `APPLY_MIGRATIONS` / `TASK_TRACKER_APPLY_MIGRATIONS`                           | `false`              | Run API Drizzle migrations during deploy. |
+| Variable                           | Default              | Purpose                                   |
+| ---------------------------------- | -------------------- | ----------------------------------------- |
+| `CEIRD_INFRA_STAGE`                | `production`         | `preview` or `production`.                |
+| `CEIRD_ZONE_NAME`                  | required             | Cloudflare zone.                          |
+| `CEIRD_APP_HOSTNAME`               | `app.<zone>`         | App hostname.                             |
+| `CEIRD_API_HOSTNAME`               | `api.<zone>`         | API hostname.                             |
+| `AUTH_EMAIL_FROM`                  | required             | Sender email address.                     |
+| `AUTH_EMAIL_FROM_NAME`             | `Ceird`              | Sender display name.                      |
+| `AUTH_EMAIL_TRANSPORT`             | `cloudflare-binding` | Auth email transport mode.                |
+| `PLANETSCALE_ORGANIZATION`         | required             | PlanetScale organization.                 |
+| `CEIRD_PLANETSCALE_DATABASE_NAME`  | `ceird-<stage>`      | PlanetScale database name.                |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH` | `main`               | PlanetScale branch.                       |
+| `CEIRD_PLANETSCALE_REGION`         | `eu-west`            | PlanetScale region slug.                  |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE`   | `PS-5`               | PlanetScale cluster size.                 |
+| `CEIRD_APPLY_MIGRATIONS`           | `false`              | Run API Drizzle migrations during deploy. |
 
 Resource names use `ceird-<stage>-<suffix>`.
 
@@ -160,10 +159,10 @@ pnpm infra:destroy
 From the infra package:
 
 ```bash
-pnpm --filter @task-tracker/infra check-types
-pnpm --filter @task-tracker/infra deploy
-pnpm --filter @task-tracker/infra destroy
-pnpm --filter @task-tracker/infra dev
+pnpm --filter @ceird/infra check-types
+pnpm --filter @ceird/infra deploy
+pnpm --filter @ceird/infra destroy
+pnpm --filter @ceird/infra dev
 ```
 
 Use the Stripe Projects CLI guidance in `AGENTS.md` when managing third-party

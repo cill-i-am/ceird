@@ -7,7 +7,7 @@ application. Keep package APIs narrow and source-backed. Move code into a
 package when more than one workspace needs the same runtime contract or domain
 primitive.
 
-## `@task-tracker/identity-core`
+## `@ceird/identity-core`
 
 Path: `packages/identity-core`
 
@@ -26,28 +26,59 @@ Use this package when app and API code need the same organization or membership
 contract. Do not put Better Auth adapter configuration or database queries here;
 those belong in `apps/api`.
 
-## `@task-tracker/jobs-core`
+## `@ceird/jobs-core`
 
 Path: `packages/jobs-core`
 
 Exports the shared jobs contract:
 
-- branded IDs for jobs, sites, contacts, service areas, rate cards, visits,
-  labels, collaborators, cost lines, activity, users, and organizations
+- branded IDs for jobs, contacts, rate cards, visits, collaborators, cost
+  lines, activity, users, and organizations
 - domain literals and schemas for job kind, status, priority, collaborator
-  access, rate-card line kind, site country, geocoding provider, cost line
-  fields, comments, visits, labels, and activity event types
+  access, rate-card line kind, cost line fields, comments, visits, and
+  activity event types
 - DTO schemas and inferred DTO types
 - cost summary helpers
 - typed `Schema.TaggedError` classes with HTTP status annotations
-- `JobsApi`, an Effect `HttpApi` contract consumed by both API handlers and app
-  clients
+- `JobsApi`, an Effect `HttpApi` contract for jobs, rate cards, job label
+  assignment, collaborators, visits, comments, costs, and activity
 
 This package is the source of truth for jobs payloads crossing the HTTP
 boundary. Keep SQL repositories, React state, and service-layer authorization
 out of this package.
 
-## `@task-tracker/sandbox-core`
+## `@ceird/sites-core`
+
+Path: `packages/sites-core`
+
+Exports the shared sites and service-area contract:
+
+- `SiteId` and `ServiceAreaId`
+- site country, geocoding provider, latitude, and longitude schemas
+- site create/update inputs, rich site option/detail DTOs, site options response
+- service-area create/update/list DTOs
+- typed site, service-area, access-denied, storage, and geocoding errors
+- `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
+
+Sites are independent shared organization data. Keep geocoding, SQL
+repositories, authorization, and React state in the API or app.
+
+## `@ceird/labels-core`
+
+Path: `packages/labels-core`
+
+Exports the shared organization-label contract:
+
+- `LabelId`
+- label name schema and `normalizeLabelName`
+- label create/update/list DTOs
+- typed label access-denied, storage, not-found, and name-conflict errors
+- `LabelsApi` and `LabelsApiGroup`
+
+Labels are organization-level labels. Jobs may assign labels, but the label
+definitions themselves are not job-owned.
+
+## `@ceird/sandbox-core`
 
 Path: `packages/sandbox-core`
 
@@ -66,7 +97,7 @@ Exports pure sandbox primitives:
 This package should stay side-effect-light. Process execution, Docker, and CLI
 presentation belong in `packages/sandbox-cli`.
 
-## `@task-tracker/sandbox-cli`
+## `@ceird/sandbox-cli`
 
 Path: `packages/sandbox-cli`
 
@@ -92,7 +123,7 @@ Docker runtime assets live under `packages/sandbox-cli/docker`:
 - `sandbox-bootstrap.mjs`
 - `sandbox-bootstrap.d.mts`
 
-## `@task-tracker/infra`
+## `@ceird/infra`
 
 Path: `packages/infra`
 
@@ -115,20 +146,32 @@ Current intended dependency direction:
 
 ```text
 apps/app
-  -> @task-tracker/identity-core
-  -> @task-tracker/jobs-core
-  -> @task-tracker/sandbox-core
+  -> @ceird/identity-core
+  -> @ceird/jobs-core
+  -> @ceird/sites-core
+  -> @ceird/labels-core
+  -> @ceird/sandbox-core
 
 apps/api
-  -> @task-tracker/identity-core
-  -> @task-tracker/jobs-core
-  -> @task-tracker/sandbox-core
+  -> @ceird/identity-core
+  -> @ceird/jobs-core
+  -> @ceird/sites-core
+  -> @ceird/labels-core
+  -> @ceird/sandbox-core
 
 packages/sandbox-cli
-  -> @task-tracker/sandbox-core
+  -> @ceird/sandbox-core
 
 packages/jobs-core
-  -> @task-tracker/identity-core
+  -> @ceird/identity-core
+  -> @ceird/sites-core
+  -> @ceird/labels-core
+
+packages/sites-core
+  -> @ceird/identity-core
+
+packages/labels-core
+  -> @ceird/identity-core
 
 packages/infra
   -> apps/api migrations and worker/app entrypoints by path
@@ -142,11 +185,13 @@ Each package has its own `test`, `build`, and `check-types` scripts where
 applicable:
 
 ```bash
-pnpm --filter @task-tracker/identity-core test
-pnpm --filter @task-tracker/jobs-core test
-pnpm --filter @task-tracker/sandbox-core test
-pnpm --filter @task-tracker/sandbox-cli test
-pnpm --filter @task-tracker/infra check-types
+pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/jobs-core test
+pnpm --filter @ceird/sites-core test
+pnpm --filter @ceird/labels-core test
+pnpm --filter @ceird/sandbox-core test
+pnpm --filter @ceird/sandbox-cli test
+pnpm --filter @ceird/infra check-types
 ```
 
 When changing a package contract, test both the package and the consuming app or

@@ -1,17 +1,17 @@
 import {
   isExternalOrganizationRole,
   isInternalOrganizationRole,
-} from "@task-tracker/identity-core";
-import { JobAccessDeniedError } from "@task-tracker/jobs-core";
+} from "@ceird/identity-core";
+import { JobAccessDeniedError } from "@ceird/jobs-core";
 import type {
   Job,
   JobCollaboratorAccessLevel,
   JobStatus,
   WorkItemIdType as WorkItemId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { Effect } from "effect";
 
-import type { JobsActor } from "./current-jobs-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
 
 const MEMBER_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[]>> = {
   blocked: ["in_progress"],
@@ -27,19 +27,19 @@ export interface JobAuthorizationGrant {
 }
 
 export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
-  "@task-tracker/domains/jobs/JobsAuthorization",
+  "@ceird/domains/jobs/JobsAuthorization",
   {
     accessors: true,
     effect: Effect.sync(() => {
       const ensureCanView = Effect.fn("JobsAuthorization.ensureCanView")(
-        (_actor: JobsActor) => Effect.void
+        (_actor: OrganizationActor) => Effect.void
       );
 
       const ensureCanViewJobDetail = Effect.fn(
         "JobsAuthorization.ensureCanViewJobDetail"
       )(
         (
-          actor: JobsActor,
+          actor: OrganizationActor,
           workItemId: WorkItemId,
           grant?: JobAuthorizationGrant
         ) =>
@@ -54,7 +54,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       );
 
       const ensureCanCreate = Effect.fn("JobsAuthorization.ensureCanCreate")(
-        (actor: JobsActor) =>
+        (actor: OrganizationActor) =>
           hasElevatedAccess(actor)
             ? Effect.void
             : Effect.fail(
@@ -64,21 +64,9 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
               )
       );
 
-      const ensureCanCreateSite = Effect.fn(
-        "JobsAuthorization.ensureCanCreateSite"
-      )((actor: JobsActor) =>
-        hasElevatedAccess(actor)
-          ? Effect.void
-          : Effect.fail(
-              makeAccessDenied(
-                "Only organization owners and admins can create sites"
-              )
-            )
-      );
-
       const ensureCanManageConfiguration = Effect.fn(
         "JobsAuthorization.ensureCanManageConfiguration"
-      )((actor: JobsActor) =>
+      )((actor: OrganizationActor) =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -90,7 +78,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       const ensureCanViewOrganizationActivity = Effect.fn(
         "JobsAuthorization.ensureCanViewOrganizationActivity"
-      )((actor: JobsActor) =>
+      )((actor: OrganizationActor) =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -101,7 +89,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       );
 
       const ensureCanPatch = Effect.fn("JobsAuthorization.ensureCanPatch")(
-        (actor: JobsActor, workItemId: WorkItemId) =>
+        (actor: OrganizationActor, workItemId: WorkItemId) =>
           hasElevatedAccess(actor)
             ? Effect.void
             : Effect.fail(
@@ -112,21 +100,9 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
               )
       );
 
-      const ensureCanManageLabels = Effect.fn(
-        "JobsAuthorization.ensureCanManageLabels"
-      )((actor: JobsActor) =>
-        hasElevatedAccess(actor)
-          ? Effect.void
-          : Effect.fail(
-              makeAccessDenied(
-                "Only organization owners and admins can manage job labels"
-              )
-            )
-      );
-
       const ensureCanManageCollaborators = Effect.fn(
         "JobsAuthorization.ensureCanManageCollaborators"
-      )((actor: JobsActor, workItemId?: WorkItemId) =>
+      )((actor: OrganizationActor, workItemId?: WorkItemId) =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -139,7 +115,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       const ensureCanAssignLabels = Effect.fn(
         "JobsAuthorization.ensureCanAssignLabels"
-      )((actor: JobsActor, job: Job) =>
+      )((actor: OrganizationActor, job: Job) =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -152,7 +128,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       );
 
       const ensureCanComment = Effect.fn("JobsAuthorization.ensureCanComment")((
-        actor: JobsActor,
+        actor: OrganizationActor,
         workItemId?: WorkItemId,
         grant?: JobAuthorizationGrant
       ) => {
@@ -172,7 +148,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       const ensureCanAddVisit = Effect.fn(
         "JobsAuthorization.ensureCanAddVisit"
-      )((actor: JobsActor, job: Job) =>
+      )((actor: OrganizationActor, job: Job) =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -186,7 +162,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       const ensureCanAddCostLine = Effect.fn(
         "JobsAuthorization.ensureCanAddCostLine"
-      )((actor: JobsActor, job: Job) =>
+      )((actor: OrganizationActor, job: Job) =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -200,7 +176,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
 
       const ensureCanTransition = Effect.fn(
         "JobsAuthorization.ensureCanTransition"
-      )((actor: JobsActor, job: Job, nextStatus: JobStatus) => {
+      )((actor: OrganizationActor, job: Job, nextStatus: JobStatus) => {
         if (hasElevatedAccess(actor)) {
           return Effect.void;
         }
@@ -236,7 +212,7 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       });
 
       const ensureCanReopen = Effect.fn("JobsAuthorization.ensureCanReopen")(
-        (actor: JobsActor, job: Job) =>
+        (actor: OrganizationActor, job: Job) =>
           hasElevatedAccess(actor) ||
           (isInternalActor(actor) && job.assigneeId === actor.userId)
             ? Effect.void
@@ -254,10 +230,8 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
         ensureCanAssignLabels,
         ensureCanComment,
         ensureCanCreate,
-        ensureCanCreateSite,
         ensureCanManageConfiguration,
         ensureCanManageCollaborators,
-        ensureCanManageLabels,
         ensureCanPatch,
         ensureCanReopen,
         ensureCanTransition,
@@ -269,15 +243,15 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
   }
 ) {}
 
-function hasElevatedAccess(actor: JobsActor): boolean {
+function hasElevatedAccess(actor: OrganizationActor): boolean {
   return actor.role === "owner" || actor.role === "admin";
 }
 
-function isInternalActor(actor: JobsActor): boolean {
+function isInternalActor(actor: OrganizationActor): boolean {
   return isInternalOrganizationRole(actor.role);
 }
 
-function isExternalActor(actor: JobsActor): boolean {
+function isExternalActor(actor: OrganizationActor): boolean {
   return isExternalOrganizationRole(actor.role);
 }
 

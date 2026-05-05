@@ -94,10 +94,10 @@ Run package tests directly when iterating:
 ```bash
 pnpm --filter app test
 pnpm --filter api test
-pnpm --filter @task-tracker/jobs-core test
-pnpm --filter @task-tracker/identity-core test
-pnpm --filter @task-tracker/sandbox-core test
-pnpm --filter @task-tracker/sandbox-cli test
+pnpm --filter @ceird/jobs-core test
+pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/sandbox-core test
+pnpm --filter @ceird/sandbox-cli test
 ```
 
 Run Playwright E2E tests against the sandbox:
@@ -185,7 +185,7 @@ pnpm api:test:with-sandbox -- src/domains/jobs/http.integration.test.ts
 For custom commands, set `API_TEST_DATABASE_URL` to the sandbox Postgres URL:
 
 ```bash
-API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5443/task_tracker pnpm --filter api test -- src/domains/jobs/http.integration.test.ts
+API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5443/ceird pnpm --filter api test -- src/domains/jobs/http.integration.test.ts
 ```
 
 ## Deployment
@@ -200,6 +200,6 @@ pnpm infra:destroy
 ```
 
 The Alchemy stack provisions PlanetScale Postgres, Cloudflare Hyperdrive,
-Cloudflare Workers/Vite, and auth email queues. Set `APPLY_MIGRATIONS=true` or
-`TASK_TRACKER_APPLY_MIGRATIONS=true` when the deploy should run Drizzle
+Cloudflare Workers/Vite, and auth email queues. Set
+`CEIRD_APPLY_MIGRATIONS=true` when the deploy should run Drizzle
 migrations through the infra stack.

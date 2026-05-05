@@ -1,5 +1,7 @@
 import { authSchema } from "../../domains/identity/authentication/schema.js";
 import { jobsSchema } from "../../domains/jobs/schema.js";
+import { labelsSchema } from "../../domains/labels/schema.js";
+import { sitesSchema } from "../../domains/sites/schema.js";
 
 export {
   account,
@@ -21,19 +23,13 @@ export {
 export {
   contact,
   contactRelations,
-  jobLabel,
-  jobLabelRelations,
   jobsSchema,
   rateCard,
   rateCardLine,
   rateCardLineRelations,
   rateCardRelations,
-  serviceArea,
-  serviceAreaRelations,
-  site,
   siteContact,
   siteContactRelations,
-  siteRelations,
   workItem,
   workItemActivity,
   workItemActivityRelations,
@@ -49,13 +45,29 @@ export {
   workItemVisit,
   workItemVisitRelations,
 } from "../../domains/jobs/schema.js";
+export {
+  label,
+  labelRelations,
+  labelsSchema,
+} from "../../domains/labels/schema.js";
+export {
+  serviceArea,
+  serviceAreaRelations,
+  site,
+  siteRelations,
+  sitesSchema,
+} from "../../domains/sites/schema.js";
 
 export const databaseSchema = {
   ...authSchema,
+  ...labelsSchema,
+  ...sitesSchema,
   ...jobsSchema,
 };
 
 export const appSchema = {
+  ...labelsSchema,
+  ...sitesSchema,
   ...jobsSchema,
 } as const;
 

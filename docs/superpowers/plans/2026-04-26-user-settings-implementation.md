@@ -71,7 +71,7 @@ it("enables Better Auth's verified email change flow", () => {
   const config = makeAuthenticationConfig({
     baseUrl: "http://127.0.0.1:3001",
     secret: "super-secret-value",
-    databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+    databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
   });
 
   expect(config.user.changeEmail).toStrictEqual({
@@ -663,7 +663,7 @@ export function UserSettingsPage({
       <AppPageHeader
         eyebrow="Account"
         title="Settings"
-        description="Update the account details Task Tracker uses for sign in, invitations, and recovery."
+        description="Update the account details Ceird uses for sign in, invitations, and recovery."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -755,7 +755,7 @@ Wire the forms in that JSX to `profileForm`, `emailForm`, and `passwordForm` usi
 
 ```txt
 Page wrapper: className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8"
-Header: <AppPageHeader eyebrow="Account" title="Settings" description="Update the account details Task Tracker uses for sign in, invitations, and recovery." />
+Header: <AppPageHeader eyebrow="Account" title="Settings" description="Update the account details Ceird uses for sign in, invitations, and recovery." />
 Grid: className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
 Panel 1 title: Profile
 Panel 1 fields: Display name, Avatar image URL

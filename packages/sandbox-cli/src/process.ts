@@ -129,7 +129,7 @@ export function isPortAvailable(port: number): Promise<boolean> {
 }
 
 export class SandboxProcessService extends Effect.Service<SandboxProcessService>()(
-  "@task-tracker/sandbox-cli/SandboxProcessService",
+  "@ceird/sandbox-cli/SandboxProcessService",
   {
     accessors: true,
     effect: Effect.succeed<SandboxProcess>({

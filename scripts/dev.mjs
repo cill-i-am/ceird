@@ -4,8 +4,8 @@ import { pathToFileURL } from "node:url";
 import { repairPortlessRoutesFile } from "./portless-state.mjs";
 
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const DEFAULT_AUTH_EMAIL_FROM = "auth@task-tracker.localhost";
-const DEFAULT_AUTH_EMAIL_FROM_NAME = "Task Tracker";
+const DEFAULT_AUTH_EMAIL_FROM = "auth@ceird.localhost";
+const DEFAULT_AUTH_EMAIL_FROM_NAME = "Ceird";
 const DEFAULT_SITE_GEOCODER_MODE = "stub";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
@@ -15,18 +15,17 @@ export function createDevEnvironment(baseEnvironment = process.env) {
   return {
     ...baseEnvironment,
     API_ORIGIN:
-      baseEnvironment.API_ORIGIN ??
-      `https://api.task-tracker.localhost:${proxyPort}`,
+      baseEnvironment.API_ORIGIN ?? `https://api.ceird.localhost:${proxyPort}`,
     AUTH_APP_ORIGIN:
       baseEnvironment.AUTH_APP_ORIGIN ??
-      `https://app.task-tracker.localhost:${proxyPort}`,
+      `https://app.ceird.localhost:${proxyPort}`,
     AUTH_EMAIL_FROM: baseEnvironment.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME:
       baseEnvironment.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME,
     AUTH_EMAIL_TRANSPORT: authEmailTransport,
     BETTER_AUTH_BASE_URL:
       baseEnvironment.BETTER_AUTH_BASE_URL ??
-      `https://api.task-tracker.localhost:${proxyPort}`,
+      `https://api.ceird.localhost:${proxyPort}`,
     PORTLESS_PORT: proxyPort,
     SITE_GEOCODER_MODE:
       baseEnvironment.SITE_GEOCODER_MODE ?? DEFAULT_SITE_GEOCODER_MODE,

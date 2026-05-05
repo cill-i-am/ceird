@@ -1,5 +1,26 @@
 "use client";
-
+import {
+  CONTACT_NOT_FOUND_ERROR_TAG,
+  ContactEmailSchema,
+  ContactNameSchema,
+  ContactNotesSchema,
+  JobExternalReferenceSchema,
+} from "@ceird/jobs-core";
+import type {
+  ContactIdType,
+  CreateJobInput,
+  JobContactOption,
+  JobPriority,
+} from "@ceird/jobs-core";
+import {
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+  SITE_NOT_FOUND_ERROR_TAG,
+} from "@ceird/sites-core";
+import type {
+  ServiceAreaOption,
+  SiteIdType,
+  SiteOption,
+} from "@ceird/sites-core";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
@@ -16,24 +37,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ContactEmailSchema,
-  ContactNameSchema,
-  ContactNotesSchema,
-  CONTACT_NOT_FOUND_ERROR_TAG,
-  JobExternalReferenceSchema,
-  SITE_GEOCODING_FAILED_ERROR_TAG,
-  SITE_NOT_FOUND_ERROR_TAG,
-} from "@task-tracker/jobs-core";
-import type {
-  ContactIdType,
-  CreateJobInput,
-  JobPriority,
-  JobContactOption,
-  ServiceAreaOption,
-  JobSiteOption,
-  SiteIdType,
-} from "@task-tracker/jobs-core";
 import { Cause, Exit, ParseResult } from "effect";
 import * as React from "react";
 
@@ -884,7 +887,7 @@ function ResponsiveCreateOverlay({
   );
 }
 
-function buildSiteSelectionGroups(sites: readonly JobSiteOption[]) {
+function buildSiteSelectionGroups(sites: readonly SiteOption[]) {
   const hasExistingSites = sites.length > 0;
 
   return [
@@ -1171,7 +1174,7 @@ function resolveCreateSelectionIds(
   values: JobsCreateFormState,
   options: {
     readonly contacts: readonly JobContactOption[];
-    readonly sites: readonly JobSiteOption[];
+    readonly sites: readonly SiteOption[];
   }
 ): JobsCreateSelectionIds {
   return {

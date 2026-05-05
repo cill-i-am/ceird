@@ -185,9 +185,7 @@ test("teardown propagates sandbox down failures", async (t) => {
 });
 
 async function createFixture() {
-  const tempDir = await mkdtemp(
-    path.join(os.tmpdir(), "task-tracker-local-env-")
-  );
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "ceird-local-env-"));
   const repoDir = path.join(tempDir, "repo");
   const binDir = path.join(tempDir, "bin");
   const callLog = path.join(tempDir, "calls.log");

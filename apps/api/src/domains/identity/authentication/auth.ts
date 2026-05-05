@@ -1,18 +1,18 @@
 /* eslint-disable max-classes-per-file, typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 
-import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import {
   isAdministrativeOrganizationRole,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeUpdateOrganizationInput,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
 import type {
   OrganizationRole,
   PublicInvitationPreview,
-} from "@task-tracker/identity-core";
+} from "@ceird/identity-core";
+import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
@@ -422,7 +422,7 @@ function makeAuthenticationBackgroundTaskHandler() {
 }
 
 export class AuthenticationBackgroundTaskHandler extends Context.Tag(
-  "@task-tracker/domains/identity/authentication/AuthenticationBackgroundTaskHandler"
+  "@ceird/domains/identity/authentication/AuthenticationBackgroundTaskHandler"
 )<AuthenticationBackgroundTaskHandler, (task: Promise<unknown>) => void>() {}
 
 export const AuthenticationBackgroundTaskHandlerLive = Layer.succeed(
@@ -730,8 +730,12 @@ function withAuthenticationCors(
 }
 
 export class Authentication extends Effect.Service<Authentication>()(
-  "@task-tracker/domains/identity/authentication/Authentication",
+  "@ceird/domains/identity/authentication/Authentication",
   {
+    dependencies: [
+      AuthenticationEmailSchedulerLive,
+      AuthenticationBackgroundTaskHandlerLive,
+    ],
     effect: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
@@ -769,49 +773,46 @@ export class Authentication extends Effect.Service<Authentication>()(
   }
 ) {}
 
-export const makeAuthenticationHttpLive = (
-  emailSchedulerLive: Layer.Layer<
-    AuthenticationEmailScheduler,
-    any,
-    any
-  > = AuthenticationEmailSchedulerLive,
+export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
+  Effect.gen(function* mountAuthenticationHttp() {
+    const auth = yield* Authentication;
+    const { authDb } = yield* AppDatabase;
+    const config = yield* loadAuthenticationConfig;
+
+    // Effect strips mount prefixes by default. Better Auth expects to receive
+    // its configured basePath, so we preserve the full /api/auth prefix here.
+    yield* router.mountApp(
+      "/api/auth",
+      HttpApp.fromWebHandler(
+        withAuthenticationCors(auth.handler, config.trustedOrigins)
+      ),
+      {
+        includePrefix: true,
+      }
+    );
+
+    yield* router.mountApp(
+      "/api/public",
+      HttpApp.fromWebHandler(
+        withAuthenticationCors(
+          makePublicInvitationPreviewHandler(authDb),
+          config.trustedOrigins
+        )
+      ),
+      {
+        includePrefix: true,
+      }
+    );
+  })
+);
+
+export const makeAuthenticationLive = (
+  emailSchedulerLive: typeof AuthenticationEmailSchedulerLive = AuthenticationEmailSchedulerLive,
   backgroundTaskHandlerLive: Layer.Layer<AuthenticationBackgroundTaskHandler> = AuthenticationBackgroundTaskHandlerLive
 ) =>
-  HttpApiBuilder.Router.use((router) =>
-    Effect.gen(function* mountAuthenticationHttp() {
-      const auth = yield* Authentication;
-      const { authDb } = yield* AppDatabase;
-      const config = yield* loadAuthenticationConfig;
-
-      // Effect strips mount prefixes by default. Better Auth expects to receive
-      // its configured basePath, so we preserve the full /api/auth prefix here.
-      yield* router.mountApp(
-        "/api/auth",
-        HttpApp.fromWebHandler(
-          withAuthenticationCors(auth.handler, config.trustedOrigins)
-        ),
-        {
-          includePrefix: true,
-        }
-      );
-
-      yield* router.mountApp(
-        "/api/public",
-        HttpApp.fromWebHandler(
-          withAuthenticationCors(
-            makePublicInvitationPreviewHandler(authDb),
-            config.trustedOrigins
-          )
-        ),
-        {
-          includePrefix: true,
-        }
-      );
-    })
-  ).pipe(
-    Layer.provide(Authentication.Default),
+  Authentication.DefaultWithoutDependencies.pipe(
     Layer.provide(emailSchedulerLive),
     Layer.provide(backgroundTaskHandlerLive)
   );
 
-export const AuthenticationHttpLive = makeAuthenticationHttpLive();
+export const AuthenticationLive = makeAuthenticationLive();

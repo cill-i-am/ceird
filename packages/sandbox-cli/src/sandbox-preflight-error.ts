@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 export const SANDBOX_PREFLIGHT_ERROR_TAG =
-  "@task-tracker/sandbox-cli/SandboxPreflightError" as const;
+  "@ceird/sandbox-cli/SandboxPreflightError" as const;
 
 const SandboxPreflightErrorContext = {
   causeTag: Schema.optional(Schema.String),

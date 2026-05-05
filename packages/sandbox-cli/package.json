@@ -1,5 +1,5 @@
 {
-  "name": "@task-tracker/sandbox-cli",
+  "name": "@ceird/sandbox-cli",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,10 +14,10 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
+    "@ceird/sandbox-core": "workspace:*",
     "@effect/cli": "^0.75.1",
     "@effect/platform": "^0.96.1",
     "@effect/platform-node": "^0.106.0",
-    "@task-tracker/sandbox-core": "workspace:*",
     "effect": "^3.21.2"
   },
   "devDependencies": {

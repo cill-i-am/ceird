@@ -1,13 +1,13 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type {
   ContactIdType,
   CreateJobResponse,
-  SiteIdType,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { SiteIdType } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
+import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -32,13 +32,13 @@ const existingJobId = "33333333-3333-4333-8333-333333333333" as WorkItemIdType;
 const organizationId = decodeOrganizationId("org_123");
 
 const {
-  mockedMakeBrowserJobsClient,
+  mockedMakeBrowserAppApiClient,
   mockedNavigate,
   mockedCreateJob,
   mockedGetJobOptions,
   mockedListJobs,
 } = vi.hoisted(() => ({
-  mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
+  mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedNavigate: vi.fn<NavigateMock>(),
   mockedCreateJob: vi.fn<EffectClientMock>(),
   mockedGetJobOptions: vi.fn<EffectClientMock>(),
@@ -106,18 +106,18 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock("./jobs-client", async () => {
+vi.mock("#/features/api/app-api-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
 
   return {
-    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-    provideBrowserJobsHttp: (effect: unknown) => effect,
-    runBrowserJobsRequest: (
+    makeBrowserAppApiClient: mockedMakeBrowserAppApiClient,
+    provideBrowserAppApiHttp: (effect: unknown) => effect,
+    runBrowserAppApiRequest: (
       _operation: string,
       execute: (client: unknown) => unknown
     ) =>
-      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+      (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
           (client) => execute(client) as Effect.Effect<unknown, unknown>
         )
@@ -128,12 +128,12 @@ vi.mock("./jobs-client", async () => {
 describe("jobs create sheet integration", () => {
   beforeEach(() => {
     mockedNavigate.mockReset();
-    mockedMakeBrowserJobsClient.mockReset();
+    mockedMakeBrowserAppApiClient.mockReset();
     mockedCreateJob.mockReset();
     mockedGetJobOptions.mockReset();
     mockedListJobs.mockReset();
 
-    mockedMakeBrowserJobsClient.mockImplementation(() =>
+    mockedMakeBrowserAppApiClient.mockImplementation(() =>
       Effect.succeed({
         jobs: {
           createJob: mockedCreateJob,

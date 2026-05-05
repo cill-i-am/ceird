@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { SandboxRuntimeAssets } from "@task-tracker/sandbox-core";
-import type { SandboxRuntimeAssetsShape as SandboxRuntimeAssetsType } from "@task-tracker/sandbox-core";
+import { SandboxRuntimeAssets } from "@ceird/sandbox-core";
+import type { SandboxRuntimeAssetsShape as SandboxRuntimeAssetsType } from "@ceird/sandbox-core";
 import { Effect, Schema } from "effect";
 
 import type { SandboxPreflightError } from "./sandbox-preflight-error.js";
@@ -45,9 +45,9 @@ export function buildSandboxRuntimeAssets(input: {
   const lockfileSuffix = input.lockfileHash.slice(0, HASH_PREFIX_LENGTH);
 
   return Schema.decodeUnknownSync(SandboxRuntimeAssets)({
-    devImage: `tt-sbx-${input.repositorySlug}-dev:${assetSuffix}`,
-    nodeModulesVolume: `tt-sbx-node-modules-${assetSuffix}-${lockfileSuffix}`,
-    pnpmStoreVolume: "tt-sbx-pnpm-store",
+    devImage: `ceird-sbx-${input.repositorySlug}-dev:${assetSuffix}`,
+    nodeModulesVolume: `ceird-sbx-node-modules-${assetSuffix}-${lockfileSuffix}`,
+    pnpmStoreVolume: "ceird-sbx-pnpm-store",
   });
 }
 

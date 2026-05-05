@@ -1,6 +1,5 @@
-/* oxlint-disable unicorn/no-array-sort */
-
 "use client";
+/* oxlint-disable unicorn/no-array-sort */
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import * as React from "react";

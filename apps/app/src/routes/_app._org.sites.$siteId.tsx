@@ -1,6 +1,6 @@
+import { SiteId } from "@ceird/sites-core";
+import type { SiteIdType } from "@ceird/sites-core";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { SiteId } from "@task-tracker/jobs-core";
-import type { SiteIdType } from "@task-tracker/jobs-core";
 import { Schema } from "effect";
 
 import { SitesDetailSheet } from "#/features/sites/sites-detail-sheet";

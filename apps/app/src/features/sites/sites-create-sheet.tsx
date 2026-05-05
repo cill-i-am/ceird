@@ -1,13 +1,12 @@
 "use client";
-
+import {
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+} from "@ceird/sites-core";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
-  SITE_GEOCODING_FAILED_ERROR_TAG,
-} from "@task-tracker/jobs-core";
 import { Cause, Exit } from "effect";
 import * as React from "react";
 
@@ -21,7 +20,6 @@ import {
   DrawerTitle,
 } from "#/components/ui/drawer";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
-import { jobsOptionsStateAtom } from "#/features/jobs/jobs-state";
 
 import {
   SiteCreateFields,
@@ -35,7 +33,7 @@ import type {
   SiteCreateDraft,
   SiteCreateFieldErrors as SiteCreateDraftFieldErrors,
 } from "./site-create-form";
-import { createSiteMutationAtom } from "./sites-state";
+import { createSiteMutationAtom, sitesOptionsStateAtom } from "./sites-state";
 
 export type SitesCreateFormState = SiteCreateDraft;
 export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
@@ -49,7 +47,7 @@ export const buildSiteInput = buildCreateSiteInputFromDraft;
 
 export function SitesCreateSheet() {
   const navigate = useNavigate({ from: "/sites/new" });
-  const options = useAtomValue(jobsOptionsStateAtom).data;
+  const options = useAtomValue(sitesOptionsStateAtom).data;
   const createSite = useAtomSet(createSiteMutationAtom, {
     mode: "promiseExit",
   });

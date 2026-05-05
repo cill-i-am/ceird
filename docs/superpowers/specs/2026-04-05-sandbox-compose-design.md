@@ -191,7 +191,7 @@ Examples:
 
 - `SANDBOX_ID`
 - explicit sandbox name and hostname slug
-- `TASK_TRACKER_SANDBOX`
+- `CEIRD_SANDBOX`
 - `HOST`
 - `PORT`
 - `DATABASE_URL`

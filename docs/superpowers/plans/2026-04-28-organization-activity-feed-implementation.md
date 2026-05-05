@@ -76,7 +76,7 @@ Add these schemas near the existing activity DTOs in `packages/jobs-core/src/dto
 
 ```ts
 export const OrganizationActivityCursor = Schema.String.pipe(
-  Schema.brand("@task-tracker/jobs-core/OrganizationActivityCursor")
+  Schema.brand("@ceird/jobs-core/OrganizationActivityCursor")
 );
 export type OrganizationActivityCursor = Schema.Schema.Type<
   typeof OrganizationActivityCursor
@@ -158,7 +158,7 @@ OrganizationActivityQuery,
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core check-types
 ```
 
 Expected: PASS.
@@ -195,7 +195,7 @@ behind job-id routes:
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core check-types
 ```
 
 Expected: PASS.
@@ -641,7 +641,7 @@ Expected: PASS.
 - [ ] **Step 1: Extend server helper types**
 
 Import `OrganizationActivityQuery` and
-`OrganizationActivityListResponse` from `@task-tracker/jobs-core`.
+`OrganizationActivityListResponse` from `@ceird/jobs-core`.
 
 - [ ] **Step 2: Add browser/server helper functions**
 
@@ -701,7 +701,7 @@ Expected: PASS after the API contract is visible to the app.
 Create `activity-formatting.ts`:
 
 ```ts
-import type { JobActivityPayload } from "@task-tracker/jobs-core";
+import type { JobActivityPayload } from "@ceird/jobs-core";
 
 export function describeJobActivity(
   actorName: string | undefined,
@@ -1004,7 +1004,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @task-tracker/jobs-core check-types
+pnpm --filter @ceird/jobs-core check-types
 pnpm --filter api check-types
 pnpm --filter app check-types
 ```

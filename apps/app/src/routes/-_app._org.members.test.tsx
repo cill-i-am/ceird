@@ -1,6 +1,6 @@
+import type { OrganizationRole } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 

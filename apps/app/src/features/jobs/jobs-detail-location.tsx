@@ -1,5 +1,4 @@
 "use client";
-
 import { Location01Icon, MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import * as React from "react";
@@ -12,14 +11,14 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "#/components/ui/empty";
-
-import { JobsDetailLocationMapPreview } from "./jobs-detail-location-map-preview";
 import {
   buildGoogleMapsUrl,
   buildSiteAddressLines,
   hasSiteCoordinates,
-} from "./jobs-location";
-import type { SiteLocationLike } from "./jobs-location";
+} from "#/features/sites/site-location";
+import type { SiteLocationLike } from "#/features/sites/site-location";
+
+import { JobsDetailLocationMapPreview } from "./jobs-detail-location-map-preview";
 
 interface JobsDetailLocationProps {
   readonly site?: SiteLocationLike;

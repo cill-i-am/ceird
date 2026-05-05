@@ -1,5 +1,5 @@
 {
-  "name": "@task-tracker/jobs-core",
+  "name": "@ceird/jobs-core",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,8 +11,10 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
+    "@ceird/identity-core": "workspace:*",
+    "@ceird/labels-core": "workspace:*",
+    "@ceird/sites-core": "workspace:*",
     "@effect/platform": "^0.96.1",
-    "@task-tracker/identity-core": "workspace:*",
     "effect": "^3.21.2"
   },
   "devDependencies": {

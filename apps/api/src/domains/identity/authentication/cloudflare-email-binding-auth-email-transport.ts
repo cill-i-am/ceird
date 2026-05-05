@@ -23,7 +23,7 @@ export interface CloudflareEmailBindingSendResult {
 }
 
 export class CloudflareEmailBinding extends Context.Tag(
-  "@task-tracker/platform/cloudflare/CloudflareEmailBinding"
+  "@ceird/platform/cloudflare/CloudflareEmailBinding"
 )<
   CloudflareEmailBinding,
   {

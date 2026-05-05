@@ -1,6 +1,6 @@
 # Sandbox CLI
 
-`@task-tracker/sandbox-cli` implements the per-worktree sandbox used for local
+`@ceird/sandbox-cli` implements the per-worktree sandbox used for local
 app/API/Postgres development.
 
 ## Commands
@@ -23,10 +23,10 @@ machine-readable URL payload instead of the human-readable status view.
 Run directly from the package when working on the CLI:
 
 ```bash
-pnpm --filter @task-tracker/sandbox-cli sandbox:up
-pnpm --filter @task-tracker/sandbox-cli test
-pnpm --filter @task-tracker/sandbox-cli check-types
-pnpm --filter @task-tracker/sandbox-cli build
+pnpm --filter @ceird/sandbox-cli sandbox:up
+pnpm --filter @ceird/sandbox-cli test
+pnpm --filter @ceird/sandbox-cli check-types
+pnpm --filter @ceird/sandbox-cli build
 ```
 
 ## Important Paths

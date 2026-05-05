@@ -1,14 +1,13 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type {
   CommentIdType,
   ContactIdType,
   JobDetailResponse,
-  ServiceAreaIdType,
-  SiteIdType,
   UserIdType,
   WorkItemIdType,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";

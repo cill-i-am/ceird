@@ -1,7 +1,6 @@
 "use client";
-
+import type { ServiceArea } from "@ceird/sites-core";
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
-import type { ServiceArea } from "@task-tracker/jobs-core";
 import { Exit } from "effect";
 import * as React from "react";
 

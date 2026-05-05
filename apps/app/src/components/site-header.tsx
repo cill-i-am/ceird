@@ -1,7 +1,6 @@
 "use client";
-
+import type { OrganizationRole } from "@ceird/identity-core";
 import { Link, useMatches, useRouterState } from "@tanstack/react-router";
-import type { OrganizationRole } from "@task-tracker/identity-core";
 import * as React from "react";
 
 import ThemeToggle from "#/components/ThemeToggle";

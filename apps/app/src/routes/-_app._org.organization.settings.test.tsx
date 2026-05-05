@@ -1,28 +1,25 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
+import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type { OrganizationRole } from "@task-tracker/identity-core";
-import type {
-  JobLabelIdType,
-  JobLabelsResponse,
-} from "@task-tracker/jobs-core";
 
 const organizationId = decodeOrganizationId("org_123");
 
-const { mockedGetCurrentServerJobLabels } = vi.hoisted(() => ({
-  mockedGetCurrentServerJobLabels: vi.fn<() => Promise<JobLabelsResponse>>(),
+const { mockedGetCurrentServerLabels } = vi.hoisted(() => ({
+  mockedGetCurrentServerLabels: vi.fn<() => Promise<LabelsResponse>>(),
 }));
 
-vi.mock(import("#/features/jobs/jobs-server"), () => ({
-  getCurrentServerJobLabels: mockedGetCurrentServerJobLabels,
+vi.mock(import("#/features/api/app-api-server"), () => ({
+  getCurrentServerLabels: mockedGetCurrentServerLabels,
 }));
 
 describe("settings route loader", () => {
   beforeEach(() => {
-    const jobLabels: JobLabelsResponse = {
+    const organizationLabels: LabelsResponse = {
       labels: [
         {
-          id: "11111111-1111-4111-8111-111111111111" as JobLabelIdType,
+          id: "11111111-1111-4111-8111-111111111111" as LabelIdType,
           name: "Urgent",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -30,7 +27,7 @@ describe("settings route loader", () => {
       ],
     };
 
-    mockedGetCurrentServerJobLabels.mockResolvedValue(jobLabels);
+    mockedGetCurrentServerLabels.mockResolvedValue(organizationLabels);
   });
 
   afterEach(() => {
@@ -45,24 +42,27 @@ describe("settings route loader", () => {
     async (role) => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
+      const context = {
+        activeOrganizationId: organizationId,
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: organizationId,
+        },
+        currentOrganizationRole: role,
+      } as const;
 
-      await expect(
-        loadSettingsRoute({
-          activeOrganizationId: organizationId,
-          activeOrganizationSync: {
-            required: false,
-            targetOrganizationId: organizationId,
-          },
-          currentOrganizationRole: role,
-        })
-      ).resolves.toStrictEqual({
-        jobLabels: [
+      expect(() => assertSettingsRouteAccess(context)).not.toThrow();
+
+      await expect(loadSettingsRoute(context)).resolves.toStrictEqual({
+        organizationLabels: [
           expect.objectContaining({
             name: "Urgent",
           }),
         ],
       });
-      expect(mockedGetCurrentServerJobLabels).toHaveBeenCalledOnce();
+      expect(mockedGetCurrentServerLabels).toHaveBeenCalledOnce();
     }
   );
 
@@ -72,12 +72,12 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async (role) => {
-      const { loadSettingsRoute } =
+      const { assertSettingsRouteAccess } =
         await import("./_app._org.organization.settings");
       let result: unknown;
 
       try {
-        loadSettingsRoute({
+        assertSettingsRouteAccess({
           activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: false,
@@ -93,7 +93,7 @@ describe("settings route loader", () => {
         options: { to: "/" },
       });
       expect(result).toSatisfy(isRedirect);
-      expect(mockedGetCurrentServerJobLabels).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 
@@ -105,20 +105,22 @@ describe("settings route loader", () => {
     async () => {
       const { loadSettingsRoute } =
         await import("./_app._org.organization.settings");
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
+      const context = {
+        activeOrganizationId: organizationId,
+        activeOrganizationSync: {
+          required: true,
+          targetOrganizationId: organizationId,
+        },
+        currentOrganizationRole: undefined,
+      } as const;
 
-      expect(
-        loadSettingsRoute({
-          activeOrganizationId: organizationId,
-          activeOrganizationSync: {
-            required: true,
-            targetOrganizationId: organizationId,
-          },
-          currentOrganizationRole: undefined,
-        })
-      ).toStrictEqual({
-        jobLabels: [],
+      expect(() => assertSettingsRouteAccess(context)).not.toThrow();
+      expect(loadSettingsRoute(context)).toStrictEqual({
+        organizationLabels: [],
       });
-      expect(mockedGetCurrentServerJobLabels).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 });

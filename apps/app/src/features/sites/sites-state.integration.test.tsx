@@ -1,30 +1,27 @@
-/* oxlint-disable vitest/prefer-import-in-mock */
-import {
-  RegistryProvider,
-  useAtomSet,
-  useAtomValue,
-} from "@effect-atom/atom-react";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import type {
   CreateSiteInput,
   CreateSiteResponse,
   SiteIdType,
   UpdateSiteInput,
   UpdateSiteResponse,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
+/* oxlint-disable vitest/prefer-import-in-mock */
+import {
+  RegistryProvider,
+  useAtomSet,
+  useAtomValue,
+} from "@effect-atom/atom-react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
 
 import {
-  jobsOptionsStateAtom,
-  seedJobsOptionsState,
-} from "#/features/jobs/jobs-state";
-
-import {
   createSiteMutationAtom,
+  seedSitesOptionsState,
   sitesNoticeAtom,
+  sitesOptionsStateAtom,
   updateSiteMutationAtomFamily,
 } from "./sites-state";
 
@@ -37,27 +34,27 @@ const createdSiteId = "22222222-2222-4222-8222-222222222222" as SiteIdType;
 const {
   mockedCreateSite,
   mockedGetSiteOptions,
-  mockedMakeBrowserJobsClient,
+  mockedMakeBrowserAppApiClient,
   mockedUpdateSite,
 } = vi.hoisted(() => ({
   mockedCreateSite: vi.fn<EffectClientMock>(),
   mockedGetSiteOptions: vi.fn<EffectClientMock>(),
-  mockedMakeBrowserJobsClient: vi.fn<EffectClientMock>(),
+  mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedUpdateSite: vi.fn<EffectClientMock>(),
 }));
 
-vi.mock("#/features/jobs/jobs-client", async () => {
+vi.mock("#/features/api/app-api-client", async () => {
   const { Effect: EffectModule } =
     await vi.importActual<typeof EffectPackage>("effect");
 
   return {
-    makeBrowserJobsClient: mockedMakeBrowserJobsClient,
-    provideBrowserJobsHttp: (effect: unknown) => effect,
-    runBrowserJobsRequest: (
+    makeBrowserAppApiClient: mockedMakeBrowserAppApiClient,
+    provideBrowserAppApiHttp: (effect: unknown) => effect,
+    runBrowserAppApiRequest: (
       _operation: string,
       execute: (client: unknown) => unknown
     ) =>
-      (mockedMakeBrowserJobsClient() as Effect.Effect<unknown, unknown>).pipe(
+      (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
           (client) => execute(client) as Effect.Effect<unknown, unknown>
         )
@@ -69,10 +66,10 @@ describe("sites state integration", () => {
   beforeEach(() => {
     mockedCreateSite.mockReset();
     mockedGetSiteOptions.mockReset();
-    mockedMakeBrowserJobsClient.mockReset();
+    mockedMakeBrowserAppApiClient.mockReset();
     mockedUpdateSite.mockReset();
 
-    mockedMakeBrowserJobsClient.mockImplementation(() =>
+    mockedMakeBrowserAppApiClient.mockImplementation(() =>
       Effect.succeed({
         sites: {
           createSite: mockedCreateSite,
@@ -159,11 +156,8 @@ function renderSitesStateProbe() {
     <RegistryProvider
       initialValues={[
         [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(organizationId, {
-            contacts: [],
-            labels: [],
-            members: [],
+          sitesOptionsStateAtom,
+          seedSitesOptionsState(organizationId, {
             serviceAreas: [],
             sites: [buildSite(existingSiteId, "Existing Site")],
           }),
@@ -182,7 +176,7 @@ function SitesStateProbe() {
   const updateSite = useAtomSet(updateSiteMutationAtomFamily(existingSiteId), {
     mode: "promiseExit",
   });
-  const options = useAtomValue(jobsOptionsStateAtom).data;
+  const options = useAtomValue(sitesOptionsStateAtom).data;
   const notice = useAtomValue(sitesNoticeAtom);
 
   return (

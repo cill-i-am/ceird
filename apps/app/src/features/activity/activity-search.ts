@@ -1,14 +1,14 @@
+import {
+  IsoDateString,
+  JobActivityEventTypeSchema,
+  UserId,
+} from "@ceird/jobs-core";
 import type {
   IsoDateStringType,
   JobActivityEventType,
   OrganizationActivityQuery,
   UserIdType,
-} from "@task-tracker/jobs-core";
-import {
-  IsoDateString,
-  JobActivityEventTypeSchema,
-  UserId,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
 import { ParseResult } from "effect";
 
 export interface ActivitySearch {

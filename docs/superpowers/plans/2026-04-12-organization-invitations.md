@@ -91,8 +91,7 @@ it("renders an organization invitation email", async () => {
     recipientName: "Taylor Example",
     organizationName: "Acme Field Ops",
     inviterEmail: "owner@example.com",
-    invitationUrl:
-      "https://app.task-tracker.localhost/accept-invitation/inv_123",
+    invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_123",
     role: "member",
   });
 
@@ -112,7 +111,7 @@ it("renders an organization invitation email", async () => {
     {
       idempotencyKey: "organization-invitation/inv_123",
       to: "member@example.com",
-      subject: "Join Acme Field Ops on Task Tracker",
+      subject: "Join Acme Field Ops on Ceird",
       text: expect.stringContaining("owner@example.com invited you"),
       html: expect.stringContaining("/accept-invitation/inv_123"),
     },
@@ -129,7 +128,7 @@ it("requires AUTH_APP_ORIGIN for auth email configuration", async () => {
       Effect.provideService(
         ConfigProvider.ConfigProvider,
         makeConfigProvider([
-          ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+          ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
           ["RESEND_API_KEY", "re_test_123"],
         ])
       )
@@ -198,7 +197,7 @@ export const loadAuthEmailConfig = Config.all({
     })
   ),
   fromName: Config.string("AUTH_EMAIL_FROM_NAME").pipe(
-    Config.withDefault("Task Tracker")
+    Config.withDefault("Ceird")
   ),
   resendApiKey: Config.string("RESEND_API_KEY").pipe(
     Config.validate({
@@ -221,7 +220,7 @@ Update `apps/api/src/domains/identity/authentication/auth-email-errors.ts`:
 
 ```ts
 export class OrganizationInvitationDeliveryError extends Schema.TaggedError<OrganizationInvitationDeliveryError>()(
-  "@task-tracker/domains/identity/authentication/OrganizationInvitationDeliveryError",
+  "@ceird/domains/identity/authentication/OrganizationInvitationDeliveryError",
   {
     message: Schema.String,
     cause: Schema.optional(Schema.String),
@@ -271,7 +270,7 @@ const sendOrganizationInvitationEmail = Effect.fn(
     .send({
       idempotencyKey: input.idempotencyKey,
       to: input.recipientEmail,
-      subject: `Join ${input.organizationName} on Task Tracker`,
+      subject: `Join ${input.organizationName} on Ceird`,
       text: [
         `Hello ${input.recipientName},`,
         "",
@@ -324,13 +323,13 @@ return {
   ...baseEnvironment,
   AUTH_APP_ORIGIN:
     baseEnvironment.AUTH_APP_ORIGIN ??
-    `https://app.task-tracker.localhost:${proxyPort}`,
+    `https://app.ceird.localhost:${proxyPort}`,
   AUTH_EMAIL_FROM: baseEnvironment.AUTH_EMAIL_FROM ?? DEFAULT_AUTH_EMAIL_FROM,
   AUTH_EMAIL_FROM_NAME:
     baseEnvironment.AUTH_EMAIL_FROM_NAME ?? DEFAULT_AUTH_EMAIL_FROM_NAME,
   BETTER_AUTH_BASE_URL:
     baseEnvironment.BETTER_AUTH_BASE_URL ??
-    `https://api.task-tracker.localhost:${proxyPort}`,
+    `https://api.ceird.localhost:${proxyPort}`,
   PORTLESS_PORT: proxyPort,
   RESEND_API_KEY: baseEnvironment.RESEND_API_KEY ?? DEFAULT_RESEND_API_KEY,
 };
@@ -384,7 +383,7 @@ export const SandboxRuntimeOverrides = Schema.Struct({
   SANDBOX_NODE_MODULES_VOLUME: SandboxDockerVolumeName,
   SANDBOX_NAME: SandboxNameSchema,
   SANDBOX_PNPM_STORE_VOLUME: SandboxDockerVolumeName,
-  TASK_TRACKER_SANDBOX: Schema.Literal("1"),
+  CEIRD_SANDBOX: Schema.Literal("1"),
   VITE_AUTH_ORIGIN: SandboxHttpUrl,
 });
 
@@ -437,7 +436,7 @@ it("configures Better Auth organization invitations with app links", async () =>
       baseUrl: "http://127.0.0.1:3001",
       portlessUrl: undefined,
       secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/task_tracker",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     }),
     database,
     reportPasswordResetEmailFailure: vi.fn(),
@@ -1408,7 +1407,7 @@ export function AcceptInvitationPage({
       <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Organization invitation</CardTitle>
-          <CardDescription>Join your team on Task Tracker.</CardDescription>
+          <CardDescription>Join your team on Ceird.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error ? <FieldError>{error}</FieldError> : null}

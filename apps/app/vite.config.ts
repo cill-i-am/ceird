@@ -11,9 +11,7 @@ const clientApiOrigin =
   typeof process.env.VITE_API_ORIGIN === "string"
     ? process.env.VITE_API_ORIGIN
     : serverApiOrigin;
-const isCloudflareBuild =
-  process.env.CEIRD_CLOUDFLARE === "1" ||
-  process.env.TASK_TRACKER_CLOUDFLARE === "1";
+const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
 
 const config = defineConfig({
   build: isCloudflareBuild

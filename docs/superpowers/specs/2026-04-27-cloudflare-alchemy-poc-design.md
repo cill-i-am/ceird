@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build a proof-of-concept Cloudflare deployment path for Task Tracker using
+Build a proof-of-concept Cloudflare deployment path for Ceird using
 Alchemy as the infrastructure-as-code layer.
 
 The POC should deploy the two existing public application surfaces:
@@ -171,7 +171,7 @@ internal calls, but the API must remain public and independently addressable.
 Create a separate workspace package:
 
 - `packages/infra`
-- package name: `@task-tracker/infra`
+- package name: `@ceird/infra`
 
 Responsibilities:
 

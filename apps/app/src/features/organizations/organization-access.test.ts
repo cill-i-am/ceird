@@ -1,9 +1,6 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { isRedirect } from "@tanstack/react-router";
-import { decodeOrganizationId } from "@task-tracker/identity-core";
-import type {
-  OrganizationId,
-  OrganizationRole,
-} from "@task-tracker/identity-core";
 
 import {
   ensureActiveOrganizationId,

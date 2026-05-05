@@ -3,7 +3,7 @@ import type {
   SandboxNameType as SandboxName,
   SandboxStatus,
   SandboxUrls,
-} from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
 import { Match } from "effect";
 
 import type {

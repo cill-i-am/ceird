@@ -24,8 +24,8 @@ describe("auth email promise bridge", () => {
             new Map([
               ["AUTH_EMAIL_TRANSPORT", "noop"],
               ["AUTH_APP_ORIGIN", "http://127.0.0.1:4173"],
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
-              ["AUTH_EMAIL_FROM_NAME", "Task Tracker"],
+              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
+              ["AUTH_EMAIL_FROM_NAME", "Ceird"],
             ])
           )
         )

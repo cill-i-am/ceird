@@ -2,11 +2,33 @@ import { ParseResult, Schema } from "effect";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ISO_DATE_TIME_UTC_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+function isIsoDateTimeString(value: string): boolean {
+  return (
+    ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
+  );
+}
 
 export const OrganizationId = Schema.NonEmptyString.pipe(
-  Schema.brand("@task-tracker/identity-core/OrganizationId")
+  Schema.brand("@ceird/identity-core/OrganizationId")
 );
 export type OrganizationId = Schema.Schema.Type<typeof OrganizationId>;
+
+export const UserId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/UserId")
+);
+export type UserId = Schema.Schema.Type<typeof UserId>;
+
+export const IsoDateTimeString = Schema.String.pipe(
+  Schema.filter((value) => isIsoDateTimeString(value)),
+  Schema.annotations({
+    description: "ISO-8601 UTC datetime string",
+    message: () => "Expected an ISO-8601 UTC datetime string",
+  })
+);
+export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
 
 export const ORGANIZATION_ROLES = [
   "owner",

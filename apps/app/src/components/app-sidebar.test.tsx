@@ -241,12 +241,10 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com owner"
       );
-      const brandLink = screen.getByRole("link", { name: /task tracker/i });
+      const brandLink = screen.getByRole("link", { name: /ceird/i });
 
       expect(brandLink).toHaveAttribute("href", "/");
-      expect(within(brandLink).getByText("Task Tracker")).not.toHaveClass(
-        "sr-only"
-      );
+      expect(within(brandLink).getByText("Ceird")).not.toHaveClass("sr-only");
       expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
         "href",
         "/jobs"
@@ -352,9 +350,10 @@ describe("app sidebar", () => {
         "href",
         "/jobs"
       );
-      expect(
-        screen.getByRole("link", { name: /task tracker/i })
-      ).toHaveAttribute("href", "/jobs");
+      expect(screen.getByRole("link", { name: /ceird/i })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
       expect(
         screen.queryByRole("link", { name: /^home$/i })
       ).not.toBeInTheDocument();

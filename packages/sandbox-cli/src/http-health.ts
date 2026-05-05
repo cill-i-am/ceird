@@ -1,5 +1,5 @@
-import { HealthPayload } from "@task-tracker/sandbox-core";
-import type { SandboxRecord } from "@task-tracker/sandbox-core";
+import { HealthPayload } from "@ceird/sandbox-core";
+import type { SandboxRecord } from "@ceird/sandbox-core";
 import { Effect, Option, Schema } from "effect";
 
 export interface SandboxHttpHealth {
@@ -11,7 +11,7 @@ export interface SandboxHttpHealth {
 }
 
 export class SandboxHttpHealthService extends Effect.Service<SandboxHttpHealthService>()(
-  "@task-tracker/sandbox-cli/SandboxHttpHealthService",
+  "@ceird/sandbox-cli/SandboxHttpHealthService",
   {
     accessors: true,
     effect: Effect.succeed<SandboxHttpHealth>({

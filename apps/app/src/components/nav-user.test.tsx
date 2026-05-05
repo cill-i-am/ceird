@@ -1,4 +1,4 @@
-import type { OrganizationRole } from "@task-tracker/identity-core";
+import type { OrganizationRole } from "@ceird/identity-core";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { isValidElement } from "react";

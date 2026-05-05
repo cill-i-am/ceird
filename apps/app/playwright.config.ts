@@ -6,9 +6,8 @@ const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? DEFAULT_APP_ORIGIN;
 const playwrightApiUrl = process.env.PLAYWRIGHT_API_URL ?? DEFAULT_API_ORIGIN;
 const useExternalServer = process.env.PLAYWRIGHT_USE_EXTERNAL_SERVER === "1";
 const playwrightAuthEmailFrom =
-  process.env.AUTH_EMAIL_FROM ?? "auth@task-tracker.localhost";
-const playwrightAuthEmailFromName =
-  process.env.AUTH_EMAIL_FROM_NAME ?? "Task Tracker";
+  process.env.AUTH_EMAIL_FROM ?? "auth@ceird.localhost";
+const playwrightAuthEmailFromName = process.env.AUTH_EMAIL_FROM_NAME ?? "Ceird";
 
 export default defineConfig({
   testDir: "./e2e",

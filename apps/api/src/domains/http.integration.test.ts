@@ -2,24 +2,28 @@ import { randomUUID } from "node:crypto";
 
 import {
   CreateRateCardResponseSchema,
-  CreateServiceAreaResponseSchema,
-  CreateSiteResponseSchema,
   JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
-  JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
-  JOB_LABEL_NOT_FOUND_ERROR_TAG,
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
   JobDetailResponseSchema,
-  JobLabelResponseSchema,
-  JobLabelsResponseSchema,
   JobListResponseSchema,
   JobOptionsResponseSchema,
   RateCardListResponseSchema,
+} from "@ceird/jobs-core";
+import {
+  LABEL_NAME_CONFLICT_ERROR_TAG,
+  LABEL_NOT_FOUND_ERROR_TAG,
+  LabelResponseSchema,
+  LabelsResponseSchema,
+} from "@ceird/labels-core";
+import {
+  CreateServiceAreaResponseSchema,
+  CreateSiteResponseSchema,
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   ServiceAreaListResponseSchema,
   SitesOptionsResponseSchema,
   UpdateServiceAreaResponseSchema,
-} from "@task-tracker/jobs-core";
+} from "@ceird/sites-core";
 import { ParseResult } from "effect";
 import type { Pool } from "pg";
 
@@ -28,10 +32,10 @@ import {
   canConnect,
   createTestDatabase,
   withPool,
-} from "../../platform/database/test-database.js";
-import { makeApiWebHandler } from "../../server.js";
+} from "../platform/database/test-database.js";
+import { makeApiWebHandler } from "../server.js";
 
-describe("jobs http integration", () => {
+describe("domain http integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
 
   afterAll(async () => {
@@ -698,7 +702,7 @@ describe("jobs http integration", () => {
 
       const memberCreateLabelResponse = await api.handler(
         makeJsonRequest(
-          "/job-labels",
+          "/labels",
           {
             name: "Member Label",
           },
@@ -711,7 +715,7 @@ describe("jobs http integration", () => {
 
       const createLabelResponse = await api.handler(
         makeJsonRequest(
-          "/job-labels",
+          "/labels",
           {
             name: "Waiting PO",
           },
@@ -721,13 +725,13 @@ describe("jobs http integration", () => {
         )
       );
       expect(createLabelResponse.status).toBe(201);
-      const createdLabel = ParseResult.decodeUnknownSync(
-        JobLabelResponseSchema
-      )(await createLabelResponse.json());
+      const createdLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+        await createLabelResponse.json()
+      );
 
       const duplicateCreateLabelResponse = await api.handler(
         makeJsonRequest(
-          "/job-labels",
+          "/labels",
           {
             name: " waiting po ",
           },
@@ -738,12 +742,12 @@ describe("jobs http integration", () => {
       );
       expect(duplicateCreateLabelResponse.status).toBe(409);
       await expect(duplicateCreateLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+        _tag: LABEL_NAME_CONFLICT_ERROR_TAG,
       });
 
       const updateLabelResponse = await api.handler(
         makeJsonRequest(
-          `/job-labels/${createdLabel.id}`,
+          `/labels/${createdLabel.id}`,
           {
             name: "Waiting on PO",
           },
@@ -754,9 +758,9 @@ describe("jobs http integration", () => {
         )
       );
       expect(updateLabelResponse.status).toBe(200);
-      const updatedLabel = ParseResult.decodeUnknownSync(
-        JobLabelResponseSchema
-      )(await updateLabelResponse.json());
+      const updatedLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+        await updateLabelResponse.json()
+      );
       expect(updatedLabel).toMatchObject({
         id: createdLabel.id,
         name: "Waiting on PO",
@@ -764,7 +768,7 @@ describe("jobs http integration", () => {
 
       const conflictingLabelResponse = await api.handler(
         makeJsonRequest(
-          "/job-labels",
+          "/labels",
           {
             name: "Callback needed",
           },
@@ -775,12 +779,12 @@ describe("jobs http integration", () => {
       );
       expect(conflictingLabelResponse.status).toBe(201);
       const conflictingLabel = ParseResult.decodeUnknownSync(
-        JobLabelResponseSchema
+        LabelResponseSchema
       )(await conflictingLabelResponse.json());
 
       const duplicateUpdateLabelResponse = await api.handler(
         makeJsonRequest(
-          `/job-labels/${conflictingLabel.id}`,
+          `/labels/${conflictingLabel.id}`,
           {
             name: " waiting on po ",
           },
@@ -792,16 +796,16 @@ describe("jobs http integration", () => {
       );
       expect(duplicateUpdateLabelResponse.status).toBe(409);
       await expect(duplicateUpdateLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NAME_CONFLICT_ERROR_TAG,
+        _tag: LABEL_NAME_CONFLICT_ERROR_TAG,
       });
 
       const labelsResponse = await api.handler(
-        makeRequest("/job-labels", {
+        makeRequest("/labels", {
           cookieJar: ownerCookieJar,
         })
       );
       expect(labelsResponse.status).toBe(200);
-      const labels = ParseResult.decodeUnknownSync(JobLabelsResponseSchema)(
+      const labels = ParseResult.decodeUnknownSync(LabelsResponseSchema)(
         await labelsResponse.json()
       );
       expect(labels.labels).toContainEqual(
@@ -886,34 +890,34 @@ describe("jobs http integration", () => {
       expect(filteredAfterRemove.items).toHaveLength(0);
 
       const archiveLabelResponse = await api.handler(
-        makeRequest(`/job-labels/${updatedLabel.id}`, {
+        makeRequest(`/labels/${updatedLabel.id}`, {
           cookieJar: ownerCookieJar,
           method: "DELETE",
         })
       );
       expect(archiveLabelResponse.status).toBe(200);
-      const archivedLabel = ParseResult.decodeUnknownSync(
-        JobLabelResponseSchema
-      )(await archiveLabelResponse.json());
+      const archivedLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+        await archiveLabelResponse.json()
+      );
       expect(archivedLabel).toMatchObject({
         id: updatedLabel.id,
         name: "Waiting on PO",
       });
 
       const labelsAfterArchiveResponse = await api.handler(
-        makeRequest("/job-labels", {
+        makeRequest("/labels", {
           cookieJar: ownerCookieJar,
         })
       );
       expect(labelsAfterArchiveResponse.status).toBe(200);
       const labelsAfterArchive = ParseResult.decodeUnknownSync(
-        JobLabelsResponseSchema
+        LabelsResponseSchema
       )(await labelsAfterArchiveResponse.json());
       expect(labelsAfterArchive.labels).toStrictEqual([conflictingLabel]);
 
       const updateArchivedLabelResponse = await api.handler(
         makeJsonRequest(
-          `/job-labels/${updatedLabel.id}`,
+          `/labels/${updatedLabel.id}`,
           {
             name: "Archived label",
           },
@@ -925,7 +929,7 @@ describe("jobs http integration", () => {
       );
       expect(updateArchivedLabelResponse.status).toBe(404);
       await expect(updateArchivedLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+        _tag: LABEL_NOT_FOUND_ERROR_TAG,
       });
 
       const assignArchivedLabelResponse = await api.handler(
@@ -941,7 +945,7 @@ describe("jobs http integration", () => {
       );
       expect(assignArchivedLabelResponse.status).toBe(404);
       await expect(assignArchivedLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+        _tag: LABEL_NOT_FOUND_ERROR_TAG,
       });
 
       const removeArchivedLabelResponse = await api.handler(
@@ -952,18 +956,18 @@ describe("jobs http integration", () => {
       );
       expect(removeArchivedLabelResponse.status).toBe(404);
       await expect(removeArchivedLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+        _tag: LABEL_NOT_FOUND_ERROR_TAG,
       });
 
       const archiveMissingLabelResponse = await api.handler(
-        makeRequest(`/job-labels/${updatedLabel.id}`, {
+        makeRequest(`/labels/${updatedLabel.id}`, {
           cookieJar: ownerCookieJar,
           method: "DELETE",
         })
       );
       expect(archiveMissingLabelResponse.status).toBe(404);
       await expect(archiveMissingLabelResponse.json()).resolves.toMatchObject({
-        _tag: JOB_LABEL_NOT_FOUND_ERROR_TAG,
+        _tag: LABEL_NOT_FOUND_ERROR_TAG,
       });
 
       const memberDetailResponse = await api.handler(
@@ -1021,7 +1025,7 @@ describe("jobs http integration", () => {
         readonly _tag: string;
       };
       expect(invalidVisitError._tag).toBe(
-        "@task-tracker/jobs-core/VisitDurationIncrementError"
+        "@ceird/jobs-core/VisitDurationIncrementError"
       );
 
       const validVisitResponse = await api.handler(
@@ -1224,7 +1228,7 @@ describe("jobs http integration", () => {
         readonly _tag: string;
       };
       expect(completedBlockedError._tag).toBe(
-        "@task-tracker/jobs-core/InvalidJobTransitionError"
+        "@ceird/jobs-core/InvalidJobTransitionError"
       );
 
       const reopenResponse = await api.handler(
@@ -1512,7 +1516,7 @@ describe("jobs http integration", () => {
       expect(deniedActivityResponse.status).toBe(403);
 
       const deniedJobLabelsResponse = await api.handler(
-        makeRequest("/job-labels", {
+        makeRequest("/labels", {
           cookieJar: externalCookieJar,
         })
       );
@@ -1788,7 +1792,7 @@ async function withJobsEnvironment<Result>(
 
   process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
   process.env.AUTH_EMAIL_FROM = "noreply@example.com";
-  process.env.AUTH_EMAIL_FROM_NAME = "Task Tracker Test";
+  process.env.AUTH_EMAIL_FROM_NAME = "Ceird Test";
   process.env.AUTH_EMAIL_TRANSPORT = "noop";
   process.env.BETTER_AUTH_BASE_URL = "http://127.0.0.1:3000";
   process.env.BETTER_AUTH_SECRET = "0123456789abcdef0123456789abcdef";

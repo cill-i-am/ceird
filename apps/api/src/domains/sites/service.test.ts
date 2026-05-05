@@ -1,47 +1,33 @@
-import { HttpServerRequest } from "@effect/platform";
-import { SqlError } from "@effect/sql/SqlError";
+import type { OrganizationId, UserId } from "@ceird/identity-core";
 import {
-  JobAccessDeniedError,
-  JobStorageError,
+  SiteAccessDeniedError,
   ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
-} from "@task-tracker/jobs-core";
+  SiteStorageError,
+} from "@ceird/sites-core";
 import type {
-  ContactIdType as ContactId,
   CreateSiteInput,
-  JobActivityPayload,
-  JobListResponse,
-  JobMemberOption,
-  OrganizationActivityListResponse,
-  OrganizationActivityQuery,
   ServiceArea,
-  SitesOptionsResponse,
-  JobSiteOption,
-  OrganizationIdType as OrganizationId,
   SiteIdType as SiteId,
-  UserId,
-  WorkItemIdType as WorkItemId,
-} from "@task-tracker/jobs-core";
+  SiteOption as JobSiteOption,
+  SitesOptionsResponse,
+} from "@ceird/sites-core";
+import { HttpServerRequest } from "@effect/platform";
+import { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, Exit, Layer, Option } from "effect";
 
-import { JobsAuthorization } from "./authorization.js";
-import { CurrentJobsActor } from "./current-jobs-actor.js";
-import type { JobsActor } from "./current-jobs-actor.js";
-import {
-  ConfigurationRepository,
-  ContactsRepository,
-  JobsRepository,
-  SitesRepository,
-} from "./repositories.js";
-import { SiteGeocoder } from "./site-geocoder.js";
-import { SitesService } from "./sites-service.js";
+import { OrganizationAuthorization } from "../organizations/authorization.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
+import { SiteGeocoder } from "./geocoder.js";
+import { ServiceAreasRepository, SitesRepository } from "./repositories.js";
+import { SitesService } from "./service.js";
 
 const siteId = "22222222-2222-4222-8222-222222222222" as SiteId;
 const serviceAreaId = "33333333-3333-4333-8333-333333333333" as NonNullable<
   JobSiteOption["serviceAreaId"]
 >;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
-const undefinedValue = undefined as undefined;
 const geocodedAt = "2026-04-22T10:00:00.000Z";
 const siteInput = {
   addressLine1: "1 Custom House Quay",
@@ -54,9 +40,9 @@ const siteInput = {
 } satisfies CreateSiteInput;
 
 function makeActor(
-  role: JobsActor["role"],
-  overrides: Partial<JobsActor> = {}
-): JobsActor {
+  role: OrganizationActor["role"],
+  overrides: Partial<OrganizationActor> = {}
+): OrganizationActor {
   return {
     organizationId: "org_123" as OrganizationId,
     role,
@@ -72,7 +58,7 @@ interface SitesServiceHarness {
     geocode: number;
     getOptionById: number;
     listOptions: number;
-    listServiceAreaOptions: number;
+    listServiceAreas: number;
   };
   readonly layer: Layer.Layer<
     SitesService | HttpServerRequest.HttpServerRequest
@@ -81,7 +67,7 @@ interface SitesServiceHarness {
 
 function makeHarness(
   options: {
-    readonly actor?: JobsActor;
+    readonly actor?: OrganizationActor;
     readonly geocodingFailure?: SiteGeocodingFailedError;
     readonly serviceAreaFailure?: ServiceAreaNotFoundError;
     readonly serviceAreaStorageFailure?: SqlError;
@@ -94,7 +80,7 @@ function makeHarness(
     geocode: 0,
     getOptionById: 0,
     listOptions: 0,
-    listServiceAreaOptions: 0,
+    listServiceAreas: 0,
   };
   const createdSiteOption: JobSiteOption = {
     addressLine1: "1 Custom House Quay",
@@ -114,84 +100,6 @@ function makeHarness(
   const unexpected = (label: string) =>
     Effect.die(new Error(`Unexpected repository call: ${label}`));
 
-  const jobsRepository = JobsRepository.make({
-    addActivity: (_input: {
-      readonly actorUserId?: UserId;
-      readonly organizationId: OrganizationId;
-      readonly payload: JobActivityPayload;
-      readonly workItemId: WorkItemId;
-    }) => unexpected("addActivity"),
-    addComment: (_input: unknown) => unexpected("addComment"),
-    addCostLine: (_input: unknown) => unexpected("addCostLine"),
-    addVisit: (_input: unknown) => unexpected("addVisit"),
-    attachCollaborator: (_input: unknown) => unexpected("attachCollaborator"),
-    create: (_input: unknown) => unexpected("create"),
-    findById: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>
-      unexpected("findById"),
-    findByIdForUpdate: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId
-    ) => unexpected("findByIdForUpdate"),
-    findUserCollaboratorGrant: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId,
-      _userId: UserId
-    ) => unexpected("findUserCollaboratorGrant"),
-    getDetail: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>
-      unexpected("getDetail"),
-    list: (_organizationId: OrganizationId, _query: unknown) =>
-      Effect.succeed({
-        items: [],
-        nextCursor: undefined,
-      } satisfies JobListResponse),
-    listAccessibleWorkItemIdsForUser: (
-      _organizationId: OrganizationId,
-      _userId: UserId
-    ) => unexpected("listAccessibleWorkItemIdsForUser"),
-    listCollaborators: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId
-    ) => unexpected("listCollaborators"),
-    listMemberOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly JobMemberOption[]),
-    listExternalMemberOptions: (_organizationId: OrganizationId) =>
-      Effect.succeed([]),
-    listOrganizationActivity: (
-      _organizationId: OrganizationId,
-      _query: OrganizationActivityQuery
-    ) =>
-      Effect.succeed({
-        items: [],
-        nextCursor: undefined,
-      } satisfies OrganizationActivityListResponse),
-    patch: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId,
-      _input: unknown
-    ) => unexpected("patch"),
-    removeCollaborator: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId,
-      _collaboratorId: unknown
-    ) => unexpected("removeCollaborator"),
-    reopen: (_organizationId: OrganizationId, _workItemId: WorkItemId) =>
-      unexpected("reopen"),
-    transition: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId,
-      _input: unknown
-    ) => unexpected("transition"),
-    updateCollaborator: (
-      _organizationId: OrganizationId,
-      _workItemId: WorkItemId,
-      _collaboratorId: unknown,
-      _input: unknown
-    ) => unexpected("updateCollaborator"),
-    withTransaction: <Value, Error, Requirements>(
-      effect: Effect.Effect<Value, Error, Requirements>
-    ) => effect,
-  });
-
   const sitesRepository = SitesRepository.make({
     create: (input: {
       readonly addressLine1: string;
@@ -207,7 +115,7 @@ function makeHarness(
       readonly serviceAreaId?: typeof serviceAreaId;
       readonly town?: string;
     }) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         calls.createSite += 1;
         expect(input).toMatchObject({
           addressLine1: "1 Custom House Quay",
@@ -223,6 +131,14 @@ function makeHarness(
           serviceAreaId,
           town: "Dublin",
         });
+
+        if (options.serviceAreaFailure !== undefined) {
+          return yield* Effect.fail(options.serviceAreaFailure);
+        }
+
+        if (options.serviceAreaStorageFailure !== undefined) {
+          return yield* Effect.fail(options.serviceAreaStorageFailure);
+        }
 
         return siteId;
       }),
@@ -255,12 +171,6 @@ function makeHarness(
 
         return Option.some(createdSiteOption);
       }),
-    linkContact: (_input: {
-      readonly contactId: ContactId;
-      readonly isPrimary?: boolean;
-      readonly organizationId: OrganizationId;
-      readonly siteId: SiteId;
-    }) => Effect.succeed(undefinedValue),
     listOptions: (organizationId: OrganizationId) =>
       Effect.sync(() => {
         calls.listOptions += 1;
@@ -273,33 +183,29 @@ function makeHarness(
       _siteId: SiteId,
       _input: unknown
     ) => unexpected("sites.update"),
+    withTransaction: <Value, Error, Requirements>(
+      effect: Effect.Effect<Value, Error, Requirements>
+    ) => effect,
   });
 
-  const configurationRepository = ConfigurationRepository.make({
-    createServiceArea: (_input: unknown) =>
-      unexpected("configuration.createServiceArea"),
-    listServiceAreaOptions: (organizationId: OrganizationId) =>
+  const serviceAreasRepository = ServiceAreasRepository.make({
+    create: (_input: unknown) => unexpected("configuration.createServiceArea"),
+    list: (_organizationId: OrganizationId) =>
+      Effect.succeed([] satisfies readonly ServiceArea[]),
+    listOptions: (organizationId: OrganizationId) =>
       Effect.sync(() => {
-        calls.listServiceAreaOptions += 1;
+        calls.listServiceAreas += 1;
         expect(organizationId).toBe(actor.organizationId);
 
         return [] satisfies SitesOptionsResponse["serviceAreas"];
       }),
-    listServiceAreas: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly ServiceArea[]),
-    updateServiceArea: (
+    update: (
       _organizationId: OrganizationId,
       _serviceAreaId: typeof serviceAreaId,
       _input: unknown
     ) => unexpected("configuration.updateServiceArea"),
   });
 
-  const contactsRepository = ContactsRepository.make({
-    create: (_input: unknown) => unexpected("contacts.create"),
-    findById: (_organizationId: OrganizationId, _contactId: ContactId) =>
-      unexpected("contacts.findById"),
-    listOptions: (_organizationId: OrganizationId) => Effect.succeed([]),
-  });
   const siteGeocoder = SiteGeocoder.make({
     geocode: (input: CreateSiteInput) =>
       Effect.gen(function* () {
@@ -323,17 +229,15 @@ function makeHarness(
     SitesService.DefaultWithoutDependencies,
     Layer.mergeAll(
       Layer.succeed(
-        CurrentJobsActor,
-        CurrentJobsActor.make({
+        CurrentOrganizationActor,
+        CurrentOrganizationActor.make({
           get: () => Effect.succeed(actor),
         })
       ),
-      Layer.succeed(JobsRepository, jobsRepository),
       Layer.succeed(SitesRepository, sitesRepository),
-      Layer.succeed(ConfigurationRepository, configurationRepository),
-      Layer.succeed(ContactsRepository, contactsRepository),
+      Layer.succeed(ServiceAreasRepository, serviceAreasRepository),
       Layer.succeed(SiteGeocoder, siteGeocoder),
-      JobsAuthorization.Default
+      OrganizationAuthorization.Default
     )
   );
 
@@ -398,7 +302,7 @@ describe("sites service", () => {
 
     expect(harness.calls.geocode).toBe(1);
     expect(harness.calls.createSite).toBe(1);
-    expect(harness.calls.ensureServiceArea).toBe(1);
+    expect(harness.calls.ensureServiceArea).toBe(0);
     expect(harness.calls.getOptionById).toBe(1);
   }, 10_000);
 
@@ -414,7 +318,7 @@ describe("sites service", () => {
       harness
     );
 
-    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
     expect(getFailure(exit)).toMatchObject({
       message: "Only organization owners and admins can create sites",
     });
@@ -436,16 +340,16 @@ describe("sites service", () => {
       harness
     );
 
-    expect(getFailure(exit)).toBeInstanceOf(JobAccessDeniedError);
+    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
     expect(getFailure(exit)).toMatchObject({
       message:
         "External collaborators cannot view organization-wide site options",
     });
     expect(harness.calls.listOptions).toBe(0);
-    expect(harness.calls.listServiceAreaOptions).toBe(0);
+    expect(harness.calls.listServiceAreas).toBe(0);
   }, 10_000);
 
-  it("validates stale service areas before geocoding standalone sites", async () => {
+  it("maps stale service areas from site creation", async () => {
     const failure = new ServiceAreaNotFoundError({
       message: "Service area does not exist in the organization",
       organizationId: makeActor("owner").organizationId,
@@ -463,13 +367,13 @@ describe("sites service", () => {
     );
 
     expect(getFailure(exit)).toStrictEqual(failure);
-    expect(harness.calls.ensureServiceArea).toBe(1);
-    expect(harness.calls.geocode).toBe(0);
-    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.ensureServiceArea).toBe(0);
+    expect(harness.calls.geocode).toBe(1);
+    expect(harness.calls.createSite).toBe(1);
     expect(harness.calls.getOptionById).toBe(0);
   }, 10_000);
 
-  it("maps service area validation storage failures before geocoding", async () => {
+  it("maps service area validation storage failures from site creation", async () => {
     const harness = makeHarness({
       serviceAreaStorageFailure: new SqlError({
         message: "database unavailable",
@@ -485,14 +389,14 @@ describe("sites service", () => {
       harness
     );
 
-    expect(getFailure(exit)).toBeInstanceOf(JobStorageError);
+    expect(getFailure(exit)).toBeInstanceOf(SiteStorageError);
     expect(getFailure(exit)).toMatchObject({
       cause: "database unavailable",
       message: "Sites storage operation failed",
     });
-    expect(harness.calls.ensureServiceArea).toBe(1);
-    expect(harness.calls.geocode).toBe(0);
-    expect(harness.calls.createSite).toBe(0);
+    expect(harness.calls.ensureServiceArea).toBe(0);
+    expect(harness.calls.geocode).toBe(1);
+    expect(harness.calls.createSite).toBe(1);
     expect(harness.calls.getOptionById).toBe(0);
   }, 10_000);
 
@@ -514,7 +418,7 @@ describe("sites service", () => {
     );
 
     expect(getFailure(exit)).toStrictEqual(failure);
-    expect(harness.calls.ensureServiceArea).toBe(1);
+    expect(harness.calls.ensureServiceArea).toBe(0);
     expect(harness.calls.geocode).toBe(1);
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.getOptionById).toBe(0);

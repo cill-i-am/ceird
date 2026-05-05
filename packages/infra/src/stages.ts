@@ -59,18 +59,6 @@ const AuthEmailFromAddress = Schema.String.check(
   })
 );
 
-function stringConfig(name: string, legacyName?: string) {
-  return legacyName
-    ? Config.string(name).pipe(Config.orElse(() => Config.string(legacyName)))
-    : Config.string(name);
-}
-
-function booleanConfig(name: string, legacyName?: string) {
-  return legacyName
-    ? Config.boolean(name).pipe(Config.orElse(() => Config.boolean(legacyName)))
-    : Config.boolean(name);
-}
-
 function decodeDomainName(value: string): DomainName {
   if (!value || !domainNamePattern.test(value)) {
     throw new Error(`Invalid domain name: ${value}`);
@@ -114,22 +102,21 @@ function decodeInfraAuthEmailTransport(value: string) {
 }
 
 export const loadInfraStageConfig = Effect.gen(function* () {
-  const stage = yield* stringConfig(
-    "CEIRD_INFRA_STAGE",
-    "TASK_TRACKER_INFRA_STAGE"
-  ).pipe(Config.withDefault("production"), Config.map(decodeStage));
-  const zoneName = yield* stringConfig(
-    "CEIRD_ZONE_NAME",
-    "TASK_TRACKER_ZONE_NAME"
-  ).pipe(Config.map(decodeDomainName));
-  const appHostname = yield* stringConfig(
-    "CEIRD_APP_HOSTNAME",
-    "TASK_TRACKER_APP_HOSTNAME"
-  ).pipe(Config.withDefault(`app.${zoneName}`), Config.map(decodeDomainName));
-  const apiHostname = yield* stringConfig(
-    "CEIRD_API_HOSTNAME",
-    "TASK_TRACKER_API_HOSTNAME"
-  ).pipe(Config.withDefault(`api.${zoneName}`), Config.map(decodeDomainName));
+  const stage = yield* Config.string("CEIRD_INFRA_STAGE").pipe(
+    Config.withDefault("production"),
+    Config.map(decodeStage)
+  );
+  const zoneName = yield* Config.string("CEIRD_ZONE_NAME").pipe(
+    Config.map(decodeDomainName)
+  );
+  const appHostname = yield* Config.string("CEIRD_APP_HOSTNAME").pipe(
+    Config.withDefault(`app.${zoneName}`),
+    Config.map(decodeDomainName)
+  );
+  const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
+    Config.withDefault(`api.${zoneName}`),
+    Config.map(decodeDomainName)
+  );
   const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
     Config.mapOrFail(decodeAuthEmailFrom)
   );
@@ -143,32 +130,27 @@ export const loadInfraStageConfig = Effect.gen(function* () {
   const planetScaleOrganization = yield* Config.string(
     "PLANETSCALE_ORGANIZATION"
   );
-  const planetScaleDatabaseName = yield* stringConfig(
-    "CEIRD_PLANETSCALE_DATABASE_NAME",
-    "TASK_TRACKER_PLANETSCALE_DATABASE_NAME"
+  const planetScaleDatabaseName = yield* Config.string(
+    "CEIRD_PLANETSCALE_DATABASE_NAME"
   ).pipe(Config.withDefault(`ceird-${stage}`));
-  const planetScaleDefaultBranch = yield* stringConfig(
-    "CEIRD_PLANETSCALE_DEFAULT_BRANCH",
-    "TASK_TRACKER_PLANETSCALE_DEFAULT_BRANCH"
+  const planetScaleDefaultBranch = yield* Config.string(
+    "CEIRD_PLANETSCALE_DEFAULT_BRANCH"
   ).pipe(Config.withDefault("main"));
-  const planetScaleRegionSlug = yield* stringConfig(
-    "CEIRD_PLANETSCALE_REGION",
-    "TASK_TRACKER_PLANETSCALE_REGION"
+  const planetScaleRegionSlug = yield* Config.string(
+    "CEIRD_PLANETSCALE_REGION"
   ).pipe(
     Config.withDefault("eu-west"),
     Config.mapOrFail(decodePlanetScaleRegionSlug)
   );
-  const planetScaleClusterSize = yield* stringConfig(
-    "CEIRD_PLANETSCALE_CLUSTER_SIZE",
-    "TASK_TRACKER_PLANETSCALE_CLUSTER_SIZE"
+  const planetScaleClusterSize = yield* Config.string(
+    "CEIRD_PLANETSCALE_CLUSTER_SIZE"
   ).pipe(
     Config.withDefault("PS-5"),
     Config.mapOrFail(decodePlanetScaleClusterSize)
   );
-  const applyMigrations = yield* booleanConfig(
-    "APPLY_MIGRATIONS",
-    "TASK_TRACKER_APPLY_MIGRATIONS"
-  ).pipe(Config.withDefault(false));
+  const applyMigrations = yield* Config.boolean("CEIRD_APPLY_MIGRATIONS").pipe(
+    Config.withDefault(false)
+  );
 
   return {
     appName: "ceird",

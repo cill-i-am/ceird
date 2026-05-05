@@ -1,31 +1,31 @@
-import { JobAccessDeniedError } from "@task-tracker/jobs-core";
-import type {
-  JobStorageError,
-  WorkItemIdType as WorkItemId,
-} from "@task-tracker/jobs-core";
+import { JobAccessDeniedError, JobStorageError } from "@ceird/jobs-core";
+import type { WorkItemIdType as WorkItemId } from "@ceird/jobs-core";
 import { Effect } from "effect";
 
 import {
-  JOBS_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG,
-  JOBS_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG,
-  JOBS_ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG,
-  JOBS_SESSION_IDENTITY_INVALID_ERROR_TAG,
-  JOBS_SESSION_REQUIRED_ERROR_TAG,
-} from "./errors.js";
+  ORGANIZATION_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG,
+  ORGANIZATION_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG,
+  ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
+  ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG,
+  ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG,
+  ORGANIZATION_SESSION_REQUIRED_ERROR_TAG,
+} from "../organizations/errors.js";
 import type {
-  JobsActiveOrganizationRequiredError,
-  JobsActorMembershipNotFoundError,
-  JobsOrganizationRoleNotSupportedError,
-  JobsSessionIdentityInvalidError,
-  JobsSessionRequiredError,
-} from "./errors.js";
+  OrganizationActiveOrganizationRequiredError,
+  OrganizationActorMembershipNotFoundError,
+  OrganizationActorStorageError,
+  OrganizationRoleNotSupportedError,
+  OrganizationSessionIdentityInvalidError,
+  OrganizationSessionRequiredError,
+} from "../organizations/errors.js";
 
 export type ActorResolutionError =
-  | JobsActiveOrganizationRequiredError
-  | JobsActorMembershipNotFoundError
-  | JobsOrganizationRoleNotSupportedError
-  | JobsSessionIdentityInvalidError
-  | JobsSessionRequiredError;
+  | OrganizationActiveOrganizationRequiredError
+  | OrganizationActorMembershipNotFoundError
+  | OrganizationActorStorageError
+  | OrganizationRoleNotSupportedError
+  | OrganizationSessionIdentityInvalidError
+  | OrganizationSessionRequiredError;
 
 export function mapActorResolutionErrorsToAccessDenied(
   workItemId?: WorkItemId
@@ -43,15 +43,22 @@ export function mapActorResolutionErrorsToAccessDenied(
   > =>
     effect.pipe(
       Effect.catchTags({
-        [JOBS_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG]: (error) =>
+        [ORGANIZATION_ACTOR_STORAGE_ERROR_TAG]: (error) =>
+          Effect.fail(
+            new JobStorageError({
+              cause: error.cause,
+              message: error.message,
+            })
+          ),
+        [ORGANIZATION_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG]: (error) =>
           Effect.fail(makeAccessDenied(error.message, workItemId)),
-        [JOBS_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG]: (error) =>
+        [ORGANIZATION_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG]: (error) =>
           Effect.fail(makeAccessDenied(error.message, workItemId)),
-        [JOBS_ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG]: (error) =>
+        [ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG]: (error) =>
           Effect.fail(makeAccessDenied(error.message, workItemId)),
-        [JOBS_SESSION_IDENTITY_INVALID_ERROR_TAG]: (error) =>
+        [ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG]: (error) =>
           Effect.fail(makeAccessDenied(error.message, workItemId)),
-        [JOBS_SESSION_REQUIRED_ERROR_TAG]: (error) =>
+        [ORGANIZATION_SESSION_REQUIRED_ERROR_TAG]: (error) =>
           Effect.fail(makeAccessDenied(error.message, workItemId)),
       })
     );

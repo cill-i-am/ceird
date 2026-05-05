@@ -230,9 +230,7 @@ const PlanetScaleRoleProvider = () =>
 const protectedResourceDestroyEnabled = Config.boolean(
   "CEIRD_DESTROY_PROTECTED_RESOURCES"
 ).pipe(
-  Config.orElse(() =>
-    Config.boolean("TASK_TRACKER_DESTROY_PROTECTED_RESOURCES")
-  ),
+  Config.orElse(() => Config.boolean("CEIRD_DESTROY_PROTECTED_RESOURCES")),
   Config.withDefault(false)
 );
 

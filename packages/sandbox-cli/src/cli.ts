@@ -1,16 +1,16 @@
 import { fileURLToPath } from "node:url";
 
-import * as Command from "@effect/cli/Command";
-import * as Options from "@effect/cli/Options";
-import { NodeContext } from "@effect/platform-node";
 import type {
   ComposeProjectNameType as ComposeProjectName,
   MissingSandboxResource,
   SandboxNameType as SandboxName,
   SandboxStatus,
   SandboxUrls,
-} from "@task-tracker/sandbox-core";
-import { validateSandboxName } from "@task-tracker/sandbox-core";
+} from "@ceird/sandbox-core";
+import { validateSandboxName } from "@ceird/sandbox-core";
+import * as Command from "@effect/cli/Command";
+import * as Options from "@effect/cli/Options";
+import { NodeContext } from "@effect/platform-node";
 import { Cause, Console, Effect, Either, Exit, Option, Schema } from "effect";
 
 import { SandboxProcessService } from "./process.js";
@@ -168,7 +168,7 @@ const sandboxCommand = Command.make("sandbox").pipe(
 );
 
 const cli = Command.run(sandboxCommand, {
-  name: "Task Tracker Sandbox CLI",
+  name: "Ceird Sandbox CLI",
   version: "0.2.0",
 });
 

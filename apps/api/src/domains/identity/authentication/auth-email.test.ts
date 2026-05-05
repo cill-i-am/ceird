@@ -46,8 +46,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Taylor Example",
         organizationName: "Acme Field Ops",
         inviterEmail: "owner@example.com",
-        invitationUrl:
-          "https://app.task-tracker.localhost/accept-invitation/inv_123",
+        invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_123",
         role: "member",
       }).pipe(
         Effect.provide(
@@ -65,18 +64,18 @@ describe("auth email sender password reset delivery", () => {
       {
         deliveryKey: "organization-invitation/inv_123",
         to: "member@example.com",
-        subject: "Join Acme Field Ops on Task Tracker",
+        subject: "Join Acme Field Ops on Ceird",
         text: [
           "Hello Taylor Example,",
           "",
           "owner@example.com invited you to join Acme Field Ops as a member.",
           "",
-          "https://app.task-tracker.localhost/accept-invitation/inv_123",
+          "https://app.ceird.localhost/accept-invitation/inv_123",
         ].join("\n"),
         html: [
           "<p>Hello Taylor Example,</p>",
           "<p>owner@example.com invited you to join Acme Field Ops as a member.</p>",
-          '<p><a href="https://app.task-tracker.localhost/accept-invitation/inv_123">Accept invitation</a></p>',
+          '<p><a href="https://app.ceird.localhost/accept-invitation/inv_123">Accept invitation</a></p>',
         ].join(""),
       },
     ]);
@@ -92,8 +91,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Jordan Example",
         organizationName: "Northwind Ops",
         inviterEmail: "existing-owner@example.com",
-        invitationUrl:
-          "https://app.task-tracker.localhost/accept-invitation/inv_456",
+        invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_456",
         role: "owner",
       }).pipe(
         Effect.provide(
@@ -121,7 +119,7 @@ describe("auth email sender password reset delivery", () => {
         organizationName: "Acme Field Ops",
         inviterEmail: "owner@example.com",
         invitationUrl:
-          "https://user:password@app.task-tracker.localhost/accept-invitation/inv_789",
+          "https://user:password@app.ceird.localhost/accept-invitation/inv_789",
         role: "member",
       } as never).pipe(
         Effect.either,
@@ -158,8 +156,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Taylor Example",
         organizationName: "Acme Field Ops",
         inviterEmail: "owner@example.com",
-        invitationUrl:
-          "https://app.task-tracker.localhost/accept-invitation/inv_req",
+        invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_req",
         role: "member",
       }).pipe(
         Effect.either,
@@ -198,7 +195,7 @@ describe("auth email sender password reset delivery", () => {
         organizationName: "Acme Field Ops",
         inviterEmail: "owner@example.com",
         invitationUrl:
-          "https://app.task-tracker.localhost/accept-invitation/inv_rejected",
+          "https://app.ceird.localhost/accept-invitation/inv_rejected",
         role: "member",
       }).pipe(
         Effect.either,
@@ -238,7 +235,7 @@ describe("auth email sender password reset delivery", () => {
         deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+        resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
@@ -260,11 +257,11 @@ describe("auth email sender password reset delivery", () => {
           "Hello Alice,",
           "",
           "Use this link to reset your password:",
-          "https://app.task-tracker.localhost/reset?token=abc123",
+          "https://app.ceird.localhost/reset?token=abc123",
         ].join("\n"),
         html: [
           "<p>Hello Alice,</p>",
-          '<p><a href="https://app.task-tracker.localhost/reset?token=abc123">Reset your password</a></p>',
+          '<p><a href="https://app.ceird.localhost/reset?token=abc123">Reset your password</a></p>',
         ].join(""),
       },
     ]);
@@ -276,7 +273,7 @@ describe("auth email sender password reset delivery", () => {
         deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+        resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
         Effect.either,
         Effect.provide(
@@ -314,7 +311,7 @@ describe("auth email sender password reset delivery", () => {
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         resetUrl:
-          "https://user:password@app.task-tracker.localhost/reset?token=abc123",
+          "https://user:password@app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
         Effect.either,
         Effect.provide(
@@ -348,7 +345,7 @@ describe("auth email sender password reset delivery", () => {
         deliveryKey: "password-reset/user-123/token-abc123",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+        resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
         Effect.either,
         Effect.provide(
@@ -383,7 +380,7 @@ describe("auth email sender password reset delivery", () => {
         deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        resetUrl: "https://app.task-tracker.localhost/reset?token=abc123",
+        resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
         Effect.either,
         Effect.provide(
@@ -420,8 +417,7 @@ describe("auth email sender password reset delivery", () => {
         deliveryKey: PASSWORD_RESET_DELIVERY_KEY,
         recipientEmail: "alice@example.com",
         recipientName: 'Alice & <Admin> "Boss"',
-        resetUrl:
-          "https://app.task-tracker.localhost/reset?token=abc&next=%2Fhome",
+        resetUrl: "https://app.ceird.localhost/reset?token=abc&next=%2Fhome",
       }).pipe(
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
@@ -435,7 +431,7 @@ describe("auth email sender password reset delivery", () => {
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.html).toBe(
-      '<p>Hello Alice &amp; &lt;Admin&gt; &quot;Boss&quot;,</p><p><a href="https://app.task-tracker.localhost/reset?token=abc&amp;next=%2Fhome">Reset your password</a></p>'
+      '<p>Hello Alice &amp; &lt;Admin&gt; &quot;Boss&quot;,</p><p><a href="https://app.ceird.localhost/reset?token=abc&amp;next=%2Fhome">Reset your password</a></p>'
     );
     expect(sentMessages[0]?.html).not.toContain("<Admin>");
     expect(sentMessages[0]?.html).toContain("&amp;next=%2Fhome");
@@ -451,8 +447,7 @@ describe("auth email sender email verification delivery", () => {
         deliveryKey: "email-verification/user-123/token-verify123",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        verificationUrl:
-          "https://app.task-tracker.localhost/verify-email?success=1",
+        verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
@@ -474,11 +469,11 @@ describe("auth email sender email verification delivery", () => {
           "Hello Alice,",
           "",
           "Use this link to verify your email:",
-          "https://app.task-tracker.localhost/verify-email?success=1",
+          "https://app.ceird.localhost/verify-email?success=1",
         ].join("\n"),
         html: [
           "<p>Hello Alice,</p>",
-          '<p><a href="https://app.task-tracker.localhost/verify-email?success=1">Verify your email</a></p>',
+          '<p><a href="https://app.ceird.localhost/verify-email?success=1">Verify your email</a></p>',
         ].join(""),
       },
     ]);
@@ -493,7 +488,7 @@ describe("auth email sender email verification delivery", () => {
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
         verificationUrl:
-          "https://user:password@app.task-tracker.localhost/verify-email?success=1",
+          "https://user:password@app.ceird.localhost/verify-email?success=1",
       } as never).pipe(
         Effect.either,
         Effect.provide(
@@ -525,8 +520,7 @@ describe("auth email sender email verification delivery", () => {
         deliveryKey: "email-verification/user-123/token-verify123",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        verificationUrl:
-          "https://app.task-tracker.localhost/verify-email?success=1",
+        verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
         Effect.either,
         Effect.provide(
@@ -561,8 +555,7 @@ describe("auth email sender email verification delivery", () => {
         deliveryKey: "email-verification/user-123/token-rejected",
         recipientEmail: "alice@example.com",
         recipientName: "Alice",
-        verificationUrl:
-          "https://app.task-tracker.localhost/verify-email?success=1",
+        verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
         Effect.either,
         Effect.provide(
@@ -616,8 +609,8 @@ describe("auth email config loading", () => {
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
             new Map([
-              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
             ])
           )
         )
@@ -626,9 +619,9 @@ describe("auth email config loading", () => {
 
     expect(config).toStrictEqual({
       transportMode: "noop",
-      appOrigin: "https://app.task-tracker.localhost",
-      from: "auth@task-tracker.localhost",
-      fromName: "Task Tracker",
+      appOrigin: "https://app.ceird.localhost",
+      from: "auth@ceird.localhost",
+      fromName: "Ceird",
       cloudflareAccountId: "",
       cloudflareApiToken: "",
     });
@@ -641,8 +634,8 @@ describe("auth email config loading", () => {
           ConfigProvider.fromMap(
             new Map([
               ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
-              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
               ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
               ["CLOUDFLARE_API_TOKEN", "token_123"],
             ])
@@ -653,9 +646,9 @@ describe("auth email config loading", () => {
 
     expect(config).toStrictEqual({
       transportMode: "cloudflare-api",
-      appOrigin: "https://app.task-tracker.localhost",
-      from: "auth@task-tracker.localhost",
-      fromName: "Task Tracker",
+      appOrigin: "https://app.ceird.localhost",
+      from: "auth@ceird.localhost",
+      fromName: "Ceird",
       cloudflareAccountId: "account_123",
       cloudflareApiToken: "token_123",
     });
@@ -668,8 +661,8 @@ describe("auth email config loading", () => {
           ConfigProvider.fromMap(
             new Map([
               ["AUTH_EMAIL_TRANSPORT", "cloudflare-binding"],
-              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
             ])
           )
         )
@@ -678,9 +671,9 @@ describe("auth email config loading", () => {
 
     expect(config).toStrictEqual({
       transportMode: "cloudflare-binding",
-      appOrigin: "https://app.task-tracker.localhost",
-      from: "auth@task-tracker.localhost",
-      fromName: "Task Tracker",
+      appOrigin: "https://app.ceird.localhost",
+      from: "auth@ceird.localhost",
+      fromName: "Ceird",
       cloudflareAccountId: "",
       cloudflareApiToken: "",
     });
@@ -691,7 +684,7 @@ describe("auth email config loading", () => {
       loadAuthEmailConfig.pipe(
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
-            new Map([["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"]])
+            new Map([["AUTH_EMAIL_FROM", "auth@ceird.localhost"]])
           )
         ),
         Effect.either
@@ -714,8 +707,8 @@ describe("auth email config loading", () => {
           ConfigProvider.fromMap(
             new Map([
               ["AUTH_EMAIL_TRANSPORT", "cloudflare-api"],
-              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@task-tracker.localhost"],
+              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
+              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
             ])
           )
         ),
@@ -741,7 +734,7 @@ describe("auth email config loading", () => {
         Effect.withConfigProvider(
           ConfigProvider.fromMap(
             new Map([
-              ["AUTH_APP_ORIGIN", "https://app.task-tracker.localhost"],
+              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "not-an-email"],
               ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
               ["CLOUDFLARE_API_TOKEN", "token_123"],

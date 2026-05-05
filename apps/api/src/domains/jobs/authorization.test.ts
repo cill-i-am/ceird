@@ -1,25 +1,21 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  JobAccessDeniedError,
-  JobSchema,
-  WorkItemId,
-} from "@task-tracker/jobs-core";
-import type { Job, UserId } from "@task-tracker/jobs-core";
+import { JobAccessDeniedError, JobSchema, WorkItemId } from "@ceird/jobs-core";
+import type { Job, UserId } from "@ceird/jobs-core";
 import { Cause, Effect, Exit, Option, ParseResult, Schema } from "effect";
 
+import type { OrganizationActor as OrganizationActorType } from "../organizations/current-actor.js";
 import { JobsAuthorization } from "./authorization.js";
-import type { JobsActor as JobsActorType } from "./current-jobs-actor.js";
 
 const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
 
 function makeActor(
-  role: JobsActorType["role"],
-  overrides: Partial<JobsActorType> = {}
-): JobsActorType {
+  role: OrganizationActorType["role"],
+  overrides: Partial<OrganizationActorType> = {}
+): OrganizationActorType {
   return {
-    organizationId: "org_123" as JobsActorType["organizationId"],
+    organizationId: "org_123" as OrganizationActorType["organizationId"],
     role,
     userId: "user_123" as UserId,
     ...overrides,
@@ -92,8 +88,6 @@ describe("jobs authorization", () => {
         Effect.gen(function* () {
           const authorization = yield* JobsAuthorization;
           yield* authorization.ensureCanCreate(owner);
-          yield* authorization.ensureCanCreateSite(owner);
-          yield* authorization.ensureCanManageLabels(owner);
           yield* authorization.ensureCanManageCollaborators(owner, job.id);
           yield* authorization.ensureCanAssignLabels(admin, job);
           yield* authorization.ensureCanPatch(admin, job.id);
@@ -137,17 +131,6 @@ describe("jobs authorization", () => {
       runAuthorization(
         Effect.gen(function* () {
           const authorization = yield* JobsAuthorization;
-          yield* authorization.ensureCanManageLabels(member);
-        })
-      )
-    ).rejects.toMatchObject({
-      message: "Only organization owners and admins can manage job labels",
-    });
-
-    await expect(
-      runAuthorization(
-        Effect.gen(function* () {
-          const authorization = yield* JobsAuthorization;
           yield* authorization.ensureCanAssignLabels(member, unassignedJob);
         })
       )
@@ -165,17 +148,6 @@ describe("jobs authorization", () => {
     ).rejects.toMatchObject({
       message:
         "Only organization owners and admins can view organization activity",
-    });
-
-    await expect(
-      runAuthorization(
-        Effect.gen(function* () {
-          const authorization = yield* JobsAuthorization;
-          yield* authorization.ensureCanCreateSite(member);
-        })
-      )
-    ).rejects.toMatchObject({
-      message: "Only organization owners and admins can create sites",
     });
 
     await expect(
@@ -288,11 +260,9 @@ describe("jobs authorization", () => {
 
     const authorizationChecks = await Promise.all([
       runAuthorizationExit(JobsAuthorization.ensureCanCreate(external)),
-      runAuthorizationExit(JobsAuthorization.ensureCanCreateSite(external)),
       runAuthorizationExit(
         JobsAuthorization.ensureCanManageConfiguration(external)
       ),
-      runAuthorizationExit(JobsAuthorization.ensureCanManageLabels(external)),
       runAuthorizationExit(
         JobsAuthorization.ensureCanManageCollaborators(external, job.id)
       ),
@@ -322,6 +292,6 @@ describe("jobs authorization", () => {
         )
         .every((check) => check instanceof JobAccessDeniedError),
     ]).toStrictEqual([true]);
-    expect(authorizationChecks).toHaveLength(12);
+    expect(authorizationChecks).toHaveLength(10);
   }, 10_000);
 });

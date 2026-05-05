@@ -53,7 +53,7 @@ test("excludes assets, lightweight helpers, build tooling, and workspace package
         "@tanstack/react-router-devtools": "latest",
         "@tanstack/router-plugin": "^1.132.0",
         "@tailwindcss/vite": "^4.1.18",
-        "@task-tracker/sandbox-core": "workspace:*",
+        "@ceird/sandbox-core": "workspace:*",
         "class-variance-authority": "^0.7.1",
         clsx: "^2.1.1",
         react: "^19.2.0",

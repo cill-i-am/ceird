@@ -36,14 +36,14 @@ export interface SandboxRuntimeSpec {
 }
 
 export const SandboxDockerImageReference = Schema.NonEmptyString.pipe(
-  Schema.brand("@task-tracker/SandboxDockerImageReference")
+  Schema.brand("@ceird/SandboxDockerImageReference")
 );
 export type SandboxDockerImageReference = Schema.Schema.Type<
   typeof SandboxDockerImageReference
 >;
 
 export const SandboxDockerVolumeName = Schema.NonEmptyString.pipe(
-  Schema.brand("@task-tracker/SandboxDockerVolumeName")
+  Schema.brand("@ceird/SandboxDockerVolumeName")
 );
 export type SandboxDockerVolumeName = Schema.Schema.Type<
   typeof SandboxDockerVolumeName
@@ -84,7 +84,7 @@ const SandboxRuntimeBaseOverrides = Schema.Struct({
   SANDBOX_NAME: SandboxNameSchema,
   SANDBOX_PNPM_STORE_VOLUME: SandboxDockerVolumeName,
   SITE_GEOCODER_MODE: Schema.Literal("stub"),
-  TASK_TRACKER_SANDBOX: Schema.Literal("1"),
+  CEIRD_SANDBOX: Schema.Literal("1"),
   VITE_API_ORIGIN: SandboxHttpUrl,
 });
 
@@ -128,7 +128,7 @@ export function buildSandboxRuntimeBaseOverrides(input: {
     AUTH_RATE_LIMIT_ENABLED: "false",
     BETTER_AUTH_BASE_URL: input.urls.api,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
-    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/task_tracker",
+    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/ceird",
     HOST: "0.0.0.0",
     PORT: String(input.ports.api),
     POSTGRES_HOST_PORT: String(input.ports.postgres),
@@ -138,7 +138,7 @@ export function buildSandboxRuntimeBaseOverrides(input: {
     SANDBOX_NAME: input.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
     SITE_GEOCODER_MODE: "stub",
-    TASK_TRACKER_SANDBOX: "1",
+    CEIRD_SANDBOX: "1",
     VITE_API_ORIGIN: input.urls.api,
   });
 }

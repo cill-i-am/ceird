@@ -1,7 +1,4 @@
-import type {
-  JobActivityPayload,
-  JobCostLineType,
-} from "@task-tracker/jobs-core";
+import type { JobActivityPayload, JobCostLineType } from "@ceird/jobs-core";
 
 import {
   JOB_PRIORITY_LABELS,

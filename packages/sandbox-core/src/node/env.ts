@@ -10,7 +10,7 @@ import type { SharedSandboxEnvironment as SharedSandboxEnvironmentType } from ".
 const ENV_FILES = [".env", ".env.local"] as const;
 
 export const SANDBOX_ENVIRONMENT_ERROR_TAG =
-  "@task-tracker/sandbox-core/SandboxEnvironmentError" as const;
+  "@ceird/sandbox-core/SandboxEnvironmentError" as const;
 
 export class SandboxEnvironmentError extends Schema.TaggedError<SandboxEnvironmentError>()(
   SANDBOX_ENVIRONMENT_ERROR_TAG,

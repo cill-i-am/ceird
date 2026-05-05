@@ -1,10 +1,10 @@
-import { RegistryProvider } from "@effect-atom/atom-react";
-import type { OrganizationId } from "@task-tracker/identity-core";
+import type { OrganizationId } from "@ceird/identity-core";
 import type {
   JobDetailResponse,
   JobListResponse,
   JobOptionsResponse,
-} from "@task-tracker/jobs-core";
+} from "@ceird/jobs-core";
+import { RegistryProvider } from "@effect-atom/atom-react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";

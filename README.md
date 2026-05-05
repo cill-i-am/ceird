@@ -1,6 +1,6 @@
 # Ceird
 
-Ceird is a greenfield task-tracker for trades and construction teams. The
+Ceird is a greenfield ceird for trades and construction teams. The
 product gives small and medium-sized businesses a focused way to manage jobs,
 sites, members, activity, and organization configuration without adopting a
 generic project-management workflow.
@@ -36,18 +36,20 @@ URLs when Portless aliases are healthy.
 
 ## Workspace Map
 
-| Path                     | Purpose                                                                                                                       |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                 |
-| `apps/api`               | Effect HTTP API, Better Auth integration, jobs domain services, Drizzle schema, migrations, and Cloudflare Worker entrypoint. |
-| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                       |
-| `packages/jobs-core`     | Shared jobs domain schemas, branded IDs, DTOs, API contract, and typed error classes.                                         |
-| `packages/sandbox-core`  | Pure sandbox identity, naming, URL, runtime-spec, and registry/environment primitives.                                        |
-| `packages/sandbox-cli`   | Effect CLI that boots, stops, inspects, and logs per-worktree Docker sandboxes.                                               |
-| `packages/infra`         | Alchemy v2 infrastructure for Cloudflare Workers/Vite, Queues, Hyperdrive, and PlanetScale Postgres.                          |
-| `scripts`                | Root dev helpers, Portless/Vite wrappers, opensrc sync, and local environment scripts.                                        |
-| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                  |
-| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                   |
+| Path                     | Purpose                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                              |
+| `apps/api`               | Effect HTTP API, Better Auth integration, jobs/sites/labels domain services, Drizzle schema, migrations, and Cloudflare Worker entrypoint. |
+| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                                    |
+| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                              |
+| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                                  |
+| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                                 |
+| `packages/sandbox-core`  | Pure sandbox identity, naming, URL, runtime-spec, and registry/environment primitives.                                                     |
+| `packages/sandbox-cli`   | Effect CLI that boots, stops, inspects, and logs per-worktree Docker sandboxes.                                                            |
+| `packages/infra`         | Alchemy v2 infrastructure for Cloudflare Workers/Vite, Queues, Hyperdrive, and PlanetScale Postgres.                                       |
+| `scripts`                | Root dev helpers, Portless/Vite wrappers, opensrc sync, and local environment scripts.                                                     |
+| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                               |
+| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                                |
 
 ## Common Commands
 
@@ -92,14 +94,16 @@ The highest-signal guides are:
 The browser app uses TanStack Router file routes and TanStack Start server-only
 helpers. Authentication is owned by the API through Better Auth, while the app
 forwards cookies and proxy headers during server-side lookups. Jobs data moves
-through an Effect `HttpApi` contract exported by `@task-tracker/jobs-core`, so
-frontend clients, API handlers, DTOs, and HTTP error responses share the same
-runtime schema boundary.
+through Effect `HttpApi` contracts exported by `@ceird/jobs-core`,
+`@ceird/sites-core`, and `@ceird/labels-core`, so frontend clients, API
+handlers, DTOs, and HTTP error responses share the same runtime schema
+boundaries.
 
 The API keeps domain behavior in Effect services. The identity domain wires
 Better Auth, organization membership, invitation preview, and auth email
-delivery. The jobs domain owns authorization, actor resolution, job/site/config
-services, repositories, activity recording, and optional site geocoding.
+delivery. The jobs domain owns job workflows, rate cards, job-label assignment,
+contacts, and activity recording. Sites and organization labels have their own
+API domains, services, repositories, schemas, and `HttpApi` contracts.
 
 Local multi-service development is handled by the sandbox packages. Production
 infrastructure is described in Alchemy and deploys Cloudflare Workers/Vite,
