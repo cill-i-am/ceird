@@ -50,6 +50,25 @@ describe("members route loader", () => {
     10_000
   );
 
+  it("keeps members unavailable after switching to an external organization", async () => {
+    const { loadMembersRouteData } = await import("./_app._org.members");
+    let result: unknown;
+
+    try {
+      loadMembersRouteData({
+        activeOrganizationSync: readySync,
+        currentOrganizationRole: "external",
+      });
+    } catch (error) {
+      result = error;
+    }
+
+    expect(result).toMatchObject({
+      options: { to: "/" },
+    });
+    expect(result).toSatisfy(isRedirect);
+  });
+
   it("short-circuits while active organization sync is pending", async () => {
     const { loadMembersRouteData } = await import("./_app._org.members");
 

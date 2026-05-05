@@ -199,6 +199,48 @@ describe("jobs route loader", () => {
   );
 
   it(
+    "keeps jobs available after switching to an external organization",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const list = {
+        items: [],
+        nextCursor: undefined,
+      };
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(list);
+      const { loadJobsRouteData } = await import("./_app._org.jobs");
+
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "external",
+          currentUserId: userId,
+        })
+      ).resolves.toMatchObject({
+        list,
+        options: {
+          contacts: [],
+          labels: [],
+          members: [],
+          serviceAreas: [],
+          sites: [],
+        },
+        viewer: {
+          role: "external",
+          userId,
+        },
+      });
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
     "hydrates granted job site context for external collaborators without organization-wide options",
     {
       timeout: 10_000,

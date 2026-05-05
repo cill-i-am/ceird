@@ -97,6 +97,37 @@ describe("settings route loader", () => {
     }
   );
 
+  it.each<OrganizationRole>(["member", "external"])(
+    "keeps organization settings unavailable after switching to a %s organization",
+    {
+      timeout: 10_000,
+    },
+    async (role) => {
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
+      let result: unknown;
+
+      try {
+        assertSettingsRouteAccess({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: role,
+        });
+      } catch (error) {
+        result = error;
+      }
+
+      expect(result).toMatchObject({
+        options: { to: "/" },
+      });
+      expect(result).toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
+    }
+  );
+
   it(
     "defers role checks while active organization sync is pending",
     {
