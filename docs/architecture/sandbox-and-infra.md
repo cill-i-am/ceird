@@ -124,10 +124,11 @@ contract, including `nodejs_compat`, so runtime packages that rely on Node.js
 compatibility APIs run consistently across both deployable surfaces. The API
 Worker is also configured with Better Auth env vars, database Hyperdrive
 binding, auth email queue binding, observability logs, and traces. The app is
-configured with app/API origins, Cloudflare-specific Vite flags, Sentry tracing,
-Sentry structured logs, and Session Replay. Sentry is initialized client-side
-only for browser replay/tracing and sanitizes sensitive query parameters before
-telemetry leaves the app.
+configured with app/API origins, Cloudflare-specific Vite flags, Cloudflare
+observability logs and traces, browser Sentry tracing, Sentry structured logs,
+and Session Replay. Browser Sentry is imported only after a browser runtime
+check so Cloudflare Worker startup does not load the Node Sentry SDK; telemetry
+sanitizes sensitive query parameters before it leaves the app.
 
 ## Infra Configuration
 

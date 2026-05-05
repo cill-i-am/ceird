@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
@@ -7,15 +6,31 @@ import {
   sanitizeReplayRecordingEvent,
 } from "./sentry-config";
 
+type AppRouter = ReturnType<typeof createAppRouter>;
+
 export function getRouter() {
-  const router = createTanStackRouter({
+  const router = createAppRouter();
+
+  if (!import.meta.env.SSR && shouldInitializeClientSentry()) {
+    void initializeClientSentry(router);
+  }
+
+  return router;
+}
+
+export function createAppRouter() {
+  return createTanStackRouter({
     routeTree,
     scrollRestoration: true,
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
   });
+}
 
-  if (shouldInitializeClientSentry()) {
+export async function initializeClientSentry(router: AppRouter) {
+  if (!import.meta.env.SSR && shouldInitializeClientSentry()) {
+    const Sentry = await import("@sentry/tanstackstart-react");
+
     Sentry.init(
       createClientSentryOptions({
         environment: import.meta.env.MODE,
@@ -29,12 +44,10 @@ export function getRouter() {
       })
     );
   }
-
-  return router;
 }
 
 export function shouldInitializeClientSentry() {
-  return typeof window !== "undefined";
+  return !import.meta.env.SSR && typeof window !== "undefined";
 }
 
 declare module "@tanstack/react-router" {

@@ -1,6 +1,11 @@
 import type * as SentrySdk from "@sentry/tanstackstart-react";
 
-import { getRouter, shouldInitializeClientSentry } from "./router";
+import {
+  createAppRouter,
+  getRouter,
+  initializeClientSentry,
+  shouldInitializeClientSentry,
+} from "./router";
 import { SENTRY_DSN } from "./sentry-config";
 
 type SentryInit = typeof SentrySdk.init;
@@ -41,26 +46,28 @@ describe("router sentry integration", () => {
     vi.unstubAllGlobals();
   });
 
-  it("initializes Sentry with tracing and replay for each router", () => {
+  it("initializes Sentry with tracing and replay for each router", async () => {
     const router = getRouter();
 
-    expect(tracingIntegration).toHaveBeenCalledWith(router);
-    expect(replayIntegration).toHaveBeenCalledWith({
-      beforeAddRecordingEvent: expect.any(Function),
-      blockAllMedia: true,
-      maskAllText: true,
+    await vi.waitFor(() => {
+      expect(tracingIntegration).toHaveBeenCalledWith(router);
+      expect(replayIntegration).toHaveBeenCalledWith({
+        beforeAddRecordingEvent: expect.any(Function),
+        blockAllMedia: true,
+        maskAllText: true,
+      });
+      expect(sentryInit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dsn: SENTRY_DSN,
+          enableLogs: true,
+          integrations: [
+            expect.objectContaining({ name: "tracing" }),
+            expect.objectContaining({ name: "replay" }),
+          ],
+          tracesSampleRate: 1,
+        })
+      );
     });
-    expect(sentryInit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dsn: SENTRY_DSN,
-        enableLogs: true,
-        integrations: [
-          expect.objectContaining({ name: "tracing" }),
-          expect.objectContaining({ name: "replay" }),
-        ],
-        tracesSampleRate: 1,
-      })
-    );
   });
 
   it("keeps browser-only Sentry setup behind a runtime guard", () => {
@@ -72,6 +79,32 @@ describe("router sentry integration", () => {
 
     expect(shouldInitializeClientSentry()).toBeFalsy();
 
-    vi.stubGlobal("window", originalWindow);
+    restoreWindow(originalWindow);
+  });
+
+  it("does not import the browser SDK on the server", async () => {
+    const router = createAppRouter();
+    sentryInit.mockClear();
+    replayIntegration.mockClear();
+    tracingIntegration.mockClear();
+
+    const originalWindow = globalThis.window;
+    Reflect.deleteProperty(globalThis, "window");
+
+    await initializeClientSentry(router);
+
+    expect(sentryInit).not.toHaveBeenCalled();
+    expect(replayIntegration).not.toHaveBeenCalled();
+    expect(tracingIntegration).not.toHaveBeenCalled();
+
+    restoreWindow(originalWindow);
   });
 });
+
+function restoreWindow(windowValue: Window & typeof globalThis) {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: windowValue,
+    writable: true,
+  });
+}
