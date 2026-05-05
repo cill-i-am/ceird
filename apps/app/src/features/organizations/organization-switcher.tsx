@@ -83,8 +83,10 @@ export function OrganizationSwitcher({
       organizations: current.organizations,
     }));
 
-    void listOrganizations()
-      .then((organizations) => {
+    void (async () => {
+      try {
+        const organizations = await listOrganizations();
+
         if (requestIdRef.current !== requestId) {
           return;
         }
@@ -93,8 +95,7 @@ export function OrganizationSwitcher({
           status: "ready",
           organizations,
         });
-      })
-      .catch(() => {
+      } catch {
         if (requestIdRef.current !== requestId) {
           return;
         }
@@ -103,7 +104,8 @@ export function OrganizationSwitcher({
           status: "error",
           organizations: current.organizations,
         }));
-      });
+      }
+    })();
   }, []);
 
   React.useEffect(() => {
@@ -140,7 +142,7 @@ export function OrganizationSwitcher({
     [activeOrganization?.id, router]
   );
 
-  const organizations = listState.organizations;
+  const { organizations } = listState;
   const canSwitchOrganizations =
     listState.status === "ready" && organizations.length > 1;
   const activeOrganizationName =
@@ -159,6 +161,21 @@ export function OrganizationSwitcher({
     },
     { enabled: canSwitchOrganizations && switchState.status !== "switching" }
   );
+
+  let triggerTrailing: React.ReactNode = null;
+
+  if (listState.status === "loading") {
+    triggerTrailing = <DotMatrixButtonLoader />;
+  } else if (canSwitchOrganizations) {
+    triggerTrailing = (
+      <HugeiconsIcon
+        aria-hidden="true"
+        icon={UnfoldMoreIcon}
+        strokeWidth={2}
+        className="ml-auto size-4 text-muted-foreground"
+      />
+    );
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -186,16 +203,7 @@ export function OrganizationSwitcher({
                 {activeOrganizationDescription}
               </span>
             </span>
-            {listState.status === "loading" ? (
-              <DotMatrixButtonLoader />
-            ) : canSwitchOrganizations ? (
-              <HugeiconsIcon
-                aria-hidden="true"
-                icon={UnfoldMoreIcon}
-                strokeWidth={2}
-                className="ml-auto size-4 text-muted-foreground"
-              />
-            ) : null}
+            {triggerTrailing}
           </SidebarMenuButton>
         }
       />

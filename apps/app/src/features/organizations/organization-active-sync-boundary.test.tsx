@@ -9,25 +9,43 @@ const { mockedRouterInvalidate, mockedSynchronizeClientActiveOrganization } =
     mockedSynchronizeClientActiveOrganization: vi.fn<() => Promise<void>>(),
   }));
 
-vi.mock("@tanstack/react-router", () => ({
-  useRouter: () => ({
-    invalidate: mockedRouterInvalidate,
-  }),
-}));
+vi.mock(import("@tanstack/react-router"), async (importActual) => {
+  const actual = await importActual();
 
-vi.mock("./organization-access", () => ({
-  synchronizeClientActiveOrganization:
-    mockedSynchronizeClientActiveOrganization,
-}));
+  return {
+    ...actual,
+    useRouter: (() => ({
+      invalidate: mockedRouterInvalidate,
+    })) as typeof actual.useRouter,
+  };
+});
 
-describe("OrganizationActiveSyncBoundary", () => {
+vi.mock(import("./organization-access"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    synchronizeClientActiveOrganization:
+      mockedSynchronizeClientActiveOrganization as unknown as typeof actual.synchronizeClientActiveOrganization,
+  };
+});
+
+const promiseWithResolvers = Promise as unknown as {
+  withResolvers<Value>(): {
+    promise: Promise<Value>;
+    reject: (reason?: unknown) => void;
+    resolve: (value?: Value | PromiseLike<Value>) => void;
+  };
+};
+
+describe("organization active sync boundary", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
   it("synchronizes the active organization and invalidates router state", async () => {
-    const syncDeferred = createDeferred();
-    const invalidateDeferred = createDeferred();
+    const syncDeferred = promiseWithResolvers.withResolvers<undefined>();
+    const invalidateDeferred = promiseWithResolvers.withResolvers<undefined>();
 
     mockedSynchronizeClientActiveOrganization.mockReturnValue(
       syncDeferred.promise
@@ -65,18 +83,6 @@ describe("OrganizationActiveSyncBoundary", () => {
 
     invalidateDeferred.resolve();
 
-    expect(await screen.findByText("Loaded app")).toBeInTheDocument();
+    await expect(screen.findByText("Loaded app")).resolves.toBeInTheDocument();
   });
 });
-
-function createDeferred() {
-  let resolve: () => void = () => {};
-  const promise = new Promise<void>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-
-  return {
-    promise,
-    resolve,
-  };
-}

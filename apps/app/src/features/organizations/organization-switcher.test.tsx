@@ -1,7 +1,5 @@
-import {
-  decodeOrganizationId,
-  type OrganizationSummary,
-} from "@ceird/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationSummary } from "@ceird/identity-core";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
@@ -23,6 +21,14 @@ const { mockedRadioCancel, mockedRouterInvalidate } = vi.hoisted(() => ({
   mockedRadioCancel: vi.fn<() => void>(),
   mockedRouterInvalidate: vi.fn<() => Promise<void>>(),
 }));
+
+const promiseWithResolvers = Promise as unknown as {
+  withResolvers<Value>(): {
+    promise: Promise<Value>;
+    reject: (reason?: unknown) => void;
+    resolve: (value: Value | PromiseLike<Value>) => void;
+  };
+};
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -288,7 +294,10 @@ describe("organization switcher", () => {
   });
 
   it("shows a loading state while organizations are loading", async () => {
-    mockedListOrganizations.mockReturnValue(new Promise(() => {}));
+    const loadingOrganizations =
+      promiseWithResolvers.withResolvers<readonly OrganizationSummary[]>();
+
+    mockedListOrganizations.mockReturnValue(loadingOrganizations.promise);
 
     const user = userEvent.setup();
     renderSwitcher(
@@ -311,9 +320,9 @@ describe("organization switcher", () => {
 
     renderSwitcher(null);
 
-    expect(
-      await screen.findByRole("button", { name: /no active organization/i })
-    ).toBeDisabled();
+    await expect(
+      screen.findByRole("button", { name: /no active organization/i })
+    ).resolves.toBeDisabled();
     expect(screen.queryByText(/no organizations/i)).not.toBeInTheDocument();
   });
 
@@ -326,9 +335,9 @@ describe("organization switcher", () => {
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
     );
 
-    expect(
-      await screen.findByRole("button", { name: /acme field ops/i })
-    ).toBeDisabled();
+    await expect(
+      screen.findByRole("button", { name: /acme field ops/i })
+    ).resolves.toBeDisabled();
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
   });
 
@@ -348,16 +357,16 @@ describe("organization switcher", () => {
       await screen.findByRole("button", { name: /acme field ops/i })
     );
 
-    expect(
-      await screen.findByText(/couldn't load organizations/i)
-    ).toBeInTheDocument();
+    await expect(
+      screen.findByText(/couldn't load organizations/i)
+    ).resolves.toBeInTheDocument();
     expect(screen.queryByTestId("unfold-more-icon")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retry/i }));
 
-    expect(
-      await screen.findByRole("menuitemradio", { name: /beta builds/i })
-    ).toBeInTheDocument();
+    await expect(
+      screen.findByRole("menuitemradio", { name: /beta builds/i })
+    ).resolves.toBeInTheDocument();
   });
 
   it("keeps retry reachable when organization loading fails without an active organization", async () => {
@@ -376,15 +385,15 @@ describe("organization switcher", () => {
 
     expect(trigger).toBeEnabled();
     await user.click(trigger);
-    expect(
-      await screen.findByText(/couldn't load organizations/i)
-    ).toBeInTheDocument();
+    await expect(
+      screen.findByText(/couldn't load organizations/i)
+    ).resolves.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retry/i }));
 
-    expect(
-      await screen.findByRole("menuitemradio", { name: /beta builds/i })
-    ).toBeInTheDocument();
+    await expect(
+      screen.findByRole("menuitemradio", { name: /beta builds/i })
+    ).resolves.toBeInTheDocument();
   });
 
   it("switches organizations and invalidates router state synchronously", async () => {
@@ -442,11 +451,11 @@ describe("organization switcher", () => {
     );
 
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
-    expect(
-      await screen.findByRole("alert", {
+    await expect(
+      screen.findByRole("alert", {
         name: /couldn't switch organizations/i,
       })
-    ).toBeInTheDocument();
+    ).resolves.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /acme field ops/i })
     ).toBeInTheDocument();
@@ -491,8 +500,8 @@ describe("organization switcher", () => {
 
     await user.keyboard("go");
 
-    expect(
-      await screen.findByRole("menuitemradio", { name: /beta builds/i })
-    ).toBeInTheDocument();
+    await expect(
+      screen.findByRole("menuitemradio", { name: /beta builds/i })
+    ).resolves.toBeInTheDocument();
   });
 });

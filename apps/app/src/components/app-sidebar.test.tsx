@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { isValidElement } from "react";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
 
@@ -20,7 +20,11 @@ const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
 }));
 
 const { mockedOrganizationSwitcher } = vi.hoisted(() => ({
-  mockedOrganizationSwitcher: vi.fn(
+  mockedOrganizationSwitcher: vi.fn<
+    (props: {
+      activeOrganization?: { id: string; name: string; slug: string } | null;
+    }) => ReactElement
+  >(
     ({
       activeOrganization,
     }: {
