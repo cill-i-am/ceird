@@ -14,6 +14,7 @@ import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
+const switchedOrganizationId = decodeOrganizationId("org_next");
 const userId = "user_123" as UserIdType;
 const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
@@ -171,10 +172,10 @@ describe("jobs route loader", () => {
 
       await expect(
         loadJobsRouteData({
-          activeOrganizationId: organizationId,
+          activeOrganizationId: switchedOrganizationId,
           activeOrganizationSync: {
             required: false,
-            targetOrganizationId: organizationId,
+            targetOrganizationId: switchedOrganizationId,
           },
           currentOrganizationRole: "external",
           currentUserId: userId,
