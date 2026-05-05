@@ -58,6 +58,7 @@ describe("shortcut help overlay", () => {
         <>
           <RegisteredShortcut id="toggleSidebar" />
           <RegisteredShortcutSequence id="goJobs" />
+          <RegisteredShortcutSequence id="openOrganizationSwitcher" />
         </>
       );
 
@@ -71,6 +72,7 @@ describe("shortcut help overlay", () => {
 
       expect(within(dialog).getByText("Toggle sidebar")).toBeVisible();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+      expect(within(dialog).getByText("Switch organization")).toBeVisible();
       expect(within(dialog).queryByText("Go to Sites")).not.toBeInTheDocument();
       expect(within(dialog).queryByText("Search jobs")).not.toBeInTheDocument();
     }

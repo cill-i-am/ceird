@@ -20,10 +20,14 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { SidebarMenuButton } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 
 import {
   listOrganizations,
@@ -137,6 +141,8 @@ export function OrganizationSwitcher({
   );
 
   const organizations = listState.organizations;
+  const canSwitchOrganizations =
+    listState.status === "ready" && organizations.length > 1;
   const activeOrganizationName =
     activeOrganization?.name ?? "No active organization";
   const triggerDisabled =
@@ -147,6 +153,14 @@ export function OrganizationSwitcher({
     listState.status === "ready" && organizations.length === 1
       ? "Only organization"
       : null;
+
+  useAppHotkeySequence(
+    "openOrganizationSwitcher",
+    () => {
+      setOpen(true);
+    },
+    { enabled: canSwitchOrganizations && switchState.status !== "switching" }
+  );
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -190,7 +204,17 @@ export function OrganizationSwitcher({
         }
       />
       <DropdownMenuContent align="start" side="right" className="w-64">
-        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">Organizations</span>
+          {canSwitchOrganizations ? (
+            <DropdownMenuShortcut>
+              <ShortcutHint
+                hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
+                label={HOTKEYS.openOrganizationSwitcher.label}
+              />
+            </DropdownMenuShortcut>
+          ) : null}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {renderListContent({
           activeOrganization,

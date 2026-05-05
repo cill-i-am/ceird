@@ -2,6 +2,7 @@ import {
   decodeOrganizationId,
   type OrganizationSummary,
 } from "@ceird/identity-core";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as React from "react";
@@ -78,15 +79,37 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
   const actual = await importActual();
+  const DropdownMenuOpenContext = React.createContext<{
+    readonly open: boolean;
+    readonly setOpen: (open: boolean) => void;
+  } | null>(null);
 
   return {
     ...actual,
-    DropdownMenu: (({ children }: { children?: ReactNode }) => (
-      <div data-testid="dropdown-menu">{children}</div>
+    DropdownMenu: (({
+      children,
+      onOpenChange,
+      open = false,
+    }: {
+      children?: ReactNode;
+      onOpenChange?: (open: boolean) => void;
+      open?: boolean;
+    }) => (
+      <DropdownMenuOpenContext.Provider
+        value={{ open, setOpen: (nextOpen) => onOpenChange?.(nextOpen) }}
+      >
+        <div data-testid="dropdown-menu">{children}</div>
+      </DropdownMenuOpenContext.Provider>
     )) as typeof actual.DropdownMenu,
-    DropdownMenuContent: (({ children }: { children?: ReactNode }) => (
-      <div data-testid="dropdown-menu-content">{children}</div>
-    )) as typeof actual.DropdownMenuContent,
+    DropdownMenuContent: (({ children }: { children?: ReactNode }) => {
+      const dropdownMenu = React.useContext(DropdownMenuOpenContext);
+
+      if (!dropdownMenu?.open) {
+        return null;
+      }
+
+      return <div data-testid="dropdown-menu-content">{children}</div>;
+    }) as typeof actual.DropdownMenuContent,
     DropdownMenuGroup: (({ children }: { children?: ReactNode }) => (
       <div data-testid="dropdown-menu-group">{children}</div>
     )) as typeof actual.DropdownMenuGroup,
@@ -188,18 +211,36 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
     DropdownMenuSeparator: (() => (
       <hr />
     )) as typeof actual.DropdownMenuSeparator,
+    DropdownMenuShortcut: (({ children }: { children?: ReactNode }) => (
+      <span>{children}</span>
+    )) as typeof actual.DropdownMenuShortcut,
     DropdownMenuTrigger: (({
       children,
       render: renderSlot,
     }: {
       children?: ReactNode;
       render?: ReactNode;
-    }) => (
-      <div>
-        {renderSlot}
-        {children}
-      </div>
-    )) as typeof actual.DropdownMenuTrigger,
+    }) => {
+      const dropdownMenu = React.useContext(DropdownMenuOpenContext);
+
+      return (
+        <div>
+          {React.isValidElement(renderSlot)
+            ? React.cloneElement(
+                renderSlot as React.ReactElement<{
+                  onClick?: React.MouseEventHandler;
+                }>,
+                {
+                  onClick: () => {
+                    dropdownMenu?.setOpen(!dropdownMenu.open);
+                  },
+                }
+              )
+            : renderSlot}
+          {children}
+        </div>
+      );
+    }) as typeof actual.DropdownMenuTrigger,
   };
 });
 
@@ -228,7 +269,9 @@ function organization(input: {
 
 function renderSwitcher(activeOrganization: OrganizationSummary | null) {
   return render(
-    <OrganizationSwitcher activeOrganization={activeOrganization} />
+    <HotkeysProvider>
+      <OrganizationSwitcher activeOrganization={activeOrganization} />
+    </HotkeysProvider>
   );
 }
 
@@ -240,9 +283,10 @@ describe("organization switcher", () => {
     mockedRouterInvalidate.mockReset();
   });
 
-  it("shows a loading state while organizations are loading", () => {
+  it("shows a loading state while organizations are loading", async () => {
     mockedListOrganizations.mockReturnValue(new Promise(() => {}));
 
+    const user = userEvent.setup();
     renderSwitcher(
       organization({
         id: "org_acme",
@@ -254,6 +298,7 @@ describe("organization switcher", () => {
     expect(
       screen.getByRole("button", { name: /acme field ops/i })
     ).toHaveAttribute("aria-busy", "true");
+    await user.click(screen.getByRole("button", { name: /acme field ops/i }));
     expect(screen.getByText(/loading organizations/i)).toBeInTheDocument();
   });
 
@@ -262,10 +307,10 @@ describe("organization switcher", () => {
 
     renderSwitcher(null);
 
-    expect(await screen.findByText(/no organizations/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /no active organization/i })
+      await screen.findByRole("button", { name: /no active organization/i })
     ).toBeDisabled();
+    expect(screen.queryByText(/no organizations/i)).not.toBeInTheDocument();
   });
 
   it("renders a single organization without switch actions", async () => {
@@ -295,6 +340,10 @@ describe("organization switcher", () => {
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
     );
 
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+
     expect(
       await screen.findByText(/couldn't load organizations/i)
     ).toBeInTheDocument();
@@ -321,6 +370,7 @@ describe("organization switcher", () => {
     });
 
     expect(trigger).toBeEnabled();
+    await user.click(trigger);
     expect(
       await screen.findByText(/couldn't load organizations/i)
     ).toBeInTheDocument();
@@ -343,6 +393,10 @@ describe("organization switcher", () => {
     const user = userEvent.setup();
     renderSwitcher(
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
     );
 
     await user.click(
@@ -373,6 +427,10 @@ describe("organization switcher", () => {
     );
 
     await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+
+    await user.click(
       await screen.findByRole("menuitemradio", { name: /beta builds/i })
     );
 
@@ -399,10 +457,35 @@ describe("organization switcher", () => {
     );
 
     await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+
+    await user.click(
       await screen.findByRole("menuitemradio", { name: /acme field ops/i })
     );
 
     expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("opens the switcher with G O when multiple organizations are available", async () => {
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await screen.findByRole("button", { name: /acme field ops/i });
+    expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
+
+    await user.keyboard("go");
+
+    expect(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    ).toBeInTheDocument();
   });
 });

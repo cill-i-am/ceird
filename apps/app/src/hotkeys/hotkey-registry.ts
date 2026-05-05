@@ -96,6 +96,14 @@ export const HOTKEYS = {
     label: "Go to Map",
     scope: "global",
   },
+  openOrganizationSwitcher: {
+    group: "Navigation",
+    hotkey: "G O",
+    id: "openOrganizationSwitcher",
+    label: "Switch organization",
+    scope: "global",
+    when: "Multiple organizations are available",
+  },
   jobsSearch: {
     group: "Jobs",
     hotkey: "/",
