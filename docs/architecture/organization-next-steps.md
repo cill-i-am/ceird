@@ -21,10 +21,10 @@ and acceptance:
 - set the invited organization active after acceptance
 - expose authenticated member invitation management from the `/members` page
 - allow pending invitations to be resent or canceled from the `/members` page
+- show pending invitation expiry metadata on the `/members` page
 
 Follow-up improvements for this slice:
 
-- expose more invitation metadata such as expiry timestamps in the UI
 - add stronger operational observability around invitation delivery failures
 
 ## Multi-Organization Switching

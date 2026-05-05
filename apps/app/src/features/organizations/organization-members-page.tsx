@@ -1,14 +1,15 @@
 import {
-  decodeOrganizationRole,
   INVITABLE_ORGANIZATION_ROLES,
   InvitableOrganizationRole,
+  IsoDateTimeString,
 } from "@ceird/identity-core";
 import type {
   InvitableOrganizationRole as InvitableOrganizationRoleType,
+  IsoDateTimeString as IsoDateTimeStringType,
   OrganizationId,
 } from "@ceird/identity-core";
 import { useForm } from "@tanstack/react-form";
-import { Schema } from "effect";
+import { ParseResult, Schema } from "effect";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
@@ -42,6 +43,7 @@ import type { OrganizationMemberInviteInput } from "./organization-member-invite
 
 interface InvitationSummary {
   readonly email: string;
+  readonly expiresAt: IsoDateTimeStringType;
   readonly id: string;
   readonly role: InvitableOrganizationRoleType;
   readonly status: string;
@@ -78,6 +80,12 @@ const ROLE_SELECTION_GROUPS = [
   },
 ] satisfies readonly CommandSelectGroup[];
 const isInviteRole = Schema.is(InvitableOrganizationRole);
+const invitationExpiryFormatter = new Intl.DateTimeFormat("en-IE", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+  year: "numeric",
+});
 
 type InvitationAction = "cancel" | "resend";
 
@@ -87,6 +95,10 @@ function formatRoleLabel(role: string) {
 
 function formatInvitationCount(count: number) {
   return count === 1 ? "1 open" : `${count} open`;
+}
+
+function formatInvitationExpiry(expiresAt: IsoDateTimeStringType) {
+  return `Expires ${invitationExpiryFormatter.format(new Date(expiresAt))}`;
 }
 
 function getMemberInitial(member: CurrentMemberSummary) {
@@ -545,6 +557,9 @@ function PendingInvitationRow({
         <p className="text-sm/6 text-muted-foreground">
           Awaiting acceptance from the invited teammate.
         </p>
+        <p className="text-sm/6 text-muted-foreground">
+          {formatInvitationExpiry(invitation.expiresAt)}
+        </p>
       </div>
       <AppRowListMeta>
         <Badge variant="secondary">{formatRoleLabel(invitation.role)}</Badge>
@@ -586,22 +601,24 @@ function isPendingInvitation(input: { readonly status: string }) {
   return input.status === "pending";
 }
 
+function decodeInvitationExpiresAt(input: unknown): IsoDateTimeStringType {
+  return ParseResult.decodeUnknownSync(IsoDateTimeString)(
+    input instanceof Date ? input.toISOString() : input
+  );
+}
+
 function toInvitation(input: {
   readonly email: string;
+  readonly expiresAt: unknown;
   readonly id: string;
-  readonly role: string;
+  readonly role: unknown;
   readonly status: string;
 }): InvitationSummary {
-  const role = decodeOrganizationRole(input.role);
-
-  if (!isInviteRole(role)) {
-    throw new Error("Invitation role is not invitable.");
-  }
-
   return {
     email: input.email,
+    expiresAt: decodeInvitationExpiresAt(input.expiresAt),
     id: input.id,
-    role,
+    role: ParseResult.decodeUnknownSync(InvitableOrganizationRole)(input.role),
     status: input.status,
   };
 }

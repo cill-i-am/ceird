@@ -15,9 +15,18 @@ type CancelInvitationInput = Parameters<
 type InviteMemberInput = Parameters<
   typeof AuthClient.organization.inviteMember
 >[0];
+interface InvitationPayload {
+  readonly email: string;
+  readonly expiresAt: Date | string;
+  readonly id: string;
+  readonly role: string;
+  readonly status: string;
+}
+
 const organizationId = decodeOrganizationId("org_123");
 const organizationOneId = decodeOrganizationId("org_1");
 const organizationTwoId = decodeOrganizationId("org_2");
+const defaultInvitationExpiresAt = "2026-04-12T09:30:00.000Z";
 
 const { mockedCancelInvitation, mockedInviteMember, mockedListInvitations } =
   vi.hoisted(() => ({
@@ -47,14 +56,7 @@ const { mockedCancelInvitation, mockedInviteMember, mockedListInvitations } =
     >(),
     mockedListInvitations: vi.fn<
       (input: { query: { organizationId: string } }) => Promise<{
-        data:
-          | {
-              email: string;
-              id: string;
-              role: string;
-              status: string;
-            }[]
-          | null;
+        data: InvitationPayload[] | null;
         error: {
           message: string;
           status: number;
@@ -97,17 +99,23 @@ function createDeferredListInvitationsResult() {
   return { promise, resolve };
 }
 
+function createInvitation(
+  overrides: Partial<InvitationPayload> = {}
+): InvitationPayload {
+  return {
+    email: "pending@example.com",
+    expiresAt: defaultInvitationExpiresAt,
+    id: "inv_123",
+    role: "member",
+    status: "pending",
+    ...overrides,
+  };
+}
+
 describe("organization members page", () => {
   beforeEach(() => {
     mockedListInvitations.mockResolvedValue({
-      data: [
-        {
-          email: "pending@example.com",
-          id: "inv_123",
-          role: "member",
-          status: "pending",
-        },
-      ],
+      data: [createInvitation()],
       error: null,
     });
     mockedInviteMember.mockResolvedValue({
@@ -134,18 +142,14 @@ describe("organization members page", () => {
 
     mockedListInvitations.mockResolvedValue({
       data: [
-        {
+        createInvitation({
           email: "accepted@example.com",
           id: "inv_accepted",
-          role: "member",
           status: "accepted",
-        },
-        {
+        }),
+        createInvitation({
           email: longEmail,
-          id: "inv_123",
-          role: "member",
-          status: "pending",
-        },
+        }),
       ],
       error: null,
     });
@@ -157,6 +161,7 @@ describe("organization members page", () => {
       screen.findByRole("heading", { name: "Pending invitations" })
     ).resolves.toBeVisible();
     await expect(screen.findByTitle(longEmail)).resolves.toBeVisible();
+    expect(screen.getByText("Expires 12 Apr 2026")).toBeVisible();
     expect(screen.queryByText("accepted@example.com")).not.toBeInTheDocument();
     expect(screen.getAllByText("1 open")).toHaveLength(1);
     expect(mockedListInvitations).toHaveBeenCalledWith({
@@ -166,33 +171,48 @@ describe("organization members page", () => {
     });
   }, 10_000);
 
+  it("loads pending invitations when the auth client returns Date expiry values", async () => {
+    mockedListInvitations.mockResolvedValue({
+      data: [
+        createInvitation({
+          email: "date-expiry@example.com",
+          expiresAt: new Date(defaultInvitationExpiresAt),
+        }),
+      ],
+      error: null,
+    });
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("date-expiry@example.com")
+    ).resolves.toBeVisible();
+    expect(screen.getByText("Expires 12 Apr 2026")).toBeVisible();
+  }, 10_000);
+
   it("submits invites for the active organization", async () => {
     mockedListInvitations
       .mockResolvedValueOnce({
         data: [
-          {
+          createInvitation({
             email: "ops@example.com",
             id: "inv_existing",
-            role: "member",
-            status: "pending",
-          },
+          }),
         ],
         error: null,
       })
       .mockResolvedValueOnce({
         data: [
-          {
+          createInvitation({
             email: "ops@example.com",
             id: "inv_existing",
-            role: "member",
-            status: "pending",
-          },
-          {
+          }),
+          createInvitation({
             email: "member@example.com",
+            expiresAt: "2026-04-13T09:30:00.000Z",
             id: "inv_456",
             role: "admin",
-            status: "pending",
-          },
+          }),
         ],
         error: null,
       });
@@ -297,12 +317,9 @@ describe("organization members page", () => {
   it("resends pending invitations from the pending list", async () => {
     mockedListInvitations.mockResolvedValueOnce({
       data: [
-        {
-          email: "pending@example.com",
-          id: "inv_123",
+        createInvitation({
           role: "admin",
-          status: "pending",
-        },
+        }),
       ],
       error: null,
     });
@@ -367,14 +384,7 @@ describe("organization members page", () => {
 
   it("cancels pending invitations from the pending list", async () => {
     mockedListInvitations.mockResolvedValueOnce({
-      data: [
-        {
-          email: "pending@example.com",
-          id: "inv_123",
-          role: "member",
-          status: "pending",
-        },
-      ],
+      data: [createInvitation()],
       error: null,
     });
 
@@ -518,12 +528,11 @@ describe("organization members page", () => {
   it("shows a load error when invitation payload roles violate the app contract", async () => {
     mockedListInvitations.mockResolvedValue({
       data: [
-        {
+        createInvitation({
           email: "bad-role@example.com",
           id: "inv_bad_role",
           role: "owner",
-          status: "pending",
-        },
+        }),
       ],
       error: null,
     });
@@ -544,12 +553,10 @@ describe("organization members page", () => {
     mockedListInvitations
       .mockResolvedValueOnce({
         data: [
-          {
+          createInvitation({
             email: "old-org@example.com",
             id: "inv_old",
-            role: "member",
-            status: "pending",
-          },
+          }),
         ],
         error: null,
       })
@@ -573,12 +580,11 @@ describe("organization members page", () => {
 
     orgTwoInvitations.resolve({
       data: [
-        {
+        createInvitation({
           email: "new-org@example.com",
           id: "inv_new",
           role: "admin",
-          status: "pending",
-        },
+        }),
       ],
       error: null,
     });
@@ -591,12 +597,11 @@ describe("organization members page", () => {
   it("hides the pending invitations section when there are no pending invitations", async () => {
     mockedListInvitations.mockResolvedValue({
       data: [
-        {
+        createInvitation({
           email: "accepted@example.com",
           id: "inv_accepted",
-          role: "member",
           status: "accepted",
-        },
+        }),
       ],
       error: null,
     });
