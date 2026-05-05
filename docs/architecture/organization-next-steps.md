@@ -27,14 +27,21 @@ and acceptance:
 
 ## Multi-Organization Switching
 
-The first organizations slice assumes one meaningful organization context in the
-UI at a time.
+Implemented behavior:
 
-When multi-org support arrives:
+- the authenticated sidebar shows the active organization on organization
+  routes
+- users with multiple organizations can switch explicitly through Better Auth's
+  native organization client APIs
+- switching invalidates TanStack Router state synchronously so organization
+  data and role-scoped navigation refresh together
+- the switcher handles loading, empty, single-organization, failed-list, and
+  failed-switch states
 
-- add explicit organization switching in the app shell
-- stop relying on single-org fallback behavior
-- preserve role scoping per organization
+Remaining follow-up:
+
+- consider richer organization search if accounts commonly belong to many
+  organizations
 
 ## Workspace And Domain Data
 

@@ -28,7 +28,6 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
-import { cn } from "#/lib/utils";
 
 import {
   listOrganizations,
@@ -169,7 +168,7 @@ export function OrganizationSwitcher({
             aria-busy={listState.status === "loading" ? true : undefined}
             disabled={triggerDisabled}
             size="lg"
-            className={cn("w-full justify-start gap-2.5")}
+            className="w-full justify-start gap-2.5"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sidebar-accent-foreground">
               <HugeiconsIcon

@@ -47,6 +47,14 @@ initialization script before hydration, loads global CSS, wraps the app in
 `TooltipProvider` and `HotkeysProvider`, and lazily loads TanStack devtools in
 development.
 
+The sidebar header shows the active organization on organization-scoped routes.
+Multi-organization users can open the organization switcher from the sidebar or
+with `G O`. The switcher calls Better Auth's organization list and set-active
+client APIs through `features/organizations/organization-access.ts`, then calls
+`router.invalidate({ sync: true })` after a successful switch so `_app`,
+`_app/_org`, and child route loaders refresh session, active organization, role,
+and organization-owned data together.
+
 Authenticated layout and navigation live under:
 
 - `features/auth/authenticated-app-layout.tsx`
@@ -136,6 +144,9 @@ New route navigation targets, primary workflow actions, command/menu items, and
 icon-only controls should either register a shortcut or have an explicit reason
 why a shortcut would be harmful or unnecessary. Show shortcuts with the shared
 keycap and help overlay components.
+
+`G O` opens the organization switcher only when more than one organization is
+available.
 
 ## Styling
 
