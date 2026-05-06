@@ -3,8 +3,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
+import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+
+import { applyCloudflareCreateRequireRuntimeFallback } from "./src/lib/cloudflare-create-require-runtime";
 
 const serverApiOrigin =
   typeof process.env.API_ORIGIN === "string" ? process.env.API_ORIGIN : null;
@@ -19,6 +22,24 @@ const shouldUploadSentrySourceMaps = Boolean(
   process.env.SENTRY_PROJECT
 );
 const sentryRelease = process.env.SENTRY_RELEASE;
+
+function cloudflareCreateRequireRuntimeFallbackPlugin(): Plugin {
+  return {
+    name: "ceird:cloudflare-create-require-runtime-fallback",
+    apply: "build",
+    applyToEnvironment(environment) {
+      return isCloudflareBuild && environment.name === "ssr";
+    },
+    generateBundle(_outputOptions, bundle) {
+      for (const item of Object.values(bundle)) {
+        if (item.type !== "chunk") {
+          continue;
+        }
+        item.code = applyCloudflareCreateRequireRuntimeFallback(item.code);
+      }
+    },
+  };
+}
 
 const config = defineConfig({
   build: isCloudflareBuild
@@ -43,6 +64,7 @@ const config = defineConfig({
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
     viteReact(),
+    cloudflareCreateRequireRuntimeFallbackPlugin(),
     sentryTanstackStart({
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,

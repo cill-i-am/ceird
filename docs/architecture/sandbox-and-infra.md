@@ -143,6 +143,10 @@ packages are also patched so their Node.js compatibility resolvers create
 `require` lazily in both published `dist` files and the `bun` source export;
 this keeps the Cloudflare Vite build path and Alchemy Worker upload path from
 evaluating `createRequire(import.meta.url)` during Worker startup validation.
+The app Vite config also rewrites Rolldown's generated SSR runtime helper to
+`createRequire(import.meta.url ?? "file:///worker.js")` for Cloudflare builds,
+because Cloudflare's Worker upload validation can expose `import.meta.url` as
+`undefined` while still requiring a file URL or absolute path.
 
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
