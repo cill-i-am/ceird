@@ -12,6 +12,10 @@ import {
 import { loadAuthEmailConfig } from "./domains/identity/authentication/auth-email-config.js";
 import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
 import { NoopAuthEmailTransportLive } from "./domains/identity/authentication/auth-email-promise-bridge.js";
+import type {
+  AuthEmailQueueMessage,
+  AuthEmailQueueTraceContext,
+} from "./domains/identity/authentication/auth-email-queue.js";
 import {
   AuthEmailQueueDeliveryError,
   InvalidAuthEmailQueueMessageError,
@@ -68,7 +72,9 @@ function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
     makeAppDatabaseLive(env.DATABASE.connectionString)
   );
   const authenticationLive = makeAuthenticationLive(
-    makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE),
+    makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE, {
+      captureTraceContext: captureCurrentSentryTraceContext,
+    }),
     Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
       context.waitUntil(task);
     })
@@ -133,6 +139,23 @@ function sendQueuedAuthEmail(body: unknown) {
   );
 }
 
+function captureCurrentSentryTraceContext():
+  | AuthEmailQueueTraceContext
+  | undefined {
+  const traceData = Sentry.getTraceData();
+  const { baggage } = traceData;
+  const sentryTrace = traceData["sentry-trace"];
+
+  if (!sentryTrace && !baggage) {
+    return undefined;
+  }
+
+  return {
+    ...(baggage ? { baggage } : {}),
+    ...(sentryTrace ? { sentryTrace } : {}),
+  };
+}
+
 const worker = {
   async fetch(
     request: Request,
@@ -145,6 +168,11 @@ const worker = {
   },
 
   async queue(batch: MessageBatch<unknown>, env: ApiWorkerEnv): Promise<void> {
+    if (isAuthEmailDeadLetterBatch(batch, env)) {
+      captureAuthEmailDeadLetterBatch(batch);
+      return;
+    }
+
     const runtime = await Effect.runPromise(
       Effect.runtime<AuthEmailSender>().pipe(
         Effect.provide(makeWorkerAuthEmailSenderLive(env)),
@@ -155,7 +183,11 @@ const worker = {
     const runWorkerEffect = Runtime.runPromise(runtime);
 
     for (const message of batch.messages) {
-      const exit = await runQueuedAuthEmail(sendQueuedAuthEmail(message.body));
+      const exit = await runSentryTracedAuthEmailQueueMessage(
+        batch,
+        message,
+        () => runQueuedAuthEmail(sendQueuedAuthEmail(message.body))
+      );
 
       if (Exit.isSuccess(exit)) {
         message.ack();
@@ -225,6 +257,118 @@ const worker = {
     }
   },
 } satisfies ExportedHandler<ApiWorkerEnv, unknown>;
+
+function isAuthEmailDeadLetterBatch(
+  batch: MessageBatch<unknown>,
+  env: ApiWorkerEnv
+) {
+  return (
+    Boolean(env.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME) &&
+    batch.queue === env.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME
+  );
+}
+
+function captureAuthEmailDeadLetterBatch(batch: MessageBatch<unknown>) {
+  for (const message of batch.messages) {
+    const kind = readAuthEmailQueueMessageKind(message.body);
+
+    Sentry.captureMessage("Auth email queue dead-letter message received", {
+      extra: {
+        authEmailQueueKind: kind,
+        authEmailQueueMessageAttempts: message.attempts,
+        authEmailQueueMessageId: message.id,
+        authEmailQueueName: batch.queue,
+      },
+      level: "error",
+      tags: {
+        "ceird.queue": "auth-email-dead-letter",
+      },
+    });
+    message.ack();
+  }
+}
+
+function runSentryTracedAuthEmailQueueMessage(
+  batch: MessageBatch<unknown>,
+  message: Message<unknown>,
+  run: () => Promise<Exit.Exit<void, unknown>>
+) {
+  const traceContext = readAuthEmailQueueTraceContext(message.body);
+  const runInSpan = () =>
+    Sentry.startSpan(
+      {
+        attributes: {
+          "ceird.auth_email.kind": readAuthEmailQueueMessageKind(message.body),
+          "messaging.destination.name": batch.queue,
+          "messaging.message.id": message.id,
+          "messaging.message.receive.count": message.attempts,
+          "messaging.operation.name": "process",
+          "messaging.system": "cloudflare-queues",
+        },
+        name: `AuthEmailQueue.process ${readAuthEmailQueueMessageKind(
+          message.body
+        )}`,
+        op: "queue.process",
+      },
+      run
+    );
+
+  if (!traceContext) {
+    return runInSpan();
+  }
+
+  return Sentry.continueTrace(
+    {
+      baggage: traceContext.baggage,
+      sentryTrace: traceContext.sentryTrace,
+    },
+    runInSpan
+  );
+}
+
+function readAuthEmailQueueTraceContext(
+  body: unknown
+): AuthEmailQueueTraceContext | undefined {
+  if (!isRecord(body)) {
+    return undefined;
+  }
+
+  const { traceContext } = body;
+  if (!isRecord(traceContext)) {
+    return undefined;
+  }
+
+  const sentryTrace =
+    typeof traceContext.sentryTrace === "string"
+      ? traceContext.sentryTrace
+      : undefined;
+  const baggage =
+    typeof traceContext.baggage === "string" ? traceContext.baggage : undefined;
+
+  if (!sentryTrace && !baggage) {
+    return undefined;
+  }
+
+  return {
+    ...(baggage ? { baggage } : {}),
+    ...(sentryTrace ? { sentryTrace } : {}),
+  };
+}
+
+function readAuthEmailQueueMessageKind(
+  body: unknown
+): AuthEmailQueueMessage["kind"] | "unknown" {
+  return isRecord(body) &&
+    (body.kind === "password-reset" ||
+      body.kind === "email-verification" ||
+      body.kind === "organization-invitation")
+    ? body.kind
+    : "unknown";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export default Sentry.withSentry(
   (env: ApiWorkerEnv) => makeSentryOptions(apiSentryConfigFromWorkerEnv(env)),

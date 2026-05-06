@@ -10,6 +10,8 @@ import { SENTRY_DSN } from "./sentry-config";
 
 type SentryInit = typeof SentrySdk.init;
 type ReplayIntegration = typeof SentrySdk.replayIntegration;
+type FeedbackIntegration = typeof SentrySdk.feedbackIntegration;
+type ProfilingIntegration = typeof SentrySdk.browserProfilingIntegration;
 type TracingIntegration =
   typeof SentrySdk.tanstackRouterBrowserTracingIntegration;
 
@@ -17,6 +19,16 @@ const sentryInit = vi.hoisted(() => vi.fn<SentryInit>());
 const replayIntegration = vi.hoisted(() =>
   vi.fn<ReplayIntegration>(
     () => ({ name: "replay" }) as ReturnType<ReplayIntegration>
+  )
+);
+const feedbackIntegration = vi.hoisted(() =>
+  vi.fn<FeedbackIntegration>(
+    () => ({ name: "feedback" }) as ReturnType<FeedbackIntegration>
+  )
+);
+const profilingIntegration = vi.hoisted(() =>
+  vi.fn<ProfilingIntegration>(
+    () => ({ name: "browser-profiling" }) as ReturnType<ProfilingIntegration>
   )
 );
 const tracingIntegration = vi.hoisted(() =>
@@ -30,6 +42,8 @@ const tracingIntegration = vi.hoisted(() =>
 );
 
 vi.mock(import("@sentry/tanstackstart-react"), () => ({
+  browserProfilingIntegration: profilingIntegration,
+  feedbackIntegration,
   init: sentryInit,
   replayIntegration,
   tanstackRouterBrowserTracingIntegration: tracingIntegration,
@@ -38,6 +52,8 @@ vi.mock(import("@sentry/tanstackstart-react"), () => ({
 describe("router sentry integration", () => {
   beforeEach(() => {
     sentryInit.mockClear();
+    feedbackIntegration.mockClear();
+    profilingIntegration.mockClear();
     replayIntegration.mockClear();
     tracingIntegration.mockClear();
   });
@@ -51,6 +67,16 @@ describe("router sentry integration", () => {
 
     await vi.waitFor(() => {
       expect(tracingIntegration).toHaveBeenCalledWith(router);
+      expect(feedbackIntegration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          autoInject: true,
+          colorScheme: "system",
+          enableScreenshot: true,
+          showEmail: false,
+          showName: false,
+        })
+      );
+      expect(profilingIntegration).toHaveBeenCalledWith();
       expect(replayIntegration).toHaveBeenCalledWith({
         beforeAddRecordingEvent: expect.any(Function),
         blockAllMedia: true,
@@ -63,7 +89,10 @@ describe("router sentry integration", () => {
           integrations: [
             expect.objectContaining({ name: "tracing" }),
             expect.objectContaining({ name: "replay" }),
+            expect.objectContaining({ name: "feedback" }),
+            expect.objectContaining({ name: "browser-profiling" }),
           ],
+          profilesSampleRate: 1,
           tracesSampleRate: 1,
         })
       );
@@ -85,6 +114,8 @@ describe("router sentry integration", () => {
   it("does not import the browser SDK on the server", async () => {
     const router = createAppRouter();
     sentryInit.mockClear();
+    feedbackIntegration.mockClear();
+    profilingIntegration.mockClear();
     replayIntegration.mockClear();
     tracingIntegration.mockClear();
 
@@ -94,6 +125,8 @@ describe("router sentry integration", () => {
     await initializeClientSentry(router);
 
     expect(sentryInit).not.toHaveBeenCalled();
+    expect(feedbackIntegration).not.toHaveBeenCalled();
+    expect(profilingIntegration).not.toHaveBeenCalled();
     expect(replayIntegration).not.toHaveBeenCalled();
     expect(tracingIntegration).not.toHaveBeenCalled();
 

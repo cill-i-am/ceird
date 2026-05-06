@@ -89,6 +89,10 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     }
     const apiEnv: WorkerEnv = {
       AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
+      AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME: resourceName(
+        input.config,
+        "auth-email-dlq"
+      ),
       AUTH_EMAIL_FROM: input.config.authEmailFrom,
       AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
       AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
@@ -112,7 +116,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
       "AuthEmailDeadLetterQueue",
       {
-        name: resourceName(input.config, "auth-email-dlq"),
+        name: String(apiEnv.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME),
       }
     );
 
@@ -179,6 +183,16 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       },
     });
 
+    yield* Cloudflare.QueueConsumer("AuthEmailDeadLetterConsumer", {
+      queueId: authEmailDeadLetterQueue.queueId,
+      scriptName: api.workerName,
+      settings: {
+        batchSize: 10,
+        maxRetries: 0,
+        maxWaitTimeMs: 2000,
+      },
+    });
+
     const app = yield* Cloudflare.Vite("App", {
       name: resourceName(input.config, "app"),
       rootDir: "../../apps/app",
@@ -186,7 +200,12 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       env: {
         API_ORIGIN: `https://${input.config.apiHostname}`,
         CEIRD_CLOUDFLARE: "1",
+        SENTRY_ENVIRONMENT: input.config.stage,
+        SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
         VITE_API_ORIGIN: `https://${input.config.apiHostname}`,
+        ...(input.config.sentryRelease === undefined
+          ? {}
+          : { SENTRY_RELEASE: input.config.sentryRelease }),
       },
       domain: input.config.appHostname,
       observability: {
@@ -227,10 +246,17 @@ function apiWorkerBuild(config: InfraStageConfig): WorkerProps["build"] {
       project: config.sentryApiProject,
       release: {
         create: true,
+        deploy: {
+          env: config.stage,
+        },
         finalize: true,
         inject: false,
         name: config.sentryRelease,
-        setCommits: false,
+        setCommits: {
+          auto: true,
+          ignoreEmpty: true,
+          ignoreMissing: true,
+        },
       },
       sourcemaps: {
         assets: [...apiWorkerSentrySourceMapAssets],

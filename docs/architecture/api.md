@@ -41,7 +41,9 @@ Production API deploys set `SENTRY_RELEASE` to the deployed Git SHA and upload
 the Cloudflare Worker bundle/source maps to the `ceird-api` Sentry project. The
 API Worker build uses the Sentry Rollup plugin through the patched Alchemy
 Worker bundling hook, so debug IDs are injected before the same bundle is sent
-to Cloudflare.
+to Cloudflare. The deploy workflow checks out full Git history so Sentry can
+associate commits with the release, and the upload step records a production
+deploy for the release.
 
 The API enables a custom Effect HTTP request logger for both the Node server and
 the Cloudflare/web-handler path. It records method, status, and redacted path
@@ -58,7 +60,12 @@ Background auth email delivery uses the same structured failure vocabulary.
 Password reset, verification, email-change confirmation, and organization
 invitation delivery failures are reported through the authentication failure
 reporters. Cloudflare queue delivery failures log the email kind, delivery key,
-source tag, and source cause before retrying.
+source tag, and source cause before retrying. When auth email work is queued
+from a traced request, the queue payload carries the current Sentry trace
+headers and the Worker queue handler continues that trace inside an explicit
+`queue.process` span. Messages that reach the auth email dead-letter queue are
+captured to Sentry at error level with queue name, message ID, attempts, and
+email kind before the DLQ message is acknowledged.
 
 ## Authentication Domain
 

@@ -16,7 +16,10 @@ type BrowserIntegration = Extract<
 >[number];
 
 export interface ClientSentryOptionsInput {
+  readonly apiOrigin?: string | undefined;
   readonly environment: string;
+  readonly feedbackIntegration: BrowserIntegration;
+  readonly profilingIntegration: BrowserIntegration;
   readonly replayIntegration: BrowserIntegration;
   readonly tracingIntegration: BrowserIntegration;
 }
@@ -38,9 +41,18 @@ export function createClientSentryOptions(
     dsn: SENTRY_DSN,
     enableLogs: true,
     environment: input.environment,
-    integrations: [input.tracingIntegration, input.replayIntegration],
+    integrations: [
+      input.tracingIntegration,
+      input.replayIntegration,
+      input.feedbackIntegration,
+      input.profilingIntegration,
+    ],
+    profilesSampleRate: sampleRates.profiles,
     replaysOnErrorSampleRate: sampleRates.replayOnError,
     replaysSessionSampleRate: sampleRates.replaySession,
+    tracePropagationTargets: createSentryTracePropagationTargets(
+      input.apiOrigin
+    ),
     tracesSampleRate: sampleRates.traces,
   };
 }
@@ -60,6 +72,49 @@ export function createServerSentryOptions(
     environment: input.environment,
     tracesSampleRate: sampleRates.traces,
   };
+}
+
+export function createSentryTracePropagationTargets(apiOrigin?: string) {
+  const targets: (string | RegExp)[] = [
+    "https://api.ceird.app",
+    /^https:\/\/(?:[a-z0-9-]+\.)?api\.ceird\.localhost(?::\d+)?(?:\/|$)/,
+    /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/,
+  ];
+  const normalizedApiOrigin = normalizeOrigin(apiOrigin);
+
+  if (
+    normalizedApiOrigin &&
+    !targets.some(
+      (target) => typeof target === "string" && target === normalizedApiOrigin
+    )
+  ) {
+    targets.unshift(normalizedApiOrigin);
+  }
+
+  return targets;
+}
+
+interface SentryRouteContextInput {
+  readonly activeOrganizationId?: string | null | undefined;
+  readonly currentOrganizationRole?: string | undefined;
+  readonly userId: string;
+}
+
+interface SentryRouteContextSink {
+  readonly setTag: (key: string, value: string | undefined) => void;
+  readonly setUser: (user: { readonly id: string }) => void;
+}
+
+export function applySentryRouteContext(
+  sentry: SentryRouteContextSink,
+  context: SentryRouteContextInput
+) {
+  sentry.setUser({ id: context.userId });
+  sentry.setTag(
+    "ceird.organization_id",
+    context.activeOrganizationId ?? undefined
+  );
+  sentry.setTag("ceird.organization_role", context.currentOrganizationRole);
 }
 
 type SentryEvent =
@@ -218,11 +273,24 @@ function shouldRedactQueryParam(key: string) {
   return SENSITIVE_QUERY_PARAMS.has(key.toLowerCase());
 }
 
+function normalizeOrigin(origin: string | undefined) {
+  if (!origin) {
+    return;
+  }
+
+  try {
+    return new URL(origin).origin;
+  } catch {
+    // Invalid configured origins are ignored; static production/local targets remain.
+  }
+}
+
 function getSentrySampleRates(environment: string) {
   const isProduction = environment === "production";
   return {
+    profiles: 1,
     replayOnError: 1,
     replaySession: isProduction ? 0.05 : 0.1,
-    traces: isProduction ? 0.2 : 1,
+    traces: 1,
   } as const;
 }

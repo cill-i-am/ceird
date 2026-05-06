@@ -1,5 +1,6 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 
+import { resolveApiOrigin } from "./lib/api-origin";
 import { routeTree } from "./routeTree.gen";
 import {
   createClientSentryOptions,
@@ -33,7 +34,25 @@ export async function initializeClientSentry(router: AppRouter) {
 
     Sentry.init(
       createClientSentryOptions({
+        apiOrigin: resolveApiOrigin(window.location.origin),
         environment: import.meta.env.MODE,
+        feedbackIntegration: Sentry.feedbackIntegration({
+          autoInject: true,
+          colorScheme: "system",
+          enableScreenshot: true,
+          showBranding: false,
+          showEmail: false,
+          showName: false,
+          tags: {
+            "ceird.feature": "feedback",
+          },
+          triggerLabel: "Feedback",
+          useSentryUser: {
+            email: "email",
+            name: "name",
+          },
+        }),
+        profilingIntegration: Sentry.browserProfilingIntegration(),
         replayIntegration: Sentry.replayIntegration({
           beforeAddRecordingEvent: sanitizeReplayRecordingEvent,
           blockAllMedia: true,

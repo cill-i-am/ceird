@@ -18,6 +18,7 @@ const shouldUploadSentrySourceMaps = Boolean(
   process.env.SENTRY_ORG &&
   process.env.SENTRY_PROJECT
 );
+const sentryRelease = process.env.SENTRY_RELEASE;
 
 const config = defineConfig({
   build: isCloudflareBuild
@@ -43,10 +44,30 @@ const config = defineConfig({
     tailwindcss(),
     viteReact(),
     sentryTanstackStart({
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      release:
+        shouldUploadSentrySourceMaps && sentryRelease
+          ? {
+              create: true,
+              deploy: {
+                env: "production",
+              },
+              finalize: true,
+              inject: true,
+              name: sentryRelease,
+              setCommits: {
+                auto: true,
+                ignoreEmpty: true,
+                ignoreMissing: true,
+              },
+            }
+          : undefined,
       silent: !shouldUploadSentrySourceMaps,
       sourcemaps: {
         disable: !shouldUploadSentrySourceMaps,
       },
+      telemetry: false,
     }),
   ],
 });

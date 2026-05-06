@@ -4,6 +4,7 @@ import type { AuthEmailQueueMessage } from "../../domains/identity/authenticatio
 export interface ApiWorkerEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL?: SendEmail;
+  readonly AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME?: string;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
   readonly AUTH_EMAIL_QUEUE: Queue<AuthEmailQueueMessage>;
@@ -28,6 +29,7 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
     Object.entries({
       AUTH_APP_ORIGIN: env.AUTH_APP_ORIGIN,
       AUTH_EMAIL_FROM: env.AUTH_EMAIL_FROM,
+      AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME: env.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME,
       AUTH_EMAIL_FROM_NAME: env.AUTH_EMAIL_FROM_NAME,
       AUTH_EMAIL_TRANSPORT: env.AUTH_EMAIL_TRANSPORT,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,

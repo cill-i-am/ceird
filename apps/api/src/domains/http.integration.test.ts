@@ -164,7 +164,8 @@ describe("domain http integration", () => {
       const response = await api.handler(
         makeRequest("/jobs", {
           headers: {
-            "access-control-request-headers": "content-type",
+            "access-control-request-headers":
+              "content-type,sentry-trace,baggage",
             "access-control-request-method": "POST",
             origin: "http://localhost:4173",
           },
@@ -181,6 +182,12 @@ describe("domain http integration", () => {
       );
       expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
         "POST"
+      );
+      expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+        "sentry-trace"
+      );
+      expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+        "baggage"
       );
     });
   }, 30_000);
