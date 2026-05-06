@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import {
   Cause,
   ConfigProvider,
@@ -34,12 +35,17 @@ import {
   makeAppDatabaseLive,
   makeAppDatabaseRuntimeLive,
 } from "./platform/database/database.js";
+import {
+  apiSentryConfigFromWorkerEnv,
+  ApiSentryWorkerInstrumentationLive,
+  makeSentryOptions,
+} from "./platform/sentry/sentry.js";
 import { makeApiWebHandler } from "./server.js";
 
 function makeWorkerBaseLive(env: ApiWorkerEnv) {
   return Layer.setConfigProvider(
     ConfigProvider.fromMap(apiWorkerEnvConfigMap(env))
-  );
+  ).pipe(Layer.provideMerge(ApiSentryWorkerInstrumentationLive));
 }
 
 function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
@@ -113,7 +119,7 @@ function sendQueuedAuthEmail(body: unknown) {
   );
 }
 
-export default {
+const worker = {
   async fetch(
     request: Request,
     env: ApiWorkerEnv,
@@ -132,6 +138,7 @@ export default {
       )
     );
     const runQueuedAuthEmail = Runtime.runPromiseExit(runtime);
+    const runWorkerEffect = Runtime.runPromise(runtime);
 
     for (const message of batch.messages) {
       const exit = await runQueuedAuthEmail(sendQueuedAuthEmail(message.body));
@@ -147,7 +154,7 @@ export default {
         Option.isSome(failure) &&
         failure.value instanceof InvalidAuthEmailQueueMessageError
       ) {
-        await Effect.runPromise(
+        await runWorkerEffect(
           Effect.logWarning("Invalid auth email queue message discarded").pipe(
             Effect.annotateLogs({
               authEmailQueueFailureCause: failure.value.cause,
@@ -164,7 +171,7 @@ export default {
         Option.isSome(failure) &&
         failure.value instanceof AuthEmailQueueDeliveryError
       ) {
-        await Effect.runPromise(
+        await runWorkerEffect(
           Effect.logWarning("Auth email queue delivery failed; retrying").pipe(
             Effect.annotateLogs({
               ...(failure.value.cause
@@ -193,7 +200,7 @@ export default {
         continue;
       }
 
-      await Effect.runPromise(
+      await runWorkerEffect(
         Effect.logError("Auth email queue handler failed with a defect").pipe(
           Effect.annotateLogs({
             authEmailQueueFailureMessage: String(Cause.squash(exit.cause)),
@@ -203,4 +210,9 @@ export default {
       message.retry({ delaySeconds: 30 });
     }
   },
-};
+} satisfies ExportedHandler<ApiWorkerEnv, unknown>;
+
+export default Sentry.withSentry(
+  (env: ApiWorkerEnv) => makeSentryOptions(apiSentryConfigFromWorkerEnv(env)),
+  worker
+);

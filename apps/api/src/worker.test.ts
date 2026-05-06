@@ -35,6 +35,23 @@ function makeBatch(messages: ReturnType<typeof makeMessage>[]) {
   return { messages } as unknown as MessageBatch<unknown>;
 }
 
+function makeExecutionContext() {
+  return {
+    passThroughOnException: vi.fn<() => void>(),
+    waitUntil: vi.fn<(promise: Promise<unknown>) => void>(),
+  } as unknown as ExecutionContext;
+}
+
+async function runWorkerQueue(batch: MessageBatch<unknown>, env: ApiWorkerEnv) {
+  const queue = worker.queue as (
+    batch: MessageBatch<unknown>,
+    env: ApiWorkerEnv,
+    context: ExecutionContext
+  ) => Promise<void>;
+
+  await queue(batch, env, makeExecutionContext());
+}
+
 function makeSendEmailMock(
   send: TestSendEmail = () => Promise.resolve({ messageId: "email_123" })
 ) {
@@ -76,7 +93,7 @@ describe("worker queue auth email delivery", () => {
     const sendEmail = makeSendEmailMock();
     const message = makeMessage(makePasswordResetQueueMessage());
 
-    await worker.queue(makeBatch([message]), makeEnv({ sendEmail }));
+    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
 
     expect(sendEmail).toHaveBeenCalledOnce();
     expect(message.ack).toHaveBeenCalledOnce();
@@ -89,7 +106,7 @@ describe("worker queue auth email delivery", () => {
     );
     const message = makeMessage(makePasswordResetQueueMessage());
 
-    await worker.queue(makeBatch([message]), makeEnv({ sendEmail }));
+    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
 
     expect(message.ack).not.toHaveBeenCalled();
     expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
@@ -99,7 +116,7 @@ describe("worker queue auth email delivery", () => {
     const sendEmail = makeSendEmailMock();
     const message = makeMessage({ kind: "password-reset", payload: {} });
 
-    await worker.queue(makeBatch([message]), makeEnv({ sendEmail }));
+    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
 
     expect(sendEmail).not.toHaveBeenCalled();
     expect(message.ack).toHaveBeenCalledOnce();
@@ -110,7 +127,7 @@ describe("worker queue auth email delivery", () => {
     const sendEmail = makeSendEmailMock();
     const message = makeMessage(makePasswordResetQueueMessage());
 
-    await worker.queue(
+    await runWorkerQueue(
       makeBatch([message]),
       makeEnv({
         AUTH_EMAIL: undefined,

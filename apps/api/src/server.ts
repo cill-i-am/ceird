@@ -19,6 +19,7 @@ import { LabelsHttpLive } from "./domains/labels/http.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { AppApi } from "./http-api.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
+import { ApiSentryLive } from "./platform/sentry/sentry.js";
 
 const RuntimeConfig = Config.all({
   sandboxId: Config.string("SANDBOX_ID").pipe(
@@ -138,7 +139,8 @@ export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
   Layer.provide(
     Layer.mergeAll(
       ApiLive,
-      NodeHttpServer.layerConfig(createServer, ServerConfig)
+      NodeHttpServer.layerConfig(createServer, ServerConfig),
+      ApiSentryLive
     )
   )
 );
@@ -146,7 +148,7 @@ export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
 export const makeApiWebHandler = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  baseLive: ApiBaseLive = Layer.empty
+  baseLive: ApiBaseLive = ApiSentryLive
 ) => {
   const apiLayer = Layer.mergeAll(
     makeApiLive(databaseRuntimeLive, authenticationLive),

@@ -25,6 +25,17 @@ System endpoints are defined in `src/server.ts`:
 
 ## Observability
 
+Sentry is available for the API in both the Node entrypoint and the
+Cloudflare Worker. Runtime config is decoded from `SENTRY_DSN`,
+`SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and `SENTRY_TRACES_SAMPLE_RATE`. When a
+DSN is present, the Node API installs Sentry's Effect tracer and metrics layer.
+Both the Node API and Cloudflare Worker install an Effect logger that forwards
+log messages and structured annotations to Sentry logs. The Cloudflare Worker is
+also wrapped with Sentry's Worker SDK so request and queue handler errors are
+captured in the Cloudflare runtime. Sentry events and logs are scrubbed before
+export so request query strings, cookies, tokens, secrets, passwords, and auth
+email delivery keys are filtered.
+
 The API enables a custom Effect HTTP request logger for both the Node server and
 the Cloudflare/web-handler path. It records method, status, and redacted path
 only; query strings are not logged, and `/health` is skipped to keep probe noise

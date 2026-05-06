@@ -14,6 +14,10 @@ export interface ApiWorkerEnv {
   readonly CLOUDFLARE_API_TOKEN?: string;
   readonly DATABASE: Hyperdrive;
   readonly NODE_ENV?: string;
+  readonly SENTRY_DSN?: string;
+  readonly SENTRY_ENVIRONMENT?: string;
+  readonly SENTRY_RELEASE?: string;
+  readonly SENTRY_TRACES_SAMPLE_RATE?: string;
 }
 
 export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
@@ -28,6 +32,10 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
       NODE_ENV: env.NODE_ENV,
+      SENTRY_DSN: env.SENTRY_DSN,
+      SENTRY_ENVIRONMENT: env.SENTRY_ENVIRONMENT,
+      SENTRY_RELEASE: env.SENTRY_RELEASE,
+      SENTRY_TRACES_SAMPLE_RATE: env.SENTRY_TRACES_SAMPLE_RATE,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )

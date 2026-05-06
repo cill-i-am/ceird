@@ -33,9 +33,13 @@ export interface InfraStageConfig {
   readonly planetScaleDefaultBranch: string;
   readonly planetScaleRegionSlug: string;
   readonly planetScaleClusterSize: string;
+  readonly sentryDsn: string;
+  readonly sentryTracesSampleRate: number;
   readonly applyMigrations: boolean;
 }
 
+const DEFAULT_API_SENTRY_DSN =
+  "https://3917e2b6a24f49a20d625a1e3b2b1674@o368240.ingest.us.sentry.io/4511339367563264";
 const decodeStage = Schema.decodeUnknownSync(InfraStage);
 const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,6 +61,14 @@ const AuthEmailFromAddress = Schema.String.check(
   Schema.isPattern(emailAddressPattern, {
     message: "AUTH_EMAIL_FROM must be a plain email address",
   })
+);
+const SentryTracesSampleRate = Schema.Number.check(
+  Schema.isBetween(
+    { minimum: 0, maximum: 1 },
+    {
+      message: "SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1",
+    }
+  )
 );
 
 function decodeDomainName(value: string): DomainName {
@@ -97,6 +109,12 @@ function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
 
 function decodeInfraAuthEmailTransport(value: string) {
   return Schema.decodeUnknownEffect(InfraAuthEmailTransport)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeSentryTracesSampleRate(value: number) {
+  return Schema.decodeUnknownEffect(SentryTracesSampleRate)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
   );
 }
@@ -148,6 +166,12 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     Config.withDefault("PS-5"),
     Config.mapOrFail(decodePlanetScaleClusterSize)
   );
+  const sentryDsn = yield* Config.string("SENTRY_DSN").pipe(
+    Config.withDefault(DEFAULT_API_SENTRY_DSN)
+  );
+  const sentryTracesSampleRate = yield* Config.number(
+    "SENTRY_TRACES_SAMPLE_RATE"
+  ).pipe(Config.withDefault(1), Config.mapOrFail(decodeSentryTracesSampleRate));
   const applyMigrations = yield* Config.boolean("CEIRD_APPLY_MIGRATIONS").pipe(
     Config.withDefault(false)
   );
@@ -166,6 +190,8 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     planetScaleDefaultBranch,
     planetScaleRegionSlug,
     planetScaleClusterSize,
+    sentryDsn,
+    sentryTracesSampleRate,
     applyMigrations,
   } satisfies InfraStageConfig;
 });
