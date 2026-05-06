@@ -69,6 +69,12 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         CLOUDFLARE_API_TOKEN: authEmailApiToken.value,
       };
     }
+    const googleGeocodingEnv: Record<string, string> = {};
+    if (input.config.googleMapsApiKey !== undefined) {
+      googleGeocodingEnv.GOOGLE_MAPS_API_KEY = Redacted.value(
+        input.config.googleMapsApiKey
+      );
+    }
 
     const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
       "AuthEmailDeadLetterQueue",
@@ -99,10 +105,12 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         SENTRY_DSN: input.config.sentryDsn,
         SENTRY_ENVIRONMENT: input.config.stage,
         SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
+        SITE_GEOCODER_MODE: input.config.siteGeocoderMode,
         ...(input.migrationRunId
           ? { CEIRD_MIGRATIONS_RUN_ID: input.migrationRunId }
           : {}),
         ...authEmailCloudflareApiEnv,
+        ...googleGeocodingEnv,
       },
       domain: input.config.apiHostname,
       observability: {

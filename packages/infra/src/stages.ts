@@ -10,11 +10,16 @@ const INFRA_AUTH_EMAIL_TRANSPORT_MODES = [
   "cloudflare-binding",
   "noop",
 ] as const;
+const INFRA_SITE_GEOCODER_MODES = ["google", "stub"] as const;
 export const InfraAuthEmailTransport = Schema.Literals(
   INFRA_AUTH_EMAIL_TRANSPORT_MODES
 );
 export type InfraAuthEmailTransport = Schema.Schema.Type<
   typeof InfraAuthEmailTransport
+>;
+export const InfraSiteGeocoderMode = Schema.Literals(INFRA_SITE_GEOCODER_MODES);
+export type InfraSiteGeocoderMode = Schema.Schema.Type<
+  typeof InfraSiteGeocoderMode
 >;
 
 export type DomainName = string;
@@ -36,6 +41,8 @@ export interface InfraStageConfig {
   readonly planetScaleClusterSize: string;
   readonly sentryDsn: string;
   readonly sentryTracesSampleRate: number;
+  readonly siteGeocoderMode: InfraSiteGeocoderMode;
+  readonly googleMapsApiKey?: Redacted.Redacted<string>;
   readonly applyMigrations: boolean;
 }
 
@@ -56,6 +63,11 @@ const PlanetScaleClusterSize = Schema.String.check(
   Schema.isPattern(planetScaleClusterSizePattern, {
     message:
       "CEIRD_PLANETSCALE_CLUSTER_SIZE must be a PlanetScale cluster size such as PS-5",
+  })
+);
+const GoogleMapsApiKey = Schema.String.check(
+  Schema.isPattern(/\S/, {
+    message: "GOOGLE_MAPS_API_KEY must not be empty",
   })
 );
 const AuthEmailFromAddress = Schema.String.check(
@@ -119,6 +131,21 @@ function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
 
 function decodeInfraAuthEmailTransport(value: string) {
   return Schema.decodeUnknownEffect(InfraAuthEmailTransport)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeInfraSiteGeocoderMode(value: string) {
+  return Schema.decodeUnknownEffect(InfraSiteGeocoderMode)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(GoogleMapsApiKey)(
+    Redacted.value(value).trim()
+  ).pipe(
+    Effect.as(value),
     Effect.mapError((error) => new Config.ConfigError(error))
   );
 }
@@ -194,6 +221,16 @@ export const loadInfraStageConfig = Effect.gen(function* () {
   const sentryTracesSampleRate = yield* Config.number(
     "SENTRY_TRACES_SAMPLE_RATE"
   ).pipe(Config.withDefault(1), Config.mapOrFail(decodeSentryTracesSampleRate));
+  const siteGeocoderMode = yield* Config.string("SITE_GEOCODER_MODE").pipe(
+    Config.withDefault("stub"),
+    Config.mapOrFail(decodeInfraSiteGeocoderMode)
+  );
+  const googleMapsApiKey =
+    siteGeocoderMode === "google"
+      ? yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
+          Config.mapOrFail(decodeGoogleMapsApiKey)
+        )
+      : undefined;
   const applyMigrations = yield* Config.boolean("CEIRD_APPLY_MIGRATIONS").pipe(
     Config.withDefault(false)
   );
@@ -215,6 +252,8 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     planetScaleClusterSize,
     sentryDsn,
     sentryTracesSampleRate,
+    siteGeocoderMode,
+    googleMapsApiKey,
     applyMigrations,
   } satisfies InfraStageConfig;
 });

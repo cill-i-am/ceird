@@ -37,15 +37,29 @@ import {
 } from "./platform/database/database.js";
 import {
   apiSentryConfigFromWorkerEnv,
-  ApiSentryWorkerInstrumentationLive,
+  makeApiSentryWorkerInstrumentationLayer,
   makeSentryOptions,
-} from "./platform/sentry/sentry.js";
+} from "./platform/sentry/sentry-worker.js";
 import { makeApiWebHandler } from "./server.js";
 
 function makeWorkerBaseLive(env: ApiWorkerEnv) {
-  return Layer.setConfigProvider(
-    ConfigProvider.fromMap(apiWorkerEnvConfigMap(env))
-  ).pipe(Layer.provideMerge(ApiSentryWorkerInstrumentationLive));
+  return Layer.mergeAll(
+    Layer.setConfigProvider(ConfigProvider.fromMap(apiWorkerEnvConfigMap(env))),
+    makeApiSentryWorkerInstrumentationLayer(apiSentryConfigFromWorkerEnv(env)),
+    makeWorkerCloudflareEmailBindingLive(env)
+  );
+}
+
+function makeWorkerCloudflareEmailBindingLive(env: ApiWorkerEnv) {
+  const authEmail = env.AUTH_EMAIL;
+
+  if (!authEmail) {
+    return Layer.empty;
+  }
+
+  return Layer.succeed(CloudflareEmailBinding, {
+    send: (message) => authEmail.send(message),
+  });
 }
 
 function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {

@@ -123,12 +123,13 @@ The API Worker and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
 on Node.js compatibility APIs run consistently across both deployable surfaces.
 The API Worker is also configured with Better Auth env vars, Sentry env vars,
-database Hyperdrive binding, auth email queue binding, observability logs, and
-traces. The app is configured with app/API origins and Cloudflare-specific Vite
-flags, Cloudflare observability logs and traces, browser Sentry tracing, Sentry
-structured logs, and Session Replay. Browser Sentry is imported only after a
-browser runtime check so Cloudflare Worker startup does not load the Node Sentry
-SDK; telemetry sanitizes sensitive query parameters before it leaves the app.
+site geocoder mode, optional Google Maps key, database Hyperdrive binding, auth
+email queue binding, observability logs, and traces. The app is configured with
+app/API origins and Cloudflare-specific Vite flags, Cloudflare observability
+logs and traces, browser Sentry tracing, Sentry structured logs, and Session
+Replay. Browser Sentry and API Node Sentry are kept out of Cloudflare Worker
+startup paths; Cloudflare Workers use the Cloudflare Sentry SDK and shared
+telemetry sanitizers before events leave the app or API.
 
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
@@ -146,24 +147,26 @@ budget is applied and before new API code is uploaded.
 
 `packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
 
-| Variable                                   | Default              | Purpose                                              |
-| ------------------------------------------ | -------------------- | ---------------------------------------------------- |
-| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                           |
-| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                     |
-| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                        |
-| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                        |
-| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                |
-| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                 |
-| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                           |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections. |
-| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                            |
-| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                           |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                  |
-| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                             |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                            |
-| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.               |
-| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                |
-| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.            |
+| Variable                                   | Default              | Purpose                                                |
+| ------------------------------------------ | -------------------- | ------------------------------------------------------ |
+| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                             |
+| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                       |
+| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                          |
+| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                          |
+| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                  |
+| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                   |
+| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                             |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections.   |
+| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                              |
+| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                             |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                    |
+| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                               |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                              |
+| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.                 |
+| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                  |
+| `SITE_GEOCODER_MODE`                       | `stub`               | API site geocoding mode, either `stub` or `google`.    |
+| `GOOGLE_MAPS_API_KEY`                      | required for google  | Google geocoding key when `SITE_GEOCODER_MODE=google`. |
+| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.              |
 
 Resource names use `ceird-<stage>-<suffix>`.
 

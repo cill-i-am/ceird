@@ -52,6 +52,16 @@ async function runWorkerQueue(batch: MessageBatch<unknown>, env: ApiWorkerEnv) {
   await queue(batch, env, makeExecutionContext());
 }
 
+async function runWorkerFetch(request: Request, env: ApiWorkerEnv) {
+  const fetch = worker.fetch as (
+    request: Request,
+    env: ApiWorkerEnv,
+    context: ExecutionContext
+  ) => Promise<Response>;
+
+  return await fetch(request, env, makeExecutionContext());
+}
+
 function makeSendEmailMock(
   send: TestSendEmail = () => Promise.resolve({ messageId: "email_123" })
 ) {
@@ -139,5 +149,18 @@ describe("worker queue auth email delivery", () => {
     expect(sendEmail).not.toHaveBeenCalled();
     expect(message.ack).toHaveBeenCalledOnce();
     expect(message.retry).not.toHaveBeenCalled();
+  }, 10_000);
+});
+
+describe("worker fetch", () => {
+  it("uses the Worker email scheduler when Cloudflare email binding auth is configured", async () => {
+    await expect(
+      runWorkerFetch(
+        new Request("https://api.example.com/health"),
+        makeEnv({ SITE_GEOCODER_MODE: "stub" })
+      )
+    ).rejects.toMatchObject({
+      name: "(FiberFailure) @ceird/platform/database/AppDatabaseConnectionError",
+    });
   }, 10_000);
 });

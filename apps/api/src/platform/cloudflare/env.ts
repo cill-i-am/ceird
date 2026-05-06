@@ -13,11 +13,14 @@ export interface ApiWorkerEnv {
   readonly CLOUDFLARE_ACCOUNT_ID?: string;
   readonly CLOUDFLARE_API_TOKEN?: string;
   readonly DATABASE: Hyperdrive;
+  readonly GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS?: string;
+  readonly GOOGLE_MAPS_API_KEY?: string;
   readonly NODE_ENV?: string;
   readonly SENTRY_DSN?: string;
   readonly SENTRY_ENVIRONMENT?: string;
   readonly SENTRY_RELEASE?: string;
   readonly SENTRY_TRACES_SAMPLE_RATE?: string;
+  readonly SITE_GEOCODER_MODE?: string;
 }
 
 export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
@@ -31,11 +34,15 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
+      GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS:
+        env.GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS,
+      GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
       NODE_ENV: env.NODE_ENV,
       SENTRY_DSN: env.SENTRY_DSN,
       SENTRY_ENVIRONMENT: env.SENTRY_ENVIRONMENT,
       SENTRY_RELEASE: env.SENTRY_RELEASE,
       SENTRY_TRACES_SAMPLE_RATE: env.SENTRY_TRACES_SAMPLE_RATE,
+      SITE_GEOCODER_MODE: env.SITE_GEOCODER_MODE,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )

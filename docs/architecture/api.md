@@ -9,14 +9,15 @@ a Node dev server or a Cloudflare Worker.
 
 ## Entry Points
 
-| File                                | Purpose                                                                                          |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/index.ts`                      | Node development entrypoint.                                                                     |
-| `src/server.ts`                     | Effect `HttpApi` construction, system endpoints, API layer composition, and web-handler factory. |
-| `src/worker.ts`                     | Cloudflare Worker entrypoint and request handling.                                               |
-| `src/platform/cloudflare/env.ts`    | Cloudflare environment decoding and binding access.                                              |
-| `src/platform/database/database.ts` | Database runtime layer.                                                                          |
-| `src/platform/database/schema.ts`   | Combined Drizzle schema barrel.                                                                  |
+| File                                | Purpose                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/index.ts`                      | Node development entrypoint.                                                                |
+| `src/server.ts`                     | Runtime-neutral `HttpApi` construction, system endpoints, API composition, and web handler. |
+| `src/server-node.ts`                | Node HTTP server wiring and Node-only Sentry layer.                                         |
+| `src/worker.ts`                     | Cloudflare Worker entrypoint and request handling.                                          |
+| `src/platform/cloudflare/env.ts`    | Cloudflare environment decoding and binding access.                                         |
+| `src/platform/database/database.ts` | Database runtime layer.                                                                     |
+| `src/platform/database/schema.ts`   | Combined Drizzle schema barrel.                                                             |
 
 System endpoints are defined in `src/server.ts`:
 
@@ -28,11 +29,11 @@ System endpoints are defined in `src/server.ts`:
 Sentry is available for the API in both the Node entrypoint and the
 Cloudflare Worker. Runtime config is decoded from `SENTRY_DSN`,
 `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and `SENTRY_TRACES_SAMPLE_RATE`. When a
-DSN is present, the Node API installs Sentry's Effect tracer and metrics layer.
-Both the Node API and Cloudflare Worker install an Effect logger that forwards
-log messages and structured annotations to Sentry logs. The Cloudflare Worker is
-also wrapped with Sentry's Worker SDK so request and queue handler errors are
-captured in the Cloudflare runtime. Sentry events and logs are scrubbed before
+DSN is present, the Node API installs Sentry's Effect tracer, metrics layer, and
+Effect logger from the Node-only entrypoint. The Cloudflare Worker keeps its
+entrypoint free of the Node Sentry SDK, uses the Cloudflare Sentry SDK wrapper
+for request and queue handler errors, and installs a Cloudflare-backed Effect
+logger for structured API logs. Sentry events and logs are scrubbed before
 export so request query strings, cookies, tokens, secrets, passwords, and auth
 email delivery keys are filtered.
 
@@ -171,7 +172,9 @@ Core files:
 
 Sites live in `src/domains/sites` and are exposed through
 `@ceird/sites-core`. Sites and service areas are independent organization data
-that jobs can reference.
+that jobs can reference. Site geocoding is selected with `SITE_GEOCODER_MODE`;
+production infrastructure defaults to `stub` until a `GOOGLE_MAPS_API_KEY` is
+provided for `google` mode.
 
 Core files:
 

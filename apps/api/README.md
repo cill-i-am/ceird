@@ -28,7 +28,8 @@ pnpm sandbox:logs -- --service api
 | Path                                  | Purpose                                                                                                                  |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `src/index.ts`                        | Node development entrypoint.                                                                                             |
-| `src/server.ts`                       | Effect API construction, system routes, API layer composition, and web handler factory.                                  |
+| `src/server.ts`                       | Runtime-neutral Effect API construction, system routes, API layer composition, and web handler factory.                  |
+| `src/server-node.ts`                  | Node HTTP server wiring and Node-only Sentry layer.                                                                      |
 | `src/worker.ts`                       | Cloudflare Worker entrypoint.                                                                                            |
 | `src/platform/database`               | Database config, runtime, schema barrel, errors, and test database helpers.                                              |
 | `src/platform/cloudflare`             | Cloudflare environment and binding helpers.                                                                              |

@@ -18,6 +18,7 @@ const configWithoutCloudflareBootstrapSecrets = {
   planetScaleRegionSlug: "eu-west",
   sentryDsn: "https://public@example.com/1",
   sentryTracesSampleRate: 1,
+  siteGeocoderMode: "stub",
   stage: "production",
   zoneName: "example.com",
 } satisfies InfraStageConfig;
