@@ -17,6 +17,16 @@ const workerCompatibility = {
   flags: ["nodejs_compat"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
 
+const apiWorkerBundleDirFromInfraCwd = "../../apps/api/.alchemy/bundles/Api";
+const apiWorkerSentrySourceMapAssets = [
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.js`,
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.mjs`,
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.cjs`,
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.js.map`,
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.mjs.map`,
+  `${apiWorkerBundleDirFromInfraCwd}/**/*.cjs.map`,
+] as const;
+
 type WorkerEnv = Record<string, Input<string | Redacted.Redacted<string>>>;
 
 export interface CloudflareStackInput {
@@ -221,6 +231,9 @@ function apiWorkerBuild(config: InfraStageConfig): WorkerProps["build"] {
         inject: false,
         name: config.sentryRelease,
         setCommits: false,
+      },
+      sourcemaps: {
+        assets: [...apiWorkerSentrySourceMapAssets],
       },
       telemetry: false,
     }),

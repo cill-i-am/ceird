@@ -143,6 +143,8 @@ write the generated bundle to disk before upload. The API Worker uses that path
 with the Sentry Rollup plugin so production deploys inject debug IDs, upload
 the exact API Worker bundle/source maps to the `ceird-api` Sentry project, and
 then upload the same debug-ID-bearing bundle to Cloudflare.
+Because Rolldown writes the API artifacts relative to the API package cwd, the
+Sentry plugin is pointed at `apps/api/.alchemy/bundles/Api` during deploy.
 
 Browser source-map uploads are handled by the Sentry Vite plugin during the
 production app build. `Deploy Main` forwards the main GitHub environment's
