@@ -52,4 +52,15 @@ describe("server sentry boundary", () => {
       tracesSampleRate: 1,
     });
   });
+
+  it("sets the document policy required for browser profiling", async () => {
+    const { createServerEntry } = await import("./server");
+    const entry = createServerEntry({
+      fetch: vi.fn<() => Response>(() => new Response("ok")) as never,
+    });
+
+    const response = await entry.fetch(new Request("https://app.ceird.app"));
+
+    expect(response.headers.get("Document-Policy")).toBe("js-profiling");
+  });
 });

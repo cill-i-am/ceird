@@ -130,9 +130,11 @@ messages are captured to Sentry instead of sitting silently in the DLQ. The app
 is configured with app/API origins and Cloudflare-specific Vite flags,
 Cloudflare observability logs and traces, browser Sentry tracing, Sentry
 structured logs, Session Replay, Feedback, Browser Profiling, and app Worker
-Sentry runtime bindings. Browser Sentry and API Node Sentry are kept out of
-Cloudflare Worker startup paths; Cloudflare Workers use the Cloudflare Sentry
-SDK and shared telemetry sanitizers before events leave the app or API.
+Sentry runtime bindings. The app Worker adds the `Document-Policy:
+js-profiling` response header required by Browser Profiling. Browser Sentry and
+API Node Sentry are kept out of Cloudflare Worker startup paths; Cloudflare
+Workers use the Cloudflare Sentry SDK and shared telemetry sanitizers before
+events leave the app or API.
 
 The pinned `alchemy@2.0.0-beta.28` package is patched so `Cloudflare.Vite`
 uses its `rootDir` as the memoization working directory. Deploys run from
