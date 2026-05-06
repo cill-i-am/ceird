@@ -13,10 +13,10 @@ describe("Cloudflare Worker compatibility", () => {
     });
   });
 
-  it("uses only AsyncLocalStorage compatibility for the app Worker", () => {
+  it("keeps the app Worker on full Node.js compatibility", () => {
     expect(appWorkerCompatibility).toStrictEqual({
       date: "2026-04-30",
-      flags: ["nodejs_als"],
+      flags: ["nodejs_compat"],
     });
   });
 });

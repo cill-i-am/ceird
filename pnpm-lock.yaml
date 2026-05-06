@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@distilled.cloud/cloudflare-rolldown-plugin@0.2.0':
+    hash: ujvldjmkeanlbimpsiszcptdw4
+    path: patches/@distilled.cloud__cloudflare-rolldown-plugin@0.2.0.patch
   '@distilled.cloud/cloudflare@0.15.2':
     hash: nkqzb52vths3hianiosusr5n44
     path: patches/@distilled.cloud__cloudflare@0.15.2.patch
@@ -8081,7 +8084,7 @@ snapshots:
       '@distilled.cloud/core': 0.15.2(effect@4.0.0-beta.58)
       effect: 4.0.0-beta.58
 
-  '@distilled.cloud/cloudflare-rolldown-plugin@0.2.0(rolldown@1.0.0-rc.17)(workerd@1.20260417.1)':
+  '@distilled.cloud/cloudflare-rolldown-plugin@0.2.0(patch_hash=ujvldjmkeanlbimpsiszcptdw4)(rolldown@1.0.0-rc.17)(workerd@1.20260417.1)':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260417.1)
       rolldown: 1.0.0-rc.17
@@ -8111,7 +8114,7 @@ snapshots:
 
   '@distilled.cloud/cloudflare-vite-plugin@0.2.0(rolldown@1.0.0-rc.17)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260417.1)':
     dependencies:
-      '@distilled.cloud/cloudflare-rolldown-plugin': 0.2.0(rolldown@1.0.0-rc.17)(workerd@1.20260417.1)
+      '@distilled.cloud/cloudflare-rolldown-plugin': 0.2.0(patch_hash=ujvldjmkeanlbimpsiszcptdw4)(rolldown@1.0.0-rc.17)(workerd@1.20260417.1)
       vite: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
     transitivePeerDependencies:
       - rolldown

@@ -19,7 +19,7 @@ export const apiWorkerCompatibility = {
 
 export const appWorkerCompatibility = {
   date: "2026-04-30",
-  flags: ["nodejs_als"],
+  flags: ["nodejs_compat"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
 
 const apiWorkerBundleDirFromInfraCwd = "../../apps/api/.alchemy/bundles/Api";
