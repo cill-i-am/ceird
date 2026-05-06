@@ -4,7 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { HyperdriveProvider } from "./src/cloudflare-hyperdrive.ts";
-import { makeCloudflareStack } from "./src/cloudflare-stack.ts";
+import {
+  makeCloudflareHyperdrive,
+  makeCloudflareStack,
+} from "./src/cloudflare-stack.ts";
 import {
   DrizzleMigrations,
   DrizzleMigrationsProvider,
@@ -37,18 +40,24 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const config = yield* loadInfraStageConfig.pipe(Effect.orDie);
     const database = yield* makePlanetScalePostgres(config);
+    const hyperdrive = yield* makeCloudflareHyperdrive({ config, database });
 
+    let migrationRunId: (typeof hyperdrive)["hyperdriveId"] | undefined;
     if (config.applyMigrations) {
-      yield* DrizzleMigrations("DrizzleMigrations", {
+      const migrations = yield* DrizzleMigrations("DrizzleMigrations", {
         databaseUrl: database.migrationRole.connectionUrl,
+        hyperdriveId: hyperdrive.hyperdriveId,
         migrationsFolder: "../../apps/api/drizzle",
         runId: new Date().toISOString(),
       });
+      migrationRunId = migrations.runId;
     }
 
     const stack = yield* makeCloudflareStack({
       config,
       database,
+      hyperdrive,
+      migrationRunId,
     });
 
     return {

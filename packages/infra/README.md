@@ -16,6 +16,7 @@ From this package:
 
 ```bash
 pnpm --filter @ceird/infra check-types
+pnpm --filter @ceird/infra test
 pnpm --filter @ceird/infra deploy
 pnpm --filter @ceird/infra destroy
 pnpm --filter @ceird/infra dev
@@ -39,6 +40,10 @@ The stack provisions PlanetScale Postgres, Cloudflare Hyperdrive, a Cloudflare
 Worker API, a Cloudflare Vite app, an auth email queue, an auth email dead-letter
 queue, and optional Cloudflare email credentials or bindings depending on
 `AUTH_EMAIL_TRANSPORT`.
+
+Hyperdrive is configured with a conservative origin connection limit. When
+migrations are enabled, Alchemy applies that Hyperdrive configuration before
+running Drizzle and makes the API Worker update depend on the migration run.
 
 See [../../docs/architecture/sandbox-and-infra.md](../../docs/architecture/sandbox-and-infra.md)
 for configuration variables and deployment flow.

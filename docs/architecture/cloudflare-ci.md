@@ -70,9 +70,18 @@ The workflow:
 - deploys through `pnpm infra:deploy`
 - serializes deploys with a GitHub Actions concurrency group
 - applies migrations by default through `CEIRD_APPLY_MIGRATIONS=true`
+- caps Hyperdrive origin database connections before migration attempts, then
+  makes the API Worker wait for migrations when migrations are enabled
 
 Use the manual `apply_migrations=false` input only when intentionally testing a
 deploy that must not touch the database schema.
+
+`CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` defaults to `5`, Cloudflare
+Hyperdrive's minimum. Keep it below the PlanetScale branch connection ceiling so
+there is room for the direct migration role and provider control-plane checks.
+The migration resource retries transient PostgreSQL slot exhaustion, including
+PlanetScale's `remaining connection slots are reserved` error, but unrelated SQL
+or schema failures still fail immediately.
 
 The infra package currently pins `alchemy@2.0.0-beta.28` with a pnpm patch that
 adds missing `.js` extensions to the package's published CLI imports. Without

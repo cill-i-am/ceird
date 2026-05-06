@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,6 +19,25 @@ const workerCompatibility = {
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
   readonly database: PlanetScalePostgresResources;
+  readonly hyperdrive: Hyperdrive;
+  readonly migrationRunId?: Input<string>;
+}
+
+export function makeCloudflareHyperdrive(input: {
+  readonly config: InfraStageConfig;
+  readonly database: PlanetScalePostgresResources;
+}) {
+  return Hyperdrive("PostgresHyperdrive", {
+    name: resourceName(input.config, "postgres"),
+    origin: input.database.appRole.connectionUrl.pipe(
+      Output.map((databaseUrl) =>
+        hyperdriveOriginFromDatabaseUrl(Redacted.value(databaseUrl))
+      )
+    ),
+    originConnectionLimit: input.config.hyperdriveOriginConnectionLimit,
+    caching: { disabled: true },
+    delete: false,
+  });
 }
 
 export function makeCloudflareStack(input: CloudflareStackInput) {
@@ -61,17 +81,6 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       name: resourceName(input.config, "auth-email"),
     });
 
-    const database = yield* Hyperdrive("PostgresHyperdrive", {
-      name: resourceName(input.config, "postgres"),
-      origin: input.database.appRole.connectionUrl.pipe(
-        Output.map((databaseUrl) =>
-          hyperdriveOriginFromDatabaseUrl(Redacted.value(databaseUrl))
-        )
-      ),
-      caching: { disabled: true },
-      delete: false,
-    });
-
     const api = yield* Cloudflare.Worker("Api", {
       name: resourceName(input.config, "api"),
       main: "../../apps/api/src/worker.ts",
@@ -90,6 +99,9 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         SENTRY_DSN: input.config.sentryDsn,
         SENTRY_ENVIRONMENT: input.config.stage,
         SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
+        ...(input.migrationRunId
+          ? { CEIRD_MIGRATIONS_RUN_ID: input.migrationRunId }
+          : {}),
         ...authEmailCloudflareApiEnv,
       },
       domain: input.config.apiHostname,
@@ -111,7 +123,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         {
           type: "hyperdrive",
           name: "DATABASE",
-          id: database.hyperdriveId,
+          id: input.hyperdrive.hyperdriveId,
         },
       ],
     });
@@ -170,7 +182,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       app,
       authEmailDeadLetterQueue,
       authEmailQueue,
-      database,
+      database: input.hyperdrive,
     } as const;
   });
 }

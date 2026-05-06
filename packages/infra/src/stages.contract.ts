@@ -10,6 +10,7 @@ const configWithoutCloudflareBootstrapSecrets = {
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",
   authEmailTransport: "cloudflare-binding",
+  hyperdriveOriginConnectionLimit: 5,
   planetScaleClusterSize: "PS-5",
   planetScaleDatabaseName: "ceird-production",
   planetScaleDefaultBranch: "main",
