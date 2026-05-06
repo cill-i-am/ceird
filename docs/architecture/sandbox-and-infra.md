@@ -119,20 +119,23 @@ The stack provisions:
 - Optional Cloudflare account API token for `cloudflare-api` email transport
 - Optional Cloudflare Email Worker binding for `cloudflare-binding` transport
 
-The API Worker and Cloudflare Vite app share the same typed Worker
-compatibility contract, including `nodejs_compat`, so runtime packages that rely
-on Node.js compatibility APIs run consistently across both deployable surfaces.
-The API Worker is also configured with Better Auth env vars, Sentry env vars,
-site geocoder mode, optional Google Maps key, database Hyperdrive binding, auth
-email queue binding, auth email dead-letter queue name, observability logs, and
-traces. The dead-letter queue has its own Worker consumer so failed auth email
-messages are captured to Sentry instead of sitting silently in the DLQ. The app
-is configured with app/API origins and Cloudflare-specific Vite flags,
-Cloudflare observability logs and traces, browser Sentry tracing, Sentry
-structured logs, Session Replay, Feedback, Browser Profiling, and app Worker
-Sentry runtime bindings. Browser Sentry and API Node Sentry are kept out of
-Cloudflare Worker startup paths; Cloudflare Workers use the Cloudflare Sentry
-SDK and shared telemetry sanitizers before events leave the app or API.
+The API Worker uses full `nodejs_compat` because server-side auth, database, and
+platform packages rely on broader Node.js compatibility APIs. The Cloudflare
+Vite app uses the narrower `nodejs_als` flag because the app Worker only needs
+Node.js `AsyncLocalStorage` for Sentry request context; avoiding full
+`nodejs_compat` keeps the current Cloudflare Vite bundler from injecting Node.js
+polyfill startup code into the app Worker. The API Worker is also configured
+with Better Auth env vars, Sentry env vars, site geocoder mode, optional Google
+Maps key, database Hyperdrive binding, auth email queue binding, auth email
+dead-letter queue name, observability logs, and traces. The dead-letter queue
+has its own Worker consumer so failed auth email messages are captured to Sentry
+instead of sitting silently in the DLQ. The app is configured with app/API
+origins and Cloudflare-specific Vite flags, Cloudflare observability logs and
+traces, browser Sentry tracing, Sentry structured logs, Session Replay,
+Feedback, Browser Profiling, and app Worker Sentry runtime bindings. Browser
+Sentry and API Node Sentry are kept out of Cloudflare Worker startup paths;
+Cloudflare Workers use the Cloudflare Sentry SDK and shared telemetry
+sanitizers before events leave the app or API.
 
 The pinned `alchemy@2.0.0-beta.28` package is patched so `Cloudflare.Vite`
 uses its `rootDir` as the memoization working directory. Deploys run from

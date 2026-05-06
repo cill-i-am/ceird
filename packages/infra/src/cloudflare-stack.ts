@@ -12,9 +12,14 @@ import type { PlanetScalePostgresResources } from "./planet-scale.ts";
 import type { InfraStageConfig } from "./stages.ts";
 import { resourceName } from "./stages.ts";
 
-const workerCompatibility = {
+export const apiWorkerCompatibility = {
   date: "2026-04-30",
   flags: ["nodejs_compat"],
+} satisfies NonNullable<WorkerProps["compatibility"]>;
+
+export const appWorkerCompatibility = {
+  date: "2026-04-30",
+  flags: ["nodejs_als"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
 
 const apiWorkerBundleDirFromInfraCwd = "../../apps/api/.alchemy/bundles/Api";
@@ -127,7 +132,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const api = yield* Cloudflare.Worker("Api", {
       name: resourceName(input.config, "api"),
       main: "../../apps/api/src/worker.ts",
-      compatibility: workerCompatibility,
+      compatibility: apiWorkerCompatibility,
       bindings: {
         AUTH_EMAIL_QUEUE: authEmailQueue,
       },
@@ -196,7 +201,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const app = yield* Cloudflare.Vite("App", {
       name: resourceName(input.config, "app"),
       rootDir: "../../apps/app",
-      compatibility: workerCompatibility,
+      compatibility: appWorkerCompatibility,
       env: {
         API_ORIGIN: `https://${input.config.apiHostname}`,
         CEIRD_CLOUDFLARE: "1",
