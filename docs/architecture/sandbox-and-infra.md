@@ -136,27 +136,34 @@ builds hidden source maps and sends `.map` files as Worker script modules with
 the `application/source-map` content type during the multipart upload. There is
 no separate `upload_source_maps` flag in our Alchemy resource config.
 
+The production Hyperdrive configuration sets a conservative origin connection
+limit before deploy-time migrations run. Drizzle migrations depend on that
+Hyperdrive resource and the API Worker depends on the migration run when
+`CEIRD_APPLY_MIGRATIONS=true`, so schema changes run after the connection pool
+budget is applied and before new API code is uploaded.
+
 ## Infra Configuration
 
 `packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
 
-| Variable                           | Default              | Purpose                                   |
-| ---------------------------------- | -------------------- | ----------------------------------------- |
-| `CEIRD_INFRA_STAGE`                | `production`         | `preview` or `production`.                |
-| `CEIRD_ZONE_NAME`                  | required             | Cloudflare zone.                          |
-| `CEIRD_APP_HOSTNAME`               | `app.<zone>`         | App hostname.                             |
-| `CEIRD_API_HOSTNAME`               | `api.<zone>`         | API hostname.                             |
-| `AUTH_EMAIL_FROM`                  | required             | Sender email address.                     |
-| `AUTH_EMAIL_FROM_NAME`             | `Ceird`              | Sender display name.                      |
-| `AUTH_EMAIL_TRANSPORT`             | `cloudflare-binding` | Auth email transport mode.                |
-| `PLANETSCALE_ORGANIZATION`         | required             | PlanetScale organization.                 |
-| `CEIRD_PLANETSCALE_DATABASE_NAME`  | `ceird-<stage>`      | PlanetScale database name.                |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH` | `main`               | PlanetScale branch.                       |
-| `CEIRD_PLANETSCALE_REGION`         | `eu-west`            | PlanetScale region slug.                  |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE`   | `PS-5`               | PlanetScale cluster size.                 |
-| `SENTRY_DSN`                       | Ceird API DSN        | Sentry project DSN for the API Worker.    |
-| `SENTRY_TRACES_SAMPLE_RATE`        | `1`                  | Sentry trace sample rate from 0 to 1.     |
-| `CEIRD_APPLY_MIGRATIONS`           | `false`              | Run API Drizzle migrations during deploy. |
+| Variable                                   | Default              | Purpose                                              |
+| ------------------------------------------ | -------------------- | ---------------------------------------------------- |
+| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                           |
+| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                     |
+| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                        |
+| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                        |
+| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                |
+| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                 |
+| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                           |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections. |
+| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                            |
+| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                           |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                  |
+| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                             |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                            |
+| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.               |
+| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                |
+| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.            |
 
 Resource names use `ceird-<stage>-<suffix>`.
 

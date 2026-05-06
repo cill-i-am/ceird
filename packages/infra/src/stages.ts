@@ -28,6 +28,7 @@ export interface InfraStageConfig {
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authEmailTransport: InfraAuthEmailTransport;
+  readonly hyperdriveOriginConnectionLimit: number;
   readonly planetScaleOrganization: string;
   readonly planetScaleDatabaseName: string;
   readonly planetScaleDefaultBranch: string;
@@ -67,6 +68,15 @@ const SentryTracesSampleRate = Schema.Number.check(
     { minimum: 0, maximum: 1 },
     {
       message: "SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1",
+    }
+  )
+);
+const HyperdriveOriginConnectionLimit = Schema.Int.check(
+  Schema.isBetween(
+    { minimum: 5, maximum: 100 },
+    {
+      message:
+        "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT must be an integer between 5 and 100",
     }
   )
 );
@@ -119,6 +129,12 @@ function decodeSentryTracesSampleRate(value: number) {
   );
 }
 
+function decodeHyperdriveOriginConnectionLimit(value: number) {
+  return Schema.decodeUnknownEffect(HyperdriveOriginConnectionLimit)(
+    value
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
 export const loadInfraStageConfig = Effect.gen(function* () {
   const stage = yield* Config.string("CEIRD_INFRA_STAGE").pipe(
     Config.withDefault("production"),
@@ -144,6 +160,12 @@ export const loadInfraStageConfig = Effect.gen(function* () {
   const authEmailTransport = yield* Config.string("AUTH_EMAIL_TRANSPORT").pipe(
     Config.withDefault("cloudflare-binding"),
     Config.mapOrFail(decodeInfraAuthEmailTransport)
+  );
+  const hyperdriveOriginConnectionLimit = yield* Config.number(
+    "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT"
+  ).pipe(
+    Config.withDefault(5),
+    Config.mapOrFail(decodeHyperdriveOriginConnectionLimit)
   );
   const planetScaleOrganization = yield* Config.string(
     "PLANETSCALE_ORGANIZATION"
@@ -185,6 +207,7 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     authEmailFrom,
     authEmailFromName,
     authEmailTransport,
+    hyperdriveOriginConnectionLimit,
     planetScaleOrganization,
     planetScaleDatabaseName,
     planetScaleDefaultBranch,

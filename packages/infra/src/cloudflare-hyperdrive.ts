@@ -25,6 +25,7 @@ export interface HyperdriveOrigin {
 export interface HyperdriveProps {
   readonly name: string;
   readonly origin: HyperdriveOrigin;
+  readonly originConnectionLimit?: number;
   readonly caching?: { readonly disabled: true };
   readonly delete?: boolean;
 }
@@ -124,7 +125,7 @@ function shouldDeleteProtectedResource(deleteFlag: boolean | undefined) {
   });
 }
 
-function hyperdriveBody(props: HyperdriveProps) {
+export function hyperdriveBody(props: HyperdriveProps) {
   return {
     name: props.name,
     origin: {
@@ -135,6 +136,7 @@ function hyperdriveBody(props: HyperdriveProps) {
       scheme: props.origin.scheme ?? "postgres",
     },
     caching: props.caching,
+    origin_connection_limit: props.originConnectionLimit,
   };
 }
 
@@ -252,6 +254,7 @@ function createHyperdriveConfig(input: {
   readonly credentials: CloudflareCredentials;
   readonly name: string;
   readonly origin: ReturnType<typeof hyperdriveBody>["origin"];
+  readonly origin_connection_limit?: number;
   readonly caching?: ReturnType<typeof hyperdriveBody>["caching"];
 }) {
   return cloudflareRequest<{ readonly result: HyperdriveApiConfig }>({
@@ -260,6 +263,7 @@ function createHyperdriveConfig(input: {
       caching: input.caching,
       name: input.name,
       origin: input.origin,
+      origin_connection_limit: input.origin_connection_limit,
     },
     credentials: input.credentials,
     method: "POST",
@@ -273,6 +277,7 @@ function updateHyperdriveConfig(input: {
   readonly hyperdriveId: string;
   readonly name: string;
   readonly origin: ReturnType<typeof hyperdriveBody>["origin"];
+  readonly origin_connection_limit?: number;
   readonly caching?: ReturnType<typeof hyperdriveBody>["caching"];
 }) {
   return cloudflareRequest<{ readonly result: HyperdriveApiConfig }>({
@@ -281,6 +286,7 @@ function updateHyperdriveConfig(input: {
       caching: input.caching,
       name: input.name,
       origin: input.origin,
+      origin_connection_limit: input.origin_connection_limit,
     },
     credentials: input.credentials,
     method: "PATCH",

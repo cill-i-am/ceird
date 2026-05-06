@@ -7,7 +7,8 @@
     "check-types": "tsc --noEmit -p tsconfig.json",
     "deploy": "node scripts/alchemy-env.mjs deploy",
     "destroy": "node scripts/alchemy-env.mjs destroy",
-    "dev": "alchemy dev"
+    "dev": "alchemy dev",
+    "test": "vitest run"
   },
   "dependencies": {
     "@distilled.cloud/planetscale": "0.13.1",
@@ -26,6 +27,7 @@
     "@types/node": "^25.6.0",
     "@types/pg": "8.15.6",
     "@types/picomatch": "^4.0.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }
