@@ -131,6 +131,11 @@ Replay. Browser Sentry and API Node Sentry are kept out of Cloudflare Worker
 startup paths; Cloudflare Workers use the Cloudflare Sentry SDK and shared
 telemetry sanitizers before events leave the app or API.
 
+The pinned `alchemy@2.0.0-beta.28` package is patched so `Cloudflare.Vite`
+uses its `rootDir` as the memoization working directory. Deploys run from
+`packages/infra`, so without that patch app-only source changes can be missed
+by the Vite resource diff and Cloudflare can keep serving stale browser assets.
+
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
 builds hidden source maps and sends `.map` files as Worker script modules with

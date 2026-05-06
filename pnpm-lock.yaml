@@ -12,7 +12,7 @@ patchedDependencies:
     hash: k457bioa24kwyy7r7rj4b6pthe
     path: patches/@distilled.cloud__planetscale@0.13.1.patch
   alchemy@2.0.0-beta.28:
-    hash: q3ldq7brlpf3dqxmhlak5ov2wm
+    hash: asro2ewvwpazpch4mkdkb2v4pu
     path: patches/alchemy@2.0.0-beta.28.patch
 
 importers:
@@ -322,7 +322,7 @@ importers:
         version: 4.0.0-beta.58(effect@4.0.0-beta.58)(ioredis@5.10.1)
       alchemy:
         specifier: 2.0.0-beta.28
-        version: 2.0.0-beta.28(patch_hash=q3ldq7brlpf3dqxmhlak5ov2wm)(@effect/platform-bun@4.0.0-beta.58(effect@4.0.0-beta.58))(@effect/platform-node@4.0.0-beta.58(effect@4.0.0-beta.58)(ioredis@5.10.1))(@types/react@19.2.14)(effect@4.0.0-beta.58)(typescript@5.9.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.2.0))(lightningcss@1.32.0)(msw@2.14.2(@types/node@25.6.0)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.2)
+        version: 2.0.0-beta.28(patch_hash=asro2ewvwpazpch4mkdkb2v4pu)(@effect/platform-bun@4.0.0-beta.58(effect@4.0.0-beta.58))(@effect/platform-node@4.0.0-beta.58(effect@4.0.0-beta.58)(ioredis@5.10.1))(@types/react@19.2.14)(effect@4.0.0-beta.58)(typescript@5.9.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.2.0))(lightningcss@1.32.0)(msw@2.14.2(@types/node@25.6.0)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.2)
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260501.1)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(bun-types@1.3.13)(kysely@0.28.16)(pg@8.20.0)
@@ -11041,7 +11041,7 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@2.0.0-beta.28(patch_hash=q3ldq7brlpf3dqxmhlak5ov2wm)(@effect/platform-bun@4.0.0-beta.58(effect@4.0.0-beta.58))(@effect/platform-node@4.0.0-beta.58(effect@4.0.0-beta.58)(ioredis@5.10.1))(@types/react@19.2.14)(effect@4.0.0-beta.58)(typescript@5.9.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.2.0))(lightningcss@1.32.0)(msw@2.14.2(@types/node@25.6.0)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.2):
+  alchemy@2.0.0-beta.28(patch_hash=asro2ewvwpazpch4mkdkb2v4pu)(@effect/platform-bun@4.0.0-beta.58(effect@4.0.0-beta.58))(@effect/platform-node@4.0.0-beta.58(effect@4.0.0-beta.58)(ioredis@5.10.1))(@types/react@19.2.14)(effect@4.0.0-beta.58)(typescript@5.9.3)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.2.0))(lightningcss@1.32.0)(msw@2.14.2(@types/node@25.6.0)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.2):
     dependencies:
       '@ai-sdk/anthropic': 3.0.74(zod@4.4.2)
       '@ai-sdk/openai': 3.0.58(zod@4.4.2)

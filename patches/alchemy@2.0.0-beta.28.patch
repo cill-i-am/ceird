@@ -230,3 +230,51 @@ index 30d64f9f37df4ca324e80c65e140b9e7d96c03cb..b4cd7033bff523fc7af77542098dca58
  import { PlatformServices } from "../Util/PlatformServices.js";
  import { execStack, ExecStackOptions } from "./commands/deploy.js";
  import { inkCLI } from "./tui/InkCLI.js";
+diff --git a/lib/Cloudflare/Website/Vite.js b/lib/Cloudflare/Website/Vite.js
+index c0c016080aaf31a7a9df42483b493319363d8da8..1445f1002ae1bf1d4dcbb897d0feb54e36a5d655 100644
+--- a/lib/Cloudflare/Website/Vite.js
++++ b/lib/Cloudflare/Website/Vite.js
+@@ -86,6 +86,7 @@ export const Vite = (id, propsEff) => Worker(id, Effect.map(Effect.isEffect(prop
+     main: undefined,
+     vite: {
+         rootDir: props?.rootDir,
++        cwd: props?.rootDir,
+         memo: props?.memo,
+     },
+ })));
+diff --git a/lib/Cloudflare/Workers/Worker.d.ts b/lib/Cloudflare/Workers/Worker.d.ts
+index 70225375f9fe0bfde3731b8e260901ca0f9188f9..157d66bf3a541cd1b6c71ea84ea461adc296977d 100644
+--- a/lib/Cloudflare/Workers/Worker.d.ts
++++ b/lib/Cloudflare/Workers/Worker.d.ts
+@@ -117,6 +117,7 @@ export interface WorkerProps<Bindings extends WorkerBindingProps = any, Assets e
+     /** @internal used by Cloudflare.Vite resource */
+     vite?: {
+         rootDir?: string;
++        cwd?: string;
+         memo?: MemoOptions;
+     };
+     logpush?: boolean;
+diff --git a/src/Cloudflare/Website/Vite.ts b/src/Cloudflare/Website/Vite.ts
+index 97dc32eb60d3a9439302ea3a60313544f6d76169..42e3a1b2f22b559bc211fff208988027b5f2569b 100644
+--- a/src/Cloudflare/Website/Vite.ts
++++ b/src/Cloudflare/Website/Vite.ts
+@@ -125,6 +125,7 @@ export const Vite = <
+         main: undefined!,
+         vite: {
+           rootDir: props?.rootDir,
++          cwd: props?.rootDir,
+           memo: props?.memo,
+         },
+       }),
+diff --git a/src/Cloudflare/Workers/Worker.ts b/src/Cloudflare/Workers/Worker.ts
+index 31a30ec65f2fb0239df9bdc2f84a72d092fa3e65..308b437f377a49b05c2f55e04de18a1fdbc779bf 100644
+--- a/src/Cloudflare/Workers/Worker.ts
++++ b/src/Cloudflare/Workers/Worker.ts
+@@ -248,6 +248,7 @@ export interface WorkerProps<
+   /** @internal used by Cloudflare.Vite resource */
+   vite?: {
+     rootDir?: string;
++    cwd?: string;
+     memo?: MemoOptions;
+   };
+   logpush?: boolean;
