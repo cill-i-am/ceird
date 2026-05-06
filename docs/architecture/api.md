@@ -37,6 +37,12 @@ logger for structured API logs. Sentry events and logs are scrubbed before
 export so request query strings, cookies, tokens, secrets, passwords, and auth
 email delivery keys are filtered.
 
+Production API deploys set `SENTRY_RELEASE` to the deployed Git SHA and upload
+the Cloudflare Worker bundle/source maps to the `ceird-api` Sentry project. The
+API Worker build uses the Sentry Rollup plugin through the patched Alchemy
+Worker bundling hook, so debug IDs are injected before the same bundle is sent
+to Cloudflare.
+
 The API enables a custom Effect HTTP request logger for both the Node server and
 the Cloudflare/web-handler path. It records method, status, and redacted path
 only; query strings are not logged, and `/health` is skipped to keep probe noise

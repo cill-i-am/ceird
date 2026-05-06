@@ -1,3 +1,4 @@
+import { sentryRollupPlugin } from "@sentry/rollup-plugin";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
@@ -15,6 +16,8 @@ const workerCompatibility = {
   date: "2026-04-30",
   flags: ["nodejs_compat"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
+
+type WorkerEnv = Record<string, Input<string | Redacted.Redacted<string>>>;
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -46,7 +49,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
       bytes: 32,
     });
-    let authEmailCloudflareApiEnv = {};
+    const authEmailCloudflareApiEnv: WorkerEnv = {};
     if (input.config.authEmailTransport === "cloudflare-api") {
       const authEmailApiToken = yield* Cloudflare.AccountApiToken(
         "AuthEmailApiToken",
@@ -64,16 +67,36 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         }
       );
 
-      authEmailCloudflareApiEnv = {
-        CLOUDFLARE_ACCOUNT_ID: authEmailApiToken.accountId,
-        CLOUDFLARE_API_TOKEN: authEmailApiToken.value,
-      };
+      authEmailCloudflareApiEnv.CLOUDFLARE_ACCOUNT_ID =
+        authEmailApiToken.accountId;
+      authEmailCloudflareApiEnv.CLOUDFLARE_API_TOKEN = authEmailApiToken.value;
     }
-    const googleGeocodingEnv: Record<string, string> = {};
+    const googleGeocodingEnv: WorkerEnv = {};
     if (input.config.googleMapsApiKey !== undefined) {
       googleGeocodingEnv.GOOGLE_MAPS_API_KEY = Redacted.value(
         input.config.googleMapsApiKey
       );
+    }
+    const apiEnv: WorkerEnv = {
+      AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
+      AUTH_EMAIL_FROM: input.config.authEmailFrom,
+      AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
+      AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
+      BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
+      BETTER_AUTH_SECRET: betterAuthSecret.text,
+      NODE_ENV: "production",
+      SENTRY_DSN: input.config.sentryDsn,
+      SENTRY_ENVIRONMENT: input.config.stage,
+      SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
+      SITE_GEOCODER_MODE: input.config.siteGeocoderMode,
+      ...authEmailCloudflareApiEnv,
+      ...googleGeocodingEnv,
+    };
+    if (input.config.sentryRelease !== undefined) {
+      apiEnv.SENTRY_RELEASE = input.config.sentryRelease;
+    }
+    if (input.migrationRunId) {
+      apiEnv.CEIRD_MIGRATIONS_RUN_ID = input.migrationRunId;
     }
 
     const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
@@ -94,24 +117,8 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       bindings: {
         AUTH_EMAIL_QUEUE: authEmailQueue,
       },
-      env: {
-        AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
-        AUTH_EMAIL_FROM: input.config.authEmailFrom,
-        AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
-        AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
-        BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
-        BETTER_AUTH_SECRET: betterAuthSecret.text,
-        NODE_ENV: "production",
-        SENTRY_DSN: input.config.sentryDsn,
-        SENTRY_ENVIRONMENT: input.config.stage,
-        SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
-        SITE_GEOCODER_MODE: input.config.siteGeocoderMode,
-        ...(input.migrationRunId
-          ? { CEIRD_MIGRATIONS_RUN_ID: input.migrationRunId }
-          : {}),
-        ...authEmailCloudflareApiEnv,
-        ...googleGeocodingEnv,
-      },
+      env: apiEnv,
+      build: apiWorkerBuild(input.config),
       domain: input.config.apiHostname,
       observability: {
         enabled: true,
@@ -193,6 +200,32 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       database: input.hyperdrive,
     } as const;
   });
+}
+
+function apiWorkerBuild(config: InfraStageConfig): WorkerProps["build"] {
+  if (
+    !config.sentryApiSourceMapUploadEnabled ||
+    config.sentryOrg === undefined ||
+    config.sentryRelease === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    plugins: sentryRollupPlugin({
+      org: config.sentryOrg,
+      project: config.sentryApiProject,
+      release: {
+        create: true,
+        finalize: true,
+        inject: false,
+        name: config.sentryRelease,
+        setCommits: false,
+      },
+      telemetry: false,
+    }),
+    write: true,
+  };
 }
 
 function hyperdriveOriginFromDatabaseUrl(databaseUrl: string) {

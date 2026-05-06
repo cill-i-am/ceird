@@ -85,12 +85,13 @@ parameters such as reset tokens, OAuth codes, state values, and invitations
 before events, transactions, spans, logs, or replay recording events leave the
 app.
 
-The production deploy workflow passes `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and
-`SENTRY_PROJECT` to the app build so the Sentry Vite plugin can upload browser
-source maps. These values are build-only GitHub environment values and are not
-stored as Cloudflare Worker runtime env vars. When any of the three values is
-missing, `apps/app/vite.config.ts` disables browser source-map uploads while
-leaving runtime Sentry instrumentation enabled.
+The production deploy workflow passes `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
+`SENTRY_PROJECT`, and `SENTRY_RELEASE` to the app build so the Sentry Vite
+plugin can upload browser source maps for the deployed Git SHA. These values
+are build-only GitHub environment values and are not stored as Cloudflare
+Worker runtime env vars. When the auth token, org, or project value is missing,
+`apps/app/vite.config.ts` disables browser source-map uploads while leaving
+runtime Sentry instrumentation enabled.
 
 Server-side app requests use the explicit TanStack Start server entry at
 `apps/app/src/server.ts`. The Cloudflare app Worker intentionally does not load

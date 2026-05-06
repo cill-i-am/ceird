@@ -32,6 +32,47 @@ describe("infra stage config", () => {
     expect(config.googleMapsApiKey).toBeUndefined();
   });
 
+  it("keeps API source-map uploads disabled until deploy credentials are complete", async () => {
+    const config = await loadConfig(
+      new Map([
+        ["SENTRY_ORG", "technifit-1f"],
+        ["SENTRY_RELEASE", "abc123"],
+      ])
+    );
+
+    expect(config.sentryApiProject).toBe("ceird-api");
+    expect(config.sentryApiSourceMapUploadEnabled).toBeFalsy();
+  });
+
+  it("enables API source-map uploads for non-dry-run deploys with Sentry credentials", async () => {
+    const config = await loadConfig(
+      new Map([
+        ["SENTRY_API_PROJECT", "custom-api"],
+        ["SENTRY_AUTH_TOKEN", "token"],
+        ["SENTRY_ORG", "technifit-1f"],
+        ["SENTRY_RELEASE", "abc123"],
+      ])
+    );
+
+    expect(config.sentryApiProject).toBe("custom-api");
+    expect(config.sentryOrg).toBe("technifit-1f");
+    expect(config.sentryRelease).toBe("abc123");
+    expect(config.sentryApiSourceMapUploadEnabled).toBeTruthy();
+  });
+
+  it("does not upload API source maps during dry-run deploys", async () => {
+    const config = await loadConfig(
+      new Map([
+        ["CEIRD_DEPLOY_DRY_RUN", "true"],
+        ["SENTRY_AUTH_TOKEN", "token"],
+        ["SENTRY_ORG", "technifit-1f"],
+        ["SENTRY_RELEASE", "abc123"],
+      ])
+    );
+
+    expect(config.sentryApiSourceMapUploadEnabled).toBeFalsy();
+  });
+
   it("loads a redacted Google Maps key for google geocoding mode", async () => {
     const config = await loadConfig(
       new Map([
