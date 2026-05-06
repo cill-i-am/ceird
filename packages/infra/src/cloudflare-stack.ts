@@ -1,4 +1,3 @@
-import { sentryRollupPlugin } from "@sentry/rollup-plugin";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
@@ -12,27 +11,10 @@ import type { PlanetScalePostgresResources } from "./planet-scale.ts";
 import type { InfraStageConfig } from "./stages.ts";
 import { resourceName } from "./stages.ts";
 
-export const apiWorkerCompatibility = {
+const workerCompatibility = {
   date: "2026-04-30",
   flags: ["nodejs_compat"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
-
-export const appWorkerCompatibility = {
-  date: "2026-04-30",
-  flags: ["nodejs_compat"],
-} satisfies NonNullable<WorkerProps["compatibility"]>;
-
-const apiWorkerBundleDirFromInfraCwd = "../../apps/api/.alchemy/bundles/Api";
-const apiWorkerSentrySourceMapAssets = [
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.js`,
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.mjs`,
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.cjs`,
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.js.map`,
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.mjs.map`,
-  `${apiWorkerBundleDirFromInfraCwd}/**/*.cjs.map`,
-] as const;
-
-type WorkerEnv = Record<string, Input<string | Redacted.Redacted<string>>>;
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -64,7 +46,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
       bytes: 32,
     });
-    const authEmailCloudflareApiEnv: WorkerEnv = {};
+    let authEmailCloudflareApiEnv = {};
     if (input.config.authEmailTransport === "cloudflare-api") {
       const authEmailApiToken = yield* Cloudflare.AccountApiToken(
         "AuthEmailApiToken",
@@ -82,46 +64,16 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         }
       );
 
-      authEmailCloudflareApiEnv.CLOUDFLARE_ACCOUNT_ID =
-        authEmailApiToken.accountId;
-      authEmailCloudflareApiEnv.CLOUDFLARE_API_TOKEN = authEmailApiToken.value;
-    }
-    const googleGeocodingEnv: WorkerEnv = {};
-    if (input.config.googleMapsApiKey !== undefined) {
-      googleGeocodingEnv.GOOGLE_MAPS_API_KEY = Redacted.value(
-        input.config.googleMapsApiKey
-      );
-    }
-    const apiEnv: WorkerEnv = {
-      AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
-      AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME: resourceName(
-        input.config,
-        "auth-email-dlq"
-      ),
-      AUTH_EMAIL_FROM: input.config.authEmailFrom,
-      AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
-      AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
-      BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
-      BETTER_AUTH_SECRET: betterAuthSecret.text,
-      NODE_ENV: "production",
-      SENTRY_DSN: input.config.sentryDsn,
-      SENTRY_ENVIRONMENT: input.config.stage,
-      SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
-      SITE_GEOCODER_MODE: input.config.siteGeocoderMode,
-      ...authEmailCloudflareApiEnv,
-      ...googleGeocodingEnv,
-    };
-    if (input.config.sentryRelease !== undefined) {
-      apiEnv.SENTRY_RELEASE = input.config.sentryRelease;
-    }
-    if (input.migrationRunId) {
-      apiEnv.CEIRD_MIGRATIONS_RUN_ID = input.migrationRunId;
+      authEmailCloudflareApiEnv = {
+        CLOUDFLARE_ACCOUNT_ID: authEmailApiToken.accountId,
+        CLOUDFLARE_API_TOKEN: authEmailApiToken.value,
+      };
     }
 
     const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
       "AuthEmailDeadLetterQueue",
       {
-        name: String(apiEnv.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME),
+        name: resourceName(input.config, "auth-email-dlq"),
       }
     );
 
@@ -132,12 +84,23 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
     const api = yield* Cloudflare.Worker("Api", {
       name: resourceName(input.config, "api"),
       main: "../../apps/api/src/worker.ts",
-      compatibility: apiWorkerCompatibility,
+      compatibility: workerCompatibility,
       bindings: {
         AUTH_EMAIL_QUEUE: authEmailQueue,
       },
-      env: apiEnv,
-      build: apiWorkerBuild(input.config),
+      env: {
+        AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
+        AUTH_EMAIL_FROM: input.config.authEmailFrom,
+        AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
+        AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
+        BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
+        BETTER_AUTH_SECRET: betterAuthSecret.text,
+        NODE_ENV: "production",
+        ...(input.migrationRunId
+          ? { CEIRD_MIGRATIONS_RUN_ID: input.migrationRunId }
+          : {}),
+        ...authEmailCloudflareApiEnv,
+      },
       domain: input.config.apiHostname,
       observability: {
         enabled: true,
@@ -188,29 +151,14 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       },
     });
 
-    yield* Cloudflare.QueueConsumer("AuthEmailDeadLetterConsumer", {
-      queueId: authEmailDeadLetterQueue.queueId,
-      scriptName: api.workerName,
-      settings: {
-        batchSize: 10,
-        maxRetries: 0,
-        maxWaitTimeMs: 2000,
-      },
-    });
-
     const app = yield* Cloudflare.Vite("App", {
       name: resourceName(input.config, "app"),
       rootDir: "../../apps/app",
-      compatibility: appWorkerCompatibility,
+      compatibility: workerCompatibility,
       env: {
         API_ORIGIN: `https://${input.config.apiHostname}`,
         CEIRD_CLOUDFLARE: "1",
-        SENTRY_ENVIRONMENT: input.config.stage,
-        SENTRY_TRACES_SAMPLE_RATE: String(input.config.sentryTracesSampleRate),
         VITE_API_ORIGIN: `https://${input.config.apiHostname}`,
-        ...(input.config.sentryRelease === undefined
-          ? {}
-          : { SENTRY_RELEASE: input.config.sentryRelease }),
       },
       domain: input.config.appHostname,
       observability: {
@@ -234,42 +182,6 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
       database: input.hyperdrive,
     } as const;
   });
-}
-
-function apiWorkerBuild(config: InfraStageConfig): WorkerProps["build"] {
-  if (
-    !config.sentryApiSourceMapUploadEnabled ||
-    config.sentryOrg === undefined ||
-    config.sentryRelease === undefined
-  ) {
-    return undefined;
-  }
-
-  return {
-    plugins: sentryRollupPlugin({
-      org: config.sentryOrg,
-      project: config.sentryApiProject,
-      release: {
-        create: true,
-        deploy: {
-          env: config.stage,
-        },
-        finalize: true,
-        inject: false,
-        name: config.sentryRelease,
-        setCommits: {
-          auto: true,
-          ignoreEmpty: true,
-          ignoreMissing: true,
-        },
-      },
-      sourcemaps: {
-        assets: [...apiWorkerSentrySourceMapAssets],
-      },
-      telemetry: false,
-    }),
-    write: true,
-  };
 }
 
 function hyperdriveOriginFromDatabaseUrl(databaseUrl: string) {

@@ -1,5 +1,5 @@
 /* eslint-disable max-classes-per-file */
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { AuthenticationEmailScheduler } from "./auth-email-scheduler.js";
 import {
@@ -29,30 +29,18 @@ export class AuthEmailQueueDeliveryError extends Schema.TaggedError<AuthEmailQue
   }
 ) {}
 
-export const AuthEmailQueueTraceContext = Schema.Struct({
-  baggage: Schema.optional(Schema.String),
-  sentryTrace: Schema.optional(Schema.String),
-});
-
-export type AuthEmailQueueTraceContext = Schema.Schema.Type<
-  typeof AuthEmailQueueTraceContext
->;
-
 export const AuthEmailQueueMessage = Schema.Union(
   Schema.Struct({
     kind: Schema.Literal("password-reset"),
     payload: PasswordResetEmailInput,
-    traceContext: Schema.optional(AuthEmailQueueTraceContext),
   }),
   Schema.Struct({
     kind: Schema.Literal("email-verification"),
     payload: EmailVerificationEmailInput,
-    traceContext: Schema.optional(AuthEmailQueueTraceContext),
   }),
   Schema.Struct({
     kind: Schema.Literal("organization-invitation"),
     payload: OrganizationInvitationEmailInput,
-    traceContext: Schema.optional(AuthEmailQueueTraceContext),
   })
 );
 
@@ -61,14 +49,6 @@ export type AuthEmailQueueMessage = Schema.Schema.Type<
 >;
 
 const decodeAuthEmailQueueMessage = Schema.decodeUnknown(AuthEmailQueueMessage);
-const decodeAuthEmailQueueMessageOption = Schema.decodeUnknownOption(
-  AuthEmailQueueMessage
-);
-
-export interface AuthEmailQueueMetadata {
-  readonly kind: AuthEmailQueueMessage["kind"] | "unknown";
-  readonly traceContext?: AuthEmailQueueTraceContext;
-}
 
 export function decodeAuthEmailQueueMessageEffect(input: unknown) {
   return decodeAuthEmailQueueMessage(input).pipe(
@@ -87,55 +67,19 @@ export function decodeAuthEmailQueueMessageStrict(input: unknown) {
 }
 
 export function makeCloudflareAuthenticationEmailSchedulerLive(
-  queue: Queue<AuthEmailQueueMessage>,
-  options?: {
-    readonly captureTraceContext?: () => AuthEmailQueueTraceContext | undefined;
-  }
+  queue: Queue<AuthEmailQueueMessage>
 ) {
-  const withTraceContext = <TMessage extends AuthEmailQueueMessage>(
-    message: TMessage
-  ): TMessage => {
-    const traceContext = normalizeAuthEmailQueueTraceContext(
-      options?.captureTraceContext?.()
-    );
-
-    return traceContext ? { ...message, traceContext } : message;
-  };
-
   return Layer.succeed(AuthenticationEmailScheduler, {
     sendPasswordResetEmail: async (payload) => {
-      await queue.send(withTraceContext({ kind: "password-reset", payload }));
+      await queue.send({ kind: "password-reset", payload });
     },
     sendVerificationEmail: async (payload) => {
-      await queue.send(
-        withTraceContext({ kind: "email-verification", payload })
-      );
+      await queue.send({ kind: "email-verification", payload });
     },
     sendOrganizationInvitationEmail: async (payload) => {
-      await queue.send(
-        withTraceContext({ kind: "organization-invitation", payload })
-      );
+      await queue.send({ kind: "organization-invitation", payload });
     },
   });
-}
-
-export function readAuthEmailQueueMetadata(
-  input: unknown
-): AuthEmailQueueMetadata {
-  const message = decodeAuthEmailQueueMessageOption(input);
-
-  if (Option.isNone(message)) {
-    return { kind: "unknown" };
-  }
-
-  const traceContext = normalizeAuthEmailQueueTraceContext(
-    message.value.traceContext
-  );
-
-  return {
-    kind: message.value.kind,
-    ...(traceContext ? { traceContext } : {}),
-  };
 }
 
 export const sendAuthEmailQueueMessage = Effect.fn(
@@ -220,19 +164,4 @@ function serializeUnknownError(error: unknown) {
     }
   }
   return String(error);
-}
-
-export function normalizeAuthEmailQueueTraceContext(
-  traceContext: AuthEmailQueueTraceContext | undefined
-): AuthEmailQueueTraceContext | undefined {
-  if (!traceContext?.sentryTrace && !traceContext?.baggage) {
-    return undefined;
-  }
-
-  return {
-    ...(traceContext.baggage ? { baggage: traceContext.baggage } : {}),
-    ...(traceContext.sentryTrace
-      ? { sentryTrace: traceContext.sentryTrace }
-      : {}),
-  };
 }

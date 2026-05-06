@@ -16,11 +16,6 @@ const configWithoutCloudflareBootstrapSecrets = {
   planetScaleDefaultBranch: "main",
   planetScaleOrganization: "example",
   planetScaleRegionSlug: "eu-west",
-  sentryApiProject: "ceird-api",
-  sentryApiSourceMapUploadEnabled: false,
-  sentryDsn: "https://public@example.com/1",
-  sentryTracesSampleRate: 1,
-  siteGeocoderMode: "stub",
   stage: "production",
   zoneName: "example.com",
 } satisfies InfraStageConfig;

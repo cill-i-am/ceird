@@ -1,14 +1,15 @@
+import { createServer } from "node:http";
+
 import { makeHealthPayloadFromSandboxIdInput } from "@ceird/sandbox-core";
 import {
   HttpApiBuilder,
   HttpMiddleware,
-  HttpServer,
   HttpServerError,
   HttpServerRequest,
 } from "@effect/platform";
+import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 
-import type { Authentication } from "./domains/identity/authentication/auth.js";
 import {
   AuthenticationHttpLive,
   AuthenticationLive,
@@ -17,7 +18,6 @@ import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { AppApi } from "./http-api.js";
-import type { AppDatabase } from "./platform/database/database.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 
 const RuntimeConfig = Config.all({
@@ -38,16 +38,12 @@ const SystemLive = HttpApiBuilder.group(AppApi, "system", (handlers) =>
     )
 );
 
-type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
-type ApiAuthenticationLive = Layer.Layer<Authentication, unknown, AppDatabase>;
-type ApiBaseLive = Layer.Layer<never, never, never>;
-
-const makeApiHandlersLive = (authenticationLive: ApiAuthenticationLive) =>
+const makeApiHandlersLive = () =>
   HttpApiBuilder.api(AppApi).pipe(
     Layer.provide(
       Layer.mergeAll(
         SystemLive,
-        AuthenticationHttpLive.pipe(Layer.provide(authenticationLive)),
+        AuthenticationHttpLive,
         JobsHttpLive,
         LabelsHttpLive,
         SitesHttpLive
@@ -55,15 +51,29 @@ const makeApiHandlersLive = (authenticationLive: ApiAuthenticationLive) =>
     )
   );
 
+type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
+type ApiAuthenticationLive = typeof AuthenticationLive;
+type ApiBaseLive = Layer.Layer<never, never, never>;
+
 export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive
 ) =>
-  makeApiHandlersLive(
-    authenticationLive.pipe(Layer.provide(databaseRuntimeLive))
-  ).pipe(Layer.provide(Layer.mergeAll(databaseRuntimeLive)));
+  makeApiHandlersLive().pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        databaseRuntimeLive,
+        authenticationLive.pipe(Layer.provide(databaseRuntimeLive))
+      )
+    )
+  );
 
 export const ApiLive = makeApiLive(AppDatabaseRuntimeLive, AuthenticationLive);
+
+export const ServerConfig = Config.all({
+  host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+  port: Config.port("PORT").pipe(Config.withDefault(3000)),
+});
 
 export const apiRequestLogger: typeof HttpMiddleware.logger =
   HttpMiddleware.make((httpApp) => {
@@ -124,6 +134,15 @@ function shouldSkipRequestLog(path: string) {
   return path === "/health";
 }
 
+export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      ApiLive,
+      NodeHttpServer.layerConfig(createServer, ServerConfig)
+    )
+  )
+);
+
 export const makeApiWebHandler = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
@@ -131,7 +150,7 @@ export const makeApiWebHandler = (
 ) => {
   const apiLayer = Layer.mergeAll(
     makeApiLive(databaseRuntimeLive, authenticationLive),
-    HttpServer.layerContext
+    NodeHttpServer.layerContext
   ).pipe(Layer.provide(baseLive));
 
   return HttpApiBuilder.toWebHandler(apiLayer, {

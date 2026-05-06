@@ -119,59 +119,13 @@ The stack provisions:
 - Optional Cloudflare account API token for `cloudflare-api` email transport
 - Optional Cloudflare Email Worker binding for `cloudflare-binding` transport
 
-The API Worker and Cloudflare Vite app use full `nodejs_compat` because the
-server-side auth, database, platform, SSR streaming, and Sentry packages import
-Node.js runtime APIs such as `node:stream/web` and `node:async_hooks`. The API
-Worker is also configured with Better Auth env vars, Sentry env vars, site
-geocoder mode, optional Google Maps key, database Hyperdrive binding, auth
-email queue binding, auth email dead-letter queue name, observability logs, and
-traces. The dead-letter queue has its own Worker consumer so failed auth email
-messages are captured to Sentry instead of sitting silently in the DLQ. The app
-is configured with app/API origins and Cloudflare-specific Vite flags,
-Cloudflare observability logs and traces, browser Sentry tracing, Sentry
-structured logs, Session Replay, Feedback, Browser Profiling, and app Worker
-Sentry runtime bindings. The app Worker adds the `Document-Policy:
-js-profiling` response header required by Browser Profiling. Browser Sentry and
-API Node Sentry are kept out of Cloudflare Worker startup paths; Cloudflare
-Workers use the Cloudflare Sentry SDK and shared telemetry sanitizers before
-events leave the app or API.
-
-The pinned `alchemy@2.0.0-beta.28` package is patched so `Cloudflare.Vite`
-uses its `rootDir` as the memoization working directory. Deploys run from
-`packages/infra`, so without that patch app-only source changes can be missed
-by the Vite resource diff and Cloudflare can keep serving stale browser assets.
-The pinned `@distilled.cloud/cloudflare-rolldown-plugin@0.2.0` and `0.3.0`
-packages are also patched so their Node.js compatibility resolvers create
-`require` lazily in both published `dist` files and the `bun` source export;
-this keeps the Cloudflare Vite build path and Alchemy Worker upload path from
-evaluating `createRequire(import.meta.url)` during Worker startup validation.
-The app Vite config also rewrites Rolldown's generated SSR runtime helper to
-`createRequire(import.meta.url ?? "file:///worker.js")` for Cloudflare builds,
-because Cloudflare's Worker upload validation can expose `import.meta.url` as
-`undefined` while still requiring a file URL or absolute path.
-
-Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
-rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
-is patched to let selected Worker builds run Rollup-compatible plugins and
-write the generated bundle to disk before upload. The API Worker uses that path
-with the Sentry Rollup plugin so production deploys inject debug IDs, upload
-the exact API Worker bundle/source maps to the `ceird-api` Sentry project, and
-then upload the same debug-ID-bearing bundle to Cloudflare.
-Because Rolldown writes the API artifacts relative to the API package cwd, the
-Sentry plugin is pointed at `apps/api/.alchemy/bundles/Api` during deploy.
-
-Browser source-map uploads are handled by the Sentry Vite plugin during the
-production app build. `Deploy Main` forwards the main GitHub environment's
-`SENTRY_AUTH_TOKEN` secret plus `SENTRY_ORG` and `SENTRY_PROJECT` variables to
-`pnpm infra:deploy`; those values are consumed by Vite and are not passed to the
-Cloudflare app Worker as auth-token bindings. The same deploy step also sets
-`SENTRY_RELEASE` to the deployed Git SHA and `SENTRY_API_PROJECT` to
-`ceird-api` by default, so app events, API events, uploaded app source maps, and
-uploaded API Worker source maps share the release. Release uploads associate
-commits from the full Git checkout and record a production deploy in Sentry.
-The app Worker receives `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and
-`SENTRY_TRACES_SAMPLE_RATE` as runtime bindings; the API Worker also receives
-the API `SENTRY_DSN`.
+The API Worker and Cloudflare Vite app share the same typed Worker
+compatibility contract, including `nodejs_compat`, so runtime packages that rely
+on Node.js compatibility APIs run consistently across both deployable surfaces.
+The API Worker is also configured with Better Auth env vars, database
+Hyperdrive binding, auth email queue binding, observability logs, and traces.
+The app is configured with app/API origins, Cloudflare-specific Vite flags, and
+Cloudflare observability logs and traces.
 
 The production Hyperdrive configuration sets a conservative origin connection
 limit before deploy-time migrations run. Drizzle migrations depend on that
@@ -183,32 +137,22 @@ budget is applied and before new API code is uploaded.
 
 `packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
 
-| Variable                                   | Default              | Purpose                                                        |
-| ------------------------------------------ | -------------------- | -------------------------------------------------------------- |
-| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                                     |
-| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                               |
-| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                                  |
-| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                                  |
-| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                          |
-| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                           |
-| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                                     |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections.           |
-| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                                      |
-| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                                     |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                            |
-| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                                       |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                                      |
-| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.                         |
-| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                          |
-| `SENTRY_AUTH_TOKEN`                        | optional             | GitHub environment secret for app and API source-map upload.   |
-| `SENTRY_ORG`                               | optional             | GitHub environment variable for app and API source-map upload. |
-| `SENTRY_PROJECT`                           | optional             | GitHub environment variable for app source-map upload.         |
-| `SENTRY_API_PROJECT`                       | `ceird-api`          | Sentry project slug for API Worker source-map upload.          |
-| `SENTRY_RELEASE`                           | optional             | Release attached to app/API runtime events and source maps.    |
-| `CEIRD_DEPLOY_DRY_RUN`                     | `false`              | Disables API source-map upload during Alchemy dry-run deploys. |
-| `SITE_GEOCODER_MODE`                       | `stub`               | API site geocoding mode, either `stub` or `google`.            |
-| `GOOGLE_MAPS_API_KEY`                      | required for google  | Google geocoding key when `SITE_GEOCODER_MODE=google`.         |
-| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.                      |
+| Variable                                   | Default              | Purpose                                              |
+| ------------------------------------------ | -------------------- | ---------------------------------------------------- |
+| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                           |
+| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                     |
+| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                        |
+| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                        |
+| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                |
+| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                 |
+| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                           |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections. |
+| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                            |
+| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                           |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                  |
+| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                             |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                            |
+| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.            |
 
 Resource names use `ceird-<stage>-<suffix>`.
 

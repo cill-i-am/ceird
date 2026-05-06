@@ -44,10 +44,6 @@ process.env.CEIRD_CLOUDFLARE ??= "1";
 const hasFlag = (flag) =>
   args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`));
 
-if (hasFlag("--dry-run")) {
-  process.env.CEIRD_DEPLOY_DRY_RUN ??= "true";
-}
-
 const resolvedAlchemyProfile =
   process.env.ALCHEMY_PROFILE ?? process.env.CEIRD_ALCHEMY_PROFILE;
 const profileArgs =

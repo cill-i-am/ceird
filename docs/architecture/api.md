@@ -9,15 +9,14 @@ a Node dev server or a Cloudflare Worker.
 
 ## Entry Points
 
-| File                                | Purpose                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------- |
-| `src/index.ts`                      | Node development entrypoint.                                                                |
-| `src/server.ts`                     | Runtime-neutral `HttpApi` construction, system endpoints, API composition, and web handler. |
-| `src/server-node.ts`                | Node HTTP server wiring and Node-only Sentry layer.                                         |
-| `src/worker.ts`                     | Cloudflare Worker entrypoint and request handling.                                          |
-| `src/platform/cloudflare/env.ts`    | Cloudflare environment decoding and binding access.                                         |
-| `src/platform/database/database.ts` | Database runtime layer.                                                                     |
-| `src/platform/database/schema.ts`   | Combined Drizzle schema barrel.                                                             |
+| File                                | Purpose                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/index.ts`                      | Node development entrypoint.                                                                     |
+| `src/server.ts`                     | Effect `HttpApi` construction, system endpoints, API layer composition, and web-handler factory. |
+| `src/worker.ts`                     | Cloudflare Worker entrypoint and request handling.                                               |
+| `src/platform/cloudflare/env.ts`    | Cloudflare environment decoding and binding access.                                              |
+| `src/platform/database/database.ts` | Database runtime layer.                                                                          |
+| `src/platform/database/schema.ts`   | Combined Drizzle schema barrel.                                                                  |
 
 System endpoints are defined in `src/server.ts`:
 
@@ -25,25 +24,6 @@ System endpoints are defined in `src/server.ts`:
 - `GET /health` returns a sandbox-compatible `HealthPayload`.
 
 ## Observability
-
-Sentry is available for the API in both the Node entrypoint and the
-Cloudflare Worker. Runtime config is decoded from `SENTRY_DSN`,
-`SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and `SENTRY_TRACES_SAMPLE_RATE`. When a
-DSN is present, the Node API installs Sentry's Effect tracer, metrics layer, and
-Effect logger from the Node-only entrypoint. The Cloudflare Worker keeps its
-entrypoint free of the Node Sentry SDK, uses the Cloudflare Sentry SDK wrapper
-for request and queue handler errors, and installs a Cloudflare-backed Effect
-logger for structured API logs. Sentry events and logs are scrubbed before
-export so request query strings, cookies, tokens, secrets, passwords, and auth
-email delivery keys are filtered.
-
-Production API deploys set `SENTRY_RELEASE` to the deployed Git SHA and upload
-the Cloudflare Worker bundle/source maps to the `ceird-api` Sentry project. The
-API Worker build uses the Sentry Rollup plugin through the patched Alchemy
-Worker bundling hook, so debug IDs are injected before the same bundle is sent
-to Cloudflare. The deploy workflow checks out full Git history so Sentry can
-associate commits with the release, and the upload step records a production
-deploy for the release.
 
 The API enables a custom Effect HTTP request logger for both the Node server and
 the Cloudflare/web-handler path. It records method, status, and redacted path
@@ -60,12 +40,8 @@ Background auth email delivery uses the same structured failure vocabulary.
 Password reset, verification, email-change confirmation, and organization
 invitation delivery failures are reported through the authentication failure
 reporters. Cloudflare queue delivery failures log the email kind, delivery key,
-source tag, and source cause before retrying. When auth email work is queued
-from a traced request, the queue payload carries the current Sentry trace
-headers and the Worker queue handler continues that trace inside an explicit
-`queue.process` span. Messages that reach the auth email dead-letter queue are
-captured to Sentry at error level with queue name, message ID, attempts, and
-email kind before the DLQ message is acknowledged.
+source tag, and source cause before retrying. Deployed Workers rely on
+Cloudflare observability logs and traces configured by the infra stack.
 
 ## Authentication Domain
 
@@ -185,9 +161,7 @@ Core files:
 
 Sites live in `src/domains/sites` and are exposed through
 `@ceird/sites-core`. Sites and service areas are independent organization data
-that jobs can reference. Site geocoding is selected with `SITE_GEOCODER_MODE`;
-production infrastructure defaults to `stub` until a `GOOGLE_MAPS_API_KEY` is
-provided for `google` mode.
+that jobs can reference.
 
 Core files:
 

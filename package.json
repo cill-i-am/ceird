@@ -68,8 +68,6 @@
       ]
     },
     "patchedDependencies": {
-      "@distilled.cloud/cloudflare-rolldown-plugin@0.2.0": "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.2.0.patch",
-      "@distilled.cloud/cloudflare-rolldown-plugin@0.3.0": "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.3.0.patch",
       "@distilled.cloud/cloudflare@0.15.2": "patches/@distilled.cloud__cloudflare@0.15.2.patch",
       "@distilled.cloud/planetscale@0.13.1": "patches/@distilled.cloud__planetscale@0.13.1.patch",
       "alchemy@2.0.0-beta.28": "patches/alchemy@2.0.0-beta.28.patch"

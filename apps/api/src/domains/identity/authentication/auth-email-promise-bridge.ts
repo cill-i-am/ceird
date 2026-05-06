@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Runtime } from "effect";
+import { Effect, Layer, Runtime } from "effect";
 
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import { AuthEmailConfigurationError } from "./auth-email-errors.js";
@@ -9,10 +9,6 @@ import type {
   PasswordResetEmailInput,
 } from "./auth-email.js";
 import { CloudflareAuthEmailTransportLive } from "./cloudflare-auth-email-transport.js";
-import {
-  CloudflareEmailBinding,
-  CloudflareEmailBindingAuthEmailTransportLive,
-} from "./cloudflare-email-binding-auth-email-transport.js";
 
 export const NoopAuthEmailTransportLive = Layer.succeed(AuthEmailTransport, {
   send: () =>
@@ -34,19 +30,11 @@ const AuthenticationEmailTransportLive = Layer.unwrapEffect(
         return CloudflareAuthEmailTransportLive;
       }
       case "cloudflare-binding": {
-        const binding = yield* Effect.serviceOption(CloudflareEmailBinding);
-
-        if (Option.isNone(binding)) {
-          return Layer.fail(
-            new AuthEmailConfigurationError({
-              message:
-                "AUTH_EMAIL_TRANSPORT=cloudflare-binding requires the Cloudflare Worker entrypoint to provide an email binding transport",
-            })
-          );
-        }
-
-        return CloudflareEmailBindingAuthEmailTransportLive.pipe(
-          Layer.provide(Layer.succeed(CloudflareEmailBinding, binding.value))
+        return Layer.fail(
+          new AuthEmailConfigurationError({
+            message:
+              "AUTH_EMAIL_TRANSPORT=cloudflare-binding requires the Cloudflare Worker entrypoint to provide an email binding transport",
+          })
         );
       }
       default: {

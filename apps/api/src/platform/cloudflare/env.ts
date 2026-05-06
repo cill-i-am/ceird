@@ -4,7 +4,6 @@ import type { AuthEmailQueueMessage } from "../../domains/identity/authenticatio
 export interface ApiWorkerEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL?: SendEmail;
-  readonly AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME?: string;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
   readonly AUTH_EMAIL_QUEUE: Queue<AuthEmailQueueMessage>;
@@ -14,14 +13,7 @@ export interface ApiWorkerEnv {
   readonly CLOUDFLARE_ACCOUNT_ID?: string;
   readonly CLOUDFLARE_API_TOKEN?: string;
   readonly DATABASE: Hyperdrive;
-  readonly GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS?: string;
-  readonly GOOGLE_MAPS_API_KEY?: string;
   readonly NODE_ENV?: string;
-  readonly SENTRY_DSN?: string;
-  readonly SENTRY_ENVIRONMENT?: string;
-  readonly SENTRY_RELEASE?: string;
-  readonly SENTRY_TRACES_SAMPLE_RATE?: string;
-  readonly SITE_GEOCODER_MODE?: string;
 }
 
 export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
@@ -29,22 +21,13 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
     Object.entries({
       AUTH_APP_ORIGIN: env.AUTH_APP_ORIGIN,
       AUTH_EMAIL_FROM: env.AUTH_EMAIL_FROM,
-      AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME: env.AUTH_EMAIL_DEAD_LETTER_QUEUE_NAME,
       AUTH_EMAIL_FROM_NAME: env.AUTH_EMAIL_FROM_NAME,
       AUTH_EMAIL_TRANSPORT: env.AUTH_EMAIL_TRANSPORT,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
-      GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS:
-        env.GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS,
-      GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
       NODE_ENV: env.NODE_ENV,
-      SENTRY_DSN: env.SENTRY_DSN,
-      SENTRY_ENVIRONMENT: env.SENTRY_ENVIRONMENT,
-      SENTRY_RELEASE: env.SENTRY_RELEASE,
-      SENTRY_TRACES_SAMPLE_RATE: env.SENTRY_TRACES_SAMPLE_RATE,
-      SITE_GEOCODER_MODE: env.SITE_GEOCODER_MODE,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )

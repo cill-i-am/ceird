@@ -1,6 +1,5 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
@@ -11,16 +10,11 @@ const INFRA_AUTH_EMAIL_TRANSPORT_MODES = [
   "cloudflare-binding",
   "noop",
 ] as const;
-const INFRA_SITE_GEOCODER_MODES = ["google", "stub"] as const;
 export const InfraAuthEmailTransport = Schema.Literals(
   INFRA_AUTH_EMAIL_TRANSPORT_MODES
 );
 export type InfraAuthEmailTransport = Schema.Schema.Type<
   typeof InfraAuthEmailTransport
->;
-export const InfraSiteGeocoderMode = Schema.Literals(INFRA_SITE_GEOCODER_MODES);
-export type InfraSiteGeocoderMode = Schema.Schema.Type<
-  typeof InfraSiteGeocoderMode
 >;
 
 export type DomainName = string;
@@ -40,25 +34,14 @@ export interface InfraStageConfig {
   readonly planetScaleDefaultBranch: string;
   readonly planetScaleRegionSlug: string;
   readonly planetScaleClusterSize: string;
-  readonly sentryApiProject: string;
-  readonly sentryDsn: string;
-  readonly sentryOrg?: string;
-  readonly sentryRelease?: string;
-  readonly sentryApiSourceMapUploadEnabled: boolean;
-  readonly sentryTracesSampleRate: number;
-  readonly siteGeocoderMode: InfraSiteGeocoderMode;
-  readonly googleMapsApiKey?: Redacted.Redacted<string>;
   readonly applyMigrations: boolean;
 }
 
-const DEFAULT_API_SENTRY_DSN =
-  "https://3917e2b6a24f49a20d625a1e3b2b1674@o368240.ingest.us.sentry.io/4511339367563264";
 const decodeStage = Schema.decodeUnknownSync(InfraStage);
 const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
 const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
-const sentrySlugPattern = /^[a-z0-9][a-z0-9-]*$/;
 const PlanetScaleRegionSlug = Schema.String.check(
   Schema.isPattern(planetScaleRegionSlugPattern, {
     message:
@@ -71,28 +54,10 @@ const PlanetScaleClusterSize = Schema.String.check(
       "CEIRD_PLANETSCALE_CLUSTER_SIZE must be a PlanetScale cluster size such as PS-5",
   })
 );
-const SentrySlug = Schema.String.check(
-  Schema.isPattern(sentrySlugPattern, {
-    message: "Sentry slugs must use lowercase letters, numbers, and dashes",
-  })
-);
-const GoogleMapsApiKey = Schema.String.check(
-  Schema.isPattern(/\S/, {
-    message: "GOOGLE_MAPS_API_KEY must not be empty",
-  })
-);
 const AuthEmailFromAddress = Schema.String.check(
   Schema.isPattern(emailAddressPattern, {
     message: "AUTH_EMAIL_FROM must be a plain email address",
   })
-);
-const SentryTracesSampleRate = Schema.Number.check(
-  Schema.isBetween(
-    { minimum: 0, maximum: 1 },
-    {
-      message: "SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1",
-    }
-  )
 );
 const HyperdriveOriginConnectionLimit = Schema.Int.check(
   Schema.isBetween(
@@ -142,48 +107,6 @@ function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
 
 function decodeInfraAuthEmailTransport(value: string) {
   return Schema.decodeUnknownEffect(InfraAuthEmailTransport)(value).pipe(
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeInfraSiteGeocoderMode(value: string) {
-  return Schema.decodeUnknownEffect(InfraSiteGeocoderMode)(value).pipe(
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
-  return Schema.decodeUnknownEffect(GoogleMapsApiKey)(
-    Redacted.value(value).trim()
-  ).pipe(
-    Effect.as(value),
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeNonEmptyString(value: string) {
-  return Schema.decodeUnknownEffect(Schema.NonEmptyString)(value.trim()).pipe(
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeSentrySlug(value: string) {
-  return Schema.decodeUnknownEffect(SentrySlug)(value.trim()).pipe(
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeSentryAuthToken(value: Redacted.Redacted<string>) {
-  return Schema.decodeUnknownEffect(Schema.NonEmptyString)(
-    Redacted.value(value).trim()
-  ).pipe(
-    Effect.as(value),
-    Effect.mapError((error) => new Config.ConfigError(error))
-  );
-}
-
-function decodeSentryTracesSampleRate(value: number) {
-  return Schema.decodeUnknownEffect(SentryTracesSampleRate)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
   );
 }
@@ -247,51 +170,6 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     Config.withDefault("PS-5"),
     Config.mapOrFail(decodePlanetScaleClusterSize)
   );
-  const sentryApiProject = yield* Config.string("SENTRY_API_PROJECT").pipe(
-    Config.withDefault("ceird-api"),
-    Config.mapOrFail(decodeSentrySlug)
-  );
-  const sentryDsn = yield* Config.string("SENTRY_DSN").pipe(
-    Config.withDefault(DEFAULT_API_SENTRY_DSN)
-  );
-  const sentryOrg = yield* Config.string("SENTRY_ORG").pipe(
-    Config.mapOrFail(decodeSentrySlug),
-    Config.option,
-    Config.map(Option.getOrUndefined)
-  );
-  const sentryRelease = yield* Config.string("SENTRY_RELEASE").pipe(
-    Config.mapOrFail(decodeNonEmptyString),
-    Config.option,
-    Config.map(Option.getOrUndefined)
-  );
-  const sentryAuthTokenConfigured = yield* Config.redacted(
-    "SENTRY_AUTH_TOKEN"
-  ).pipe(
-    Config.mapOrFail(decodeSentryAuthToken),
-    Config.option,
-    Config.map(Option.isSome)
-  );
-  const dryRun = yield* Config.boolean("CEIRD_DEPLOY_DRY_RUN").pipe(
-    Config.withDefault(false)
-  );
-  const sentryApiSourceMapUploadEnabled =
-    !dryRun &&
-    sentryAuthTokenConfigured &&
-    sentryOrg !== undefined &&
-    sentryRelease !== undefined;
-  const sentryTracesSampleRate = yield* Config.number(
-    "SENTRY_TRACES_SAMPLE_RATE"
-  ).pipe(Config.withDefault(1), Config.mapOrFail(decodeSentryTracesSampleRate));
-  const siteGeocoderMode = yield* Config.string("SITE_GEOCODER_MODE").pipe(
-    Config.withDefault("stub"),
-    Config.mapOrFail(decodeInfraSiteGeocoderMode)
-  );
-  const googleMapsApiKey =
-    siteGeocoderMode === "google"
-      ? yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
-          Config.mapOrFail(decodeGoogleMapsApiKey)
-        )
-      : undefined;
   const applyMigrations = yield* Config.boolean("CEIRD_APPLY_MIGRATIONS").pipe(
     Config.withDefault(false)
   );
@@ -311,14 +189,6 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     planetScaleDefaultBranch,
     planetScaleRegionSlug,
     planetScaleClusterSize,
-    sentryApiProject,
-    sentryDsn,
-    sentryOrg,
-    sentryRelease,
-    sentryApiSourceMapUploadEnabled,
-    sentryTracesSampleRate,
-    siteGeocoderMode,
-    googleMapsApiKey,
     applyMigrations,
   } satisfies InfraStageConfig;
 });

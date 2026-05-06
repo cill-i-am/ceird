@@ -73,47 +73,9 @@ Authenticated layout and navigation live under:
 
 ## Observability
 
-The app initializes browser Sentry from `apps/app/src/router.tsx` using a
-dynamic `@sentry/tanstackstart-react` import. Client-side Sentry is guarded
-behind a browser runtime check before the SDK is imported because the router
-module is also used during SSR and Cloudflare Worker startup. Browser
-instrumentation includes TanStack Router tracing, structured logs, and Session
-Replay with text and media masking enabled. Browser Feedback and Browser
-Profiling are enabled from the same initialization path. The app explicitly
-propagates `sentry-trace` and `baggage` to the configured API origin,
-`api.ceird.app`, Portless sandbox API origins, and loopback API origins so app
-navigation and API calls can appear in one distributed trace. `_app` route
-context also sets privacy-preserving Sentry user and organization tags: user ID,
-active organization ID, and active organization role only.
-
-The app Sentry project DSN, full trace/profile sample-rate defaults, and
-Sentry URL/query sanitization live in
-`apps/app/src/sentry-config.ts`. The sanitizer redacts sensitive query
-parameters such as reset tokens, OAuth codes, state values, and invitations
-before events, transactions, spans, logs, or replay recording events leave the
-app.
-
-The production deploy workflow passes `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
-`SENTRY_PROJECT`, and `SENTRY_RELEASE` to the app build so the Sentry Vite
-plugin can upload browser source maps for the deployed Git SHA. These values
-are build-only GitHub environment values and are not stored as Cloudflare
-Worker auth-token bindings. The Sentry Vite plugin creates/finalizes the
-release, associates commits from the full Git checkout, records a production
-deploy, and injects release metadata into the app bundle. When the auth token,
-org, or project value is missing, `apps/app/vite.config.ts` disables browser
-source-map uploads while leaving runtime Sentry instrumentation enabled.
-
 Server-side app requests use the explicit TanStack Start server entry at
-`apps/app/src/server.ts`, configured in `apps/app/vite.config.ts` as
-`./server.ts` relative to the app `src` directory. The Cloudflare app Worker
-uses the Cloudflare Sentry SDK wrapper with the same sanitizers as the browser
-path, plus runtime `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and
-`SENTRY_TRACES_SAMPLE_RATE` bindings from infrastructure. The server entry also
-applies
-`Document-Policy: js-profiling`, which is required by Browser Profiling in
-Chromium-based browsers. The Worker intentionally does not load the Node Sentry
-SDK during startup; Cloudflare observability remains enabled from infrastructure
-as the platform-level log/trace substrate.
+`apps/app/src/server.ts`. Deployed app Workers rely on Cloudflare observability
+logs and traces configured by the infra stack.
 
 ## Feature Folders
 
