@@ -1,0 +1,25 @@
+diff --git a/dist/plugins/nodejs-compat.js b/dist/plugins/nodejs-compat.js
+index 1923c9a25f8875c9ef6b74d25b4980f40d8a82cb..916f2d1b6307c7142e3d0675c926d6d2e7d0df26 100644
+--- a/dist/plugins/nodejs-compat.js
++++ b/dist/plugins/nodejs-compat.js
+@@ -27,6 +27,10 @@
+     }).env;
+     const injectVirtualModules = makeInjectVirtualModules(inject);
+-    const require = createRequire(import.meta.url);
++    let require;
++    const getRequire = () => {
++        require ??= createRequire(import.meta.url);
++        return require;
++    };
+     return [
+         esmExternalRequirePlugin({
+             external: [...external],
+@@ -57,7 +61,7 @@
+                     const resolved = await this.resolve(id, importer, options);
+                     if (resolved)
+                         return resolved;
+-                    return { id: require.resolve(id) };
++                    return { id: getRequire().resolve(id) };
+                 },
+             },
+         },

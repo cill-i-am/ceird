@@ -138,10 +138,11 @@ The pinned `alchemy@2.0.0-beta.28` package is patched so `Cloudflare.Vite`
 uses its `rootDir` as the memoization working directory. Deploys run from
 `packages/infra`, so without that patch app-only source changes can be missed
 by the Vite resource diff and Cloudflare can keep serving stale browser assets.
-The pinned `@distilled.cloud/cloudflare-rolldown-plugin@0.2.0` package is also
-patched so its Node.js compatibility resolver creates `require` lazily; this
-keeps the Cloudflare Vite app worker from evaluating
-`createRequire(import.meta.url)` during Worker startup validation.
+The pinned `@distilled.cloud/cloudflare-rolldown-plugin@0.2.0` and `0.3.0`
+packages are also patched so their Node.js compatibility resolvers create
+`require` lazily; this keeps the Cloudflare Vite build path and Alchemy Worker
+upload path from evaluating `createRequire(import.meta.url)` during Worker
+startup validation.
 
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource
