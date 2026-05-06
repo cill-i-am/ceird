@@ -12,15 +12,13 @@ import {
 import { loadAuthEmailConfig } from "./domains/identity/authentication/auth-email-config.js";
 import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
 import { NoopAuthEmailTransportLive } from "./domains/identity/authentication/auth-email-promise-bridge.js";
-import type {
-  AuthEmailQueueMessage,
-  AuthEmailQueueTraceContext,
-} from "./domains/identity/authentication/auth-email-queue.js";
+import type { AuthEmailQueueTraceContext } from "./domains/identity/authentication/auth-email-queue.js";
 import {
   AuthEmailQueueDeliveryError,
   InvalidAuthEmailQueueMessageError,
   decodeAuthEmailQueueMessageEffect,
   makeCloudflareAuthenticationEmailSchedulerLive,
+  readAuthEmailQueueMetadata,
   sendAuthEmailQueueMessage,
 } from "./domains/identity/authentication/auth-email-queue.js";
 import { AuthEmailSender } from "./domains/identity/authentication/auth-email.js";
@@ -270,7 +268,7 @@ function isAuthEmailDeadLetterBatch(
 
 function captureAuthEmailDeadLetterBatch(batch: MessageBatch<unknown>) {
   for (const message of batch.messages) {
-    const kind = readAuthEmailQueueMessageKind(message.body);
+    const { kind } = readAuthEmailQueueMetadata(message.body);
 
     Sentry.captureMessage("Auth email queue dead-letter message received", {
       extra: {
@@ -293,21 +291,19 @@ function runSentryTracedAuthEmailQueueMessage(
   message: Message<unknown>,
   run: () => Promise<Exit.Exit<void, unknown>>
 ) {
-  const traceContext = readAuthEmailQueueTraceContext(message.body);
+  const { kind, traceContext } = readAuthEmailQueueMetadata(message.body);
   const runInSpan = () =>
     Sentry.startSpan(
       {
         attributes: {
-          "ceird.auth_email.kind": readAuthEmailQueueMessageKind(message.body),
+          "ceird.auth_email.kind": kind,
           "messaging.destination.name": batch.queue,
           "messaging.message.id": message.id,
           "messaging.message.receive.count": message.attempts,
           "messaging.operation.name": "process",
           "messaging.system": "cloudflare-queues",
         },
-        name: `AuthEmailQueue.process ${readAuthEmailQueueMessageKind(
-          message.body
-        )}`,
+        name: `AuthEmailQueue.process ${kind}`,
         op: "queue.process",
       },
       run
@@ -324,50 +320,6 @@ function runSentryTracedAuthEmailQueueMessage(
     },
     runInSpan
   );
-}
-
-function readAuthEmailQueueTraceContext(
-  body: unknown
-): AuthEmailQueueTraceContext | undefined {
-  if (!isRecord(body)) {
-    return undefined;
-  }
-
-  const { traceContext } = body;
-  if (!isRecord(traceContext)) {
-    return undefined;
-  }
-
-  const sentryTrace =
-    typeof traceContext.sentryTrace === "string"
-      ? traceContext.sentryTrace
-      : undefined;
-  const baggage =
-    typeof traceContext.baggage === "string" ? traceContext.baggage : undefined;
-
-  if (!sentryTrace && !baggage) {
-    return undefined;
-  }
-
-  return {
-    ...(baggage ? { baggage } : {}),
-    ...(sentryTrace ? { sentryTrace } : {}),
-  };
-}
-
-function readAuthEmailQueueMessageKind(
-  body: unknown
-): AuthEmailQueueMessage["kind"] | "unknown" {
-  return isRecord(body) &&
-    (body.kind === "password-reset" ||
-      body.kind === "email-verification" ||
-      body.kind === "organization-invitation")
-    ? body.kind
-    : "unknown";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 export default Sentry.withSentry(

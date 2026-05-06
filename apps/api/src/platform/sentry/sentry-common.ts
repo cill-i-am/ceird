@@ -12,6 +12,8 @@ export type ApiSentryOptions = Pick<
   CloudflareOptions,
   | "beforeSend"
   | "beforeSendLog"
+  | "beforeSendSpan"
+  | "beforeSendTransaction"
   | "dsn"
   | "enableMetrics"
   | "enableLogs"
@@ -82,6 +84,8 @@ export function makeSentryOptions(config: ApiSentryConfig): ApiSentryOptions {
   return {
     beforeSend: scrubApiSentryEvent,
     beforeSendLog: scrubApiSentryLog,
+    beforeSendSpan: scrubApiSentrySpan,
+    beforeSendTransaction: scrubApiSentryTransaction,
     dsn: Option.getOrUndefined(config.dsn),
     enableMetrics: true,
     enableLogs: true,
@@ -182,19 +186,41 @@ type ApiSentryEvent = Parameters<
 type ApiSentryLog = Parameters<
   NonNullable<CloudflareOptions["beforeSendLog"]>
 >[0];
+type ApiSentrySpan = Parameters<
+  NonNullable<CloudflareOptions["beforeSendSpan"]>
+>[0];
+type ApiSentryTransaction = Parameters<
+  NonNullable<CloudflareOptions["beforeSendTransaction"]>
+>[0];
 
 export function scrubApiSentryEvent(event: ApiSentryEvent): ApiSentryEvent {
+  return scrubApiSentryEventFields(event);
+}
+
+export function scrubApiSentryTransaction(
+  event: ApiSentryTransaction
+): ApiSentryTransaction {
+  return scrubApiSentryEventFields(event);
+}
+
+function scrubApiSentryEventFields<
+  TEvent extends ApiSentryEvent | ApiSentryTransaction,
+>(event: TEvent): TEvent {
   if (event.request?.url) {
-    event.request.url = stripUrlQuery(event.request.url);
+    event.request.url = scrubSentryText(event.request.url);
   }
   if (event.request) {
     delete event.request.query_string;
     delete event.request.cookies;
+    event.request.headers = scrubSentryRecord(event.request.headers);
   }
 
   event.extra = scrubSentryRecord(event.extra);
   event.tags = scrubSentryRecord(event.tags);
   event.contexts = scrubSentryRecord(event.contexts);
+  event.message = scrubOptionalSentryText(event.message);
+  event.spans = event.spans?.map(scrubApiSentrySpan);
+  event.transaction = scrubOptionalSentryText(event.transaction);
 
   return event;
 }
@@ -207,6 +233,14 @@ export function scrubApiSentryLog(log: ApiSentryLog): ApiSentryLog {
   }
 
   return log;
+}
+
+export function scrubApiSentrySpan(span: ApiSentrySpan): ApiSentrySpan {
+  span.description = scrubOptionalSentryText(span.description);
+  if (span.data) {
+    span.data = scrubSentryRecord(span.data);
+  }
+  return span;
 }
 
 function scrubSentryRecord<T extends Record<string, unknown> | undefined>(
@@ -239,21 +273,46 @@ function scrubSentryValue(value: unknown): unknown {
     return scrubSentryRecord(value);
   }
   if (typeof value === "string") {
-    return stripUrlQuery(value);
+    return scrubSentryText(value);
   }
   return value;
 }
 
 function isSensitiveSentryKey(key: string) {
   const normalized = key.toLowerCase();
+  const squashed = normalized.replaceAll(/[^a-z0-9]/g, "");
   return (
-    normalized === "deliverykey" ||
-    normalized.endsWith("deliverykey") ||
-    normalized === "authemailqueuedeliverykey" ||
+    normalized === "authorization" ||
+    normalized === "cookie" ||
+    normalized === "set-cookie" ||
+    normalized === "x-api-key" ||
+    squashed === "apikey" ||
+    squashed === "deliverykey" ||
+    squashed.endsWith("deliverykey") ||
     normalized.includes("token") ||
     normalized.includes("secret") ||
     normalized.includes("password")
   );
+}
+
+function scrubSentryText(value: string) {
+  return stripUrlQuery(redactSensitivePathSegments(value));
+}
+
+function scrubOptionalSentryText(value: string | undefined) {
+  return value === undefined ? value : scrubSentryText(value);
+}
+
+function redactSensitivePathSegments(value: string) {
+  return value
+    .replaceAll(
+      /((?:https?:\/\/[^/\s"'<>?#]+)?\/api\/auth\/reset-password\/)([^/\s"'<>?#]+)/gi,
+      (_match, prefix: string) => `${prefix}[Filtered]`
+    )
+    .replaceAll(
+      /((?:https?:\/\/[^/\s"'<>?#]+)?\/reset-password\/)([^/\s"'<>?#]+)/gi,
+      (_match, prefix: string) => `${prefix}[Filtered]`
+    );
 }
 
 function stripUrlQuery(value: string) {
@@ -294,7 +353,7 @@ function scrubSentryMessage(message: string) {
   if (Option.isSome(parsed)) {
     return stringifySentryMessage(scrubSentryValue(parsed.value));
   }
-  return stripUrlQuery(message);
+  return scrubSentryText(message);
 }
 
 function parseJsonMessage(value: string) {

@@ -59,11 +59,6 @@ const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
 const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
 const sentrySlugPattern = /^[a-z0-9][a-z0-9-]*$/;
-const NonEmptyString = Schema.String.check(
-  Schema.isPattern(/\S/, {
-    message: "Value must not be empty",
-  })
-);
 const PlanetScaleRegionSlug = Schema.String.check(
   Schema.isPattern(planetScaleRegionSlugPattern, {
     message:
@@ -167,7 +162,7 @@ function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
 }
 
 function decodeNonEmptyString(value: string) {
-  return Schema.decodeUnknownEffect(NonEmptyString)(value.trim()).pipe(
+  return Schema.decodeUnknownEffect(Schema.NonEmptyString)(value.trim()).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
   );
 }
@@ -179,7 +174,7 @@ function decodeSentrySlug(value: string) {
 }
 
 function decodeSentryAuthToken(value: Redacted.Redacted<string>) {
-  return Schema.decodeUnknownEffect(NonEmptyString)(
+  return Schema.decodeUnknownEffect(Schema.NonEmptyString)(
     Redacted.value(value).trim()
   ).pipe(
     Effect.as(value),

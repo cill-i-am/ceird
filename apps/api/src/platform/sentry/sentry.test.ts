@@ -8,6 +8,8 @@ import {
   makeSentryOptions,
   scrubApiSentryEvent,
   scrubApiSentryLog,
+  scrubApiSentrySpan,
+  scrubApiSentryTransaction,
 } from "./sentry.js";
 
 describe("API Sentry configuration", () => {
@@ -24,6 +26,8 @@ describe("API Sentry configuration", () => {
     expect(options).toStrictEqual({
       beforeSend: scrubApiSentryEvent,
       beforeSendLog: scrubApiSentryLog,
+      beforeSendSpan: scrubApiSentrySpan,
+      beforeSendTransaction: scrubApiSentryTransaction,
       dsn: "https://3917e2b6a24f49a20d625a1e3b2b1674@o368240.ingest.us.sentry.io/4511339367563264",
       enableMetrics: true,
       enableLogs: true,
@@ -44,6 +48,8 @@ describe("API Sentry configuration", () => {
     expect(options).toStrictEqual({
       beforeSend: scrubApiSentryEvent,
       beforeSendLog: scrubApiSentryLog,
+      beforeSendSpan: scrubApiSentrySpan,
+      beforeSendTransaction: scrubApiSentryTransaction,
       dsn: undefined,
       enableMetrics: true,
       enableLogs: true,
@@ -83,9 +89,30 @@ describe("API Sentry configuration", () => {
       type: undefined,
       request: {
         cookies: { session: "abc" },
+        headers: {
+          authorization: "Bearer session-token",
+          cookie: "better-auth.session_token=session-token",
+          "x-request-id": "req_123",
+        },
         query_string: "token=secret",
-        url: "https://api.example.com/api/auth/reset-password?token=secret",
+        url: "https://api.example.com/api/auth/reset-password/token-secret?token=secret",
       },
+      message:
+        "failed https://api.example.com/api/auth/reset-password/token-secret?token=secret",
+      spans: [
+        {
+          data: {
+            callbackUrl:
+              "https://api.example.com/api/auth/reset-password/token-secret?callbackURL=/settings",
+            resetToken: "token-secret",
+          },
+          description: "GET /api/auth/reset-password/token-secret?token=secret",
+          span_id: "span",
+          start_timestamp: 1,
+          trace_id: "trace",
+        },
+      ],
+      transaction: "GET /api/auth/reset-password/token-secret?token=secret",
       extra: {
         authEmailQueueDeliveryKey: "organization-invitation/inv_123",
         jobId: "job_123",
@@ -97,7 +124,23 @@ describe("API Sentry configuration", () => {
     });
 
     expect(event.request).toStrictEqual({
-      url: "https://api.example.com/api/auth/reset-password",
+      headers: {
+        authorization: "[Filtered]",
+        cookie: "[Filtered]",
+        "x-request-id": "req_123",
+      },
+      url: "https://api.example.com/api/auth/reset-password/[Filtered]",
+    });
+    expect(event.message).toBe(
+      "failed https://api.example.com/api/auth/reset-password/[Filtered]"
+    );
+    expect(event.transaction).toBe("GET /api/auth/reset-password/[Filtered]");
+    expect(event.spans?.[0]?.description).toBe(
+      "GET /api/auth/reset-password/[Filtered]"
+    );
+    expect(event.spans?.[0]?.data).toStrictEqual({
+      callbackUrl: "https://api.example.com/api/auth/reset-password/[Filtered]",
+      resetToken: "[Filtered]",
     });
     expect(event.extra).toStrictEqual({
       authEmailQueueDeliveryKey: "[Filtered]",
@@ -127,6 +170,28 @@ describe("API Sentry configuration", () => {
     expect(log.message).toBe(
       '{"deliveryKey":"[Filtered]","outcomeBucket":"request_failed"}'
     );
+  });
+
+  it("scrubs sensitive span attributes before sending traces to Sentry", () => {
+    const span = scrubApiSentrySpan({
+      data: {
+        authorization: "Bearer session-token",
+        route: "/api/auth/reset-password/token-secret?token=secret",
+      },
+      description:
+        "POST https://api.example.com/reset-password/token-secret?token=secret",
+      span_id: "span",
+      start_timestamp: 1,
+      trace_id: "trace",
+    });
+
+    expect(span.description).toBe(
+      "POST https://api.example.com/reset-password/[Filtered]"
+    );
+    expect(span.data).toStrictEqual({
+      authorization: "[Filtered]",
+      route: "/api/auth/reset-password/[Filtered]",
+    });
   });
 
   it("formats Effect log message arguments as scrubbed Sentry attributes", () => {

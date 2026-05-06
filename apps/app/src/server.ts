@@ -9,8 +9,8 @@ import type { RequestHandler } from "@tanstack/react-start/server";
 import type { AppCloudflareSentryEnv } from "./sentry-cloudflare";
 import { makeAppCloudflareSentryOptions } from "./sentry-cloudflare";
 
-const fetch = createStartHandler<Register>(defaultStreamHandler);
-type FetchOptions = Parameters<typeof fetch>[1];
+const startFetch = createStartHandler<Register>(defaultStreamHandler);
+type FetchOptions = Parameters<typeof startFetch>[1];
 const SENTRY_BROWSER_PROFILING_DOCUMENT_POLICY = "js-profiling";
 
 export interface ServerEntry {
@@ -27,14 +27,20 @@ export function createServerEntry(entry: ServerEntry): ServerEntry {
 
 const serverEntry = createServerEntry({
   fetch(request, opts) {
-    return fetch(request, isFetchOptions(opts) ? opts : undefined);
+    return startFetch(request, isFetchOptions(opts) ? opts : undefined);
   },
 });
 
+const appWorkerHandler = {
+  fetch(request: Request) {
+    return serverEntry.fetch(request);
+  },
+};
+
 export default Sentry.withSentry<AppCloudflareSentryEnv>(
   makeAppCloudflareSentryOptions,
-  serverEntry as never
-) as unknown as ServerEntry;
+  appWorkerHandler
+);
 
 function isFetchOptions(opts: unknown): opts is FetchOptions {
   return opts === undefined || (typeof opts === "object" && opts !== null);

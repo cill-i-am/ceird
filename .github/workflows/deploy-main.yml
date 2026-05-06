@@ -95,6 +95,6 @@ jobs:
           SENTRY_API_PROJECT: ${{ vars.SENTRY_API_PROJECT || 'ceird-api' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'ceird-app' }}
           SENTRY_RELEASE: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           SITE_GEOCODER_MODE: ${{ vars.SITE_GEOCODER_MODE || 'stub' }}

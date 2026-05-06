@@ -1,8 +1,8 @@
 import {
   SENTRY_DSN,
   applySentryRouteContext,
+  clearSentryRouteContext,
   createClientSentryOptions,
-  createServerSentryOptions,
   createSentryTracePropagationTargets,
   sanitizeReplayRecordingEvent,
   sanitizeSentryEvent,
@@ -37,11 +37,14 @@ describe("sentry configuration", () => {
       profilesSampleRate: 1,
       replaysOnErrorSampleRate: 1,
       replaysSessionSampleRate: 0.05,
-      tracePropagationTargets: expect.arrayContaining([
-        "https://api.ceird.app",
-      ]),
       tracesSampleRate: 1,
     });
+    expect(
+      doesPropagateTrace(
+        options.tracePropagationTargets ?? [],
+        "https://api.ceird.app/jobs"
+      )
+    ).toBeTruthy();
     expect(options.integrations).toStrictEqual([
       tracingIntegration,
       replayIntegration,
@@ -52,17 +55,6 @@ describe("sentry configuration", () => {
     expect(options.beforeSendLog).toBeInstanceOf(Function);
     expect(options.beforeSendSpan).toBeInstanceOf(Function);
     expect(options.beforeSendTransaction).toBeInstanceOf(Function);
-  });
-
-  it("enables server tracing and logs", () => {
-    expect(
-      createServerSentryOptions({ environment: "production" })
-    ).toMatchObject({
-      dsn: SENTRY_DSN,
-      enableLogs: true,
-      environment: "production",
-      tracesSampleRate: 1,
-    });
   });
 
   it("matches production, portless, sandbox, and loopback API origins for trace propagation", () => {
@@ -85,10 +77,13 @@ describe("sentry configuration", () => {
     expect(
       doesPropagateTrace(targets, "https://billing.example.com")
     ).toBeFalsy();
+    expect(
+      doesPropagateTrace(targets, "https://api.ceird.app.evil.example/jobs")
+    ).toBeFalsy();
   });
 
   it("sets privacy-preserving Sentry route context", () => {
-    const setUser = vi.fn<(user: { readonly id: string }) => void>();
+    const setUser = vi.fn<(user: { readonly id: string } | null) => void>();
     const setTag = vi.fn<(key: string, value: string | undefined) => void>();
 
     applySentryRouteContext(
@@ -106,7 +101,7 @@ describe("sentry configuration", () => {
   });
 
   it("clears organization route context when no organization is active", () => {
-    const setUser = vi.fn<(user: { readonly id: string }) => void>();
+    const setUser = vi.fn<(user: { readonly id: string } | null) => void>();
     const setTag = vi.fn<(key: string, value: string | undefined) => void>();
 
     applySentryRouteContext(
@@ -123,6 +118,17 @@ describe("sentry configuration", () => {
     expect(setTag).toHaveBeenCalledWith("ceird.organization_role", undefined);
   });
 
+  it("clears Sentry user and organization context", () => {
+    const setUser = vi.fn<(user: { readonly id: string } | null) => void>();
+    const setTag = vi.fn<(key: string, value: string | undefined) => void>();
+
+    clearSentryRouteContext({ setTag, setUser });
+
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(setTag).toHaveBeenCalledWith("ceird.organization_id", undefined);
+    expect(setTag).toHaveBeenCalledWith("ceird.organization_role", undefined);
+  });
+
   it("redacts sensitive query parameters from Sentry events", () => {
     const event = sanitizeSentryEvent({
       breadcrumbs: [
@@ -134,6 +140,14 @@ describe("sentry configuration", () => {
         },
       ],
       request: {
+        cookies: {
+          "better-auth.session_token": "session-token",
+        },
+        headers: {
+          authorization: "Bearer token",
+          cookie: "better-auth.session_token=session-token",
+          "x-request-id": "req_123",
+        },
         query_string: {
           code: "abc",
           email: "user@example.com",
@@ -141,6 +155,18 @@ describe("sentry configuration", () => {
         },
         url: "https://app.ceird.test/reset-password?token=secret&next=/",
       },
+      contexts: {
+        link: {
+          url: "/api/auth/reset-password/token-secret?callbackURL=/settings",
+        },
+      },
+      extra: {
+        callbackUrl: "/reset-password/token-secret?next=/",
+        nested: {
+          resetToken: "secret",
+        },
+      },
+      message: "failed /api/auth/reset-password/token-secret?token=secret",
       spans: [
         {
           data: {
@@ -152,6 +178,10 @@ describe("sentry configuration", () => {
           trace_id: "trace",
         },
       ],
+      tags: {
+        invitationToken: "invite-secret",
+        stage: "production",
+      },
       transaction: "GET /reset-password?token=secret",
       type: "transaction",
     });
@@ -163,6 +193,28 @@ describe("sentry configuration", () => {
       code: "[Filtered]",
       email: "user@example.com",
       token: "[Filtered]",
+    });
+    expect(event.request).not.toHaveProperty("cookies");
+    expect(event.request?.headers).toStrictEqual({
+      authorization: "[Filtered]",
+      cookie: "[Filtered]",
+      "x-request-id": "req_123",
+    });
+    expect(event.message).toBe(
+      "failed /api/auth/reset-password/[Filtered]?token=%5BFiltered%5D"
+    );
+    expect(event.extra?.callbackUrl).toBe(
+      "/reset-password/[Filtered]?next=%2F"
+    );
+    expect(event.extra?.nested).toStrictEqual({
+      resetToken: "[Filtered]",
+    });
+    expect(event.contexts?.link).toStrictEqual({
+      url: "/api/auth/reset-password/[Filtered]?callbackURL=%2Fsettings",
+    });
+    expect(event.tags).toStrictEqual({
+      invitationToken: "[Filtered]",
+      stage: "production",
     });
     expect(event.transaction).toBe("GET /reset-password?token=%5BFiltered%5D");
     expect(event.breadcrumbs?.[0]?.data?.target).toBe(

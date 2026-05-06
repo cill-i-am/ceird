@@ -1,4 +1,4 @@
-import type { BrowserOptions, NodeOptions } from "@sentry/tanstackstart-react";
+import type { BrowserOptions } from "@sentry/tanstackstart-react";
 
 export const SENTRY_DSN =
   "https://a6db1d95f474e8443fa3435bb95eed76@o368240.ingest.us.sentry.io/4511339382964224";
@@ -9,6 +9,10 @@ const SENSITIVE_QUERY_PARAMS = new Set([
   "state",
   "token",
 ]);
+const SENSITIVE_PATH_SEGMENT_PATTERNS = [
+  /((?:https?:\/\/[^/\s"'<>?#]+)?\/api\/auth\/reset-password\/)([^/\s"'<>?#]+)/gi,
+  /((?:https?:\/\/[^/\s"'<>?#]+)?\/reset-password\/)([^/\s"'<>?#]+)/gi,
+] as const;
 
 type BrowserIntegration = Extract<
   NonNullable<BrowserOptions["integrations"]>,
@@ -22,10 +26,6 @@ export interface ClientSentryOptionsInput {
   readonly profilingIntegration: BrowserIntegration;
   readonly replayIntegration: BrowserIntegration;
   readonly tracingIntegration: BrowserIntegration;
-}
-
-export interface ServerSentryOptionsInput {
-  readonly environment: string;
 }
 
 export function createClientSentryOptions(
@@ -57,38 +57,16 @@ export function createClientSentryOptions(
   };
 }
 
-export function createServerSentryOptions(
-  input: ServerSentryOptionsInput
-): NodeOptions {
-  const sampleRates = getSentrySampleRates(input.environment);
-
-  return {
-    beforeSend: (event) => sanitizeSentryEvent(event),
-    beforeSendLog: (log) => sanitizeSentryLog(log),
-    beforeSendSpan: (span) => sanitizeSentrySpan(span),
-    beforeSendTransaction: (event) => sanitizeSentryEvent(event),
-    dsn: SENTRY_DSN,
-    enableLogs: true,
-    environment: input.environment,
-    tracesSampleRate: sampleRates.traces,
-  };
-}
-
 export function createSentryTracePropagationTargets(apiOrigin?: string) {
-  const targets: (string | RegExp)[] = [
-    "https://api.ceird.app",
+  const targets: RegExp[] = [
+    createExactOriginTraceTarget("https://api.ceird.app"),
     /^https:\/\/(?:[a-z0-9-]+\.)?api\.ceird\.localhost(?::\d+)?(?:\/|$)/,
     /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/,
   ];
   const normalizedApiOrigin = normalizeOrigin(apiOrigin);
 
-  if (
-    normalizedApiOrigin &&
-    !targets.some(
-      (target) => typeof target === "string" && target === normalizedApiOrigin
-    )
-  ) {
-    targets.unshift(normalizedApiOrigin);
+  if (normalizedApiOrigin && normalizedApiOrigin !== "https://api.ceird.app") {
+    targets.unshift(createExactOriginTraceTarget(normalizedApiOrigin));
   }
 
   return targets;
@@ -102,7 +80,7 @@ interface SentryRouteContextInput {
 
 interface SentryRouteContextSink {
   readonly setTag: (key: string, value: string | undefined) => void;
-  readonly setUser: (user: { readonly id: string }) => void;
+  readonly setUser: (user: { readonly id: string } | null) => void;
 }
 
 export function applySentryRouteContext(
@@ -115,6 +93,12 @@ export function applySentryRouteContext(
     context.activeOrganizationId ?? undefined
   );
   sentry.setTag("ceird.organization_role", context.currentOrganizationRole);
+}
+
+export function clearSentryRouteContext(sentry: SentryRouteContextSink) {
+  sentry.setUser(null);
+  sentry.setTag("ceird.organization_id", undefined);
+  sentry.setTag("ceird.organization_role", undefined);
 }
 
 type SentryEvent =
@@ -137,14 +121,12 @@ export function sanitizeSentryEvent<TEvent extends SentryEvent>(
       data: sanitizeRecordValues(breadcrumb.data),
       message: sanitizeUrlText(breadcrumb.message),
     })),
-    request: event.request
-      ? {
-          ...event.request,
-          query_string: sanitizeQueryString(event.request.query_string),
-          url: sanitizeUrlText(event.request.url),
-        }
-      : undefined,
+    request: event.request ? sanitizeSentryRequest(event.request) : undefined,
+    contexts: sanitizeRecordValues(event.contexts),
+    extra: sanitizeRecordValues(event.extra),
+    message: sanitizeUrlText(event.message),
     spans: event.spans?.map(sanitizeSentrySpan),
+    tags: sanitizeRecordValues(event.tags),
     transaction: sanitizeUrlText(event.transaction),
   };
 }
@@ -168,6 +150,19 @@ export function sanitizeReplayRecordingEvent<TEvent>(event: TEvent): TEvent {
   return sanitizeUnknown(event) as TEvent;
 }
 
+function sanitizeSentryRequest(
+  request: NonNullable<SentryEvent["request"]>
+): NonNullable<SentryEvent["request"]> {
+  const { cookies: _cookies, ...requestWithoutCookies } = request;
+
+  return {
+    ...requestWithoutCookies,
+    headers: sanitizeRecordValues(requestWithoutCookies.headers),
+    query_string: sanitizeQueryString(request.query_string),
+    url: sanitizeUrlText(request.url),
+  };
+}
+
 function sanitizeRecordValues<TRecord extends Record<string, unknown>>(
   record: TRecord | undefined
 ): TRecord | undefined {
@@ -185,6 +180,10 @@ function sanitizeRecordValues<TRecord extends Record<string, unknown>>(
 
 function sanitizeRecordValue(key: string, value: unknown): unknown {
   const normalizedKey = key.toLowerCase();
+  if (shouldRedactRecordKey(normalizedKey)) {
+    return "[Filtered]";
+  }
+
   if (typeof value === "string") {
     if (normalizedKey.includes("url") || normalizedKey.includes("target")) {
       return sanitizeUrlText(value);
@@ -195,6 +194,22 @@ function sanitizeRecordValue(key: string, value: unknown): unknown {
   }
 
   return sanitizeUnknown(value);
+}
+
+function shouldRedactRecordKey(normalizedKey: string) {
+  const squashedKey = normalizedKey.replaceAll(/[^a-z0-9]/g, "");
+  return (
+    normalizedKey === "authorization" ||
+    normalizedKey === "cookie" ||
+    normalizedKey === "set-cookie" ||
+    normalizedKey === "x-api-key" ||
+    squashedKey === "apikey" ||
+    squashedKey === "deliverykey" ||
+    squashedKey.endsWith("deliverykey") ||
+    normalizedKey.includes("token") ||
+    normalizedKey.includes("secret") ||
+    normalizedKey.includes("password")
+  );
 }
 
 function sanitizeUnknown(value: unknown): unknown {
@@ -222,10 +237,13 @@ function sanitizeQueryString(queryString: QueryString | undefined) {
   }
 
   if (Array.isArray(queryString)) {
-    return queryString.map(([key, value]) => [
-      key,
-      shouldRedactQueryParam(key) ? "[Filtered]" : value,
-    ]);
+    return queryString.map(
+      ([key, value]) =>
+        [key, shouldRedactQueryParam(key) ? "[Filtered]" : value] satisfies [
+          string,
+          string,
+        ]
+    );
   }
 
   if (queryString) {
@@ -245,7 +263,15 @@ function sanitizeUrlText(value: string | undefined) {
     return value;
   }
 
-  return value.replaceAll(
+  let withoutSensitivePathSegments = value;
+  for (const pattern of SENSITIVE_PATH_SEGMENT_PATTERNS) {
+    withoutSensitivePathSegments = withoutSensitivePathSegments.replaceAll(
+      pattern,
+      (_match, prefix: string) => `${prefix}[Filtered]`
+    );
+  }
+
+  return withoutSensitivePathSegments.replaceAll(
     /((?:https?:\/\/|\/)[^\s"'<>?#]+)\?([^\s"'<>#]*)(#[^\s"'<>]*)?/g,
     (_match, base: string, query: string, hash: string | undefined) => {
       const sanitizedQuery = sanitizeQueryText(query);
@@ -283,6 +309,14 @@ function normalizeOrigin(origin: string | undefined) {
   } catch {
     // Invalid configured origins are ignored; static production/local targets remain.
   }
+}
+
+function createExactOriginTraceTarget(origin: string) {
+  return new RegExp(`^${escapeRegExp(origin)}(?:/|$)`);
+}
+
+function escapeRegExp(value: string) {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function getSentrySampleRates(environment: string) {

@@ -4,6 +4,7 @@ import type { AuthEmailQueueMessage } from "./auth-email-queue.js";
 import {
   decodeAuthEmailQueueMessageStrict,
   makeCloudflareAuthenticationEmailSchedulerLive,
+  readAuthEmailQueueMetadata,
 } from "./auth-email-queue.js";
 import { AuthenticationEmailScheduler } from "./auth-email-scheduler.js";
 
@@ -45,6 +46,32 @@ describe("auth email queue messages", () => {
         baggage: "sentry-environment=production",
         sentryTrace: "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
       },
+    });
+  }, 1000);
+
+  it("reads queue metadata from decoded messages and falls back for malformed bodies", () => {
+    expect(
+      readAuthEmailQueueMetadata({
+        kind: "password-reset",
+        payload: {
+          deliveryKey:
+            "password-reset/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          recipientEmail: "user@example.com",
+          recipientName: "User",
+          resetUrl: "https://app.example.com/reset-password?token=abc",
+        },
+        traceContext: {
+          baggage: "sentry-environment=production",
+        },
+      })
+    ).toStrictEqual({
+      kind: "password-reset",
+      traceContext: {
+        baggage: "sentry-environment=production",
+      },
+    });
+    expect(readAuthEmailQueueMetadata({ kind: "not-real" })).toStrictEqual({
+      kind: "unknown",
     });
   }, 1000);
 

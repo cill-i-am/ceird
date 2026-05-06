@@ -1,5 +1,5 @@
 /* eslint-disable max-classes-per-file */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 
 import { AuthenticationEmailScheduler } from "./auth-email-scheduler.js";
 import {
@@ -61,6 +61,14 @@ export type AuthEmailQueueMessage = Schema.Schema.Type<
 >;
 
 const decodeAuthEmailQueueMessage = Schema.decodeUnknown(AuthEmailQueueMessage);
+const decodeAuthEmailQueueMessageOption = Schema.decodeUnknownOption(
+  AuthEmailQueueMessage
+);
+
+export interface AuthEmailQueueMetadata {
+  readonly kind: AuthEmailQueueMessage["kind"] | "unknown";
+  readonly traceContext?: AuthEmailQueueTraceContext;
+}
 
 export function decodeAuthEmailQueueMessageEffect(input: unknown) {
   return decodeAuthEmailQueueMessage(input).pipe(
@@ -87,7 +95,7 @@ export function makeCloudflareAuthenticationEmailSchedulerLive(
   const withTraceContext = <TMessage extends AuthEmailQueueMessage>(
     message: TMessage
   ): TMessage => {
-    const traceContext = normalizeTraceContext(
+    const traceContext = normalizeAuthEmailQueueTraceContext(
       options?.captureTraceContext?.()
     );
 
@@ -109,6 +117,25 @@ export function makeCloudflareAuthenticationEmailSchedulerLive(
       );
     },
   });
+}
+
+export function readAuthEmailQueueMetadata(
+  input: unknown
+): AuthEmailQueueMetadata {
+  const message = decodeAuthEmailQueueMessageOption(input);
+
+  if (Option.isNone(message)) {
+    return { kind: "unknown" };
+  }
+
+  const traceContext = normalizeAuthEmailQueueTraceContext(
+    message.value.traceContext
+  );
+
+  return {
+    kind: message.value.kind,
+    ...(traceContext ? { traceContext } : {}),
+  };
 }
 
 export const sendAuthEmailQueueMessage = Effect.fn(
@@ -195,7 +222,7 @@ function serializeUnknownError(error: unknown) {
   return String(error);
 }
 
-function normalizeTraceContext(
+export function normalizeAuthEmailQueueTraceContext(
   traceContext: AuthEmailQueueTraceContext | undefined
 ): AuthEmailQueueTraceContext | undefined {
   if (!traceContext?.sentryTrace && !traceContext?.baggage) {

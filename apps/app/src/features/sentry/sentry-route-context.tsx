@@ -1,9 +1,13 @@
 "use client";
 
+import type * as SentryBrowser from "@sentry/tanstackstart-react";
 import { useMatch, useRouteContext } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { applySentryRouteContext } from "#/sentry-config";
+import {
+  applySentryRouteContext,
+  clearSentryRouteContext,
+} from "#/sentry-config";
 
 export function SentryRouteContext() {
   const {
@@ -26,6 +30,7 @@ export function SentryRouteContext() {
 
   useEffect(() => {
     let cancelled = false;
+    let sentry: typeof SentryBrowser | undefined;
 
     if (typeof window === "undefined") {
       return () => {
@@ -40,6 +45,7 @@ export function SentryRouteContext() {
         return;
       }
 
+      sentry = Sentry;
       applySentryRouteContext(Sentry, {
         activeOrganizationId,
         currentOrganizationRole,
@@ -49,6 +55,9 @@ export function SentryRouteContext() {
 
     return () => {
       cancelled = true;
+      if (sentry) {
+        clearSentryRouteContext(sentry);
+      }
     };
   }, [activeOrganizationId, currentOrganizationRole, userId]);
 

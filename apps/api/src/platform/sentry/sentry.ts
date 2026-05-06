@@ -11,6 +11,8 @@ import {
   makeSentryOptions,
   scrubApiSentryEvent,
   scrubApiSentryLog,
+  scrubApiSentrySpan,
+  scrubApiSentryTransaction,
 } from "./sentry-common.js";
 
 export {
@@ -21,6 +23,8 @@ export {
   makeSentryOptions,
   scrubApiSentryEvent,
   scrubApiSentryLog,
+  scrubApiSentrySpan,
+  scrubApiSentryTransaction,
 };
 
 export const ApiSentryLive = Layer.unwrapEffect(
