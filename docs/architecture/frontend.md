@@ -61,9 +61,10 @@ Authenticated layout and navigation live under:
 
 ## Observability
 
-The app initializes Sentry from `apps/app/src/router.tsx` using
-`@sentry/tanstackstart-react`. Client-side Sentry is guarded behind a browser
-runtime check because the router module is also used during SSR. Browser
+The app initializes browser Sentry from `apps/app/src/router.tsx` using a
+dynamic `@sentry/tanstackstart-react` import. Client-side Sentry is guarded
+behind a browser runtime check before the SDK is imported because the router
+module is also used during SSR and Cloudflare Worker startup. Browser
 instrumentation includes TanStack Router tracing, structured logs, and Session
 Replay with text and media masking enabled. Shared DSN, production-safe
 sample-rate defaults, and Sentry URL/query sanitization live in
@@ -73,9 +74,9 @@ before events, transactions, spans, logs, or replay recording events leave the
 app.
 
 Server-side app requests use the explicit TanStack Start server entry at
-`apps/app/src/server.ts`, which imports `apps/app/src/sentry-server.ts` and
-wraps the Start fetch handler with `wrapFetchWithSentry` so server request and
-server-function tracing is captured.
+`apps/app/src/server.ts`. The Cloudflare app Worker intentionally does not load
+the Node Sentry SDK during Worker startup; Cloudflare observability remains
+enabled from infrastructure.
 
 ## Feature Folders
 

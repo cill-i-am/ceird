@@ -1,5 +1,3 @@
-import "./sentry-server";
-import { wrapFetchWithSentry } from "@sentry/tanstackstart-react";
 import type { Register } from "@tanstack/react-router";
 import {
   createStartHandler,
@@ -22,15 +20,9 @@ export function createServerEntry(entry: ServerEntry): ServerEntry {
   };
 }
 
-const sentryEntry = wrapFetchWithSentry({
-  fetch(request, opts) {
-    return fetch(request, isFetchOptions(opts) ? opts : undefined);
-  },
-});
-
 export default createServerEntry({
   fetch(request, opts) {
-    return sentryEntry.fetch(request, opts);
+    return fetch(request, isFetchOptions(opts) ? opts : undefined);
   },
 });
 
