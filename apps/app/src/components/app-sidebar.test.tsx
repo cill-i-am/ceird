@@ -1,6 +1,8 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
 import { render, screen, within } from "@testing-library/react";
 import { isValidElement } from "react";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
 
@@ -8,7 +10,10 @@ const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
   mockedMatches: {
     value: [] as {
       context?: {
+        activeOrganization?: OrganizationSummary | null;
+        activeOrganizationId?: OrganizationId | null;
         currentOrganizationRole?: "owner" | "admin" | "member" | "external";
+        organizations?: readonly OrganizationSummary[];
       };
       id?: string;
       routeId?: string;
@@ -16,6 +21,38 @@ const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
   },
   mockedNavigate: vi.fn<() => Promise<void>>(),
 }));
+
+const { mockedOrganizationSwitcher } = vi.hoisted(() => ({
+  mockedOrganizationSwitcher: vi.fn<
+    (props: {
+      activeOrganization?: OrganizationSummary | null;
+      activeOrganizationId?: OrganizationId | null;
+      organizations?: readonly OrganizationSummary[];
+    }) => ReactElement
+  >(
+    ({
+      activeOrganization,
+    }: {
+      activeOrganization?: { id: string; name: string; slug: string } | null;
+    }) => (
+      <div data-testid="organization-switcher">
+        {activeOrganization?.name ?? "missing organization"}
+      </div>
+    )
+  ),
+}));
+
+function organization(input: {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+}): OrganizationSummary {
+  return {
+    id: decodeOrganizationId(input.id),
+    name: input.name,
+    slug: input.slug,
+  };
+}
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -66,6 +103,10 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     }) as typeof actual.useRouterState,
   };
 });
+
+vi.mock(import("#/features/organizations/organization-switcher"), () => ({
+  OrganizationSwitcher: mockedOrganizationSwitcher,
+}));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
@@ -207,12 +248,21 @@ vi.mock(import("#/components/nav-user"), () => ({
 
 describe("app sidebar", () => {
   beforeEach(() => {
+    const acmeOrganization = organization({
+      id: "org_acme",
+      name: "Acme Field Ops",
+      slug: "acme-field-ops",
+    });
+
     mockedMatches.value = [
       {
         id: "/_app/_org",
         routeId: "/_app/_org",
         context: {
+          activeOrganization: acmeOrganization,
+          activeOrganizationId: acmeOrganization.id,
           currentOrganizationRole: "owner",
+          organizations: [acmeOrganization],
         },
       },
     ];
@@ -220,6 +270,56 @@ describe("app sidebar", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("shows the active organization in the sidebar header", () => {
+    const acmeOrganization = organization({
+      id: "org_acme",
+      name: "Acme Field Ops",
+      slug: "acme-field-ops",
+    });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByTestId("organization-switcher")).toHaveTextContent(
+      "Acme Field Ops"
+    );
+    expect(mockedOrganizationSwitcher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeOrganization: acmeOrganization,
+        activeOrganizationId: acmeOrganization.id,
+        organizations: [acmeOrganization],
+      }),
+      undefined
+    );
+  });
+
+  it("passes app-level organization context outside organization routes", () => {
+    mockedMatches.value = [];
+
+    render(
+      <AppSidebar
+        activeOrganizationId={decodeOrganizationId("org_acme")}
+        currentOrganizationRole="admin"
+      />
+    );
+
+    expect(mockedOrganizationSwitcher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeOrganization: null,
+        activeOrganizationId: "org_acme",
+        organizations: undefined,
+      }),
+      undefined
+    );
+    expect(screen.getByRole("link", { name: /activity/i })).toHaveAttribute(
+      "href",
+      "/activity"
+    );
+    expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
+      "href",
+      "/members"
+    );
   });
 
   it(
@@ -368,4 +468,38 @@ describe("app sidebar", () => {
       ).not.toBeInTheDocument();
     }
   );
+
+  it("keeps external users pointed at jobs while still showing the active organization", () => {
+    const externalOrganization = organization({
+      id: "org_external",
+      name: "External Client",
+      slug: "external-client",
+    });
+
+    mockedMatches.value = [
+      {
+        id: "/_app/_org",
+        routeId: "/_app/_org",
+        context: {
+          activeOrganization: externalOrganization,
+          activeOrganizationId: externalOrganization.id,
+          currentOrganizationRole: "external",
+        },
+      },
+    ];
+
+    render(<AppSidebar />);
+
+    expect(screen.getByTestId("organization-switcher")).toHaveTextContent(
+      "External Client"
+    );
+    expect(screen.getByRole("link", { name: /ceird/i })).toHaveAttribute(
+      "href",
+      "/jobs"
+    );
+    expect(screen.getByRole("link", { name: /jobs/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /members/i })
+    ).not.toBeInTheDocument();
+  });
 });

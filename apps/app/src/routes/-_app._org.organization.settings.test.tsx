@@ -5,6 +5,7 @@ import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
 import { isRedirect } from "@tanstack/react-router";
 
 const organizationId = decodeOrganizationId("org_123");
+const switchedOrganizationId = decodeOrganizationId("org_next");
 
 const { mockedGetCurrentServerLabels } = vi.hoisted(() => ({
   mockedGetCurrentServerLabels: vi.fn<() => Promise<LabelsResponse>>(),
@@ -93,6 +94,60 @@ describe("settings route loader", () => {
         options: { to: "/" },
       });
       expect(result).toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each<OrganizationRole>(["member", "external"])(
+    "keeps organization settings unavailable after switching to a %s organization",
+    {
+      timeout: 10_000,
+    },
+    async (role) => {
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
+      let result: unknown;
+
+      try {
+        assertSettingsRouteAccess({
+          activeOrganizationId: switchedOrganizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: switchedOrganizationId,
+          },
+          currentOrganizationRole: role,
+        });
+      } catch (error) {
+        result = error;
+      }
+
+      expect(result).toMatchObject({
+        options: { to: "/" },
+      });
+      expect(result).toSatisfy(isRedirect);
+      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each<OrganizationRole>(["owner", "admin"])(
+    "keeps organization settings available after switching to a %s organization",
+    {
+      timeout: 10_000,
+    },
+    async (role) => {
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
+
+      expect(() =>
+        assertSettingsRouteAccess({
+          activeOrganizationId: switchedOrganizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: switchedOrganizationId,
+          },
+          currentOrganizationRole: role,
+        })
+      ).not.toThrow();
       expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );

@@ -14,6 +14,7 @@ import type { ComponentProps } from "react";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
+const switchedOrganizationId = decodeOrganizationId("org_next");
 const userId = "user_123" as UserIdType;
 const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
@@ -171,10 +172,10 @@ describe("jobs route loader", () => {
 
       await expect(
         loadJobsRouteData({
-          activeOrganizationId: organizationId,
+          activeOrganizationId: switchedOrganizationId,
           activeOrganizationSync: {
             required: false,
-            targetOrganizationId: organizationId,
+            targetOrganizationId: switchedOrganizationId,
           },
           currentOrganizationRole: "external",
           currentUserId: userId,
@@ -194,6 +195,48 @@ describe("jobs route loader", () => {
         },
       });
       expect(mockedListAllCurrentServerJobs).toHaveBeenCalledWith({});
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "keeps jobs available after switching to an external organization",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const list = {
+        items: [],
+        nextCursor: undefined,
+      };
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(list);
+      const { loadJobsRouteData } = await import("./_app._org.jobs");
+
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "external",
+          currentUserId: userId,
+        })
+      ).resolves.toMatchObject({
+        list,
+        options: {
+          contacts: [],
+          labels: [],
+          members: [],
+          serviceAreas: [],
+          sites: [],
+        },
+        viewer: {
+          role: "external",
+          userId,
+        },
+      });
       expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
     }
   );

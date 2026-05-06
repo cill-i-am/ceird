@@ -1,5 +1,5 @@
 "use client";
-import type { OrganizationRole } from "@ceird/identity-core";
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { Outlet } from "@tanstack/react-router";
 
 import { AppSidebar } from "#/components/app-sidebar";
@@ -17,16 +17,22 @@ export type AppLayoutUser =
   | null;
 
 export interface AppLayoutProps {
+  activeOrganizationId?: OrganizationId | null | undefined;
   currentOrganizationRole?: OrganizationRole | undefined;
   user: AppLayoutUser;
 }
 
-export function AppLayout({ currentOrganizationRole, user }: AppLayoutProps) {
+export function AppLayout({
+  activeOrganizationId,
+  currentOrganizationRole,
+  user,
+}: AppLayoutProps) {
   return (
     <CommandBarProvider>
       <AppGlobalCommandActions />
       <SidebarProvider className="[--header-height:calc(--spacing(15))]">
         <AppSidebar
+          activeOrganizationId={activeOrganizationId}
           currentOrganizationRole={currentOrganizationRole}
           user={user}
         />

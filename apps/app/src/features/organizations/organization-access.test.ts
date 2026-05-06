@@ -8,6 +8,8 @@ import {
   redirectIfOrganizationReady,
   requireOrganizationAdministrationAccess,
   requireOrganizationAccess,
+  setActiveOrganization,
+  synchronizeClientActiveOrganization,
 } from "./organization-access";
 import type { OrganizationSummary } from "./organization-access";
 
@@ -152,6 +154,61 @@ describe("organization access helpers", () => {
     ]);
     expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
   }, 1000);
+
+  it("sets the client active organization through Better Auth", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+
+    await expect(
+      setActiveOrganization(decodeOrganizationId("org_next"))
+    ).resolves.toBeUndefined();
+
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: "org_next",
+    });
+  });
+
+  it("clears the client active organization when sync targets no organization", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+
+    await expect(
+      synchronizeClientActiveOrganization({
+        required: true,
+        targetOrganizationId: null,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockedSetClientActiveOrganization).toHaveBeenCalledWith({
+      organizationId: null,
+    });
+  });
+
+  it("skips active organization sync when no change is required", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+
+    await expect(
+      synchronizeClientActiveOrganization({
+        required: false,
+        targetOrganizationId: null,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  });
+
+  it("rethrows active organization switch failures", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedSetClientActiveOrganization.mockResolvedValue({
+      data: null,
+      error: new Error("switch failed"),
+    });
+
+    const failure = await setActiveOrganization(
+      decodeOrganizationId("org_next")
+    ).catch((caughtError) => caughtError);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain("switch failed");
+  });
 
   it("uses the strict server list helper during SSR", async () => {
     mockedIsServerEnvironment.mockReturnValue(true);
@@ -299,6 +356,13 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_current",
       },
+      organizations: [
+        {
+          id: "org_current",
+          name: "Current Org",
+          slug: "current-org",
+        },
+      ],
       session: {
         session: {
           activeOrganizationId: "org_stale",
@@ -345,6 +409,18 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_first",
       },
+      organizations: [
+        {
+          id: "org_first",
+          name: "First Org",
+          slug: "first-org",
+        },
+        {
+          id: "org_second",
+          name: "Second Org",
+          slug: "second-org",
+        },
+      ],
       session: {
         session: {},
         user: {
@@ -461,6 +537,13 @@ describe("organization access helpers", () => {
         required: true,
         targetOrganizationId: "org_server",
       },
+      organizations: [
+        {
+          id: "org_server",
+          name: "Server Org",
+          slug: "server-org",
+        },
+      ],
       session: {
         session: {
           id: "session_123",

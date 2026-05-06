@@ -1,6 +1,6 @@
 "use client";
 import { isExternalOrganizationRole } from "@ceird/identity-core";
-import type { OrganizationRole } from "@ceird/identity-core";
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -20,25 +20,37 @@ import {
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
 import {
+  useActiveOrganizationFromMatches,
+  useActiveOrganizationIdFromMatches,
   useCurrentOrganizationRoleFromMatches,
   useIsInOrganizationRoute,
+  useOrganizationsFromMatches,
 } from "#/features/organizations/organization-route-context";
+import { OrganizationSwitcher } from "#/features/organizations/organization-switcher";
 
 export function AppSidebar({
+  activeOrganizationId: appActiveOrganizationId,
   currentOrganizationRole: appCurrentOrganizationRole,
   user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  activeOrganizationId?: OrganizationId | null | undefined;
   currentOrganizationRole?: OrganizationRole | undefined;
   user?: NavUserAccount | null;
 }) {
   const navigate = useNavigate({ from: "/" });
   const isInOrganizationRoute = useIsInOrganizationRoute();
+  const activeOrganization = useActiveOrganizationFromMatches();
+  const matchedActiveOrganizationId = useActiveOrganizationIdFromMatches();
+  const organizations = useOrganizationsFromMatches();
   const matchedOrganizationRole = useCurrentOrganizationRoleFromMatches();
   const currentOrganizationRole =
     matchedOrganizationRole ??
     (isInOrganizationRoute ? undefined : appCurrentOrganizationRole);
   const primaryNavItems = getPrimaryNavItemsForRole(currentOrganizationRole);
+  const activeOrganizationId =
+    matchedActiveOrganizationId ??
+    (isInOrganizationRoute ? null : (appActiveOrganizationId ?? null));
   const homeTarget =
     currentOrganizationRole !== undefined &&
     isExternalOrganizationRole(currentOrganizationRole)
@@ -71,6 +83,13 @@ export function AppSidebar({
                 <span className="truncate font-medium">Ceird</span>
               </div>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <OrganizationSwitcher
+              activeOrganization={activeOrganization ?? null}
+              activeOrganizationId={activeOrganizationId}
+              organizations={organizations}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

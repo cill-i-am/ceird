@@ -10,6 +10,7 @@ const readySync: ActiveOrganizationSync = {
   required: false,
   targetOrganizationId: null,
 };
+const switchedOrganizationId = decodeOrganizationId("org_next");
 
 describe("members route loader", () => {
   it.each<OrganizationRole>(["owner", "admin"])(
@@ -51,6 +52,28 @@ describe("members route loader", () => {
     },
     10_000
   );
+
+  it("keeps members unavailable after switching to an external organization", async () => {
+    const { loadMembersRouteData } = await import("./_app._org.members");
+    let result: unknown;
+
+    try {
+      loadMembersRouteData({
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: switchedOrganizationId,
+        },
+        currentOrganizationRole: "external",
+      });
+    } catch (error) {
+      result = error;
+    }
+
+    expect(result).toMatchObject({
+      options: { to: "/" },
+    });
+    expect(result).toSatisfy(isRedirect);
+  });
 
   it("short-circuits while active organization sync is pending", async () => {
     const { loadMembersRouteData } = await import("./_app._org.members");
