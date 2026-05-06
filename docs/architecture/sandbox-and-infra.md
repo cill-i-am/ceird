@@ -140,9 +140,9 @@ uses its `rootDir` as the memoization working directory. Deploys run from
 by the Vite resource diff and Cloudflare can keep serving stale browser assets.
 The pinned `@distilled.cloud/cloudflare-rolldown-plugin@0.2.0` and `0.3.0`
 packages are also patched so their Node.js compatibility resolvers create
-`require` lazily; this keeps the Cloudflare Vite build path and Alchemy Worker
-upload path from evaluating `createRequire(import.meta.url)` during Worker
-startup validation.
+`require` lazily in both published `dist` files and the `bun` source export;
+this keeps the Cloudflare Vite build path and Alchemy Worker upload path from
+evaluating `createRequire(import.meta.url)` during Worker startup validation.
 
 Cloudflare Worker source maps are handled by Alchemy's Worker bundling path
 rather than Wrangler config. The pinned `alchemy@2.0.0-beta.28` Worker resource

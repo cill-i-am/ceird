@@ -23,6 +23,12 @@ describe("Cloudflare Worker compatibility", () => {
   });
 
   it("keeps both Cloudflare Rolldown plugin copies patched for Worker startup", () => {
+    const expectedPatches = {
+      "@distilled.cloud/cloudflare-rolldown-plugin@0.2.0":
+        "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.2.0.patch",
+      "@distilled.cloud/cloudflare-rolldown-plugin@0.3.0":
+        "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.3.0.patch",
+    };
     const packageJson = JSON.parse(
       readFileSync(new URL("../../../package.json", import.meta.url), "utf8")
     ) as {
@@ -31,11 +37,19 @@ describe("Cloudflare Worker compatibility", () => {
       };
     };
 
-    expect(packageJson.pnpm?.patchedDependencies).toMatchObject({
-      "@distilled.cloud/cloudflare-rolldown-plugin@0.2.0":
-        "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.2.0.patch",
-      "@distilled.cloud/cloudflare-rolldown-plugin@0.3.0":
-        "patches/@distilled.cloud__cloudflare-rolldown-plugin@0.3.0.patch",
-    });
+    expect(packageJson.pnpm?.patchedDependencies).toMatchObject(
+      expectedPatches
+    );
+
+    for (const patchPath of Object.values(expectedPatches)) {
+      const patch = readFileSync(
+        new URL(`../../../${patchPath}`, import.meta.url),
+        "utf8"
+      );
+
+      expect(patch).toContain("diff --git a/dist/plugins/nodejs-compat.js");
+      expect(patch).toContain("diff --git a/src/plugins/nodejs-compat.ts");
+      expect(patch).toContain("const getRequire = () =>");
+    }
   });
 });

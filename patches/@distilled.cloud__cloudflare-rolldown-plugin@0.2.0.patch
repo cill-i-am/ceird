@@ -24,3 +24,23 @@ index a99cf51c2ae56218eada874d093f146e28616fc7..f3fed93ec708e5f562cc6323a2839bcc
                  },
              },
          },
+diff --git a/src/plugins/nodejs-compat.ts b/src/plugins/nodejs-compat.ts
+index 52db25e83af211f402e68b540de4f4eb17aa6f86..80bbb063a4ca27d03c2a65cc3232760e98c6ee24 100644
+--- a/src/plugins/nodejs-compat.ts
++++ b/src/plugins/nodejs-compat.ts
+@@ -32 +32,5 @@
+-  const require = createRequire(import.meta.url);
++  let require: ReturnType<typeof createRequire> | undefined;
++  const getRequire = () => {
++    require ??= createRequire(import.meta.url);
++    return require;
++  };
+@@ -60,7 +64,7 @@
+         async handler(id, importer, options) {
+           const resolved = await this.resolve(id, importer, options);
+           if (resolved) return resolved;
+-          return { id: require.resolve(id) };
++          return { id: getRequire().resolve(id) };
+         },
+       },
+     },
