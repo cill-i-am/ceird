@@ -137,6 +137,12 @@ builds hidden source maps and sends `.map` files as Worker script modules with
 the `application/source-map` content type during the multipart upload. There is
 no separate `upload_source_maps` flag in our Alchemy resource config.
 
+Browser source-map uploads are handled by the Sentry Vite plugin during the
+production app build. `Deploy Main` forwards the main GitHub environment's
+`SENTRY_AUTH_TOKEN` secret plus `SENTRY_ORG` and `SENTRY_PROJECT` variables to
+`pnpm infra:deploy`; those values are consumed by Vite and are not passed to the
+Cloudflare app Worker as runtime bindings.
+
 The production Hyperdrive configuration sets a conservative origin connection
 limit before deploy-time migrations run. Drizzle migrations depend on that
 Hyperdrive resource and the API Worker depends on the migration run when
@@ -147,26 +153,29 @@ budget is applied and before new API code is uploaded.
 
 `packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
 
-| Variable                                   | Default              | Purpose                                                |
-| ------------------------------------------ | -------------------- | ------------------------------------------------------ |
-| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                             |
-| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                       |
-| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                          |
-| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                          |
-| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                  |
-| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                   |
-| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                             |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections.   |
-| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                              |
-| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                             |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                    |
-| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                               |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                              |
-| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.                 |
-| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                  |
-| `SITE_GEOCODER_MODE`                       | `stub`               | API site geocoding mode, either `stub` or `google`.    |
-| `GOOGLE_MAPS_API_KEY`                      | required for google  | Google geocoding key when `SITE_GEOCODER_MODE=google`. |
-| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.              |
+| Variable                                   | Default              | Purpose                                                                  |
+| ------------------------------------------ | -------------------- | ------------------------------------------------------------------------ |
+| `CEIRD_INFRA_STAGE`                        | `production`         | `preview` or `production`.                                               |
+| `CEIRD_ZONE_NAME`                          | required             | Cloudflare zone.                                                         |
+| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`         | App hostname.                                                            |
+| `CEIRD_API_HOSTNAME`                       | `api.<zone>`         | API hostname.                                                            |
+| `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                                    |
+| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                                     |
+| `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                                               |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections.                     |
+| `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                                                |
+| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                                               |
+| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`               | PlanetScale branch.                                                      |
+| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`            | PlanetScale region slug.                                                 |
+| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`               | PlanetScale cluster size.                                                |
+| `SENTRY_DSN`                               | Ceird API DSN        | Sentry project DSN for the API Worker.                                   |
+| `SENTRY_TRACES_SAMPLE_RATE`                | `1`                  | Sentry trace sample rate from 0 to 1.                                    |
+| `SENTRY_AUTH_TOKEN`                        | optional             | GitHub environment secret for browser source-map upload during deploy.   |
+| `SENTRY_ORG`                               | optional             | GitHub environment variable for browser source-map upload during deploy. |
+| `SENTRY_PROJECT`                           | optional             | GitHub environment variable for browser source-map upload during deploy. |
+| `SITE_GEOCODER_MODE`                       | `stub`               | API site geocoding mode, either `stub` or `google`.                      |
+| `GOOGLE_MAPS_API_KEY`                      | required for google  | Google geocoding key when `SITE_GEOCODER_MODE=google`.                   |
+| `CEIRD_APPLY_MIGRATIONS`                   | `false`              | Run API Drizzle migrations during deploy.                                |
 
 Resource names use `ceird-<stage>-<suffix>`.
 
