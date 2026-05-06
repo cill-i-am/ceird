@@ -15,8 +15,10 @@ export interface AppCloudflareSentryEnv {
 }
 
 export function makeAppCloudflareSentryOptions(
-  env: AppCloudflareSentryEnv
+  env?: AppCloudflareSentryEnv
 ): CloudflareOptions {
+  const sentryEnv = env ?? {};
+
   return {
     beforeSend: (event) => sanitizeSentryEvent(event),
     beforeSendLog: (log) => sanitizeSentryLog(log),
@@ -25,11 +27,13 @@ export function makeAppCloudflareSentryOptions(
     dsn: SENTRY_DSN,
     enableLogs: true,
     environment:
-      normalizeSentryString(env.SENTRY_ENVIRONMENT) ??
-      normalizeSentryString(env.NODE_ENV) ??
+      normalizeSentryString(sentryEnv.SENTRY_ENVIRONMENT) ??
+      normalizeSentryString(sentryEnv.NODE_ENV) ??
       "development",
-    release: normalizeSentryString(env.SENTRY_RELEASE),
-    tracesSampleRate: parseSentrySampleRate(env.SENTRY_TRACES_SAMPLE_RATE),
+    release: normalizeSentryString(sentryEnv.SENTRY_RELEASE),
+    tracesSampleRate: parseSentrySampleRate(
+      sentryEnv.SENTRY_TRACES_SAMPLE_RATE
+    ),
   };
 }
 

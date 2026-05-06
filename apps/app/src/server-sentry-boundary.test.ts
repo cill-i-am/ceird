@@ -1,5 +1,6 @@
 import type * as SentryCloudflare from "@sentry/cloudflare";
 
+import { makeAppCloudflareSentryOptions } from "./sentry-cloudflare";
 import { SENTRY_DSN } from "./sentry-config";
 
 const withSentry = vi.hoisted(() =>
@@ -49,6 +50,15 @@ describe("server sentry boundary", () => {
       enableLogs: true,
       environment: "production",
       release: "release-sha",
+      tracesSampleRate: 1,
+    });
+  });
+
+  it("uses development defaults when the app server has no Cloudflare env", () => {
+    expect(makeAppCloudflareSentryOptions()).toMatchObject({
+      dsn: SENTRY_DSN,
+      enableLogs: true,
+      environment: "development",
       tracesSampleRate: 1,
     });
   });
