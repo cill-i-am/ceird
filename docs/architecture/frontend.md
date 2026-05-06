@@ -78,7 +78,7 @@ dynamic `@sentry/tanstackstart-react` import. Client-side Sentry is guarded
 behind a browser runtime check before the SDK is imported because the router
 module is also used during SSR and Cloudflare Worker startup. Browser
 instrumentation includes TanStack Router tracing, structured logs, and Session
-Replay with text and media masking enabled. Shared DSN, production-safe
+Replay with text and media masking enabled. The app Sentry project DSN, production-safe
 sample-rate defaults, and Sentry URL/query sanitization live in
 `apps/app/src/sentry-config.ts`. The sanitizer redacts sensitive query
 parameters such as reset tokens, OAuth codes, state values, and invitations

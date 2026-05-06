@@ -1,7 +1,7 @@
 import type { BrowserOptions, NodeOptions } from "@sentry/tanstackstart-react";
 
 export const SENTRY_DSN =
-  "https://3917e2b6a24f49a20d625a1e3b2b1674@o368240.ingest.us.sentry.io/4511339367563264";
+  "https://a6db1d95f474e8443fa3435bb95eed76@o368240.ingest.us.sentry.io/4511339382964224";
 
 const SENSITIVE_QUERY_PARAMS = new Set([
   "code",

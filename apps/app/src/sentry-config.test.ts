@@ -7,9 +7,9 @@ import {
 } from "./sentry-config";
 
 describe("sentry configuration", () => {
-  it("uses the configured Ceird Sentry project DSN", () => {
+  it("uses the configured Ceird app Sentry project DSN", () => {
     expect(SENTRY_DSN).toBe(
-      "https://3917e2b6a24f49a20d625a1e3b2b1674@o368240.ingest.us.sentry.io/4511339367563264"
+      "https://a6db1d95f474e8443fa3435bb95eed76@o368240.ingest.us.sentry.io/4511339382964224"
     );
   });
 
