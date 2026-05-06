@@ -8,6 +8,7 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 import { applyCloudflareCreateRequireRuntimeFallback } from "./src/lib/cloudflare-create-require-runtime";
+import { tanstackStartServerEntry } from "./src/lib/tanstack-start-config";
 
 const serverApiOrigin =
   typeof process.env.API_ORIGIN === "string" ? process.env.API_ORIGIN : null;
@@ -57,7 +58,7 @@ const config = defineConfig({
   plugins: [
     tanstackStart({
       server: {
-        entry: "./src/server.ts",
+        entry: tanstackStartServerEntry,
       },
     }),
     devtools(),

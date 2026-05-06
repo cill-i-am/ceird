@@ -104,10 +104,12 @@ org, or project value is missing, `apps/app/vite.config.ts` disables browser
 source-map uploads while leaving runtime Sentry instrumentation enabled.
 
 Server-side app requests use the explicit TanStack Start server entry at
-`apps/app/src/server.ts`. The Cloudflare app Worker uses the Cloudflare Sentry
-SDK wrapper with the same sanitizers as the browser path, plus runtime
-`SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and `SENTRY_TRACES_SAMPLE_RATE`
-bindings from infrastructure. The server entry also applies
+`apps/app/src/server.ts`, configured in `apps/app/vite.config.ts` as
+`./server.ts` relative to the app `src` directory. The Cloudflare app Worker
+uses the Cloudflare Sentry SDK wrapper with the same sanitizers as the browser
+path, plus runtime `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, and
+`SENTRY_TRACES_SAMPLE_RATE` bindings from infrastructure. The server entry also
+applies
 `Document-Policy: js-profiling`, which is required by Browser Profiling in
 Chromium-based browsers. The Worker intentionally does not load the Node Sentry
 SDK during startup; Cloudflare observability remains enabled from infrastructure
