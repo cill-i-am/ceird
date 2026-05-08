@@ -74,7 +74,8 @@ describe("sites route loader", () => {
 
       mockedGetCurrentServerSiteOptions.mockResolvedValue(siteOptions);
 
-      const { loadSitesRouteData } = await import("./_app._org.sites");
+      const { loadSitesRouteData } =
+        await import("#/features/sites/sites-route-loader");
 
       await expect(
         loadSitesRouteData({
@@ -107,7 +108,8 @@ describe("sites route loader", () => {
     { timeout: 10_000 },
     async () => {
       const { isRedirect } = await import("@tanstack/react-router");
-      const { loadSitesRouteData } = await import("./_app._org.sites");
+      const { loadSitesRouteData } =
+        await import("#/features/sites/sites-route-loader");
       const result = loadSitesRouteData({
         activeOrganizationId: organizationId,
         activeOrganizationSync: {

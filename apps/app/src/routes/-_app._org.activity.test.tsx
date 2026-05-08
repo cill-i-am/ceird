@@ -46,8 +46,9 @@ describe("activity route loader", () => {
       mockedListCurrentServerOrganizationActivity.mockResolvedValue(activity);
       mockedGetCurrentServerJobMemberOptions.mockResolvedValue(options);
 
-      const { decodeActivitySearch, loadActivityRouteData } =
-        await import("./_app._org.activity");
+      const { decodeActivitySearch } = await import("./_app._org.activity");
+      const { loadActivityRouteData } =
+        await import("#/features/activity/activity-route-loader");
       const search = decodeActivitySearch({
         actorUserId: "user_taylor",
         eventType: "job_created",
@@ -85,7 +86,8 @@ describe("activity route loader", () => {
       timeout: 10_000,
     },
     async (role) => {
-      const { loadActivityRouteData } = await import("./_app._org.activity");
+      const { loadActivityRouteData } =
+        await import("#/features/activity/activity-route-loader");
       const result = loadActivityRouteData(
         {
           activeOrganizationId: organizationId,
@@ -115,7 +117,8 @@ describe("activity route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { loadActivityRouteData } = await import("./_app._org.activity");
+      const { loadActivityRouteData } =
+        await import("#/features/activity/activity-route-loader");
 
       await expect(
         loadActivityRouteData(

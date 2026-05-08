@@ -1,39 +1,17 @@
-import { ParseResult, Schema } from "effect";
-
 export const JOBS_VIEW_MODES = ["list", "map"] as const;
 
 export type JobsViewMode = (typeof JOBS_VIEW_MODES)[number];
 
-const RawJobsSearch = Schema.Struct({
-  view: Schema.optional(Schema.Unknown),
-});
-
-const JobsSearch = Schema.transform(
-  RawJobsSearch,
-  Schema.Struct({
-    view: Schema.optional(Schema.Literal(...JOBS_VIEW_MODES)),
-  }),
-  {
-    strict: true,
-    decode: ({ view }) => {
-      if (view === "list") {
-        return { view: "list" as const };
-      }
-
-      if (view === "map") {
-        return { view: "map" as const };
-      }
-
-      return { view: undefined };
-    },
-    encode: (search) => search,
-  }
-);
-
-export type JobsSearch = typeof JobsSearch.Type;
+export interface JobsSearch {
+  readonly view?: JobsViewMode | undefined;
+}
 
 export function decodeJobsSearch(input: unknown): JobsSearch {
-  return ParseResult.decodeUnknownSync(JobsSearch)(input);
+  const view = readSearchParam(input, "view");
+
+  return {
+    view: isJobsViewMode(view) ? view : undefined,
+  };
 }
 
 export function isJobsMapViewSearch(search: unknown) {
@@ -42,4 +20,18 @@ export function isJobsMapViewSearch(search: unknown) {
   }
 
   return decodeJobsSearch(search).view === "map";
+}
+
+function readSearchParam(input: unknown, key: string) {
+  if (typeof input !== "object" || input === null) {
+    return;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+
+  return typeof value === "string" ? value : undefined;
+}
+
+function isJobsViewMode(value: string | undefined): value is JobsViewMode {
+  return value === "list" || value === "map";
 }

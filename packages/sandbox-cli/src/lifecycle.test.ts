@@ -102,6 +102,7 @@ describe("bringSandboxUp()", () => {
       bringSandboxUp({
         repoRoot: "/Users/me/ceird",
         worktreePath: "/Users/me/ceird/.worktrees/agent-one",
+        branchName: "codex/agent-one",
         explicitSandboxName: undefined,
         now: "2026-04-01T12:00:00.000Z",
         takenNames: new Set(),
@@ -141,6 +142,7 @@ describe("bringSandboxUp()", () => {
       bringSandboxUp({
         repoRoot: "/Users/me/ceird",
         worktreePath: "/Users/me/ceird/.worktrees/agent-one",
+        branchName: "codex/agent-one",
         explicitSandboxName: undefined,
         now: "2026-04-01T12:05:00.000Z",
         takenNames: new Set(),
@@ -386,6 +388,55 @@ describe("bringSandboxUp()", () => {
     expect(events).toStrictEqual([]);
   }, 10_000);
 
+  it("requires an explicit sandbox name when HEAD is detached", async () => {
+    const events: string[] = [];
+
+    const result = await Effect.runPromise(
+      bringSandboxUp(
+        makeBasicBringSandboxUpOptions({
+          branchName: undefined,
+          explicitSandboxName: undefined,
+          allocatePorts: () =>
+            Effect.sync(() => {
+              events.push("ports");
+              return {
+                app: 4308,
+                api: 4309,
+                postgres: 5443,
+              };
+            }),
+          determineAliasesHealthy: () =>
+            Effect.sync(() => {
+              events.push("aliases");
+              return true;
+            }),
+          persist: () =>
+            Effect.sync(() => {
+              events.push("persist");
+            }),
+          startComposeProject: () =>
+            Effect.sync(() => {
+              events.push("compose");
+            }),
+          migrateDatabase: () =>
+            Effect.sync(() => {
+              events.push("migrations");
+            }),
+        })
+      ).pipe(Effect.either)
+    );
+
+    // eslint-disable-next-line vitest/prefer-strict-boolean-matchers, vitest/prefer-to-be-truthy
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isRight(result)) {
+      throw new Error("Expected detached HEAD sandbox startup to fail");
+    }
+    expect(result.left).toBeInstanceOf(SandboxPreflightError);
+    expect(result.left.message).toMatch(/detached HEAD/);
+    expect(result.left.message).toMatch(/--name/);
+    expect(events).toStrictEqual([]);
+  }, 10_000);
+
   it("preserves sandbox conflict context when the requested name is already taken", async () => {
     const result = await Effect.runPromise(
       bringSandboxUp({
@@ -433,16 +484,21 @@ describe("bringSandboxUp()", () => {
     expect(result.left.sandboxName).toBe("agent-one");
   }, 10_000);
 
-  it("derives a unique name when another worktree already uses the same basename", async () => {
+  it("derives a unique name when another worktree already uses the same branch name", async () => {
     const result = await Effect.runPromise(
       bringSandboxUp(
         makeBasicBringSandboxUpOptions({
-          takenNames: new Set([validateSandboxName("ceird")]),
+          branchName: "codex/add-sandbox-aware-tests",
+          takenNames: new Set([
+            validateSandboxName("codex-add-sandbox-aware-tests"),
+          ]),
         })
       )
     );
 
-    expect(result.record.sandboxName).toMatch(/^ceird-[a-f0-9]{6}$/);
+    expect(result.record.sandboxName).toMatch(
+      /^codex-add-sandbox-aware-tests-[a-f0-9]{6}$/
+    );
     expect(result.urls.postgres).toBe(
       "postgresql://postgres:postgres@127.0.0.1:5443/ceird"
     );

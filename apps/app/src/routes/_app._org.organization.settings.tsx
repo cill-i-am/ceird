@@ -1,10 +1,10 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 
-import { getCurrentServerLabels } from "#/features/api/app-api-server";
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import { OrganizationSettingsPage } from "#/features/organizations/organization-settings-page";
+import { loadSettingsRoute } from "#/features/organizations/organization-settings-route-loader";
 
 export const Route = createFileRoute("/_app/_org/organization/settings")({
   staticData: {
@@ -13,6 +13,7 @@ export const Route = createFileRoute("/_app/_org/organization/settings")({
       to: "/organization/settings",
     },
   },
+  codeSplitGroupings: [["loader", "component"]],
   beforeLoad: ({ context }) => assertSettingsRouteAccess(context),
   loader: ({ context }) => loadSettingsRoute(context),
   component: SettingsRoute,
@@ -30,18 +31,6 @@ export function assertSettingsRouteAccess(context: SettingsRouteContext) {
   }
 
   assertOrganizationAdministrationRouteContext(context);
-}
-
-export function loadSettingsRoute(context: SettingsRouteContext) {
-  if (context.activeOrganizationSync.required) {
-    return {
-      organizationLabels: [],
-    };
-  }
-
-  return getCurrentServerLabels().then((labels) => ({
-    organizationLabels: labels.labels,
-  }));
 }
 
 function SettingsRoute() {

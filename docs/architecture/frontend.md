@@ -40,6 +40,20 @@ Current visible routes:
 typed route registration. Breadcrumb labels are declared through route
 `staticData`.
 
+Domain-heavy routes keep the route file as the lightweight routing boundary.
+When a loader needs API contracts, server helpers, Effect schemas, or other
+large feature dependencies, put the loader implementation in the owning
+`features/*/*-route-loader.ts` module, statically import that module from the
+route file, and group the route `loader` and `component` with TanStack Router
+`codeSplitGroupings`. Do not nest a dynamic `import()` inside the loader; that
+adds another chunk fetch before the loader can start its API work. Canvas and
+map-heavy feature views should also be loaded behind feature-level lazy
+boundaries so the authenticated shell does not pull map libraries or
+visualization code into the initial chunk.
+Route `validateSearch` functions run in the route manifest, so they should stay
+small and avoid importing domain API contracts or boundary schemas when a local
+query-string parser can preserve the same behavior.
+
 ## Application Shell
 
 `apps/app/src/routes/__root.tsx` owns the document shell. It injects the theme

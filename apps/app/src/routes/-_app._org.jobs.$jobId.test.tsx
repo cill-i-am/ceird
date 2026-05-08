@@ -87,7 +87,7 @@ describe("job detail route", () => {
       mockedGetCurrentServerJobDetail.mockResolvedValue(detail);
 
       const { loadJobDetailRouteData } =
-        await import("./_app._org.jobs.$jobId");
+        await import("#/features/jobs/jobs-detail-route-loader");
 
       await expect(loadJobDetailRouteData(workItemId)).resolves.toStrictEqual(
         detail
@@ -103,7 +103,7 @@ describe("job detail route", () => {
     },
     async () => {
       const { loadJobDetailRouteData } =
-        await import("./_app._org.jobs.$jobId");
+        await import("#/features/jobs/jobs-detail-route-loader");
 
       expect(() =>
         loadJobDetailRouteData("not-a-job-id" as WorkItemIdType)
@@ -119,7 +119,7 @@ describe("job detail route", () => {
     },
     async () => {
       const { loadJobDetailRouteData } =
-        await import("./_app._org.jobs.$jobId");
+        await import("#/features/jobs/jobs-detail-route-loader");
 
       await expect(
         loadJobDetailRouteData(workItemId, {

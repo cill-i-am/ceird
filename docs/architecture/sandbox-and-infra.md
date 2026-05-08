@@ -26,8 +26,10 @@ or Postgres URL.
 
 `packages/sandbox-cli/src/lifecycle.ts` coordinates startup:
 
-1. Derive or validate the sandbox name. Inferred names prefer the current Git
-   branch, then fall back to the worktree path for detached checkouts.
+1. Derive or validate the sandbox name. Inferred names come from the current
+   Git branch. Detached checkouts must pass `--name`; startup fails before any
+   Docker or Portless work when neither a branch nor an explicit name is
+   available.
 2. Load `.env`, `.env.local`, and process environment values.
 3. Resolve Docker runtime assets.
 4. Allocate app, API, and Postgres ports.
@@ -49,7 +51,9 @@ Host-side API integration tests do not start Docker by themselves. The root
 `pnpm test:with-sandbox` and `pnpm api:test:with-sandbox` wrappers start the
 current worktree sandbox, read `pnpm sandbox:url -- --format json`, export the
 sandbox Postgres URL as `API_TEST_DATABASE_URL`, and then run the requested test
-command.
+command. Browser E2E runs against an existing sandbox should use the canonical
+HTTPS app/API URLs from `pnpm sandbox:url`, not the loopback fallback URLs, so
+auth cookies and origin checks match the sandbox hostnames.
 
 Use those wrappers when an agent or developer needs database-backed API
 integration coverage from the host. Plain `pnpm test` remains available for

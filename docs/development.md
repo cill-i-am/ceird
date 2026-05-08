@@ -41,11 +41,17 @@ pnpm sandbox:up
 pnpm sandbox:url
 ```
 
-The sandbox command derives a name from the current Git branch when one is
-available, falling back to the current worktree path for detached checkouts
-unless `--name` is supplied. It allocates app/API/Postgres ports, starts Docker
-Compose, applies API migrations, waits for health checks, persists a sandbox
-record, and prints URLs.
+The sandbox command derives a name from the current Git branch. If the worktree
+is detached, create or switch to a branch first, or provide an explicit name:
+
+```bash
+pnpm sandbox:up -- --name codex-my-task
+```
+
+Detached checkouts without `--name` fail before Docker or Portless work starts.
+Once named, the sandbox allocates app/API/Postgres ports, starts Docker Compose,
+applies API migrations, waits for health checks, persists a sandbox record, and
+prints URLs.
 
 Useful commands:
 
@@ -103,13 +109,19 @@ pnpm --filter @ceird/sandbox-cli test
 Run Playwright E2E tests against the sandbox:
 
 ```bash
-pnpm sandbox:up
+SANDBOX_NAME=codex-my-task
+pnpm sandbox:up -- --name $SANDBOX_NAME
+PLAYWRIGHT_USE_EXTERNAL_SERVER=1 \
+PLAYWRIGHT_BASE_URL=https://$SANDBOX_NAME.app.ceird.localhost:1355 \
+PLAYWRIGHT_API_URL=https://$SANDBOX_NAME.api.ceird.localhost:1355 \
 pnpm --filter app e2e
 ```
 
 The sandbox and Playwright web server set `AUTH_RATE_LIMIT_ENABLED=false` for
 automation so repeated auth tests do not lock themselves out while still using
-the real Better Auth browser workflow.
+the real Better Auth browser workflow. Prefer the canonical sandbox HTTPS app
+and API URLs for E2E; loopback fallback URLs are useful for manual debugging but
+can fail auth cookie and origin checks.
 
 ## Type Checking, Linting, And Formatting
 

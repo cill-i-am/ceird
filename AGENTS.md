@@ -37,11 +37,14 @@ historical plans as decision context only.
 
 When working from a linked git worktree, prefer the sandbox workflow over the host-level dev scripts.
 
+- Before starting a sandbox, check the current branch. If the worktree is detached, create or switch to a descriptive `codex/<task-slug>` branch before running sandbox commands. If creating a branch would be inappropriate for the task, pass an explicit sandbox name with `--name` instead of letting the CLI fall back to the worktree basename.
+- Sandboxes should have an intentional, task-specific identity. Prefer branch-derived names such as `<branch-slug>.app.ceird.localhost`; avoid generic names like `ceird.app.ceird.localhost` for agent work unless that is explicitly requested.
 - Use `pnpm sandbox:up` to boot app, api, and Postgres for the current worktree.
 - Use `pnpm sandbox:status` or `pnpm sandbox:url` to discover the current worktree's endpoints.
 - Use `pnpm sandbox:logs` when debugging sandboxed services.
 - Use `pnpm sandbox:down` when you are finished with that worktree's sandbox.
 - Prefer the sandbox URLs and `portless` aliases for worktree development. Fall back to the loopback URLs printed by the CLI when aliases are unavailable.
+- When running Playwright against an existing sandbox, set `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` and use the canonical sandbox HTTPS `app url` and `api url` from `pnpm sandbox:url`; avoid the loopback fallback URLs for E2E because auth cookies and origin checks depend on the sandbox hostnames.
 - Do not default to `pnpm dev` inside linked worktrees unless the user explicitly asks for the non-sandbox flow.
 
 ## Linear Issues And Pull Requests

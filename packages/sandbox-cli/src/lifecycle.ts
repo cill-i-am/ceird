@@ -18,8 +18,10 @@ import type {
 } from "@ceird/sandbox-core/node";
 import { Array as EffectArray, Effect } from "effect";
 
-import type { SandboxPreflightError } from "./sandbox-preflight-error.js";
-import { toSandboxPreflightError } from "./sandbox-preflight-error.js";
+import {
+  SandboxPreflightError,
+  toSandboxPreflightError,
+} from "./sandbox-preflight-error.js";
 import {
   noopSandboxStartupProgressReporter,
   toSandboxStartupProgressEvents,
@@ -79,6 +81,18 @@ export const bringSandboxUp = Effect.fn("SandboxLifecycle.bringSandboxUp")(
       status: SandboxStartupProgressEvent["status"],
       detail?: string
     ) => reportProgress({ step, status, detail });
+    const hasResolvedBranch =
+      options.branchName !== undefined && options.branchName.trim().length > 0;
+
+    if (options.explicitSandboxName === undefined && !hasResolvedBranch) {
+      return yield* Effect.fail(
+        new SandboxPreflightError({
+          message:
+            "Cannot infer a sandbox name from detached HEAD. Create or switch to a branch, for example `git switch -c codex/<task-slug>`, or rerun with `pnpm sandbox:up -- --name <sandbox-name>`.",
+        })
+      );
+    }
+
     const takenSlugs = new Set(
       EffectArray.map(EffectArray.fromIterable(options.takenNames), (name) =>
         validateHostnameSlug(name)
@@ -87,7 +101,7 @@ export const bringSandboxUp = Effect.fn("SandboxLifecycle.bringSandboxUp")(
     const inferredIdentity = deriveSandboxIdentity({
       repoRoot: options.repoRoot,
       worktreePath: options.worktreePath,
-      preferredName: options.branchName,
+      ...(hasResolvedBranch ? { preferredName: options.branchName } : {}),
       takenSlugs,
     });
     const sandboxName =
