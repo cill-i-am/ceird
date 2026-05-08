@@ -32,7 +32,9 @@ pnpm sandbox:url
 
 Use the sandbox workflow when developing from linked git worktrees. It starts
 the app, API, and Postgres together, applies API migrations, and reports stable
-URLs when Portless aliases are healthy.
+URLs when Portless aliases are healthy. `sandbox:up` derives unnamed sandboxes
+from the current Git branch; detached checkouts must first create a branch or
+pass `--name`.
 
 ## Workspace Map
 
@@ -123,7 +125,11 @@ pnpm format
 For UI workflows, use the sandbox and run the affected Playwright tests:
 
 ```bash
-pnpm sandbox:up
+SANDBOX_NAME=codex-my-task
+pnpm sandbox:up -- --name $SANDBOX_NAME
+PLAYWRIGHT_USE_EXTERNAL_SERVER=1 \
+PLAYWRIGHT_BASE_URL=https://$SANDBOX_NAME.app.ceird.localhost:1355 \
+PLAYWRIGHT_API_URL=https://$SANDBOX_NAME.api.ceird.localhost:1355 \
 pnpm --filter app e2e
 ```
 

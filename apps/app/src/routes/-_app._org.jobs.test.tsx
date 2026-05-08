@@ -89,7 +89,8 @@ describe("jobs route loader", () => {
 
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
       mockedGetCurrentServerJobOptions.mockResolvedValue(options);
-      const { loadJobsRouteData } = await import("./_app._org.jobs");
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
 
       await expect(
         loadJobsRouteData({
@@ -122,7 +123,8 @@ describe("jobs route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { loadJobsRouteData } = await import("./_app._org.jobs");
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
 
       await expect(
         loadJobsRouteData({
@@ -168,7 +170,8 @@ describe("jobs route loader", () => {
       };
 
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
-      const { loadJobsRouteData } = await import("./_app._org.jobs");
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
 
       await expect(
         loadJobsRouteData({
@@ -211,7 +214,8 @@ describe("jobs route loader", () => {
       };
 
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
-      const { loadJobsRouteData } = await import("./_app._org.jobs");
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
 
       await expect(
         loadJobsRouteData({
@@ -267,7 +271,8 @@ describe("jobs route loader", () => {
 
       mockedListAllCurrentServerJobs.mockResolvedValue(list);
       mockedGetCurrentServerJobDetail.mockResolvedValue(detail);
-      const { loadJobsRouteData } = await import("./_app._org.jobs");
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
 
       await expect(
         loadJobsRouteData({

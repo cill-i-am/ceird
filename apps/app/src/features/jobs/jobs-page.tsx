@@ -80,7 +80,6 @@ import {
   JOB_PRIORITY_LABELS as PRIORITY_LABELS,
   JOB_STATUS_LABELS as STATUS_LABELS,
 } from "./job-display";
-import { JobsCoverageMap } from "./jobs-coverage-map";
 import {
   buildJobSavedViews,
   findMatchingJobSavedView,
@@ -114,6 +113,12 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Completed", value: "completed" },
   { label: "Canceled", value: "canceled" },
 ] as const;
+
+const JobsCoverageMap = React.lazy(async () => {
+  const module = await import("./jobs-coverage-map");
+
+  return { default: module.JobsCoverageMap };
+});
 
 export function JobsPage({
   children,
@@ -420,12 +425,23 @@ export function JobsPage({
         <JobsListView jobs={jobs} canCreateJobs={canCreateJobs} />
       ) : (
         <section data-testid="jobs-coverage-panel" className="min-h-0">
-          <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
+          <React.Suspense fallback={<JobsCoverageMapFallback />}>
+            <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
+          </React.Suspense>
         </section>
       )}
 
       {children}
     </main>
+  );
+}
+
+function JobsCoverageMapFallback() {
+  return (
+    <div
+      aria-label="Loading map view"
+      className="min-h-[420px] rounded-2xl border bg-muted/10"
+    />
   );
 }
 

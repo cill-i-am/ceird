@@ -1,69 +1,11 @@
-import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import type {
-  JobMemberOptionsResponse,
-  OrganizationActivityListResponse,
-} from "@ceird/jobs-core";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import {
-  decodeActivitySearch,
-  toOrganizationActivityQuery,
-} from "#/features/activity/activity-search";
+import { loadActivityRouteData } from "#/features/activity/activity-route-loader";
+import { decodeActivitySearch } from "#/features/activity/activity-search";
 import type { ActivitySearch } from "#/features/activity/activity-search";
 import { OrganizationActivityPage } from "#/features/activity/organization-activity-page";
-import {
-  getCurrentServerJobMemberOptions,
-  listCurrentServerOrganizationActivity,
-} from "#/features/jobs/jobs-server";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
-import { assertOrganizationAdministrationRole } from "#/features/organizations/organization-access";
 
 export { decodeActivitySearch };
-
-const EMPTY_ACTIVITY: OrganizationActivityListResponse = {
-  items: [],
-  nextCursor: undefined,
-};
-
-const EMPTY_OPTIONS: JobMemberOptionsResponse = {
-  members: [],
-};
-
-interface ActivityRouteOrganizationAccess {
-  readonly activeOrganizationId: OrganizationId;
-  readonly activeOrganizationSync: ActiveOrganizationSync;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-}
-
-export async function loadActivityRouteData(
-  context: ActivityRouteOrganizationAccess,
-  search: ActivitySearch
-) {
-  if (context.activeOrganizationSync.required) {
-    return {
-      activity: EMPTY_ACTIVITY,
-      options: EMPTY_OPTIONS,
-    };
-  }
-
-  const role = context.currentOrganizationRole;
-
-  if (role === undefined) {
-    throw redirect({ to: "/" });
-  }
-
-  assertOrganizationAdministrationRole({ role });
-
-  const [activity, options] = await Promise.all([
-    listCurrentServerOrganizationActivity(toOrganizationActivityQuery(search)),
-    getCurrentServerJobMemberOptions(),
-  ]);
-
-  return {
-    activity,
-    options,
-  };
-}
 
 export function getActivityRouteLoaderDeps(search: ActivitySearch) {
   return {
@@ -82,6 +24,7 @@ export const Route = createFileRoute("/_app/_org/activity")({
       to: "/activity",
     },
   },
+  codeSplitGroupings: [["loader", "component"]],
   validateSearch: decodeActivitySearch,
   loaderDeps: ({ search }) => getActivityRouteLoaderDeps(search),
   loader: ({ context, deps }) => loadActivityRouteData(context, deps),

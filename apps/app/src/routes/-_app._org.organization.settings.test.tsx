@@ -42,7 +42,7 @@ describe("settings route loader", () => {
     },
     async (role) => {
       const { loadSettingsRoute } =
-        await import("./_app._org.organization.settings");
+        await import("#/features/organizations/organization-settings-route-loader");
       const { assertSettingsRouteAccess } =
         await import("./_app._org.organization.settings");
       const context = {
@@ -159,7 +159,7 @@ describe("settings route loader", () => {
     },
     async () => {
       const { loadSettingsRoute } =
-        await import("./_app._org.organization.settings");
+        await import("#/features/organizations/organization-settings-route-loader");
       const { assertSettingsRouteAccess } =
         await import("./_app._org.organization.settings");
       const context = {

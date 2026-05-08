@@ -1,0 +1,72 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+const APP_SRC_DIR = resolve(process.cwd(), "src");
+
+const DOMAIN_HEAVY_ROUTE_FILES = [
+  "routes/_app._org.activity.tsx",
+  "routes/_app._org.jobs.$jobId.tsx",
+  "routes/_app._org.jobs.tsx",
+  "routes/_app._org.organization.settings.tsx",
+  "routes/_app._org.sites.$siteId.tsx",
+  "routes/_app._org.sites.tsx",
+] as const;
+
+const ROUTE_SEARCH_FILES = [
+  "features/activity/activity-search.ts",
+  "features/jobs/jobs-search.ts",
+] as const;
+
+describe("app route code splitting", () => {
+  it("keeps domain-heavy route loaders with their lazy route chunks", () => {
+    const unsplitRouteFiles = DOMAIN_HEAVY_ROUTE_FILES.filter((filePath) => {
+      const source = readAppSource(filePath);
+
+      return !hasLoaderComponentCodeSplitGrouping(source);
+    });
+
+    expect(unsplitRouteFiles).toStrictEqual([]);
+  });
+
+  it("does not add a nested dynamic import before route loaders run", () => {
+    for (const filePath of DOMAIN_HEAVY_ROUTE_FILES) {
+      const source = readAppSource(filePath);
+
+      expect(source).not.toMatch(
+        /await\s+import\(\s*["'][^"']*route-loader["']\s*\)/u
+      );
+    }
+  });
+
+  it("keeps route search decoders free of boundary schema imports", () => {
+    for (const filePath of ROUTE_SEARCH_FILES) {
+      const source = readAppSource(filePath);
+
+      expect(source).not.toMatch(/from\s+["']effect["']/u);
+      expect(source).not.toMatch(
+        /import\s+\{[^}]*\}\s+from\s+["']@ceird\/jobs-core["']/u
+      );
+    }
+  });
+
+  it("loads the jobs coverage map only when the map view renders", () => {
+    const source = readAppSource("features/jobs/jobs-page.tsx");
+
+    expect(source).not.toMatch(
+      /import\s+\{\s*JobsCoverageMap\s*\}\s+from\s+["']\.\/jobs-coverage-map["']/u
+    );
+    expect(source).toContain('import("./jobs-coverage-map")');
+  });
+});
+
+function readAppSource(filePath: string) {
+  return readFileSync(resolve(APP_SRC_DIR, filePath), "utf8");
+}
+
+function hasLoaderComponentCodeSplitGrouping(source: string) {
+  return /codeSplitGroupings:\s*\[\s*\[\s*["']loader["']\s*,\s*["']component["']\s*\]\s*\]/u.test(
+    source
+  );
+}

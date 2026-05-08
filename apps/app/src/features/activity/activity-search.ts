@@ -1,15 +1,9 @@
-import {
-  IsoDateString,
-  JobActivityEventTypeSchema,
-  UserId,
-} from "@ceird/jobs-core";
 import type {
   IsoDateStringType,
   JobActivityEventType,
   OrganizationActivityQuery,
   UserIdType,
 } from "@ceird/jobs-core";
-import { ParseResult } from "effect";
 
 export interface ActivitySearch {
   readonly actorUserId?: UserIdType | undefined;
@@ -18,6 +12,24 @@ export interface ActivitySearch {
   readonly jobTitle?: string | undefined;
   readonly toDate?: IsoDateStringType | undefined;
 }
+
+const ACTIVITY_EVENT_TYPE_LOOKUP = {
+  assignee_changed: true,
+  blocked_reason_changed: true,
+  contact_changed: true,
+  coordinator_changed: true,
+  cost_line_added: true,
+  job_created: true,
+  job_reopened: true,
+  label_added: true,
+  label_removed: true,
+  priority_changed: true,
+  site_changed: true,
+  status_changed: true,
+  visit_logged: true,
+} as const satisfies Record<JobActivityEventType, true>;
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 export function decodeActivitySearch(input: Record<string, unknown>) {
   return {
@@ -41,22 +53,28 @@ export function toOrganizationActivityQuery(
   };
 }
 
-const decodeUserId = ParseResult.decodeUnknownSync(UserId);
-const decodeEventType = ParseResult.decodeUnknownSync(
-  JobActivityEventTypeSchema
-);
-const decodeIsoDate = ParseResult.decodeUnknownSync(IsoDateString);
-
 export function decodeActivityActorUserId(value: unknown) {
-  return decodeOptionalString(value, decodeUserId);
+  if (typeof value !== "string" || value.length === 0) {
+    return;
+  }
+
+  return value as UserIdType;
 }
 
 export function decodeActivityEventType(value: unknown) {
-  return decodeOptionalString(value, decodeEventType);
+  if (typeof value !== "string" || !isActivityEventType(value)) {
+    return;
+  }
+
+  return value;
 }
 
 export function decodeActivityIsoDate(value: unknown) {
-  return decodeOptionalString(value, decodeIsoDate);
+  if (typeof value !== "string" || !isIsoDateString(value)) {
+    return;
+  }
+
+  return value as IsoDateStringType;
 }
 
 function decodeJobTitle(value: unknown) {
@@ -69,17 +87,22 @@ function decodeJobTitle(value: unknown) {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function decodeOptionalString<Value>(
-  value: unknown,
-  decode: (value: string) => Value
-): Value | undefined {
-  if (typeof value !== "string" || value.length === 0) {
-    return;
+function isIsoDateString(value: string): boolean {
+  if (!ISO_DATE_PATTERN.test(value)) {
+    return false;
   }
 
-  try {
-    return decode(value);
-  } catch {
-    return undefined;
-  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
+}
+
+function isActivityEventType(value: string): value is JobActivityEventType {
+  return value in ACTIVITY_EVENT_TYPE_LOOKUP;
 }

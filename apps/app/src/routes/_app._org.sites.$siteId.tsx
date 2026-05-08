@@ -1,17 +1,10 @@
-import { SiteId } from "@ceird/sites-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { Schema } from "effect";
 
+import { loadSiteDetailRouteData } from "#/features/sites/sites-detail-route-loader";
 import { SitesDetailSheet } from "#/features/sites/sites-detail-sheet";
 
-const decodeSiteId: (siteId: unknown) => SiteIdType =
-  Schema.decodeUnknownSync(SiteId);
 const sitesRouteApi = getRouteApi("/_app/_org/sites");
-
-export function loadSiteDetailRouteData(siteId: unknown): SiteIdType {
-  return decodeSiteId(siteId);
-}
 
 export const Route = createFileRoute("/_app/_org/sites/$siteId")({
   staticData: {
@@ -19,10 +12,8 @@ export const Route = createFileRoute("/_app/_org/sites/$siteId")({
       label: "Site",
     },
   },
-  loader: ({ params }) => {
-    loadSiteDetailRouteData(params.siteId);
-    return params.siteId;
-  },
+  codeSplitGroupings: [["loader", "component"]],
+  loader: ({ params }): SiteIdType => loadSiteDetailRouteData(params.siteId),
   component: SitesDetailRoute,
 });
 
