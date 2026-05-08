@@ -36,6 +36,12 @@ describe("api origin resolution", () => {
     );
   }, 1000);
 
+  it("maps the local app origin to the matching local API origin", () => {
+    expect(resolveApiOrigin("http://app.localhost:1337")).toBe(
+      "http://api.localhost:1337"
+    );
+  }, 1000);
+
   it("returns undefined when no origin is available", () => {
     expect(resolveApiOrigin()).toBeUndefined();
   }, 1000);

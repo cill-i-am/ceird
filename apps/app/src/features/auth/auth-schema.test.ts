@@ -127,6 +127,12 @@ describe("auth base URL resolution", () => {
     );
   }, 1000);
 
+  it("maps the local app origin to the matching local API auth origin", () => {
+    expect(resolveAuthBaseURL("http://app.localhost:1337")).toBe(
+      "http://api.localhost:1337/api/auth"
+    );
+  }, 1000);
+
   it("returns undefined when no origin is available", () => {
     expect(resolveAuthBaseURL()).toBeUndefined();
   }, 1000);

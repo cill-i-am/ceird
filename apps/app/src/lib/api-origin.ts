@@ -25,6 +25,11 @@ function mapAppOriginToApiOrigin(url: URL): URL | undefined {
     return mapped;
   }
 
+  if (mapped.hostname === "app.localhost") {
+    mapped.hostname = "api.localhost";
+    return mapped;
+  }
+
   if (
     (mapped.hostname === "127.0.0.1" || mapped.hostname === "localhost") &&
     LOCAL_APP_PORTS.has(mapped.port)
