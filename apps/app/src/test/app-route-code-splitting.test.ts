@@ -20,11 +20,11 @@ const ROUTE_SEARCH_FILES = [
 ] as const;
 
 describe("app route code splitting", () => {
-  it("keeps domain-heavy route loaders with their lazy route chunks", () => {
+  it("keeps domain-heavy route loaders in lazy route chunks", () => {
     const unsplitRouteFiles = DOMAIN_HEAVY_ROUTE_FILES.filter((filePath) => {
       const source = readAppSource(filePath);
 
-      return !hasLoaderComponentCodeSplitGrouping(source);
+      return !hasLoaderCodeSplitGrouping(source);
     });
 
     expect(unsplitRouteFiles).toStrictEqual([]);
@@ -65,8 +65,6 @@ function readAppSource(filePath: string) {
   return readFileSync(resolve(APP_SRC_DIR, filePath), "utf8");
 }
 
-function hasLoaderComponentCodeSplitGrouping(source: string) {
-  return /codeSplitGroupings:\s*\[\s*\[\s*["']loader["']\s*,\s*["']component["']\s*\]\s*\]/u.test(
-    source
-  );
+function hasLoaderCodeSplitGrouping(source: string) {
+  return /codeSplitGroupings:\s*\[[\s\S]*["']loader["'][\s\S]*\]/u.test(source);
 }

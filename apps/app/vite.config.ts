@@ -26,6 +26,16 @@ const config = defineConfig({
     __SERVER_API_ORIGIN__: JSON.stringify(serverApiOrigin),
     "import.meta.env.VITE_API_ORIGIN": JSON.stringify(clientApiOrigin),
   },
+  optimizeDeps: {
+    include: [
+      "@tanstack/history",
+      "@tanstack/router-core",
+      "@tanstack/router-core/ssr/client",
+      "@tanstack/router-core/ssr/server",
+      "h3-v2",
+      "seroval",
+    ],
+  },
   plugins: [
     tanstackStart({
       server: {
