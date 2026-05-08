@@ -111,7 +111,7 @@ async function loadExternalJobsScopedOptions(
   return deriveExternalJobsScopedOptions(details);
 }
 
-export function deriveExternalJobsScopedOptions(
+function deriveExternalJobsScopedOptions(
   details: readonly JobDetailResponse[]
 ): JobOptionsResponse {
   const contactsById = new Map<JobContactOption["id"], JobContactOption>();
@@ -130,13 +130,12 @@ export function deriveExternalJobsScopedOptions(
     if (detail.site !== undefined) {
       sitesById.set(detail.site.id, detail.site);
 
-      if (
-        detail.site.serviceAreaId !== undefined &&
-        detail.site.serviceAreaName !== undefined
-      ) {
-        serviceAreasById.set(detail.site.serviceAreaId, {
-          id: detail.site.serviceAreaId,
-          name: detail.site.serviceAreaName,
+      const { serviceAreaId, serviceAreaName } = detail.site;
+
+      if (serviceAreaId !== undefined && serviceAreaName !== undefined) {
+        serviceAreasById.set(serviceAreaId, {
+          id: serviceAreaId,
+          name: serviceAreaName,
         });
       }
     }

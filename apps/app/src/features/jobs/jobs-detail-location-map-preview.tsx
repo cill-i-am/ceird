@@ -4,6 +4,8 @@ import * as React from "react";
 import { Skeleton } from "#/components/ui/skeleton";
 import type { SiteLocationLike } from "#/features/sites/site-location";
 
+import { useCanRenderInteractiveMap } from "./use-can-render-interactive-map";
+
 const JobsDetailLocationMapPreviewCanvas = React.lazy(async () => {
   const module = await import("./jobs-detail-location-map-preview-canvas");
 
@@ -17,15 +19,7 @@ interface JobsDetailLocationMapPreviewProps {
 export function JobsDetailLocationMapPreview({
   site,
 }: JobsDetailLocationMapPreviewProps) {
-  const [canRenderInteractiveMap, setCanRenderInteractiveMap] =
-    React.useState(false);
-
-  React.useEffect(() => {
-    setCanRenderInteractiveMap(
-      typeof window !== "undefined" &&
-        typeof window.URL?.createObjectURL === "function"
-    );
-  }, []);
+  const canRenderInteractiveMap = useCanRenderInteractiveMap();
 
   if (!canRenderInteractiveMap) {
     return (

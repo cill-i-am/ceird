@@ -137,7 +137,7 @@ describe("organization rate card section", () => {
     renderRateCardSection();
 
     await expect(
-      screen.findByText("Loading rate card...")
+      screen.findByText("Loading rate card…")
     ).resolves.toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Save rate card" })

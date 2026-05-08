@@ -51,16 +51,16 @@ const ImageUrl = Schema.transform(Schema.Trim, Schema.NullOr(Schema.String), {
   )
 );
 
-const ProfileSettingsInput = Schema.Struct({
+const ProfileSettingsInputSchema = Schema.Struct({
   name: SettingsName,
   image: ImageUrl,
 });
 
-const ChangeEmailInput = Schema.Struct({
+const ChangeEmailInputSchema = Schema.Struct({
   email: SettingsEmail,
 });
 
-const ChangePasswordInput = Schema.Struct({
+const ChangePasswordInputSchema = Schema.Struct({
   currentPassword: SettingsPassword,
   newPassword: SettingsPassword,
   confirmPassword: SettingsPassword,
@@ -74,24 +74,24 @@ const ChangePasswordInput = Schema.Struct({
   })
 );
 
-export type ProfileSettingsInput = typeof ProfileSettingsInput.Type;
-export type ChangeEmailInput = typeof ChangeEmailInput.Type;
-export type ChangePasswordInput = typeof ChangePasswordInput.Type;
+export type ProfileSettingsInput = typeof ProfileSettingsInputSchema.Type;
+export type ChangeEmailInput = typeof ChangeEmailInputSchema.Type;
+export type ChangePasswordInput = typeof ChangePasswordInputSchema.Type;
 
-export const profileSettingsSchema = ProfileSettingsInput;
-export const changeEmailSchema = ChangeEmailInput;
-export const changePasswordSchema = ChangePasswordInput;
+export const profileSettingsSchema = ProfileSettingsInputSchema;
+export const changeEmailSchema = ChangeEmailInputSchema;
+export const changePasswordSchema = ChangePasswordInputSchema;
 
 export function decodeProfileSettingsInput(
   input: unknown
 ): ProfileSettingsInput {
-  return ParseResult.decodeUnknownSync(ProfileSettingsInput)(input);
+  return ParseResult.decodeUnknownSync(ProfileSettingsInputSchema)(input);
 }
 
 export function decodeChangeEmailInput(input: unknown): ChangeEmailInput {
-  return ParseResult.decodeUnknownSync(ChangeEmailInput)(input);
+  return ParseResult.decodeUnknownSync(ChangeEmailInputSchema)(input);
 }
 
 export function decodeChangePasswordInput(input: unknown): ChangePasswordInput {
-  return ParseResult.decodeUnknownSync(ChangePasswordInput)(input);
+  return ParseResult.decodeUnknownSync(ChangePasswordInputSchema)(input);
 }

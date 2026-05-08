@@ -20,6 +20,7 @@ import {
   DrawerTitle,
 } from "#/components/ui/drawer";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   SiteCreateFields,
@@ -35,15 +36,7 @@ import type {
 } from "./site-create-form";
 import { createSiteMutationAtom, sitesOptionsStateAtom } from "./sites-state";
 
-export type SitesCreateFormState = SiteCreateDraft;
 export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
-
-export const defaultSiteFormState = defaultSiteCreateDraft;
-export const buildServiceAreaSelectionGroups =
-  buildSiteServiceAreaSelectionGroups;
-export const validateSiteForm = validateSiteCreateDraft;
-export const hasSiteFieldErrors = hasSiteCreateFieldErrors;
-export const buildSiteInput = buildCreateSiteInputFromDraft;
 
 export function SitesCreateSheet() {
   const navigate = useNavigate({ from: "/sites/new" });
@@ -99,9 +92,7 @@ export function SitesCreateSheet() {
     closeNavigationTimeout.current = setTimeout(navigateToSites, 140);
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleSubmit() {
     const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
     setFieldErrors(nextErrors);
 
@@ -163,7 +154,7 @@ export function SitesCreateSheet() {
           className="flex min-h-0 flex-1 flex-col"
           method="post"
           noValidate
-          onSubmit={handleSubmit}
+          onSubmit={(event) => submitClientForm(event, handleSubmit)}
         >
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(createResult)

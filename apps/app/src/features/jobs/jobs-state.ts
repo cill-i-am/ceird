@@ -22,7 +22,7 @@ import { Effect, Option } from "effect";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 
-export type JobsStatusFilter = "active" | "all" | JobStatus;
+type JobsStatusFilter = "active" | "all" | JobStatus;
 
 export type JobsAssigneeFilter =
   | { readonly kind: "all" }
@@ -56,7 +56,7 @@ export interface JobsNotice {
   readonly title: string;
 }
 
-export const emptyJobOptions: JobOptionsResponse = {
+const emptyJobOptions: JobOptionsResponse = {
   contacts: [],
   labels: [],
   members: [],
@@ -129,32 +129,6 @@ export const visibleJobsAtom = Atom.make((get) => {
   );
 }).pipe(Atom.keepAlive);
 
-export const jobsSummaryAtom = Atom.make((get) => {
-  const items = get(visibleJobsAtom);
-  const counts = {
-    active: 0,
-    blocked: 0,
-    completed: 0,
-    total: items.length,
-  };
-
-  for (const item of items) {
-    if (isActiveStatus(item.status)) {
-      counts.active += 1;
-    }
-
-    if (item.status === "blocked") {
-      counts.blocked += 1;
-    }
-
-    if (item.status === "completed") {
-      counts.completed += 1;
-    }
-  }
-
-  return counts;
-}).pipe(Atom.keepAlive);
-
 export const refreshJobsListAtom = Atom.fn<AppApiError, JobListResponse>(
   (_, get) =>
     listAllBrowserJobs().pipe(
@@ -165,22 +139,6 @@ export const refreshJobsListAtom = Atom.fn<AppApiError, JobListResponse>(
           get.set(jobsListStateAtom, {
             items: response.items,
             nextCursor: response.nextCursor,
-            organizationId: state.organizationId,
-          });
-        })
-      )
-    )
-).pipe(Atom.keepAlive);
-
-export const refreshJobOptionsAtom = Atom.fn<AppApiError, JobOptionsResponse>(
-  (_, get) =>
-    getBrowserJobOptions().pipe(
-      Effect.tap((response) =>
-        Effect.sync(() => {
-          const state = get(jobsOptionsStateAtom);
-
-          get.set(jobsOptionsStateAtom, {
-            data: response,
             organizationId: state.organizationId,
           });
         })

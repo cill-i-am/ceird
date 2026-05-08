@@ -21,7 +21,7 @@ describe("auth split shell", () => {
       >
         <div>
           <h2>Sign in</h2>
-          <button type="button">Continue</button>
+          <button type="button">Continue sign in</button>
         </div>
       </AuthSplitShell>
     );
@@ -41,7 +41,7 @@ describe("auth split shell", () => {
     }
 
     expect(
-      within(actionColumn).getByRole("button", { name: "Continue" })
+      within(actionColumn).getByRole("button", { name: "Continue sign in" })
     ).toBeInTheDocument();
     expect(
       within(contextColumn).getByRole("heading", {
@@ -56,7 +56,7 @@ describe("auth split shell", () => {
   it("treats falsy boolean context as absent and collapses to a single-column layout", () => {
     const { container } = render(
       <AuthSplitShell context={false}>
-        <button type="button">Continue</button>
+        <button type="button">Continue setup</button>
       </AuthSplitShell>
     );
 

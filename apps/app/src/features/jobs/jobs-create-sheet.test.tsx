@@ -443,7 +443,9 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("Address line 1"), "Unit 4");
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D04 X2X2");
-      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(
+        screen.getByRole("button", { name: "Close site details" })
+      );
       await createInlineContact(user, "Alex Caller");
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
@@ -604,7 +606,7 @@ describe("jobs create sheet", () => {
       );
       await user.click(
         within(getResponsiveDrawerForHeading("New site")).getByRole("button", {
-          name: "Done",
+          name: "Close site details",
         })
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
@@ -641,7 +643,9 @@ describe("jobs create sheet", () => {
       render(<JobsCreateSheet />);
 
       await choosePickerOption(user, "Site", "Create a new site");
-      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(
+        screen.getByRole("button", { name: "Close site details" })
+      );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(
@@ -667,7 +671,9 @@ describe("jobs create sheet", () => {
       render(<JobsCreateSheet />);
 
       await choosePickerOption(user, "Site", "Create a new site");
-      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(
+        screen.getByRole("button", { name: "Close site details" })
+      );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(
@@ -781,7 +787,9 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("Address line 1"), "Unit 4");
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D04 X2X2");
-      await user.click(screen.getByRole("button", { name: "Done" }));
+      await user.click(
+        screen.getByRole("button", { name: "Close site details" })
+      );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       const siteDrawer = getResponsiveDrawerForHeading("New site");

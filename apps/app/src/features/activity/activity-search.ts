@@ -53,7 +53,7 @@ export function toOrganizationActivityQuery(
   };
 }
 
-export function decodeActivityActorUserId(value: unknown) {
+function decodeActivityActorUserId(value: unknown) {
   if (typeof value !== "string" || value.length === 0) {
     return;
   }

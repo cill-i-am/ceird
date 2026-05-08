@@ -25,6 +25,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   SITE_CREATE_NONE_VALUE,
@@ -49,6 +50,8 @@ interface SitesDetailSheetProps {
   readonly viewer: OrganizationViewer;
 }
 
+// The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
+// react-doctor-disable-next-line
 export function SitesDetailSheet({
   initialSite,
   siteId,
@@ -74,6 +77,8 @@ export function SitesDetailSheet({
     {}
   );
 
+  // Reset the editable draft when the backing site record changes.
+  // react-doctor-disable-next-line
   React.useEffect(() => {
     if (currentSite) {
       setValues(buildFormStateFromSite(currentSite));
@@ -87,9 +92,7 @@ export function SitesDetailSheet({
     });
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleSubmit() {
     if (!canEdit) {
       return;
     }
@@ -157,7 +160,7 @@ export function SitesDetailSheet({
           className="flex min-h-0 flex-1 flex-col"
           method="post"
           noValidate
-          onSubmit={handleSubmit}
+          onSubmit={(event) => submitClientForm(event, handleSubmit)}
         >
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(updateResult)

@@ -1,6 +1,6 @@
-export const JOBS_VIEW_MODES = ["list", "map"] as const;
+const JOBS_VIEW_MODES = ["list", "map"] as const;
 
-export type JobsViewMode = (typeof JOBS_VIEW_MODES)[number];
+type JobsViewMode = (typeof JOBS_VIEW_MODES)[number];
 
 export interface JobsSearch {
   readonly view?: JobsViewMode | undefined;

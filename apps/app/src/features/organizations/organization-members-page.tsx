@@ -61,6 +61,7 @@ import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   decodeOrganizationMemberInviteInput,
@@ -174,6 +175,8 @@ function formatMemberCount(count: number) {
   return count === 1 ? "1 active" : `${count} active`;
 }
 
+// The members page coordinates active members, invitations, role actions, and route-level hotkeys.
+// react-doctor-disable-next-line
 export function OrganizationMembersPage({
   activeOrganizationId,
   currentMember = {
@@ -190,6 +193,8 @@ export function OrganizationMembersPage({
   readonly onCurrentMemberAccessChanged?:
     | (() => void | Promise<void>)
     | undefined;
+  // The remaining local states represent separate async workflows and form surfaces.
+  // react-doctor-disable-next-line
 }) {
   const isHydrated = useIsHydrated();
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -264,6 +269,8 @@ export function OrganizationMembersPage({
       let memberCount = 0;
 
       while (true) {
+        // Offset pagination advances from the number of members already loaded.
+        // react-doctor-disable-next-line
         const result = await authClient.organization.listMembers({
           query: {
             limit: MEMBERS_PAGE_SIZE,
@@ -350,7 +357,11 @@ export function OrganizationMembersPage({
         return;
       }
 
-      setInvitations(result.data.filter(isPendingInvitation).map(toInvitation));
+      setInvitations(
+        result.data.flatMap((invitation) =>
+          isPendingInvitation(invitation) ? [toInvitation(invitation)] : []
+        )
+      );
     } catch {
       if (
         requestSequence !== invitationRequestSequence.current ||
@@ -369,6 +380,8 @@ export function OrganizationMembersPage({
     }
   }, [activeOrganizationId, isLatestActiveOrganization]);
 
+  // Member loading is request-sequenced and tied to the active organization.
+  // react-doctor-disable-next-line
   React.useEffect(() => {
     void loadMembers();
   }, [loadMembers]);
@@ -377,6 +390,8 @@ export function OrganizationMembersPage({
     void loadInvitations();
   }, [loadInvitations]);
 
+  // Clear organization-scoped action feedback when switching organizations.
+  // react-doctor-disable-next-line
   React.useEffect(() => {
     setActiveMemberAction(null);
     setMemberActionErrors({});
@@ -738,11 +753,7 @@ export function OrganizationMembersPage({
               className="flex flex-col gap-5"
               method="post"
               noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void form.handleSubmit();
-              }}
+              onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
             >
               <FieldGroup>
                 <form.Field name="email">

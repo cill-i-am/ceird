@@ -3,18 +3,21 @@ import { ParseResult, Schema } from "effect";
 
 import { accountEmailSchema } from "#/features/auth/auth-schemas";
 
-const OrganizationMemberInviteInput = Schema.Struct({
+const OrganizationMemberInviteInputSchema = Schema.Struct({
   email: accountEmailSchema,
   role: InvitableOrganizationRole,
 });
 
 export type OrganizationMemberInviteInput =
-  typeof OrganizationMemberInviteInput.Type;
+  typeof OrganizationMemberInviteInputSchema.Type;
 
-export const organizationMemberInviteSchema = OrganizationMemberInviteInput;
+export const organizationMemberInviteSchema =
+  OrganizationMemberInviteInputSchema;
 
 export function decodeOrganizationMemberInviteInput(
   input: unknown
 ): OrganizationMemberInviteInput {
-  return ParseResult.decodeUnknownSync(OrganizationMemberInviteInput)(input);
+  return ParseResult.decodeUnknownSync(OrganizationMemberInviteInputSchema)(
+    input
+  );
 }

@@ -196,13 +196,13 @@ export function OrganizationSwitcher({
           ) : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {renderListContent({
-          activeOrganizationId,
-          listState,
-          switchState,
-          onRetry: loadOrganizations,
-          onSwitchOrganization: handleSwitchOrganization,
-        })}
+        <OrganizationSwitcherListContent
+          activeOrganizationId={activeOrganizationId}
+          listState={listState}
+          switchState={switchState}
+          onRetry={loadOrganizations}
+          onSwitchOrganization={handleSwitchOrganization}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -212,7 +212,7 @@ function useOrganizationListState(
   activeOrganization: OrganizationSummary | null | undefined,
   initialOrganizations: readonly OrganizationSummary[] | undefined
 ) {
-  const [listState, setListState] = React.useState<ListState>(
+  const [listState, setListState] = React.useState<ListState>(() =>
     getInitialListState(activeOrganization, initialOrganizations)
   );
   const requestIdRef = React.useRef(0);
@@ -357,7 +357,7 @@ function getTriggerTooltip({
   };
 }
 
-function renderListContent({
+function OrganizationSwitcherListContent({
   activeOrganizationId,
   listState,
   switchState,

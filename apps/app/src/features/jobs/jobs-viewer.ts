@@ -26,7 +26,7 @@ const ELEVATED_TRANSITION_OPTIONS: Readonly<
   triaged: ["in_progress", "blocked", "canceled"],
 };
 
-export const MEMBER_TRANSITION_OPTIONS: Readonly<
+const MEMBER_TRANSITION_OPTIONS: Readonly<
   Record<JobStatus, readonly JobStatus[]>
 > = {
   blocked: ["in_progress"],

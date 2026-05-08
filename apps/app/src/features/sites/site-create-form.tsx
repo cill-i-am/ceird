@@ -13,7 +13,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 
 export const SITE_CREATE_NONE_VALUE = "__none__";
-export const DEFAULT_SITE_COUNTRY = "IE" satisfies SiteCountry;
+const DEFAULT_SITE_COUNTRY = "IE" satisfies SiteCountry;
 
 export interface SiteCreateDraft {
   readonly accessNotes: string;

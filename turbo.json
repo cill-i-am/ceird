@@ -16,6 +16,10 @@
     "check-types": {
       "dependsOn": ["transit"]
     },
+    "react-doctor": {
+      "dependsOn": ["transit"],
+      "outputs": []
+    },
     "test": {
       "dependsOn": ["^test"],
       "env": [

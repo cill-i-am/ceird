@@ -57,50 +57,69 @@ const SITE_OR_LABEL_OWNED_JOBS_CORE_IMPORTS = new Set([
   "normalizeJobLabelName",
 ]);
 
+interface SourceFile {
+  readonly filePath: string;
+  readonly source: string;
+}
+
+const SOURCE_FILES: readonly SourceFile[] = getSourceFiles(APP_SRC_DIR).flatMap(
+  (filePath) =>
+    filePath === THIS_FILE
+      ? []
+      : [
+          {
+            filePath,
+            source: readFileSync(join(APP_SRC_DIR, filePath), "utf8"),
+          },
+        ]
+);
+
 describe("app domain package boundaries", () => {
   it("does not import site or organization label primitives from jobs-core", () => {
-    const violations = getSourceFiles(APP_SRC_DIR)
-      .filter((filePath) => filePath !== THIS_FILE)
-      .flatMap((filePath) =>
-        findJobsCoreImportViolations(
-          filePath,
-          readFileSync(join(APP_SRC_DIR, filePath), "utf8")
-        )
-      );
+    const violations = collectSourceFileViolations(
+      findJobsCoreImportViolations
+    );
 
     expect(violations).toStrictEqual([]);
   });
 
   it("does not load site or label route data through jobs server helpers", () => {
-    const violations = getSourceFiles(APP_SRC_DIR)
-      .filter((filePath) => filePath !== THIS_FILE)
-      .flatMap((filePath) =>
-        findJobsServerDomainHelperViolations(
-          filePath,
-          readFileSync(join(APP_SRC_DIR, filePath), "utf8")
-        )
-      );
+    const violations = collectSourceFileViolations(
+      findJobsServerDomainHelperViolations
+    );
 
     expect(violations).toStrictEqual([]);
   });
 
   it("keeps site and label app features independent from jobs features", () => {
-    const violations = getSourceFiles(APP_SRC_DIR)
-      .filter(
-        (filePath) =>
-          filePath.startsWith("features/sites/") ||
-          filePath.startsWith("features/labels/")
-      )
-      .flatMap((filePath) =>
-        findJobsFeatureImportViolations(
-          filePath,
-          readFileSync(join(APP_SRC_DIR, filePath), "utf8")
-        )
-      );
+    const violations: string[] = [];
+
+    for (const { filePath, source } of SOURCE_FILES) {
+      if (
+        !filePath.startsWith("features/sites/") &&
+        !filePath.startsWith("features/labels/")
+      ) {
+        continue;
+      }
+
+      violations.push(...findJobsFeatureImportViolations(filePath, source));
+    }
 
     expect(violations).toStrictEqual([]);
   });
 });
+
+function collectSourceFileViolations(
+  findViolations: (filePath: string, source: string) => readonly string[]
+) {
+  const violations: string[] = [];
+
+  for (const { filePath, source } of SOURCE_FILES) {
+    violations.push(...findViolations(filePath, source));
+  }
+
+  return violations;
+}
 
 function findJobsCoreImportViolations(filePath: string, source: string) {
   const violations: string[] = [];
@@ -120,15 +139,14 @@ function findJobsCoreImportViolations(filePath: string, source: string) {
 }
 
 function getImportedNames(imports: string) {
-  return imports
-    .split(",")
-    .map((importedName) =>
-      importedName
-        .trim()
-        .split(/\s+as\s+/u)[0]
-        ?.trim()
-    )
-    .filter(Boolean);
+  return imports.split(",").flatMap((importedName) => {
+    const name = importedName
+      .trim()
+      .split(/\s+as\s+/u)[0]
+      ?.trim();
+
+    return name ? [name] : [];
+  });
 }
 
 function findJobsServerDomainHelperViolations(

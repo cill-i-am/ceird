@@ -16,10 +16,12 @@ function mergeDescribedBy(
     typeof existingDescribedBy === "string"
       ? existingDescribedBy.split(/\s+/).filter(Boolean)
       : [];
+  const seenIds = new Set(describedByIds);
 
   for (const id of idsToAdd) {
-    if (!describedByIds.includes(id)) {
+    if (!seenIds.has(id)) {
       describedByIds.push(id);
+      seenIds.add(id);
     }
   }
 
@@ -38,7 +40,15 @@ export function AuthFormField(props: {
     props;
   const descriptionId = descriptionText ? `${htmlFor}-description` : undefined;
   const errorId = errorText ? `${htmlFor}-error` : undefined;
-  const describedByIds = [descriptionId, errorId].filter(Boolean) as string[];
+  const describedByIds: string[] = [];
+
+  if (descriptionId) {
+    describedByIds.push(descriptionId);
+  }
+
+  if (errorId) {
+    describedByIds.push(errorId);
+  }
   let content = children;
 
   if (

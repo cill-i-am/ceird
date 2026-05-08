@@ -22,8 +22,10 @@ export class CreateOrganizationPage {
   }
 
   async expectLoaded() {
-    await expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`);
-    await expect(this.heading).toBeVisible();
-    await waitForSubmitHydration(this.page);
+    await Promise.all([
+      expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`),
+      expect(this.heading).toBeVisible(),
+      waitForSubmitHydration(this.page),
+    ]);
   }
 }

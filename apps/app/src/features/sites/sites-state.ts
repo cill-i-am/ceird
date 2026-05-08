@@ -25,7 +25,7 @@ export interface SitesOptionsState {
   readonly organizationId: OrganizationId | null;
 }
 
-export const emptySiteOptions: SitesOptionsResponse = {
+const emptySiteOptions: SitesOptionsResponse = {
   serviceAreas: [],
   sites: [],
 };
@@ -79,7 +79,7 @@ export const updateSiteMutationAtomFamily = Atom.family((siteId: SiteIdType) =>
   )
 );
 
-export function upsertSiteOption(
+function upsertSiteOption(
   options: SitesOptionsResponse,
   site: SiteOption
 ): SitesOptionsResponse {

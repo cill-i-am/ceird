@@ -13,6 +13,7 @@ import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   decodeCreateOrganizationInput,
@@ -122,11 +123,7 @@ export function OrganizationOnboardingPage() {
             className="flex flex-col gap-6"
             method="post"
             noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
-            }}
+            onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
           >
             <FieldGroup>
               <form.Field name="name">

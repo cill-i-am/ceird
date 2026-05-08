@@ -114,12 +114,20 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Canceled", value: "canceled" },
 ] as const;
 
+const relativeDateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
 const JobsCoverageMap = React.lazy(async () => {
   const module = await import("./jobs-coverage-map");
 
   return { default: module.JobsCoverageMap };
 });
 
+// Route-level page coordinates filters, URL state, command actions, and layout.
+// react-doctor-disable-next-line
 export function JobsPage({
   children,
   listHotkeysEnabled = true,
@@ -583,16 +591,10 @@ function JobsCommandToolbar({
                 value={filters.siteId}
                 options={[
                   { label: "All sites", value: "all" },
-                  ...optionsState.sites
-                    .filter((site) =>
-                      filters.serviceAreaId === "all"
-                        ? true
-                        : site.serviceAreaId === filters.serviceAreaId
-                    )
-                    .map((site) => ({
-                      label: site.name,
-                      value: site.id,
-                    })),
+                  ...buildSiteFilterOptions(
+                    optionsState.sites,
+                    filters.serviceAreaId
+                  ),
                 ]}
                 onValueChange={(value) =>
                   onFiltersChange({
@@ -1138,13 +1140,32 @@ function LabelBadges({ labels }: { readonly labels: readonly Label[] }) {
 
 function formatRelativeDate(value: string) {
   const date = new Date(value);
-  const formatter = new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
 
-  return formatter.format(date);
+  return relativeDateFormatter.format(date);
+}
+
+function buildSiteFilterOptions(
+  sites: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly serviceAreaId?: string;
+  }[],
+  serviceAreaId: JobsListFilters["serviceAreaId"]
+) {
+  const options: { readonly label: string; readonly value: string }[] = [];
+
+  for (const site of sites) {
+    if (serviceAreaId !== "all" && site.serviceAreaId !== serviceAreaId) {
+      continue;
+    }
+
+    options.push({
+      label: site.name,
+      value: site.id,
+    });
+  }
+
+  return options;
 }
 
 interface ActiveFilterBadge {

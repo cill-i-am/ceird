@@ -49,19 +49,6 @@ export const jobCollaboratorsStateAtomFamily = Atom.family(
   }
 );
 
-export const refreshJobDetailAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse>((_, get) =>
-      getBrowserJobDetail(workItemId).pipe(
-        Effect.tap((detail) =>
-          Effect.sync(() => {
-            get.set(jobDetailStateAtomFamily(workItemId), detail);
-          })
-        )
-      )
-    )
-);
-
 export const refreshJobCollaboratorsAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppApiError, readonly JobCollaborator[]>((_, get) =>

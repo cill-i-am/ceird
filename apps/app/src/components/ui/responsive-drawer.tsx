@@ -89,4 +89,4 @@ function getResponsiveDrawerViewportSnapshot() {
   return window.innerWidth >= RESPONSIVE_DRAWER_DESKTOP_MIN_WIDTH;
 }
 
-export { ResponsiveDrawer, ResponsiveNestedDrawer, useResponsiveDrawerDesktop };
+export { ResponsiveDrawer, ResponsiveNestedDrawer };

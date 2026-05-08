@@ -87,6 +87,7 @@ import type {
   SiteCreateDraft,
   SiteCreateFieldErrors,
 } from "#/features/sites/site-create-form";
+import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
 import {
@@ -169,6 +170,8 @@ const defaultFormState: JobsCreateFormState = {
   title: "",
 };
 
+// The create sheet keeps one local draft so validation and inline site/contact creation stay atomic.
+// react-doctor-disable-next-line
 export function JobsCreateSheet() {
   const navigate = useNavigate({ from: "/jobs/new" });
   const options = useAtomValue(jobsOptionsStateAtom).data;
@@ -250,9 +253,7 @@ export function JobsCreateSheet() {
     closeNavigationTimeout.current = setTimeout(navigateToJobs, 140);
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleSubmit() {
     const nextErrors = validate(values, options.serviceAreas);
     setFieldErrors(nextErrors);
 
@@ -352,7 +353,7 @@ export function JobsCreateSheet() {
         className="flex min-h-0 flex-1 flex-col"
         method="post"
         noValidate
-        onSubmit={handleSubmit}
+        onSubmit={(event) => submitClientForm(event, handleSubmit)}
       >
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
           {Result.builder(createResult)
@@ -651,7 +652,7 @@ export function JobsCreateSheet() {
 
           <DrawerFooter className="flex-row justify-end border-t px-5 py-4 sm:px-6">
             <Button type="button" onClick={() => setSiteDrawerOpen(false)}>
-              Done
+              Close site details
             </Button>
           </DrawerFooter>
         </DrawerContent>

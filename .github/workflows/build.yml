@@ -88,6 +88,51 @@ jobs:
       - name: Type Check
         run: pnpm check-types
 
+  react-doctor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Detect app React changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            react_app:
+              - 'apps/app/**/*.{js,jsx,ts,tsx}'
+              - 'apps/app/package.json'
+              - 'apps/app/react-doctor.config.json'
+              - 'pnpm-lock.yaml'
+
+      - name: Setup pnpm
+        if: steps.changes.outputs.react_app == 'true'
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.react_app == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        if: steps.changes.outputs.react_app == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure Linux native packages
+        if: steps.changes.outputs.react_app == 'true'
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Run React Doctor
+        if: steps.changes.outputs.react_app == 'true'
+        run: pnpm --filter app react-doctor
+
   e2e:
     runs-on: ubuntu-latest
     needs:
@@ -147,6 +192,7 @@ jobs:
       - lint
       - format
       - check-types
+      - react-doctor
       - e2e
 
     steps:

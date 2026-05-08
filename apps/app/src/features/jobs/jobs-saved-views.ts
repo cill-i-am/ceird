@@ -6,7 +6,7 @@ import {
 } from "./jobs-state";
 import type { JobsListFilters } from "./jobs-state";
 
-export const JOB_SAVED_VIEW_IDS = [
+const JOB_SAVED_VIEW_IDS = [
   "active",
   "assigned-to-me",
   "completed",
@@ -15,7 +15,7 @@ export const JOB_SAVED_VIEW_IDS = [
   "unassigned",
 ] as const;
 
-export type JobSavedViewId = (typeof JOB_SAVED_VIEW_IDS)[number];
+type JobSavedViewId = (typeof JOB_SAVED_VIEW_IDS)[number];
 
 export interface JobSavedView {
   readonly filters: JobsListFilters;
@@ -99,7 +99,7 @@ export function findMatchingJobSavedView(
   );
 }
 
-export function areJobsListFiltersEqual(
+function areJobsListFiltersEqual(
   left: JobsListFilters,
   right: JobsListFilters
 ): boolean {

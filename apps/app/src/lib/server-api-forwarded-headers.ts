@@ -43,6 +43,24 @@ function readCurrentRequestOrigin(input: {
   return `${protocol}://${host}`;
 }
 
+function splitCookieEntry(entry: string):
+  | {
+      readonly name: string;
+      readonly value: string;
+    }
+  | undefined {
+  for (let index = 0; index < entry.length; index += 1) {
+    if (entry[index] === "=") {
+      return {
+        name: entry.slice(0, index),
+        value: entry.slice(index + 1),
+      };
+    }
+  }
+
+  return undefined;
+}
+
 export function readServerApiForwardedHeaders(input: {
   readonly host: string | undefined;
   readonly forwardedProto: string | undefined;
@@ -72,21 +90,29 @@ export function normalizeServerApiCookieHeader(
     return cookie;
   }
 
-  const entries = cookie
-    .split(";")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  const names = new Set(entries.map((entry) => entry.split("=", 1)[0] ?? ""));
-  const aliases: string[] = [];
+  const entries: string[] = [];
+  const names = new Set<string>();
 
-  for (const entry of entries) {
-    const separatorIndex = entry.indexOf("=");
+  for (const part of cookie.split(";")) {
+    const entry = part.trim();
 
-    if (separatorIndex === -1) {
+    if (entry.length === 0) {
       continue;
     }
 
-    const name = entry.slice(0, separatorIndex);
+    entries.push(entry);
+    names.add(splitCookieEntry(entry)?.name ?? entry);
+  }
+  const aliases: string[] = [];
+
+  for (const entry of entries) {
+    const parsedEntry = splitCookieEntry(entry);
+
+    if (!parsedEntry) {
+      continue;
+    }
+
+    const { name } = parsedEntry;
 
     if (!name.startsWith(SECURE_AUTH_COOKIE_PREFIX)) {
       continue;
@@ -98,7 +124,7 @@ export function normalizeServerApiCookieHeader(
       continue;
     }
 
-    aliases.push(`${aliasName}=${entry.slice(separatorIndex + 1)}`);
+    aliases.push(`${aliasName}=${parsedEntry.value}`);
   }
 
   return aliases.length > 0 ? [...entries, ...aliases].join("; ") : cookie;

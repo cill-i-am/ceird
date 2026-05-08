@@ -5,6 +5,7 @@ import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as React from "react";
+import { use } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { OrganizationSwitcher } from "./organization-switcher";
@@ -139,7 +140,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       children?: ReactNode;
       side?: string;
     }) => {
-      const dropdownMenu = React.useContext(DropdownMenuOpenContext);
+      const dropdownMenu = use(DropdownMenuOpenContext);
 
       if (!dropdownMenu?.open) {
         return null;
@@ -246,7 +247,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       children?: ReactNode;
       render?: ReactNode;
     }) => {
-      const dropdownMenu = React.useContext(DropdownMenuOpenContext);
+      const dropdownMenu = use(DropdownMenuOpenContext);
 
       return (
         <div>

@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 import { APP_ORIGIN } from "../test-urls";
+import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
 export class MembersPage {
   readonly page: Page;
@@ -32,19 +33,11 @@ export class MembersPage {
   }
 
   async expectLoaded() {
-    await expect(this.page).toHaveURL(`${APP_ORIGIN}/members`);
-    await expect(this.heading).toBeVisible();
-    await this.page.waitForFunction(() => {
-      const submitButton = document.querySelector('button[type="submit"]');
-
-      return (
-        submitButton !== null &&
-        Object.keys(submitButton).some(
-          (key) =>
-            key.startsWith("__reactFiber$") || key.startsWith("__reactProps$")
-        )
-      );
-    });
+    await Promise.all([
+      expect(this.page).toHaveURL(`${APP_ORIGIN}/members`),
+      expect(this.heading).toBeVisible(),
+      waitForSubmitHydration(this.page),
+    ]);
   }
 
   pendingInvitation(email: string): Locator {

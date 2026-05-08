@@ -6,7 +6,7 @@ export function getRouter() {
   return createAppRouter();
 }
 
-export function createAppRouter() {
+function createAppRouter() {
   return createTanStackRouter({
     routeTree,
     scrollRestoration: true,

@@ -64,7 +64,7 @@ export function DotMatrixButtonLoader({
   readonly className?: string;
   readonly visible?: boolean;
 }) {
-  const [isPresent, setIsPresent] = useState(visible);
+  const [isPresent, setIsPresent] = useState(() => visible);
 
   useEffect(() => {
     if (visible) {

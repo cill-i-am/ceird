@@ -13,7 +13,9 @@ export const Route = createFileRoute("/_app/_org/organization/settings")({
       to: "/organization/settings",
     },
   },
-  codeSplitGroupings: [["loader", "component"]],
+  // Keep the loader out of the React component chunk so dev reloads never wrap
+  // the lazy loader module in React Refresh component state.
+  codeSplitGroupings: [["loader"], ["component"]],
   beforeLoad: ({ context }) => assertSettingsRouteAccess(context),
   loader: ({ context }) => loadSettingsRoute(context),
   component: SettingsRoute,

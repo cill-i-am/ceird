@@ -29,15 +29,13 @@ export class AppApiRequestError extends Schema.TaggedError<AppApiRequestError>()
   }
 ) {}
 
-export type AppApiDomainError = JobsError | LabelsError | SitesError;
+type AppApiDomainError = JobsError | LabelsError | SitesError;
 export type AppApiError =
   | AppApiDomainError
   | AppApiOriginResolutionError
   | AppApiRequestError;
 
-export function isAppApiDomainError(
-  error: unknown
-): error is AppApiDomainError {
+function isAppApiDomainError(error: unknown): error is AppApiDomainError {
   const tag =
     typeof error === "object" && error !== null && "_tag" in error
       ? error._tag

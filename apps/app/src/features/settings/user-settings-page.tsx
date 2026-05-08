@@ -18,6 +18,7 @@ import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { activeElementIsInside } from "#/hotkeys/focus";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient, buildEmailChangeRedirectTo } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   changeEmailSchema,
@@ -56,6 +57,8 @@ function FormStatus({
   );
 }
 
+// The settings page owns three independent forms that share the same hotkey scope.
+// react-doctor-disable-next-line
 export function UserSettingsPage({
   user,
   emailChangeStatus,
@@ -68,9 +71,13 @@ export function UserSettingsPage({
   const [profileMessage, setProfileMessage] = React.useState<string | null>(
     null
   );
-  const [emailMessage, setEmailMessage] = React.useState<string | null>(() =>
-    getEmailChangeStatusMessage(emailChangeStatus)
+  const emailStatusMessage = React.useMemo(
+    () => getEmailChangeStatusMessage(emailChangeStatus),
+    [emailChangeStatus]
   );
+  const [emailMessage, setEmailMessage] = React.useState<string | null>(null);
+  const [dismissedEmailStatus, setDismissedEmailStatus] =
+    React.useState<EmailChangeStatus | null>(null);
   const [passwordMessage, setPasswordMessage] = React.useState<string | null>(
     null
   );
@@ -78,9 +85,9 @@ export function UserSettingsPage({
   const passwordFormRef = React.useRef<HTMLFormElement | null>(null);
   const profileFormRef = React.useRef<HTMLFormElement | null>(null);
 
-  React.useEffect(() => {
-    setEmailMessage(getEmailChangeStatusMessage(emailChangeStatus));
-  }, [emailChangeStatus]);
+  const visibleEmailMessage =
+    emailMessage ??
+    (emailChangeStatus === dismissedEmailStatus ? null : emailStatusMessage);
 
   const profileForm = useForm({
     defaultValues: {
@@ -130,6 +137,7 @@ export function UserSettingsPage({
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
       setEmailMessage(null);
+      setDismissedEmailStatus(emailChangeStatus ?? null);
 
       const input = decodeChangeEmailInput(value);
       if (input.email.toLowerCase() === user.email.toLowerCase()) {
@@ -255,11 +263,9 @@ export function UserSettingsPage({
             className="flex flex-col gap-5"
             method="post"
             noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void profileForm.handleSubmit();
-            }}
+            onSubmit={(event) =>
+              submitClientForm(event, profileForm.handleSubmit)
+            }
           >
             <FieldGroup>
               <profileForm.Field name="name">
@@ -379,11 +385,9 @@ export function UserSettingsPage({
             className="flex flex-col gap-5"
             method="post"
             noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void emailForm.handleSubmit();
-            }}
+            onSubmit={(event) =>
+              submitClientForm(event, emailForm.handleSubmit)
+            }
           >
             <FieldGroup>
               <emailForm.Field name="email">
@@ -407,10 +411,12 @@ export function UserSettingsPage({
                         onBlur={field.handleBlur}
                         onInput={(event) => {
                           setEmailMessage(null);
+                          setDismissedEmailStatus(emailChangeStatus ?? null);
                           field.handleChange(event.currentTarget.value);
                         }}
                         onChange={(event) => {
                           setEmailMessage(null);
+                          setDismissedEmailStatus(emailChangeStatus ?? null);
                           field.handleChange(event.target.value);
                         }}
                       />
@@ -427,13 +433,13 @@ export function UserSettingsPage({
                 ) : null
               }
             </emailForm.Subscribe>
-            {emailMessage ? (
+            {visibleEmailMessage ? (
               <FormStatus
                 tone={
                   emailChangeStatus === "failed" ? "destructive" : "neutral"
                 }
               >
-                {emailMessage}
+                {visibleEmailMessage}
               </FormStatus>
             ) : null}
 
@@ -464,11 +470,9 @@ export function UserSettingsPage({
             className="flex flex-col gap-5"
             method="post"
             noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void passwordForm.handleSubmit();
-            }}
+            onSubmit={(event) =>
+              submitClientForm(event, passwordForm.handleSubmit)
+            }
           >
             <FieldGroup>
               <passwordForm.Field name="currentPassword">

@@ -41,10 +41,11 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async (role) => {
-      const { loadSettingsRoute } =
-        await import("#/features/organizations/organization-settings-route-loader");
-      const { assertSettingsRouteAccess } =
-        await import("./_app._org.organization.settings");
+      const [{ loadSettingsRoute }, { assertSettingsRouteAccess }] =
+        await Promise.all([
+          import("#/features/organizations/organization-settings-route-loader"),
+          import("./_app._org.organization.settings"),
+        ]);
       const context = {
         activeOrganizationId: organizationId,
         activeOrganizationSync: {
@@ -158,10 +159,11 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { loadSettingsRoute } =
-        await import("#/features/organizations/organization-settings-route-loader");
-      const { assertSettingsRouteAccess } =
-        await import("./_app._org.organization.settings");
+      const [{ loadSettingsRoute }, { assertSettingsRouteAccess }] =
+        await Promise.all([
+          import("#/features/organizations/organization-settings-route-loader"),
+          import("./_app._org.organization.settings"),
+        ]);
       const context = {
         activeOrganizationId: organizationId,
         activeOrganizationSync: {

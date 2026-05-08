@@ -28,6 +28,7 @@ import { validateLabelName } from "#/features/labels/label-name-validation";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
 import type { OrganizationSummary } from "./organization-access";
@@ -48,22 +49,25 @@ const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before creating it.";
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
 const INVALID_LABEL_NAME_MESSAGE =
   "Keep label names between 1 and 48 characters.";
+const EMPTY_ORGANIZATION_LABELS: readonly Label[] = [];
 
+// Organization settings owns the general form plus label, service area, and rate-card panels.
+// react-doctor-disable-next-line
 export function OrganizationSettingsPage({
-  organizationLabels = [],
+  organizationLabels = EMPTY_ORGANIZATION_LABELS,
   organization,
 }: {
   readonly organizationLabels?: readonly Label[];
   readonly organization: OrganizationSummary;
+  // Label editing state and the organization form are intentionally independent.
+  // react-doctor-disable-next-line
 }) {
   const router = useRouter();
   const isHydrated = useIsHydrated();
   const [successMessage, setSuccessMessage] = React.useState<string | null>(
     null
   );
-  const [savedOrganizationName, setSavedOrganizationName] = React.useState(
-    organization.name
-  );
+  const savedOrganizationNameRef = React.useRef(organization.name);
   const [labels, setLabels] = React.useState(() =>
     sortLabels(organizationLabels)
   );
@@ -106,9 +110,9 @@ export function OrganizationSettingsPage({
 
       const input = decodeUpdateOrganizationInput(value);
 
-      if (input.name === savedOrganizationName) {
+      if (input.name === savedOrganizationNameRef.current) {
         formApi.reset({
-          name: savedOrganizationName,
+          name: savedOrganizationNameRef.current,
         });
         return;
       }
@@ -145,7 +149,7 @@ export function OrganizationSettingsPage({
       formApi.reset({
         name: result.data.name,
       });
-      setSavedOrganizationName(result.data.name);
+      savedOrganizationNameRef.current = result.data.name;
       setSuccessMessage("Organization updated.");
 
       try {
@@ -158,6 +162,8 @@ export function OrganizationSettingsPage({
     },
   });
 
+  // Refresh local label and form state when the active organization data changes.
+  // react-doctor-disable-next-line
   React.useEffect(() => {
     const previousOrganization = previousOrganizationRef.current;
     const isNewOrganization = previousOrganization.id !== organization.id;
@@ -186,7 +192,7 @@ export function OrganizationSettingsPage({
       return;
     }
 
-    setSavedOrganizationName(organization.name);
+    savedOrganizationNameRef.current = organization.name;
 
     if (isNewOrganization) {
       setSuccessMessage(null);
@@ -244,8 +250,7 @@ export function OrganizationSettingsPage({
     }
   }
 
-  async function handleCreateLabel(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleCreateLabel() {
     const decodedName = validateLabelName(newLabelName);
 
     setLabelError(null);
@@ -391,11 +396,7 @@ export function OrganizationSettingsPage({
               className="flex max-w-xl flex-col gap-5"
               method="post"
               noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void form.handleSubmit();
-              }}
+              onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
             >
               <FieldGroup>
                 <form.Field name="name">
@@ -496,9 +497,7 @@ export function OrganizationSettingsPage({
             <div className="flex max-w-3xl flex-col gap-5">
               <form
                 className="flex flex-col gap-3 sm:flex-row sm:items-end"
-                onSubmit={(event) => {
-                  void handleCreateLabel(event);
-                }}
+                onSubmit={(event) => submitClientForm(event, handleCreateLabel)}
               >
                 <AuthFormField
                   label="New label name"
@@ -731,7 +730,7 @@ function upsertLabel(labels: readonly Label[], label: Label) {
 }
 
 function sortLabels(labels: readonly Label[]) {
-  return [...labels].sort(compareLabels);
+  return labels.toSorted(compareLabels);
 }
 
 function compareLabels(left: Label, right: Label) {

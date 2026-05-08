@@ -4,8 +4,14 @@ import * as React from "react";
 import { Button } from "#/components/ui/button";
 
 const SHORTCUT_INTRO_STORAGE_KEY = "ceird-shortcut-intro-seen";
+const SHORTCUT_INTRO_SEEN_EVENT = "ceird:shortcut-intro-seen";
+let shortcutIntroSeenInMemory = false;
 
 function getShortcutIntroSeen() {
+  if (shortcutIntroSeenInMemory) {
+    return true;
+  }
+
   try {
     const { localStorage } = window;
 
@@ -20,6 +26,8 @@ function getShortcutIntroSeen() {
 }
 
 function setShortcutIntroSeen() {
+  shortcutIntroSeenInMemory = true;
+
   try {
     const { localStorage } = window;
 
@@ -29,14 +37,26 @@ function setShortcutIntroSeen() {
   } catch {
     // The notice still hides for this session when storage is unavailable.
   }
+
+  window.dispatchEvent(new Event(SHORTCUT_INTRO_SEEN_EVENT));
 }
 
-export function ShortcutIntroNotice() {
-  const [isSeen, setIsSeen] = React.useState(true);
+function subscribeToShortcutIntroSeen(onStoreChange: () => void) {
+  window.addEventListener(SHORTCUT_INTRO_SEEN_EVENT, onStoreChange);
 
-  React.useEffect(() => {
-    setIsSeen(getShortcutIntroSeen());
-  }, []);
+  return () => {
+    window.removeEventListener(SHORTCUT_INTRO_SEEN_EVENT, onStoreChange);
+  };
+}
+
+const getShortcutIntroSeenServerSnapshot = () => true;
+
+export function ShortcutIntroNotice() {
+  const isSeen = React.useSyncExternalStore(
+    subscribeToShortcutIntroSeen,
+    getShortcutIntroSeen,
+    getShortcutIntroSeenServerSnapshot
+  );
 
   if (isSeen) {
     return null;
@@ -56,7 +76,6 @@ export function ShortcutIntroNotice() {
         size="xs"
         onClick={() => {
           setShortcutIntroSeen();
-          setIsSeen(true);
         }}
       >
         Got it

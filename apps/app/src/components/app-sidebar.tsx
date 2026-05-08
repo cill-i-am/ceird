@@ -69,7 +69,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              className="rounded-xl px-2.5 py-2.5"
+              className="rounded-xl p-2.5"
               render={<Link to={homeTarget} />}
             >
               <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklab,var(--sidebar-primary-foreground)_30%,transparent)]">

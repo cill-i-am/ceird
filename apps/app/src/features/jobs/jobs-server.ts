@@ -25,13 +25,6 @@ const listAllCurrentServerJobsIsomorphic = createIsomorphicFn()
   })
   .client((query: JobListQuery = {}) => listAllCurrentBrowserJobs(query));
 
-const listCurrentServerJobsIsomorphic = createIsomorphicFn()
-  .server(async (query: JobListQuery = {}) => {
-    const { listCurrentServerJobsDirect } = await importJobsServerSsr();
-    return await listCurrentServerJobsDirect(query);
-  })
-  .client((query: JobListQuery = {}) => listCurrentBrowserJobs(query));
-
 const listCurrentServerOrganizationActivityIsomorphic = createIsomorphicFn()
   .server(async (query: OrganizationActivityQuery = {}) => {
     const { listCurrentServerOrganizationActivityDirect } =
@@ -99,6 +92,8 @@ async function listAllCurrentBrowserJobs(
   let cursor = initialCursor;
 
   while (true) {
+    // Cursor pagination must await each page before requesting its next cursor.
+    // react-doctor-disable-next-line
     const page = await listCurrentBrowserJobs(
       cursor ? { ...staticQuery, cursor } : staticQuery
     );
@@ -154,12 +149,6 @@ async function getCurrentBrowserJobExternalMemberOptions(): Promise<JobExternalM
     "JobsClient.getJobExternalMemberOptions",
     (client) => client.jobs.getJobExternalMemberOptions()
   );
-}
-
-export function listCurrentServerJobs(
-  query: JobListQuery = {}
-): Promise<JobListResponse> {
-  return listCurrentServerJobsIsomorphic(query);
 }
 
 export function listAllCurrentServerJobs(

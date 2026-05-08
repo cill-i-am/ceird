@@ -16,7 +16,7 @@ function formatHotkeyChord(hotkey: string) {
   return display === "+" ? [display] : display.split("+");
 }
 
-export function formatHotkeyForLabel(hotkey: string) {
+function formatHotkeyForLabel(hotkey: string) {
   return splitHotkeySequence(hotkey)
     .map((sequence) => formatHotkeyDisplay(sequence))
     .join(" then ");

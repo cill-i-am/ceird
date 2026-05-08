@@ -37,9 +37,9 @@ export function SiteHeader({
 }) {
   const breadcrumbs = useMatches({
     select: (matches) =>
-      matches
-        .map((match) => match.staticData.breadcrumb)
-        .filter((breadcrumb) => breadcrumb !== undefined),
+      matches.flatMap((match) =>
+        match.staticData.breadcrumb ? [match.staticData.breadcrumb] : []
+      ),
   });
   const activeScopes = useRouterState({
     select: (state) =>

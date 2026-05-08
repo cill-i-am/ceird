@@ -107,9 +107,10 @@ describe("sites route loader", () => {
     "redirects external users before fetching site options",
     { timeout: 10_000 },
     async () => {
-      const { isRedirect } = await import("@tanstack/react-router");
-      const { loadSitesRouteData } =
-        await import("#/features/sites/sites-route-loader");
+      const [{ isRedirect }, { loadSitesRouteData }] = await Promise.all([
+        import("@tanstack/react-router"),
+        import("#/features/sites/sites-route-loader"),
+      ]);
       const result = loadSitesRouteData({
         activeOrganizationId: organizationId,
         activeOrganizationSync: {

@@ -81,7 +81,6 @@ Authenticated layout and navigation live under:
 - `components/app-sidebar.tsx`
 - `components/app-navigation.ts`
 - `components/nav-main.tsx`
-- `components/nav-secondary.tsx`
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
 

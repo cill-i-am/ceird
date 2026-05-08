@@ -81,6 +81,7 @@ import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { validateLabelName } from "#/features/labels/label-name-validation";
+import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
 import {
@@ -548,9 +549,7 @@ export function JobsDetailSheet({
     }
   }
 
-  async function handleAddComment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleAddComment() {
     if (!canAddComment) {
       return;
     }
@@ -570,9 +569,7 @@ export function JobsDetailSheet({
     }
   }
 
-  async function handleAddVisit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleAddVisit() {
     if (visitDate.trim().length === 0) {
       setVisitError("Pick the day the visit happened.");
       return;
@@ -636,11 +633,7 @@ export function JobsDetailSheet({
     await removeJobLabel(labelId);
   }
 
-  async function handleAttachCollaborator(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
+  async function handleAttachCollaborator() {
     if (!canManageCollaborators) {
       return;
     }
@@ -1041,7 +1034,9 @@ export function JobsDetailSheet({
                     <form
                       className="flex flex-col gap-4"
                       method="post"
-                      onSubmit={handleAddComment}
+                      onSubmit={(event) =>
+                        submitClientForm(event, handleAddComment)
+                      }
                     >
                       <FieldGroup>
                         <Field data-invalid={Boolean(commentError)}>
@@ -1159,12 +1154,12 @@ export function JobsDetailSheet({
             {isExternalViewer ? null : (
               <>
                 <JobCostsSection
+                  key={workItemId}
                   addJobCostLine={addJobCostLine}
                   canAddCostLine={canAddCostLine}
                   detail={detail}
                   mutationError={renderMutationError(costLineResult)}
                   waiting={costLineResult.waiting}
-                  workItemId={workItemId}
                 />
 
                 <DetailSection
@@ -1178,7 +1173,9 @@ export function JobsDetailSheet({
                         <form
                           className="flex flex-col gap-4"
                           method="post"
-                          onSubmit={handleAddVisit}
+                          onSubmit={(event) =>
+                            submitClientForm(event, handleAddVisit)
+                          }
                         >
                           <FieldGroup>
                             <div className="grid gap-4 md:grid-cols-2">
@@ -1410,7 +1407,7 @@ function JobCollaboratorsSection({
   readonly externalMembers: readonly ExternalMemberOption[];
   readonly isLoading: boolean;
   readonly onAccessLevelChange: (value: JobCollaboratorAccessLevel) => void;
-  readonly onAttach: (event: React.FormEvent<HTMLFormElement>) => void;
+  readonly onAttach: () => void | Promise<void>;
   readonly onRoleLabelChange: (value: string) => void;
   readonly onUserChange: (value: string) => void;
   readonly selectedAccessLevel: JobCollaboratorAccessLevel;
@@ -1458,7 +1455,10 @@ function JobCollaboratorsSection({
           </Alert>
         ) : null}
 
-        <form className="flex flex-col gap-4" onSubmit={onAttach}>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => submitClientForm(event, onAttach)}
+        >
           <FieldGroup>
             <div className="grid gap-4 md:grid-cols-3">
               <Field>

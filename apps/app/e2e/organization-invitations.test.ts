@@ -308,6 +308,8 @@ test.describe("organization invitations", () => {
       invitedEmail
     );
     await expectPublicInvitationPreviewReady(request, invitationId);
+    // The isolated browser context has to exist before the invited page can be opened.
+    // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
     const invitedPage = await invitedContext.newPage();
     const invitedSignupPage = new SignupPage(invitedPage);
@@ -366,6 +368,8 @@ test.describe("organization invitations", () => {
       request,
       invitedEmail
     );
+    // The isolated browser context has to exist before the invited page can be opened.
+    // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
     const invitedPage = await invitedContext.newPage();
     const invitedLoginPage = new LoginPage(invitedPage);
@@ -410,6 +414,8 @@ test.describe("organization invitations", () => {
       invitedEmail
     );
 
+    // The isolated browser context has to exist before the invited page can be opened.
+    // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
     const invitedPage = await invitedContext.newPage();
     const invitedLoginPage = new LoginPage(invitedPage);
@@ -455,6 +461,8 @@ test.describe("organization invitations", () => {
       invitedEmail
     );
 
+    // The isolated browser context has to exist before the invited page can be opened.
+    // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
     const invitedPage = await invitedContext.newPage();
 

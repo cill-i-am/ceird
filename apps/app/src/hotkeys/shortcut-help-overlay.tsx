@@ -40,10 +40,15 @@ function getShortcutsForScopes(
 }
 
 function groupShortcuts(shortcuts: readonly HotkeyDefinition[]) {
-  return HOTKEY_GROUPS.map((group) => ({
-    group,
-    shortcuts: shortcuts.filter((shortcut) => shortcut.group === group),
-  })).filter(({ shortcuts: groupedShortcuts }) => groupedShortcuts.length > 0);
+  return HOTKEY_GROUPS.flatMap((group) => {
+    const groupedShortcuts = shortcuts.filter(
+      (shortcut) => shortcut.group === group
+    );
+
+    return groupedShortcuts.length > 0
+      ? [{ group, shortcuts: groupedShortcuts }]
+      : [];
+  });
 }
 
 const ShortcutHelpHotkeys = React.memo(function ShortcutHelpHotkeys({

@@ -8,7 +8,6 @@ import type {
   AddJobCostLineInput,
   AddJobCostLineResponse,
   JobDetailResponse,
-  WorkItemIdType,
 } from "@ceird/jobs-core";
 import { Briefcase01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -31,10 +30,11 @@ import {
 import { Input } from "#/components/ui/input";
 import { Separator } from "#/components/ui/separator";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import { DetailEmpty, DetailSection } from "./jobs-detail-section";
 
-export const COST_LINE_TYPE_LABELS = {
+const COST_LINE_TYPE_LABELS = {
   labour: "Labour",
   material: "Material",
 } as const;
@@ -55,6 +55,86 @@ const COST_LINE_TYPE_SELECTION_GROUPS = [
 
 const MAX_COST_LINE_UNIT_PRICE_MAJOR = MAX_JOB_COST_LINE_UNIT_PRICE_MINOR / 100;
 
+const moneyFormatter = new Intl.NumberFormat("en-IE", {
+  currency: "EUR",
+  style: "currency",
+});
+
+const integerQuantityFormatter = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 0,
+});
+
+const decimalQuantityFormatter = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+});
+
+interface CostLineFormState {
+  readonly type: CostLineType;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly error: string | null;
+}
+
+type CostLineFormAction =
+  | { readonly type: "reset" }
+  | { readonly type: "setType"; readonly value: CostLineType }
+  | { readonly type: "setDescription"; readonly value: string }
+  | { readonly type: "setQuantity"; readonly value: string }
+  | { readonly type: "setUnitPrice"; readonly value: string }
+  | { readonly type: "setError"; readonly value: string | null }
+  | { readonly type: "submitted" };
+
+const initialCostLineFormState: CostLineFormState = {
+  type: "labour",
+  description: "",
+  quantity: "1",
+  unitPrice: "",
+  error: null,
+};
+
+function costLineFormReducer(
+  state: CostLineFormState,
+  action: CostLineFormAction
+): CostLineFormState {
+  switch (action.type) {
+    case "reset": {
+      return initialCostLineFormState;
+    }
+    case "setType": {
+      return { ...state, type: action.value };
+    }
+    case "setDescription": {
+      return { ...state, description: action.value };
+    }
+    case "setQuantity": {
+      return { ...state, quantity: action.value };
+    }
+    case "setUnitPrice": {
+      return { ...state, unitPrice: action.value };
+    }
+    case "setError": {
+      return { ...state, error: action.value };
+    }
+    case "submitted": {
+      return {
+        ...state,
+        type: "labour",
+        description: "",
+        quantity: "1",
+        unitPrice: "",
+        error: null,
+      };
+    }
+    default: {
+      action satisfies never;
+      return state;
+    }
+  }
+}
+
 interface JobCostsSectionProps {
   readonly addJobCostLine: (
     input: AddJobCostLineInput
@@ -63,7 +143,6 @@ interface JobCostsSectionProps {
   readonly detail: JobDetailResponse;
   readonly mutationError: React.ReactNode;
   readonly waiting: boolean;
-  readonly workItemId: WorkItemIdType;
 }
 
 export function JobCostsSection({
@@ -72,24 +151,13 @@ export function JobCostsSection({
   detail,
   mutationError,
   waiting,
-  workItemId,
 }: JobCostsSectionProps) {
   const { costs } = detail;
   const costDescriptionRef = React.useRef<HTMLInputElement>(null);
-  const [costLineType, setCostLineType] =
-    React.useState<CostLineType>("labour");
-  const [costDescription, setCostDescription] = React.useState("");
-  const [costQuantity, setCostQuantity] = React.useState("1");
-  const [costUnitPrice, setCostUnitPrice] = React.useState("");
-  const [costError, setCostError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    setCostLineType("labour");
-    setCostDescription("");
-    setCostQuantity("1");
-    setCostUnitPrice("");
-    setCostError(null);
-  }, [workItemId]);
+  const [costLineForm, dispatchCostLineForm] = React.useReducer(
+    costLineFormReducer,
+    initialCostLineFormState
+  );
 
   useAppHotkey(
     "jobDetailCost",
@@ -101,25 +169,29 @@ export function JobCostsSection({
     }
   );
 
-  async function handleAddCostLine(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (costDescription.trim().length === 0) {
-      setCostError("Add a short cost description.");
+  async function handleAddCostLine() {
+    if (costLineForm.description.trim().length === 0) {
+      dispatchCostLineForm({
+        type: "setError",
+        value: "Add a short cost description.",
+      });
       return;
     }
 
-    const quantityResult = parseCostLineQuantity(costQuantity);
+    const quantityResult = parseCostLineQuantity(costLineForm.quantity);
 
     if (!quantityResult.ok) {
-      setCostError(quantityResult.error);
+      dispatchCostLineForm({ type: "setError", value: quantityResult.error });
       return;
     }
 
-    const unitPriceResult = parseCostLineUnitPriceMinor(costUnitPrice);
+    const unitPriceResult = parseCostLineUnitPriceMinor(costLineForm.unitPrice);
 
     if (!unitPriceResult.ok) {
-      setCostError(unitPriceResult.error);
+      dispatchCostLineForm({
+        type: "setError",
+        value: unitPriceResult.error,
+      });
       return;
     }
 
@@ -129,23 +201,23 @@ export function JobCostsSection({
     });
 
     if (!Number.isSafeInteger(lineTotalMinor)) {
-      setCostError("Line total is too large to submit safely.");
+      dispatchCostLineForm({
+        type: "setError",
+        value: "Line total is too large to submit safely.",
+      });
       return;
     }
 
-    setCostError(null);
+    dispatchCostLineForm({ type: "setError", value: null });
     const exit = await addJobCostLine({
-      description: costDescription.trim(),
+      description: costLineForm.description.trim(),
       quantity: quantityResult.quantity,
-      type: costLineType,
+      type: costLineForm.type,
       unitPriceMinor: unitPriceResult.unitPriceMinor,
     });
 
     if (Exit.isSuccess(exit)) {
-      setCostLineType("labour");
-      setCostDescription("");
-      setCostQuantity("1");
-      setCostUnitPrice("");
+      dispatchCostLineForm({ type: "submitted" });
     }
   }
 
@@ -175,7 +247,7 @@ export function JobCostsSection({
             className="flex flex-col gap-4"
             method="post"
             noValidate
-            onSubmit={handleAddCostLine}
+            onSubmit={(event) => submitClientForm(event, handleAddCostLine)}
           >
             <FieldGroup>
               <div className="grid gap-4 md:grid-cols-3">
@@ -184,7 +256,7 @@ export function JobCostsSection({
                   <FieldContent>
                     <CommandSelect
                       id="job-cost-type"
-                      value={costLineType}
+                      value={costLineForm.type}
                       placeholder="Pick type"
                       emptyText="No cost types found."
                       groups={COST_LINE_TYPE_SELECTION_GROUPS}
@@ -192,7 +264,10 @@ export function JobCostsSection({
                         const decoded = decodeCostLineType(nextValue);
 
                         if (decoded) {
-                          setCostLineType(decoded);
+                          dispatchCostLineForm({
+                            type: "setType",
+                            value: decoded,
+                          });
                         }
                       }}
                     />
@@ -201,8 +276,8 @@ export function JobCostsSection({
 
                 <Field
                   data-invalid={
-                    Boolean(costError) &&
-                    !parseCostLineQuantity(costQuantity).ok
+                    Boolean(costLineForm.error) &&
+                    !parseCostLineQuantity(costLineForm.quantity).ok
                   }
                 >
                   <FieldLabel htmlFor="job-cost-quantity">Quantity</FieldLabel>
@@ -213,22 +288,27 @@ export function JobCostsSection({
                       min="0.01"
                       step="0.01"
                       type="number"
-                      value={costQuantity}
+                      value={costLineForm.quantity}
                       aria-invalid={
-                        Boolean(costError) &&
-                        !parseCostLineQuantity(costQuantity).ok
+                        Boolean(costLineForm.error) &&
+                        !parseCostLineQuantity(costLineForm.quantity).ok
                           ? true
                           : undefined
                       }
-                      onChange={(event) => setCostQuantity(event.target.value)}
+                      onChange={(event) =>
+                        dispatchCostLineForm({
+                          type: "setQuantity",
+                          value: event.target.value,
+                        })
+                      }
                     />
                   </FieldContent>
                 </Field>
 
                 <Field
                   data-invalid={
-                    Boolean(costError) &&
-                    !parseCostLineUnitPriceMinor(costUnitPrice).ok
+                    Boolean(costLineForm.error) &&
+                    !parseCostLineUnitPriceMinor(costLineForm.unitPrice).ok
                   }
                 >
                   <FieldLabel htmlFor="job-cost-unit-price">
@@ -241,14 +321,19 @@ export function JobCostsSection({
                       min="0"
                       step="0.01"
                       type="number"
-                      value={costUnitPrice}
+                      value={costLineForm.unitPrice}
                       aria-invalid={
-                        Boolean(costError) &&
-                        !parseCostLineUnitPriceMinor(costUnitPrice).ok
+                        Boolean(costLineForm.error) &&
+                        !parseCostLineUnitPriceMinor(costLineForm.unitPrice).ok
                           ? true
                           : undefined
                       }
-                      onChange={(event) => setCostUnitPrice(event.target.value)}
+                      onChange={(event) =>
+                        dispatchCostLineForm({
+                          type: "setUnitPrice",
+                          value: event.target.value,
+                        })
+                      }
                     />
                   </FieldContent>
                 </Field>
@@ -256,7 +341,8 @@ export function JobCostsSection({
 
               <Field
                 data-invalid={
-                  Boolean(costError) && costDescription.trim().length === 0
+                  Boolean(costLineForm.error) &&
+                  costLineForm.description.trim().length === 0
                 }
               >
                 <FieldLabel htmlFor="job-cost-description">
@@ -266,18 +352,24 @@ export function JobCostsSection({
                   <Input
                     id="job-cost-description"
                     ref={costDescriptionRef}
-                    value={costDescription}
+                    value={costLineForm.description}
                     aria-invalid={
-                      Boolean(costError) && costDescription.trim().length === 0
+                      Boolean(costLineForm.error) &&
+                      costLineForm.description.trim().length === 0
                         ? true
                         : undefined
                     }
-                    onChange={(event) => setCostDescription(event.target.value)}
+                    onChange={(event) =>
+                      dispatchCostLineForm({
+                        type: "setDescription",
+                        value: event.target.value,
+                      })
+                    }
                   />
                   <FieldDescription>
                     Keep it short: what was used or what work was carried out.
                   </FieldDescription>
-                  <FieldError>{costError}</FieldError>
+                  <FieldError>{costLineForm.error}</FieldError>
                 </FieldContent>
               </Field>
             </FieldGroup>
@@ -518,15 +610,11 @@ function getDecimalParts(value: string) {
 }
 
 function formatMoneyMinor(value: number) {
-  return new Intl.NumberFormat("en-IE", {
-    currency: "EUR",
-    style: "currency",
-  }).format(value / 100);
+  return moneyFormatter.format(value / 100);
 }
 
 function formatQuantity(value: number) {
-  return new Intl.NumberFormat("en", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-  }).format(value);
+  return Number.isInteger(value)
+    ? integerQuantityFormatter.format(value)
+    : decimalQuantityFormatter.format(value);
 }

@@ -649,11 +649,7 @@ describe("jobs page", () => {
       const queuePanel = getPrimaryQueuePanel();
       const searchInput = screen.getByLabelText("Search jobs");
 
-      for (const query of [
-        "Primary Contact",
-        "contact.search@example.com",
-        "+353 1 555 0199",
-      ]) {
+      async function expectSearchMatchesContact(query: string) {
         await user.clear(searchInput);
         await user.type(searchInput, query);
 
@@ -664,6 +660,10 @@ describe("jobs page", () => {
           within(queuePanel).queryByText("Await materials")
         ).not.toBeInTheDocument();
       }
+
+      await expectSearchMatchesContact("Primary Contact");
+      await expectSearchMatchesContact("contact.search@example.com");
+      await expectSearchMatchesContact("+353 1 555 0199");
     }
   );
 

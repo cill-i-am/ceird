@@ -42,15 +42,19 @@ export interface NavUserAccount {
 export type NavUserNavigate = (options: LoginNavigationTarget) => Promise<void>;
 
 function getInitials(name: string) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  let initials = "";
 
-  return initials || "U";
+  for (const part of name.split(/\s+/)) {
+    if (initials.length >= 2) {
+      break;
+    }
+
+    if (part) {
+      initials += part[0];
+    }
+  }
+
+  return initials.toUpperCase() || "U";
 }
 
 export function NavUser({

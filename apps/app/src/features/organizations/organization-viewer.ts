@@ -1,7 +1,6 @@
 import {
   isAdministrativeOrganizationRole,
   isExternalOrganizationRole,
-  isInternalOrganizationRole,
   UserId,
 } from "@ceird/identity-core";
 import type {
@@ -27,12 +26,6 @@ export function isExternalOrganizationViewer(
   viewer: Pick<OrganizationViewer, "role">
 ): boolean {
   return isExternalOrganizationRole(viewer.role);
-}
-
-export function canUseInternalOrganizationOptions(
-  viewer: Pick<OrganizationViewer, "role">
-): boolean {
-  return isInternalOrganizationRole(viewer.role);
 }
 
 export function decodeOrganizationViewerUserId(input: unknown): UserIdType {

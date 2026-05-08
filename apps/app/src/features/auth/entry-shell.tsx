@@ -35,52 +35,6 @@ interface EntrySurfaceCardProps {
   readonly title: string;
 }
 
-interface EntryHighlightGridProps {
-  readonly items: readonly {
-    readonly description: string;
-    readonly title: string;
-  }[];
-}
-
-interface EntrySupportPanelProps {
-  readonly children?: ReactNode;
-  readonly className?: string;
-  readonly description?: string;
-  readonly title: string;
-}
-
-export const DEFAULT_AUTH_HIGHLIGHTS = [
-  {
-    title: "Clear ownership",
-    description: "See who owns what and what should move next without digging.",
-  },
-  {
-    title: "Fast updates",
-    description:
-      "Keep office staff and field crews aligned from the same workspace.",
-  },
-  {
-    title: "Simple access",
-    description: "Bring people in, verify accounts, and keep permissions tidy.",
-  },
-] as const;
-
-export const INVITATION_AUTH_HIGHLIGHTS = [
-  {
-    title: "Context stays attached",
-    description:
-      "Your invitation follows you through sign in so nothing gets lost.",
-  },
-  {
-    title: "Built for working teams",
-    description: "Roles, members, and follow-up actions stay straightforward.",
-  },
-  {
-    title: "No admin clutter",
-    description: "Get into the workspace quickly and keep work moving.",
-  },
-] as const;
-
 export function EntryShell(props: EntryShellProps) {
   const {
     badge,
@@ -145,41 +99,5 @@ export function EntrySurfaceCard(props: EntrySurfaceCardProps) {
         </CardFooter>
       ) : null}
     </Card>
-  );
-}
-
-export function EntryHighlightGrid({ items }: EntryHighlightGridProps) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {items.map((item) => (
-        <EntrySupportPanel
-          key={item.title}
-          title={item.title}
-          description={item.description}
-        />
-      ))}
-    </div>
-  );
-}
-
-export function EntrySupportPanel(props: EntrySupportPanelProps) {
-  const { children, className, description, title } = props;
-
-  return (
-    <div
-      data-slot="entry-support-panel"
-      className={cn(
-        "rounded-3xl border border-border/70 bg-background/92 p-4 shadow-sm shadow-primary/5",
-        className
-      )}
-    >
-      <div className="flex flex-col gap-2">
-        <p className="font-heading text-base font-medium">{title}</p>
-        {description ? (
-          <p className="text-sm/6 text-muted-foreground">{description}</p>
-        ) : null}
-        {children}
-      </div>
-    </div>
   );
 }

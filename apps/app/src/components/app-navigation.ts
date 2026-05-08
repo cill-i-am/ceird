@@ -15,7 +15,7 @@ import type * as React from "react";
 
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];
 
-export type AppNavigationAccess = "all" | "internal" | "administrators";
+type AppNavigationAccess = "all" | "internal" | "administrators";
 
 export interface AppNavigationItem {
   readonly access?: AppNavigationAccess;
@@ -26,7 +26,7 @@ export interface AppNavigationItem {
   readonly url: "/" | "/jobs" | "/sites" | "/activity" | "/members";
 }
 
-export const APP_PRIMARY_NAV_ITEMS = [
+const APP_PRIMARY_NAV_ITEMS = [
   {
     access: "internal",
     icon: ComputerTerminalIcon,

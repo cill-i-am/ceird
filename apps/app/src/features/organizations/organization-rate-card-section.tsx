@@ -26,6 +26,7 @@ import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import { OrganizationAsyncResultError } from "./organization-async-result-error";
 import {
@@ -111,7 +112,7 @@ export function OrganizationRateCardSection() {
           </p>
         </div>
         {listResult.waiting ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <p className="text-sm text-muted-foreground">Loading&hellip;</p>
         ) : null}
       </div>
 
@@ -147,7 +148,9 @@ function RateCardEditorSlot({
     return null;
   }
 
-  return <p className="text-sm text-muted-foreground">Loading rate card...</p>;
+  return (
+    <p className="text-sm text-muted-foreground">Loading rate card&hellip;</p>
+  );
 }
 
 function ExistingStandardRateCardEditor({
@@ -228,9 +231,7 @@ function RateCardForm({
     setLineErrors({});
   }, [initialLines]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleSubmit() {
     if (mutationResult.waiting) {
       return;
     }
@@ -300,7 +301,7 @@ function RateCardForm({
       ref={formRef}
       className="flex flex-col gap-4"
       noValidate
-      onSubmit={handleSubmit}
+      onSubmit={(event) => submitClientForm(event, handleSubmit)}
     >
       {lines.length > 0 ? (
         <div className="flex flex-col divide-y divide-border/60 border-y border-border/60">

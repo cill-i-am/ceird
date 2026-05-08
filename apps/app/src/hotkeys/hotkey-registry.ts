@@ -1,4 +1,4 @@
-export const HOTKEY_SCOPES = [
+const HOTKEY_SCOPES = [
   "global",
   "jobs",
   "job-create",
@@ -21,7 +21,7 @@ export const HOTKEY_GROUPS = [
   "Map",
 ] as const;
 
-export type HotkeyGroup = (typeof HOTKEY_GROUPS)[number];
+type HotkeyGroup = (typeof HOTKEY_GROUPS)[number];
 
 export interface HotkeyDefinition {
   readonly group: HotkeyGroup;

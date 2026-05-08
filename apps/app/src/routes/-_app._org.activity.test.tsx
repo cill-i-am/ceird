@@ -46,9 +46,11 @@ describe("activity route loader", () => {
       mockedListCurrentServerOrganizationActivity.mockResolvedValue(activity);
       mockedGetCurrentServerJobMemberOptions.mockResolvedValue(options);
 
-      const { decodeActivitySearch } = await import("./_app._org.activity");
-      const { loadActivityRouteData } =
-        await import("#/features/activity/activity-route-loader");
+      const [{ decodeActivitySearch }, { loadActivityRouteData }] =
+        await Promise.all([
+          import("./_app._org.activity"),
+          import("#/features/activity/activity-route-loader"),
+        ]);
       const search = decodeActivitySearch({
         actorUserId: "user_taylor",
         eventType: "job_created",

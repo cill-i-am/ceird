@@ -7,6 +7,7 @@ import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
@@ -160,11 +161,7 @@ export function LoginPage({
           className="flex flex-col gap-6"
           method="post"
           noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
-          }}
+          onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
         >
           <FieldGroup>
             <form.Field name="email">

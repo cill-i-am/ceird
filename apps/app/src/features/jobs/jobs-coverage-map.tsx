@@ -23,6 +23,7 @@ import type { SiteLocationLike } from "#/features/sites/site-location";
 import { cn } from "#/lib/utils";
 
 import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
+import { useCanRenderInteractiveMap } from "./use-can-render-interactive-map";
 
 type SiteRecord = SiteLocationLike & {
   readonly id: string;
@@ -57,16 +58,8 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
       }),
     [jobs, sites]
   );
-  const [canRenderInteractiveMap, setCanRenderInteractiveMap] =
-    React.useState(false);
+  const canRenderInteractiveMap = useCanRenderInteractiveMap();
   const hasUnmappedJobs = unmappedJobs.length > 0;
-
-  React.useEffect(() => {
-    setCanRenderInteractiveMap(
-      typeof window !== "undefined" &&
-        typeof window.URL?.createObjectURL === "function"
-    );
-  }, []);
 
   return (
     <div className="flex min-h-[calc(100vh-14rem)] flex-col overflow-hidden rounded-2xl border bg-background">
@@ -92,7 +85,10 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
         )}
       >
         <div className="min-h-[520px] overflow-hidden bg-muted/10">
-          {renderMapViewport(groupedSites, canRenderInteractiveMap)}
+          <MapViewport
+            canRenderInteractiveMap={canRenderInteractiveMap}
+            groupedSites={groupedSites}
+          />
         </div>
 
         {hasUnmappedJobs ? (
@@ -109,7 +105,7 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
 
                 return (
                   <li key={job.id} className="border-b last:border-b-0">
-                    <div className="flex flex-col gap-2 px-3 py-3">
+                    <div className="flex flex-col gap-2 p-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant={
@@ -167,10 +163,13 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   );
 }
 
-function renderMapViewport(
-  groupedSites: readonly MappedSiteGroup[],
-  canRenderInteractiveMap: boolean
-) {
+function MapViewport({
+  canRenderInteractiveMap,
+  groupedSites,
+}: {
+  readonly canRenderInteractiveMap: boolean;
+  readonly groupedSites: readonly MappedSiteGroup[];
+}) {
   if (groupedSites.length === 0) {
     return (
       <Empty className="h-full min-h-[520px] rounded-none border-0 bg-muted/10 px-6 py-10">
@@ -253,7 +252,7 @@ export interface MappedSiteGroup {
   readonly tone: "active" | "blocked" | "done";
 }
 
-export function groupJobsByMappedSite(
+function groupJobsByMappedSite(
   jobs: readonly JobListItem[],
   sites: ReadonlyMap<string, SiteRecord>
 ) {

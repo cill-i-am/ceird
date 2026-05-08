@@ -152,7 +152,7 @@ describe("site header", () => {
   });
 
   afterEach(() => {
-    if (typeof window.localStorage.clear === "function") {
+    if (typeof window.localStorage?.clear === "function") {
       window.localStorage.clear();
     }
     vi.clearAllMocks();

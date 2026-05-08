@@ -9,12 +9,12 @@ export const accountPasswordSchema = Schema.String.pipe(Schema.minLength(8));
 
 export const accountNameSchema = Schema.Trim.pipe(Schema.minLength(2));
 
-const LoginInput = Schema.Struct({
+const LoginInputSchema = Schema.Struct({
   email: accountEmailSchema,
   password: accountPasswordSchema,
 });
 
-const SignupInput = Schema.Struct({
+const SignupInputSchema = Schema.Struct({
   name: accountNameSchema,
   email: accountEmailSchema,
   password: accountPasswordSchema,
@@ -26,11 +26,11 @@ const SignupInput = Schema.Struct({
   })
 );
 
-const PasswordResetRequestInput = Schema.Struct({
+const PasswordResetRequestInputSchema = Schema.Struct({
   email: accountEmailSchema,
 });
 
-const PasswordResetInput = Schema.Struct({
+const PasswordResetInputSchema = Schema.Struct({
   password: accountPasswordSchema,
   confirmPassword: accountPasswordSchema,
 }).pipe(
@@ -40,30 +40,31 @@ const PasswordResetInput = Schema.Struct({
   })
 );
 
-export type LoginInput = typeof LoginInput.Type;
-export type SignupInput = typeof SignupInput.Type;
-export type PasswordResetRequestInput = typeof PasswordResetRequestInput.Type;
-export type PasswordResetInput = typeof PasswordResetInput.Type;
+export type LoginInput = typeof LoginInputSchema.Type;
+export type SignupInput = typeof SignupInputSchema.Type;
+export type PasswordResetRequestInput =
+  typeof PasswordResetRequestInputSchema.Type;
+export type PasswordResetInput = typeof PasswordResetInputSchema.Type;
 
-export const loginSchema = LoginInput;
-export const signupSchema = SignupInput;
-export const passwordResetRequestSchema = PasswordResetRequestInput;
-export const passwordResetSchema = PasswordResetInput;
+export const loginSchema = LoginInputSchema;
+export const signupSchema = SignupInputSchema;
+export const passwordResetRequestSchema = PasswordResetRequestInputSchema;
+export const passwordResetSchema = PasswordResetInputSchema;
 
 export function decodeLoginInput(input: unknown): LoginInput {
-  return ParseResult.decodeUnknownSync(LoginInput)(input);
+  return ParseResult.decodeUnknownSync(LoginInputSchema)(input);
 }
 
 export function decodeSignupInput(input: unknown): SignupInput {
-  return ParseResult.decodeUnknownSync(SignupInput)(input);
+  return ParseResult.decodeUnknownSync(SignupInputSchema)(input);
 }
 
 export function decodePasswordResetRequestInput(
   input: unknown
 ): PasswordResetRequestInput {
-  return ParseResult.decodeUnknownSync(PasswordResetRequestInput)(input);
+  return ParseResult.decodeUnknownSync(PasswordResetRequestInputSchema)(input);
 }
 
 export function decodePasswordResetInput(input: unknown): PasswordResetInput {
-  return ParseResult.decodeUnknownSync(PasswordResetInput)(input);
+  return ParseResult.decodeUnknownSync(PasswordResetInputSchema)(input);
 }

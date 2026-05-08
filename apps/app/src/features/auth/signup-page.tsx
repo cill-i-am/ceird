@@ -10,6 +10,7 @@ import {
   authClient,
   buildEmailVerificationRedirectTo,
 } from "#/lib/auth-client";
+import { submitClientForm } from "#/lib/client-form-submit";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
@@ -162,11 +163,7 @@ export function SignupPage({
           className="flex flex-col gap-6"
           method="post"
           noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
-          }}
+          onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
         >
           <FieldGroup>
             <form.Field name="name">

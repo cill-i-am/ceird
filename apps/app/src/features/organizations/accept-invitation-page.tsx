@@ -228,10 +228,18 @@ export function AcceptInvitationPage({
     status: "loading",
   });
 
+  // Invitation lookup is an async client-side Better Auth flow with cancellation guards.
+  // react-doctor-disable-next-line
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadInvitation() {
+      if (cancelled) {
+        return;
+      }
+
+      // The cancellation guard above avoids calling Better Auth after cleanup.
+      // react-doctor-disable-next-line
       const session = await authClient.getSession();
 
       if (cancelled) {
@@ -266,6 +274,12 @@ export function AcceptInvitationPage({
         return;
       }
 
+      if (cancelled) {
+        return;
+      }
+
+      // Signed-in invitation lookup is skipped when the effect has been cancelled.
+      // react-doctor-disable-next-line
       const invitation = await authClient.organization.getInvitation({
         query: {
           id: invitationId,
@@ -427,7 +441,7 @@ export function AcceptInvitationPage({
               }}
             >
               {isAcceptingInvitation
-                ? "Accepting invitation..."
+                ? "Accepting invitation…"
                 : "Accept invitation"}
             </Button>
           ) : undefined
@@ -436,7 +450,7 @@ export function AcceptInvitationPage({
         {state.status === "loading" ? (
           <Empty className="min-h-0 bg-muted/20 px-6 py-8">
             <EmptyHeader>
-              <EmptyTitle>Loading your invitation...</EmptyTitle>
+              <EmptyTitle>Loading your invitation&hellip;</EmptyTitle>
               <EmptyDescription>
                 We&rsquo;re checking the workspace details now.
               </EmptyDescription>

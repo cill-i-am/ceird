@@ -27,11 +27,11 @@ export class JobsPage {
   }
 
   async expectLoaded() {
-    await expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`);
-    await expect(
-      this.page.getByRole("dialog", { name: "New job" })
-    ).toBeHidden();
-    await expect(this.heading).toBeVisible();
+    await Promise.all([
+      expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`),
+      expect(this.page.getByRole("dialog", { name: "New job" })).toBeHidden(),
+      expect(this.heading).toBeVisible(),
+    ]);
   }
 
   async openCreateSheet() {
@@ -85,9 +85,11 @@ export class JobsCreateSheet {
   }
 
   async expectOpen() {
-    await expect(this.page).toHaveURL(/\/jobs\/new$/);
-    await expect(this.heading).toBeVisible();
-    await waitForSubmitHydration(this.page);
+    await Promise.all([
+      expect(this.page).toHaveURL(/\/jobs\/new$/),
+      expect(this.heading).toBeVisible(),
+      waitForSubmitHydration(this.page),
+    ]);
   }
 
   async chooseSiteOption(optionLabel: string) {
@@ -106,6 +108,8 @@ export class JobsCreateSheet {
   }
 
   async createInlineContact(contactName: string) {
+    // The contact options are rendered only after the combobox is opened.
+    // react-doctor-disable-next-line
     await this.contact.click();
     await this.contactName.fill(contactName);
     await chooseCommandOption(
@@ -117,7 +121,7 @@ export class JobsCreateSheet {
   async closeSiteDialog() {
     await this.page
       .getByRole("dialog", { name: "New site" })
-      .getByRole("button", { name: "Done" })
+      .getByRole("button", { name: "Close site details" })
       .click();
   }
 }
@@ -170,20 +174,26 @@ export class JobDetailSheet {
   }
 
   async expectOpen(title: string) {
-    await expect(this.page).toHaveURL(/\/jobs\/.+$/);
-    await expect(
-      this.page.getByRole("heading", { level: 2, name: title })
-    ).toBeVisible();
-    await waitForSubmitHydration(this.page);
+    await Promise.all([
+      expect(this.page).toHaveURL(/\/jobs\/.+$/),
+      expect(
+        this.page.getByRole("heading", { level: 2, name: title })
+      ).toBeVisible(),
+      waitForSubmitHydration(this.page),
+    ]);
   }
 
   async chooseStatusOption(optionLabel: string) {
+    // The status options are rendered only after the picker is opened.
+    // react-doctor-disable-next-line
     await this.statusSelect.click();
     await chooseCommandOption(this.page, optionLabel);
     await expect(this.statusSelect).toContainText(optionLabel);
   }
 
   async chooseVisitDurationOption(optionLabel: string) {
+    // The duration options are rendered only after the picker is opened.
+    // react-doctor-disable-next-line
     await this.visitDuration.click();
     await chooseCommandOption(this.page, optionLabel);
     await expect(this.visitDuration).toContainText(optionLabel);

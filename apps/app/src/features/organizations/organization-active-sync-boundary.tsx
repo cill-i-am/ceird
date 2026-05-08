@@ -1,6 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 
 import { Button } from "#/components/ui/button";
 import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
@@ -15,28 +15,73 @@ interface OrganizationActiveSyncBoundaryProps {
 
 type SyncState = "ready" | "syncing" | "error";
 
+interface OrganizationSyncState {
+  readonly retryCount: number;
+  readonly status: SyncState;
+}
+
+type OrganizationSyncAction =
+  | { readonly type: "ready" }
+  | { readonly type: "syncing" }
+  | { readonly type: "error" }
+  | { readonly type: "retry" };
+
+function setSyncStatus(
+  state: OrganizationSyncState,
+  status: SyncState
+): OrganizationSyncState {
+  return state.status === status ? state : { ...state, status };
+}
+
+function organizationSyncReducer(
+  state: OrganizationSyncState,
+  action: OrganizationSyncAction
+): OrganizationSyncState {
+  switch (action.type) {
+    case "ready": {
+      return setSyncStatus(state, "ready");
+    }
+    case "syncing": {
+      return setSyncStatus(state, "syncing");
+    }
+    case "error": {
+      return setSyncStatus(state, "error");
+    }
+    case "retry": {
+      return {
+        retryCount: state.retryCount + 1,
+        status: "syncing",
+      };
+    }
+    default: {
+      action satisfies never;
+      return state;
+    }
+  }
+}
+
 export function OrganizationActiveSyncBoundary({
   activeOrganizationSync,
   children,
 }: OrganizationActiveSyncBoundaryProps) {
   const router = useRouter();
   const { required, targetOrganizationId } = activeOrganizationSync;
-  const [retryCount, setRetryCount] = useState(0);
-  const [syncState, setSyncState] = useState<SyncState>(
-    required ? "syncing" : "ready"
-  );
+  const [syncState, dispatchSyncState] = useReducer(organizationSyncReducer, {
+    retryCount: 0,
+    status: required ? "syncing" : "ready",
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     if (!required) {
-      setSyncState("ready");
+      dispatchSyncState({ type: "ready" });
       return () => {
         cancelled = true;
       };
     }
 
-    setSyncState("syncing");
+    dispatchSyncState({ type: "syncing" });
 
     void (async () => {
       try {
@@ -47,11 +92,11 @@ export function OrganizationActiveSyncBoundary({
         await router.invalidate({ sync: true });
 
         if (!cancelled) {
-          setSyncState("ready");
+          dispatchSyncState({ type: "ready" });
         }
       } catch {
         if (!cancelled) {
-          setSyncState("error");
+          dispatchSyncState({ type: "error" });
         }
       }
     })();
@@ -59,9 +104,9 @@ export function OrganizationActiveSyncBoundary({
     return () => {
       cancelled = true;
     };
-  }, [required, retryCount, router, targetOrganizationId]);
+  }, [required, syncState.retryCount, router, targetOrganizationId]);
 
-  if (syncState === "syncing") {
+  if (syncState.status === "syncing") {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center">
         <DotMatrixLoadingState label="Loading your organization" />
@@ -69,7 +114,7 @@ export function OrganizationActiveSyncBoundary({
     );
   }
 
-  if (syncState === "error") {
+  if (syncState.status === "error") {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm">
         <p className="text-destructive">
@@ -79,7 +124,7 @@ export function OrganizationActiveSyncBoundary({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setRetryCount((currentCount) => currentCount + 1)}
+          onClick={() => dispatchSyncState({ type: "retry" })}
         >
           Try again
         </Button>

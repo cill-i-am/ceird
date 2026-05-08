@@ -36,6 +36,8 @@ export async function listAllCurrentServerJobsDirect(
 
   while (true) {
     const urlParams = cursor ? { ...staticQuery, cursor } : staticQuery;
+    // Cursor pagination must await each page before requesting its next cursor.
+    // react-doctor-disable-next-line
     const page = await runAppApiClient(
       request,
       "JobsServer.listAllJobs.page",
