@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -45,9 +51,7 @@ describe("app global command actions", () => {
         ).toBeInTheDocument();
       });
 
-      expect(
-        screen.getByLabelText("Go to user settings shortcut: G then T")
-      ).toBeVisible();
+      expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
         screen.queryByRole("option", { name: /go to jobs/i })
       ).not.toBeInTheDocument();
@@ -92,24 +96,12 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
-      expect(
-        screen.getByLabelText("Go to Home shortcut: G then H")
-      ).toBeVisible();
-      expect(
-        screen.getByLabelText("Go to Jobs shortcut: G then J")
-      ).toBeVisible();
-      expect(
-        screen.getByLabelText("Go to Sites shortcut: G then S")
-      ).toBeVisible();
-      expect(
-        screen.getByLabelText("Go to Activity shortcut: G then A")
-      ).toBeVisible();
-      expect(
-        screen.getByLabelText("Go to Members shortcut: G then M")
-      ).toBeVisible();
-      expect(
-        screen.getByLabelText(/Go to organization settings shortcut: G then W/i)
-      ).toBeVisible();
+      expectCommandShortcut("Go to Home", ["G", "H"]);
+      expectCommandShortcut("Go to Jobs", ["G", "J"]);
+      expectCommandShortcut("Go to Sites", ["G", "S"]);
+      expectCommandShortcut("Go to Activity", ["G", "A"]);
+      expectCommandShortcut("Go to Members", ["G", "M"]);
+      expectCommandShortcut("Open organization settings", ["G", "W"]);
 
       await user.click(screen.getByRole("option", { name: /go to jobs/i }));
 
@@ -141,9 +133,7 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
-      expect(
-        screen.getByLabelText(/Go to organization settings shortcut: G then W/i)
-      ).toBeVisible();
+      expectCommandShortcut("Open organization settings", ["G", "W"]);
     }
   );
 
@@ -198,15 +188,11 @@ describe("app global command actions", () => {
         ).toBeInTheDocument();
       });
 
-      expect(
-        screen.getByLabelText("Go to Jobs shortcut: G then J")
-      ).toBeVisible();
+      expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expect(
         screen.getByRole("option", { name: /open user settings/i })
       ).toBeInTheDocument();
-      expect(
-        screen.getByLabelText("Go to user settings shortcut: G then T")
-      ).toBeVisible();
+      expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
         screen.queryByRole("option", { name: /go to home/i })
       ).not.toBeInTheDocument();
@@ -227,3 +213,11 @@ describe("app global command actions", () => {
     }
   );
 });
+
+function expectCommandShortcut(title: string, keys: readonly string[]) {
+  const option = screen.getByRole("option", { name: title });
+
+  for (const key of keys) {
+    expect(within(option).getByText(key)).toBeVisible();
+  }
+}

@@ -215,6 +215,7 @@ function CommandBarDialog({
                       {action.shortcut ? (
                         <ShortcutHint
                           className="order-3 shrink-0 tabular-nums"
+                          decorative
                           hotkey={action.shortcut.hotkey}
                           label={action.shortcut.label}
                         />

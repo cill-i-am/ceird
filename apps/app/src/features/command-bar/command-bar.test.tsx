@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -121,9 +127,10 @@ describe("command bar registry", () => {
         ).toBeInTheDocument();
       });
 
-      expect(
-        screen.getByLabelText("Go to Jobs shortcut: G then J")
-      ).toBeVisible();
+      const option = screen.getByRole("option", { name: "Go to Jobs" });
+
+      expect(within(option).getByText("G")).toBeVisible();
+      expect(within(option).getByText("J")).toBeVisible();
     }
   );
 });

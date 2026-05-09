@@ -27,8 +27,12 @@ function getServerShortcutDisplayPlatform(): ShortcutDisplayPlatform {
   return "linux";
 }
 
+function unsubscribeShortcutDisplayPlatform() {
+  return null;
+}
+
 function subscribeToShortcutDisplayPlatform() {
-  return () => {};
+  return unsubscribeShortcutDisplayPlatform;
 }
 
 function useShortcutDisplayPlatform() {
