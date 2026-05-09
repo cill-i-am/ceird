@@ -19,7 +19,6 @@ import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Empty,
-  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -201,18 +200,6 @@ export function SitesPage({
               Create a site before assigning jobs to a place.
             </EmptyDescription>
           </EmptyHeader>
-          {canCreateSites ? (
-            <EmptyContent>
-              <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
-                <HugeiconsIcon
-                  icon={Add01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                New site
-              </Link>
-            </EmptyContent>
-          ) : null}
         </Empty>
       )}
 

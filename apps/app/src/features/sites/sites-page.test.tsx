@@ -117,6 +117,18 @@ describe("sites page", () => {
     }
   );
 
+  it("keeps the empty state informational instead of duplicating creation", () => {
+    renderSitesPage({
+      options: {
+        ...options,
+        sites: [],
+      },
+    });
+
+    expect(screen.getByText("No sites yet.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /new site/i })).toHaveLength(1);
+  });
+
   it(
     "registers site page actions in the command bar",
     { timeout: 10_000 },

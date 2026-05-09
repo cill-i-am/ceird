@@ -14,7 +14,9 @@ import type {
   UserId,
 } from "@ceird/identity-core";
 import {
+  Add01Icon,
   MoreHorizontalCircle01Icon,
+  Refresh01Icon,
   UserRemove01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -30,7 +32,6 @@ import {
   AppRowListLeading,
   AppRowListMeta,
 } from "#/components/app-row-list";
-import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -54,11 +55,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#/components/ui/empty";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { getErrorText } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
+import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
+import type { CommandAction } from "#/features/command-bar/command-bar";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
@@ -175,14 +187,22 @@ function formatMemberCount(count: number) {
   return count === 1 ? "1 active" : `${count} active`;
 }
 
+function isCurrentOrganizationMember(
+  member: OrganizationMemberSummary,
+  currentUserId: UserId | undefined
+) {
+  return currentUserId !== undefined && member.userId === currentUserId;
+}
+
 // The members page coordinates active members, invitations, role actions, and route-level hotkeys.
+// eslint-disable-next-line complexity -- This page coordinates separate member, invite, and hotkey workflows until they settle into smaller feature modules.
 // react-doctor-disable-next-line
 export function OrganizationMembersPage({
   activeOrganizationId,
   currentMember = {
     email: "You",
     name: "You",
-    role: "member",
+    role: "owner",
   },
   currentUserId,
   onCurrentMemberAccessChanged,
@@ -232,6 +252,7 @@ export function OrganizationMembersPage({
     null
   );
   const formRef = React.useRef<HTMLFormElement | null>(null);
+  const inviteDialogContentRef = React.useRef<HTMLDivElement | null>(null);
   const latestActiveOrganizationId = React.useRef(activeOrganizationId);
   const memberRequestSequence = React.useRef(0);
   const membersOrganizationId = React.useRef(activeOrganizationId);
@@ -239,6 +260,7 @@ export function OrganizationMembersPage({
   const invitationsOrganizationId = React.useRef(activeOrganizationId);
   const roleSelectTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = React.useState(false);
   latestActiveOrganizationId.current = activeOrganizationId;
 
   const isLatestActiveOrganization = React.useCallback(
@@ -429,6 +451,8 @@ export function OrganizationMembersPage({
 
       formApi.reset();
       setSuccessMessage(`Invitation sent to ${invite.email}.`);
+      setIsInviteDialogOpen(false);
+      setRoleSelectOpen(false);
       await loadInvitations();
     },
   });
@@ -495,6 +519,12 @@ export function OrganizationMembersPage({
       ? members
       : [toCurrentOrganizationMember(currentMember, currentUserId)];
   const displayedMemberCount = memberTotal ?? displayedMembers.length;
+  const canInviteMembers =
+    currentViewerRole === "owner" || currentViewerRole === "admin";
+  const hasNoTeammates =
+    members.length === 0 ||
+    (displayedMembers.length === 1 &&
+      isCurrentOrganizationMember(displayedMembers[0], currentUserId));
 
   const handleMemberRoleChange = React.useCallback(
     async (member: OrganizationMemberSummary, role: OrganizationRoleType) => {
@@ -651,6 +681,58 @@ export function OrganizationMembersPage({
     ]
   );
 
+  const membersPageCommandActions = React.useMemo<
+    readonly CommandAction[]
+  >(() => {
+    const actions: CommandAction[] = [
+      {
+        group: "Current page",
+        icon: Refresh01Icon,
+        id: "members-refresh",
+        priority: 70,
+        run: async () => {
+          await Promise.all([loadMembers(), loadInvitations()]);
+        },
+        scope: "route",
+        title: "Refresh members",
+      },
+    ];
+
+    if (canInviteMembers) {
+      actions.unshift({
+        disabled: !isHydrated || isInviteDialogOpen,
+        group: "Current page",
+        icon: Add01Icon,
+        id: "members-invite",
+        priority: 80,
+        run: () => setIsInviteDialogOpen(true),
+        scope: "route",
+        shortcut: HOTKEYS.membersInvite,
+        title: "Invite teammate",
+      });
+    }
+
+    return actions;
+  }, [
+    canInviteMembers,
+    isHydrated,
+    isInviteDialogOpen,
+    loadInvitations,
+    loadMembers,
+  ]);
+
+  useRegisterCommandActions(membersPageCommandActions);
+
+  useAppHotkey(
+    "membersInvite",
+    () => {
+      setIsInviteDialogOpen(true);
+    },
+    {
+      enabled: isHydrated && canInviteMembers && !isInviteDialogOpen,
+      ignoreInputs: true,
+    }
+  );
   useAppHotkey(
     "membersSubmit",
     () => {
@@ -658,9 +740,13 @@ export function OrganizationMembersPage({
         return;
       }
 
+      if (!isInviteDialogOpen) {
+        return;
+      }
+
       formRef.current?.requestSubmit();
     },
-    { enabled: isHydrated }
+    { enabled: isHydrated && canInviteMembers }
   );
   useAppHotkey(
     "membersRole",
@@ -669,11 +755,15 @@ export function OrganizationMembersPage({
         return;
       }
 
+      if (!isInviteDialogOpen) {
+        return;
+      }
+
       roleSelectTriggerRef.current?.focus();
       setRoleSelectOpen(true);
     },
     {
-      enabled: isHydrated && !roleSelectOpen,
+      enabled: isHydrated && canInviteMembers && !roleSelectOpen,
       ignoreInputs: true,
     }
   );
@@ -688,155 +778,159 @@ export function OrganizationMembersPage({
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <AppPageHeader eyebrow="Organization access" title="Members" />
+      <MembersPageHeader
+        canInviteMembers={canInviteMembers}
+        isHydrated={isHydrated}
+        onInvite={() => setIsInviteDialogOpen(true)}
+      />
+
+      {successMessage ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {successMessage}
+        </p>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)]">
-        <div className="flex flex-col gap-6">
-          <section aria-labelledby="current-members-heading">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <h2
-                id="current-members-heading"
-                className="font-heading text-lg font-medium"
-              >
-                Current members
-              </h2>
-              <Badge
-                variant="secondary"
-                className="w-fit rounded-full px-3 py-1"
-              >
-                {formatMemberCount(displayedMemberCount)}
-              </Badge>
-            </div>
-            {isLoadingMembers && members.length === 0 ? (
-              <DotMatrixLoadingState
-                label="Loading members"
-                className="justify-start border-y py-4"
-              />
-            ) : null}
-            {memberLoadErrorMessage ? (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{memberLoadErrorMessage}</AlertDescription>
-              </Alert>
-            ) : null}
-            {memberActionSuccessMessage ? (
-              <p role="status" className="mb-4 text-sm text-muted-foreground">
-                {memberActionSuccessMessage}
+        <CurrentMembersSection
+          activeMemberAction={activeMemberAction}
+          currentUserId={currentUserId}
+          currentViewerRole={currentViewerRole}
+          displayedMemberCount={displayedMemberCount}
+          displayedMembers={displayedMembers}
+          hasNoTeammates={hasNoTeammates}
+          isHydrated={isHydrated}
+          isLoadingMembers={isLoadingMembers}
+          memberActionErrors={memberActionErrors}
+          memberActionSuccessMessage={memberActionSuccessMessage}
+          memberLoadErrorMessage={memberLoadErrorMessage}
+          memberTotal={memberTotal}
+          members={members}
+          ownerCount={ownerCount}
+          onMemberRemoval={handleMemberRemoval}
+          onMemberRoleChange={handleMemberRoleChange}
+        />
+
+        {shouldRenderInvitationsSection ? (
+          <PendingInvitationsSection
+            activeInvitationAction={activeInvitationAction}
+            invitationActionErrorMessage={invitationActionErrorMessage}
+            invitationActionSuccessMessage={invitationActionSuccessMessage}
+            invitations={invitations}
+            isHydrated={isHydrated}
+            isLoadingInvitations={isLoadingInvitations}
+            loadErrorMessage={loadErrorMessage}
+            onInvitationAction={handleInvitationAction}
+          />
+        ) : null}
+      </div>
+
+      <Dialog
+        open={isInviteDialogOpen}
+        onOpenChange={(open) => {
+          setIsInviteDialogOpen(open);
+          if (!open) {
+            setRoleSelectOpen(false);
+          }
+        }}
+      >
+        <DialogContent
+          ref={inviteDialogContentRef}
+          className="sm:max-w-lg"
+          initialFocus={inviteDialogContentRef}
+        >
+          <form
+            ref={formRef}
+            className="flex flex-col gap-5"
+            method="post"
+            noValidate
+            onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
+          >
+            <DialogHeader>
+              <DialogTitle>Invite teammate</DialogTitle>
+              <DialogDescription>
+                Send an invitation to join this organization.
+              </DialogDescription>
+            </DialogHeader>
+
+            <FieldGroup>
+              <form.Field name="email">
+                {(field) => {
+                  const errorText = getErrorText(field.state.meta.errors);
+
+                  return (
+                    <AuthFormField
+                      label="Email"
+                      htmlFor="invite-email"
+                      invalid={Boolean(errorText)}
+                      errorText={errorText}
+                    >
+                      <Input
+                        id="invite-email"
+                        name={field.name}
+                        type="email"
+                        autoComplete="email"
+                        value={field.state.value}
+                        aria-invalid={Boolean(errorText) || undefined}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                      />
+                    </AuthFormField>
+                  );
+                }}
+              </form.Field>
+
+              <form.Field name="role">
+                {(field) => {
+                  const errorText = getErrorText(field.state.meta.errors);
+
+                  return (
+                    <AuthFormField
+                      label="Role"
+                      htmlFor="invite-role"
+                      invalid={Boolean(errorText)}
+                      errorText={errorText}
+                    >
+                      <CommandSelect
+                        id="invite-role"
+                        value={field.state.value}
+                        placeholder="Pick role"
+                        emptyText="No roles found."
+                        groups={ROLE_SELECTION_GROUPS}
+                        ariaInvalid={errorText ? true : undefined}
+                        open={roleSelectOpen}
+                        triggerRef={roleSelectTriggerRef}
+                        onOpenChange={setRoleSelectOpen}
+                        onValueChange={(nextValue) => {
+                          if (!isInviteRole(nextValue)) {
+                            return;
+                          }
+
+                          field.handleChange(nextValue);
+                          field.handleBlur();
+                        }}
+                      />
+                    </AuthFormField>
+                  );
+                }}
+              </form.Field>
+            </FieldGroup>
+
+            {errorMessage ? (
+              <p role="alert" className="text-sm text-destructive">
+                {errorMessage}
               </p>
             ) : null}
-            <AppRowList aria-label="Current members">
-              {displayedMembers.map((member) => (
-                <CurrentMemberRow
-                  key={member.id}
-                  activeAction={activeMemberAction}
-                  actionsDisabled={!isHydrated || Boolean(activeMemberAction)}
-                  currentViewerRole={currentViewerRole}
-                  errorMessage={memberActionErrors[member.id]}
-                  isCurrentUser={
-                    currentUserId !== undefined &&
-                    member.userId === currentUserId
-                  }
-                  member={member}
-                  ownerCount={ownerCount}
-                  onRoleChange={handleMemberRoleChange}
-                  onRemove={handleMemberRemoval}
-                />
-              ))}
-            </AppRowList>
-          </section>
 
-          <AppUtilityPanel
-            title="Invite teammate"
-            className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
-          >
-            <form
-              ref={formRef}
-              className="flex flex-col gap-5"
-              method="post"
-              noValidate
-              onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
-            >
-              <FieldGroup>
-                <form.Field name="email">
-                  {(field) => {
-                    const errorText = getErrorText(field.state.meta.errors);
-
-                    return (
-                      <AuthFormField
-                        label="Email"
-                        htmlFor="invite-email"
-                        invalid={Boolean(errorText)}
-                        errorText={errorText}
-                      >
-                        <Input
-                          id="invite-email"
-                          name={field.name}
-                          type="email"
-                          autoComplete="email"
-                          value={field.state.value}
-                          aria-invalid={Boolean(errorText) || undefined}
-                          onBlur={field.handleBlur}
-                          onChange={(event) =>
-                            field.handleChange(event.target.value)
-                          }
-                        />
-                      </AuthFormField>
-                    );
-                  }}
-                </form.Field>
-
-                <form.Field name="role">
-                  {(field) => {
-                    const errorText = getErrorText(field.state.meta.errors);
-
-                    return (
-                      <AuthFormField
-                        label="Role"
-                        htmlFor="invite-role"
-                        invalid={Boolean(errorText)}
-                        errorText={errorText}
-                      >
-                        <CommandSelect
-                          id="invite-role"
-                          value={field.state.value}
-                          placeholder="Pick role"
-                          emptyText="No roles found."
-                          groups={ROLE_SELECTION_GROUPS}
-                          ariaInvalid={errorText ? true : undefined}
-                          open={roleSelectOpen}
-                          triggerRef={roleSelectTriggerRef}
-                          onOpenChange={setRoleSelectOpen}
-                          onValueChange={(nextValue) => {
-                            if (!isInviteRole(nextValue)) {
-                              return;
-                            }
-
-                            field.handleChange(nextValue);
-                            field.handleBlur();
-                          }}
-                        />
-                      </AuthFormField>
-                    );
-                  }}
-                </form.Field>
-              </FieldGroup>
-
-              {errorMessage ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {errorMessage}
-                </p>
-              ) : null}
-              {successMessage ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {successMessage}
-                </p>
-              ) : null}
-
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                Cancel
+              </DialogClose>
               <form.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
                   <Button
                     type="submit"
-                    size="lg"
-                    className="w-full sm:w-auto"
                     loading={isSubmitting}
                     disabled={!isHydrated}
                   >
@@ -844,71 +938,235 @@ export function OrganizationMembersPage({
                   </Button>
                 )}
               </form.Subscribe>
-            </form>
-          </AppUtilityPanel>
-        </div>
-
-        {shouldRenderInvitationsSection ? (
-          <section
-            aria-labelledby="pending-invitations-heading"
-            className="flex flex-col gap-4"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <h2
-                id="pending-invitations-heading"
-                className="font-heading text-lg font-medium"
-              >
-                Pending invitations
-              </h2>
-              <Badge
-                variant="secondary"
-                className="w-fit rounded-full px-3 py-1"
-              >
-                {formatInvitationCount(invitations.length)}
-              </Badge>
-            </div>
-            {isLoadingInvitations ? (
-              <DotMatrixLoadingState
-                label="Loading invitations"
-                className="justify-start border-y py-4"
-              />
-            ) : null}
-            {loadErrorMessage ? (
-              <Alert variant="destructive">
-                <AlertDescription>{loadErrorMessage}</AlertDescription>
-              </Alert>
-            ) : null}
-            {invitationActionErrorMessage ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {invitationActionErrorMessage}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            {invitationActionSuccessMessage ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                {invitationActionSuccessMessage}
-              </p>
-            ) : null}
-            {invitations.length > 0 ? (
-              <AppRowList aria-label="Pending invitations">
-                {invitations.map((invitation) => (
-                  <PendingInvitationRow
-                    key={invitation.id}
-                    activeAction={activeInvitationAction}
-                    actionsDisabled={
-                      !isHydrated || Boolean(activeInvitationAction)
-                    }
-                    invitation={invitation}
-                    onInvitationAction={handleInvitationAction}
-                  />
-                ))}
-              </AppRowList>
-            ) : null}
-          </section>
-        ) : null}
-      </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function MembersPageHeader({
+  canInviteMembers,
+  isHydrated,
+  onInvite,
+}: {
+  readonly canInviteMembers: boolean;
+  readonly isHydrated: boolean;
+  readonly onInvite: () => void;
+}) {
+  return (
+    <AppPageHeader
+      title="Members"
+      actions={
+        canInviteMembers ? (
+          <Button type="button" onClick={onInvite} disabled={!isHydrated}>
+            <HugeiconsIcon
+              icon={Add01Icon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+            Invite teammate
+            <ShortcutHint
+              className="ml-1"
+              hotkey={HOTKEYS.membersInvite.hotkey}
+              label={HOTKEYS.membersInvite.label}
+              decorative
+            />
+          </Button>
+        ) : null
+      }
+    />
+  );
+}
+
+function CurrentMembersSection({
+  activeMemberAction,
+  currentUserId,
+  currentViewerRole,
+  displayedMemberCount,
+  displayedMembers,
+  hasNoTeammates,
+  isHydrated,
+  isLoadingMembers,
+  memberActionErrors,
+  memberActionSuccessMessage,
+  memberLoadErrorMessage,
+  memberTotal,
+  members,
+  ownerCount,
+  onMemberRemoval,
+  onMemberRoleChange,
+}: {
+  readonly activeMemberAction: MemberAction | null;
+  readonly currentUserId?: UserId | undefined;
+  readonly currentViewerRole: OrganizationRoleType;
+  readonly displayedMemberCount: number;
+  readonly displayedMembers: readonly OrganizationMemberSummary[];
+  readonly hasNoTeammates: boolean;
+  readonly isHydrated: boolean;
+  readonly isLoadingMembers: boolean;
+  readonly memberActionErrors: Readonly<Record<string, string>>;
+  readonly memberActionSuccessMessage: string | null;
+  readonly memberLoadErrorMessage: string | null;
+  readonly memberTotal: number | null;
+  readonly members: readonly OrganizationMemberSummary[];
+  readonly ownerCount: number;
+  readonly onMemberRemoval: (
+    member: OrganizationMemberSummary
+  ) => Promise<void>;
+  readonly onMemberRoleChange: (
+    member: OrganizationMemberSummary,
+    role: OrganizationRoleType
+  ) => Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      <section aria-labelledby="current-members-heading">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <h2
+            id="current-members-heading"
+            className="font-heading text-lg font-medium"
+          >
+            Current members
+          </h2>
+          <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+            {formatMemberCount(displayedMemberCount)}
+          </Badge>
+        </div>
+        {isLoadingMembers && members.length === 0 ? (
+          <DotMatrixLoadingState
+            label="Loading members"
+            className="justify-start border-y py-4"
+          />
+        ) : null}
+        {memberLoadErrorMessage ? (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{memberLoadErrorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+        {memberActionSuccessMessage ? (
+          <p role="status" className="mb-4 text-sm text-muted-foreground">
+            {memberActionSuccessMessage}
+          </p>
+        ) : null}
+        {!isLoadingMembers &&
+        memberTotal !== null &&
+        !memberLoadErrorMessage &&
+        hasNoTeammates ? (
+          <Empty className="min-h-64 rounded-[calc(var(--radius)*3)] bg-background/78 supports-[backdrop-filter]:bg-background/68">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+              </EmptyMedia>
+              <EmptyTitle>No teammates yet.</EmptyTitle>
+              <EmptyDescription>
+                Invite someone so they can help run work from Ceird.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <AppRowList aria-label="Current members">
+            {displayedMembers.map((member) => (
+              <CurrentMemberRow
+                key={member.id}
+                activeAction={activeMemberAction}
+                actionsDisabled={!isHydrated || Boolean(activeMemberAction)}
+                currentViewerRole={currentViewerRole}
+                errorMessage={memberActionErrors[member.id]}
+                isCurrentUser={isCurrentOrganizationMember(
+                  member,
+                  currentUserId
+                )}
+                member={member}
+                ownerCount={ownerCount}
+                onRoleChange={onMemberRoleChange}
+                onRemove={onMemberRemoval}
+              />
+            ))}
+          </AppRowList>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PendingInvitationsSection({
+  activeInvitationAction,
+  invitationActionErrorMessage,
+  invitationActionSuccessMessage,
+  invitations,
+  isHydrated,
+  isLoadingInvitations,
+  loadErrorMessage,
+  onInvitationAction,
+}: {
+  readonly activeInvitationAction: {
+    readonly invitationId: string;
+    readonly type: InvitationAction;
+  } | null;
+  readonly invitationActionErrorMessage: string | null;
+  readonly invitationActionSuccessMessage: string | null;
+  readonly invitations: readonly InvitationSummary[];
+  readonly isHydrated: boolean;
+  readonly isLoadingInvitations: boolean;
+  readonly loadErrorMessage: string | null;
+  readonly onInvitationAction: (
+    invitation: InvitationSummary,
+    action: InvitationAction
+  ) => Promise<void>;
+}) {
+  return (
+    <section
+      aria-labelledby="pending-invitations-heading"
+      className="flex flex-col gap-4"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <h2
+          id="pending-invitations-heading"
+          className="font-heading text-lg font-medium"
+        >
+          Pending invitations
+        </h2>
+        <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+          {formatInvitationCount(invitations.length)}
+        </Badge>
+      </div>
+      {isLoadingInvitations ? (
+        <DotMatrixLoadingState
+          label="Loading invitations"
+          className="justify-start border-y py-4"
+        />
+      ) : null}
+      {loadErrorMessage ? (
+        <Alert variant="destructive">
+          <AlertDescription>{loadErrorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+      {invitationActionErrorMessage ? (
+        <Alert variant="destructive">
+          <AlertDescription>{invitationActionErrorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+      {invitationActionSuccessMessage ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {invitationActionSuccessMessage}
+        </p>
+      ) : null}
+      {invitations.length > 0 ? (
+        <AppRowList aria-label="Pending invitations">
+          {invitations.map((invitation) => (
+            <PendingInvitationRow
+              key={invitation.id}
+              activeAction={activeInvitationAction}
+              actionsDisabled={!isHydrated || Boolean(activeInvitationAction)}
+              invitation={invitation}
+              onInvitationAction={onInvitationAction}
+            />
+          ))}
+        </AppRowList>
+      ) : null}
+    </section>
   );
 }
 

@@ -29,6 +29,16 @@ export function RouteHotkeys({
   });
 
   useAppHotkeySequence(
+    "goHome",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/" });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
+
+  useAppHotkeySequence(
     "goSites",
     () => {
       React.startTransition(() => {
@@ -78,6 +88,12 @@ function AdministratorRouteHotkeys() {
   useAppHotkeySequence("goMembers", () => {
     React.startTransition(() => {
       navigate({ to: "/members" });
+    });
+  });
+
+  useAppHotkeySequence("goOrganizationSettings", () => {
+    React.startTransition(() => {
+      navigate({ to: "/organization/settings" });
     });
   });
 

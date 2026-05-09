@@ -1,60 +1,20 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ComponentProps } from "react";
 
 import { SiteHeader } from "./site-header";
 
-const {
-  mockedActiveScopes,
-  mockedNavigate,
-  mockedPathname,
-  mockedRole,
-  mockedSearch,
-  mockedUseMatches,
-} = vi.hoisted(() => ({
-  mockedActiveScopes: [] as unknown[],
+const { mockedNavigate, mockedRole } = vi.hoisted(() => ({
   mockedNavigate: vi.fn<() => Promise<void>>(),
-  mockedPathname: {
-    value: "/jobs",
-  },
   mockedRole: {
     value: undefined as "owner" | "admin" | "member" | "external" | undefined,
   },
-  mockedSearch: {
-    value: {} as Record<string, unknown>,
-  },
-  mockedUseMatches:
-    vi.fn<(input: { select: (matches: unknown[]) => unknown }) => unknown>(),
 }));
 
 function setOrgMatches(
   currentOrganizationRole?: "owner" | "admin" | "member" | "external"
 ) {
   mockedRole.value = currentOrganizationRole;
-  mockedUseMatches.mockImplementation(({ select }) =>
-    select([
-      { id: "__root__", staticData: {} },
-      { id: "/_app", staticData: {} },
-      {
-        context: {
-          currentOrganizationRole,
-        },
-        id: "/_app/_org",
-        routeId: "/_app/_org",
-        staticData: {},
-      },
-      {
-        id: "/_app/_org/jobs",
-        staticData: {
-          breadcrumb: {
-            label: "Jobs",
-            to: "/jobs",
-          },
-        },
-      },
-    ])
-  );
 }
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -62,15 +22,6 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
   return {
     ...actual,
-    Link: (({
-      children,
-      to,
-      ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    )) as typeof actual.Link,
     useMatch: ((options?: {
       select?: (match: {
         context: {
@@ -92,37 +43,8 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       return options?.select ? options.select(match) : match;
     }) as typeof actual.useMatch,
     useNavigate: () => mockedNavigate,
-    useMatches: mockedUseMatches as typeof actual.useMatches,
-    useRouterState: ((options?: {
-      select?: (state: { location: { pathname: string } }) => unknown;
-    }) => {
-      const state = {
-        location: {
-          pathname: mockedPathname.value,
-          search: mockedSearch.value,
-        },
-      };
-
-      return options?.select ? options.select(state) : state;
-    }) as typeof actual.useRouterState,
   };
 });
-
-vi.mock(import("#/components/ThemeToggle"), () => ({
-  default: () => <button type="button">Theme mode</button>,
-}));
-
-vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
-  ShortcutHelpOverlay: ({
-    activeScopes,
-  }: {
-    activeScopes: readonly string[];
-  }) => {
-    mockedActiveScopes.push(activeScopes);
-
-    return <button type="button">Keyboard shortcuts</button>;
-  },
-}));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
@@ -145,9 +67,6 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 
 describe("site header", () => {
   beforeEach(() => {
-    mockedActiveScopes.length = 0;
-    mockedPathname.value = "/jobs";
-    mockedSearch.value = {};
     setOrgMatches();
   });
 
@@ -159,7 +78,7 @@ describe("site header", () => {
   });
 
   it(
-    "keeps navigation, route breadcrumbs, and theme controls available",
+    "keeps the sidebar trigger available without duplicating page actions",
     {
       timeout: 10_000,
     },
@@ -175,132 +94,15 @@ describe("site header", () => {
       ).toBeInTheDocument();
       expect(screen.queryByRole("search")).not.toBeInTheDocument();
       expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
-      expect(screen.getByText("Jobs")).toBeInTheDocument();
+      expect(screen.queryByText("Jobs")).not.toBeInTheDocument();
       expect(screen.queryByText("Ceird")).not.toBeInTheDocument();
       expect(screen.queryByText("Your work")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /theme mode/i })
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: /theme mode/i })
+      ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /keyboard shortcuts/i })
-      ).toBeInTheDocument();
-    }
-  );
-
-  it(
-    "activates job drawer shortcut scopes for job drawer routes",
-    { timeout: 10_000 },
-    () => {
-      mockedPathname.value = "/jobs/new";
-
-      const { rerender } = render(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(
-        screen.getByRole("button", { name: /keyboard shortcuts/i })
-      ).toBeInTheDocument();
-      expect(mockedActiveScopes.at(-1)).toStrictEqual([
-        "global",
-        "jobs",
-        "job-create",
-      ]);
-
-      mockedPathname.value = "/jobs/11111111-1111-4111-8111-111111111111";
-
-      rerender(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(
-        screen.getByRole("button", { name: /keyboard shortcuts/i })
-      ).toBeInTheDocument();
-      expect(mockedActiveScopes.at(-1)).toStrictEqual([
-        "global",
-        "jobs",
-        "job-detail",
-      ]);
-    }
-  );
-
-  it(
-    "activates members, settings, and map shortcut scopes on matching routes",
-    { timeout: 10_000 },
-    () => {
-      mockedPathname.value = "/members";
-
-      const { rerender } = render(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "members"]);
-
-      mockedPathname.value = "/settings";
-
-      rerender(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "settings"]);
-
-      mockedPathname.value = "/organization/settings";
-
-      rerender(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "settings"]);
-
-      mockedPathname.value = "/jobs";
-      mockedSearch.value = { view: "map" };
-
-      rerender(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual([
-        "global",
-        "jobs",
-        "map",
-      ]);
-
-      mockedSearch.value = {};
-
-      rerender(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global", "jobs"]);
-    }
-  );
-
-  it(
-    "uses only global shortcut scope on the activity route",
-    { timeout: 10_000 },
-    () => {
-      mockedPathname.value = "/activity";
-
-      render(
-        <HotkeysProvider>
-          <SiteHeader />
-        </HotkeysProvider>
-      );
-
-      expect(mockedActiveScopes.at(-1)).toStrictEqual(["global"]);
+        screen.queryByRole("button", { name: /keyboard shortcuts/i })
+      ).not.toBeInTheDocument();
     }
   );
 

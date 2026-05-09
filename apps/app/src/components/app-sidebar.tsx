@@ -1,22 +1,20 @@
 "use client";
-import { isExternalOrganizationRole } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import * as React from "react";
 
 import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
 import { NavMain } from "#/components/nav-main";
 import { NavUser } from "#/components/nav-user";
 import type { NavUserAccount } from "#/components/nav-user";
+import ThemeToggle from "#/components/ThemeToggle";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
 import {
@@ -27,6 +25,8 @@ import {
   useOrganizationsFromMatches,
 } from "#/features/organizations/organization-route-context";
 import { OrganizationSwitcher } from "#/features/organizations/organization-switcher";
+import { getActiveShortcutScopes } from "#/hotkeys/active-shortcut-scopes";
+import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 
 export function AppSidebar({
   activeOrganizationId: appActiveOrganizationId,
@@ -51,11 +51,6 @@ export function AppSidebar({
   const activeOrganizationId =
     matchedActiveOrganizationId ??
     (isInOrganizationRoute ? null : (appActiveOrganizationId ?? null));
-  const homeTarget =
-    currentOrganizationRole !== undefined &&
-    isExternalOrganizationRole(currentOrganizationRole)
-      ? "/jobs"
-      : "/";
 
   return (
     <Sidebar
@@ -66,24 +61,6 @@ export function AppSidebar({
     >
       <SidebarHeader className="p-3">
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              className="rounded-xl p-2.5"
-              render={<Link to={homeTarget} />}
-            >
-              <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklab,var(--sidebar-primary-foreground)_30%,transparent)]">
-                <HugeiconsIcon
-                  icon={CommandIcon}
-                  strokeWidth={2}
-                  className="size-4"
-                />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Ceird</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
           <SidebarMenuItem>
             <OrganizationSwitcher
               activeOrganization={activeOrganization ?? null}
@@ -102,15 +79,41 @@ export function AppSidebar({
           }))}
         />
       </SidebarContent>
-      {user ? (
-        <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-2.5">
+      <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-2.5">
+        <SidebarUtilities />
+        {user ? (
           <NavUser
             currentOrganizationRole={currentOrganizationRole}
             user={user}
             navigate={navigate}
           />
-        </SidebarFooter>
-      ) : null}
+        ) : null}
+      </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function SidebarUtilities() {
+  const activeScopes = useRouterState({
+    select: (state) =>
+      getActiveShortcutScopes(state.location.pathname, state.location.search),
+  });
+  const utilityButtonClassName =
+    "h-9 w-full justify-start rounded-md border-transparent bg-transparent px-2 text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0";
+  const utilityLabelClassName = "group-data-[collapsible=icon]:hidden";
+
+  return (
+    <div className="flex flex-col gap-1 border-b border-sidebar-border/70 pb-2 group-data-[collapsible=icon]:items-center">
+      <ShortcutHelpOverlay
+        activeScopes={activeScopes}
+        buttonClassName={utilityButtonClassName}
+        labelClassName={utilityLabelClassName}
+      />
+      <ThemeToggle
+        className={utilityButtonClassName}
+        labelClassName={utilityLabelClassName}
+        contentAlign="start"
+      />
+    </div>
   );
 }

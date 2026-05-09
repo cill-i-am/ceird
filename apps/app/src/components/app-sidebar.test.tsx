@@ -6,7 +6,13 @@ import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { AppSidebar } from "./app-sidebar";
 
-const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
+const {
+  mockedMatches,
+  mockedNavigate,
+  mockedPathname,
+  mockedSearch,
+  mockedShortcutOverlayCalls,
+} = vi.hoisted(() => ({
   mockedMatches: {
     value: [] as {
       context?: {
@@ -20,6 +26,13 @@ const { mockedMatches, mockedNavigate } = vi.hoisted(() => ({
     }[],
   },
   mockedNavigate: vi.fn<() => Promise<void>>(),
+  mockedPathname: {
+    value: "/",
+  },
+  mockedSearch: {
+    value: {} as Record<string, unknown>,
+  },
+  mockedShortcutOverlayCalls: [] as { activeScopes: readonly string[] }[],
 }));
 
 const { mockedOrganizationSwitcher } = vi.hoisted(() => ({
@@ -91,11 +104,14 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         ? options.select(mockedMatches.value)
         : mockedMatches.value) as typeof actual.useMatches,
     useRouterState: ((options?: {
-      select?: (state: { location: { pathname: string } }) => unknown;
+      select?: (state: {
+        location: { pathname: string; search: Record<string, unknown> };
+      }) => unknown;
     }) => {
       const state = {
         location: {
-          pathname: "/",
+          pathname: mockedPathname.value,
+          search: mockedSearch.value,
         },
       };
 
@@ -106,6 +122,48 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
 vi.mock(import("#/features/organizations/organization-switcher"), () => ({
   OrganizationSwitcher: mockedOrganizationSwitcher,
+}));
+
+vi.mock(import("#/components/ThemeToggle"), () => ({
+  default: ({
+    className,
+    labelClassName,
+  }: {
+    className?: string;
+    labelClassName?: string;
+  }) => (
+    <button
+      type="button"
+      className={className}
+      data-label-class-name={labelClassName}
+    >
+      Theme mode
+    </button>
+  ),
+}));
+
+vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
+  ShortcutHelpOverlay: ({
+    activeScopes,
+    buttonClassName,
+    labelClassName,
+  }: {
+    activeScopes: readonly string[];
+    buttonClassName?: string;
+    labelClassName?: string;
+  }) => {
+    mockedShortcutOverlayCalls.push({ activeScopes });
+
+    return (
+      <button
+        type="button"
+        className={buttonClassName}
+        data-label-class-name={labelClassName}
+      >
+        Keyboard shortcuts
+      </button>
+    );
+  },
 }));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
@@ -266,6 +324,9 @@ describe("app sidebar", () => {
         },
       },
     ];
+    mockedPathname.value = "/";
+    mockedSearch.value = {};
+    mockedShortcutOverlayCalls.length = 0;
   });
 
   afterEach(() => {
@@ -292,6 +353,10 @@ describe("app sidebar", () => {
       }),
       undefined
     );
+    expect(
+      screen.queryByRole("link", { name: /ceird/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Ceird")).not.toBeInTheDocument();
   });
 
   it("passes app-level organization context outside organization routes", () => {
@@ -341,10 +406,6 @@ describe("app sidebar", () => {
       expect(screen.getByTestId("nav-user")).toHaveTextContent(
         "Taylor Example person@example.com owner"
       );
-      const brandLink = screen.getByRole("link", { name: /ceird/i });
-
-      expect(brandLink).toHaveAttribute("href", "/");
-      expect(within(brandLink).getByText("Ceird")).not.toHaveClass("sr-only");
       expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
         "href",
         "/jobs"
@@ -356,13 +417,43 @@ describe("app sidebar", () => {
       const membersLink = screen.getByRole("link", { name: /members/i });
 
       expect(membersLink).toHaveAttribute("href", "/members");
-      expect(within(membersLink).getByText("Members")).not.toHaveClass(
-        "sr-only"
-      );
       expect(screen.queryByText(/starter workspace/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/shadcn starter/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /ceird/i })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Ceird")).not.toBeInTheDocument();
     }
   );
+
+  it("keeps shortcut and theme controls in the sidebar footer", () => {
+    mockedPathname.value = "/jobs";
+    mockedSearch.value = { view: "map" };
+
+    render(
+      <AppSidebar
+        user={{
+          name: "Taylor Example",
+          email: "person@example.com",
+          image: null,
+        }}
+      />
+    );
+
+    const footer = screen.getByTestId("sidebar-footer");
+
+    expect(
+      within(footer).getByRole("button", { name: /keyboard shortcuts/i })
+    ).toBeVisible();
+    expect(
+      within(footer).getByRole("button", { name: /theme mode/i })
+    ).toBeVisible();
+    expect(mockedShortcutOverlayCalls.at(-1)?.activeScopes).toStrictEqual([
+      "global",
+      "jobs",
+      "map",
+    ]);
+  });
 
   it.each(["owner", "admin"] as const)(
     "shows administrator navigation for %s role",
@@ -450,10 +541,9 @@ describe("app sidebar", () => {
         "href",
         "/jobs"
       );
-      expect(screen.getByRole("link", { name: /ceird/i })).toHaveAttribute(
-        "href",
-        "/jobs"
-      );
+      expect(
+        screen.queryByRole("link", { name: /ceird/i })
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("link", { name: /^home$/i })
       ).not.toBeInTheDocument();
@@ -493,10 +583,9 @@ describe("app sidebar", () => {
     expect(screen.getByTestId("organization-switcher")).toHaveTextContent(
       "External Client"
     );
-    expect(screen.getByRole("link", { name: /ceird/i })).toHaveAttribute(
-      "href",
-      "/jobs"
-    );
+    expect(
+      screen.queryByRole("link", { name: /ceird/i })
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /jobs/i })).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /members/i })

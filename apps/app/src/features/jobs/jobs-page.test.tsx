@@ -562,6 +562,61 @@ describe("jobs page", () => {
     ).not.toBeInTheDocument();
   }, 10_000);
 
+  it("uses first-run empty copy when the workspace has no jobs", () => {
+    renderJobsPage({
+      list: {
+        items: [],
+        nextCursor: undefined,
+      },
+    });
+
+    expect(screen.getByText("No jobs yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Create the first job when work is ready to schedule.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Clear filters or add the next piece of work.")
+    ).not.toBeInTheDocument();
+    const [newJobLink] = screen.getAllByRole("link", { name: /new job/i });
+
+    expect(screen.getAllByRole("link", { name: /new job/i })).toHaveLength(1);
+    expect(newJobLink).toHaveAttribute("href", "/jobs/new");
+  }, 10_000);
+
+  it(
+    "uses filtered-empty copy and a clear action when filters hide every job",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage();
+
+      await chooseCommandFilter(
+        user,
+        /more filter/i,
+        "Coordinator: Taylor Owner"
+      );
+      await chooseCommandFilter(user, /more filter/i, "Service area: North");
+
+      expect(screen.getByText("No matching jobs.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Clear filters to return to the full queue.")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Clear filters or add the next piece of work.")
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /clear filters/i }));
+
+      expect(screen.queryByText("No matching jobs.")).not.toBeInTheDocument();
+      expect(
+        within(getPrimaryQueuePanel()).getAllByText("Inspect boiler").length
+      ).toBeGreaterThan(0);
+    }
+  );
+
   it(
     "limits external collaborators to search and status filters without map controls",
     {
@@ -748,7 +803,7 @@ describe("jobs page", () => {
 
       await chooseCommandFilter(user, /more filter/i, "Service area: North");
 
-      expect(screen.getByText(/no jobs here/i)).toBeInTheDocument();
+      expect(screen.getByText(/no matching jobs/i)).toBeInTheDocument();
 
       await chooseCommandFilter(user, /more filter/i, "All coordinators");
       await chooseCommandFilter(user, /site filter/i, "Depot");
@@ -866,6 +921,7 @@ function getPrimaryQueuePanel() {
 }
 
 function renderJobsPage(options?: {
+  readonly list?: JobListResponse;
   readonly viewer?: JobsViewer;
   readonly viewportWidth?: number;
   readonly withCommandBar?: boolean;
@@ -874,7 +930,10 @@ function renderJobsPage(options?: {
   const page = (
     <RegistryProvider
       initialValues={[
-        [jobsListStateAtom, seedJobsListState(organizationId, initialList)],
+        [
+          jobsListStateAtom,
+          seedJobsListState(organizationId, options?.list ?? initialList),
+        ],
         [
           jobsOptionsStateAtom,
           seedJobsOptionsState(organizationId, initialOptions),

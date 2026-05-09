@@ -199,8 +199,16 @@ vi.mock(import("#/components/ui/avatar"), async (importActual) => {
 
   return {
     ...actual,
-    Avatar: (({ children }: { children?: ReactNode }) => (
-      <div data-testid="avatar">{children}</div>
+    Avatar: (({
+      children,
+      className,
+    }: {
+      children?: ReactNode;
+      className?: string;
+    }) => (
+      <div className={className} data-testid="avatar">
+        {children}
+      </div>
     )) as typeof actual.Avatar,
     AvatarFallback: (({ children }: { children?: ReactNode }) => (
       <div data-testid="avatar-fallback">{children}</div>
@@ -216,8 +224,16 @@ vi.mock(import("@hugeicons/react"), async (importActual) => {
 
   return {
     ...actual,
-    HugeiconsIcon: (({ icon }: { icon?: unknown }) => (
-      <span data-testid="hugeicon">{String(icon ?? "icon")}</span>
+    HugeiconsIcon: (({
+      className,
+      icon,
+    }: {
+      className?: string;
+      icon?: unknown;
+    }) => (
+      <span className={className} data-testid="hugeicon">
+        {String(icon ?? "icon")}
+      </span>
     )) as typeof actual.HugeiconsIcon,
   };
 });
@@ -272,7 +288,7 @@ describe("nav user", () => {
   }, 10_000);
 
   it(
-    "links to account settings from the user dropdown",
+    "links to user settings from the user dropdown",
     {
       timeout: 10_000,
     },
@@ -280,10 +296,11 @@ describe("nav user", () => {
       renderNavUser();
 
       expect(
-        screen
-          .getAllByRole("link")
-          .find((link) => link.getAttribute("href") === "/settings")
-      ).toBeInTheDocument();
+        screen.getByRole("link", { name: /user settings/i })
+      ).toHaveAttribute("href", "/settings");
+      expect(
+        screen.queryByRole("link", { name: "Settings" })
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", {
           name: /sign out/i,
@@ -291,6 +308,23 @@ describe("nav user", () => {
       ).toBeInTheDocument();
     }
   );
+
+  it("renders as an avatar-only account trigger when the sidebar is collapsed", () => {
+    renderNavUser();
+
+    const trigger = screen.getByTestId("sidebar-menu-button");
+    const accountSummary = screen
+      .getAllByText("Taylor Example")[0]
+      .closest("div");
+    const [avatar] = screen.getAllByTestId("avatar");
+    const [chevron] = screen.getAllByTestId("hugeicon");
+
+    expect(trigger).toHaveClass("overflow-hidden");
+    expect(trigger).toHaveClass("group-data-[collapsible=icon]:p-0!");
+    expect(avatar).toHaveClass("group-data-[collapsible=icon]:size-8");
+    expect(accountSummary).toHaveClass("group-data-[collapsible=icon]:hidden");
+    expect(chevron).toHaveClass("group-data-[collapsible=icon]:hidden");
+  });
 
   it(
     "shows a pending label and blocks repeat clicks while sign-out is in flight",

@@ -162,8 +162,18 @@ describe("organization settings page", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Organization settings" })
-    ).toBeVisible();
+      screen.getByRole("heading", {
+        hidden: true,
+        name: "Organization settings",
+      })
+    ).toHaveClass("sr-only");
+    expect(screen.queryByText("ORGANIZATION")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Keep the workspace identity current for everyone on the team."
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "General" })).toBeVisible();
     expect(screen.getByLabelText("Organization name")).toHaveValue(
       "Acme Field Ops"
     );

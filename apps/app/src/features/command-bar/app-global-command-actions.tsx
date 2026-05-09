@@ -5,7 +5,11 @@ import { Settings02Icon } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
-import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
+import {
+  getPrimaryNavItemsForRole,
+  getPrimaryNavShortcut,
+} from "#/components/app-navigation";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { useRegisterCommandActions } from "./command-bar";
 import type { CommandAction } from "./command-bar";
@@ -22,6 +26,7 @@ export function AppGlobalCommandActions() {
         priority: 40,
         run: () => navigate({ to: "/settings" }),
         scope: "global",
+        shortcut: HOTKEYS.goSettings,
         title: "Open user settings",
       },
     ],
@@ -53,6 +58,7 @@ export function AppOrganizationCommandActions({
           priority: 80 - index * 10,
           run: () => navigate({ to: item.url }),
           scope: "org" as const,
+          shortcut: getPrimaryNavShortcut(item.url),
           title: `Go to ${item.title}`,
         })
       ),
@@ -66,6 +72,7 @@ export function AppOrganizationCommandActions({
               priority: 30,
               run: () => navigate({ to: "/organization/settings" }),
               scope: "org" as const,
+              shortcut: HOTKEYS.goOrganizationSettings,
               title: "Open organization settings",
             },
           ]

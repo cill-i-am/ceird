@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import {
   CommandBarProvider,
@@ -89,6 +91,39 @@ describe("command bar registry", () => {
       expect(screen.getByTestId("registered-actions")).toHaveTextContent(
         "Clear filters, Go to Members, Go to Sites"
       );
+    }
+  );
+
+  it(
+    "renders action shortcuts in command suggestions",
+    { timeout: 10_000 },
+    async () => {
+      render(
+        <CommandBarProvider>
+          <ActionRegistrar
+            actions={[
+              {
+                ...baseAction,
+                id: "go-jobs",
+                shortcut: HOTKEYS.goJobs,
+                title: "Go to Jobs",
+              },
+            ]}
+          />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /go to jobs/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByLabelText("Go to Jobs shortcut: G then J")
+      ).toBeVisible();
     }
   );
 });

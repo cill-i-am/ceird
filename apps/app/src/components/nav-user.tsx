@@ -99,14 +99,17 @@ export function NavUser({
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton className="overflow-visible rounded-[calc(var(--radius)*2.2)] border border-transparent bg-sidebar/40 px-2.5 py-2 aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground" />
+              <SidebarMenuButton
+                size="lg"
+                className="overflow-hidden rounded-xl bg-sidebar/40 px-2.5 py-2 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground"
+              />
             }
           >
-            <Avatar className="size-9 rounded-[calc(var(--radius)*2)] border border-sidebar-border/70">
+            <Avatar className="size-9 rounded-xl border border-sidebar-border/70 group-data-[collapsible=icon]:size-8">
               <AvatarImage src={user.image ?? undefined} alt={user.name} />
               <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
+            <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
               <span className="truncate font-medium">{user.name}</span>
               <span className="truncate text-xs text-sidebar-foreground/65">
                 {user.email}
@@ -115,11 +118,11 @@ export function NavUser({
             <HugeiconsIcon
               icon={UnfoldMoreIcon}
               strokeWidth={2}
-              className="ml-auto size-4 text-sidebar-foreground/60"
+              className="ml-auto size-4 text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden"
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56 rounded-[calc(var(--radius)*2.2)]"
+            className="min-w-56 rounded-xl"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
@@ -127,7 +130,7 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-3 px-1 py-1.5 text-left text-sm">
-                  <Avatar className="size-9 rounded-[calc(var(--radius)*2)] border border-border/60">
+                  <Avatar className="size-9 rounded-xl border border-border/60">
                     <AvatarImage
                       src={user.image ?? undefined}
                       alt={user.name}
@@ -159,7 +162,7 @@ export function NavUser({
                 }
               >
                 <HugeiconsIcon icon={AccountSetting01Icon} strokeWidth={2} />
-                Settings
+                User settings
               </DropdownMenuItem>
               <DropdownMenuItem
                 aria-busy={isSigningOut || undefined}

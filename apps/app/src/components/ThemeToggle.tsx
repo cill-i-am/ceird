@@ -5,6 +5,7 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -15,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { cn } from "#/lib/utils";
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -69,7 +71,15 @@ function applyThemeMode(mode: ThemeMode) {
   document.documentElement.style.colorScheme = resolved;
 }
 
-export default function ThemeToggle() {
+export default function ThemeToggle({
+  className,
+  contentAlign = "end",
+  labelClassName,
+}: {
+  readonly className?: string | undefined;
+  readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>["align"];
+  readonly labelClassName?: string | undefined;
+}) {
   const [mode, setMode] = useState<ThemeMode>("auto");
 
   useEffect(() => {
@@ -110,7 +120,7 @@ export default function ThemeToggle() {
             type="button"
             variant="outline"
             size="sm"
-            className="min-h-11 gap-1.5 px-3 sm:min-h-8"
+            className={cn("min-h-11 gap-1.5 px-3 sm:min-h-8", className)}
             aria-label={label}
             title={label}
           />
@@ -121,14 +131,14 @@ export default function ThemeToggle() {
           strokeWidth={2}
           data-icon="inline-start"
         />
-        {activeOption.label}
+        <span className={labelClassName}>{activeOption.label}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align={contentAlign} className="w-44">
         <DropdownMenuGroup>
           {THEME_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.value}
-              onSelect={() => setThemeMode(option.value)}
+              onClick={() => setThemeMode(option.value)}
             >
               <HugeiconsIcon icon={option.icon} strokeWidth={2} />
               {option.label}

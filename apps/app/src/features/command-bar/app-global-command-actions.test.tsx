@@ -46,6 +46,9 @@ describe("app global command actions", () => {
       });
 
       expect(
+        screen.getByLabelText("Go to user settings shortcut: G then T")
+      ).toBeVisible();
+      expect(
         screen.queryByRole("option", { name: /go to jobs/i })
       ).not.toBeInTheDocument();
       expect(
@@ -89,6 +92,24 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Go to Home shortcut: G then H")
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Go to Jobs shortcut: G then J")
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Go to Sites shortcut: G then S")
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Go to Activity shortcut: G then A")
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Go to Members shortcut: G then M")
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText(/Go to organization settings shortcut: G then W/i)
+      ).toBeVisible();
 
       await user.click(screen.getByRole("option", { name: /go to jobs/i }));
 
@@ -120,6 +141,9 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/Go to organization settings shortcut: G then W/i)
+      ).toBeVisible();
     }
   );
 
@@ -175,8 +199,14 @@ describe("app global command actions", () => {
       });
 
       expect(
+        screen.getByLabelText("Go to Jobs shortcut: G then J")
+      ).toBeVisible();
+      expect(
         screen.getByRole("option", { name: /open user settings/i })
       ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Go to user settings shortcut: G then T")
+      ).toBeVisible();
       expect(
         screen.queryByRole("option", { name: /go to home/i })
       ).not.toBeInTheDocument();

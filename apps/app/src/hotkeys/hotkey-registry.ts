@@ -54,6 +54,13 @@ export const HOTKEYS = {
     label: "Toggle sidebar",
     scope: "global",
   },
+  goHome: {
+    group: "Navigation",
+    hotkey: "G H",
+    id: "goHome",
+    label: "Go to Home",
+    scope: "global",
+  },
   goJobs: {
     group: "Navigation",
     hotkey: "G J",
@@ -86,8 +93,16 @@ export const HOTKEYS = {
     group: "Navigation",
     hotkey: "G T",
     id: "goSettings",
-    label: "Go to Settings",
+    label: "Go to user settings",
     scope: "global",
+  },
+  goOrganizationSettings: {
+    group: "Navigation",
+    hotkey: "G W",
+    id: "goOrganizationSettings",
+    label: "Go to organization settings",
+    scope: "global",
+    when: "Viewer can administer organization",
   },
   goMap: {
     group: "Navigation",
@@ -248,12 +263,20 @@ export const HOTKEYS = {
     label: "Submit focused form area",
     scope: "job-detail",
   },
+  membersInvite: {
+    group: "Members",
+    hotkey: "N",
+    id: "membersInvite",
+    label: "Invite teammate",
+    scope: "members",
+  },
   membersSubmit: {
     group: "Members",
     hotkey: "Mod+Enter",
     id: "membersSubmit",
     label: "Submit invite form",
     scope: "members",
+    when: "Invite dialog is open",
   },
   membersRole: {
     group: "Members",
@@ -261,6 +284,7 @@ export const HOTKEYS = {
     id: "membersRole",
     label: "Focus invite role select",
     scope: "members",
+    when: "Invite dialog is open",
   },
   settingsSubmit: {
     group: "Settings",

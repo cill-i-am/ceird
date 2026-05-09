@@ -89,6 +89,7 @@ import {
   defaultJobsListFilters,
   isJobsAssigneeFilterEqual,
   jobsListFiltersAtom,
+  jobsListStateAtom,
   jobsLookupAtom,
   jobsNoticeAtom,
   jobsOptionsStateAtom,
@@ -146,6 +147,7 @@ export function JobsPage({
     React.useState<JobsViewMode>("list");
   const viewMode = controlledViewMode ?? uncontrolledViewMode;
   const filters = useAtomValue(jobsListFiltersAtom);
+  const jobsListState = useAtomValue(jobsListStateAtom);
   const jobs = useAtomValue(visibleJobsAtom);
   const lookup = useAtomValue(jobsLookupAtom);
   const notice = useAtomValue(jobsNoticeAtom);
@@ -430,7 +432,13 @@ export function JobsPage({
       ) : null}
 
       {visibleViewMode === "list" ? (
-        <JobsListView jobs={jobs} canCreateJobs={canCreateJobs} />
+        <JobsListView
+          jobs={jobs}
+          canCreateJobs={canCreateJobs}
+          hasCustomFilters={hasCustomFilters}
+          totalJobs={jobsListState.items.length}
+          onClearFilters={() => setFilters(defaultJobsListFilters)}
+        />
       ) : (
         <section data-testid="jobs-coverage-panel" className="min-h-0">
           <React.Suspense fallback={<JobsCoverageMapFallback />}>
@@ -859,15 +867,28 @@ function ActiveFilterBar({
 
 function JobsListView({
   canCreateJobs,
+  hasCustomFilters,
   jobs,
+  onClearFilters,
+  totalJobs,
 }: {
   readonly canCreateJobs: boolean;
+  readonly hasCustomFilters: boolean;
   readonly jobs: readonly JobListItem[];
+  readonly onClearFilters: () => void;
+  readonly totalJobs: number;
 }) {
   const lookup = useAtomValue(jobsLookupAtom);
 
   if (jobs.length === 0) {
-    return <JobsEmptyState canCreateJobs={canCreateJobs} />;
+    return (
+      <JobsEmptyState
+        canCreateJobs={canCreateJobs}
+        hasCustomFilters={hasCustomFilters}
+        totalJobs={totalJobs}
+        onClearFilters={onClearFilters}
+      />
+    );
   }
 
   return (
@@ -1041,9 +1062,21 @@ function JobIssueRow({
 
 function JobsEmptyState({
   canCreateJobs,
+  hasCustomFilters,
+  onClearFilters,
+  totalJobs,
 }: {
   readonly canCreateJobs: boolean;
+  readonly hasCustomFilters: boolean;
+  readonly onClearFilters: () => void;
+  readonly totalJobs: number;
 }) {
+  const copy = getJobsEmptyStateCopy({
+    canCreateJobs,
+    hasCustomFilters,
+    totalJobs,
+  });
+
   return (
     <section data-testid="jobs-queue-panel">
       <Empty className="min-h-[420px] border-transparent bg-transparent p-8">
@@ -1051,19 +1084,55 @@ function JobsEmptyState({
           <EmptyMedia variant="icon">
             <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} />
           </EmptyMedia>
-          <EmptyTitle>No jobs here.</EmptyTitle>
-          <EmptyDescription>
-            Clear filters or add the next piece of work.
-          </EmptyDescription>
+          <EmptyTitle>{copy.title}</EmptyTitle>
+          <EmptyDescription>{copy.description}</EmptyDescription>
         </EmptyHeader>
-        {canCreateJobs ? (
+        {hasCustomFilters ? (
           <EmptyContent>
-            <NewJobLink />
+            <Button type="button" size="sm" onClick={onClearFilters}>
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+              Clear filters
+            </Button>
           </EmptyContent>
         ) : null}
       </Empty>
     </section>
   );
+}
+
+function getJobsEmptyStateCopy({
+  canCreateJobs,
+  hasCustomFilters,
+  totalJobs,
+}: {
+  readonly canCreateJobs: boolean;
+  readonly hasCustomFilters: boolean;
+  readonly totalJobs: number;
+}) {
+  if (hasCustomFilters) {
+    return {
+      description: "Clear filters to return to the full queue.",
+      title: "No matching jobs.",
+    };
+  }
+
+  if (totalJobs === 0) {
+    return {
+      description: canCreateJobs
+        ? "Create the first job when work is ready to schedule."
+        : "Jobs will appear here when the team creates them.",
+      title: "No jobs yet.",
+    };
+  }
+
+  return {
+    description: "Switch to All jobs to review completed or canceled work.",
+    title: "No active jobs.",
+  };
 }
 
 function NewJobLink() {
