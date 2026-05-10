@@ -155,6 +155,9 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
     DropdownMenuGroup: (({ children }: { children?: ReactNode }) => (
       <div data-testid="dropdown-menu-group">{children}</div>
     )) as typeof actual.DropdownMenuGroup,
+    DropdownMenuHeader: (({ children }: { children?: ReactNode }) => (
+      <div>{children}</div>
+    )) as typeof actual.DropdownMenuHeader,
     DropdownMenuItem: (({
       children,
       closeOnClick: _closeOnClick,
@@ -254,16 +257,18 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
           {React.isValidElement(renderSlot)
             ? React.cloneElement(
                 renderSlot as React.ReactElement<{
+                  children?: ReactNode;
                   onClick?: React.MouseEventHandler;
                 }>,
                 {
+                  children,
                   onClick: () => {
                     dropdownMenu?.setOpen(!dropdownMenu.open);
                   },
                 }
               )
             : renderSlot}
-          {children}
+          {React.isValidElement(renderSlot) ? null : children}
         </div>
       );
     }) as typeof actual.DropdownMenuTrigger,
@@ -341,7 +346,7 @@ describe("organization switcher", () => {
       screen.getByRole("button", { name: /acme field ops/i })
     ).toHaveAttribute("aria-busy", "true");
     await user.click(screen.getByRole("button", { name: /acme field ops/i }));
-    expect(screen.getByText(/loading organizations/i)).toBeInTheDocument();
+    expect(screen.getByText(/loading teams/i)).toBeInTheDocument();
   });
 
   it("renders an empty disabled state when the user has no organizations", async () => {
@@ -355,19 +360,30 @@ describe("organization switcher", () => {
     expect(screen.queryByText(/no organizations/i)).not.toBeInTheDocument();
   });
 
-  it("renders a single organization without switch actions", async () => {
+  it("renders a single organization in the teams menu with add team disabled", async () => {
     mockedListOrganizations.mockResolvedValue([
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
     ]);
 
+    const user = userEvent.setup();
     renderSwitcher(
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
     );
 
-    await expect(
-      screen.findByRole("button", { name: /acme field ops/i })
-    ).resolves.toBeDisabled();
-    expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
+    const trigger = await screen.findByRole("button", {
+      name: /acme field ops/i,
+    });
+
+    expect(trigger).toBeEnabled();
+    await user.click(trigger);
+
+    expect(screen.getByText("Teams")).toBeVisible();
+    expect(
+      screen.getByRole("menuitemradio", { name: /acme field ops/i })
+    ).toBeVisible();
+    expect(screen.queryByText("Only organization")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add team/i })).toBeDisabled();
+    expect(screen.getByText("Coming soon")).toBeVisible();
   });
 
   it("shows list failures with a retry action", async () => {
@@ -387,9 +403,9 @@ describe("organization switcher", () => {
     );
 
     await expect(
-      screen.findByText(/couldn't load organizations/i)
+      screen.findByText(/couldn't load teams/i)
     ).resolves.toBeInTheDocument();
-    expect(screen.queryByTestId("unfold-more-icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("unfold-more-icon")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retry/i }));
 
@@ -415,7 +431,7 @@ describe("organization switcher", () => {
     expect(trigger).toBeEnabled();
     await user.click(trigger);
     await expect(
-      screen.findByText(/couldn't load organizations/i)
+      screen.findByText(/couldn't load teams/i)
     ).resolves.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retry/i }));
@@ -623,5 +639,27 @@ describe("organization switcher", () => {
     await expect(
       screen.findByRole("menuitemradio", { name: /beta builds/i })
     ).resolves.toBeInTheDocument();
+  });
+
+  it("switches organizations with the visible team index shortcut", async () => {
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.keyboard("{Control>}2{/Control}");
+
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
   });
 });

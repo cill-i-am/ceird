@@ -57,15 +57,22 @@ export interface AppRowListBodyProps extends Omit<
   React.ComponentProps<"div">,
   "title"
 > {
+  readonly descriptionClassName?: string;
   readonly eyebrow?: React.ReactNode;
   readonly title: React.ReactNode;
+  readonly titleClassName?: string;
+  readonly truncateTitle?: boolean;
   readonly description?: React.ReactNode;
 }
 
 export function AppRowListBody({
+  descriptionClassName,
   eyebrow,
   title,
+  titleClassName,
+  truncateTitle = true,
   description,
+  children,
   className,
   ...props
 }: AppRowListBodyProps) {
@@ -79,10 +86,26 @@ export function AppRowListBody({
           {eyebrow}
         </p>
       ) : null}
-      <p className="truncate text-sm font-medium text-foreground">{title}</p>
+      <p
+        className={cn(
+          "text-sm font-medium text-foreground",
+          truncateTitle ? "truncate" : null,
+          titleClassName
+        )}
+      >
+        {title}
+      </p>
       {description ? (
-        <p className="text-sm/6 text-muted-foreground">{description}</p>
+        <p
+          className={cn(
+            "text-sm/6 text-muted-foreground",
+            descriptionClassName
+          )}
+        >
+          {description}
+        </p>
       ) : null}
+      {children}
     </div>
   );
 }

@@ -13,7 +13,6 @@ import { Effect, Schema } from "effect";
 import { Archive, Check, Pencil, Plus, X } from "lucide-react";
 import * as React from "react";
 
-import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
@@ -379,12 +378,7 @@ export function OrganizationSettingsPage({
         ref={settingsRootRef}
         className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8"
       >
-        <AppPageHeader
-          eyebrow="Organization"
-          title="Organization settings"
-          description="Keep the workspace identity current for everyone on the team."
-        />
-
+        <h1 className="sr-only">Organization settings</h1>
         <div className="grid max-w-5xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
           <AppUtilityPanel
             title="General"

@@ -43,11 +43,15 @@ describe("route hotkeys", () => {
         name: /keyboard shortcuts/i,
       });
 
+      expect(within(dialog).getByText("Go to Home")).toBeVisible();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
       expect(within(dialog).getByText("Go to Sites")).toBeVisible();
       expect(within(dialog).getByText("Go to Activity")).toBeVisible();
       expect(within(dialog).getByText("Go to Members")).toBeVisible();
-      expect(within(dialog).getByText("Go to Settings")).toBeVisible();
+      expect(
+        within(dialog).getByText("Go to organization settings")
+      ).toBeVisible();
+      expect(within(dialog).getByText("Go to user settings")).toBeVisible();
       expect(within(dialog).getByText("Go to Map")).toBeVisible();
     },
     10_000
@@ -72,12 +76,16 @@ describe("route hotkeys", () => {
     });
 
     expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+    expect(within(dialog).getByText("Go to Home")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites")).toBeVisible();
     expect(
       within(dialog).queryByText("Go to Activity")
     ).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Go to Members")).not.toBeInTheDocument();
-    expect(within(dialog).getByText("Go to Settings")).toBeVisible();
+    expect(
+      within(dialog).queryByText("Go to organization settings")
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Go to user settings")).toBeVisible();
     expect(within(dialog).getByText("Go to Map")).toBeVisible();
   }, 10_000);
 
@@ -101,6 +109,7 @@ describe("route hotkeys", () => {
         name: /keyboard shortcuts/i,
       });
 
+      expect(within(dialog).queryByText("Go to Home")).not.toBeInTheDocument();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
       expect(within(dialog).queryByText("Go to Sites")).not.toBeInTheDocument();
       expect(
@@ -109,7 +118,10 @@ describe("route hotkeys", () => {
       expect(
         within(dialog).queryByText("Go to Members")
       ).not.toBeInTheDocument();
-      expect(within(dialog).getByText("Go to Settings")).toBeVisible();
+      expect(
+        within(dialog).queryByText("Go to organization settings")
+      ).not.toBeInTheDocument();
+      expect(within(dialog).getByText("Go to user settings")).toBeVisible();
       expect(within(dialog).queryByText("Go to Map")).not.toBeInTheDocument();
     },
     10_000
@@ -133,11 +145,15 @@ describe("route hotkeys", () => {
       name: /keyboard shortcuts/i,
     });
 
+    expect(within(dialog).getByText("Go to Home")).toBeVisible();
     expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites")).toBeVisible();
     expect(within(dialog).getByText("Go to Activity")).toBeVisible();
     expect(within(dialog).getByText("Go to Members")).toBeVisible();
-    expect(within(dialog).getByText("Go to Settings")).toBeVisible();
+    expect(
+      within(dialog).getByText("Go to organization settings")
+    ).toBeVisible();
+    expect(within(dialog).getByText("Go to user settings")).toBeVisible();
     expect(within(dialog).getByText("Go to Map")).toBeVisible();
   }, 10_000);
 
@@ -153,15 +169,18 @@ describe("route hotkeys", () => {
       );
 
       await user.keyboard("gj");
+      await user.keyboard("gh");
       await user.keyboard("gs");
       await user.keyboard("ga");
       await user.keyboard("gm");
+      await user.keyboard("gw");
       await user.keyboard("gt");
       await user.keyboard("gp");
 
       expect(mockedNavigate).toHaveBeenNthCalledWith(1, { to: "/jobs" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/sites" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(3, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/sites" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(4, {
         search: {
           actorUserId: undefined,
           eventType: undefined,
@@ -171,9 +190,12 @@ describe("route hotkeys", () => {
         },
         to: "/activity",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(4, { to: "/members" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(5, { to: "/settings" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(5, { to: "/members" });
       expect(mockedNavigate).toHaveBeenNthCalledWith(6, {
+        to: "/organization/settings",
+      });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(7, { to: "/settings" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(8, {
         search: { view: "map" },
         to: "/jobs",
       });
@@ -181,7 +203,26 @@ describe("route hotkeys", () => {
     10_000
   );
 
-  it.each(["member", "external", undefined] as const)(
+  it("does not navigate to administrator routes for member role", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <RouteHotkeys currentOrganizationRole="member" />
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("ga");
+    await user.keyboard("gm");
+    await user.keyboard("gw");
+    await user.keyboard("gh");
+    await user.keyboard("gj");
+
+    expect(mockedNavigate).toHaveBeenNthCalledWith(1, { to: "/" });
+    expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/jobs" });
+  }, 10_000);
+
+  it.each(["external", undefined] as const)(
     "does not navigate to administrator routes for %s role",
     async (role) => {
       const user = userEvent.setup();
@@ -194,6 +235,8 @@ describe("route hotkeys", () => {
 
       await user.keyboard("ga");
       await user.keyboard("gm");
+      await user.keyboard("gw");
+      await user.keyboard("gh");
       await user.keyboard("gj");
 
       expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });

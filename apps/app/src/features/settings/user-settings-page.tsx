@@ -3,7 +3,6 @@ import { useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import * as React from "react";
 
-import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
@@ -246,12 +245,7 @@ export function UserSettingsPage({
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <AppPageHeader
-        eyebrow="Account"
-        title="Settings"
-        description="Keep your sign-in details and account identity current for invites, recovery, and team updates."
-      />
-
+      <h1 className="sr-only">Settings</h1>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
         <AppUtilityPanel
           title="Profile"

@@ -3,6 +3,10 @@ import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import {
+  CommandBarProvider,
+  useCommandActions,
+} from "#/features/command-bar/command-bar";
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
@@ -163,6 +167,14 @@ async function chooseCommandOption(
   await user.click(screen.getByRole("option", { name: optionLabel }));
 }
 
+async function openInviteDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Invite teammate" })
+  );
+
+  return screen.findByRole("dialog", { name: "Invite teammate" });
+}
+
 function createDeferredResult<Value>() {
   const { promise, reject, resolve } = (
     Promise as unknown as {
@@ -230,6 +242,16 @@ function createMemberList(
     },
     error: null,
   };
+}
+
+function RegisteredActionTitles() {
+  const actions = useCommandActions();
+
+  return (
+    <div data-testid="registered-actions">
+      {actions.map((action) => action.title).join(", ") || "none"}
+    </div>
+  );
 }
 
 describe("organization members page", () => {
@@ -302,9 +324,15 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     expect(screen.getByRole("heading", { name: "Members" })).toBeVisible();
+    expect(screen.queryByText("Organization access")).not.toBeInTheDocument();
     await expect(
       screen.findByRole("heading", { name: "Pending invitations" })
     ).resolves.toBeVisible();
@@ -360,6 +388,85 @@ describe("organization members page", () => {
         organizationId: "org_123",
       },
     });
+  }, 10_000);
+
+  it("keeps the invite form behind an invite teammate dialog", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+
+    const dialog = await openInviteDialog(user);
+
+    expect(within(dialog).getByLabelText("Email")).toBeVisible();
+    expect(within(dialog).getByLabelText("Role")).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Send invite" })
+    ).toBeVisible();
+  }, 10_000);
+
+  it("shows an empty state when the current user is the only active member", async () => {
+    mockedListMembers.mockResolvedValue(
+      createMemberList([
+        createMember({
+          id: "mem_owner",
+          role: "owner",
+          user: {
+            email: "owner@example.com",
+            id: "user_owner",
+            image: null,
+            name: "Owner Example",
+          },
+          userId: "user_owner",
+        }),
+      ])
+    );
+    mockedListInvitations.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    await expect(screen.findByText("No teammates yet.")).resolves.toBeVisible();
+    expect(
+      screen.getByText("Invite someone so they can help run work from Ceird.")
+    ).toBeVisible();
+    expect(screen.queryByText("Owner Example")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Current members" })
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("registers members page command actions", async () => {
+    render(
+      <CommandBarProvider>
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
+        <RegisteredActionTitles />
+      </CommandBarProvider>
+    );
+
+    await expect(
+      screen.findByText("pending@example.com")
+    ).resolves.toBeVisible();
+
+    expect(screen.getByTestId("registered-actions")).toHaveTextContent(
+      "Invite teammate, Refresh members"
+    );
   }, 10_000);
 
   it("loads every member page and reports Better Auth's total", async () => {
@@ -795,10 +902,11 @@ describe("organization members page", () => {
             organizationId: "org_1",
             user: {
               email: "old-org@example.com",
-              id: "user_owner",
+              id: "user_old_owner",
               image: null,
               name: "Old Org Owner",
             },
+            userId: "user_old_owner",
           }),
         ])
       )
@@ -830,10 +938,11 @@ describe("organization members page", () => {
           organizationId: "org_2",
           user: {
             email: "new-org@example.com",
-            id: "user_owner",
+            id: "user_new_owner",
             image: null,
             name: "New Org Owner",
           },
+          userId: "user_new_owner",
         }),
       ])
     );
@@ -869,10 +978,11 @@ describe("organization members page", () => {
           organizationId: "org_2",
           user: {
             email: "new-org@example.com",
-            id: "user_owner",
+            id: "user_new_owner",
             image: null,
             name: "New Org Owner",
           },
+          userId: "user_new_owner",
         }),
       ])
     );
@@ -885,10 +995,11 @@ describe("organization members page", () => {
           organizationId: "org_1",
           user: {
             email: "old-org@example.com",
-            id: "user_owner",
+            id: "user_old_owner",
             image: null,
             name: "Old Org Owner",
           },
+          userId: "user_old_owner",
         }),
       ])
     );
@@ -910,10 +1021,11 @@ describe("organization members page", () => {
             organizationId: "org_2",
             user: {
               email: "new-org@example.com",
-              id: "user_owner",
+              id: "user_new_owner",
               image: null,
               name: "New Org Owner",
             },
+            userId: "user_new_owner",
           }),
         ])
       );
@@ -981,10 +1093,11 @@ describe("organization members page", () => {
             organizationId: "org_2",
             user: {
               email: "new-org@example.com",
-              id: "user_owner",
+              id: "user_new_owner",
               image: null,
               name: "New Org Owner",
             },
+            userId: "user_new_owner",
           }),
         ])
       );
@@ -1052,7 +1165,12 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     await expect(
       screen.findByTitle("date-expiry@example.com")
@@ -1089,14 +1207,26 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     await expect(screen.findByText("ops@example.com")).resolves.toBeVisible();
     expect(screen.getAllByText("1 open")).toHaveLength(1);
 
-    await user.type(screen.getByLabelText("Email"), "member@example.com");
+    const dialog = await openInviteDialog(user);
+
+    await user.type(
+      within(dialog).getByLabelText("Email"),
+      "member@example.com"
+    );
     await chooseCommandOption(user, "Role", "Admin");
-    await user.click(screen.getByRole("button", { name: "Send invite" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invite" })
+    );
 
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
@@ -1132,10 +1262,14 @@ describe("organization members page", () => {
 
     render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
+    await openInviteDialog(user);
     await user.type(screen.getByLabelText("Email"), "member@example.com");
     await user.keyboard("{Control>}{Enter}{/Control}");
 
@@ -1153,10 +1287,14 @@ describe("organization members page", () => {
 
     render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
+    await openInviteDialog(user);
     await user.keyboard("r");
 
     expect(screen.getByRole("combobox")).toHaveFocus();
@@ -1166,14 +1304,45 @@ describe("organization members page", () => {
     ).toBeVisible();
   }, 10_000);
 
+  it("opens the invite dialog with the members invite hotkey", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("n");
+
+    await expect(
+      screen.findByRole("dialog", { name: "Invite teammate" })
+    ).resolves.toBeVisible();
+  }, 10_000);
+
   it("submits external collaborator invites", async () => {
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
-    await user.type(screen.getByLabelText("Email"), "vendor@example.com");
+    const dialog = await openInviteDialog(user);
+
+    await user.type(
+      within(dialog).getByLabelText("Email"),
+      "vendor@example.com"
+    );
     await chooseCommandOption(user, "Role", "External collaborator");
-    await user.click(screen.getByRole("button", { name: "Send invite" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invite" })
+    );
 
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
@@ -1322,7 +1491,10 @@ describe("organization members page", () => {
 
     const { rerender } = render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
@@ -1332,7 +1504,10 @@ describe("organization members page", () => {
 
     rerender(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
         <ShortcutHelpOverlay activeScopes={["members"]} />
       </HotkeysProvider>
     );
@@ -1345,6 +1520,7 @@ describe("organization members page", () => {
       name: /keyboard shortcuts/i,
     });
 
+    expect(within(dialog).getByText("Invite teammate")).toBeVisible();
     expect(within(dialog).getByText("Submit invite form")).toBeVisible();
     expect(within(dialog).getByText("Focus invite role select")).toBeVisible();
   }, 10_000);
@@ -1361,10 +1537,22 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
-    await user.type(screen.getByLabelText("Email"), "member@example.com");
-    await user.click(screen.getByRole("button", { name: "Send invite" }));
+    const dialog = await openInviteDialog(user);
+
+    await user.type(
+      within(dialog).getByLabelText("Email"),
+      "member@example.com"
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invite" })
+    );
 
     await expect(
       screen.findByText(

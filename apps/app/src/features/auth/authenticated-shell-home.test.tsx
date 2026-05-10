@@ -109,7 +109,9 @@ describe("authenticated shell home", () => {
         )
       ).toBeInTheDocument();
       expect(
-        within(nextActions as HTMLElement).getByRole("link", { name: /open/i })
+        within(nextActions as HTMLElement).getByRole("link", {
+          name: /open members/i,
+        })
       ).toHaveAttribute("href", "/members");
       expect(
         within(nextActions as HTMLElement).getAllByRole("listitem")

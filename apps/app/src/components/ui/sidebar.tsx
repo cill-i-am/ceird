@@ -27,6 +27,7 @@ import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
@@ -52,8 +53,37 @@ function useSidebar() {
   return context;
 }
 
+function readPersistedSidebarOpen() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  // eslint-disable-next-line unicorn/no-document-cookie -- Sidebar state has to be available synchronously before first paint.
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`));
+  const value = cookie?.slice(SIDEBAR_COOKIE_NAME.length + 1);
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+}
+
+function persistSidebarOpen(open: boolean) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  // eslint-disable-next-line unicorn/no-document-cookie -- This mirrors the synchronous read path for first-paint sidebar state.
+  document.cookie = `${SIDEBAR_COOKIE_NAME}=${String(open)}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}; SameSite=Lax`;
+}
+
 function SidebarProvider({
-  defaultOpen = true,
+  defaultOpen,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -70,8 +100,27 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [internalOpen, setInternalOpen] = React.useState(() => defaultOpen);
+  const [internalOpen, setInternalOpen] = React.useState(
+    () => defaultOpen ?? true
+  );
   const open = openProp ?? internalOpen;
+
+  React.useLayoutEffect(() => {
+    if (defaultOpen !== undefined || openProp !== undefined) {
+      return;
+    }
+
+    const persistedOpen = readPersistedSidebarOpen();
+
+    if (persistedOpen === undefined) {
+      return;
+    }
+
+    setInternalOpen((currentOpen) =>
+      currentOpen === persistedOpen ? currentOpen : persistedOpen
+    );
+  }, [defaultOpen, openProp]);
+
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === "function" ? value(open) : value;
@@ -81,13 +130,7 @@ function SidebarProvider({
         setInternalOpen(openState);
       }
 
-      if ("cookieStore" in window) {
-        void window.cookieStore.set({
-          name: SIDEBAR_COOKIE_NAME,
-          value: String(openState),
-          path: "/",
-        });
-      }
+      persistSidebarOpen(openState);
     },
     [setOpenProp, open]
   );
@@ -473,7 +516,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-xl px-3 py-2 text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate",
+  "peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-xl border border-transparent px-3 py-2 text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-active:border-sidebar-border/80 data-active:bg-sidebar-accent data-active:font-semibold data-active:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&>span:not([data-slot=shortcut-hint]):last-child]:truncate",
   {
     variants: {
       variant: {
@@ -679,7 +722,7 @@ function SidebarMenuSubButton({
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex h-10 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-xl px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs sm:h-7 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+          "flex h-10 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-xl border border-transparent px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs sm:h-7 data-active:border-sidebar-border/70 data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
           className
         ),
       },

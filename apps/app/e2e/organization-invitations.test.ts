@@ -279,6 +279,7 @@ async function inviteMemberFromMembersPage(
 ) {
   const membersPage = new MembersPage(page);
   await membersPage.openFromNavigation();
+  await membersPage.openInviteDialog();
   await membersPage.email.fill(email);
   await membersPage.submit.click();
 

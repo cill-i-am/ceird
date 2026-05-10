@@ -345,7 +345,6 @@ describe("jobs route loader", () => {
       render(
         <JobsRouteContent
           activeOrganizationId={organizationId}
-          activeOrganizationName="Acme Field Ops"
           list={{
             items: [
               {
@@ -397,7 +396,6 @@ describe("jobs route loader", () => {
       render(
         <JobsRouteContent
           activeOrganizationId={organizationId}
-          activeOrganizationName="Acme Field Ops"
           list={{
             items: [
               {

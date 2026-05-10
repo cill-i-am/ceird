@@ -1,11 +1,9 @@
 "use client";
-import {
-  isAdministrativeOrganizationRole,
-  isInternalOrganizationRole,
-} from "@ceird/identity-core";
 import type { OrganizationRole } from "@ceird/identity-core";
 import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
+
+import { getPrimaryNavItemsForRole } from "#/components/app-navigation";
 
 import { useAppHotkeySequence } from "./use-app-hotkey";
 
@@ -15,18 +13,33 @@ export function RouteHotkeys({
   currentOrganizationRole?: OrganizationRole;
 }) {
   const navigate = useNavigate({ from: "/" });
-  const canUseAdministratorHotkeys =
-    currentOrganizationRole !== undefined &&
-    isAdministrativeOrganizationRole(currentOrganizationRole);
-  const canUseInternalHotkeys =
-    currentOrganizationRole !== undefined &&
-    isInternalOrganizationRole(currentOrganizationRole);
+  const primaryNavigationUrls = React.useMemo(
+    () =>
+      new Set(
+        getPrimaryNavItemsForRole(currentOrganizationRole).map(
+          (item) => item.url
+        )
+      ),
+    [currentOrganizationRole]
+  );
+  const canUseAdministratorHotkeys = primaryNavigationUrls.has("/activity");
+  const canUseInternalHotkeys = primaryNavigationUrls.has("/");
 
   useAppHotkeySequence("goJobs", () => {
     React.startTransition(() => {
       navigate({ to: "/jobs" });
     });
   });
+
+  useAppHotkeySequence(
+    "goHome",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/" });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
 
   useAppHotkeySequence(
     "goSites",
@@ -78,6 +91,12 @@ function AdministratorRouteHotkeys() {
   useAppHotkeySequence("goMembers", () => {
     React.startTransition(() => {
       navigate({ to: "/members" });
+    });
+  });
+
+  useAppHotkeySequence("goOrganizationSettings", () => {
+    React.startTransition(() => {
+      navigate({ to: "/organization/settings" });
     });
   });
 

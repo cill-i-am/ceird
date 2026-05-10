@@ -6,14 +6,18 @@ import type {
   OrganizationActivityItem,
   OrganizationActivityListResponse,
 } from "@ceird/jobs-core";
+import { Activity01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
@@ -61,15 +65,23 @@ export function OrganizationActivityPage({
     activityItemMatchesSearch(item, search)
   );
   const hasActivity = visibleActivityItems.length > 0;
+  const hasActiveFilters = hasActivitySearchFilters(search);
+  const emptyStateCopy = getActivityEmptyStateCopy(hasActiveFilters);
+  const shouldShowFilters = activity.items.length > 0 || hasActiveFilters;
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-5 p-4 sm:p-6">
-      <AppPageHeader title="Activity">
-        <ActivityFilters
-          options={options}
-          search={search}
-          onSearchChange={onSearchChange}
-        />
+    <main className="flex min-h-0 flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
+      <AppPageHeader
+        title="Activity"
+        leading={<HugeiconsIcon icon={Activity01Icon} strokeWidth={2} />}
+      >
+        {shouldShowFilters ? (
+          <ActivityFilters
+            options={options}
+            search={search}
+            onSearchChange={onSearchChange}
+          />
+        ) : null}
       </AppPageHeader>
 
       {hasActivity ? (
@@ -116,17 +128,51 @@ export function OrganizationActivityPage({
           </div>
         </section>
       ) : (
-        <Empty className="min-h-64 rounded-lg">
+        <Empty className="min-h-64 border-transparent bg-transparent p-8">
           <EmptyHeader>
-            <EmptyTitle>No activity found</EmptyTitle>
-            <EmptyDescription>
-              Try changing the filters to see more organization activity.
-            </EmptyDescription>
+            <EmptyTitle>{emptyStateCopy.title}</EmptyTitle>
+            <EmptyDescription>{emptyStateCopy.description}</EmptyDescription>
           </EmptyHeader>
+          {hasActiveFilters ? (
+            <EmptyContent>
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => onSearchChange({})}
+              >
+                Clear filters
+              </Button>
+            </EmptyContent>
+          ) : null}
         </Empty>
       )}
     </main>
   );
+}
+
+function hasActivitySearchFilters(search: ActivitySearch) {
+  return (
+    search.actorUserId !== undefined ||
+    search.eventType !== undefined ||
+    search.fromDate !== undefined ||
+    search.toDate !== undefined ||
+    search.jobTitle !== undefined
+  );
+}
+
+function getActivityEmptyStateCopy(hasActiveFilters: boolean) {
+  if (hasActiveFilters) {
+    return {
+      description: "Clear filters to return to the full timeline.",
+      title: "No matching activity.",
+    };
+  }
+
+  return {
+    description: "Changes to jobs, members, and settings will appear here.",
+    title: "No activity yet.",
+  };
 }
 
 function activityItemMatchesSearch(

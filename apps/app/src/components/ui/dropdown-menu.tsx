@@ -75,6 +75,26 @@ function DropdownMenuLabel({
   );
 }
 
+function DropdownMenuHeader({
+  className,
+  inset,
+  ...props
+}: React.ComponentProps<"div"> & {
+  inset?: boolean;
+}) {
+  return (
+    <div
+      data-slot="dropdown-menu-header"
+      data-inset={inset}
+      className={cn(
+        "px-3 py-2.5 text-xs text-muted-foreground data-inset:pl-9.5",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
 function DropdownMenuItem({
   className,
   inset,
@@ -263,6 +283,7 @@ export {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuLabel,
+  DropdownMenuHeader,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,

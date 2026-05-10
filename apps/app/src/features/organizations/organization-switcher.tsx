@@ -2,6 +2,7 @@
 
 import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
 import {
+  Add01Icon,
   Building03Icon,
   RefreshIcon,
   UnfoldMoreIcon,
@@ -10,13 +11,14 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "@tanstack/react-router";
 import * as React from "react";
 
+import { Badge } from "#/components/ui/badge";
 import { DotMatrixButtonLoader } from "#/components/ui/dot-matrix-loader";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuHeader,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -27,7 +29,8 @@ import { SidebarMenuButton, useSidebar } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
-import { useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
+import type { HotkeyId } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 
 import {
   listOrganizations,
@@ -56,6 +59,18 @@ type SwitchState =
       readonly organizationId: OrganizationId;
     }
   | { readonly status: "error"; readonly organizationId: OrganizationId };
+
+const ORGANIZATION_SWITCH_HOTKEY_IDS = [
+  "switchOrganization1",
+  "switchOrganization2",
+  "switchOrganization3",
+  "switchOrganization4",
+  "switchOrganization5",
+  "switchOrganization6",
+  "switchOrganization7",
+  "switchOrganization8",
+  "switchOrganization9",
+] as const satisfies readonly HotkeyId[];
 
 export function OrganizationSwitcher({
   activeOrganization,
@@ -123,14 +138,16 @@ export function OrganizationSwitcher({
     resolvedActiveOrganization?.id ?? fallbackActiveOrganizationId;
   const canSwitchOrganizations =
     listState.status === "ready" && organizations.length > 1;
+  const canOpenOrganizationMenu =
+    listState.status !== "ready" ||
+    organizations.length > 0 ||
+    Boolean(resolvedActiveOrganization);
   const activeOrganizationName =
     resolvedActiveOrganization?.name ?? "No active organization";
   const activeOrganizationDescription =
     resolvedActiveOrganization?.slug ?? "Organization";
   const triggerDisabled =
-    listState.status !== "error" &&
-    listState.status === "ready" &&
-    organizations.length <= 1;
+    listState.status === "ready" && !canOpenOrganizationMenu;
 
   useAppHotkeySequence(
     "openOrganizationSwitcher",
@@ -141,7 +158,7 @@ export function OrganizationSwitcher({
   );
 
   const triggerTrailing = renderTriggerTrailing({
-    canSwitchOrganizations,
+    canOpenOrganizationMenu,
     listState,
   });
 
@@ -154,49 +171,35 @@ export function OrganizationSwitcher({
             disabled={triggerDisabled}
             size="lg"
             className="w-full justify-start gap-2.5"
-            tooltip={getTriggerTooltip({
-              activeOrganizationName,
-              canSwitchOrganizations,
-            })}
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sidebar-accent-foreground">
-              <HugeiconsIcon
-                aria-hidden="true"
-                icon={Building03Icon}
-                strokeWidth={2}
-                className="size-4"
-              />
-            </span>
-            <span className="grid min-w-0 flex-1 gap-0.5 text-left leading-tight">
-              <span className="truncate font-medium">
-                {activeOrganizationName}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {activeOrganizationDescription}
-              </span>
-            </span>
-            {triggerTrailing}
-          </SidebarMenuButton>
+          />
         }
-      />
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent text-sidebar-accent-foreground">
+          <HugeiconsIcon
+            aria-hidden="true"
+            icon={Building03Icon}
+            strokeWidth={2}
+            className="size-4"
+          />
+        </span>
+        <span className="grid min-w-0 flex-1 gap-0.5 text-left leading-tight">
+          <span className="truncate font-medium">{activeOrganizationName}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {activeOrganizationDescription}
+          </span>
+        </span>
+        {triggerTrailing}
+      </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
         side={isMobile ? "bottom" : "right"}
-        className="w-64"
+        className="w-64 rounded-xl"
       >
-        <DropdownMenuLabel className="flex items-center gap-2">
-          <span className="min-w-0 flex-1">Organizations</span>
-          {canSwitchOrganizations ? (
-            <DropdownMenuShortcut>
-              <ShortcutHint
-                hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
-                label={HOTKEYS.openOrganizationSwitcher.label}
-              />
-            </DropdownMenuShortcut>
-          ) : null}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        <DropdownMenuHeader className="px-3 py-2 text-xs font-medium text-muted-foreground">
+          Teams
+        </DropdownMenuHeader>
         <OrganizationSwitcherListContent
+          isOpen={open}
           activeOrganizationId={activeOrganizationId}
           listState={listState}
           switchState={switchState}
@@ -309,17 +312,17 @@ function resolveActiveOrganization({
 }
 
 function renderTriggerTrailing({
-  canSwitchOrganizations,
+  canOpenOrganizationMenu,
   listState,
 }: {
-  readonly canSwitchOrganizations: boolean;
+  readonly canOpenOrganizationMenu: boolean;
   readonly listState: ListState;
 }) {
   if (listState.status === "loading") {
     return <DotMatrixButtonLoader />;
   }
 
-  if (!canSwitchOrganizations) {
+  if (!canOpenOrganizationMenu) {
     return null;
   }
 
@@ -333,37 +336,15 @@ function renderTriggerTrailing({
   );
 }
 
-function getTriggerTooltip({
-  activeOrganizationName,
-  canSwitchOrganizations,
-}: {
-  readonly activeOrganizationName: string;
-  readonly canSwitchOrganizations: boolean;
-}) {
-  if (!canSwitchOrganizations) {
-    return activeOrganizationName;
-  }
-
-  return {
-    children: (
-      <>
-        <span>{activeOrganizationName}</span>
-        <ShortcutHint
-          hotkey={HOTKEYS.openOrganizationSwitcher.hotkey}
-          label={HOTKEYS.openOrganizationSwitcher.label}
-        />
-      </>
-    ),
-  };
-}
-
 function OrganizationSwitcherListContent({
+  isOpen,
   activeOrganizationId,
   listState,
   switchState,
   onRetry,
   onSwitchOrganization,
 }: {
+  readonly isOpen: boolean;
   readonly activeOrganizationId: OrganizationId | null;
   readonly listState: ListState;
   readonly switchState: SwitchState;
@@ -375,7 +356,7 @@ function OrganizationSwitcherListContent({
       <DropdownMenuGroup>
         <div className="flex items-center gap-2.5 rounded-2xl px-3 py-2 text-sm text-muted-foreground">
           <Skeleton className="size-4 shrink-0 rounded-full" />
-          <span>Loading organizations</span>
+          <span>Loading teams</span>
         </div>
       </DropdownMenuGroup>
     );
@@ -385,7 +366,7 @@ function OrganizationSwitcherListContent({
     return (
       <DropdownMenuGroup>
         <div className="px-3 py-2 text-sm text-muted-foreground">
-          Couldn't load organizations.
+          Couldn't load teams.
         </div>
         <DropdownMenuItem closeOnClick={false} onClick={onRetry}>
           <HugeiconsIcon
@@ -410,18 +391,14 @@ function OrganizationSwitcherListContent({
     );
   }
 
-  if (listState.organizations.length === 1) {
-    return (
-      <DropdownMenuGroup>
-        <div className="px-3 py-2 text-sm text-muted-foreground">
-          Only organization
-        </div>
-      </DropdownMenuGroup>
-    );
-  }
-
   return (
     <>
+      <OrganizationSwitchHotkeys
+        activeOrganizationId={activeOrganizationId}
+        enabled={isOpen && switchState.status !== "switching"}
+        organizations={listState.organizations}
+        onSwitchOrganization={onSwitchOrganization}
+      />
       {switchState.status === "error" ? (
         <div
           aria-label="Couldn't switch organizations."
@@ -447,20 +424,144 @@ function OrganizationSwitcherListContent({
           onSwitchOrganization(selectedOrganization.id);
         }}
       >
-        {listState.organizations.map((organization) => (
+        {listState.organizations.map((organization, index) => (
           <DropdownMenuRadioItem
             key={organization.id}
             value={organization.id}
             disabled={switchState.status === "switching"}
+            className="h-11 rounded-xl px-3 text-sm focus:bg-accent/70 data-[highlighted]:bg-accent/70 [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
           >
-            <span className="min-w-0 truncate">{organization.name}</span>
+            <OrganizationMenuIcon />
+            <span className="min-w-0 flex-1 truncate">{organization.name}</span>
             {switchState.status === "switching" &&
             switchState.organizationId === organization.id ? (
               <DotMatrixButtonLoader />
-            ) : null}
+            ) : (
+              <OrganizationMenuShortcut
+                index={index}
+                name={organization.name}
+              />
+            )}
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        disabled
+        className="h-11 rounded-xl px-3 text-sm text-muted-foreground data-disabled:opacity-75"
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background text-muted-foreground">
+          <HugeiconsIcon
+            aria-hidden="true"
+            icon={Add01Icon}
+            strokeWidth={2}
+            className="size-4"
+          />
+        </span>
+        <span className="whitespace-nowrap">Add team</span>
+        <Badge
+          variant="secondary"
+          className="ml-auto h-6 px-2 text-[0.6875rem] leading-none text-muted-foreground"
+        >
+          Coming soon
+        </Badge>
+      </DropdownMenuItem>
     </>
+  );
+}
+
+function OrganizationSwitchHotkeys({
+  activeOrganizationId,
+  enabled,
+  organizations,
+  onSwitchOrganization,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly enabled: boolean;
+  readonly organizations: readonly OrganizationSummary[];
+  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+}) {
+  return (
+    <>
+      {ORGANIZATION_SWITCH_HOTKEY_IDS.map((hotkeyId, index) => {
+        const organization = organizations[index];
+
+        return organization ? (
+          <OrganizationSwitchHotkey
+            key={hotkeyId}
+            activeOrganizationId={activeOrganizationId}
+            enabled={enabled}
+            hotkeyId={hotkeyId}
+            organization={organization}
+            onSwitchOrganization={onSwitchOrganization}
+          />
+        ) : null;
+      })}
+    </>
+  );
+}
+
+function OrganizationSwitchHotkey({
+  activeOrganizationId,
+  enabled,
+  hotkeyId,
+  organization,
+  onSwitchOrganization,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly enabled: boolean;
+  readonly hotkeyId: HotkeyId;
+  readonly organization: OrganizationSummary;
+  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+}) {
+  useAppHotkey(
+    hotkeyId,
+    () => {
+      if (activeOrganizationId === organization.id) {
+        return;
+      }
+
+      onSwitchOrganization(organization.id);
+    },
+    { enabled, ignoreInputs: true }
+  );
+
+  return null;
+}
+
+function OrganizationMenuIcon() {
+  return (
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background text-muted-foreground">
+      <HugeiconsIcon
+        aria-hidden="true"
+        icon={Building03Icon}
+        strokeWidth={2}
+        className="size-4"
+      />
+    </span>
+  );
+}
+
+function OrganizationMenuShortcut({
+  index,
+  name,
+}: {
+  readonly index: number;
+  readonly name: string;
+}) {
+  const hotkeyId = ORGANIZATION_SWITCH_HOTKEY_IDS[index];
+
+  if (!hotkeyId) {
+    return null;
+  }
+
+  return (
+    <DropdownMenuShortcut className="pl-2">
+      <ShortcutHint
+        decorative
+        hotkey={HOTKEYS[hotkeyId].hotkey}
+        label={`Switch to ${name}`}
+      />
+    </DropdownMenuShortcut>
   );
 }

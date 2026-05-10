@@ -19,6 +19,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "#/components/ui/dialog";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
 
 type CommandScope = "detail" | "global" | "org" | "route";
 
@@ -31,6 +33,7 @@ export interface CommandAction {
   readonly priority?: number;
   readonly run: () => Promise<void> | void;
   readonly scope: CommandScope;
+  readonly shortcut?: HotkeyDefinition;
   readonly subtitle?: string;
   readonly title: string;
 }
@@ -209,6 +212,14 @@ function CommandBarDialog({
                           {action.subtitle}
                         </span>
                       ) : null}
+                      {action.shortcut ? (
+                        <ShortcutHint
+                          className="order-3 shrink-0 tabular-nums"
+                          decorative
+                          hotkey={action.shortcut.hotkey}
+                          label={action.shortcut.label}
+                        />
+                      ) : null}
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -260,7 +271,12 @@ function groupCommandActions(actions: readonly CommandAction[]) {
 }
 
 function buildCommandValue(action: CommandAction) {
-  return [action.title, action.subtitle, ...(action.keywords ?? [])]
+  return [
+    action.title,
+    action.subtitle,
+    action.shortcut?.hotkey,
+    ...(action.keywords ?? []),
+  ]
     .filter((value): value is string => typeof value === "string")
     .join(" ");
 }

@@ -14,6 +14,7 @@ describe("app page header", () => {
       render(
         <AppPageHeader
           eyebrow="Workspace"
+          leading={<span data-testid="header-leading">C</span>}
           title="Crew access"
           description="Keep teammates moving without adding admin noise."
           actions={<Button type="button">Invite teammate</Button>}
@@ -31,6 +32,7 @@ describe("app page header", () => {
       expect(
         screen.getByRole("button", { name: "Invite teammate" })
       ).toBeInTheDocument();
+      expect(screen.getByTestId("header-leading")).toHaveTextContent("C");
       expect(screen.getByText("Workspace")).toBeInTheDocument();
       expect(screen.getByText("1 pending invitation")).toBeInTheDocument();
     }

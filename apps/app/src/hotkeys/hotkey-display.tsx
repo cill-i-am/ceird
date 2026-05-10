@@ -6,48 +6,94 @@ import { cn } from "#/lib/utils";
 
 import { splitHotkeySequence } from "./hotkey-sequence";
 
-function formatHotkeyDisplay(hotkey: string) {
-  return formatForDisplay(hotkey, { useSymbols: false }) || hotkey;
+type ShortcutDisplayPlatform = "linux" | "mac" | "windows";
+
+function detectClientShortcutDisplayPlatform(): ShortcutDisplayPlatform {
+  const platform = window.navigator.platform?.toLocaleLowerCase() ?? "";
+  const userAgent = window.navigator.userAgent?.toLocaleLowerCase() ?? "";
+
+  if (platform.includes("mac") || userAgent.includes("mac")) {
+    return "mac";
+  }
+
+  if (platform.includes("win") || userAgent.includes("win")) {
+    return "windows";
+  }
+
+  return "linux";
 }
 
-function formatHotkeyChord(hotkey: string) {
-  const display = formatHotkeyDisplay(hotkey);
+function getServerShortcutDisplayPlatform(): ShortcutDisplayPlatform {
+  return "linux";
+}
+
+function unsubscribeShortcutDisplayPlatform() {
+  return null;
+}
+
+function subscribeToShortcutDisplayPlatform() {
+  return unsubscribeShortcutDisplayPlatform;
+}
+
+function useShortcutDisplayPlatform() {
+  return React.useSyncExternalStore(
+    subscribeToShortcutDisplayPlatform,
+    detectClientShortcutDisplayPlatform,
+    getServerShortcutDisplayPlatform
+  );
+}
+
+function formatHotkeyDisplay(
+  hotkey: string,
+  platform: ShortcutDisplayPlatform
+) {
+  return formatForDisplay(hotkey, { platform, useSymbols: false }) || hotkey;
+}
+
+function formatHotkeyChord(hotkey: string, platform: ShortcutDisplayPlatform) {
+  const display = formatHotkeyDisplay(hotkey, platform);
 
   return display === "+" ? [display] : display.split("+");
 }
 
-function formatHotkeyForLabel(hotkey: string) {
+function formatHotkeyForLabel(
+  hotkey: string,
+  platform: ShortcutDisplayPlatform
+) {
   return splitHotkeySequence(hotkey)
-    .map((sequence) => formatHotkeyDisplay(sequence))
+    .map((sequence) => formatHotkeyDisplay(sequence, platform))
     .join(" then ");
 }
 
 export function ShortcutHint({
   className,
+  decorative = false,
   hotkey,
   label,
 }: {
   readonly className?: string;
+  readonly decorative?: boolean;
   readonly hotkey: string;
   readonly label: string;
 }) {
+  const platform = useShortcutDisplayPlatform();
   const sequences = splitHotkeySequence(hotkey);
-  const accessibleLabel = `${label} shortcut: ${formatHotkeyForLabel(hotkey)}`;
+  const accessibleLabel = `${label} shortcut: ${formatHotkeyForLabel(
+    hotkey,
+    platform
+  )}`;
 
   return (
     <span
-      aria-label={accessibleLabel}
+      aria-hidden={decorative ? true : undefined}
+      aria-label={decorative ? undefined : accessibleLabel}
       className={cn("inline-flex items-center gap-1", className)}
+      data-slot="shortcut-hint"
     >
       {sequences.map((sequence, sequenceIndex) => (
-        <React.Fragment key={sequence}>
-          {sequenceIndex > 0 ? (
-            <span aria-hidden="true" className="text-muted-foreground">
-              then
-            </span>
-          ) : null}
+        <React.Fragment key={`${sequence}-${sequenceIndex}`}>
           <KbdGroup>
-            {formatHotkeyChord(sequence).map((key) => (
+            {formatHotkeyChord(sequence, platform).map((key) => (
               <Kbd key={key}>{key}</Kbd>
             ))}
           </KbdGroup>

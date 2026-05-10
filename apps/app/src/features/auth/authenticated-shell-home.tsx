@@ -56,7 +56,7 @@ export function AuthenticatedShellHome() {
                 to="/members"
                 className={buttonVariants({ variant: "ghost", size: "sm" })}
               >
-                Open
+                Open members
               </Link>
             </AppRowListMeta>
           </AppRowListItem>

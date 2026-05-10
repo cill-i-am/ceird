@@ -7,6 +7,7 @@ import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 export class MembersPage {
   readonly page: Page;
   readonly heading: Locator;
+  readonly inviteTeammate: Locator;
   readonly email: Locator;
   readonly role: Locator;
   readonly submit: Locator;
@@ -16,6 +17,9 @@ export class MembersPage {
     this.heading = page.getByRole("heading", {
       level: 1,
       name: "Members",
+    });
+    this.inviteTeammate = page.getByRole("button", {
+      name: "Invite teammate",
     });
     this.email = page.getByLabel("Email", { exact: true });
     this.role = page.getByLabel("Role", { exact: true });
@@ -36,8 +40,15 @@ export class MembersPage {
     await Promise.all([
       expect(this.page).toHaveURL(`${APP_ORIGIN}/members`),
       expect(this.heading).toBeVisible(),
-      waitForSubmitHydration(this.page),
     ]);
+  }
+
+  async openInviteDialog() {
+    await this.inviteTeammate.click();
+    await expect(
+      this.page.getByRole("dialog", { name: "Invite teammate" })
+    ).toBeVisible();
+    await waitForSubmitHydration(this.page);
   }
 
   pendingInvitation(email: string): Locator {

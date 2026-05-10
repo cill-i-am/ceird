@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_app/_org/jobs")({
 });
 
 function JobsRoute() {
-  const { activeOrganization, activeOrganizationId } = useRouteContext({
+  const { activeOrganizationId } = useRouteContext({
     from: "/_app/_org",
   });
   const { list, options, viewer } = Route.useLoaderData();
@@ -38,7 +38,6 @@ function JobsRoute() {
 
   return (
     <JobsRouteContent
-      activeOrganizationName={activeOrganization.name}
       activeOrganizationId={activeOrganizationId}
       listHotkeysEnabled={listHotkeysEnabled}
       list={list}

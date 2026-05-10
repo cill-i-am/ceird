@@ -9,6 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
+import { AppPageHeader } from "#/components/app-page-header";
 import {
   Alert,
   AlertAction,
@@ -19,7 +20,6 @@ import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Empty,
-  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -100,24 +100,22 @@ export function SitesPage({
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-          </span>
-          <h1 className="truncate font-heading text-xl font-medium">Sites</h1>
-        </div>
-        {canCreateSites ? (
-          <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
-            <HugeiconsIcon
-              icon={Add01Icon}
-              strokeWidth={2}
-              data-icon="inline-start"
-            />
-            New site
-          </Link>
-        ) : null}
-      </header>
+      <AppPageHeader
+        title="Sites"
+        leading={<HugeiconsIcon icon={Location01Icon} strokeWidth={2} />}
+        actions={
+          canCreateSites ? (
+            <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
+              <HugeiconsIcon
+                icon={Add01Icon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+              New site
+            </Link>
+          ) : null
+        }
+      />
 
       {notice ? (
         <Alert
@@ -201,18 +199,6 @@ export function SitesPage({
               Create a site before assigning jobs to a place.
             </EmptyDescription>
           </EmptyHeader>
-          {canCreateSites ? (
-            <EmptyContent>
-              <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
-                <HugeiconsIcon
-                  icon={Add01Icon}
-                  strokeWidth={2}
-                  data-icon="inline-start"
-                />
-                New site
-              </Link>
-            </EmptyContent>
-          ) : null}
         </Empty>
       )}
 

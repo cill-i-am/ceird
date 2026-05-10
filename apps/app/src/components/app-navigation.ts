@@ -13,6 +13,9 @@ import {
 import type { HugeiconsIcon } from "@hugeicons/react";
 import type * as React from "react";
 
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
+
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];
 
 type AppNavigationAccess = "all" | "internal" | "administrators";
@@ -69,6 +72,16 @@ const APP_PRIMARY_NAV_ITEMS = [
   },
 ] as const satisfies readonly AppNavigationItem[];
 
+const APP_PRIMARY_NAV_SHORTCUTS_BY_URL = {
+  "/": HOTKEYS.goHome,
+  "/activity": HOTKEYS.goActivity,
+  "/jobs": HOTKEYS.goJobs,
+  "/members": HOTKEYS.goMembers,
+  "/sites": HOTKEYS.goSites,
+} as const satisfies Readonly<
+  Record<AppNavigationItem["url"], HotkeyDefinition>
+>;
+
 export function getPrimaryNavItemsForRole(
   role?: OrganizationRole | null
 ): readonly AppNavigationItem[] {
@@ -87,4 +100,18 @@ export function getPrimaryNavItemsForRole(
 
     return isAdministrativeOrganizationRole(role);
   });
+}
+
+export function getPrimaryNavShortcut(
+  url: string
+): HotkeyDefinition | undefined {
+  return hasPrimaryNavShortcut(url)
+    ? APP_PRIMARY_NAV_SHORTCUTS_BY_URL[url]
+    : undefined;
+}
+
+function hasPrimaryNavShortcut(
+  url: string
+): url is keyof typeof APP_PRIMARY_NAV_SHORTCUTS_BY_URL {
+  return url in APP_PRIMARY_NAV_SHORTCUTS_BY_URL;
 }

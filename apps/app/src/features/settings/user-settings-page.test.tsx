@@ -105,6 +105,21 @@ describe("user settings page", () => {
     vi.clearAllMocks();
   });
 
+  it("keeps the settings title accessible without repeating it visually", () => {
+    render(<UserSettingsPage user={user} />);
+
+    expect(
+      screen.getByRole("heading", { hidden: true, name: "Settings" })
+    ).toHaveClass("sr-only");
+    expect(screen.queryByText("ACCOUNT")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Keep your sign-in details and account identity current for invites, recovery, and team updates."
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Profile" })).toBeVisible();
+  });
+
   it("updates the profile and refreshes route data", async () => {
     const interaction = userEvent.setup();
 

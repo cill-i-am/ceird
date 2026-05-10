@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { isValidElement } from "react";
+import userEvent from "@testing-library/user-event";
+import { cloneElement, isValidElement } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { getPrimaryNavItemsForRole } from "./app-navigation";
@@ -49,8 +50,10 @@ vi.mock(import("#/components/ui/collapsible"), async () => {
   });
 
   const CollapsibleContext = React.createContext<{
+    onOpenChange?: (open: boolean) => void;
     open: boolean;
   }>({
+    onOpenChange: undefined,
     open: false,
   });
 
@@ -58,11 +61,13 @@ vi.mock(import("#/components/ui/collapsible"), async () => {
     Collapsible: (({
       children,
       defaultOpen,
+      onOpenChange,
       open,
       render: renderSlot,
     }: {
       children?: ReactNode;
       defaultOpen?: boolean;
+      onOpenChange?: (open: boolean) => void;
       open?: boolean;
       render?: ReactNode;
     }) => {
@@ -70,7 +75,10 @@ vi.mock(import("#/components/ui/collapsible"), async () => {
       const resolvedOpen = open ?? uncontrolledOpen;
       const content = (
         <CollapsibleContext.Provider
-          value={resolvedOpen ? openContextValue : closedContextValue}
+          value={{
+            ...(resolvedOpen ? openContextValue : closedContextValue),
+            onOpenChange,
+          }}
         >
           {children}
         </CollapsibleContext.Provider>
@@ -96,11 +104,27 @@ vi.mock(import("#/components/ui/collapsible"), async () => {
         </div>
       );
     }) as never,
-    CollapsibleTrigger: (({ children, ...props }: ComponentProps<"button">) => (
-      <button type="button" {...props}>
-        {children}
-      </button>
-    )) as never,
+    CollapsibleTrigger: (({
+      children,
+      onClick,
+      ...props
+    }: ComponentProps<"button">) => {
+      const { onOpenChange, open } = React.useContext(CollapsibleContext);
+
+      return (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={(event) => {
+            onClick?.(event);
+            onOpenChange?.(!open);
+          }}
+          {...props}
+        >
+          {children}
+        </button>
+      );
+    }) as never,
     CollapsibleContent: (({ children }: { children?: ReactNode }) => {
       const { open } = React.useContext(CollapsibleContext);
 
@@ -150,9 +174,19 @@ vi.mock(import("#/components/ui/sidebar"), () => ({
       </button>
     );
   },
-  SidebarMenuAction: ({ children }: { children?: ReactNode }) => (
-    <button type="button">{children}</button>
-  ),
+  SidebarMenuAction: ({
+    children,
+    render: renderProp,
+  }: {
+    children?: ReactNode;
+    render?: unknown;
+  }) => {
+    if (isValidElement<{ children?: ReactNode }>(renderProp)) {
+      return cloneElement(renderProp, undefined, children);
+    }
+
+    return <button type="button">{children}</button>;
+  },
   SidebarMenuSub: ({ children }: { children?: ReactNode }) => (
     <ul>{children}</ul>
   ),
@@ -277,4 +311,140 @@ describe("nav main", () => {
       );
     }
   );
+
+  it("honors explicit item active state", () => {
+    mockedPathname.value = "/settings";
+
+    render(
+      <NavMain
+        items={[
+          {
+            title: "Jobs",
+            url: "/jobs",
+            icon: <span aria-hidden="true">J</span>,
+            isActive: true,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
+      "data-active",
+      "true"
+    );
+  });
+
+  it("renders shortcut hints for primary navigation links", () => {
+    mockedPathname.value = "/";
+
+    render(
+      <NavMain
+        items={[
+          {
+            title: "Home",
+            url: "/",
+            icon: <span aria-hidden="true">Home icon</span>,
+          },
+          {
+            title: "Jobs",
+            url: "/jobs",
+            icon: <span aria-hidden="true">Jobs icon</span>,
+          },
+        ]}
+      />
+    );
+
+    const homeLink = screen.getByRole("link", { name: /home/i });
+    const jobsLink = screen.getByRole("link", { name: /jobs/i });
+
+    expect(within(homeLink).getByText("G")).toBeInTheDocument();
+    expect(within(homeLink).getByText("H")).toBeInTheDocument();
+    expect(within(jobsLink).getByText("G")).toBeInTheDocument();
+    expect(within(jobsLink).getByText("J")).toBeInTheDocument();
+  });
+
+  it("does not reveal active route shortcut hints without hover or focus", () => {
+    mockedPathname.value = "/jobs";
+
+    render(
+      <NavMain
+        items={[
+          {
+            title: "Jobs",
+            url: "/jobs",
+            icon: <span aria-hidden="true">Jobs icon</span>,
+          },
+        ]}
+      />
+    );
+
+    const jobsLink = screen.getByRole("link", { name: /jobs/i });
+    const shortcutHint = jobsLink.querySelector('[data-slot="shortcut-hint"]');
+
+    expect(jobsLink).toHaveAttribute("data-active", "true");
+    expect(shortcutHint).toHaveClass("opacity-0");
+    expect(shortcutHint).toHaveClass("group-hover/menu-button:opacity-100");
+    expect(shortcutHint).toHaveClass(
+      "group-focus-visible/menu-button:opacity-100"
+    );
+    expect(shortcutHint).not.toHaveClass(
+      "group-data-active/menu-button:opacity-100"
+    );
+  });
+
+  it("keys manual submenu expansion by URL", async () => {
+    const user = userEvent.setup();
+    mockedPathname.value = "/members";
+
+    const items = [
+      {
+        title: "Projects",
+        url: "/projects",
+        icon: <span aria-hidden="true">P</span>,
+        items: [
+          {
+            title: "Alpha",
+            url: "/projects/alpha",
+          },
+        ],
+      },
+      {
+        title: "Members",
+        url: "/members",
+        icon: <span aria-hidden="true">M</span>,
+      },
+    ];
+
+    const { rerender } = render(<NavMain items={items} />);
+
+    expect(screen.getAllByTestId("collapsible")[0]).toHaveAttribute(
+      "data-open",
+      "false"
+    );
+
+    await user.click(screen.getByRole("button", { name: /toggle/i }));
+
+    expect(screen.getAllByTestId("collapsible")[0]).toHaveAttribute(
+      "data-open",
+      "true"
+    );
+
+    rerender(
+      <NavMain
+        items={[
+          {
+            ...items[0],
+            title: "Work",
+          },
+          items[1],
+        ]}
+      />
+    );
+
+    expect(screen.getAllByTestId("collapsible")[0]).toHaveAttribute(
+      "data-open",
+      "true"
+    );
+    expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
+  });
 });

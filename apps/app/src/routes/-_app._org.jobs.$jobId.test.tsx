@@ -145,7 +145,6 @@ describe("job detail route", () => {
       render(
         <JobsRouteContent
           activeOrganizationId={organizationId}
-          activeOrganizationName="Acme Field Ops"
           list={{
             items: [
               {

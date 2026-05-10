@@ -137,6 +137,9 @@ describe("organization activity page", () => {
       );
 
       expect(
+        screen.getByRole("heading", { name: "Activity" })
+      ).toBeInTheDocument();
+      expect(
         screen.getByText("Taylor Owner created the job.")
       ).toBeInTheDocument();
       expect(screen.getByLabelText("Actor")).toBeInTheDocument();
@@ -285,7 +288,7 @@ describe("organization activity page", () => {
   );
 
   it(
-    "renders an empty state when no activity matches",
+    "renders a first-run empty state when the timeline is blank",
     {
       timeout: 10_000,
     },
@@ -303,11 +306,63 @@ describe("organization activity page", () => {
           options={{
             members: [],
           }}
-          search={{ eventType: "job_created" }}
+          search={{}}
         />
       );
 
-      expect(screen.getByText("No activity found")).toBeInTheDocument();
+      expect(screen.getByText("No activity yet.")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Changes to jobs, members, and settings will appear here."
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Actor")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Event type")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Job title")).not.toBeInTheDocument();
+      expect(screen.queryByText("Clear filters")).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "renders a filtered empty state with a clear action",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          activity={mixedActivity}
+          onSearchChange={onSearchChange}
+          options={{
+            members: [
+              {
+                id: taylorUserId,
+                name: "Taylor Owner",
+              },
+              {
+                id: jordanUserId,
+                name: "Jordan Admin",
+              },
+            ],
+          }}
+          search={{ eventType: "visit_logged" }}
+        />
+      );
+
+      expect(screen.getByText("No matching activity.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Clear filters to return to the full timeline.")
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Event type")).toHaveValue("visit_logged");
+
+      await user.click(screen.getByRole("button", { name: "Clear filters" }));
+
+      expect(onSearchChange).toHaveBeenCalledExactlyOnceWith({});
     }
   );
 
@@ -324,13 +379,19 @@ describe("organization activity page", () => {
 
       render(
         <OrganizationActivityPage
-          activity={{
-            items: [],
-            nextCursor: undefined,
-          }}
+          activity={mixedActivity}
           onSearchChange={onSearchChange}
           options={{
-            members: [],
+            members: [
+              {
+                id: taylorUserId,
+                name: "Taylor Owner",
+              },
+              {
+                id: jordanUserId,
+                name: "Jordan Admin",
+              },
+            ],
           }}
           search={{}}
         />

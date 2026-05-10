@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import * as React from "react";
 
+import { getPrimaryNavShortcut } from "#/components/app-navigation";
 import {
   Collapsible,
   CollapsibleContent,
@@ -20,15 +21,6 @@ import {
   SidebarMenuSubItem,
 } from "#/components/ui/sidebar";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
-import { HOTKEYS } from "#/hotkeys/hotkey-registry";
-import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
-
-const NAVIGATION_SHORTCUTS_BY_URL: Partial<Record<string, HotkeyDefinition>> = {
-  "/activity": HOTKEYS.goActivity,
-  "/jobs": HOTKEYS.goJobs,
-  "/members": HOTKEYS.goMembers,
-  "/sites": HOTKEYS.goSites,
-};
 
 export function NavMain({
   items,
@@ -65,8 +57,10 @@ export function NavMain({
       <SidebarMenu>
         {items.map((item) => {
           const hasChildren = Boolean(item.items?.length);
-          const isActive = isCurrentPath(item.url);
-          const isOpen = isActive || expandedItems[item.title] === true;
+          const itemKey = item.url;
+          const isActive = item.isActive ?? isCurrentPath(item.url);
+          const isOpen = isActive || expandedItems[itemKey] === true;
+          const shortcut = getPrimaryNavShortcut(item.url);
 
           return (
             <Collapsible
@@ -79,17 +73,17 @@ export function NavMain({
                         if (open) {
                           return {
                             ...current,
-                            [item.title]: true,
+                            [itemKey]: true,
                           };
                         }
 
-                        if (current[item.title] === undefined) {
+                        if (current[itemKey] === undefined) {
                           return current;
                         }
 
                         return Object.fromEntries(
                           Object.entries(current).filter(
-                            ([key]) => key !== item.title
+                            ([key]) => key !== itemKey
                           )
                         ) as Record<string, true | undefined>;
                       });
@@ -101,12 +95,19 @@ export function NavMain({
               <SidebarMenuButton
                 isActive={isActive}
                 size="sm"
-                className="rounded-[calc(var(--radius)*2.1)]"
                 tooltip={getNavigationTooltip(item)}
                 render={<Link to={item.url} />}
               >
                 {item.icon}
-                <span>{item.title}</span>
+                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                {shortcut ? (
+                  <ShortcutHint
+                    decorative
+                    className="ml-auto shrink-0 opacity-0 transition-opacity group-hover/menu-button:opacity-100 group-focus-visible/menu-button:opacity-100 group-data-[collapsible=icon]:hidden"
+                    hotkey={shortcut.hotkey}
+                    label={shortcut.label}
+                  />
+                ) : null}
               </SidebarMenuButton>
               {hasChildren ? (
                 <>
@@ -145,7 +146,7 @@ function getNavigationTooltip(item: {
   readonly title: string;
   readonly url: string;
 }) {
-  const shortcut = NAVIGATION_SHORTCUTS_BY_URL[item.url];
+  const shortcut = getPrimaryNavShortcut(item.url);
 
   if (!shortcut) {
     return item.title;

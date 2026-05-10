@@ -1,4 +1,6 @@
 "use client";
+import { CommandIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
 import * as React from "react";
 
@@ -10,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog";
+import { cn } from "#/lib/utils";
 
 import { ShortcutHint } from "./hotkey-display";
 import { HOTKEYS, HOTKEY_GROUPS } from "./hotkey-registry";
@@ -66,8 +69,12 @@ const ShortcutHelpHotkeys = React.memo(function ShortcutHelpHotkeys({
 
 export function ShortcutHelpOverlay({
   activeScopes,
+  buttonClassName,
+  labelClassName,
 }: {
   readonly activeScopes: readonly HotkeyScope[];
+  readonly buttonClassName?: string | undefined;
+  readonly labelClassName?: string | undefined;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -78,9 +85,16 @@ export function ShortcutHelpOverlay({
         type="button"
         variant="outline"
         size="sm"
+        className={cn("gap-1.5", buttonClassName)}
+        aria-label="Keyboard shortcuts"
         onClick={() => setIsOpen(true)}
       >
-        Keyboard shortcuts
+        <HugeiconsIcon
+          icon={CommandIcon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        <span className={labelClassName}>Keyboard shortcuts</span>
       </Button>
       {isOpen ? <ShortcutHelpContent activeScopes={activeScopes} /> : null}
     </Dialog>

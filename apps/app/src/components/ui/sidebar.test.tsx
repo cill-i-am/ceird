@@ -1,6 +1,7 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import * as React from "react";
 
 import { SidebarProvider, useSidebar } from "./sidebar";
 
@@ -10,8 +11,24 @@ function SidebarStateProbe() {
   return <output aria-label="Sidebar state">{state}</output>;
 }
 
+function PersistSidebarCookieAfterHydration() {
+  // react-doctor-disable-next-line
+  React.useLayoutEffect(() => {
+    setSidebarCookie("sidebar_state=false; path=/");
+  }, []);
+
+  return <SidebarStateProbe />;
+}
+
+function setSidebarCookie(value: string) {
+  // eslint-disable-next-line unicorn/no-document-cookie -- Tests need jsdom cookie setup for the sidebar persistence path.
+  document.cookie = value;
+}
+
 describe("sidebar provider", () => {
   beforeEach(() => {
+    setSidebarCookie("sidebar_state=; path=/; max-age=0");
+
     if (!window.matchMedia) {
       Object.defineProperty(window, "matchMedia", {
         configurable: true,
@@ -34,7 +51,40 @@ describe("sidebar provider", () => {
   });
 
   afterEach(() => {
+    setSidebarCookie("sidebar_state=; path=/; max-age=0");
     vi.restoreAllMocks();
+  });
+
+  it("uses the persisted sidebar state as the default state", () => {
+    setSidebarCookie("sidebar_state=false; path=/");
+
+    render(
+      <HotkeysProvider>
+        <SidebarProvider>
+          <SidebarStateProbe />
+        </SidebarProvider>
+      </HotkeysProvider>
+    );
+
+    expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
+      "collapsed"
+    );
+  });
+
+  it("reconciles the persisted sidebar state after hydration", async () => {
+    render(
+      <HotkeysProvider>
+        <SidebarProvider>
+          <PersistSidebarCookieAfterHydration />
+        </SidebarProvider>
+      </HotkeysProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
+        "collapsed"
+      );
+    });
   });
 
   it("toggles sidebar state with Mod+B", async () => {
@@ -57,6 +107,22 @@ describe("sidebar provider", () => {
     expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
       "collapsed"
     );
+  }, 1000);
+
+  it("persists sidebar state when toggled", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <HotkeysProvider>
+        <SidebarProvider>
+          <SidebarStateProbe />
+        </SidebarProvider>
+      </HotkeysProvider>
+    );
+
+    await user.keyboard("{Control>}b{/Control}");
+
+    expect(document.cookie).toContain("sidebar_state=false");
   }, 1000);
 
   it("lets document listeners observe Mod+B while toggling", async () => {

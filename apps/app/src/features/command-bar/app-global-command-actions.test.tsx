@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -45,6 +51,7 @@ describe("app global command actions", () => {
         ).toBeInTheDocument();
       });
 
+      expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
         screen.queryByRole("option", { name: /go to jobs/i })
       ).not.toBeInTheDocument();
@@ -89,6 +96,12 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
+      expectCommandShortcut("Go to Home", ["G", "H"]);
+      expectCommandShortcut("Go to Jobs", ["G", "J"]);
+      expectCommandShortcut("Go to Sites", ["G", "S"]);
+      expectCommandShortcut("Go to Activity", ["G", "A"]);
+      expectCommandShortcut("Go to Members", ["G", "M"]);
+      expectCommandShortcut("Open organization settings", ["G", "W"]);
 
       await user.click(screen.getByRole("option", { name: /go to jobs/i }));
 
@@ -120,6 +133,7 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
+      expectCommandShortcut("Open organization settings", ["G", "W"]);
     }
   );
 
@@ -174,9 +188,11 @@ describe("app global command actions", () => {
         ).toBeInTheDocument();
       });
 
+      expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expect(
         screen.getByRole("option", { name: /open user settings/i })
       ).toBeInTheDocument();
+      expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
         screen.queryByRole("option", { name: /go to home/i })
       ).not.toBeInTheDocument();
@@ -197,3 +213,11 @@ describe("app global command actions", () => {
     }
   );
 });
+
+function expectCommandShortcut(title: string, keys: readonly string[]) {
+  const option = screen.getByRole("option", { name: title });
+
+  for (const key of keys) {
+    expect(within(option).getByText(key)).toBeVisible();
+  }
+}
