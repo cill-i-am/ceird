@@ -137,7 +137,6 @@ export function JobsPage({
   viewMode: controlledViewMode,
   viewer,
 }: {
-  readonly activeOrganizationName: string;
   readonly children?: React.ReactNode;
   readonly listHotkeysEnabled?: boolean;
   readonly onViewModeChange?: (value: JobsViewMode) => void;

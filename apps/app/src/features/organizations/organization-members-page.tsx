@@ -5,6 +5,7 @@ import {
   ORGANIZATION_ROLES,
   OrganizationRole,
   decodeOrganizationRole,
+  isAdministrativeOrganizationRole,
 } from "@ceird/identity-core";
 import type {
   InvitableOrganizationRole as InvitableOrganizationRoleType,
@@ -29,6 +30,7 @@ import { AppPageHeader } from "#/components/app-page-header";
 import {
   AppRowList,
   AppRowListActions,
+  AppRowListBody,
   AppRowListItem,
   AppRowListLeading,
   AppRowListMeta,
@@ -203,7 +205,7 @@ export function OrganizationMembersPage({
   currentMember = {
     email: "You",
     name: "You",
-    role: "owner",
+    role: "member",
   },
   currentUserId,
   onCurrentMemberAccessChanged,
@@ -520,8 +522,7 @@ export function OrganizationMembersPage({
       ? members
       : [toCurrentOrganizationMember(currentMember, currentUserId)];
   const displayedMemberCount = memberTotal ?? displayedMembers.length;
-  const canInviteMembers =
-    currentViewerRole === "owner" || currentViewerRole === "admin";
+  const canInviteMembers = isAdministrativeOrganizationRole(currentViewerRole);
   const hasNoTeammates =
     members.length === 0 ||
     (displayedMembers.length === 1 &&
@@ -1223,19 +1224,17 @@ function CurrentMemberRow({
       <AppRowListLeading aria-hidden="true">
         {getOrganizationMemberInitial(member)}
       </AppRowListLeading>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {displayName}
-        </p>
-        <p className="text-sm/6 break-all text-muted-foreground">
-          {member.email}
-        </p>
+      <AppRowListBody
+        title={displayName}
+        description={member.email}
+        descriptionClassName="break-all"
+      >
         {errorMessage ? (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage}
           </p>
         ) : null}
-      </div>
+      </AppRowListBody>
       <AppRowListMeta>
         <Badge variant="secondary">{formatRoleLabel(member.role)}</Badge>
         {isCurrentUser ? <Badge variant="outline">You</Badge> : null}
@@ -1362,20 +1361,16 @@ function PendingInvitationRow({
       <AppRowListLeading aria-hidden="true">
         {invitation.email.charAt(0).toUpperCase()}
       </AppRowListLeading>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p
-          className="text-sm font-medium break-all text-foreground"
-          title={invitation.email}
-        >
-          {invitation.email}
-        </p>
-        <p className="text-sm/6 text-muted-foreground">
-          Awaiting acceptance from the invited teammate.
-        </p>
+      <AppRowListBody
+        title={<span title={invitation.email}>{invitation.email}</span>}
+        titleClassName="break-all"
+        truncateTitle={false}
+        description="Awaiting acceptance from the invited teammate."
+      >
         <p className="text-sm/6 text-muted-foreground">
           {formatInvitationExpiry(invitation.expiresAt)}
         </p>
-      </div>
+      </AppRowListBody>
       <AppRowListMeta>
         <Badge variant="secondary">{formatRoleLabel(invitation.role)}</Badge>
         <Badge variant="outline">{formatRoleLabel(invitation.status)}</Badge>
@@ -1529,7 +1524,7 @@ function getManageableRoleOptions({
     return [];
   }
 
-  if (currentViewerRole !== "owner" && currentViewerRole !== "admin") {
+  if (!isAdministrativeOrganizationRole(currentViewerRole)) {
     return [];
   }
 
@@ -1574,7 +1569,7 @@ function canRemoveMember({
     return currentViewerRole === "owner" && ownerCount > 1;
   }
 
-  return currentViewerRole === "owner" || currentViewerRole === "admin";
+  return isAdministrativeOrganizationRole(currentViewerRole);
 }
 
 function omitRecordKey(record: Readonly<Record<string, string>>, key: string) {

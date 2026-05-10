@@ -20,7 +20,6 @@ import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 
 export function JobsRouteContent({
   activeOrganizationId,
-  activeOrganizationName,
   children,
   listHotkeysEnabled,
   list,
@@ -30,7 +29,6 @@ export function JobsRouteContent({
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
-  readonly activeOrganizationName: string;
   readonly children?: ReactNode;
   readonly listHotkeysEnabled?: ComponentProps<
     typeof JobsPage
@@ -55,7 +53,6 @@ export function JobsRouteContent({
       ]}
     >
       <JobsPage
-        activeOrganizationName={activeOrganizationName}
         listHotkeysEnabled={listHotkeysEnabled}
         onViewModeChange={onViewModeChange}
         viewMode={viewMode}

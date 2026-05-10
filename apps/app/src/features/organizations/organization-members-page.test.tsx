@@ -168,7 +168,9 @@ async function chooseCommandOption(
 }
 
 async function openInviteDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Invite teammate" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Invite teammate" })
+  );
 
   return screen.findByRole("dialog", { name: "Invite teammate" });
 }
@@ -322,7 +324,12 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     expect(screen.getByRole("heading", { name: "Members" })).toBeVisible();
     expect(screen.queryByText("Organization access")).not.toBeInTheDocument();
@@ -386,7 +393,12 @@ describe("organization members page", () => {
   it("keeps the invite form behind an invite teammate dialog", async () => {
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
 
@@ -440,7 +452,10 @@ describe("organization members page", () => {
   it("registers members page command actions", async () => {
     render(
       <CommandBarProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
         <RegisteredActionTitles />
       </CommandBarProvider>
     );
@@ -1150,7 +1165,12 @@ describe("organization members page", () => {
       error: null,
     });
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     await expect(
       screen.findByTitle("date-expiry@example.com")
@@ -1187,7 +1207,12 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     await expect(screen.findByText("ops@example.com")).resolves.toBeVisible();
     expect(screen.getAllByText("1 open")).toHaveLength(1);
@@ -1237,7 +1262,10 @@ describe("organization members page", () => {
 
     render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
@@ -1259,7 +1287,10 @@ describe("organization members page", () => {
 
     render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
@@ -1278,7 +1309,10 @@ describe("organization members page", () => {
 
     render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
@@ -1292,7 +1326,12 @@ describe("organization members page", () => {
   it("submits external collaborator invites", async () => {
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     const dialog = await openInviteDialog(user);
 
@@ -1452,7 +1491,10 @@ describe("organization members page", () => {
 
     const { rerender } = render(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
       </HotkeysProvider>
     );
 
@@ -1462,7 +1504,10 @@ describe("organization members page", () => {
 
     rerender(
       <HotkeysProvider>
-        <OrganizationMembersPage activeOrganizationId={organizationId} />
+        <OrganizationMembersPage
+          activeOrganizationId={organizationId}
+          currentUserId={currentUserId}
+        />
         <ShortcutHelpOverlay activeScopes={["members"]} />
       </HotkeysProvider>
     );
@@ -1492,7 +1537,12 @@ describe("organization members page", () => {
 
     const user = userEvent.setup();
 
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
 
     const dialog = await openInviteDialog(user);
 

@@ -1,11 +1,11 @@
 import { render, screen } from "@testing-library/react";
 
-import { DropdownMenuLabel } from "./dropdown-menu";
+import { DropdownMenuHeader } from "./dropdown-menu";
 
 describe("dropdown menu", () => {
-  it("allows labels to render as standalone menu headers", () => {
+  it("allows standalone visual menu headers outside primitive groups", () => {
     expect(() => {
-      render(<DropdownMenuLabel>Organizations</DropdownMenuLabel>);
+      render(<DropdownMenuHeader>Organizations</DropdownMenuHeader>);
     }).not.toThrow();
 
     expect(screen.getByText("Organizations")).toBeInTheDocument();

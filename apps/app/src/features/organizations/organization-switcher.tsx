@@ -11,13 +11,14 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "@tanstack/react-router";
 import * as React from "react";
 
+import { Badge } from "#/components/ui/badge";
 import { DotMatrixButtonLoader } from "#/components/ui/dot-matrix-loader";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuHeader,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -27,7 +28,9 @@ import {
 import { SidebarMenuButton, useSidebar } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
-import { useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import type { HotkeyId } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 
 import {
   listOrganizations,
@@ -56,6 +59,18 @@ type SwitchState =
       readonly organizationId: OrganizationId;
     }
   | { readonly status: "error"; readonly organizationId: OrganizationId };
+
+const ORGANIZATION_SWITCH_HOTKEY_IDS = [
+  "switchOrganization1",
+  "switchOrganization2",
+  "switchOrganization3",
+  "switchOrganization4",
+  "switchOrganization5",
+  "switchOrganization6",
+  "switchOrganization7",
+  "switchOrganization8",
+  "switchOrganization9",
+] as const satisfies readonly HotkeyId[];
 
 export function OrganizationSwitcher({
   activeOrganization,
@@ -180,10 +195,11 @@ export function OrganizationSwitcher({
         side={isMobile ? "bottom" : "right"}
         className="w-64 rounded-xl"
       >
-        <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-muted-foreground">
+        <DropdownMenuHeader className="px-3 py-2 text-xs font-medium text-muted-foreground">
           Teams
-        </DropdownMenuLabel>
+        </DropdownMenuHeader>
         <OrganizationSwitcherListContent
+          isOpen={open}
           activeOrganizationId={activeOrganizationId}
           listState={listState}
           switchState={switchState}
@@ -321,12 +337,14 @@ function renderTriggerTrailing({
 }
 
 function OrganizationSwitcherListContent({
+  isOpen,
   activeOrganizationId,
   listState,
   switchState,
   onRetry,
   onSwitchOrganization,
 }: {
+  readonly isOpen: boolean;
   readonly activeOrganizationId: OrganizationId | null;
   readonly listState: ListState;
   readonly switchState: SwitchState;
@@ -375,6 +393,12 @@ function OrganizationSwitcherListContent({
 
   return (
     <>
+      <OrganizationSwitchHotkeys
+        activeOrganizationId={activeOrganizationId}
+        enabled={isOpen && switchState.status !== "switching"}
+        organizations={listState.organizations}
+        onSwitchOrganization={onSwitchOrganization}
+      />
       {switchState.status === "error" ? (
         <div
           aria-label="Couldn't switch organizations."
@@ -400,7 +424,7 @@ function OrganizationSwitcherListContent({
           onSwitchOrganization(selectedOrganization.id);
         }}
       >
-        {listState.organizations.map((organization) => (
+        {listState.organizations.map((organization, index) => (
           <DropdownMenuRadioItem
             key={organization.id}
             value={organization.id}
@@ -414,7 +438,7 @@ function OrganizationSwitcherListContent({
               <DotMatrixButtonLoader />
             ) : (
               <OrganizationMenuShortcut
-                index={listState.organizations.indexOf(organization)}
+                index={index}
                 name={organization.name}
               />
             )}
@@ -435,12 +459,74 @@ function OrganizationSwitcherListContent({
           />
         </span>
         <span className="whitespace-nowrap">Add team</span>
-        <span className="ml-auto inline-flex h-6 items-center justify-center rounded-full bg-muted-foreground/10 px-2 text-[0.6875rem] leading-none font-medium whitespace-nowrap text-muted-foreground ring-1 ring-border/10">
+        <Badge
+          variant="secondary"
+          className="ml-auto h-6 px-2 text-[0.6875rem] leading-none text-muted-foreground"
+        >
           Coming soon
-        </span>
+        </Badge>
       </DropdownMenuItem>
     </>
   );
+}
+
+function OrganizationSwitchHotkeys({
+  activeOrganizationId,
+  enabled,
+  organizations,
+  onSwitchOrganization,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly enabled: boolean;
+  readonly organizations: readonly OrganizationSummary[];
+  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+}) {
+  return (
+    <>
+      {ORGANIZATION_SWITCH_HOTKEY_IDS.map((hotkeyId, index) => {
+        const organization = organizations[index];
+
+        return organization ? (
+          <OrganizationSwitchHotkey
+            key={hotkeyId}
+            activeOrganizationId={activeOrganizationId}
+            enabled={enabled}
+            hotkeyId={hotkeyId}
+            organization={organization}
+            onSwitchOrganization={onSwitchOrganization}
+          />
+        ) : null;
+      })}
+    </>
+  );
+}
+
+function OrganizationSwitchHotkey({
+  activeOrganizationId,
+  enabled,
+  hotkeyId,
+  organization,
+  onSwitchOrganization,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly enabled: boolean;
+  readonly hotkeyId: HotkeyId;
+  readonly organization: OrganizationSummary;
+  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+}) {
+  useAppHotkey(
+    hotkeyId,
+    () => {
+      if (activeOrganizationId === organization.id) {
+        return;
+      }
+
+      onSwitchOrganization(organization.id);
+    },
+    { enabled, ignoreInputs: true }
+  );
+
+  return null;
 }
 
 function OrganizationMenuIcon() {
@@ -463,19 +549,19 @@ function OrganizationMenuShortcut({
   readonly index: number;
   readonly name: string;
 }) {
-  const shortcut = getOrganizationMenuShortcut(index);
+  const hotkeyId = ORGANIZATION_SWITCH_HOTKEY_IDS[index];
 
-  if (!shortcut) {
+  if (!hotkeyId) {
     return null;
   }
 
   return (
     <DropdownMenuShortcut className="pl-2">
-      <ShortcutHint decorative hotkey={shortcut} label={`Switch to ${name}`} />
+      <ShortcutHint
+        decorative
+        hotkey={HOTKEYS[hotkeyId].hotkey}
+        label={`Switch to ${name}`}
+      />
     </DropdownMenuShortcut>
   );
-}
-
-function getOrganizationMenuShortcut(index: number) {
-  return index >= 0 && index < 9 ? `Mod+${index + 1}` : null;
 }

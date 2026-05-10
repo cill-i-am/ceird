@@ -941,7 +941,6 @@ function renderJobsPage(options?: {
       ]}
     >
       <JobsPage
-        activeOrganizationName="Acme Field Ops"
         viewer={
           options?.viewer ?? {
             role: "owner",

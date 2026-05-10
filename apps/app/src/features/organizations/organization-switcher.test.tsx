@@ -155,6 +155,9 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
     DropdownMenuGroup: (({ children }: { children?: ReactNode }) => (
       <div data-testid="dropdown-menu-group">{children}</div>
     )) as typeof actual.DropdownMenuGroup,
+    DropdownMenuHeader: (({ children }: { children?: ReactNode }) => (
+      <div>{children}</div>
+    )) as typeof actual.DropdownMenuHeader,
     DropdownMenuItem: (({
       children,
       closeOnClick: _closeOnClick,
@@ -636,5 +639,27 @@ describe("organization switcher", () => {
     await expect(
       screen.findByRole("menuitemradio", { name: /beta builds/i })
     ).resolves.toBeInTheDocument();
+  });
+
+  it("switches organizations with the visible team index shortcut", async () => {
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.keyboard("{Control>}2{/Control}");
+
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
   });
 });
