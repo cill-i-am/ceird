@@ -10,7 +10,7 @@ import { Activity01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type * as React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { Badge } from "#/components/ui/badge";
@@ -203,25 +203,6 @@ function ActivityFilters({
   readonly search: ActivitySearch;
   readonly onSearchChange: (search: ActivitySearch) => void;
 }) {
-  const [jobTitleDraft, setJobTitleDraft] = useState(search.jobTitle ?? "");
-
-  useEffect(() => {
-    setJobTitleDraft(search.jobTitle ?? "");
-  }, [search.jobTitle]);
-
-  const commitJobTitleFilter = useCallback(() => {
-    const jobTitle = jobTitleDraft.trim() || undefined;
-
-    if (jobTitle === search.jobTitle) {
-      return;
-    }
-
-    onSearchChange({
-      ...search,
-      jobTitle,
-    });
-  }, [jobTitleDraft, onSearchChange, search]);
-
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(10rem,1fr)_minmax(11rem,1fr)_9rem_9rem_minmax(12rem,1.2fr)]">
       <FilterField label="Actor">
@@ -296,22 +277,53 @@ function ActivityFilters({
         />
       </FilterField>
 
-      <FilterField label="Job title">
-        <Input
-          aria-label="Job title"
-          placeholder="Filter by job title"
-          value={jobTitleDraft}
-          onBlur={commitJobTitleFilter}
-          onChange={(event) => setJobTitleDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitJobTitleFilter();
-            }
-          }}
-        />
-      </FilterField>
+      <JobTitleFilter
+        key={`job-title:${search.jobTitle ?? ""}`}
+        onSearchChange={onSearchChange}
+        search={search}
+      />
     </div>
+  );
+}
+
+function JobTitleFilter({
+  onSearchChange,
+  search,
+}: {
+  readonly search: ActivitySearch;
+  readonly onSearchChange: (search: ActivitySearch) => void;
+}) {
+  const [jobTitleDraft, setJobTitleDraft] = useState(search.jobTitle ?? "");
+
+  function commitJobTitleFilter() {
+    const jobTitle = jobTitleDraft.trim() || undefined;
+
+    if (jobTitle === search.jobTitle) {
+      return;
+    }
+
+    onSearchChange({
+      ...search,
+      jobTitle,
+    });
+  }
+
+  return (
+    <FilterField label="Job title">
+      <Input
+        aria-label="Job title"
+        placeholder="Filter by job title"
+        value={jobTitleDraft}
+        onBlur={commitJobTitleFilter}
+        onChange={(event) => setJobTitleDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitJobTitleFilter();
+          }
+        }}
+      />
+    </FilterField>
   );
 }
 

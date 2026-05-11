@@ -235,16 +235,6 @@ function ServiceAreaRow({
   const nameId = React.useId();
   const descriptionId = React.useId();
 
-  React.useEffect(() => {
-    if (!isEditing) {
-      setValues({
-        description: serviceArea.description ?? "",
-        name: serviceArea.name,
-      });
-      setNameError(null);
-    }
-  }, [isEditing, serviceArea.description, serviceArea.name]);
-
   // Focus follows the user entering edit mode; the input only exists after render.
   // react-doctor-disable-next-line
   React.useEffect(() => {
@@ -273,6 +263,20 @@ function ServiceAreaRow({
     }
   }
 
+  const enterEditMode = React.useCallback(() => {
+    setValues({
+      description: serviceArea.description ?? "",
+      name: serviceArea.name,
+    });
+    setNameError(null);
+    setIsEditing(true);
+  }, [serviceArea.description, serviceArea.name]);
+
+  const cancelEditMode = React.useCallback(() => {
+    setNameError(null);
+    setIsEditing(false);
+  }, []);
+
   const commandActions = React.useMemo<readonly CommandAction[]>(
     () => [
       {
@@ -285,7 +289,7 @@ function ServiceAreaRow({
             return;
           }
 
-          setIsEditing(true);
+          enterEditMode();
         },
         scope: "route",
         title: isEditing
@@ -293,7 +297,13 @@ function ServiceAreaRow({
           : `Edit service area: ${serviceArea.name}`,
       },
     ],
-    [isEditing, serviceArea.id, serviceArea.name, updateResult.waiting]
+    [
+      enterEditMode,
+      isEditing,
+      serviceArea.id,
+      serviceArea.name,
+      updateResult.waiting,
+    ]
   );
   useRegisterCommandActions(commandActions);
 
@@ -362,7 +372,7 @@ function ServiceAreaRow({
                   size="sm"
                   variant="outline"
                   disabled={updateResult.waiting}
-                  onClick={() => setIsEditing(false)}
+                  onClick={cancelEditMode}
                 >
                   Cancel
                 </Button>
@@ -388,7 +398,7 @@ function ServiceAreaRow({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setIsEditing(true)}
+            onClick={enterEditMode}
           >
             Edit {serviceArea.name}
           </Button>

@@ -2,8 +2,7 @@
 import * as React from "react";
 
 import { Drawer, DrawerNestedRoot } from "#/components/ui/drawer";
-
-const RESPONSIVE_DRAWER_DESKTOP_MIN_WIDTH = 768;
+import { useIsMobile } from "#/hooks/use-mobile";
 
 type DrawerDirection = "top" | "bottom" | "left" | "right";
 type DrawerRootProps = React.ComponentProps<typeof Drawer>;
@@ -56,37 +55,9 @@ function useResponsiveDrawerDirection({
   desktopDirection,
   mobileDirection,
 }: Required<ResponsiveDrawerDirectionOptions>) {
-  const isDesktop = useResponsiveDrawerDesktop();
+  const isMobile = useIsMobile();
 
-  return isDesktop ? desktopDirection : mobileDirection;
-}
-
-function useResponsiveDrawerDesktop() {
-  return React.useSyncExternalStore(
-    subscribeToResponsiveDrawerViewport,
-    getResponsiveDrawerViewportSnapshot,
-    () => true
-  );
-}
-
-function subscribeToResponsiveDrawerViewport(onStoreChange: () => void) {
-  if (typeof window === "undefined") {
-    return () => null;
-  }
-
-  window.addEventListener("resize", onStoreChange);
-
-  return () => {
-    window.removeEventListener("resize", onStoreChange);
-  };
-}
-
-function getResponsiveDrawerViewportSnapshot() {
-  if (typeof window === "undefined") {
-    return true;
-  }
-
-  return window.innerWidth >= RESPONSIVE_DRAWER_DESKTOP_MIN_WIDTH;
+  return isMobile ? mobileDirection : desktopDirection;
 }
 
 export { ResponsiveDrawer, ResponsiveNestedDrawer };

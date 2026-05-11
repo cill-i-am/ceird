@@ -207,6 +207,30 @@ describe("organization service areas section", () => {
       });
     });
   });
+
+  it("resets a canceled service area edit when editing starts again", async () => {
+    const user = userEvent.setup();
+    renderServiceAreasSection();
+
+    const area = await screen.findByRole("article", {
+      name: "Service area Dublin",
+    });
+    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+    await user.clear(within(area).getByLabelText("Area name for Dublin"));
+    await user.type(
+      within(area).getByLabelText("Area name for Dublin"),
+      "Draft area"
+    );
+
+    await user.click(within(area).getByRole("button", { name: "Cancel" }));
+    expect(within(area).queryByLabelText("Area name for Dublin")).toBeNull();
+
+    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+
+    expect(within(area).getByLabelText("Area name for Dublin")).toHaveValue(
+      "Dublin"
+    );
+  });
 });
 
 function renderServiceAreasSection() {

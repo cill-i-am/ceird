@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { ResponsiveDrawer, ResponsiveNestedDrawer } from "./responsive-drawer";
@@ -117,6 +117,30 @@ describe("responsive drawer", () => {
     expect(screen.getByTestId("drawer-root")).toHaveAttribute(
       "data-direction",
       "top"
+    );
+  }, 1000);
+
+  it("updates the direction after a mounted viewport resize", () => {
+    setViewportWidth(1024);
+
+    render(
+      <ResponsiveDrawer open>
+        <p>Drawer body</p>
+      </ResponsiveDrawer>
+    );
+
+    expect(screen.getByTestId("drawer-root")).toHaveAttribute(
+      "data-direction",
+      "right"
+    );
+
+    act(() => {
+      setViewportWidth(390);
+    });
+
+    expect(screen.getByTestId("drawer-root")).toHaveAttribute(
+      "data-direction",
+      "bottom"
     );
   }, 1000);
 

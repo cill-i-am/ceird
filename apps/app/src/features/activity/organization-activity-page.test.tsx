@@ -408,6 +408,44 @@ describe("organization activity page", () => {
       });
     }
   );
+
+  it(
+    "resets the committed job title filter when search props change",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+      const renderActivityPage = (search: ActivitySearch) => (
+        <OrganizationActivityPage
+          activity={mixedActivity}
+          onSearchChange={onSearchChange}
+          options={{
+            members: [
+              {
+                id: taylorUserId,
+                name: "Taylor Owner",
+              },
+              {
+                id: jordanUserId,
+                name: "Jordan Admin",
+              },
+            ],
+          }}
+          search={search}
+        />
+      );
+
+      const { rerender } = render(renderActivityPage({ jobTitle: "boiler" }));
+      expect(screen.getByLabelText("Job title")).toHaveValue("boiler");
+
+      rerender(renderActivityPage({}));
+
+      expect(screen.getByLabelText("Job title")).toHaveValue("");
+    }
+  );
 });
 
 function makeActivityItem(
