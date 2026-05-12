@@ -62,7 +62,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs

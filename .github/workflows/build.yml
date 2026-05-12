@@ -31,7 +31,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Lint
         run: pnpm lint
@@ -57,7 +57,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Format Check
         run: pnpm format
@@ -83,7 +83,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Type Check
         run: pnpm check-types
@@ -123,7 +123,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.changes.outputs.react_app == 'true'
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Ensure Linux native packages
         if: steps.changes.outputs.react_app == 'true'
@@ -172,7 +172,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
@@ -213,7 +213,7 @@ jobs:
             package.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
