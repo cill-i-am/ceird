@@ -6,7 +6,6 @@ import { repairPortlessRoutesFile } from "./portless-state.mjs";
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const DEFAULT_AUTH_EMAIL_FROM = "auth@ceird.localhost";
 const DEFAULT_AUTH_EMAIL_FROM_NAME = "Ceird";
-const DEFAULT_SITE_GEOCODER_MODE = "stub";
 
 export function createDevEnvironment(baseEnvironment = process.env) {
   const proxyPort = baseEnvironment.PORTLESS_PORT ?? "1355";
@@ -27,8 +26,6 @@ export function createDevEnvironment(baseEnvironment = process.env) {
       baseEnvironment.BETTER_AUTH_BASE_URL ??
       `https://api.ceird.localhost:${proxyPort}`,
     PORTLESS_PORT: proxyPort,
-    SITE_GEOCODER_MODE:
-      baseEnvironment.SITE_GEOCODER_MODE ?? DEFAULT_SITE_GEOCODER_MODE,
   };
 }
 

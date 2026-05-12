@@ -66,8 +66,10 @@ export class OrganizationActorStorageError extends Schema.TaggedError<Organizati
   }
 ) {}
 
+export const ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG =
+  "@ceird/domains/organizations/OrganizationAuthorizationDeniedError" as const;
 export class OrganizationAuthorizationDeniedError extends Schema.TaggedError<OrganizationAuthorizationDeniedError>()(
-  "OrganizationAuthorizationDeniedError",
+  ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
   {
     message: Schema.String,
   }

@@ -46,7 +46,6 @@ export default defineConfig({
           BETTER_AUTH_BASE_URL: playwrightApiUrl,
           BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
           PORT: "3001",
-          SITE_GEOCODER_MODE: "stub",
         },
         port: 4173,
         reuseExistingServer: false,

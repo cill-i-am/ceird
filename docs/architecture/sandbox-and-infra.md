@@ -101,7 +101,6 @@ Common sandbox variables include:
 | `BETTER_AUTH_BASE_URL`    | API auth URL.                                            |
 | `BETTER_AUTH_SECRET`      | Stable sandbox auth secret.                              |
 | `DATABASE_URL`            | Sandbox Postgres URL.                                    |
-| `SITE_GEOCODER_MODE`      | Site geocoder behavior for local runs.                   |
 | `CEIRD_SANDBOX`           | Marks sandbox runtime.                                   |
 
 Cloudflare email API credentials are optional unless
@@ -127,7 +126,8 @@ The API Worker and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
 on Node.js compatibility APIs run consistently across both deployable surfaces.
 The API Worker is also configured with Better Auth env vars, database
-Hyperdrive binding, auth email queue binding, observability logs, and traces.
+Hyperdrive binding, auth email queue binding, Google Maps geocoding credentials,
+observability logs, and traces.
 The app is configured with app/API origins, Cloudflare-specific Vite flags, and
 Cloudflare observability logs and traces.
 
@@ -150,6 +150,7 @@ budget is applied and before new API code is uploaded.
 | `AUTH_EMAIL_FROM`                          | required             | Sender email address.                                |
 | `AUTH_EMAIL_FROM_NAME`                     | `Ceird`              | Sender display name.                                 |
 | `AUTH_EMAIL_TRANSPORT`                     | `cloudflare-binding` | Auth email transport mode.                           |
+| `GOOGLE_MAPS_API_KEY`                      | required             | Google Maps Geocoding API key for deployed API.      |
 | `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`                  | Soft maximum Hyperdrive origin database connections. |
 | `PLANETSCALE_ORGANIZATION`                 | required             | PlanetScale organization.                            |
 | `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>`      | PlanetScale database name.                           |

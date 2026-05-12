@@ -2,6 +2,7 @@ import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
   ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteNotFoundError,
 } from "@ceird/sites-core";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
@@ -97,6 +98,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       .addError(ServiceAreaNotFoundError)
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
+      .addError(SiteGeocodingProviderError)
       .addError(ContactNotFoundError)
       .addError(JobStorageError)
   )

@@ -6,6 +6,7 @@ export type {
 export {
   IsoDateTimeString,
   SITE_COUNTRIES,
+  GoogleMapsApiKey,
   SITE_GEOCODING_PROVIDERS,
   SiteCountrySchema,
   SiteGeocodingProviderSchema,
@@ -18,6 +19,7 @@ export type {
   SiteGeocodingProvider,
   SiteLatitude,
   SiteLongitude,
+  GoogleMapsApiKey as GoogleMapsApiKeyType,
 } from "./domain.js";
 export {
   CreateServiceAreaInputSchema,
@@ -55,11 +57,13 @@ export {
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SITE_ACCESS_DENIED_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
+  SITE_GEOCODING_PROVIDER_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
   ServiceAreaNotFoundError,
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteNotFoundError,
   SiteStorageError,
 } from "./errors.js";

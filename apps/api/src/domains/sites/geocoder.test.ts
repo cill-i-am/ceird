@@ -1,11 +1,19 @@
-import { SiteGeocodingFailedError } from "@ceird/sites-core";
+import {
+  SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
+} from "@ceird/sites-core";
 import type { CreateSiteInput } from "@ceird/sites-core";
-import { ConfigProvider, Effect } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { ConfigProvider, Duration, Effect } from "effect";
 
 import { makeGoogleSiteGeocoder, SiteGeocoder } from "../sites/geocoder.js";
 
 const FAILED_MESSAGE =
   "We could not locate that site address. Check the Eircode and address details.";
+const GOOGLE_MAPS_API_KEY = "test-google-key";
+type TestGoogleFetch = NonNullable<
+  Parameters<typeof makeGoogleSiteGeocoder>[0]["fetch"]
+>;
 
 const siteInput = {
   addressLine1: "1 Custom House Quay",
@@ -38,28 +46,38 @@ function runWithConfig<Value, Error>(
   );
 }
 
-function responseWithJson(payload: unknown, ok = true): Response {
+function responseWithJson(payload: unknown, ok = true, status = 200): Response {
   return {
     json: () => Promise.resolve(payload),
     ok,
+    status,
   } as Response;
 }
 
-describe("site geocoder", () => {
-  it("stub mode resolves deterministic coordinates without Google key", async () => {
-    const config = new Map([["SITE_GEOCODER_MODE", "stub"]]);
+function makeGoogleTestGeocoder(
+  fetchImplementation: TestGoogleFetch,
+  options: {
+    readonly requestTimeout?: Duration.Duration;
+  } = {}
+) {
+  return makeGoogleSiteGeocoder({
+    fetch: fetchImplementation,
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    ...options,
+  });
+}
 
-    const first = await runWithConfig(
+describe("site geocoder", () => {
+  it("development layer resolves deterministic coordinates without Google key", async () => {
+    const first = await Effect.runPromise(
       SiteGeocoder.geocode(siteInput).pipe(
-        Effect.provide(SiteGeocoder.Default)
-      ),
-      config
+        Effect.provide(SiteGeocoder.Development)
+      )
     );
-    const second = await runWithConfig(
+    const second = await Effect.runPromise(
       SiteGeocoder.geocode(siteInput).pipe(
-        Effect.provide(SiteGeocoder.Default)
-      ),
-      config
+        Effect.provide(SiteGeocoder.Development)
+      )
     );
 
     expect(first).toMatchObject({
@@ -73,6 +91,81 @@ describe("site geocoder", () => {
     expect(first.latitude).toBeLessThanOrEqual(90);
     expect(first.longitude).toBeGreaterThanOrEqual(-180);
     expect(first.longitude).toBeLessThanOrEqual(180);
+  }, 10_000);
+
+  it("google layer requires a Google Maps API key", async () => {
+    const result = await runWithConfig(
+      SiteGeocoder.geocode(siteInput).pipe(
+        Effect.provide(SiteGeocoder.Google),
+        Effect.either
+      ),
+      new Map()
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(result._tag === "Left" ? String(result.left) : "").toContain(
+      "GOOGLE_MAPS_API_KEY"
+    );
+  }, 10_000);
+
+  it("google factory rejects a blank Google Maps API key", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          results: [],
+          status: "ZERO_RESULTS",
+        })
+      )) satisfies TestGoogleFetch;
+
+    const result = await Effect.runPromise(
+      makeGoogleSiteGeocoder({
+        fetch: fetchImplementation,
+        googleMapsApiKey: "   ",
+      }).pipe(Effect.either)
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(result._tag === "Left" ? String(result.left) : "").toContain(
+      "minLength"
+    );
+  }, 10_000);
+
+  it("google factory rejects request timeouts outside the supported range", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          results: [],
+          status: "ZERO_RESULTS",
+        })
+      )) satisfies TestGoogleFetch;
+
+    const result = await Effect.runPromise(
+      makeGoogleSiteGeocoder({
+        fetch: fetchImplementation,
+        googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+        requestTimeout: Duration.zero,
+      }).pipe(Effect.either)
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(result._tag === "Left" ? String(result.left) : "").toContain(
+      "betweenDuration"
+    );
+  }, 10_000);
+
+  it("google layer does not use an env var for request timeout", async () => {
+    const result = await runWithConfig(
+      Effect.runtime<SiteGeocoder>().pipe(
+        Effect.provide(SiteGeocoder.Google),
+        Effect.either
+      ),
+      new Map([
+        ["GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_API_KEY],
+        ["GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS", "not-a-duration"],
+      ])
+    );
+
+    expect(result._tag).toBe("Right");
   }, 10_000);
 
   it("successful Google response maps to latitude/longitude/provider/geocodedAt", async () => {
@@ -95,13 +188,12 @@ describe("site geocoder", () => {
           status: "OK",
         })
       );
-    }) as typeof fetch;
+    }) satisfies TestGoogleFetch;
 
-    const location = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
+    const location = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput))
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(location).toMatchObject({
@@ -123,7 +215,7 @@ describe("site geocoder", () => {
       "1 Custom House Quay, IFSC, Dublin, Dublin, D01 W2R1, Ireland"
     );
     expect(requestedUrl.searchParams.get("region")).toBe("ie");
-    expect(requestedUrl.searchParams.get("key")).toBe("test-google-key");
+    expect(requestedUrl.searchParams.get("key")).toBe(GOOGLE_MAPS_API_KEY);
   }, 10_000);
 
   it("google request maps GB to uk region bias and United Kingdom address", async () => {
@@ -146,13 +238,12 @@ describe("site geocoder", () => {
           status: "OK",
         })
       );
-    }) as typeof fetch;
+    }) satisfies TestGoogleFetch;
 
-    await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
+    await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(gbSiteInput))
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(requestedUrl).toBeDefined();
@@ -164,30 +255,6 @@ describe("site geocoder", () => {
       "10 Downing Street, London, Greater London, United Kingdom"
     );
     expect(requestedUrl.searchParams.get("region")).toBe("uk");
-  }, 10_000);
-
-  it("explicit google factory requires a key even when default mode is stub", async () => {
-    let fetchCalls = 0;
-    const fetchImplementation = (() => {
-      fetchCalls += 1;
-
-      return Promise.resolve(
-        responseWithJson({
-          results: [],
-          status: "ZERO_RESULTS",
-        })
-      );
-    }) as typeof fetch;
-
-    const result = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
-        Effect.either
-      ),
-      new Map([["SITE_GEOCODER_MODE", "stub"]])
-    );
-
-    expect(result._tag).toBe("Left");
-    expect(fetchCalls).toBe(0);
   }, 10_000);
 
   it("successful google response ignores malformed later results", async () => {
@@ -214,13 +281,12 @@ describe("site geocoder", () => {
           ],
           status: "OK",
         })
-      )) as typeof fetch;
+      )) satisfies TestGoogleFetch;
 
-    const location = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
+    const location = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput))
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(location).toMatchObject({
@@ -237,14 +303,13 @@ describe("site geocoder", () => {
           results: [],
           status: "ZERO_RESULTS",
         })
-      )) as typeof fetch;
+      )) satisfies TestGoogleFetch;
 
-    const result = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
         Effect.either
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(result._tag).toBe("Left");
@@ -260,7 +325,73 @@ describe("site geocoder", () => {
     });
   }, 10_000);
 
-  it("malformed response fails with SiteGeocodingFailedError", async () => {
+  it("non-OK HTTP response fails with SiteGeocodingProviderError", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({ status: "UNKNOWN_ERROR" }, false, 503)
+      )) satisfies TestGoogleFetch;
+
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
+        Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
+        Effect.either
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(SiteGeocodingProviderError);
+    if (!(result.left instanceof SiteGeocodingProviderError)) {
+      return;
+    }
+    expect(result.left).toMatchObject({
+      country: "IE",
+      eircode: "D01 W2R1",
+      httpStatus: 503,
+      reason: "http_error",
+    });
+  }, 10_000);
+
+  it("provider status failures fail with SiteGeocodingProviderError", async () => {
+    const fetchImplementation = (() =>
+      Promise.resolve(
+        responseWithJson({
+          error_message:
+            "This API project is not authorized to use this API. key=secret",
+          results: [],
+          status: "REQUEST_DENIED",
+        })
+      )) satisfies TestGoogleFetch;
+
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
+        Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
+        Effect.either
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(SiteGeocodingProviderError);
+    if (!(result.left instanceof SiteGeocodingProviderError)) {
+      return;
+    }
+    expect(result.left).toMatchObject({
+      country: "IE",
+      eircode: "D01 W2R1",
+      providerStatus: "REQUEST_DENIED",
+      reason: "provider_status_not_ok",
+    });
+    expect(result.left.providerMessage).not.toContain("secret");
+  }, 10_000);
+
+  it("malformed response fails with SiteGeocodingProviderError", async () => {
     const fetchImplementation = (() =>
       Promise.resolve(
         responseWithJson({
@@ -276,14 +407,13 @@ describe("site geocoder", () => {
           ],
           status: "OK",
         })
-      )) as typeof fetch;
+      )) satisfies TestGoogleFetch;
 
-    const result = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
         Effect.either
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(result._tag).toBe("Left");
@@ -291,32 +421,35 @@ describe("site geocoder", () => {
       return;
     }
 
-    expect(result.left).toBeInstanceOf(SiteGeocodingFailedError);
-    expect(result.left.message).toBe(FAILED_MESSAGE);
-  }, 10_000);
-
-  it("provider request failure fails with SiteGeocodingFailedError", async () => {
-    const fetchImplementation = (() =>
-      Promise.reject(new Error("upstream timeout"))) as typeof fetch;
-
-    const result = await runWithConfig(
-      makeGoogleSiteGeocoder({ fetch: fetchImplementation }).pipe(
-        Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
-    );
-
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") {
-      return;
-    }
-
-    expect(result.left).toBeInstanceOf(SiteGeocodingFailedError);
+    expect(result.left).toBeInstanceOf(SiteGeocodingProviderError);
     expect(result.left).toMatchObject({
       country: "IE",
       eircode: "D01 W2R1",
-      message: FAILED_MESSAGE,
+      reason: "first_result_parse_failed",
+    });
+  }, 10_000);
+
+  it("provider request failure fails with SiteGeocodingProviderError", async () => {
+    const fetchImplementation = (() =>
+      Promise.reject(new Error("upstream timeout"))) satisfies TestGoogleFetch;
+
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
+        Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
+        Effect.either
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(result.left).toBeInstanceOf(SiteGeocodingProviderError);
+    expect(result.left).toMatchObject({
+      country: "IE",
+      eircode: "D01 W2R1",
+      reason: "fetch_failed",
     });
   }, 10_000);
 
@@ -330,22 +463,20 @@ describe("site geocoder", () => {
       });
 
       return Promise.race<Response>([]);
-    }) as typeof fetch;
+    }) satisfies TestGoogleFetch;
 
-    const result = await runWithConfig(
-      makeGoogleSiteGeocoder({
-        fetch: fetchImplementation,
-        requestTimeoutMs: 1,
+    const result = await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation, {
+        requestTimeout: Duration.millis(1),
       }).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
         Effect.either
-      ),
-      new Map([["GOOGLE_MAPS_API_KEY", "test-google-key"]])
+      )
     );
 
     expect(result._tag).toBe("Left");
     expect(result._tag === "Left" ? result.left : undefined).toBeInstanceOf(
-      SiteGeocodingFailedError
+      SiteGeocodingProviderError
     );
     expect([aborted, abortSignal?.aborted]).toStrictEqual([true, true]);
   }, 10_000);

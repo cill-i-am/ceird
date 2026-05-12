@@ -1211,7 +1211,6 @@ describe("authentication integration", () => {
       CLOUDFLARE_ACCOUNT_ID: "test-account-id",
       CLOUDFLARE_API_TOKEN: "test-api-token",
       DATABASE_URL: databaseUrl,
-      SITE_GEOCODER_MODE: "stub",
     } as const;
 
     await withEnvironment(publicPreviewEnvironment, async () => {

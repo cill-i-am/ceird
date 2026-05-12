@@ -2,9 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import * as Vitest from "vitest";
-
-const { describe, expect, it } = Vitest;
+import { describe, expect, it } from "@effect/vitest";
 
 const domainsDir = path.dirname(fileURLToPath(import.meta.url));
 const apiSrcDir = path.resolve(domainsDir, "..");
@@ -18,7 +16,6 @@ describe("api domain boundaries", () => {
     expect(domains).toContain("sites/repositories.ts");
     expect(domains).toContain("sites/schema.ts");
     expect(domains).toContain("sites/geocoder.ts");
-    expect(domains).toContain("sites/geocoding-config.ts");
     expect(domains).not.toContain("jobs/sites-service.ts");
     expect(domains).not.toContain("jobs/site-geocoder.ts");
     expect(domains).not.toContain("jobs/site-geocoding-config.ts");

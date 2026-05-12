@@ -17,7 +17,25 @@ export type InfraAuthEmailTransport = Schema.Schema.Type<
   typeof InfraAuthEmailTransport
 >;
 
-export type DomainName = string;
+const domainNamePattern = /^[a-z0-9.-]+$/;
+const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
+const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
+
+export const DomainName = Schema.NonEmptyString.check(
+  Schema.isPattern(domainNamePattern, {
+    message:
+      "Domain names may only contain lowercase letters, digits, dots, and hyphens",
+  })
+);
+export type DomainName = Schema.Schema.Type<typeof DomainName>;
+
+export const InfraGoogleMapsApiKey = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/infra/GoogleMapsApiKey")
+);
+export type InfraGoogleMapsApiKey = Schema.Schema.Type<
+  typeof InfraGoogleMapsApiKey
+>;
 
 export interface InfraStageConfig {
   readonly appName: string;
@@ -28,6 +46,7 @@ export interface InfraStageConfig {
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authEmailTransport: InfraAuthEmailTransport;
+  readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly planetScaleOrganization: string;
   readonly planetScaleDatabaseName: string;
@@ -37,11 +56,6 @@ export interface InfraStageConfig {
   readonly applyMigrations: boolean;
 }
 
-const decodeStage = Schema.decodeUnknownSync(InfraStage);
-const domainNamePattern = /^[a-z0-9.-]+$/;
-const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
-const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
 const PlanetScaleRegionSlug = Schema.String.check(
   Schema.isPattern(planetScaleRegionSlugPattern, {
     message:
@@ -69,11 +83,16 @@ const HyperdriveOriginConnectionLimit = Schema.Int.check(
   )
 );
 
-function decodeDomainName(value: string): DomainName {
-  if (!value || !domainNamePattern.test(value)) {
-    throw new Error(`Invalid domain name: ${value}`);
-  }
-  return value;
+function decodeInfraStage(value: string) {
+  return Schema.decodeUnknownEffect(InfraStage)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeDomainName(value: string) {
+  return Schema.decodeUnknownEffect(DomainName)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
 }
 
 function normalizePlanetScaleRegionSlug(value: string) {
@@ -105,6 +124,15 @@ function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
   );
 }
 
+function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(InfraGoogleMapsApiKey)(
+    Redacted.value(value).trim()
+  ).pipe(
+    Effect.map((googleMapsApiKey) => Redacted.make(googleMapsApiKey)),
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeInfraAuthEmailTransport(value: string) {
   return Schema.decodeUnknownEffect(InfraAuthEmailTransport)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
@@ -120,18 +148,18 @@ function decodeHyperdriveOriginConnectionLimit(value: number) {
 export const loadInfraStageConfig = Effect.gen(function* () {
   const stage = yield* Config.string("CEIRD_INFRA_STAGE").pipe(
     Config.withDefault("production"),
-    Config.map(decodeStage)
+    Config.mapOrFail(decodeInfraStage)
   );
   const zoneName = yield* Config.string("CEIRD_ZONE_NAME").pipe(
-    Config.map(decodeDomainName)
+    Config.mapOrFail(decodeDomainName)
   );
   const appHostname = yield* Config.string("CEIRD_APP_HOSTNAME").pipe(
     Config.withDefault(`app.${zoneName}`),
-    Config.map(decodeDomainName)
+    Config.mapOrFail(decodeDomainName)
   );
   const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
     Config.withDefault(`api.${zoneName}`),
-    Config.map(decodeDomainName)
+    Config.mapOrFail(decodeDomainName)
   );
   const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
     Config.mapOrFail(decodeAuthEmailFrom)
@@ -142,6 +170,9 @@ export const loadInfraStageConfig = Effect.gen(function* () {
   const authEmailTransport = yield* Config.string("AUTH_EMAIL_TRANSPORT").pipe(
     Config.withDefault("cloudflare-binding"),
     Config.mapOrFail(decodeInfraAuthEmailTransport)
+  );
+  const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
+    Config.mapOrFail(decodeGoogleMapsApiKey)
   );
   const hyperdriveOriginConnectionLimit = yield* Config.number(
     "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT"
@@ -183,6 +214,7 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     authEmailFrom,
     authEmailFromName,
     authEmailTransport,
+    googleMapsApiKey,
     hyperdriveOriginConnectionLimit,
     planetScaleOrganization,
     planetScaleDatabaseName,

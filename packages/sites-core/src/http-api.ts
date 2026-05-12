@@ -17,6 +17,7 @@ import {
   ServiceAreaNotFoundError,
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteNotFoundError,
   SiteStorageError,
 } from "./errors.js";
@@ -36,6 +37,7 @@ const sitesGroup = HttpApiGroup.make("sites")
       .addError(SiteAccessDeniedError)
       .addError(ServiceAreaNotFoundError)
       .addError(SiteGeocodingFailedError)
+      .addError(SiteGeocodingProviderError)
       .addError(SiteStorageError)
   )
   .add(
@@ -47,6 +49,7 @@ const sitesGroup = HttpApiGroup.make("sites")
       .addError(ServiceAreaNotFoundError)
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
+      .addError(SiteGeocodingProviderError)
       .addError(SiteStorageError)
   );
 

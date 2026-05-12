@@ -1,6 +1,8 @@
 import {
+  GoogleMapsApiKey as GoogleMapsApiKeySchema,
   IsoDateTimeString as IsoDateTimeStringSchema,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteLatitudeSchema,
   SiteLongitudeSchema,
 } from "@ceird/sites-core";
@@ -11,16 +13,22 @@ import type {
   SiteLatitude,
   SiteLongitude,
 } from "@ceird/sites-core";
-import { Duration, Effect, Layer, Schema } from "effect";
-
 import {
-  loadGoogleGeocodingRequestTimeoutMs,
-  loadGoogleMapsApiKey,
-  loadSiteGeocodingConfig,
-} from "./geocoding-config.js";
+  Array as EffectArray,
+  Config,
+  Context,
+  Duration,
+  Effect,
+  Layer,
+  Match,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 
 const GOOGLE_GEOCODING_URL =
   "https://maps.googleapis.com/maps/api/geocode/json";
+const DEFAULT_GOOGLE_GEOCODING_REQUEST_TIMEOUT = Duration.seconds(5);
 const SITE_GEOCODING_FAILED_MESSAGE =
   "We could not locate that site address. Check the Eircode and address details.";
 
@@ -36,8 +44,18 @@ const GoogleGeocodeResultSchema = Schema.Struct({
 });
 
 const GoogleGeocodeResponseSchema = Schema.Struct({
+  error_message: Schema.optional(Schema.String),
   results: Schema.optional(Schema.Array(Schema.Unknown)),
   status: Schema.String,
+});
+const GoogleSiteGeocoderConfigSchema = Schema.Struct({
+  googleMapsApiKey: GoogleMapsApiKeySchema,
+  requestTimeout: Schema.optionalWith(
+    Schema.DurationFromSelf.pipe(
+      Schema.betweenDuration(Duration.millis(1), Duration.seconds(60))
+    ),
+    { default: () => DEFAULT_GOOGLE_GEOCODING_REQUEST_TIMEOUT }
+  ),
 });
 
 const decodeGoogleGeocodeResponse = Schema.decodeUnknown(
@@ -46,9 +64,14 @@ const decodeGoogleGeocodeResponse = Schema.decodeUnknown(
 const decodeGoogleGeocodeResult = Schema.decodeUnknown(
   GoogleGeocodeResultSchema
 );
+const decodeGoogleSiteGeocoderConfig = Schema.decodeUnknown(
+  GoogleSiteGeocoderConfigSchema
+);
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
 );
+const decodeSiteLatitude = Schema.decodeUnknownSync(SiteLatitudeSchema);
+const decodeSiteLongitude = Schema.decodeUnknownSync(SiteLongitudeSchema);
 
 export interface GeocodedSiteLocation {
   readonly latitude: SiteLatitude;
@@ -60,7 +83,10 @@ export interface GeocodedSiteLocation {
 export interface SiteGeocoderImplementation {
   readonly geocode: (
     input: CreateSiteInput
-  ) => Effect.Effect<GeocodedSiteLocation, SiteGeocodingFailedError>;
+  ) => Effect.Effect<
+    GeocodedSiteLocation,
+    SiteGeocodingFailedError | SiteGeocodingProviderError
+  >;
 }
 
 function makeSiteGeocodingFailedError(input: CreateSiteInput) {
@@ -71,12 +97,34 @@ function makeSiteGeocodingFailedError(input: CreateSiteInput) {
   });
 }
 
-function serializeFailureCause(cause: unknown) {
+function makeSiteGeocodingProviderError(
+  input: CreateSiteInput,
+  details: SiteGeocodingProviderFailureDetails
+) {
+  return new SiteGeocodingProviderError({
+    country: input.country,
+    eircode: input.eircode,
+    httpStatus: details.httpStatus,
+    message: "Site geocoding provider failed",
+    providerMessage: details.providerMessage,
+    providerStatus: details.providerStatus,
+    reason: details.reason,
+  });
+}
+
+function failureCauseName(cause: unknown) {
   if (cause instanceof Error) {
-    return cause.message;
+    return cause.name;
   }
 
-  return String(cause);
+  return typeof cause;
+}
+
+function sanitizeProviderMessage(value: string | undefined) {
+  return value
+    ?.replaceAll(/([?&]key=)[^&\s]+/gi, "$1[redacted]")
+    .replaceAll(/\bkey=([^\s&]+)/gi, "key=[redacted]")
+    .slice(0, 240);
 }
 
 function logAndFailSiteGeocoding(
@@ -86,13 +134,10 @@ function logAndFailSiteGeocoding(
     readonly httpStatus?: number;
     readonly reason: string;
     readonly providerStatus?: string;
-    readonly requestTimeoutMs?: number;
+    readonly requestTimeout?: Duration.Duration;
   }
 ) {
   return Effect.logWarning("Site geocoding provider failed", {
-    ...(details.cause === undefined
-      ? {}
-      : { failureCause: serializeFailureCause(details.cause) }),
     ...(details.httpStatus === undefined
       ? {}
       : { httpStatus: details.httpStatus }),
@@ -101,11 +146,55 @@ function logAndFailSiteGeocoding(
       ? {}
       : { providerStatus: details.providerStatus }),
     reason: details.reason,
-    ...(details.requestTimeoutMs === undefined
+    ...(details.requestTimeout === undefined
       ? {}
-      : { requestTimeoutMs: details.requestTimeoutMs }),
+      : { requestTimeoutMs: Duration.toMillis(details.requestTimeout) }),
     siteCountry: input.country,
   }).pipe(Effect.zipRight(Effect.fail(makeSiteGeocodingFailedError(input))));
+}
+
+interface SiteGeocodingProviderFailureDetails {
+  readonly cause?: unknown;
+  readonly httpStatus?: number;
+  readonly providerMessage?: string;
+  readonly providerStatus?: string;
+  readonly reason: string;
+  readonly requestTimeout?: Duration.Duration;
+}
+
+function logAndFailSiteGeocodingProvider(
+  input: CreateSiteInput,
+  details: SiteGeocodingProviderFailureDetails
+) {
+  return Effect.logWarning("Site geocoding provider failed", {
+    ...(details.cause === undefined
+      ? {}
+      : { failureCauseType: failureCauseName(details.cause) }),
+    ...(details.httpStatus === undefined
+      ? {}
+      : { httpStatus: details.httpStatus }),
+    provider: "google",
+    ...(details.providerMessage === undefined
+      ? {}
+      : { providerMessage: sanitizeProviderMessage(details.providerMessage) }),
+    ...(details.providerStatus === undefined
+      ? {}
+      : { providerStatus: details.providerStatus }),
+    reason: details.reason,
+    ...(details.requestTimeout === undefined
+      ? {}
+      : { requestTimeoutMs: Duration.toMillis(details.requestTimeout) }),
+    siteCountry: input.country,
+  }).pipe(
+    Effect.zipRight(
+      Effect.fail(
+        makeSiteGeocodingProviderError(input, {
+          ...details,
+          providerMessage: sanitizeProviderMessage(details.providerMessage),
+        })
+      )
+    )
+  );
 }
 
 type PortableFetch = (
@@ -124,7 +213,7 @@ type GoogleGeocodingRequestFailure =
     }
   | {
       readonly _tag: "GoogleGeocodingTimedOut";
-      readonly requestTimeoutMs: number;
+      readonly requestTimeout: Duration.Duration;
     };
 
 type GoogleGeocodingRequestResult =
@@ -138,34 +227,28 @@ type GoogleGeocodingRequestResult =
     };
 
 function googleRequestFailureDetails(failure: GoogleGeocodingRequestFailure) {
-  switch (failure._tag) {
-    case "GoogleGeocodingFetchFailed": {
-      return {
-        cause: failure.cause,
-        reason: "fetch_failed",
-      };
-    }
-    case "GoogleGeocodingJsonDecodeFailed": {
-      return {
-        cause: failure.cause,
-        reason: "json_decode_failed",
-      };
-    }
-    case "GoogleGeocodingTimedOut": {
-      return {
-        reason: "request_timeout",
-        requestTimeoutMs: failure.requestTimeoutMs,
-      };
-    }
-    default: {
-      return failure satisfies never;
-    }
-  }
+  return Match.type<GoogleGeocodingRequestFailure>().pipe(
+    Match.tag("GoogleGeocodingFetchFailed", (value) => ({
+      cause: value.cause,
+      reason: "fetch_failed",
+    })),
+    Match.tag("GoogleGeocodingJsonDecodeFailed", (value) => ({
+      cause: value.cause,
+      reason: "json_decode_failed",
+    })),
+    Match.tag("GoogleGeocodingTimedOut", (value) => ({
+      reason: "request_timeout",
+      requestTimeout: value.requestTimeout,
+    })),
+    Match.exhaustive
+  )(failure);
 }
 
 function fetchGoogleGeocodingPayload(options: {
+  readonly country: CreateSiteInput["country"];
   readonly fetchImplementation: PortableFetch;
-  readonly requestTimeoutMs: number;
+  readonly region: string;
+  readonly requestTimeout: Duration.Duration;
   readonly url: URL;
 }) {
   return Effect.acquireUseRelease(
@@ -183,6 +266,7 @@ function fetchGoogleGeocodingPayload(options: {
               cause,
             }) satisfies GoogleGeocodingRequestFailure,
         });
+        yield* Effect.annotateCurrentSpan("http.status", response.status);
 
         if (!response.ok) {
           return {
@@ -204,16 +288,28 @@ function fetchGoogleGeocodingPayload(options: {
           _tag: "Success",
           payload,
         } satisfies GoogleGeocodingRequestResult;
-      }).pipe(
-        Effect.timeoutFail({
-          duration: Duration.millis(options.requestTimeoutMs),
-          onTimeout: () =>
-            ({
-              _tag: "GoogleGeocodingTimedOut",
-              requestTimeoutMs: options.requestTimeoutMs,
-            }) satisfies GoogleGeocodingRequestFailure,
-        })
-      ),
+      })
+        .pipe(
+          Effect.timeoutFail({
+            duration: options.requestTimeout,
+            onTimeout: () =>
+              ({
+                _tag: "GoogleGeocodingTimedOut",
+                requestTimeout: options.requestTimeout,
+              }) satisfies GoogleGeocodingRequestFailure,
+          })
+        )
+        .pipe(
+          Effect.withSpan("SiteGeocoder.Google.fetch", {
+            attributes: {
+              provider: "google",
+              requestTimeoutMs: Duration.toMillis(options.requestTimeout),
+              siteCountry: options.country,
+              siteRegion: options.region,
+            },
+            captureStackTrace: false,
+          })
+        ),
     (controller) => Effect.sync(() => controller.abort())
   );
 }
@@ -270,25 +366,31 @@ function googleRegionBias(country: CreateSiteInput["country"]) {
 }
 
 function buildAddress(input: CreateSiteInput) {
-  return [
-    input.addressLine1,
-    input.addressLine2,
-    input.town,
-    input.county,
-    input.eircode,
-    countryName(input.country),
-  ]
-    .map(normalizeAddressPart)
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(", ");
+  return EffectArray.filterMap(
+    [
+      input.addressLine1,
+      input.addressLine2,
+      input.town,
+      input.county,
+      input.eircode,
+      countryName(input.country),
+    ],
+    (part) => {
+      const normalized = normalizeAddressPart(part);
+
+      return normalized === undefined || normalized.length === 0
+        ? Option.none()
+        : Option.some(normalized);
+    }
+  ).join(", ");
 }
 
 function nowIsoString() {
   return decodeIsoDateTimeString(new Date().toISOString());
 }
 
-export function makeStubSiteGeocoder(): SiteGeocoderImplementation {
-  const geocode = Effect.fn("SiteGeocoder.Stub.geocode")(
+export function makeDevelopmentSiteGeocoder(): SiteGeocoderImplementation {
+  const geocode = Effect.fn("SiteGeocoder.Development.geocode")(
     (input: CreateSiteInput) =>
       Effect.sync(() => {
         const hash = stableHash(buildAddress(input).toLowerCase());
@@ -298,8 +400,8 @@ export function makeStubSiteGeocoder(): SiteGeocoderImplementation {
 
         return {
           geocodedAt: nowIsoString(),
-          latitude,
-          longitude,
+          latitude: decodeSiteLatitude(latitude),
+          longitude: decodeSiteLongitude(longitude),
           provider: "stub",
         } satisfies GeocodedSiteLocation;
       })
@@ -308,46 +410,45 @@ export function makeStubSiteGeocoder(): SiteGeocoderImplementation {
   return { geocode };
 }
 
-export function makeGoogleSiteGeocoder(
-  options: {
-    readonly fetch?: PortableFetch;
-    readonly googleMapsApiKey?: string;
-    readonly requestTimeoutMs?: number;
-  } = {}
-) {
+export function makeGoogleSiteGeocoder(options: {
+  readonly fetch?: PortableFetch;
+  readonly googleMapsApiKey: string;
+  readonly requestTimeout?: Duration.Duration;
+}) {
   return Effect.gen(function* makeGoogleSiteGeocoderEffect() {
-    const googleMapsApiKey =
-      options.googleMapsApiKey ?? (yield* loadGoogleMapsApiKey);
-    const requestTimeoutMs =
-      options.requestTimeoutMs ?? (yield* loadGoogleGeocodingRequestTimeoutMs);
-    const fetchImplementation = options.fetch ?? globalThis.fetch;
+    const { fetch: fetchImplementation = globalThis.fetch } = options;
+    const { googleMapsApiKey, requestTimeout } =
+      yield* decodeGoogleSiteGeocoderConfig(options);
 
     const geocode = Effect.fn("SiteGeocoder.Google.geocode")(function* geocode(
       input: CreateSiteInput
     ) {
+      const region = googleRegionBias(input.country);
       const url = new URL(GOOGLE_GEOCODING_URL);
       url.searchParams.set("address", buildAddress(input));
-      url.searchParams.set("region", googleRegionBias(input.country));
+      url.searchParams.set("region", region);
       url.searchParams.set("key", googleMapsApiKey);
 
       const requestResult = yield* fetchGoogleGeocodingPayload({
+        country: input.country,
         fetchImplementation,
-        requestTimeoutMs,
+        region,
+        requestTimeout,
         url,
       }).pipe(
         Effect.catchTags({
           GoogleGeocodingFetchFailed: (failure) =>
-            logAndFailSiteGeocoding(
+            logAndFailSiteGeocodingProvider(
               input,
               googleRequestFailureDetails(failure)
             ),
           GoogleGeocodingJsonDecodeFailed: (failure) =>
-            logAndFailSiteGeocoding(
+            logAndFailSiteGeocodingProvider(
               input,
               googleRequestFailureDetails(failure)
             ),
           GoogleGeocodingTimedOut: (failure) =>
-            logAndFailSiteGeocoding(
+            logAndFailSiteGeocodingProvider(
               input,
               googleRequestFailureDetails(failure)
             ),
@@ -355,7 +456,7 @@ export function makeGoogleSiteGeocoder(
       );
 
       if (requestResult._tag === "HttpError") {
-        return yield* logAndFailSiteGeocoding(input, {
+        return yield* logAndFailSiteGeocodingProvider(input, {
           httpStatus: requestResult.status,
           reason: "http_error",
         });
@@ -365,11 +466,16 @@ export function makeGoogleSiteGeocoder(
         requestResult.payload
       ).pipe(
         Effect.catchTag("ParseError", (cause) =>
-          logAndFailSiteGeocoding(input, {
+          logAndFailSiteGeocodingProvider(input, {
             cause,
             reason: "response_parse_failed",
           })
         )
+      );
+      yield* Effect.annotateCurrentSpan("providerStatus", decoded.status);
+      yield* Effect.annotateCurrentSpan(
+        "resultCount",
+        decoded.results?.length ?? 0
       );
 
       if (decoded.status === "ZERO_RESULTS") {
@@ -380,7 +486,8 @@ export function makeGoogleSiteGeocoder(
       }
 
       if (decoded.status !== "OK") {
-        return yield* logAndFailSiteGeocoding(input, {
+        return yield* logAndFailSiteGeocodingProvider(input, {
+          providerMessage: decoded.error_message,
           providerStatus: decoded.status,
           reason: "provider_status_not_ok",
         });
@@ -389,7 +496,7 @@ export function makeGoogleSiteGeocoder(
       const firstResult = decoded.results?.[0];
 
       if (firstResult === undefined) {
-        return yield* logAndFailSiteGeocoding(input, {
+        return yield* logAndFailSiteGeocodingProvider(input, {
           providerStatus: decoded.status,
           reason: "first_result_missing",
         });
@@ -398,7 +505,7 @@ export function makeGoogleSiteGeocoder(
       const location = yield* decodeGoogleGeocodeResult(firstResult).pipe(
         Effect.map((result) => result.geometry.location),
         Effect.catchTag("ParseError", (cause) =>
-          logAndFailSiteGeocoding(input, {
+          logAndFailSiteGeocodingProvider(input, {
             cause,
             providerStatus: decoded.status,
             reason: "first_result_parse_failed",
@@ -418,26 +525,36 @@ export function makeGoogleSiteGeocoder(
   });
 }
 
-export class SiteGeocoder extends Effect.Service<SiteGeocoder>()(
-  "@ceird/domains/sites/SiteGeocoder",
-  {
-    accessors: true,
-    effect: Effect.gen(function* SiteGeocoderLive() {
-      const config = yield* loadSiteGeocodingConfig;
+const googleMapsApiKeyConfig = Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
+  Config.validate({
+    message: "GOOGLE_MAPS_API_KEY must not be empty",
+    validation: (value) => Redacted.value(value).trim().length > 0,
+  })
+);
 
-      if (config.mode === "stub") {
-        return makeStubSiteGeocoder();
-      }
+export class SiteGeocoder extends Context.Tag(
+  "@ceird/domains/sites/SiteGeocoder"
+)<SiteGeocoder, SiteGeocoderImplementation>() {
+  static readonly geocode = (input: CreateSiteInput) =>
+    Effect.gen(function* SiteGeocoderGeocode() {
+      const siteGeocoder = yield* SiteGeocoder;
+
+      return yield* siteGeocoder.geocode(input);
+    });
+
+  static readonly Development = Layer.succeed(
+    SiteGeocoder,
+    makeDevelopmentSiteGeocoder()
+  );
+
+  static readonly Google = Layer.effect(
+    SiteGeocoder,
+    Effect.gen(function* SiteGeocoderGoogle() {
+      const googleMapsApiKey = yield* googleMapsApiKeyConfig;
 
       return yield* makeGoogleSiteGeocoder({
-        googleMapsApiKey: config.googleMapsApiKey,
-        requestTimeoutMs: config.requestTimeoutMs,
+        googleMapsApiKey: Redacted.value(googleMapsApiKey),
       });
-    }),
-  }
-) {
-  static readonly Stub = Layer.succeed(
-    SiteGeocoder,
-    SiteGeocoder.make(makeStubSiteGeocoder())
+    })
   );
 }

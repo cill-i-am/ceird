@@ -52,6 +52,22 @@ export class SiteGeocodingFailedError extends Schema.TaggedError<SiteGeocodingFa
   HttpApiSchema.annotations({ status: 422 })
 ) {}
 
+export const SITE_GEOCODING_PROVIDER_ERROR_TAG =
+  "@ceird/sites-core/SiteGeocodingProviderError" as const;
+export class SiteGeocodingProviderError extends Schema.TaggedError<SiteGeocodingProviderError>()(
+  SITE_GEOCODING_PROVIDER_ERROR_TAG,
+  {
+    message: Schema.String,
+    country: SiteCountrySchema,
+    eircode: Schema.optional(Schema.String),
+    httpStatus: Schema.optional(Schema.Int),
+    providerMessage: Schema.optional(Schema.String),
+    providerStatus: Schema.optional(Schema.String),
+    reason: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 503 })
+) {}
+
 export const SERVICE_AREA_NOT_FOUND_ERROR_TAG =
   "@ceird/sites-core/ServiceAreaNotFoundError" as const;
 export class ServiceAreaNotFoundError extends Schema.TaggedError<ServiceAreaNotFoundError>()(
@@ -69,4 +85,5 @@ export type SitesError =
   | SiteStorageError
   | SiteNotFoundError
   | SiteGeocodingFailedError
+  | SiteGeocodingProviderError
   | ServiceAreaNotFoundError;

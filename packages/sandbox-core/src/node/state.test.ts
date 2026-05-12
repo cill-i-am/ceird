@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 
 import { SandboxRegistryRecord } from "./state.js";

@@ -1,5 +1,5 @@
+import { describe, expect, it } from "@effect/vitest";
 import { ParseResult, Schema } from "effect";
-import * as Vitest from "vitest";
 
 import type { SiteId } from "./index.js";
 import {
@@ -10,13 +10,12 @@ import {
   ServiceAreasApiGroup,
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteNotFoundError,
   SitesApi,
   SitesApiGroup,
   SiteStorageError,
 } from "./index.js";
-
-const { describe, expect, it } = Vitest;
 
 describe("sites-core", () => {
   it("decodes site-owned creation DTOs", () => {
@@ -142,6 +141,15 @@ describe("sites-core", () => {
         message: "Could not geocode site",
       })._tag
     ).toBe("@ceird/sites-core/SiteGeocodingFailedError");
+    expect(
+      new SiteGeocodingProviderError({
+        country: "IE",
+        eircode: "D01 X2X2",
+        message: "Site geocoding provider failed",
+        providerStatus: "REQUEST_DENIED",
+        reason: "provider_status_not_ok",
+      })._tag
+    ).toBe("@ceird/sites-core/SiteGeocodingProviderError");
     expect(new SiteAccessDeniedError({ message: "No access" })._tag).toBe(
       "@ceird/sites-core/SiteAccessDeniedError"
     );

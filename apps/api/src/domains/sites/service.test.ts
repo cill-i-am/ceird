@@ -206,7 +206,7 @@ function makeHarness(
     ) => unexpected("configuration.updateServiceArea"),
   });
 
-  const siteGeocoder = SiteGeocoder.make({
+  const siteGeocoder = {
     geocode: (input: CreateSiteInput) =>
       Effect.gen(function* () {
         calls.geocode += 1;
@@ -223,7 +223,7 @@ function makeHarness(
           provider: "stub" as const,
         };
       }),
-  });
+  };
 
   const serviceLayer = Layer.provide(
     SitesService.DefaultWithoutDependencies,

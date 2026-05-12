@@ -29,6 +29,7 @@ import type {
   JobMemberOptionsResponse,
   JobListQuery,
   OrganizationActivityQuery,
+  OrganizationMemberNotFoundError,
   OrganizationIdType as OrganizationId,
   PatchJobInput,
   TransitionJobInput,
@@ -40,7 +41,14 @@ import type {
   ServiceAreaOption,
   SiteIdType as SiteId,
 } from "@ceird/sites-core";
-import { Effect, Either, Option } from "effect";
+import {
+  Array as EffectArray,
+  Effect,
+  Either,
+  HashMap,
+  Match,
+  Option,
+} from "effect";
 
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -77,7 +85,6 @@ export class JobsService extends Effect.Service<JobsService>()(
       LabelsRepository.Default,
       ServiceAreasRepository.Default,
       SitesRepository.Default,
-      SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* JobsServiceLive() {
       const activityRecorder = yield* JobsActivityRecorder;
@@ -195,11 +202,22 @@ export class JobsService extends Effect.Service<JobsService>()(
       ) {
         const actor = yield* loadActor();
         yield* authorization.ensureCanCreate(actor);
+        yield* Effect.annotateCurrentSpan("action", "create");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
         if (
           input.site?.kind === "create" &&
           input.site.input.serviceAreaId !== undefined
         ) {
+          yield* Effect.annotateCurrentSpan(
+            "inlineSiteServiceAreaId",
+            input.site.input.serviceAreaId
+          );
           yield* sitesRepository
             .ensureServiceAreaInOrganization(
               actor.organizationId,
@@ -210,7 +228,22 @@ export class JobsService extends Effect.Service<JobsService>()(
 
         const geocodedSiteLocation =
           input.site?.kind === "create"
-            ? yield* siteGeocoder.geocode(input.site.input)
+            ? yield* siteGeocoder.geocode(input.site.input).pipe(
+                Effect.tap((location) =>
+                  Effect.annotateCurrentSpan(
+                    "inlineSiteGeocodingProvider",
+                    location.provider
+                  )
+                ),
+                Effect.withSpan("JobsService.create.geocodeInlineSite", {
+                  attributes: {
+                    organizationId: actor.organizationId,
+                    siteCountry: input.site.input.country,
+                    siteCreation: "inline",
+                  },
+                  captureStackTrace: false,
+                })
+              )
             : undefined;
 
         const result = yield* jobsRepository
@@ -257,28 +290,12 @@ export class JobsService extends Effect.Service<JobsService>()(
           return result.right;
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG:
-          case JOB_NOT_FOUND_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+        }).pipe(
+          Effect.catchTag(JOB_NOT_FOUND_ERROR_TAG, (error) => Effect.die(error))
+        );
       });
 
       const getDetail = Effect.fn("JobsService.getDetail")(function* (
@@ -386,28 +403,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           );
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.fail(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "fail",
+          workItemId,
+        });
       });
 
       const transition = Effect.fn("JobsService.transition")(function* (
@@ -485,28 +485,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           );
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const reopen = Effect.fn("JobsService.reopen")(function* (
@@ -566,28 +549,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           );
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const addComment = Effect.fn("JobsService.addComment")(function* (
@@ -632,28 +598,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           return result.right;
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const assignLabel = Effect.fn("JobsService.assignLabel")(function* (
@@ -706,28 +655,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           );
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const removeLabel = Effect.fn("JobsService.removeLabel")(function* (
@@ -780,28 +712,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           );
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const addVisit = Effect.fn("JobsService.addVisit")(function* (
@@ -859,28 +774,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           return result.right;
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const addCostLine = Effect.fn("JobsService.addCostLine")(function* (
@@ -933,28 +831,11 @@ export class JobsService extends Effect.Service<JobsService>()(
           return result.right;
         }
 
-        switch (result.left._tag) {
-          case ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG: {
-            return yield* result.left.userId === actor.userId
-              ? Effect.fail(
-                  new JobAccessDeniedError({
-                    message:
-                      "Your organization access changed while the request was running",
-                    workItemId,
-                  })
-                )
-              : Effect.die(result.left);
-          }
-          case WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG: {
-            return yield* Effect.die(result.left);
-          }
-          case "SqlError": {
-            return yield* failJobsStorageError(result.left);
-          }
-          default: {
-            return yield* Effect.fail(result.left);
-          }
-        }
+        return yield* handleJobMutationFailure(result.left, {
+          actor,
+          otherMemberFailure: "die",
+          workItemId,
+        });
       });
 
       const listCollaborators = Effect.fn("JobsService.listCollaborators")(
@@ -1130,6 +1011,92 @@ function failJobsStorageError(
   return Effect.fail(makeJobsStorageError(error));
 }
 
+interface JobMutationFailure {
+  readonly _tag: string;
+}
+type JobMutationFailureCommonHandledTag =
+  | typeof WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG
+  | "SqlError";
+type JobMutationFailureHandledTag<Mode extends "die" | "fail"> =
+  Mode extends "die"
+    ?
+        | JobMutationFailureCommonHandledTag
+        | typeof ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG
+    : JobMutationFailureCommonHandledTag;
+type UnhandledJobMutationFailure<
+  Error extends JobMutationFailure,
+  Mode extends "die" | "fail",
+> = Exclude<Error, { readonly _tag: JobMutationFailureHandledTag<Mode> }>;
+
+function handleJobMutationFailure<
+  Error extends JobMutationFailure,
+  Mode extends "die" | "fail",
+>(
+  error: Error,
+  options: {
+    readonly actor: OrganizationActor;
+    readonly otherMemberFailure: Mode;
+    readonly workItemId?: WorkItemId;
+  }
+): Effect.Effect<
+  never,
+  | UnhandledJobMutationFailure<Error, Mode>
+  | JobAccessDeniedError
+  | JobStorageError
+> {
+  if (error._tag === ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG) {
+    return handleOrganizationMemberNotFoundFailure(
+      error as Error & OrganizationMemberNotFoundError,
+      options
+    ) as Effect.Effect<
+      never,
+      | UnhandledJobMutationFailure<Error, Mode>
+      | JobAccessDeniedError
+      | JobStorageError
+    >;
+  }
+
+  return Match.value(error._tag).pipe(
+    Match.when(WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG, () =>
+      Effect.die(error)
+    ),
+    Match.when("SqlError", () => failJobsStorageError(error)),
+    Match.orElse(() =>
+      Effect.fail(error as UnhandledJobMutationFailure<Error, Mode>)
+    )
+  ) as Effect.Effect<
+    never,
+    | UnhandledJobMutationFailure<Error, Mode>
+    | JobAccessDeniedError
+    | JobStorageError
+  >;
+}
+
+function handleOrganizationMemberNotFoundFailure<Error>(
+  error: Error & OrganizationMemberNotFoundError,
+  options: {
+    readonly actor: OrganizationActor;
+    readonly otherMemberFailure: "die" | "fail";
+    readonly workItemId?: WorkItemId;
+  }
+): Effect.Effect<never, Error | JobAccessDeniedError> {
+  if (error.userId === options.actor.userId) {
+    return Effect.fail(
+      new JobAccessDeniedError({
+        message:
+          "Your organization access changed while the request was running",
+        ...(options.workItemId === undefined
+          ? {}
+          : { workItemId: options.workItemId }),
+      })
+    );
+  }
+
+  return options.otherMemberFailure === "die"
+    ? Effect.die(error)
+    : Effect.fail(error);
+}
+
 function dieWorkItemOrganizationMismatch(error: unknown) {
   return Effect.die(error);
 }
@@ -1262,26 +1229,19 @@ function deriveServiceAreaOptionsFromSites(
     readonly serviceAreaName?: string | undefined;
   }[]
 ): readonly ServiceAreaOption[] {
-  const serviceAreasById = new Map<
-    ServiceAreaOption["id"],
-    ServiceAreaOption
-  >();
+  const serviceAreasById = EffectArray.reduce(
+    sites,
+    HashMap.empty<ServiceAreaOption["id"], ServiceAreaOption>(),
+    (currentServiceAreasById, site) =>
+      site.serviceAreaId === undefined || site.serviceAreaName === undefined
+        ? currentServiceAreasById
+        : HashMap.set(currentServiceAreasById, site.serviceAreaId, {
+            id: site.serviceAreaId,
+            name: site.serviceAreaName,
+          })
+  );
 
-  for (const site of sites) {
-    if (
-      site.serviceAreaId === undefined ||
-      site.serviceAreaName === undefined
-    ) {
-      continue;
-    }
-
-    serviceAreasById.set(site.serviceAreaId, {
-      id: site.serviceAreaId,
-      name: site.serviceAreaName,
-    });
-  }
-
-  return [...serviceAreasById.values()].toSorted(compareServiceAreaOptions);
+  return HashMap.toValues(serviceAreasById).toSorted(compareServiceAreaOptions);
 }
 
 function compareServiceAreaOptions(

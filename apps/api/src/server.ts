@@ -16,6 +16,7 @@ import {
 } from "./domains/identity/authentication/auth.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
+import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { AppApi } from "./http-api.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
@@ -54,16 +55,19 @@ const makeApiHandlersLive = () =>
 type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
 type ApiAuthenticationLive = typeof AuthenticationLive;
 type ApiBaseLive = Layer.Layer<never, never, never>;
+type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
 
 export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
-  authenticationLive: ApiAuthenticationLive = AuthenticationLive
+  authenticationLive: ApiAuthenticationLive = AuthenticationLive,
+  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Development
 ) =>
   makeApiHandlersLive().pipe(
     Layer.provide(
       Layer.mergeAll(
         databaseRuntimeLive,
-        authenticationLive.pipe(Layer.provide(databaseRuntimeLive))
+        authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
+        siteGeocoderLive
       )
     )
   );
@@ -123,11 +127,22 @@ export const apiRequestLogger: typeof HttpMiddleware.logger =
   });
 
 function requestPathname(url: string) {
-  try {
-    return new URL(url, "http://ceird.local").pathname;
-  } catch {
-    return url.split("?")[0] ?? url;
+  const queryIndex = url.indexOf("?");
+  const pathOrUrl = queryIndex === -1 ? url : url.slice(0, queryIndex);
+
+  if (pathOrUrl.startsWith("/")) {
+    return pathOrUrl;
   }
+
+  const protocolSeparatorIndex = pathOrUrl.indexOf("://");
+
+  if (protocolSeparatorIndex === -1) {
+    return pathOrUrl;
+  }
+
+  const pathnameStartIndex = pathOrUrl.indexOf("/", protocolSeparatorIndex + 3);
+
+  return pathnameStartIndex === -1 ? "/" : pathOrUrl.slice(pathnameStartIndex);
 }
 
 function shouldSkipRequestLog(path: string) {
@@ -146,10 +161,11 @@ export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
 export const makeApiWebHandler = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
+  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Development,
   baseLive: ApiBaseLive = Layer.empty
 ) => {
   const apiLayer = Layer.mergeAll(
-    makeApiLive(databaseRuntimeLive, authenticationLive),
+    makeApiLive(databaseRuntimeLive, authenticationLive, siteGeocoderLive),
     NodeHttpServer.layerContext
   ).pipe(Layer.provide(baseLive));
 

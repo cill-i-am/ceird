@@ -27,3 +27,9 @@ export const SiteGeocodingProviderSchema = Schema.Literal(
 export type SiteGeocodingProvider = Schema.Schema.Type<
   typeof SiteGeocodingProviderSchema
 >;
+
+export const GoogleMapsApiKey = Schema.Trim.pipe(
+  Schema.minLength(1),
+  Schema.brand("@ceird/sites-core/GoogleMapsApiKey")
+);
+export type GoogleMapsApiKey = Schema.Schema.Type<typeof GoogleMapsApiKey>;

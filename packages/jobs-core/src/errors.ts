@@ -7,6 +7,7 @@ import type {
 import type {
   ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteNotFoundError,
 } from "@ceird/sites-core";
 import { HttpApiSchema } from "@effect/platform";
@@ -214,6 +215,7 @@ export type JobsError =
   | JobCollaboratorConflictError
   | SiteNotFoundError
   | SiteGeocodingFailedError
+  | SiteGeocodingProviderError
   | ContactNotFoundError
   | OrganizationMemberNotFoundError
   | ServiceAreaNotFoundError

@@ -1,10 +1,15 @@
+import { describe, expect, it, vi } from "@effect/vitest";
+import { ConfigProvider, Effect, Layer } from "effect";
+
 import type { AuthEmailQueueMessage } from "./domains/identity/authentication/auth-email-queue.js";
 import type {
   CloudflareEmailBindingMessage,
   CloudflareEmailBindingSendResult,
 } from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
+import type { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
-import worker from "./worker.js";
+import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
+import worker, { WorkerApiSiteGeocoderLive } from "./worker.js";
 
 type TestSendEmail = (
   message: CloudflareEmailBindingMessage
@@ -83,12 +88,29 @@ function makeEnv(
     DATABASE: {
       connectionString: "postgresql://postgres:postgres@localhost:5432/app",
     } as Hyperdrive,
+    GOOGLE_MAPS_API_KEY: "google-key",
     NODE_ENV: "test",
     ...envOverrides,
   };
 }
 
 describe("worker queue auth email delivery", () => {
+  it("uses the Google geocoder layer with Worker environment config", async () => {
+    const result = await Effect.runPromise(
+      Effect.runtime<SiteGeocoder>().pipe(
+        Effect.provide(WorkerApiSiteGeocoderLive),
+        Effect.provide(
+          Layer.setConfigProvider(
+            ConfigProvider.fromMap(apiWorkerEnvConfigMap(makeEnv()))
+          )
+        ),
+        Effect.either
+      )
+    );
+
+    expect(result._tag).toBe("Right");
+  }, 10_000);
+
   it("acks messages after sending through the configured email binding", async () => {
     const sendEmail = makeSendEmailMock();
     const message = makeMessage(makePasswordResetQueueMessage());

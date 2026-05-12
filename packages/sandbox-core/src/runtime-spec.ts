@@ -83,7 +83,6 @@ const SandboxRuntimeBaseOverrides = Schema.Struct({
   SANDBOX_NODE_MODULES_VOLUME: SandboxDockerVolumeName,
   SANDBOX_NAME: SandboxNameSchema,
   SANDBOX_PNPM_STORE_VOLUME: SandboxDockerVolumeName,
-  SITE_GEOCODER_MODE: Schema.Literal("stub"),
   CEIRD_SANDBOX: Schema.Literal("1"),
   VITE_API_ORIGIN: SandboxHttpUrl,
 });
@@ -137,7 +136,6 @@ export function buildSandboxRuntimeBaseOverrides(input: {
     SANDBOX_NODE_MODULES_VOLUME: input.runtimeAssets.nodeModulesVolume,
     SANDBOX_NAME: input.sandboxName,
     SANDBOX_PNPM_STORE_VOLUME: input.runtimeAssets.pnpmStoreVolume,
-    SITE_GEOCODER_MODE: "stub",
     CEIRD_SANDBOX: "1",
     VITE_API_ORIGIN: input.urls.api,
   });
@@ -184,8 +182,6 @@ export const buildSandboxRuntimeSpec = Effect.fn("SandboxRuntimeSpec.build")(
     readonly sharedEnvironment: SharedSandboxEnvironment;
   }) {
     yield* Effect.annotateCurrentSpan("sandboxName", input.sandboxName);
-    yield* Effect.annotateCurrentSpan("worktreePath", input.worktreePath);
-    yield* Effect.annotateCurrentSpan("repoRoot", input.repoRoot);
     const takenNames = input.takenNames ?? new Set<SandboxName>();
 
     if (takenNames.has(input.sandboxName)) {
@@ -202,6 +198,7 @@ export const buildSandboxRuntimeSpec = Effect.fn("SandboxRuntimeSpec.build")(
         `${input.repoRoot}::${input.worktreePath}::${input.sandboxName}`
       )
     );
+    yield* Effect.annotateCurrentSpan("sandboxId", sandboxId);
     const composeProjectName = makeComposeProjectName(input.sandboxName);
     const hostnameSlug = Schema.decodeUnknownSync(HostnameSlugSchema)(
       input.sandboxName

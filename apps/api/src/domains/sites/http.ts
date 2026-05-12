@@ -4,7 +4,6 @@ import { Effect, Layer } from "effect";
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
 import { DomainCorsLive } from "../http-cors.js";
-import { SiteGeocoder } from "./geocoder.js";
 import { ServiceAreasService } from "./service-areas-service.js";
 import { SitesService } from "./service.js";
 
@@ -73,10 +72,6 @@ export const SitesHttpLive = Layer.mergeAll(
   ServiceAreasHandlersLive
 ).pipe(
   Layer.provide(
-    Layer.mergeAll(
-      SitesService.Default,
-      ServiceAreasService.Default,
-      SiteGeocoder.Default
-    )
+    Layer.mergeAll(SitesService.Default, ServiceAreasService.Default)
   )
 );

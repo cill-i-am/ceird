@@ -9,7 +9,7 @@ import {
   SiteNotFoundError,
   SiteStorageError,
 } from "@ceird/sites-core";
-import { Effect, Option } from "effect";
+import { Array as EffectArray, Effect, HashMap, Option } from "effect";
 
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
@@ -19,8 +19,10 @@ import {
 } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
-import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
-import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
+import {
+  ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
+  ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+} from "../organizations/errors.js";
 import { SiteGeocoder } from "./geocoder.js";
 import { ServiceAreasRepository, SitesRepository } from "./repositories.js";
 
@@ -33,7 +35,6 @@ export class SitesService extends Effect.Service<SitesService>()(
       OrganizationAuthorization.Default,
       ServiceAreasRepository.Default,
       SitesRepository.Default,
-      SiteGeocoder.Default,
     ],
     effect: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
@@ -60,7 +61,12 @@ export class SitesService extends Effect.Service<SitesService>()(
         const actor = yield* loadActor();
         yield* authorization
           .ensureCanCreateSite(actor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(
+            Effect.catchTag(
+              ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+              failSiteAccessDenied
+            )
+          );
         yield* Effect.annotateCurrentSpan("action", "create");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -128,7 +134,12 @@ export class SitesService extends Effect.Service<SitesService>()(
         const actor = yield* loadActor();
         yield* authorization
           .ensureCanCreateSite(actor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(
+            Effect.catchTag(
+              ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+              failSiteAccessDenied
+            )
+          );
         yield* Effect.annotateCurrentSpan("action", "update");
         yield* Effect.annotateCurrentSpan(
           "organizationId",
@@ -250,7 +261,12 @@ function ensureCanViewOrganizationSiteOptions(
 
     yield* authorization
       .ensureCanViewOrganizationData(actor)
-      .pipe(Effect.mapError(mapAuthorizationDenied));
+      .pipe(
+        Effect.catchTag(
+          ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+          failSiteAccessDenied
+        )
+      );
   });
 }
 
@@ -258,8 +274,8 @@ const mapSitesActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new SiteAccessDeniedError({ message })
 );
 
-function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
-  return new SiteAccessDeniedError({ message: error.message });
+function failSiteAccessDenied(error: { readonly message: string }) {
+  return Effect.fail(new SiteAccessDeniedError({ message: error.message }));
 }
 
 function deriveServiceAreaOptionsFromSites(
@@ -268,26 +284,19 @@ function deriveServiceAreaOptionsFromSites(
     readonly serviceAreaName?: string | undefined;
   }[]
 ): readonly ServiceAreaOption[] {
-  const serviceAreasById = new Map<
-    ServiceAreaOption["id"],
-    ServiceAreaOption
-  >();
+  const serviceAreasById = EffectArray.reduce(
+    sites,
+    HashMap.empty<ServiceAreaOption["id"], ServiceAreaOption>(),
+    (currentServiceAreasById, site) =>
+      site.serviceAreaId === undefined || site.serviceAreaName === undefined
+        ? currentServiceAreasById
+        : HashMap.set(currentServiceAreasById, site.serviceAreaId, {
+            id: site.serviceAreaId,
+            name: site.serviceAreaName,
+          })
+  );
 
-  for (const site of sites) {
-    if (
-      site.serviceAreaId === undefined ||
-      site.serviceAreaName === undefined
-    ) {
-      continue;
-    }
-
-    serviceAreasById.set(site.serviceAreaId, {
-      id: site.serviceAreaId,
-      name: site.serviceAreaName,
-    });
-  }
-
-  return [...serviceAreasById.values()].toSorted(compareServiceAreaOptions);
+  return HashMap.toValues(serviceAreasById).toSorted(compareServiceAreaOptions);
 }
 
 function compareServiceAreaOptions(

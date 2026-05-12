@@ -13,6 +13,7 @@ import {
   ServiceAreaOptionSchema,
   ServiceAreaSchema,
   SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
   SiteOptionSchema,
   SitesApi,
   SitesApiGroup,
@@ -21,8 +22,8 @@ import {
   UpdateServiceAreaResponseSchema,
 } from "@ceird/sites-core";
 import { OpenApi } from "@effect/platform";
+import { describe, expect, it } from "@effect/vitest";
 import { ParseResult, Schema } from "effect";
-import * as Vitest from "vitest";
 
 import {
   AddJobCostLineInputSchema,
@@ -70,8 +71,6 @@ import {
   VisitDurationIncrementError,
   WorkItemId,
 } from "./index.js";
-
-const { describe, expect, it } = Vitest;
 
 describe("jobs-core", () => {
   it("decodes job collaborator domain contracts", () => {
@@ -1490,6 +1489,18 @@ describe("jobs-core", () => {
       "@ceird/sites-core/SiteGeocodingFailedError"
     );
     expect(geocodingError.country).toBe("IE");
+
+    const providerError = new SiteGeocodingProviderError({
+      message: "Site geocoding provider failed",
+      country: "IE",
+      eircode: "D01 X2X2",
+      reason: "request_timeout",
+    });
+
+    expect(providerError._tag).toBe(
+      "@ceird/sites-core/SiteGeocodingProviderError"
+    );
+    expect(providerError.reason).toBe("request_timeout");
 
     const costSummaryError = new JobCostSummaryLimitExceededError({
       message: "Job cost summary subtotal would exceed a safe integer",

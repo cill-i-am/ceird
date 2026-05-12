@@ -4,8 +4,8 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
-  Runtime,
 } from "effect";
 
 import { loadAuthEmailConfig } from "./domains/identity/authentication/auth-email-config.js";
@@ -28,6 +28,7 @@ import {
   CloudflareEmailBinding,
   CloudflareEmailBindingAuthEmailTransportLive,
 } from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
+import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
 import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
@@ -42,6 +43,8 @@ function makeWorkerBaseLive(env: ApiWorkerEnv) {
   );
 }
 
+export const WorkerApiSiteGeocoderLive = SiteGeocoder.Google;
+
 function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
   const baseLive = makeWorkerBaseLive(env);
   const databaseRuntimeLive = makeAppDatabaseRuntimeLive(
@@ -54,21 +57,22 @@ function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
     })
   );
 
-  return makeApiWebHandler(databaseRuntimeLive, authenticationLive, baseLive);
+  return makeApiWebHandler(
+    databaseRuntimeLive,
+    authenticationLive,
+    WorkerApiSiteGeocoderLive,
+    baseLive
+  );
 }
 
 function makeWorkerAuthEmailTransportLive(env: ApiWorkerEnv) {
   return Layer.unwrapEffect(
     loadAuthEmailConfig.pipe(
-      Effect.map(({ transportMode }) => {
-        switch (transportMode) {
-          case "noop": {
-            return NoopAuthEmailTransportLive;
-          }
-          case "cloudflare-api": {
-            return CloudflareAuthEmailTransportLive;
-          }
-          case "cloudflare-binding": {
+      Effect.map(({ transportMode }) =>
+        Match.value(transportMode).pipe(
+          Match.when("noop", () => NoopAuthEmailTransportLive),
+          Match.when("cloudflare-api", () => CloudflareAuthEmailTransportLive),
+          Match.when("cloudflare-binding", () => {
             const authEmail = env.AUTH_EMAIL;
 
             if (!authEmail) {
@@ -90,13 +94,10 @@ function makeWorkerAuthEmailTransportLive(env: ApiWorkerEnv) {
             return CloudflareEmailBindingAuthEmailTransportLive.pipe(
               Layer.provide(cloudflareEmailBindingLive)
             );
-          }
-          default: {
-            const exhaustive: never = transportMode;
-            return exhaustive;
-          }
-        }
-      })
+          }),
+          Match.exhaustive
+        )
+      )
     )
   );
 }
@@ -113,6 +114,93 @@ function sendQueuedAuthEmail(body: unknown) {
   );
 }
 
+function acknowledgeMessage(message: Message<unknown>) {
+  return Effect.sync(() => {
+    message.ack();
+  });
+}
+
+function retryMessage(message: Message<unknown>) {
+  return Effect.sync(() => {
+    message.retry({ delaySeconds: 30 });
+  });
+}
+
+function logInvalidAuthEmailQueueMessage(
+  failure: InvalidAuthEmailQueueMessageError
+) {
+  return Effect.logWarning("Invalid auth email queue message discarded").pipe(
+    Effect.annotateLogs({
+      authEmailQueueFailureCause: failure.cause,
+      authEmailQueueFailureMessage: failure.message,
+      authEmailQueueFailureTag: failure._tag,
+    })
+  );
+}
+
+function logAuthEmailQueueDeliveryError(failure: AuthEmailQueueDeliveryError) {
+  return Effect.logWarning("Auth email queue delivery failed; retrying").pipe(
+    Effect.annotateLogs({
+      ...(failure.cause ? { authEmailQueueFailureCause: failure.cause } : {}),
+      ...(failure.deliveryKey
+        ? { authEmailQueueDeliveryKey: failure.deliveryKey }
+        : {}),
+      ...(failure.emailKind
+        ? { authEmailQueueEmailKind: failure.emailKind }
+        : {}),
+      authEmailQueueFailureMessage: failure.message,
+      ...(failure.sourceCause
+        ? {
+            authEmailQueueFailureSourceCause: failure.sourceCause,
+          }
+        : {}),
+      ...(failure.sourceTag
+        ? { authEmailQueueFailureSourceTag: failure.sourceTag }
+        : {}),
+      authEmailQueueFailureTag: failure._tag,
+    })
+  );
+}
+
+function handleQueuedAuthEmailMessage(message: Message<unknown>) {
+  return sendQueuedAuthEmail(message.body).pipe(
+    Effect.exit,
+    Effect.flatMap((exit) => {
+      if (Exit.isSuccess(exit)) {
+        return acknowledgeMessage(message);
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+
+      if (
+        Option.isSome(failure) &&
+        failure.value instanceof InvalidAuthEmailQueueMessageError
+      ) {
+        return logInvalidAuthEmailQueueMessage(failure.value).pipe(
+          Effect.zipRight(acknowledgeMessage(message))
+        );
+      }
+
+      if (
+        Option.isSome(failure) &&
+        failure.value instanceof AuthEmailQueueDeliveryError
+      ) {
+        return logAuthEmailQueueDeliveryError(failure.value).pipe(
+          Effect.zipRight(retryMessage(message))
+        );
+      }
+
+      return Effect.logError("Auth email queue handler failed with a defect")
+        .pipe(
+          Effect.annotateLogs({
+            authEmailQueueFailureMessage: String(Cause.squash(exit.cause)),
+          })
+        )
+        .pipe(Effect.zipRight(retryMessage(message)));
+    })
+  );
+}
+
 const worker = {
   async fetch(
     request: Request,
@@ -125,84 +213,14 @@ const worker = {
   },
 
   async queue(batch: MessageBatch<unknown>, env: ApiWorkerEnv): Promise<void> {
-    const runtime = await Effect.runPromise(
-      Effect.runtime<AuthEmailSender>().pipe(
+    await Effect.runPromise(
+      Effect.forEach(batch.messages, handleQueuedAuthEmailMessage, {
+        discard: true,
+      }).pipe(
         Effect.provide(makeWorkerAuthEmailSenderLive(env)),
         Effect.provide(makeWorkerBaseLive(env))
       )
     );
-    const runQueuedAuthEmail = Runtime.runPromiseExit(runtime);
-    const runWorkerEffect = Runtime.runPromise(runtime);
-
-    for (const message of batch.messages) {
-      const exit = await runQueuedAuthEmail(sendQueuedAuthEmail(message.body));
-
-      if (Exit.isSuccess(exit)) {
-        message.ack();
-        continue;
-      }
-
-      const failure = Cause.failureOption(exit.cause);
-
-      if (
-        Option.isSome(failure) &&
-        failure.value instanceof InvalidAuthEmailQueueMessageError
-      ) {
-        await runWorkerEffect(
-          Effect.logWarning("Invalid auth email queue message discarded").pipe(
-            Effect.annotateLogs({
-              authEmailQueueFailureCause: failure.value.cause,
-              authEmailQueueFailureMessage: failure.value.message,
-              authEmailQueueFailureTag: failure.value._tag,
-            })
-          )
-        );
-        message.ack();
-        continue;
-      }
-
-      if (
-        Option.isSome(failure) &&
-        failure.value instanceof AuthEmailQueueDeliveryError
-      ) {
-        await runWorkerEffect(
-          Effect.logWarning("Auth email queue delivery failed; retrying").pipe(
-            Effect.annotateLogs({
-              ...(failure.value.cause
-                ? { authEmailQueueFailureCause: failure.value.cause }
-                : {}),
-              ...(failure.value.deliveryKey
-                ? { authEmailQueueDeliveryKey: failure.value.deliveryKey }
-                : {}),
-              ...(failure.value.emailKind
-                ? { authEmailQueueEmailKind: failure.value.emailKind }
-                : {}),
-              authEmailQueueFailureMessage: failure.value.message,
-              ...(failure.value.sourceCause
-                ? {
-                    authEmailQueueFailureSourceCause: failure.value.sourceCause,
-                  }
-                : {}),
-              ...(failure.value.sourceTag
-                ? { authEmailQueueFailureSourceTag: failure.value.sourceTag }
-                : {}),
-              authEmailQueueFailureTag: failure.value._tag,
-            })
-          )
-        );
-        message.retry({ delaySeconds: 30 });
-        continue;
-      }
-
-      await runWorkerEffect(
-        Effect.logError("Auth email queue handler failed with a defect").pipe(
-          Effect.annotateLogs({
-            authEmailQueueFailureMessage: String(Cause.squash(exit.cause)),
-          })
-        )
-      );
-      message.retry({ delaySeconds: 30 });
-    }
   },
 } satisfies ExportedHandler<ApiWorkerEnv, unknown>;
 

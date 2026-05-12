@@ -1787,7 +1787,6 @@ async function withJobsEnvironment<Result>(
     CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
     DATABASE_URL: process.env.DATABASE_URL,
     PORTLESS_URL: process.env.PORTLESS_URL,
-    SITE_GEOCODER_MODE: process.env.SITE_GEOCODER_MODE,
   };
 
   process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
@@ -1799,7 +1798,6 @@ async function withJobsEnvironment<Result>(
   process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
   process.env.CLOUDFLARE_API_TOKEN = "test-token";
   process.env.DATABASE_URL = databaseUrl;
-  process.env.SITE_GEOCODER_MODE = "stub";
   delete process.env.PORTLESS_URL;
 
   try {
@@ -1863,12 +1861,6 @@ async function withJobsEnvironment<Result>(
       delete process.env.PORTLESS_URL;
     } else {
       process.env.PORTLESS_URL = previous.PORTLESS_URL;
-    }
-
-    if (previous.SITE_GEOCODER_MODE === undefined) {
-      delete process.env.SITE_GEOCODER_MODE;
-    } else {
-      process.env.SITE_GEOCODER_MODE = previous.SITE_GEOCODER_MODE;
     }
   }
 }

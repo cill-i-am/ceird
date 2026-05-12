@@ -1,5 +1,7 @@
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 
+import { InfraGoogleMapsApiKey } from "./stages.ts";
 import type { InfraStageConfig } from "./stages.ts";
 
 const configWithoutCloudflareBootstrapSecrets = {
@@ -10,6 +12,9 @@ const configWithoutCloudflareBootstrapSecrets = {
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",
   authEmailTransport: "cloudflare-binding",
+  googleMapsApiKey: Redacted.make(
+    Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-key")
+  ),
   hyperdriveOriginConnectionLimit: 5,
   planetScaleClusterSize: "PS-5",
   planetScaleDatabaseName: "ceird-production",

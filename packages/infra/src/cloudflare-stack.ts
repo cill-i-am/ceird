@@ -95,6 +95,7 @@ export function makeCloudflareStack(input: CloudflareStackInput) {
         AUTH_EMAIL_TRANSPORT: input.config.authEmailTransport,
         BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
         BETTER_AUTH_SECRET: betterAuthSecret.text,
+        GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
         NODE_ENV: "production",
         ...(input.migrationRunId
           ? { CEIRD_MIGRATIONS_RUN_ID: input.migrationRunId }

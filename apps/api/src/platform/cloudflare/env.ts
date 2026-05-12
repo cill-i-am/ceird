@@ -13,6 +13,7 @@ export interface ApiWorkerEnv {
   readonly CLOUDFLARE_ACCOUNT_ID?: string;
   readonly CLOUDFLARE_API_TOKEN?: string;
   readonly DATABASE: Hyperdrive;
+  readonly GOOGLE_MAPS_API_KEY: string;
   readonly NODE_ENV?: string;
 }
 
@@ -27,6 +28,7 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
+      GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
       NODE_ENV: env.NODE_ENV,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"

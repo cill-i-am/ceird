@@ -32,7 +32,6 @@ services:
       PNPM_STORE_DIR: /pnpm/store
       PORT: ${API_HOST_PORT}
       SANDBOX_ID: ${SANDBOX_ID}
-      SITE_GEOCODER_MODE: ${SITE_GEOCODER_MODE}
       CEIRD_SANDBOX: ${CEIRD_SANDBOX}
     volumes:
       - ${SANDBOX_WORKTREE_PATH}:/workspace

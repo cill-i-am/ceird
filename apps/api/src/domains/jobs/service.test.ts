@@ -710,7 +710,7 @@ function makeHarness(
         };
       }),
   });
-  const siteGeocoder = SiteGeocoder.make({
+  const siteGeocoder = {
     geocode: (input: CreateSiteInput) =>
       Effect.sync(() => {
         calls.geocode += 1;
@@ -723,7 +723,7 @@ function makeHarness(
           provider: "stub" as const,
         };
       }),
-  });
+  };
 
   const repositoriesLayer = Layer.mergeAll(
     Layer.succeed(JobsRepository, jobsRepository),

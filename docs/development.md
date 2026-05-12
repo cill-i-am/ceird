@@ -180,7 +180,7 @@ High-signal runtime variables:
 | `AUTH_RATE_LIMIT_ENABLED` | API                     | Enables or disables Better Auth database-backed rate limits.   |
 | `API_ORIGIN`              | app                     | Server-side API origin.                                        |
 | `VITE_API_ORIGIN`         | app                     | Browser-exposed API origin.                                    |
-| `SITE_GEOCODER_MODE`      | API sandbox             | Selects site geocoding behavior.                               |
+| `GOOGLE_MAPS_API_KEY`     | API, infra              | Required by deployed API Google site geocoding.                |
 | `CLOUDFLARE_ACCOUNT_ID`   | API, infra              | Required for Cloudflare API email transport.                   |
 | `CLOUDFLARE_API_TOKEN`    | API, infra              | Required for Cloudflare API email transport.                   |
 

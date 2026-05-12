@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Either, Exit, Schema } from "effect";
 
 import { validateSandboxName } from "./naming.js";
@@ -96,7 +97,6 @@ describe("buildSandboxRuntimeSpec()", () => {
         SANDBOX_NODE_MODULES_VOLUME:
           "ceird-sbx-node-modules-123456789abc-def456789abc",
         SANDBOX_PNPM_STORE_VOLUME: "ceird-sbx-pnpm-store",
-        SITE_GEOCODER_MODE: "stub",
         CEIRD_SANDBOX: "1",
         AUTH_APP_ORIGIN: "https://agent-one.app.ceird.localhost:1355",
         AUTH_RATE_LIMIT_ENABLED: "false",
@@ -107,6 +107,7 @@ describe("buildSandboxRuntimeSpec()", () => {
         AUTH_EMAIL_TRANSPORT: "noop",
       },
     });
+    expect(result.overrides).not.toHaveProperty("SITE_GEOCODER_MODE");
   }, 10_000);
 
   it("fails when the requested sandbox name is already taken", async () => {
