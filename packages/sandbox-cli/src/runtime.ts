@@ -77,21 +77,22 @@ const SANDBOX_PROXY_PORT = 1355;
 const SANDBOX_READY_POLL_INTERVAL_MS = 1000;
 const SANDBOX_READY_TIMEOUT_MS = 180_000;
 const SANDBOX_STOP_TIMEOUT_SECONDS = 2;
-const AUTH_EMAIL_SHARED_ENV_KEYS = [
+const SANDBOX_SHARED_ENV_KEYS = [
   "AUTH_EMAIL_FROM",
   "AUTH_EMAIL_FROM_NAME",
   "AUTH_EMAIL_TRANSPORT",
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_API_TOKEN",
+  "GOOGLE_MAPS_API_KEY",
 ] as const;
-const AUTH_EMAIL_REQUIRED_ENV_KEYS = ["AUTH_EMAIL_FROM"] as const;
+const SANDBOX_REQUIRED_ENV_KEYS = ["AUTH_EMAIL_FROM"] as const;
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isValidEmailAddress(value: string) {
   return EMAIL_ADDRESS_PATTERN.test(value);
 }
 
-const authEmailSharedEnvironmentFields = {
+const sandboxSharedEnvironmentFields = {
   AUTH_EMAIL_FROM: Schema.String.pipe(
     Schema.filter((value: string) => isValidEmailAddress(value)),
     Schema.annotations({
@@ -111,9 +112,12 @@ const authEmailSharedEnvironmentFields = {
   CLOUDFLARE_API_TOKEN: Schema.optionalWith(Schema.String, {
     default: () => "",
   }),
+  GOOGLE_MAPS_API_KEY: Schema.optionalWith(Schema.String, {
+    default: () => "",
+  }),
 };
-export const AuthEmailSharedEnvironment = Schema.Struct(
-  authEmailSharedEnvironmentFields
+export const SandboxSharedEnvironment = Schema.Struct(
+  sandboxSharedEnvironmentFields
 ).pipe(
   Schema.filter((environment) => {
     if (environment.AUTH_EMAIL_TRANSPORT !== "cloudflare-api") {
@@ -130,11 +134,11 @@ export const AuthEmailSharedEnvironment = Schema.Struct(
       "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set when AUTH_EMAIL_TRANSPORT=cloudflare-api",
   })
 );
-type AuthEmailSharedEnvironment = Schema.Schema.Type<
-  typeof AuthEmailSharedEnvironment
+type SandboxSharedEnvironment = Schema.Schema.Type<
+  typeof SandboxSharedEnvironment
 >;
-type AuthEmailSharedEnvironmentOverrides = {
-  readonly [K in keyof AuthEmailSharedEnvironment]: string;
+type SandboxSharedEnvironmentOverrides = {
+  readonly [K in keyof SandboxSharedEnvironment]: string;
 };
 const SANDBOX_COMPOSE_FILE = path.join(
   fileURLToPath(new URL("../docker", import.meta.url)),
@@ -1164,21 +1168,22 @@ function exec<A>(
 export function loadSandboxEnvironmentOrThrow(
   sandboxProcess: SandboxProcess,
   repoRoot: string
-): SandboxPreflightEffect<AuthEmailSharedEnvironment>;
+): SandboxPreflightEffect<SandboxSharedEnvironment>;
 export function loadSandboxEnvironmentOrThrow(
   sandboxProcess: SandboxProcess,
   repoRoot: string
-): SandboxPreflightEffect<AuthEmailSharedEnvironment> {
+): SandboxPreflightEffect<SandboxSharedEnvironment> {
   return sandboxProcess.env().pipe(
     Effect.flatMap((processEnv) =>
       loadSandboxSharedEnvironment({
         repoRoot,
-        requiredKeys: AUTH_EMAIL_REQUIRED_ENV_KEYS,
+        requiredKeys: SANDBOX_REQUIRED_ENV_KEYS,
         optionalKeys: [
           "AUTH_EMAIL_FROM_NAME",
           "AUTH_EMAIL_TRANSPORT",
           "CLOUDFLARE_ACCOUNT_ID",
           "CLOUDFLARE_API_TOKEN",
+          "GOOGLE_MAPS_API_KEY",
         ],
         processEnv,
       })
@@ -1189,9 +1194,9 @@ export function loadSandboxEnvironmentOrThrow(
         : toPreflightError(error, "Sandbox shared environment is invalid")
     ),
     Effect.flatMap((environment) =>
-      Schema.decodeUnknown(AuthEmailSharedEnvironment)(environment).pipe(
+      Schema.decodeUnknown(SandboxSharedEnvironment)(environment).pipe(
         Effect.mapError((error) =>
-          toPreflightError(error, "Sandbox auth email environment is invalid")
+          toPreflightError(error, "Sandbox shared environment is invalid")
         )
       )
     )
@@ -1524,7 +1529,7 @@ function ensureComposeEnvironmentFile(
       isMissingFileError(error)
         ? writeComposeEnvironmentFile(
             record,
-            makeBlankAuthEmailSharedEnvironmentOverrides()
+            makeBlankSandboxSharedEnvironmentOverrides()
           )
         : Effect.fail(
             toPreflightError(
@@ -1539,7 +1544,7 @@ function ensureComposeEnvironmentFile(
 
 function writeComposeEnvironmentFile(
   record: SandboxRecord,
-  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
+  sharedEnvironment: SandboxSharedEnvironmentOverrides
 ): SandboxPreflightEffect<void> {
   const composeEnvFile = getComposeEnvFilePath(record.sandboxName);
   return Effect.gen(function* () {
@@ -1564,7 +1569,7 @@ function writeComposeEnvironmentFile(
 
 export function buildComposeFallbackEnvironmentOverrides(
   record: SandboxRecord,
-  sharedEnvironment: AuthEmailSharedEnvironmentOverrides
+  sharedEnvironment: SandboxSharedEnvironmentOverrides
 ): Record<string, string> {
   const urls = buildRecordUrls(record);
 
@@ -1581,13 +1586,13 @@ export function buildComposeFallbackEnvironmentOverrides(
   };
 }
 
-function makeBlankAuthEmailSharedEnvironmentOverrides(): AuthEmailSharedEnvironmentOverrides {
+function makeBlankSandboxSharedEnvironmentOverrides(): SandboxSharedEnvironmentOverrides {
   return Object.fromEntries(
-    AUTH_EMAIL_SHARED_ENV_KEYS.map((key) => [
+    SANDBOX_SHARED_ENV_KEYS.map((key) => [
       key,
       key === "AUTH_EMAIL_TRANSPORT" ? "noop" : "",
     ])
-  ) as AuthEmailSharedEnvironmentOverrides;
+  ) as SandboxSharedEnvironmentOverrides;
 }
 
 function writeComposeEnvironmentFileFromSpec(

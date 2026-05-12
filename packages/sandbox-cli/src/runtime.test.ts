@@ -11,7 +11,7 @@ import { Effect, Either, Exit, Schema } from "effect";
 
 import type { SandboxProcess } from "./process.js";
 import {
-  AuthEmailSharedEnvironment,
+  SandboxSharedEnvironment,
   buildComposeFallbackEnvironmentOverrides,
   cleanupFailedSandboxUp,
   ensureSandboxProxyHealthy,
@@ -586,6 +586,7 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
         AUTH_EMAIL_TRANSPORT: "noop",
         CLOUDFLARE_ACCOUNT_ID: "",
         CLOUDFLARE_API_TOKEN: "",
+        GOOGLE_MAPS_API_KEY: "",
       })
     ).toMatchObject({
       AUTH_EMAIL_FROM: "",
@@ -593,6 +594,7 @@ describe("buildComposeFallbackEnvironmentOverrides()", () => {
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "",
       CLOUDFLARE_API_TOKEN: "",
+      GOOGLE_MAPS_API_KEY: "",
       AUTH_APP_ORIGIN: "https://alpha.app.ceird.localhost:1355",
       AUTH_RATE_LIMIT_ENABLED: "false",
       BETTER_AUTH_BASE_URL: "https://alpha.api.ceird.localhost:1355",
@@ -612,6 +614,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
       AUTH_EMAIL_FROM_NAME: process.env.AUTH_EMAIL_FROM_NAME,
       CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
       CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+      GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
     };
 
     try {
@@ -623,6 +626,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
           "AUTH_EMAIL_TRANSPORT=cloudflare-api",
           "CLOUDFLARE_ACCOUNT_ID=account_123",
           "CLOUDFLARE_API_TOKEN=token_123",
+          "GOOGLE_MAPS_API_KEY=google-key",
         ].join("\n")
       );
 
@@ -630,6 +634,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
       delete process.env.AUTH_EMAIL_FROM_NAME;
       process.env.CLOUDFLARE_ACCOUNT_ID = "account_123";
       process.env.CLOUDFLARE_API_TOKEN = "token_123";
+      delete process.env.GOOGLE_MAPS_API_KEY;
       const sandboxProcess: SandboxProcess = {
         argv: () => Effect.succeed([]),
         cwd: () => Effect.succeed(repoRoot),
@@ -650,6 +655,7 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
         AUTH_EMAIL_TRANSPORT: "cloudflare-api",
         CLOUDFLARE_ACCOUNT_ID: "account_123",
         CLOUDFLARE_API_TOKEN: "token_123",
+        GOOGLE_MAPS_API_KEY: "google-key",
       });
     } finally {
       if (previousEnv.AUTH_EMAIL_FROM === undefined) {
@@ -676,15 +682,21 @@ describe("loadSandboxEnvironmentOrThrow()", () => {
         process.env.CLOUDFLARE_API_TOKEN = previousEnv.CLOUDFLARE_API_TOKEN;
       }
 
+      if (previousEnv.GOOGLE_MAPS_API_KEY === undefined) {
+        delete process.env.GOOGLE_MAPS_API_KEY;
+      } else {
+        process.env.GOOGLE_MAPS_API_KEY = previousEnv.GOOGLE_MAPS_API_KEY;
+      }
+
       await fs.rm(repoRoot, { recursive: true, force: true });
     }
   }, 10_000);
 });
 
-describe("authEmailSharedEnvironment", () => {
+describe("sandbox shared environment schema", () => {
   it("defaults AUTH_EMAIL_FROM_NAME when it is omitted", () => {
     expect(
-      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+      Schema.decodeUnknownSync(SandboxSharedEnvironment)({
         AUTH_EMAIL_FROM: "auth@example.com",
       })
     ).toStrictEqual({
@@ -693,17 +705,18 @@ describe("authEmailSharedEnvironment", () => {
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "",
       CLOUDFLARE_API_TOKEN: "",
+      GOOGLE_MAPS_API_KEY: "",
     });
   }, 10_000);
 
   it("rejects invalid AUTH_EMAIL_FROM values", () => {
     expect(() =>
-      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+      Schema.decodeUnknownSync(SandboxSharedEnvironment)({
         AUTH_EMAIL_FROM: "not-an-email",
       })
     ).toThrow(/AUTH_EMAIL_FROM/);
     expect(() =>
-      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+      Schema.decodeUnknownSync(SandboxSharedEnvironment)({
         AUTH_EMAIL_FROM: "not-an-email",
       })
     ).toThrow(/valid email address/);
@@ -711,7 +724,7 @@ describe("authEmailSharedEnvironment", () => {
 
   it("accepts blank Cloudflare API credentials when sandbox email is noop", () => {
     expect(
-      Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+      Schema.decodeUnknownSync(SandboxSharedEnvironment)({
         AUTH_EMAIL_FROM: "auth@example.com",
         AUTH_EMAIL_FROM_NAME: "Ceird",
         AUTH_EMAIL_TRANSPORT: "noop",
@@ -724,6 +737,7 @@ describe("authEmailSharedEnvironment", () => {
       AUTH_EMAIL_TRANSPORT: "noop",
       CLOUDFLARE_ACCOUNT_ID: "   ",
       CLOUDFLARE_API_TOKEN: "\t",
+      GOOGLE_MAPS_API_KEY: "",
     });
   }, 10_000);
 
@@ -731,7 +745,7 @@ describe("authEmailSharedEnvironment", () => {
     "requires non-empty %s when sandbox email uses the Cloudflare API",
     (key) => {
       expect(() =>
-        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        Schema.decodeUnknownSync(SandboxSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Ceird",
           AUTH_EMAIL_TRANSPORT: "cloudflare-api",
@@ -742,7 +756,7 @@ describe("authEmailSharedEnvironment", () => {
         })
       ).toThrow(key);
       expect(() =>
-        Schema.decodeUnknownSync(AuthEmailSharedEnvironment)({
+        Schema.decodeUnknownSync(SandboxSharedEnvironment)({
           AUTH_EMAIL_FROM: "auth@example.com",
           AUTH_EMAIL_FROM_NAME: "Ceird",
           AUTH_EMAIL_TRANSPORT: "cloudflare-api",

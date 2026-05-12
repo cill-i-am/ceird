@@ -531,6 +531,19 @@ const googleMapsApiKeyConfig = Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
     validation: (value) => Redacted.value(value).trim().length > 0,
   })
 );
+const optionalLocalGoogleMapsApiKeyConfig = Config.option(
+  Config.redacted("GOOGLE_MAPS_API_KEY")
+).pipe(
+  Config.map((value) => {
+    if (Option.isNone(value)) {
+      return Option.none();
+    }
+
+    return Redacted.value(value.value).trim().length > 0
+      ? value
+      : Option.none();
+  })
+);
 
 export class SiteGeocoder extends Context.Tag(
   "@ceird/domains/sites/SiteGeocoder"
@@ -554,6 +567,21 @@ export class SiteGeocoder extends Context.Tag(
 
       return yield* makeGoogleSiteGeocoder({
         googleMapsApiKey: Redacted.value(googleMapsApiKey),
+      });
+    })
+  );
+
+  static readonly Local = Layer.effect(
+    SiteGeocoder,
+    Effect.gen(function* SiteGeocoderLocal() {
+      const googleMapsApiKey = yield* optionalLocalGoogleMapsApiKeyConfig;
+
+      if (Option.isNone(googleMapsApiKey)) {
+        return makeDevelopmentSiteGeocoder();
+      }
+
+      return yield* makeGoogleSiteGeocoder({
+        googleMapsApiKey: Redacted.value(googleMapsApiKey.value),
       });
     })
   );

@@ -177,10 +177,12 @@ Core files:
 
 Site and job services depend on the `SiteGeocoder` capability, not on a
 provider-specific implementation. Runtime entrypoints choose the provider layer:
-local Node/sandbox composition uses `SiteGeocoder.Development`, while the
-Cloudflare Worker composition uses `SiteGeocoder.Google`. Environment variables
-configure the selected provider, such as `GOOGLE_MAPS_API_KEY`; they do not
-select provider topology. Address-level misses return the user-correctable
+local Node/sandbox composition uses `SiteGeocoder.Local`, which selects Google
+when `GOOGLE_MAPS_API_KEY` is present and falls back to deterministic
+development coordinates when it is absent. The Cloudflare Worker composition
+uses `SiteGeocoder.Google`, so deployed API startup fails fast without the
+Google Maps key. Environment variables configure provider credentials; they do
+not select provider topology. Address-level misses return the user-correctable
 geocoding failure contract, while upstream Google/configuration failures return
 the provider failure contract so deployed misconfiguration fails visibly.
 

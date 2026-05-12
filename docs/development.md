@@ -67,7 +67,9 @@ pnpm sandbox:down
 The sandbox reads required shared environment from `.env`, `.env.local`, and
 the process environment. Missing required keys are reported before Docker
 startup. Optional Cloudflare auth email credentials are only used when the
-configured transport needs them.
+configured transport needs them. `GOOGLE_MAPS_API_KEY` is optional locally; when
+it is present the sandbox API uses Google geocoding, otherwise it uses
+deterministic development coordinates.
 
 Codex/local worktree setup runs `scripts/setup-local-environment.sh` before
 sandbox startup actions. The script preserves an existing `.env.local`, copies
@@ -180,7 +182,7 @@ High-signal runtime variables:
 | `AUTH_RATE_LIMIT_ENABLED` | API                     | Enables or disables Better Auth database-backed rate limits.   |
 | `API_ORIGIN`              | app                     | Server-side API origin.                                        |
 | `VITE_API_ORIGIN`         | app                     | Browser-exposed API origin.                                    |
-| `GOOGLE_MAPS_API_KEY`     | API, infra              | Required by deployed API Google site geocoding.                |
+| `GOOGLE_MAPS_API_KEY`     | API, infra              | Optional locally for live geocoding; required by deployed API. |
 | `CLOUDFLARE_ACCOUNT_ID`   | API, infra              | Required for Cloudflare API email transport.                   |
 | `CLOUDFLARE_API_TOKEN`    | API, infra              | Required for Cloudflare API email transport.                   |
 

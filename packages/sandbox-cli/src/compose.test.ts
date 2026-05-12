@@ -55,6 +55,7 @@ describe("renderComposeEnvironmentFile()", () => {
           CLOUDFLARE_ACCOUNT_ID: "",
           CLOUDFLARE_API_TOKEN: "",
           DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/ceird",
+          GOOGLE_MAPS_API_KEY: "google-key",
           SANDBOX_DEV_IMAGE: "ceird-sbx-ceird-dev:123456789abc",
           SANDBOX_NODE_MODULES_VOLUME:
             "ceird-sbx-node-modules-123456789abc-def456789abc",
@@ -77,6 +78,7 @@ describe("renderComposeEnvironmentFile()", () => {
         "CLOUDFLARE_ACCOUNT_ID=",
         "CLOUDFLARE_API_TOKEN=",
         "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ceird",
+        "GOOGLE_MAPS_API_KEY=google-key",
         "SANDBOX_DEV_IMAGE=ceird-sbx-ceird-dev:123456789abc",
         "SANDBOX_NODE_MODULES_VOLUME=ceird-sbx-node-modules-123456789abc-def456789abc",
         "SANDBOX_PNPM_STORE_VOLUME=ceird-sbx-pnpm-store",
@@ -110,6 +112,7 @@ describe("sandbox.compose.yaml", () => {
     expect(composeFile).toContain("CLOUDFLARE_ACCOUNT_ID");
     expect(composeFile).toContain("AUTH_RATE_LIMIT_ENABLED");
     expect(composeFile).toContain("CLOUDFLARE_API_TOKEN");
+    expect(composeFile).toContain("GOOGLE_MAPS_API_KEY");
     expect(composeFile).toContain(`name: ${pnpmStoreVolumeVariable}`);
     expect(composeFile).toContain(`name: ${nodeModulesVolumeVariable}`);
   }, 10_000);

@@ -93,6 +93,59 @@ describe("site geocoder", () => {
     expect(first.longitude).toBeLessThanOrEqual(180);
   }, 10_000);
 
+  it("local layer resolves deterministic coordinates without Google key", async () => {
+    const location = await runWithConfig(
+      SiteGeocoder.geocode(siteInput).pipe(Effect.provide(SiteGeocoder.Local)),
+      new Map()
+    );
+
+    expect(location.provider).toBe("stub");
+  }, 10_000);
+
+  it("local layer uses Google geocoding when a Google key is configured", async () => {
+    const previousFetch = globalThis.fetch;
+    let requestedUrl: URL | undefined;
+    globalThis.fetch = ((url: URL) => {
+      requestedUrl = url;
+
+      return Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 52.478_663_040_036_444,
+                  lng: -9.559_573_126_109_493,
+                },
+              },
+            },
+          ],
+          status: "OK",
+        })
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      const location = await runWithConfig(
+        SiteGeocoder.geocode({
+          ...siteInput,
+          eircode: "V31 R968",
+        }).pipe(Effect.provide(SiteGeocoder.Local)),
+        new Map([["GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_API_KEY]])
+      );
+
+      expect(location).toMatchObject({
+        latitude: 52.478_663_040_036_444,
+        longitude: -9.559_573_126_109_493,
+        provider: "google",
+      });
+      expect(requestedUrl?.searchParams.get("key")).toBe(GOOGLE_MAPS_API_KEY);
+      expect(requestedUrl?.searchParams.get("address")).toContain("V31 R968");
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  }, 10_000);
+
   it("google layer requires a Google Maps API key", async () => {
     const result = await runWithConfig(
       SiteGeocoder.geocode(siteInput).pipe(

@@ -60,7 +60,7 @@ type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
 export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Development
+  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local
 ) =>
   makeApiHandlersLive().pipe(
     Layer.provide(
@@ -161,7 +161,7 @@ export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
 export const makeApiWebHandler = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Development,
+  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local,
   baseLive: ApiBaseLive = Layer.empty
 ) => {
   const apiLayer = Layer.mergeAll(

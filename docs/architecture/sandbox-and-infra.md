@@ -102,9 +102,12 @@ Common sandbox variables include:
 | `BETTER_AUTH_SECRET`      | Stable sandbox auth secret.                              |
 | `DATABASE_URL`            | Sandbox Postgres URL.                                    |
 | `CEIRD_SANDBOX`           | Marks sandbox runtime.                                   |
+| `GOOGLE_MAPS_API_KEY`     | Optional local Google geocoding key for site creation.   |
 
 Cloudflare email API credentials are optional unless
 `AUTH_EMAIL_TRANSPORT=cloudflare-api`.
+The Google Maps key is optional for sandbox startup; when it is missing or
+blank, the API uses deterministic development geocoding.
 
 ## Production Infrastructure
 
