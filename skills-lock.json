@@ -114,7 +114,8 @@
     "impeccable": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",
-      "computedHash": "bd24f9b2f67dfdac55f76a85877ce302fe75d6204d2b329d3d05342904abf336"
+      "skillPath": "skill/SKILL.md",
+      "computedHash": "9aec36a70b0c2cafd3ded7e2c523c77beddcdb814fac86cda42f395ef719a924"
     },
     "layout": {
       "source": "pbakaus/impeccable",
