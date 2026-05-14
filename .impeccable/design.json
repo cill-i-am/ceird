@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-13T00:00:00.000Z",
+  "title": "Design System: Ceird",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Workspace Ground",
+        "canonical": "oklch(0.976 0.003 248)",
+        "usage": "Main app background."
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(0.24 0.014 248)",
+        "usage": "Primary text and high-emphasis UI."
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Work Blue",
+        "canonical": "oklch(0.43 0.06 244)",
+        "usage": "Primary actions, active navigation, selected states, and task focus."
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline Steel",
+        "canonical": "oklch(0.884 0.006 248)",
+        "usage": "Borders, dividers, table rules, and panel edges."
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Caution Amber",
+        "canonical": "oklch(0.62 0.13 78)",
+        "usage": "Warnings, blockers, and job risk indicators."
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Route titles and major workspace context."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text, row descriptions, form help, and workflow copy."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Metadata, badges, command rows, field labels, and compact controls."
+      }
+    },
+    "elevation": {
+      "hairlineLift": {
+        "value": "0 1px 0 color-mix(in oklab, var(--border) 65%, transparent)",
+        "usage": "App shell panels, row lists, and persistent containers."
+      }
+    },
+    "motion": {
+      "duration": {
+        "fast": "150ms",
+        "standard": "200ms",
+        "slow": "250ms"
+      },
+      "easing": {
+        "standard": "cubic-bezier(0.22, 1, 0.36, 1)"
+      },
+      "principle": "Motion conveys state, feedback, loading, and reveal. It should not delay product work."
+    },
+    "breakpoints": {
+      "mobile": "default",
+      "sm": "640px",
+      "lg": "1024px"
+    },
+    "rules": [
+      "Earn Linear-level trust with coherent, familiar product components.",
+      "Design one workspace for office desktop use and mobile site use.",
+      "Make active organization, role, job, site, and permission context explicit.",
+      "Use AI as workflow infrastructure, not as a decorative theme.",
+      "Do not simplify the UI into a basic field app."
+    ]
+  }
+}

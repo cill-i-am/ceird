@@ -1,4 +1,8 @@
-import { useRouteContext } from "@tanstack/react-router";
+import {
+  Outlet,
+  useRouteContext,
+  useRouterState,
+} from "@tanstack/react-router";
 
 import { AppLayout } from "#/components/app-layout";
 
@@ -7,6 +11,13 @@ export function AuthenticatedAppLayout() {
     useRouteContext({
       from: "/_app",
     });
+  const isOrganizationCreation = useRouterState({
+    select: (state) => state.location.pathname === "/create-organization",
+  });
+
+  if (isOrganizationCreation) {
+    return <Outlet />;
+  }
 
   return (
     <AppLayout

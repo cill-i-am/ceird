@@ -36,4 +36,85 @@ describe("command select", () => {
       expect(screen.getByLabelText("Urgent shortcut: 1")).toBeVisible();
     }
   );
+
+  it(
+    "renders compact option descriptions when provided",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      render(
+        <CommandSelect
+          emptyText="No roles found"
+          groups={[
+            {
+              label: "Role",
+              options: [
+                {
+                  description: "Can manage members, settings, jobs, and sites.",
+                  label: "Admin",
+                  value: "admin",
+                },
+                {
+                  description: "For teammates working day to day.",
+                  label: "Member",
+                  value: "member",
+                },
+              ],
+            },
+          ]}
+          id="role"
+          onValueChange={vi.fn<(value: string) => void>()}
+          placeholder="Pick role"
+          value="member"
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Member" }));
+
+      expect(
+        screen.getByText("Can manage members, settings, jobs, and sites.")
+      ).toBeVisible();
+      expect(
+        screen.getByRole("option", {
+          name: "Admin. Can manage members, settings, jobs, and sites.",
+        })
+      ).toBeVisible();
+    }
+  );
+
+  it(
+    "can hide search for short option sets",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      render(
+        <CommandSelect
+          emptyText="No roles found"
+          groups={[
+            {
+              label: "Role",
+              options: [{ label: "Member", value: "member" }],
+            },
+          ]}
+          id="role"
+          onValueChange={vi.fn<(value: string) => void>()}
+          placeholder="Pick role"
+          searchable={false}
+          value="member"
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Member" }));
+
+      expect(
+        screen.queryByPlaceholderText("Pick role")
+      ).not.toBeInTheDocument();
+    }
+  );
 });

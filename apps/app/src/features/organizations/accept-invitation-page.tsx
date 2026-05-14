@@ -5,22 +5,21 @@ import * as React from "react";
 
 import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Button, buttonVariants } from "#/components/ui/button";
-import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "#/components/ui/empty";
+import { Skeleton } from "#/components/ui/skeleton";
 import { authClient, getPublicInvitationPreview } from "#/lib/auth-client";
 
 import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
 } from "../auth/auth-navigation";
-import { EntryShell, EntrySurfaceCard } from "../auth/entry-shell";
+import {
+  EntryContextPanel,
+  EntryShell,
+  EntrySurfaceCard,
+} from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
+import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
 interface InvitationPreviewDetails {
   readonly email: string;
@@ -65,6 +64,10 @@ const INVITATION_LOOKUP_ERROR_MESSAGE =
 const INVITATION_ACCEPT_ERROR_MESSAGE =
   "We couldn't accept this invitation. Please try again.";
 
+function formatInvitationRole(role: OrganizationRole) {
+  return role === "owner" ? "Owner" : INVITE_ROLE_LABELS[role];
+}
+
 function getInvitationShellCopy(
   state: InvitationPageState,
   invitation?: InvitationPreviewDetails | InvitationDetails
@@ -72,7 +75,7 @@ function getInvitationShellCopy(
   if (invitation) {
     return {
       title: `Join ${invitation.organizationName}`,
-      description: `Continue with ${invitation.email} to join ${invitation.organizationName} as ${invitation.role}.`,
+      description: `Continue with ${invitation.email} to join ${invitation.organizationName} as ${formatInvitationRole(invitation.role)}.`,
     };
   }
 
@@ -80,7 +83,7 @@ function getInvitationShellCopy(
     return {
       title: "Continue with the invited account.",
       description:
-        "Sign in or create an account to continue into the workspace with the correct email.",
+        "Sign in or create an account with the invited email before joining the workspace.",
     };
   }
 
@@ -109,7 +112,7 @@ function getInvitationCardCopy(
     return {
       badge: "Checking invitation",
       title: "Checking invitation",
-      description: "We'll prepare the invitation details in a moment.",
+      description: "Checking the invited workspace.",
     };
   }
 
@@ -117,7 +120,7 @@ function getInvitationCardCopy(
     return {
       badge: "Ready to join",
       title: "Accept invitation",
-      description: "Review the invitation details, then join the organization.",
+      description: "Join the workspace when the details look right.",
     };
   }
 
@@ -130,10 +133,8 @@ function getInvitationCardCopy(
 
 function InvitationContextContent({
   invitation,
-  signedOut = false,
 }: {
   readonly invitation?: InvitationPreviewDetails | InvitationDetails;
-  readonly signedOut?: boolean;
 }) {
   if (!invitation) {
     return (
@@ -144,8 +145,7 @@ function InvitationContextContent({
           </p>
           <p className="max-w-[48ch] text-sm/7 text-foreground/90">
             Use the invited account to review this workspace invitation. If
-            you&rsquo;re in the wrong account, sign out and switch before you
-            continue.
+            you&rsquo;re in the wrong account, switch before you continue.
           </p>
         </div>
 
@@ -165,17 +165,10 @@ function InvitationContextContent({
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase">
-          Invitation details
-        </p>
-        <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-          {signedOut
-            ? `Sign in with ${invitation.email} to join ${invitation.organizationName}.`
-            : `This invitation will add ${invitation.email} to ${invitation.organizationName}. Accept it from the invited account to keep the membership handoff clean.`}
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <p className="text-xs font-medium text-muted-foreground uppercase">
+        Invitation details
+      </p>
 
       <dl className="grid gap-5 sm:grid-cols-2">
         <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
@@ -200,7 +193,9 @@ function InvitationContextContent({
           <dt className="text-xs font-medium text-muted-foreground uppercase">
             Role
           </dt>
-          <dd className="text-sm/6 text-muted-foreground">{invitation.role}</dd>
+          <dd className="text-sm/6 text-muted-foreground">
+            {formatInvitationRole(invitation.role)}
+          </dd>
         </div>
 
         {"inviterEmail" in invitation ? (
@@ -415,25 +410,27 @@ export function AcceptInvitationPage({
 
   return (
     <EntryShell
-      badge="Invitation"
-      title={shellCopy.title}
-      description={shellCopy.description}
-      supportingContent={
-        <InvitationContextContent
-          invitation={invitation}
-          signedOut={state.status === "signed-out"}
-        />
+      context={
+        invitation ? (
+          <EntryContextPanel
+            badge="Invitation"
+            title={shellCopy.title}
+            description={shellCopy.description}
+          >
+            <InvitationContextContent invitation={invitation} />
+          </EntryContextPanel>
+        ) : undefined
       }
     >
       <EntrySurfaceCard
-        badge={cardCopy.badge}
         className="max-w-lg"
         title={cardCopy.title}
+        titleLevel={invitation ? undefined : 1}
         description={cardCopy.description}
         footer={
           showsAcceptInvitationCta ? (
             <Button
-              className="w-full"
+              className="w-full [view-transition-name:auth-card-action]"
               size="lg"
               loading={isAcceptingInvitation}
               onClick={() => {
@@ -448,36 +445,43 @@ export function AcceptInvitationPage({
         }
       >
         {state.status === "loading" ? (
-          <Empty className="min-h-0 bg-muted/20 px-6 py-8">
-            <EmptyHeader>
-              <EmptyTitle>Loading your invitation&hellip;</EmptyTitle>
-              <EmptyDescription>
-                We&rsquo;re checking the workspace details now.
-              </EmptyDescription>
-            </EmptyHeader>
-            <DotMatrixLoadingState label="Checking workspace details" />
-          </Empty>
+          <div
+            aria-label="Checking workspace details"
+            role="status"
+            className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-muted/25 p-4"
+          >
+            <Skeleton className="h-4 w-40 rounded-full" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-14 rounded-xl" />
+            </div>
+          </div>
         ) : null}
 
         {state.status === "signed-out" ? (
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              {...getLoginNavigationTarget(invitationId)}
-              className={buttonVariants({
-                className: "flex-1",
-              })}
-            >
-              Sign in
-            </Link>
-            <Link
-              {...getSignupNavigationTarget(invitationId)}
-              className={buttonVariants({
-                className: "flex-1",
-                variant: "outline",
-              })}
-            >
-              Create account
-            </Link>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                {...getLoginNavigationTarget(invitationId)}
+                className={buttonVariants({
+                  className:
+                    "w-full sm:flex-1 [view-transition-name:auth-card-action]",
+                })}
+              >
+                Sign in
+              </Link>
+              <Link
+                {...getSignupNavigationTarget(invitationId)}
+                className={buttonVariants({
+                  className: "w-full sm:flex-1",
+                  variant: "secondary",
+                })}
+              >
+                Create account
+              </Link>
+            </div>
           </div>
         ) : null}
 

@@ -270,7 +270,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="Display name"
                       htmlFor="settings-name"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -302,7 +301,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="Avatar image URL"
                       htmlFor="settings-image"
-                      invalid={Boolean(errorText)}
                       descriptionText="Optional. Use a direct http or https image URL."
                       errorText={errorText}
                     >
@@ -392,7 +390,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="New email"
                       htmlFor="settings-email"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -477,7 +474,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="Current password"
                       htmlFor="settings-current-password"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -510,7 +506,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="New password"
                       htmlFor="settings-new-password"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -543,7 +538,6 @@ export function UserSettingsPage({
                     <AuthFormField
                       label="Confirm new password"
                       htmlFor="settings-confirm-password"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input

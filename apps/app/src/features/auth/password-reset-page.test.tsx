@@ -38,10 +38,12 @@ vi.mock(import("@tanstack/react-router"), async () => {
       children,
       search,
       to,
+      viewTransition: _viewTransition,
       ...props
     }: ComponentProps<"a"> & {
       search?: Record<string, string | undefined>;
       to?: string;
+      viewTransition?: unknown;
     }) => {
       const { href: initialHref } = props;
       let href = initialHref;
@@ -85,7 +87,7 @@ describe("password reset page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "This reset link isn't valid anymore.",
+        name: "Reset link expired",
       })
     ).toBeInTheDocument();
     expect(
@@ -116,10 +118,9 @@ describe("password reset page", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Choose a new password." })
+      screen.getByRole("heading", { name: "Reset password" })
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("New password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
@@ -140,7 +141,6 @@ describe("password reset page", () => {
     );
 
     await user.type(screen.getByLabelText("New password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
@@ -149,6 +149,9 @@ describe("password reset page", () => {
           invitation: "inv_123",
         },
         to: "/login",
+        viewTransition: {
+          types: ["auth-card"],
+        },
       });
     });
   }, 10_000);
@@ -172,7 +175,6 @@ describe("password reset page", () => {
     );
 
     await user.type(screen.getByLabelText("New password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
@@ -202,7 +204,6 @@ describe("password reset page", () => {
     render(<PasswordResetPage search={{ token: "reset-token" }} />);
 
     await user.type(screen.getByLabelText("New password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
@@ -211,20 +212,16 @@ describe("password reset page", () => {
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("shows the shared mismatch validation message and blocks submission", async () => {
+  it("shows password length errors and blocks submission", async () => {
     const user = userEvent.setup();
 
     render(<PasswordResetPage search={{ token: "reset-token" }} />);
 
-    await user.type(screen.getByLabelText("New password"), "password123");
-    await user.type(
-      screen.getByLabelText("Confirm password"),
-      "different-password"
-    );
+    await user.type(screen.getByLabelText("New password"), "short");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
-      screen.findByText("Passwords must match")
+      screen.findByText("Use at least 8 characters.")
     ).resolves.toBeInTheDocument();
     expect(mockedResetPassword).not.toHaveBeenCalled();
     expect(mockedNavigate).not.toHaveBeenCalled();

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 
 import { AuthContextPanel } from "./auth-context-panel";
 import { AuthSplitShell } from "./auth-split-shell";
-import { EntryShell } from "./entry-shell";
+import { EntryContextPanel, EntryShell } from "./entry-shell";
 
 describe("auth split shell", () => {
   it("renders a focused action column beside a context column", () => {
@@ -78,17 +78,13 @@ describe("auth split shell", () => {
 
     expect(grid.className).toContain("lg:grid-cols-[minmax(0,1fr)]");
     expect(grid.className).not.toContain(
-      "lg:grid-cols-[minmax(0,0.94fr)_minmax(0,1.06fr)]"
+      "lg:grid-cols-[minmax(24rem,0.9fr)_minmax(0,1.1fr)]"
     );
   }, 10_000);
 
-  it("keeps the compatibility shell working without a support-card grid and with arbitrary context", () => {
+  it("keeps the compatibility shell single-column by default and accepts composed context", () => {
     const { container, rerender } = render(
-      <EntryShell
-        badge="Invitation flow"
-        title="Continue into the workspace."
-        description="The shared shell should not require a support-card grid to explain the next step."
-      >
+      <EntryShell>
         <button type="button">Action</button>
       </EntryShell>
     );
@@ -97,7 +93,7 @@ describe("auth split shell", () => {
       '[data-slot="auth-split-shell-context"]'
     );
 
-    expect(contextColumn).not.toBeNull();
+    expect(contextColumn).toBeNull();
     expect(
       screen.queryByTestId("custom-context-details")
     ).not.toBeInTheDocument();
@@ -107,24 +103,27 @@ describe("auth split shell", () => {
 
     rerender(
       <EntryShell
-        badge="Account status"
-        title="Your account is ready."
-        description="Shared context should be able to show invitation and status details without page-specific layout code."
-        supportingContent={
-          <dl data-testid="custom-context-details" className="grid gap-3">
-            <div>
-              <dt className="text-sm font-medium">Invited email</dt>
-              <dd className="text-sm text-muted-foreground">
-                person@example.com
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium">Verification status</dt>
-              <dd className="text-sm text-muted-foreground">
-                Awaiting acceptance
-              </dd>
-            </div>
-          </dl>
+        context={
+          <EntryContextPanel
+            badge="Account status"
+            title="Your account is ready."
+            description="Shared context should be able to show invitation and status details without page-specific layout code."
+          >
+            <dl data-testid="custom-context-details" className="grid gap-3">
+              <div>
+                <dt className="text-sm font-medium">Invited email</dt>
+                <dd className="text-sm text-muted-foreground">
+                  person@example.com
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium">Verification status</dt>
+                <dd className="text-sm text-muted-foreground">
+                  Awaiting acceptance
+                </dd>
+              </div>
+            </dl>
+          </EntryContextPanel>
         }
       >
         <button type="button">Action</button>

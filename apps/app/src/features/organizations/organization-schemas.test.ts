@@ -1,40 +1,36 @@
 import {
-  decodeCreateOrganizationInput,
+  decodeCreateOrganizationNameInput,
   organizationOnboardingSchema,
 } from "./organization-schemas";
 
 describe("organization onboarding schema", () => {
-  it("accepts a valid organization name and slug", () => {
+  it("accepts a valid organization name", () => {
     expect(
-      decodeCreateOrganizationInput({
+      decodeCreateOrganizationNameInput({
         name: "Acme Field Ops",
-        slug: "acme-field-ops",
       })
     ).toStrictEqual({
       name: "Acme Field Ops",
-      slug: "acme-field-ops",
     });
     expect(organizationOnboardingSchema).toBeDefined();
   }, 1000);
 
-  it("trims the organization name and slug before returning them", () => {
+  it("trims the organization name before returning it", () => {
     expect(
-      decodeCreateOrganizationInput({
+      decodeCreateOrganizationNameInput({
         name: "  Acme Field Ops  ",
-        slug: "  acme-field-ops  ",
       })
     ).toStrictEqual({
       name: "Acme Field Ops",
-      slug: "acme-field-ops",
     });
   }, 1000);
 
-  it("rejects slugs with uppercase letters or spaces", () => {
+  it("rejects slugs because onboarding does not accept client slugs", () => {
     expect(() =>
-      decodeCreateOrganizationInput({
+      decodeCreateOrganizationNameInput({
         name: "Acme Field Ops",
-        slug: "Acme Field Ops",
+        slug: "acme-field-ops",
       })
-    ).toThrow(/Expected/);
+    ).toThrow(/is unexpected/);
   }, 1000);
 });

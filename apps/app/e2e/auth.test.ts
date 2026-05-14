@@ -12,10 +12,6 @@ function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
 }
 
-function createTestSlug(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
-}
-
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
@@ -36,7 +32,6 @@ async function signUpAndCreateOrganization(
     readonly email?: string;
     readonly name?: string;
     readonly organizationName?: string;
-    readonly organizationSlugPrefix?: string;
     readonly password?: string;
   }
 ) {
@@ -49,17 +44,14 @@ async function signUpAndCreateOrganization(
   await signupPage.name.fill(options?.name ?? "Taylor Example");
   await signupPage.email.fill(email);
   await signupPage.password.fill(password);
-  await signupPage.confirmPassword.fill(password);
   await signupPage.submit.click();
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill(
     options?.organizationName ?? "Acme Field Ops"
   );
-  await createOrganizationPage.slug.fill(
-    createTestSlug(options?.organizationSlugPrefix ?? "acme-field-ops")
-  );
   await createOrganizationPage.submit.click();
+  await createOrganizationPage.skipInviteStep();
 
   await expectAuthenticatedHome(page);
 
@@ -128,7 +120,7 @@ test.describe("auth pages", () => {
     await expect(loginPage.alerts).toContainText("Use at least 8 characters.");
   });
 
-  test("signup shows password mismatch inline", async ({ page }) => {
+  test("signup shows password length validation inline", async ({ page }) => {
     const signupPage = new SignupPage(page);
 
     await signupPage.goto();
@@ -137,13 +129,11 @@ test.describe("auth pages", () => {
     await signupPage.name.blur();
     await signupPage.email.fill("person@example.com");
     await signupPage.email.blur();
-    await signupPage.password.fill("password123");
+    await signupPage.password.fill("short");
     await signupPage.password.blur();
-    await signupPage.confirmPassword.fill("password124");
-    await signupPage.confirmPassword.blur();
     await signupPage.submit.click();
 
-    await expect(signupPage.alerts).toContainText("Passwords must match");
+    await expect(signupPage.alerts).toContainText("Use at least 8 characters.");
   });
 
   test("signup creates an org before entering the app", async ({ page }) => {
@@ -156,7 +146,6 @@ test.describe("auth pages", () => {
     const { email } = await signUpAndCreateOrganization(page, {
       email: createTestEmail("verification-banner"),
       organizationName: "Verification Banner Org",
-      organizationSlugPrefix: "verification-banner-org",
     });
 
     const banner = page.getByRole("alert", {
@@ -176,7 +165,6 @@ test.describe("auth pages", () => {
     await signUpAndCreateOrganization(page, {
       email: createTestEmail("verification-resend"),
       organizationName: "Verification Resend Org",
-      organizationSlugPrefix: "verification-resend-org",
     });
 
     const banner = page.getByRole("alert", {
@@ -224,8 +212,8 @@ test.describe("auth pages", () => {
 
     await createOrganizationPage.expectLoaded();
     await createOrganizationPage.name.fill("Field Services Team");
-    await createOrganizationPage.slug.fill(createTestSlug("field-services"));
     await createOrganizationPage.submit.click();
+    await createOrganizationPage.skipInviteStep();
 
     await expectAuthenticatedHome(page);
   });
@@ -243,13 +231,12 @@ test.describe("auth pages", () => {
     await signupPage.name.fill("Taylor Example");
     await signupPage.email.fill(email);
     await signupPage.password.fill(password);
-    await signupPage.confirmPassword.fill(password);
     await signupPage.submit.click();
 
     await createOrganizationPage.expectLoaded();
     await createOrganizationPage.name.fill("Existing Org Team");
-    await createOrganizationPage.slug.fill(createTestSlug("existing-org-team"));
     await createOrganizationPage.submit.click();
+    await createOrganizationPage.skipInviteStep();
 
     await expectAuthenticatedHome(page);
     await page.context().clearCookies();

@@ -3,13 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
 
-import { Button, buttonVariants } from "#/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "#/components/ui/empty";
+import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
@@ -23,6 +17,7 @@ import {
   getPasswordResetRequestFailureMessage,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { authQuietLinkClassName } from "./auth-link-styles";
 import { getLoginNavigationTarget } from "./auth-navigation";
 import type { LoginNavigationTarget } from "./auth-navigation";
 import {
@@ -32,7 +27,7 @@ import {
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 
 const successCopy =
-  "If an account exists for that email, a reset link will be sent.";
+  "If an account exists for that email, the newest reset link is on its way.";
 
 export function PasswordResetRequestPage({
   search,
@@ -45,20 +40,6 @@ export function PasswordResetRequestPage({
     search?.invitation
   );
   const isInvitationFlow = Boolean(search?.invitation);
-  let shellDescription = "We'll send one reset link.";
-  let contextDescription = "Use the email tied to your account.";
-
-  if (isInvitationFlow && isSubmitted) {
-    shellDescription = "Open the latest reset email to continue.";
-    contextDescription =
-      "The newest email will bring you back to the invitation.";
-  } else if (isInvitationFlow) {
-    shellDescription = "Use the invited account email.";
-    contextDescription = "Send the reset link to the invited email address.";
-  } else if (isSubmitted) {
-    shellDescription = "Open the latest reset email to continue.";
-    contextDescription = "Use the newest email in your inbox.";
-  }
   const form = useForm({
     defaultValues: {
       email: "",
@@ -96,58 +77,35 @@ export function PasswordResetRequestPage({
   });
 
   return (
-    <EntryShell
-      badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-      title={isSubmitted ? "Check your email." : "Reset your password."}
-      description={shellDescription}
-      supportingContent={
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase">
-            {isSubmitted ? "Next" : "Reset link"}
-          </p>
-          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
-            {contextDescription}
-          </p>
-        </div>
-      }
-    >
+    <EntryShell>
       <EntrySurfaceCard
-        badge={isSubmitted ? "Email sent" : "Password reset"}
         className="max-w-lg"
-        title={isSubmitted ? "Check your email" : "Forgot password?"}
+        title={isSubmitted ? "Check your email" : "Reset your password"}
+        titleLevel={1}
         description={
-          isSubmitted
-            ? "Use the reset link in your inbox."
-            : "Enter your email."
+          isSubmitted ? successCopy : "Enter the email tied to your account."
         }
         footer={
-          <Link
-            {...loginNavigationTarget}
-            className={buttonVariants({
-              variant: isSubmitted ? "default" : "link",
-              className: isSubmitted
-                ? "w-full"
-                : "h-auto justify-start p-0 text-muted-foreground",
-            })}
-          >
-            Back to login
-          </Link>
+          <div className="flex flex-col items-start gap-2 text-sm/6 text-muted-foreground">
+            <p>
+              <Link
+                {...loginNavigationTarget}
+                className={authQuietLinkClassName}
+              >
+                Back to login
+              </Link>
+            </p>
+          </div>
         }
       >
         {isInvitationFlow && !isSubmitted ? (
           <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
-            Send the link to the invited email address.
+            Send the link to the invited email so the invitation can continue
+            after reset.
           </div>
         ) : null}
 
-        {isSubmitted ? (
-          <Empty className="min-h-0 bg-muted/20 px-6 py-8">
-            <EmptyHeader>
-              <EmptyTitle>Reset link sent</EmptyTitle>
-              <EmptyDescription>{successCopy}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
+        {isSubmitted ? null : (
           <form
             className="flex flex-col gap-6"
             method="post"
@@ -163,7 +121,6 @@ export function PasswordResetRequestPage({
                     <AuthFormField
                       label="Email"
                       htmlFor="email"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -209,7 +166,7 @@ export function PasswordResetRequestPage({
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full"
+                    className="w-full [view-transition-name:auth-card-action]"
                     loading={isSubmitting}
                     disabled={isEmailEmpty || !isHydrated}
                   >

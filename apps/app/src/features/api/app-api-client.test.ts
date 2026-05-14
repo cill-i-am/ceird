@@ -122,6 +122,38 @@ describe("app API client", () => {
     });
   }, 1000);
 
+  it("forwards the public SSR origin and API host when provided", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(listResponse));
+
+    await expect(
+      runAppApiClient(
+        {
+          apiOrigin: "http://ceird-sbx-api:4301",
+          cookie: "better-auth.session_token=session-token",
+          forwardedHeaders: {
+            origin: "https://agent-one.app.ceird.localhost:1355",
+            "x-forwarded-host": "agent-one.api.ceird.localhost:1355",
+            "x-forwarded-proto": "https",
+          },
+        },
+        "JobsServer.test.listJobs.forwarded",
+        (client) => client.jobs.listJobs({ urlParams: {} })
+      )
+    ).resolves.toStrictEqual(listResponse);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://ceird-sbx-api:4301/jobs");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+      origin: "https://agent-one.app.ceird.localhost:1355",
+      "x-forwarded-host": "agent-one.api.ceird.localhost:1355",
+      "x-forwarded-proto": "https",
+    });
+  }, 1000);
+
   it("supports browser-side client creation from the current app origin mapping", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

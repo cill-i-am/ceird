@@ -44,10 +44,12 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       children,
       search,
       to,
+      viewTransition: _viewTransition,
       ...props
     }: ComponentProps<"a"> & {
       search?: Record<string, string | undefined>;
       to?: string;
+      viewTransition?: unknown;
     }) => {
       const { href: initialHref } = props;
       let href = initialHref;
@@ -108,11 +110,11 @@ describe("password reset request page", () => {
 
     await expect(
       screen.findByText(
-        "If an account exists for that email, a reset link will be sent."
+        "If an account exists for that email, the newest reset link is on its way."
       )
     ).resolves.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Check your email." })
+      screen.getByRole("heading", { name: "Check your email" })
     ).toBeInTheDocument();
   }, 10_000);
 
@@ -175,7 +177,7 @@ describe("password reset request page", () => {
     render(<PasswordResetRequestPage />);
 
     expect(
-      screen.getByRole("heading", { name: "Reset your password." })
+      screen.getByRole("heading", { name: "Reset your password" })
     ).toBeInTheDocument();
   }, 10_000);
 });

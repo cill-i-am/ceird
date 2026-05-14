@@ -1,6 +1,7 @@
 import { resolveApiOrigin } from "./api-origin";
 
 export interface ServerApiForwardedHeaders {
+  readonly origin: string;
   readonly "x-forwarded-host": string;
   readonly "x-forwarded-proto": "http" | "https";
 }
@@ -22,10 +23,15 @@ function isInternalHttpApiOrigin(apiOrigin: string): boolean {
 }
 
 function readCurrentRequestOrigin(input: {
+  readonly forwardedHost: string | undefined;
   readonly host: string | undefined;
   readonly forwardedProto: string | undefined;
 }): string | undefined {
-  const { host } = input;
+  const trustsForwardedHost = isTrustedForwardingHost(input.host);
+  const host =
+    trustsForwardedHost && input.forwardedHost
+      ? input.forwardedHost
+      : input.host;
 
   if (!host) {
     return undefined;
@@ -34,13 +40,34 @@ function readCurrentRequestOrigin(input: {
   const { forwardedProto } = input;
   let protocol: "http" | "https" = "http";
 
-  if (forwardedProto === "http" || forwardedProto === "https") {
+  if (
+    trustsForwardedHost &&
+    (forwardedProto === "http" || forwardedProto === "https")
+  ) {
     protocol = forwardedProto;
   } else if (host.includes("ceird.localhost")) {
     protocol = "https";
   }
 
   return `${protocol}://${host}`;
+}
+
+function isTrustedForwardingHost(host: string | undefined): boolean {
+  if (!host) {
+    return false;
+  }
+
+  try {
+    const url = new URL(`http://${host}`);
+    return (
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "localhost" ||
+      url.hostname === "[::1]" ||
+      url.hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function splitCookieEntry(entry: string):
@@ -62,13 +89,18 @@ function splitCookieEntry(entry: string):
 }
 
 export function readServerApiForwardedHeaders(input: {
+  readonly origin: string | undefined;
+  readonly forwardedHost: string | undefined;
   readonly host: string | undefined;
   readonly forwardedProto: string | undefined;
 }): ServerApiForwardedHeaders | undefined {
   const requestOrigin = readCurrentRequestOrigin(input);
-  const publicApiOrigin = requestOrigin
-    ? resolveApiOrigin(requestOrigin)
-    : undefined;
+
+  if (!requestOrigin) {
+    return undefined;
+  }
+
+  const publicApiOrigin = resolveApiOrigin(requestOrigin);
 
   if (!publicApiOrigin) {
     return undefined;
@@ -77,6 +109,7 @@ export function readServerApiForwardedHeaders(input: {
   const url = new URL(publicApiOrigin);
 
   return {
+    origin: input.origin ?? requestOrigin,
     "x-forwarded-host": url.host,
     "x-forwarded-proto": url.protocol === "https:" ? "https" : "http",
   };

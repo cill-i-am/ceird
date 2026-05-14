@@ -179,7 +179,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Site name"
                 htmlFor="site-edit-name"
-                invalid={Boolean(fieldErrors.name)}
                 errorText={fieldErrors.name}
               >
                 <Input
@@ -199,7 +198,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Service area"
                 htmlFor="site-edit-service-area"
-                invalid={Boolean(fieldErrors.serviceAreaSelection)}
                 errorText={fieldErrors.serviceAreaSelection}
               >
                 <CommandSelect
@@ -230,7 +228,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Address line 1"
                 htmlFor="site-edit-address-line-1"
-                invalid={Boolean(fieldErrors.addressLine1)}
                 errorText={fieldErrors.addressLine1}
               >
                 <Input
@@ -250,7 +247,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Address line 2"
                 htmlFor="site-edit-address-line-2"
-                invalid={false}
               >
                 <Input
                   id="site-edit-address-line-2"
@@ -266,11 +262,7 @@ export function SitesDetailSheet({
               </AuthFormField>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <AuthFormField
-                  label="Town"
-                  htmlFor="site-edit-town"
-                  invalid={false}
-                >
+                <AuthFormField label="Town" htmlFor="site-edit-town">
                   <Input
                     id="site-edit-town"
                     disabled={!canEdit}
@@ -287,7 +279,6 @@ export function SitesDetailSheet({
                 <AuthFormField
                   label="County"
                   htmlFor="site-edit-county"
-                  invalid={Boolean(fieldErrors.county)}
                   errorText={fieldErrors.county}
                 >
                   <Input
@@ -308,7 +299,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Eircode"
                 htmlFor="site-edit-eircode"
-                invalid={Boolean(fieldErrors.eircode)}
                 errorText={fieldErrors.eircode}
               >
                 <Input
@@ -328,7 +318,6 @@ export function SitesDetailSheet({
               <AuthFormField
                 label="Access notes"
                 htmlFor="site-edit-access-notes"
-                invalid={false}
               >
                 <Textarea
                   id="site-edit-access-notes"

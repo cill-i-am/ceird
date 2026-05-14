@@ -10,10 +10,6 @@ function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
 }
 
-function createTestSlug(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
-}
-
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
@@ -40,12 +36,10 @@ async function signUpAndCreateOrganization(
     emailPrefix,
     organizationName,
     ownerName,
-    slugPrefix,
   }: {
     readonly emailPrefix: string;
     readonly organizationName: string;
     readonly ownerName: string;
-    readonly slugPrefix: string;
   }
 ) {
   const signupPage = new SignupPage(page);
@@ -56,13 +50,12 @@ async function signUpAndCreateOrganization(
   await signupPage.name.fill(ownerName);
   await signupPage.email.fill(createTestEmail(emailPrefix));
   await signupPage.password.fill(password);
-  await signupPage.confirmPassword.fill(password);
   await signupPage.submit.click();
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill(organizationName);
-  await createOrganizationPage.slug.fill(createTestSlug(slugPrefix));
   await createOrganizationPage.submit.click();
+  await createOrganizationPage.skipInviteStep();
   await expectAuthenticatedHome(page);
 }
 
@@ -91,7 +84,6 @@ test("an organization admin can update the organization name from account settin
     emailPrefix: "org-settings",
     organizationName: initialOrganizationName,
     ownerName: "Settings Owner",
-    slugPrefix: "acme-field-ops",
   });
 
   await openSettingsFromAccountMenu(page);
@@ -127,7 +119,6 @@ test("organization settings service areas and rate cards feed sites and job filt
     emailPrefix: "org-settings-config",
     organizationName: "Dublin Field Ops",
     ownerName: "Settings Owner",
-    slugPrefix: "dublin-field-ops",
   });
 
   await openSettingsFromAccountMenu(page);

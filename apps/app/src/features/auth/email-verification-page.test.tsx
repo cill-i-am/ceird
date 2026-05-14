@@ -14,8 +14,9 @@ vi.mock(import("@tanstack/react-router"), async () => {
     Link: (({
       children,
       to,
+      viewTransition: _viewTransition,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
+    }: ComponentProps<"a"> & { to?: string; viewTransition?: unknown }) => (
       <a
         data-router-link="true"
         href={typeof to === "string" ? to : props.href}
@@ -33,13 +34,18 @@ describe("email verification page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "This verification link can't be used.",
+        name: "Verification link expired",
       })
     ).toBeInTheDocument();
-    expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
+    expect(screen.queryByText("Verification issue")).not.toBeInTheDocument();
     expect(
-      screen.getByText("This verification link is invalid or has expired.")
+      screen.getByText(
+        "Use the newest email verification link, or return to sign in and request a fresh one."
+      )
     ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Auth context column")
+    ).not.toBeInTheDocument();
 
     const appLink = screen.getByRole("link", { name: "Go to the app" });
     expect(appLink).toHaveAttribute("href", "/");
@@ -54,12 +60,12 @@ describe("email verification page", () => {
     render(<EmailVerificationPage search={{ status: "success" }} />);
 
     expect(
-      screen.getByRole("heading", { name: "Your email is verified." })
+      screen.getByRole("heading", { name: "Email verified" })
     ).toBeInTheDocument();
-    expect(screen.getByText("Email verified")).toBeInTheDocument();
+    expect(screen.queryByText("Verified")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Your email address is verified.")
-    ).toBeInTheDocument();
+      screen.queryByLabelText("Auth context column")
+    ).not.toBeInTheDocument();
   }, 10_000);
 
   it("shows the invalid-link state for invalid-token search", () => {
@@ -67,12 +73,14 @@ describe("email verification page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "This verification link can't be used.",
+        name: "Verification link expired",
       })
     ).toBeInTheDocument();
-    expect(screen.getByText("Verification link invalid")).toBeInTheDocument();
+    expect(screen.queryByText("Verification issue")).not.toBeInTheDocument();
     expect(
-      screen.getByText("This verification link is invalid or has expired.")
+      screen.getByText(
+        "Use the newest email verification link, or return to sign in and request a fresh one."
+      )
     ).toBeInTheDocument();
   }, 10_000);
 });

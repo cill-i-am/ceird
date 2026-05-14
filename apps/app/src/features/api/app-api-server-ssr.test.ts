@@ -82,6 +82,114 @@ describe("shared app api server helpers", () => {
     });
   }, 1000);
 
+  it("forwards trusted sandbox origin headers when reading labels", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "__Secure-better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "127.0.0.1:4300";
+      }
+
+      if (name === "x-forwarded-host") {
+        return "agent-one.app.ceird.localhost:1355";
+      }
+
+      if (name === "x-forwarded-proto") {
+        return "https";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(labelsResponse));
+
+    await expect(getCurrentServerLabels()).resolves.toStrictEqual(
+      labelsResponse
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "__Secure-better-auth.session_token=session-token",
+      origin: "https://agent-one.app.ceird.localhost:1355",
+      "x-forwarded-host": "agent-one.api.ceird.localhost:1355",
+      "x-forwarded-proto": "https",
+    });
+  }, 1000);
+
+  it("does not trust arbitrary forwarded hosts when reading labels", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "app.ceird.localhost:1355";
+      }
+
+      if (name === "x-forwarded-host") {
+        return "attacker.example";
+      }
+
+      if (name === "x-forwarded-proto") {
+        return "https";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(labelsResponse));
+
+    await expect(getCurrentServerLabels()).resolves.toStrictEqual(
+      labelsResponse
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(requestInit?.headers).toMatchObject({
+      origin: "https://app.ceird.localhost:1355",
+      "x-forwarded-host": "api.ceird.localhost:1355",
+      "x-forwarded-proto": "https",
+    });
+  }, 1000);
+
+  it("forwards the incoming browser origin instead of synthesizing one", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "app.ceird.localhost:1355";
+      }
+
+      if (name === "origin") {
+        return "https://attacker.example";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(labelsResponse));
+
+    await expect(getCurrentServerLabels()).resolves.toStrictEqual(
+      labelsResponse
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(requestInit?.headers).toMatchObject({
+      origin: "https://attacker.example",
+      "x-forwarded-host": "api.ceird.localhost:1355",
+      "x-forwarded-proto": "https",
+    });
+  }, 1000);
+
   it("forwards the current auth cookie when reading site options", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined

@@ -23,7 +23,7 @@ Current visible routes:
 | `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                      |
 | `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                               |
 | `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                               |
-| `/create-organization`             | `_app.create-organization.tsx`        | Create first or additional organization.                      |
+| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.          |
 | `/settings`                        | `_app.settings.tsx`                   | User settings.                                                |
 | `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                   |
 | `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                    |
@@ -129,6 +129,16 @@ routes are owned by Better Auth rather than the jobs `HttpApi` contract:
 - `features/auth/server-session.ts`
 - `features/organizations/organization-server.ts`
 - `features/auth/sign-out.ts`
+
+The `/create-organization` onboarding route stays outside the app shell while
+the first workspace is created. The client submits only the team name to
+`features/organizations/organization-server.ts`; that server helper generates
+the Better Auth organization slug, forwards auth cookies from the Better Auth
+response, decodes the created organization summary, and returns that summary to
+the client. The same onboarding page then offers an optional invite-members
+step before navigating into the app. Skipping or completing this step enters the
+active workspace; invite creation uses Better Auth's
+`authClient.organization.inviteMember` with the newly created organization ID.
 
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with

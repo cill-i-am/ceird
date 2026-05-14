@@ -372,7 +372,6 @@ export function JobsCreateSheet() {
             <AuthFormField
               label="Title"
               htmlFor="job-title"
-              invalid={Boolean(fieldErrors.title)}
               errorText={fieldErrors.title}
             >
               <Input
@@ -393,7 +392,6 @@ export function JobsCreateSheet() {
             <AuthFormField
               label="External reference"
               htmlFor="job-external-reference"
-              invalid={Boolean(fieldErrors.externalReference)}
               errorText={fieldErrors.externalReference}
             >
               <Input
@@ -497,7 +495,6 @@ export function JobsCreateSheet() {
               <AuthFormField
                 label="Contact email"
                 htmlFor="job-contact-email"
-                invalid={Boolean(fieldErrors.contactEmail)}
                 errorText={fieldErrors.contactEmail}
               >
                 <Input
@@ -513,11 +510,7 @@ export function JobsCreateSheet() {
                   }
                 />
               </AuthFormField>
-              <AuthFormField
-                label="Contact phone"
-                htmlFor="job-contact-phone"
-                invalid={false}
-              >
+              <AuthFormField label="Contact phone" htmlFor="job-contact-phone">
                 <Input
                   id="job-contact-phone"
                   value={values.contactPhone}
@@ -532,7 +525,6 @@ export function JobsCreateSheet() {
               <AuthFormField
                 label="Contact notes"
                 htmlFor="job-contact-notes"
-                invalid={Boolean(fieldErrors.contactNotes)}
                 errorText={fieldErrors.contactNotes}
               >
                 <Textarea

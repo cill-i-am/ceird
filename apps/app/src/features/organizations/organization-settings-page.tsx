@@ -401,7 +401,6 @@ export function OrganizationSettingsPage({
                       <AuthFormField
                         label="Organization name"
                         htmlFor="organization-name"
-                        invalid={Boolean(errorText)}
                         errorText={errorText}
                       >
                         <Input
@@ -496,7 +495,7 @@ export function OrganizationSettingsPage({
                 <AuthFormField
                   label="New label name"
                   htmlFor="new-job-label-name"
-                  invalid={isCreateLabelError}
+                  validationState={isCreateLabelError ? "invalid" : undefined}
                   errorText={undefined}
                 >
                   <Input

@@ -1,14 +1,18 @@
 import {
+  createOrganizationSlugFromName,
+  decodeCreateOrganizationNameInput,
   decodeOrganizationMemberRoleResponse,
+  decodeOrganizationSummary,
   decodeOrganizationSummaryList,
   OrganizationId,
 } from "@ceird/identity-core";
 import type {
+  CreateOrganizationNameInput,
   OrganizationId as OrganizationIdType,
   OrganizationMemberRoleResponse,
   OrganizationSummary,
 } from "@ceird/identity-core";
-import { createServerOnlyFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { Schema } from "effect";
 
 import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
@@ -19,6 +23,12 @@ import {
 
 const NullableString = Schema.NullOr(Schema.String);
 const NullableOrganizationId = Schema.NullOr(OrganizationId);
+const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
+  "ORGANIZATION_ALREADY_EXISTS",
+  "ORGANIZATION_SLUG_ALREADY_TAKEN",
+  "Organization already exists",
+  "Organization slug already taken",
+] as const;
 
 const OrganizationAccessSessionSchema = Schema.Struct({
   session: Schema.Struct({
@@ -53,6 +63,51 @@ interface ServerAuthRequest {
   cookie: string;
   authBaseURL: string;
   forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
+}
+
+export const createCurrentServerOrganization = createServerFn({
+  method: "POST",
+})
+  .inputValidator((input: unknown) => decodeCreateOrganizationNameInput(input))
+  .handler(
+    async ({ data }) => await createCurrentServerOrganizationDirect(data)
+  );
+
+export async function createCurrentServerOrganizationDirect(
+  input: CreateOrganizationNameInput
+): Promise<OrganizationSummary> {
+  const { getRequestHeader } = await import("@tanstack/react-start/server");
+  const authRequest = readServerAuthRequestStrict(getRequestHeader);
+  const baseSlug = createOrganizationSlugFromName(input.name);
+  const response = await postCreateOrganization(authRequest, {
+    name: input.name,
+    slug: baseSlug,
+  });
+
+  if (response.ok) {
+    await forwardAuthResponseCookies(response);
+    return await readCreatedOrganization(response);
+  }
+
+  if (await isOrganizationSlugConflictResponse(response)) {
+    const retryResponse = await postCreateOrganization(authRequest, {
+      name: input.name,
+      slug: `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`,
+    });
+
+    if (retryResponse.ok) {
+      await forwardAuthResponseCookies(retryResponse);
+      return await readCreatedOrganization(retryResponse);
+    }
+
+    throw new Error(
+      `Organization creation failed with status ${retryResponse.status}.`
+    );
+  }
+
+  throw new Error(
+    `Organization creation failed with status ${response.status}.`
+  );
 }
 
 export const getCurrentServerOrganizationSession = createServerOnlyFn(
@@ -179,7 +234,9 @@ function readServerSessionRequest(
 
   const authBaseURL = readServerAuthBaseURL();
   const forwardedHeaders = readServerApiForwardedHeaders({
+    forwardedHost: getRequestHeader("x-forwarded-host"),
     host: getRequestHeader("host"),
+    origin: getRequestHeader("origin"),
     forwardedProto: getRequestHeader("x-forwarded-proto"),
   });
 
@@ -209,7 +266,9 @@ function readServerAuthRequestStrict(
 
   const authBaseURL = readServerAuthBaseURL();
   const forwardedHeaders = readServerApiForwardedHeaders({
+    forwardedHost: getRequestHeader("x-forwarded-host"),
     host: getRequestHeader("host"),
+    origin: getRequestHeader("origin"),
     forwardedProto: getRequestHeader("x-forwarded-proto"),
   });
 
@@ -241,6 +300,75 @@ async function fetchOrganizations(authRequest: ServerAuthRequest) {
       },
     }
   );
+}
+
+async function postCreateOrganization(
+  authRequest: ServerAuthRequest,
+  input: { name: string; slug: string }
+) {
+  return await fetch(
+    new URL("organization/create", `${authRequest.authBaseURL}/`),
+    {
+      body: JSON.stringify(input),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        cookie: authRequest.cookie,
+        ...authRequest.forwardedHeaders,
+      },
+      method: "POST",
+    }
+  );
+}
+
+async function isOrganizationSlugConflictResponse(response: Response) {
+  if (response.status !== 400) {
+    return false;
+  }
+
+  const bodyText = await response
+    .clone()
+    .text()
+    .catch(() => "");
+
+  return ORGANIZATION_SLUG_CONFLICT_MARKERS.some((marker) =>
+    bodyText.includes(marker)
+  );
+}
+
+async function forwardAuthResponseCookies(response: Response) {
+  const setCookies = readSetCookieHeaders(response.headers);
+
+  if (setCookies.length === 0) {
+    return;
+  }
+
+  const { setResponseHeader } = await import("@tanstack/react-start/server");
+  setResponseHeader("set-cookie", setCookies);
+}
+
+async function readCreatedOrganization(
+  response: Response
+): Promise<OrganizationSummary> {
+  try {
+    return decodeOrganizationSummary((await response.json()) as unknown);
+  } catch {
+    throw new Error("Organization creation returned an invalid payload.");
+  }
+}
+
+function readSetCookieHeaders(headers: Headers): string[] {
+  const headersWithSetCookie = headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  const setCookies = headersWithSetCookie.getSetCookie?.();
+
+  if (setCookies && setCookies.length > 0) {
+    return setCookies;
+  }
+
+  const setCookie = headers.get("set-cookie");
+  return setCookie ? [setCookie] : [];
 }
 
 function decodeOrganizationSummariesStrict(

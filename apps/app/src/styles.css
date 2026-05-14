@@ -170,6 +170,76 @@
     @apply transition-colors;
   }
 
+  @supports (view-transition-name: auth-card) {
+    ::view-transition-group(auth-card) {
+      animation-duration: 260ms;
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    ::view-transition-old(auth-card) {
+      animation: auth-card-shell-out 170ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    ::view-transition-new(auth-card) {
+      animation: auth-card-shell-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    ::view-transition-old(auth-card-header),
+    ::view-transition-old(auth-card-body),
+    ::view-transition-old(auth-card-action),
+    ::view-transition-old(auth-card-footer) {
+      animation: auth-card-region-out 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    ::view-transition-new(auth-card-header) {
+      animation: auth-card-region-in 200ms 35ms cubic-bezier(0.22, 1, 0.36, 1)
+        both;
+    }
+
+    ::view-transition-new(auth-card-body) {
+      animation: auth-card-region-in 220ms 55ms cubic-bezier(0.22, 1, 0.36, 1)
+        both;
+    }
+
+    ::view-transition-new(auth-card-action) {
+      animation: auth-card-region-in 220ms 70ms cubic-bezier(0.22, 1, 0.36, 1)
+        both;
+    }
+
+    ::view-transition-new(auth-card-footer) {
+      animation: auth-card-region-in 220ms 95ms cubic-bezier(0.22, 1, 0.36, 1)
+        both;
+    }
+  }
+
+  @keyframes auth-card-shell-out {
+    to {
+      opacity: 0.78;
+      transform: translateY(-2px) scale(0.996);
+    }
+  }
+
+  @keyframes auth-card-shell-in {
+    from {
+      opacity: 0.92;
+      transform: translateY(2px) scale(0.998);
+    }
+  }
+
+  @keyframes auth-card-region-out {
+    to {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+  }
+
+  @keyframes auth-card-region-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,
@@ -178,6 +248,13 @@
       animation-iteration-count: 1 !important;
       scroll-behavior: auto !important;
       transition-duration: 0.01ms !important;
+    }
+
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
     }
   }
 

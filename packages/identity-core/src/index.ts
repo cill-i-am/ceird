@@ -2,6 +2,7 @@ import { ParseResult, Schema } from "effect";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const DEFAULT_ORGANIZATION_SLUG_PREFIX = "team";
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
@@ -104,17 +105,44 @@ export const OrganizationSlugSchema = Schema.Trim.pipe(
   Schema.pattern(ORGANIZATION_SLUG_PATTERN)
 );
 
+export function createOrganizationSlugFromName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replaceAll(/['’]/g, "")
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replaceAll(/^-+|-+$/g, "");
+
+  return slug || DEFAULT_ORGANIZATION_SLUG_PREFIX;
+}
+
 export const CreateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
   slug: OrganizationSlugSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const CreateOrganizationNameInputSchema = Schema.Struct({
+  name: OrganizationNameSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 export const UpdateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
+>;
+
+export type CreateOrganizationNameInput = Schema.Schema.Type<
+  typeof CreateOrganizationNameInputSchema
 >;
 
 export type UpdateOrganizationInput = Schema.Schema.Type<
@@ -137,12 +165,18 @@ export function decodeCreateOrganizationInput(
   return ParseResult.decodeUnknownSync(CreateOrganizationInputSchema)(input);
 }
 
+export function decodeCreateOrganizationNameInput(
+  input: unknown
+): CreateOrganizationNameInput {
+  return ParseResult.decodeUnknownSync(CreateOrganizationNameInputSchema)(
+    input
+  );
+}
+
 export function decodeUpdateOrganizationInput(
   input: unknown
 ): UpdateOrganizationInput {
-  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input, {
-    onExcessProperty: "error",
-  });
+  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
 }
 
 export function decodePublicInvitationPreview(

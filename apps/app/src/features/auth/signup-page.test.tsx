@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
@@ -61,10 +61,12 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       children,
       search,
       to,
+      viewTransition: _viewTransition,
       ...props
     }: ComponentProps<"a"> & {
       search?: Record<string, string | undefined>;
       to?: string;
+      viewTransition?: unknown;
     }) => {
       const { href: initialHref } = props;
       let href = initialHref;
@@ -132,7 +134,6 @@ describe("signup page", () => {
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.type(screen.getByLabelText("Password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
@@ -167,7 +168,6 @@ describe("signup page", () => {
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.type(screen.getByLabelText("Password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password123");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await expect(
@@ -175,19 +175,18 @@ describe("signup page", () => {
     ).resolves.toBeInTheDocument();
   }, 10_000);
 
-  it("shows the password mismatch error inline", async () => {
+  it("shows password length errors inline", async () => {
     const user = userEvent.setup();
 
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
-    await user.type(screen.getByLabelText("Confirm password"), "password124");
+    await user.type(screen.getByLabelText("Password"), "short");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await expect(
-      screen.findByText("Passwords must match")
+      screen.findByText("Use at least 8 characters.")
     ).resolves.toBeInTheDocument();
     expect(mockedSignUpEmail).not.toHaveBeenCalled();
   }, 10_000);
@@ -196,13 +195,8 @@ describe("signup page", () => {
     render(<SignupPage search={{ invitation: "inv_123" }} />);
 
     expect(
-      within(screen.getByLabelText("Auth context column")).getByRole(
-        "heading",
-        {
-          name: "Create the account that will accept this invitation.",
-        }
-      )
-    ).toBeInTheDocument();
+      screen.queryByLabelText("Auth context column")
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/login?invitation=inv_123"

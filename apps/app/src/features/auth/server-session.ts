@@ -39,7 +39,9 @@ export const getCurrentServerSession = createServerOnlyFn(async () => {
   const cookie = getRequestHeader("cookie");
   const authBaseURL = resolveConfiguredServerAuthBaseURL();
   const forwardedHeaders = readServerApiForwardedHeaders({
+    forwardedHost: getRequestHeader("x-forwarded-host"),
     host: getRequestHeader("host"),
+    origin: getRequestHeader("origin"),
     forwardedProto: getRequestHeader("x-forwarded-proto"),
   });
 

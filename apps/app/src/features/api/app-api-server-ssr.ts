@@ -36,7 +36,9 @@ export async function readServerAppApiRequestStrict(): Promise<ServerAppApiReque
     apiOrigin,
     cookie: normalizeServerApiCookieHeader(cookie, apiOrigin),
     forwardedHeaders: readServerApiForwardedHeaders({
+      forwardedHost: getRequestHeader("x-forwarded-host"),
       host: getRequestHeader("host"),
+      origin: getRequestHeader("origin"),
       forwardedProto: getRequestHeader("x-forwarded-proto"),
     }),
   };

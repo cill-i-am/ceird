@@ -1,9 +1,12 @@
 import {
+  createOrganizationSlugFromName,
+  decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
   decodeUpdateOrganizationInput,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
+  ORGANIZATION_SLUG_PATTERN,
 } from "./index.js";
 
 describe("createOrganizationInputSchema", () => {
@@ -26,6 +29,49 @@ describe("createOrganizationInputSchema", () => {
         slug: "Acme Field Ops",
       })
     ).toThrow(/Expected/);
+  }, 1000);
+});
+
+describe("organization slug generation", () => {
+  it("generates lowercase durable slugs from organization names", () => {
+    expect(createOrganizationSlugFromName("  Acme Field Ops  ")).toBe(
+      "acme-field-ops"
+    );
+    expect(createOrganizationSlugFromName("O'Connor & Sons")).toBe(
+      "oconnor-sons"
+    );
+  }, 1000);
+
+  it("falls back when a name has no slug-safe characters", () => {
+    expect(createOrganizationSlugFromName("!!")).toBe("team");
+  }, 1000);
+
+  it("keeps truncated slugs inside the slug pattern", () => {
+    const slug = createOrganizationSlugFromName(`${"a".repeat(63)} & Beta`);
+
+    expect(slug).toBe("a".repeat(63));
+    expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+});
+
+describe("createOrganizationNameInputSchema", () => {
+  it("trims a valid organization name", () => {
+    expect(
+      decodeCreateOrganizationNameInput({
+        name: "  Acme Field Ops  ",
+      })
+    ).toStrictEqual({
+      name: "Acme Field Ops",
+    });
+  }, 1000);
+
+  it("rejects client-supplied organization slugs", () => {
+    expect(() =>
+      decodeCreateOrganizationNameInput({
+        name: "Acme Field Ops",
+        slug: "acme-field-ops",
+      })
+    ).toThrow(/is unexpected/);
   }, 1000);
 });
 

@@ -11,10 +11,6 @@ function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
 }
 
-function createTestSlug(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
-}
-
 async function signUpAndCreateOrganization(page: Page) {
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
@@ -25,13 +21,12 @@ async function signUpAndCreateOrganization(page: Page) {
   await signupPage.name.fill("Taylor Example");
   await signupPage.email.fill(email);
   await signupPage.password.fill(password);
-  await signupPage.confirmPassword.fill(password);
   await signupPage.submit.click();
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill("Acme Field Ops");
-  await createOrganizationPage.slug.fill(createTestSlug("acme-field-ops"));
   await createOrganizationPage.submit.click();
+  await createOrganizationPage.skipInviteStep();
 
   await expect(
     page.getByRole("main", { name: "Workspace home" })

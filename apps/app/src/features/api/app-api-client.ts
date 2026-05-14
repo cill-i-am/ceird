@@ -11,6 +11,7 @@ import {
 import { Cause, Effect, Exit, Layer } from "effect";
 
 import { resolveApiOrigin } from "#/lib/api-origin";
+import type { ServerApiForwardedHeaders } from "#/lib/server-api-forwarded-headers";
 
 import {
   AppApiOriginResolutionError,
@@ -29,12 +30,7 @@ export interface AppApiClientOptions {
   readonly requestOrigin?: string | undefined;
   readonly apiOrigin?: string | undefined;
   readonly cookie?: string | undefined;
-  readonly forwardedHeaders?:
-    | {
-        readonly "x-forwarded-host": string;
-        readonly "x-forwarded-proto": "http" | "https";
-      }
-    | undefined;
+  readonly forwardedHeaders?: ServerApiForwardedHeaders | undefined;
 }
 
 export function resolveAppApiOrigin(
@@ -153,6 +149,11 @@ function withOptionalCookie(
       }
 
       if (options.forwardedHeaders) {
+        nextRequest = HttpClientRequest.setHeader(
+          nextRequest,
+          "origin",
+          options.forwardedHeaders.origin
+        );
         nextRequest = HttpClientRequest.setHeader(
           nextRequest,
           "x-forwarded-host",

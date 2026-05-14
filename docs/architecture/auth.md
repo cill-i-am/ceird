@@ -497,8 +497,7 @@ Current behavior:
 
 - uses TanStack Form for form state
 - validates submit payloads with `Effect/Schema`
-- requires `name`, `email`, `password`, and `confirmPassword`
-- enforces password confirmation match before submit
+- requires `name`, `email`, and `password`
 - calls `authClient.signUp.email`
 - displays field-level validation inline
 - displays safe form-level failure messaging for server/auth errors
@@ -554,9 +553,8 @@ The shared auth schemas live in
 Current input rules:
 
 - email is trimmed, non-empty, and must match a basic email pattern
-- password is trimmed and must be at least 8 characters
+- password is not trimmed and must be at least 8 characters
 - signup name is trimmed and must be at least 2 characters
-- signup password and confirm password must match
 
 Important rule:
 

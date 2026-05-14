@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { isValidElement } from "react";
 import type { ComponentProps, MouseEventHandler, ReactNode } from "react";
 
+import { authCardViewTransition } from "#/features/auth/auth-navigation";
+
 import type { NavUserNavigate } from "./nav-user";
 import { NavUser } from "./nav-user";
 
@@ -371,6 +373,7 @@ describe("nav user", () => {
             invitation: undefined,
           },
           to: "/login",
+          viewTransition: authCardViewTransition,
         });
       });
     }
@@ -435,6 +438,7 @@ describe("nav user", () => {
             invitation: undefined,
           },
           to: "/login",
+          viewTransition: authCardViewTransition,
         });
       });
     }

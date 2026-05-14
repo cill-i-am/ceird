@@ -6,6 +6,8 @@ import { accountEmailSchema } from "#/features/auth/auth-schemas";
 const OrganizationMemberInviteInputSchema = Schema.Struct({
   email: accountEmailSchema,
   role: InvitableOrganizationRole,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 export type OrganizationMemberInviteInput =

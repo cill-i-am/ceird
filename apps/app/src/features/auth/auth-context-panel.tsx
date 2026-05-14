@@ -19,28 +19,31 @@ export function AuthContextPanel(props: AuthContextPanelProps) {
     <section
       data-slot="auth-context-panel"
       className={cn(
-        "relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/88 p-6 shadow-sm ring-1 ring-border/50 sm:p-8 lg:p-10",
+        "relative overflow-hidden rounded-2xl border border-border/70 bg-card/90 p-5 shadow-[0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] ring-1 ring-border/40 sm:p-6 lg:p-8",
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,color-mix(in_oklab,var(--primary)_14%,transparent),transparent_42%)]" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border/80"
+      />
 
-      <div className="relative flex h-full flex-col gap-8">
+      <div className="relative flex h-full flex-col gap-7">
         {kicker || badge ? (
           <div
             data-slot="auth-context-panel-badges"
-            className="flex flex-wrap items-center gap-3"
+            className="flex flex-wrap items-center gap-2"
           >
             {kicker ? (
               <Badge
                 variant="secondary"
-                className="rounded-full px-3 py-1 text-[0.7rem] uppercase"
+                className="rounded-full px-2.5 py-1 text-[0.68rem] uppercase"
               >
                 {kicker}
               </Badge>
             ) : null}
             {badge ? (
-              <Badge variant="outline" className="rounded-full px-3 py-1">
+              <Badge variant="outline" className="rounded-full px-2.5 py-1">
                 {badge}
               </Badge>
             ) : null}
@@ -51,11 +54,11 @@ export function AuthContextPanel(props: AuthContextPanelProps) {
           data-slot="auth-context-panel-header"
           className="flex max-w-2xl flex-col gap-3"
         >
-          <h1 className="font-heading text-3xl font-medium sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="font-heading text-2xl leading-tight font-medium text-balance sm:text-3xl">
             {title}
           </h1>
           {description ? (
-            <p className="max-w-[62ch] text-sm/7 text-muted-foreground sm:text-base/7">
+            <p className="max-w-[58ch] text-sm/7 text-muted-foreground">
               {description}
             </p>
           ) : null}

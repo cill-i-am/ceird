@@ -164,7 +164,13 @@ async function chooseCommandOption(
   optionLabel: string
 ) {
   await user.click(screen.getByLabelText(label));
-  await user.click(screen.getByRole("option", { name: optionLabel }));
+  await user.click(
+    screen.getByRole("option", { name: commandOptionName(optionLabel) })
+  );
+}
+
+function commandOptionName(label: string) {
+  return new RegExp(`^${label.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
 }
 
 async function openInviteDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -1297,10 +1303,14 @@ describe("organization members page", () => {
     await openInviteDialog(user);
     await user.keyboard("r");
 
-    expect(screen.getByRole("combobox")).toHaveFocus();
-    expect(screen.getByRole("option", { name: "Admin" })).toBeVisible();
+    expect(screen.getByRole("listbox", { name: "Suggestions" })).toBeVisible();
     expect(
-      screen.getByRole("option", { name: "External collaborator" })
+      screen.getByRole("option", { name: commandOptionName("Admin") })
+    ).toBeVisible();
+    expect(
+      screen.getByRole("option", {
+        name: commandOptionName("External collaborator"),
+      })
     ).toBeVisible();
   }, 10_000);
 

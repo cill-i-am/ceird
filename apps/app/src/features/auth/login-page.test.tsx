@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Schema } from "effect";
 import type { ComponentProps } from "react";
@@ -52,10 +52,12 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       children,
       search,
       to,
+      viewTransition: _viewTransition,
       ...props
     }: ComponentProps<"a"> & {
       search?: Record<string, string | undefined>;
       to?: string;
+      viewTransition?: unknown;
     }) => {
       const { href: initialHref } = props;
       let href = initialHref;
@@ -128,13 +130,8 @@ describe("login page", () => {
     render(<LoginPage search={{ invitation: "inv_123" }} />);
 
     expect(
-      within(screen.getByLabelText("Auth context column")).getByRole(
-        "heading",
-        {
-          name: "Sign in to finish this invitation.",
-        }
-      )
-    ).toBeInTheDocument();
+      screen.queryByLabelText("Auth context column")
+    ).not.toBeInTheDocument();
 
     const link = screen.getByRole("link", { name: "Forgot password?" });
 

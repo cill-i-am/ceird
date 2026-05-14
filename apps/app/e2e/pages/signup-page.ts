@@ -32,10 +32,6 @@ export class SignupPage {
     return this.page.locator("#password");
   }
 
-  get confirmPassword(): Locator {
-    return this.page.getByLabel("Confirm password", { exact: true });
-  }
-
   get submit(): Locator {
     return this.page.getByRole("button", { name: "Sign up" });
   }

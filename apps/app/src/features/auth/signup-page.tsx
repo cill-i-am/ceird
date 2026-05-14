@@ -19,15 +19,14 @@ import {
   getFormErrorText,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { authQuietLinkClassName } from "./auth-link-styles";
 import {
   getLoginNavigationTarget,
   useAuthSuccessNavigation,
 } from "./auth-navigation";
+import { AuthPasswordInput } from "./auth-password-input";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
-
-const quietLinkClassName =
-  "text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none";
 
 export function SignupPage({
   search,
@@ -41,7 +40,6 @@ export function SignupPage({
       name: "",
       email: "",
       password: "",
-      confirmPassword: "",
     },
     validators: {
       onSubmit: Schema.standardSchemaV1(signupSchema),
@@ -77,64 +75,14 @@ export function SignupPage({
   const isInvitationFlow = Boolean(search?.invitation);
 
   return (
-    <EntryShell
-      badge={isInvitationFlow ? "Invitation flow" : "Account setup"}
-      title={
-        isInvitationFlow
-          ? "Create the account that will accept this invitation."
-          : "Create the account your team will sign into."
-      }
-      description={
-        isInvitationFlow
-          ? "Use the invited email, verify it, and continue straight into the workspace."
-          : "Set up a secure account once so sign-in, invites, and recovery stay straightforward."
-      }
-      supportingContent={
-        <div className="flex flex-col gap-8">
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase">
-              {isInvitationFlow ? "Create the invited account" : "Set up once"}
-            </p>
-            <p className="max-w-[48ch] text-sm/7 text-foreground/90">
-              {isInvitationFlow
-                ? "Create the account tied to the invitation so the workspace handoff stays attached after verification."
-                : "This is the account you'll use to manage work, invite teammates, and recover access later."}
-            </p>
-          </div>
-
-          <dl className="grid gap-5 sm:grid-cols-2">
-            <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-              <dt className="text-xs font-medium text-muted-foreground uppercase">
-                Email choice
-              </dt>
-              <dd className="text-sm/6 text-muted-foreground">
-                {isInvitationFlow
-                  ? "Use the invited email address so the invitation lands on the new account."
-                  : "Choose the email you want to keep tied to invites, verification, and sign-in."}
-              </dd>
-            </div>
-
-            <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-              <dt className="text-xs font-medium text-muted-foreground uppercase">
-                After this
-              </dt>
-              <dd className="text-sm/6 text-muted-foreground">
-                {isInvitationFlow
-                  ? "You'll verify the address, then continue directly back to the invitation."
-                  : "You'll verify the address, then head into the app."}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      }
-    >
+    <EntryShell>
       <EntrySurfaceCard
-        badge={isInvitationFlow ? "Invited account" : "Create account"}
         className="max-w-lg"
         title="Create an account"
+        titleLevel={1}
         description={
           isInvitationFlow
-            ? "Create an account with the invited email address."
+            ? "Create the account that will accept the invitation."
             : "Use your name, email, and password to get started."
         }
         footer={
@@ -143,22 +91,14 @@ export function SignupPage({
               Already have an account?{" "}
               <Link
                 {...getLoginNavigationTarget(search?.invitation)}
-                className={quietLinkClassName}
+                className={authQuietLinkClassName}
               >
                 Sign in
               </Link>
             </p>
-            <p>We&rsquo;ll verify your email before you continue.</p>
           </div>
         }
       >
-        {isInvitationFlow ? (
-          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm/6 text-muted-foreground">
-            Use the invited email address so the invitation attaches to the new
-            account.
-          </div>
-        ) : null}
-
         <form
           className="flex flex-col gap-6"
           method="post"
@@ -174,7 +114,6 @@ export function SignupPage({
                   <AuthFormField
                     label="Name"
                     htmlFor="name"
-                    invalid={Boolean(errorText)}
                     errorText={errorText}
                   >
                     <Input
@@ -202,7 +141,6 @@ export function SignupPage({
                   <AuthFormField
                     label="Email"
                     htmlFor="email"
-                    invalid={Boolean(errorText)}
                     errorText={errorText}
                   >
                     <Input
@@ -231,42 +169,11 @@ export function SignupPage({
                   <AuthFormField
                     label="Password"
                     htmlFor="password"
-                    invalid={Boolean(errorText)}
-                    descriptionText="Use 8 or more characters."
                     errorText={errorText}
                   >
-                    <Input
+                    <AuthPasswordInput
                       id="password"
                       name={field.name}
-                      type="password"
-                      autoComplete="new-password"
-                      value={field.state.value}
-                      aria-invalid={Boolean(errorText) || undefined}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(event.target.value)
-                      }
-                    />
-                  </AuthFormField>
-                );
-              }}
-            </form.Field>
-
-            <form.Field name="confirmPassword">
-              {(field) => {
-                const errorText = getErrorText(field.state.meta.errors);
-
-                return (
-                  <AuthFormField
-                    label="Confirm password"
-                    htmlFor="confirmPassword"
-                    invalid={Boolean(errorText)}
-                    errorText={errorText}
-                  >
-                    <Input
-                      id="confirmPassword"
-                      name={field.name}
-                      type="password"
                       autoComplete="new-password"
                       value={field.state.value}
                       aria-invalid={Boolean(errorText) || undefined}
@@ -294,7 +201,7 @@ export function SignupPage({
               <Button
                 type="submit"
                 size="lg"
-                className="w-full"
+                className="w-full [view-transition-name:auth-card-action]"
                 loading={isSubmitting}
                 disabled={!isHydrated}
               >

@@ -1,5 +1,4 @@
 import {
-  INVITABLE_ORGANIZATION_ROLES,
   InvitableOrganizationRole,
   IsoDateTimeString,
   ORGANIZATION_ROLES,
@@ -39,7 +38,6 @@ import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { CommandSelect } from "#/components/ui/command-select";
-import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   Dialog,
   DialogClose,
@@ -78,6 +76,10 @@ import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 
+import {
+  INVITE_ROLE_SELECTION_GROUPS,
+  isInviteRole,
+} from "./organization-invite-role-options";
 import {
   decodeOrganizationMemberInviteInput,
   organizationMemberInviteSchema,
@@ -121,27 +123,12 @@ const INVITATION_ACTION_FAILURE_MESSAGE =
   "We couldn't update that invitation. Please try again.";
 const MEMBER_LOAD_FAILURE_MESSAGE =
   "We couldn't load members right now. Please try again.";
-const INVITE_ROLE_LABELS = {
-  admin: "Admin",
-  external: "External collaborator",
-  member: "Member",
-} satisfies Record<OrganizationMemberInviteInput["role"], string>;
 const MEMBER_ROLE_LABELS = {
   admin: "Admin",
   external: "External",
   member: "Member",
   owner: "Owner",
 } satisfies Record<OrganizationRoleType, string>;
-const ROLE_SELECTION_GROUPS = [
-  {
-    label: "Role",
-    options: INVITABLE_ORGANIZATION_ROLES.map((role) => ({
-      label: INVITE_ROLE_LABELS[role],
-      value: role,
-    })),
-  },
-] satisfies readonly CommandSelectGroup[];
-const isInviteRole = Schema.is(InvitableOrganizationRole);
 const isOrganizationRole = Schema.is(OrganizationRole);
 const invitationExpiryFormatter = new Intl.DateTimeFormat("en-IE", {
   day: "numeric",
@@ -863,7 +850,6 @@ export function OrganizationMembersPage({
                     <AuthFormField
                       label="Email"
                       htmlFor="invite-email"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <Input
@@ -891,7 +877,6 @@ export function OrganizationMembersPage({
                     <AuthFormField
                       label="Role"
                       htmlFor="invite-role"
-                      invalid={Boolean(errorText)}
                       errorText={errorText}
                     >
                       <CommandSelect
@@ -899,7 +884,8 @@ export function OrganizationMembersPage({
                         value={field.state.value}
                         placeholder="Pick role"
                         emptyText="No roles found."
-                        groups={ROLE_SELECTION_GROUPS}
+                        groups={INVITE_ROLE_SELECTION_GROUPS}
+                        searchable={false}
                         ariaInvalid={errorText ? true : undefined}
                         open={roleSelectOpen}
                         triggerRef={roleSelectTriggerRef}

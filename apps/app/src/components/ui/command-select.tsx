@@ -22,6 +22,7 @@ import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { cn } from "#/lib/utils";
 
 interface CommandSelectOption {
+  readonly description?: string;
   readonly icon?: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly label: string;
   readonly shortcut?: string;
@@ -48,6 +49,7 @@ export interface CommandSelectProps {
   readonly placeholder: string;
   readonly prefix?: React.ReactNode;
   readonly searchPlaceholder?: string;
+  readonly searchable?: boolean;
   readonly showGroupHeadings?: boolean;
   readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly value: string;
@@ -68,6 +70,7 @@ export function CommandSelect({
   placeholder,
   prefix,
   searchPlaceholder = placeholder,
+  searchable = true,
   showGroupHeadings = true,
   triggerRef,
   value,
@@ -131,7 +134,7 @@ export function CommandSelect({
         align="start"
       >
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          {searchable ? <CommandInput placeholder={searchPlaceholder} /> : null}
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             {visibleGroups.map((group, groupIndex) => (
@@ -142,8 +145,16 @@ export function CommandSelect({
                   {group.options.map((option) => (
                     <CommandItem
                       key={option.value}
-                      aria-label={option.label}
-                      value={option.label}
+                      aria-label={
+                        option.description
+                          ? `${option.label}. ${option.description}`
+                          : option.label
+                      }
+                      value={
+                        option.description
+                          ? `${option.label} ${option.description}`
+                          : option.label
+                      }
                       data-checked={
                         option.value === selectedOption?.value
                           ? "true"
@@ -161,8 +172,13 @@ export function CommandSelect({
                           className="text-muted-foreground"
                         />
                       ) : null}
-                      <span className="min-w-0 flex-1 truncate">
-                        {option.label}
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate">{option.label}</span>
+                        {option.description ? (
+                          <span className="line-clamp-2 text-xs/5 font-normal text-muted-foreground">
+                            {option.description}
+                          </span>
+                        ) : null}
                       </span>
                       {option.shortcut ? (
                         <ShortcutHint

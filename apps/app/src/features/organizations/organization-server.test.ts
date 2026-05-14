@@ -1,6 +1,7 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 
 import {
+  createCurrentServerOrganizationDirect,
   getCurrentServerOrganizationSession,
   getCurrentServerOrganizations,
   setCurrentServerActiveOrganization,
@@ -41,13 +42,22 @@ interface AuthSession {
   user: User;
 }
 
-const { mockedGetRequestHeader } = vi.hoisted(() => ({
+const { mockedGetRequestHeader, mockedSetResponseHeader } = vi.hoisted(() => ({
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
+  mockedSetResponseHeader:
+    vi.fn<(name: string, value: string | string[]) => void>(),
 }));
 
-vi.mock(import("@tanstack/react-start/server"), () => ({
-  getRequestHeader: mockedGetRequestHeader,
-}));
+vi.mock(import("@tanstack/react-start/server"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getRequestHeader: mockedGetRequestHeader as typeof actual.getRequestHeader,
+    setResponseHeader:
+      mockedSetResponseHeader as typeof actual.setResponseHeader,
+  };
+});
 
 describe("server organization lookup", () => {
   let originalApiOrigin: string | undefined;
@@ -324,5 +334,208 @@ describe("server organization lookup", () => {
         method: "POST",
       }
     );
+  }, 1000);
+
+  it("creates an organization with a server-generated slug", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "__Secure-better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "127.0.0.1:4300";
+      }
+
+      if (name === "x-forwarded-host") {
+        return "codex-task.app.ceird.localhost:1355";
+      }
+
+      if (name === "x-forwarded-proto") {
+        return "https";
+      }
+
+      if (name === "origin") {
+        return "https://codex-task.app.ceird.localhost:1355";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+        {
+          headers: {
+            "set-cookie": "better-auth.session_token=next-session",
+          },
+        }
+      )
+    );
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
+    ).resolves.toStrictEqual({
+      id: "org_123",
+      name: "Acme Field Ops",
+      slug: "acme-field-ops",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/create", "http://ceird-sbx-api:4301/api/auth/"),
+      {
+        body: JSON.stringify({
+          name: "Acme Field Ops",
+          slug: "acme-field-ops",
+        }),
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: "__Secure-better-auth.session_token=session-token",
+          origin: "https://codex-task.app.ceird.localhost:1355",
+          "x-forwarded-host": "codex-task.api.ceird.localhost:1355",
+          "x-forwarded-proto": "https",
+        },
+        method: "POST",
+      }
+    );
+    expect(mockedSetResponseHeader).toHaveBeenCalledWith("set-cookie", [
+      "better-auth.session_token=next-session",
+    ]);
+  }, 1000);
+
+  it("preserves an untrusted incoming origin when creating an organization", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "app.ceird.localhost:1355";
+      }
+
+      if (name === "origin") {
+        return "https://attacker.example";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        id: "org_123",
+        name: "Acme Field Ops",
+        slug: "acme-field-ops",
+      })
+    );
+
+    await createCurrentServerOrganizationDirect({ name: "Acme Field Ops" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/create", "http://ceird-sbx-api:4301/api/auth/"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          origin: "https://attacker.example",
+          "x-forwarded-host": "api.ceird.localhost:1355",
+          "x-forwarded-proto": "https",
+        }),
+      })
+    );
+  }, 1000);
+
+  it("retries organization creation with a slug suffix when the base slug is taken", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            code: "ORGANIZATION_ALREADY_EXISTS",
+            message: "Organization already exists",
+          },
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "org_123",
+          name: "Acme Field Ops",
+          slug: "acme-field-ops-retry",
+        })
+      );
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
+    ).resolves.toStrictEqual({
+      id: "org_123",
+      name: "Acme Field Ops",
+      slug: "acme-field-ops-retry",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        name: "Acme Field Ops",
+        slug: "acme-field-ops",
+      }),
+    });
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toMatch(
+      /"slug":"acme-field-ops-[a-z0-9-]+"/
+    );
+  }, 1000);
+
+  it("reports the retry status when organization slug conflict recovery fails", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            code: "ORGANIZATION_ALREADY_EXISTS",
+            message: "Organization already exists",
+          },
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Organization create unavailable",
+          },
+          { status: 503 }
+        )
+      );
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
+    ).rejects.toThrow("Organization creation failed with status 503.");
+  }, 1000);
+
+  it("does not retry organization creation for generic validation failures", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        {
+          code: "BAD_REQUEST",
+          message: "Invalid organization name",
+        },
+        { status: 400 }
+      )
+    );
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
+    ).rejects.toThrow("Organization creation failed with status 400.");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
   }, 1000);
 });

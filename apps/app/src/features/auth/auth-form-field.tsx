@@ -1,5 +1,5 @@
-import { createElement, isValidElement } from "react";
-import type { ReactElement, ReactNode } from "react";
+import { Children, cloneElement, isValidElement } from "react";
+import type { ReactNode } from "react";
 
 import {
   Field,
@@ -28,16 +28,56 @@ function mergeDescribedBy(
   return describedByIds.join(" ");
 }
 
+function addDescribedByToControl(
+  node: ReactNode,
+  controlId: string,
+  idsToAdd: readonly string[]
+): ReactNode {
+  if (
+    isValidElement<{
+      "aria-describedby"?: string;
+      children?: ReactNode;
+      id?: string;
+    }>(node)
+  ) {
+    if (node.props.id === controlId) {
+      return cloneElement(node, {
+        "aria-describedby": mergeDescribedBy(
+          node.props["aria-describedby"],
+          idsToAdd
+        ),
+      });
+    }
+
+    if (node.props.children) {
+      return cloneElement(node, {
+        children: Children.map(node.props.children, (child) =>
+          addDescribedByToControl(child, controlId, idsToAdd)
+        ),
+      });
+    }
+  }
+
+  return node;
+}
+
 export function AuthFormField(props: {
   readonly descriptionText?: ReactNode;
   readonly label: string;
   readonly htmlFor: string;
-  readonly invalid: boolean;
+  readonly validationState?: "invalid";
   readonly errorText?: string;
   readonly children: ReactNode;
 }) {
-  const { children, descriptionText, errorText, htmlFor, invalid, label } =
-    props;
+  const {
+    children,
+    descriptionText,
+    errorText,
+    htmlFor,
+    label,
+    validationState,
+  } = props;
+  const invalid = Boolean(errorText) || validationState === "invalid";
   const descriptionId = descriptionText ? `${htmlFor}-description` : undefined;
   const errorId = errorText ? `${htmlFor}-error` : undefined;
   const describedByIds: string[] = [];
@@ -49,25 +89,11 @@ export function AuthFormField(props: {
   if (errorId) {
     describedByIds.push(errorId);
   }
-  let content = children;
 
-  if (
-    describedByIds.length > 0 &&
-    isValidElement<{ "aria-describedby"?: string }>(
-      children as ReactElement<{ "aria-describedby"?: string }>
-    )
-  ) {
-    const control = children as ReactElement<{ "aria-describedby"?: string }>;
-
-    content = createElement(control.type, {
-      ...control.props,
-      key: control.key,
-      "aria-describedby": mergeDescribedBy(
-        control.props["aria-describedby"],
-        describedByIds
-      ),
-    });
-  }
+  const content =
+    describedByIds.length > 0
+      ? addDescribedByToControl(children, htmlFor, describedByIds)
+      : children;
 
   return (
     <Field data-invalid={invalid || undefined}>

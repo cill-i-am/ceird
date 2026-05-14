@@ -149,7 +149,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Site name"
           htmlFor={`${idPrefix}-name`}
-          invalid={Boolean(errors.name)}
           errorText={errors.name}
         >
           <Input
@@ -163,7 +162,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Service area"
           htmlFor={`${idPrefix}-service-area`}
-          invalid={Boolean(errors.serviceAreaSelection)}
           errorText={errors.serviceAreaSelection}
         >
           <CommandSelect
@@ -185,7 +183,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Address line 1"
           htmlFor={`${idPrefix}-address-line-1`}
-          invalid={Boolean(errors.addressLine1)}
           errorText={errors.addressLine1}
         >
           <Input
@@ -201,7 +198,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Address line 2"
           htmlFor={`${idPrefix}-address-line-2`}
-          invalid={false}
         >
           <Input
             id={`${idPrefix}-address-line-2`}
@@ -213,11 +209,7 @@ export function SiteCreateFields({
         </AuthFormField>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <AuthFormField
-            label="Town"
-            htmlFor={`${idPrefix}-town`}
-            invalid={false}
-          >
+          <AuthFormField label="Town" htmlFor={`${idPrefix}-town`}>
             <Input
               id={`${idPrefix}-town`}
               value={draft.town}
@@ -228,7 +220,6 @@ export function SiteCreateFields({
           <AuthFormField
             label="County"
             htmlFor={`${idPrefix}-county`}
-            invalid={Boolean(errors.county)}
             errorText={errors.county}
           >
             <Input
@@ -243,7 +234,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Eircode"
           htmlFor={`${idPrefix}-eircode`}
-          invalid={Boolean(errors.eircode)}
           errorText={errors.eircode}
         >
           <Input
@@ -257,7 +247,6 @@ export function SiteCreateFields({
         <AuthFormField
           label="Access notes"
           htmlFor={`${idPrefix}-access-notes`}
-          invalid={false}
         >
           <Textarea
             id={`${idPrefix}-access-notes`}

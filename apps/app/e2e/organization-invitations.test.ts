@@ -312,42 +312,44 @@ test.describe("organization invitations", () => {
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
-    const invitedPage = await invitedContext.newPage();
-    const invitedSignupPage = new SignupPage(invitedPage);
+    try {
+      const invitedPage = await invitedContext.newPage();
+      const invitedSignupPage = new SignupPage(invitedPage);
 
-    await invitedPage.goto(`/accept-invitation/${invitationId}`);
-    await expect(
-      invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      invitedPage.getByRole("link", { name: "Sign in" })
-    ).toBeVisible();
-    await expect(
-      invitedPage.getByRole("link", { name: "Create account" })
-    ).toBeVisible();
-    await invitedPage.getByRole("link", { name: "Create account" }).click();
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+      await expect(
+        invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        invitedPage.getByRole("link", { name: "Sign in" })
+      ).toBeVisible();
+      await expect(
+        invitedPage.getByRole("link", { name: "Create account" })
+      ).toBeVisible();
+      await invitedPage.getByRole("link", { name: "Create account" }).click();
 
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/signup?invitation=${invitationId}`
-    );
-    await invitedSignupPage.name.fill("Invited Example");
-    await invitedSignupPage.email.fill(invitedEmail);
-    await invitedSignupPage.password.fill("password123");
-    await invitedSignupPage.confirmPassword.fill("password123");
-    await invitedSignupPage.submit.click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/signup?invitation=${invitationId}`
+      );
+      await invitedSignupPage.name.fill("Invited Example");
+      await invitedSignupPage.email.fill(invitedEmail);
+      await invitedSignupPage.password.fill("password123");
+      await invitedSignupPage.submit.click();
 
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/accept-invitation/${invitationId}`
-    );
-    await expect(
-      invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
-    ).toBeVisible();
-    await invitedPage
-      .getByRole("button", { name: "Accept invitation" })
-      .click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/accept-invitation/${invitationId}`
+      );
+      await expect(
+        invitedPage.getByRole("heading", { name: "Join Acme Field Ops" })
+      ).toBeVisible();
+      await invitedPage
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
 
-    await expectAuthenticatedHome(invitedPage);
-    await invitedContext.close();
+      await expectAuthenticatedHome(invitedPage);
+    } finally {
+      await invitedContext.close();
+    }
   });
 
   test("an existing user can sign in from the invitation and accept it", async ({
@@ -372,28 +374,31 @@ test.describe("organization invitations", () => {
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
-    const invitedPage = await invitedContext.newPage();
-    const invitedLoginPage = new LoginPage(invitedPage);
+    try {
+      const invitedPage = await invitedContext.newPage();
+      const invitedLoginPage = new LoginPage(invitedPage);
 
-    await invitedPage.goto(`/accept-invitation/${invitationId}`);
-    await invitedPage.getByRole("link", { name: "Sign in" }).click();
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+      await invitedPage.getByRole("link", { name: "Sign in" }).click();
 
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/login?invitation=${invitationId}`
-    );
-    await invitedLoginPage.email.fill(invitedEmail);
-    await invitedLoginPage.password.fill(invitedPassword);
-    await invitedLoginPage.submit.click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/login?invitation=${invitationId}`
+      );
+      await invitedLoginPage.email.fill(invitedEmail);
+      await invitedLoginPage.password.fill(invitedPassword);
+      await invitedLoginPage.submit.click();
 
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/accept-invitation/${invitationId}`
-    );
-    await invitedPage
-      .getByRole("button", { name: "Accept invitation" })
-      .click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/accept-invitation/${invitationId}`
+      );
+      await invitedPage
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
 
-    await expectAuthenticatedHome(invitedPage);
-    await invitedContext.close();
+      await expectAuthenticatedHome(invitedPage);
+    } finally {
+      await invitedContext.close();
+    }
   });
 
   test("a non-admin member cannot access the members page", async ({
@@ -418,29 +423,31 @@ test.describe("organization invitations", () => {
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
-    const invitedPage = await invitedContext.newPage();
-    const invitedLoginPage = new LoginPage(invitedPage);
+    try {
+      const invitedPage = await invitedContext.newPage();
+      const invitedLoginPage = new LoginPage(invitedPage);
 
-    await invitedPage.goto(`/accept-invitation/${invitationId}`);
-    await invitedPage.getByRole("link", { name: "Sign in" }).click();
-    await invitedLoginPage.email.fill(invitedEmail);
-    await invitedLoginPage.password.fill(invitedPassword);
-    await invitedLoginPage.submit.click();
-    await invitedPage
-      .getByRole("button", { name: "Accept invitation" })
-      .click();
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+      await invitedPage.getByRole("link", { name: "Sign in" }).click();
+      await invitedLoginPage.email.fill(invitedEmail);
+      await invitedLoginPage.password.fill(invitedPassword);
+      await invitedLoginPage.submit.click();
+      await invitedPage
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
 
-    await expectAuthenticatedHome(invitedPage);
-    await expect(
-      invitedPage.getByRole("link", { name: "Members", exact: true })
-    ).not.toBeVisible();
-    await invitedPage.goto("/members");
-    await expectAuthenticatedHome(invitedPage);
-    await expect(
-      invitedPage.getByRole("button", { name: "Send invite" })
-    ).not.toBeVisible();
-
-    await invitedContext.close();
+      await expectAuthenticatedHome(invitedPage);
+      await expect(
+        invitedPage.getByRole("link", { name: "Members", exact: true })
+      ).not.toBeVisible();
+      await invitedPage.goto("/members");
+      await expectAuthenticatedHome(invitedPage);
+      await expect(
+        invitedPage.getByRole("button", { name: "Send invite" })
+      ).not.toBeVisible();
+    } finally {
+      await invitedContext.close();
+    }
   });
 
   test("the invite flow preserves continuation through forgot-password", async ({
@@ -465,32 +472,35 @@ test.describe("organization invitations", () => {
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
-    const invitedPage = await invitedContext.newPage();
+    try {
+      const invitedPage = await invitedContext.newPage();
 
-    await invitedPage.goto(`/accept-invitation/${invitationId}`);
-    await invitedPage.getByRole("link", { name: "Sign in" }).click();
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/login?invitation=${invitationId}`
-    );
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+      await invitedPage.getByRole("link", { name: "Sign in" }).click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/login?invitation=${invitationId}`
+      );
 
-    await invitedPage.getByRole("link", { name: "Forgot password?" }).click();
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/forgot-password?invitation=${invitationId}`
-    );
+      await invitedPage.getByRole("link", { name: "Forgot password?" }).click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/forgot-password?invitation=${invitationId}`
+      );
 
-    const backToLogin = invitedPage.getByRole("link", {
-      name: "Back to login",
-    });
-    await expect(backToLogin).toHaveAttribute(
-      "href",
-      `/login?invitation=${invitationId}`
-    );
+      const backToLogin = invitedPage.getByRole("link", {
+        name: "Back to login",
+      });
+      await expect(backToLogin).toHaveAttribute(
+        "href",
+        `/login?invitation=${invitationId}`
+      );
 
-    await backToLogin.click();
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/login?invitation=${invitationId}`
-    );
-    await invitedContext.close();
+      await backToLogin.click();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/login?invitation=${invitationId}`
+      );
+    } finally {
+      await invitedContext.close();
+    }
   });
 
   test("the invite page lets a signed-in wrong account recover by switching accounts", async ({
@@ -526,31 +536,33 @@ test.describe("organization invitations", () => {
     );
 
     const invitedContext = await browser.newContext();
-    const invitedPage = await invitedContext.newPage();
-    const invitedLoginPage = new LoginPage(invitedPage);
+    try {
+      const invitedPage = await invitedContext.newPage();
+      const invitedLoginPage = new LoginPage(invitedPage);
 
-    await invitedLoginPage.goto();
-    await invitedLoginPage.email.fill(wrongAccountEmail);
-    await invitedLoginPage.password.fill(wrongAccountPassword);
-    await invitedLoginPage.submit.click();
-    await expect(invitedPage).toHaveURL(`${APP_ORIGIN}/create-organization`);
+      await invitedLoginPage.goto();
+      await invitedLoginPage.email.fill(wrongAccountEmail);
+      await invitedLoginPage.password.fill(wrongAccountPassword);
+      await invitedLoginPage.submit.click();
+      await expect(invitedPage).toHaveURL(`${APP_ORIGIN}/create-organization`);
 
-    await invitedPage.goto(`/accept-invitation/${invitationId}`);
-    await expect(
-      invitedPage.getByText(
-        /This invitation is unavailable\. Sign in with the invited email address or ask for a fresh invite\./i
-      )
-    ).toBeVisible();
-    await invitedPage
-      .getByRole("button", { name: "Sign out and try another account" })
-      .click();
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+      await expect(
+        invitedPage.getByText(
+          /This invitation is unavailable\. Sign in with the invited email address or ask for a fresh invite\./i
+        )
+      ).toBeVisible();
+      await invitedPage
+        .getByRole("button", { name: "Sign out and try another account" })
+        .click();
 
-    await expect(invitedPage).toHaveURL(
-      `${APP_ORIGIN}/login?invitation=${invitationId}`
-    );
-    await expect(invitedLoginPage.heading).toBeVisible();
-
-    await invitedContext.close();
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/login?invitation=${invitationId}`
+      );
+      await expect(invitedLoginPage.heading).toBeVisible();
+    } finally {
+      await invitedContext.close();
+    }
   });
 
   test("the members page shows a load error instead of an empty invitation state when listing fails", async ({

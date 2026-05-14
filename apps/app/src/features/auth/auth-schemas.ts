@@ -12,33 +12,29 @@ export const accountNameSchema = Schema.Trim.pipe(Schema.minLength(2));
 const LoginInputSchema = Schema.Struct({
   email: accountEmailSchema,
   password: accountPasswordSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 const SignupInputSchema = Schema.Struct({
   name: accountNameSchema,
   email: accountEmailSchema,
   password: accountPasswordSchema,
-  confirmPassword: accountPasswordSchema,
-}).pipe(
-  Schema.filter((input) => input.password === input.confirmPassword),
-  Schema.annotations({
-    message: () => "Passwords must match",
-  })
-);
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
 
 const PasswordResetRequestInputSchema = Schema.Struct({
   email: accountEmailSchema,
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 const PasswordResetInputSchema = Schema.Struct({
   password: accountPasswordSchema,
-  confirmPassword: accountPasswordSchema,
-}).pipe(
-  Schema.filter((input) => input.password === input.confirmPassword),
-  Schema.annotations({
-    message: () => "Passwords must match",
-  })
-);
+}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
 
 export type LoginInput = typeof LoginInputSchema.Type;
 export type SignupInput = typeof SignupInputSchema.Type;

@@ -133,6 +133,7 @@ describe("server session lookup", () => {
           accept: "application/json",
           cookie:
             "__Secure-better-auth.session_token=session-token; better-auth.session_token=session-token",
+          origin: "https://linear-ui-refresh.app.ceird.localhost:1355",
           "x-forwarded-host": "linear-ui-refresh.api.ceird.localhost:1355",
           "x-forwarded-proto": "https",
         },

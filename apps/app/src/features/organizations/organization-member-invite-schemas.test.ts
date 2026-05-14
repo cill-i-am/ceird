@@ -51,4 +51,14 @@ describe("organization member invite schemas", () => {
       issues: expect.anything(),
     });
   }, 10_000);
+
+  it("rejects fields outside the invite contract", () => {
+    expect(() =>
+      decodeOrganizationMemberInviteInput({
+        email: "member@example.com",
+        role: "member",
+        organizationId: "org_123",
+      })
+    ).toThrow(/is unexpected/);
+  }, 10_000);
 });

@@ -46,49 +46,37 @@ describe("auth schemas", () => {
     });
   }, 1000);
 
-  it("rejects mismatched signup passwords", () => {
-    expect(() =>
-      decodeSignupInput({
-        name: "Cillian",
-        email: "cillian@example.com",
-        password: "supersecret",
-        confirmPassword: "different-secret",
-      })
-    ).toThrow(/match/i);
-  }, 1000);
-
   it("normalizes surrounding whitespace in signup input", () => {
     expect(
       decodeSignupInput({
         name: " Cillian ",
         email: " cillian@example.com ",
         password: "supersecret",
-        confirmPassword: "supersecret",
       })
     ).toStrictEqual({
       name: "Cillian",
       email: "cillian@example.com",
       password: "supersecret",
-      confirmPassword: "supersecret",
     });
+  }, 1000);
+
+  it("rejects stale password confirmation fields at the signup boundary", () => {
+    expect(() =>
+      decodeSignupInput({
+        name: "Cillian",
+        email: "cillian@example.com",
+        password: "supersecret",
+        confirmPassword: "supersecret",
+      })
+    ).toThrow(/is unexpected/);
   }, 1000);
 
   it("rejects short reset request passwords", () => {
     expect(() =>
       decodePasswordResetInput({
         password: "short",
-        confirmPassword: "short",
       })
     ).toThrow(/8/i);
-  }, 1000);
-
-  it("rejects mismatched reset request passwords", () => {
-    expect(() =>
-      decodePasswordResetInput({
-        password: "supersecret",
-        confirmPassword: "different-secret",
-      })
-    ).toThrow(/match/i);
   }, 1000);
 
   it("normalizes surrounding whitespace in reset request input", () => {

@@ -30,7 +30,7 @@ export function AuthSplitShell(props: AuthSplitShellProps) {
     <div
       data-slot="auth-split-shell"
       className={cn(
-        "w-full",
+        "w-full bg-background text-foreground",
         mode === "full" ? "min-h-screen" : "flex flex-1",
         className
       )}
@@ -38,12 +38,12 @@ export function AuthSplitShell(props: AuthSplitShellProps) {
       <div
         data-slot="auth-split-shell-grid"
         className={cn(
-          "mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-8",
+          "mx-auto grid w-full max-w-6xl gap-4 px-4 py-4 sm:px-6 sm:py-6 lg:gap-6 lg:px-8",
           mode === "full"
-            ? "min-h-screen lg:py-10"
+            ? "min-h-screen lg:py-8"
             : "flex-1 items-start lg:py-8",
           hasContext
-            ? "lg:grid-cols-[minmax(0,0.94fr)_minmax(0,1.06fr)] lg:items-center"
+            ? "lg:grid-cols-[minmax(24rem,0.9fr)_minmax(0,1.1fr)] lg:items-center"
             : "lg:grid-cols-[minmax(0,1fr)]"
         )}
       >
@@ -51,7 +51,10 @@ export function AuthSplitShell(props: AuthSplitShellProps) {
           aria-label="Auth action column"
           data-slot="auth-split-shell-action"
           className={cn(
-            "flex w-full min-w-0 items-center justify-center",
+            "flex w-full min-w-0 justify-center",
+            mode === "full"
+              ? "items-start pt-[clamp(4.5rem,14svh,8rem)] pb-10 sm:pt-[clamp(5rem,16svh,9rem)] lg:items-center lg:pt-0 lg:pb-0"
+              : "items-center",
             hasContext ? "lg:justify-start" : "",
             actionClassName
           )}

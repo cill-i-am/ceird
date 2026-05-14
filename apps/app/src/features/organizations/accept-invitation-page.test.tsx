@@ -98,10 +98,12 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       children,
       search,
       to,
+      viewTransition: _viewTransition,
       ...props
     }: ComponentProps<"a"> & {
       search?: Record<string, string | undefined>;
       to?: string;
+      viewTransition?: unknown;
     }) => {
       const { href: initialHref } = props;
       let href = initialHref;
@@ -209,7 +211,7 @@ describe("accept invitation page", () => {
     expect(
       within(contextColumn).getByText("m***@e***.com")
     ).toBeInTheDocument();
-    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
+    expect(within(contextColumn).getByText("Member")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/login?invitation=inv_123"
@@ -232,9 +234,12 @@ describe("accept invitation page", () => {
 
     await expect(
       screen.findByRole("heading", {
-        name: "Continue with the invited account.",
+        name: "Sign in to continue",
       })
     ).resolves.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Auth context column")
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Acme Field Ops")).not.toBeInTheDocument();
     expect(mockedGetInvitation).not.toHaveBeenCalled();
   }, 10_000);
@@ -270,7 +275,7 @@ describe("accept invitation page", () => {
     expect(
       within(contextColumn).getByText("member@example.com")
     ).toBeInTheDocument();
-    expect(within(contextColumn).getByText("member")).toBeInTheDocument();
+    expect(within(contextColumn).getByText("Member")).toBeInTheDocument();
     expect(
       within(contextColumn).getByText("Acme Field Ops")
     ).toBeInTheDocument();
@@ -397,6 +402,9 @@ describe("accept invitation page", () => {
           invitation: "inv_123",
         },
         to: "/login",
+        viewTransition: {
+          types: ["auth-card"],
+        },
       });
     });
   }, 10_000);

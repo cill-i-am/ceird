@@ -3,14 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 
 import { Button, buttonVariants } from "#/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "#/components/ui/empty";
 import { FieldError, FieldGroup } from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
@@ -22,10 +15,12 @@ import {
   isInvalidPasswordResetTokenError,
 } from "./auth-form-errors";
 import { AuthFormField } from "./auth-form-field";
+import { authQuietLinkClassName } from "./auth-link-styles";
 import {
   getForgotPasswordNavigationTarget,
   getLoginNavigationTarget,
 } from "./auth-navigation";
+import { AuthPasswordInput } from "./auth-password-input";
 import { decodePasswordResetInput, passwordResetSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 import { decodePasswordResetSearch } from "./password-reset-search";
@@ -42,15 +37,10 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
     search ?? {}
   );
   const { invitation, token } = normalizedSearch;
-  const isInvitationFlow = Boolean(invitation);
-  const recoveryContext = isInvitationFlow
-    ? "This will return you to the invitation."
-    : "You'll sign in again with the new password.";
 
   const form = useForm({
     defaultValues: {
       password: "",
-      confirmPassword: "",
     },
     validators: {
       onSubmit: Schema.standardSchemaV1(passwordResetSchema),
@@ -99,32 +89,18 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
 
   if (!token) {
     return (
-      <EntryShell
-        badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-        title="This reset link isn't valid anymore."
-        description="Request a fresh reset link."
-        supportingContent={
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase">
-              Link expired
-            </p>
-            <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
-              Open the newest reset email instead of an older one.
-            </p>
-          </div>
-        }
-      >
+      <EntryShell>
         <EntrySurfaceCard
-          badge="Expired link"
           className="max-w-lg"
           title="Reset link expired"
+          titleLevel={1}
           description="This password reset link is invalid or has expired."
           footer={
             <div className="flex flex-col gap-3">
               <Link
                 {...getForgotPasswordNavigationTarget(invitation)}
                 className={buttonVariants({
-                  className: "w-full",
+                  className: "w-full [view-transition-name:auth-card-action]",
                 })}
               >
                 Request a new reset link
@@ -140,51 +116,29 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
               </Link>
             </div>
           }
-        >
-          <Empty className="min-h-0 bg-muted/20 px-6 py-8">
-            <EmptyHeader>
-              <EmptyTitle>Start again with a fresh link</EmptyTitle>
-              <EmptyDescription>
-                Request a new reset link to continue, or return to login.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </EntrySurfaceCard>
+        />
       </EntryShell>
     );
   }
 
   return (
-    <EntryShell
-      badge={isInvitationFlow ? "Invitation support" : "Password reset"}
-      title="Choose a new password."
-      description="Save it to continue."
-      supportingContent={
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase">
-            Recovery
-          </p>
-          <p className="max-w-[36ch] text-sm/6 text-muted-foreground">
-            {recoveryContext}
-          </p>
-        </div>
-      }
-    >
+    <EntryShell>
       <EntrySurfaceCard
-        badge="Choose a new password"
         className="max-w-lg"
         title="Reset password"
-        description="Use 8 or more characters."
+        titleLevel={1}
+        description="Choose a new password, then sign in again."
         footer={
-          <Link
-            {...getLoginNavigationTarget(invitation)}
-            className={buttonVariants({
-              variant: "link",
-              className: "h-auto justify-start p-0 text-muted-foreground",
-            })}
-          >
-            Back to login
-          </Link>
+          <div className="flex flex-col items-start gap-2 text-sm/6 text-muted-foreground">
+            <p>
+              <Link
+                {...getLoginNavigationTarget(invitation)}
+                className={authQuietLinkClassName}
+              >
+                Back to login
+              </Link>
+            </p>
+          </div>
         }
       >
         <form
@@ -202,42 +156,11 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
                   <AuthFormField
                     label="New password"
                     htmlFor="password"
-                    invalid={Boolean(errorText)}
-                    descriptionText="Use 8 or more characters."
                     errorText={errorText}
                   >
-                    <Input
+                    <AuthPasswordInput
                       id="password"
                       name={field.name}
-                      type="password"
-                      autoComplete="new-password"
-                      value={field.state.value}
-                      aria-invalid={Boolean(errorText) || undefined}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(event.target.value)
-                      }
-                    />
-                  </AuthFormField>
-                );
-              }}
-            </form.Field>
-
-            <form.Field name="confirmPassword">
-              {(field) => {
-                const errorText = getErrorText(field.state.meta.errors);
-
-                return (
-                  <AuthFormField
-                    label="Confirm password"
-                    htmlFor="confirmPassword"
-                    invalid={Boolean(errorText)}
-                    errorText={errorText}
-                  >
-                    <Input
-                      id="confirmPassword"
-                      name={field.name}
-                      type="password"
                       autoComplete="new-password"
                       value={field.state.value}
                       aria-invalid={Boolean(errorText) || undefined}
@@ -265,7 +188,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
               <Button
                 type="submit"
                 size="lg"
-                className="w-full"
+                className="w-full [view-transition-name:auth-card-action]"
                 loading={isSubmitting}
                 disabled={!isHydrated}
               >
