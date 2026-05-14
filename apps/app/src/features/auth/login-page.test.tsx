@@ -129,9 +129,10 @@ describe("login page", () => {
   it("preserves invitation continuation in the forgot-password link", () => {
     render(<LoginPage search={{ invitation: "inv_123" }} />);
 
+    expect(screen.getByLabelText("Auth context column")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Auth context column")
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Run your work. Together." })
+    ).toBeInTheDocument();
 
     const link = screen.getByRole("link", { name: "Forgot password?" });
 

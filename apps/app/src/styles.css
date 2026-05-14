@@ -13,7 +13,7 @@
   --card-foreground: oklch(0.24 0.014 248);
   --popover: oklch(0.994 0.001 248);
   --popover-foreground: oklch(0.24 0.014 248);
-  --primary: oklch(0.43 0.06 244);
+  --primary: oklch(0.55 0.16 255);
   --primary-foreground: oklch(0.992 0.002 95);
   --secondary: oklch(0.948 0.004 248);
   --secondary-foreground: oklch(0.3 0.012 248);
@@ -39,7 +39,7 @@
   --radius: 0.5rem;
   --sidebar: oklch(0.965 0.003 248);
   --sidebar-foreground: oklch(0.24 0.014 248);
-  --sidebar-primary: oklch(0.43 0.06 244);
+  --sidebar-primary: oklch(0.55 0.16 255);
   --sidebar-primary-foreground: oklch(0.992 0.002 95);
   --sidebar-accent: oklch(0.948 0.004 248);
   --sidebar-accent-foreground: oklch(0.28 0.015 248);
@@ -54,7 +54,7 @@
   --card-foreground: oklch(0.94 0.004 95);
   --popover: oklch(0.24 0.008 248);
   --popover-foreground: oklch(0.94 0.004 95);
-  --primary: oklch(0.74 0.046 240);
+  --primary: oklch(0.72 0.1 255);
   --primary-foreground: oklch(0.21 0.01 248);
   --secondary: oklch(0.255 0.008 248);
   --secondary-foreground: oklch(0.94 0.004 95);
@@ -79,7 +79,7 @@
   --chart-5: oklch(0.68 0.08 55);
   --sidebar: oklch(0.205 0.007 248);
   --sidebar-foreground: oklch(0.94 0.004 95);
-  --sidebar-primary: oklch(0.74 0.046 240);
+  --sidebar-primary: oklch(0.72 0.1 255);
   --sidebar-primary-foreground: oklch(0.21 0.01 248);
   --sidebar-accent: oklch(0.265 0.008 248);
   --sidebar-accent-foreground: oklch(0.94 0.004 95);
@@ -270,5 +270,245 @@
   }
   .maplibregl-popup-tip {
     @apply hidden!;
+  }
+}
+
+@layer components {
+  .entry-atmosphere {
+    --entry-dot-size: 1px;
+    --entry-grid-size: 24px;
+    --entry-blueprint-opacity: 0.36;
+    --entry-grid-opacity: 0.58;
+    --entry-glow-opacity: 0.96;
+    --entry-trace-opacity: 0.62;
+    --entry-motion-duration: 34s;
+    background:
+      radial-gradient(
+        ellipse at 58% 52%,
+        color-mix(in oklab, var(--primary) 8%, transparent) 0,
+        transparent 32rem
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--background) 94%, var(--primary) 6%) 0%,
+        var(--background) 72%
+      );
+  }
+
+  .dark .entry-atmosphere {
+    --entry-blueprint-opacity: 0.32;
+    --entry-grid-opacity: 0.52;
+    --entry-glow-opacity: 0.72;
+    --entry-trace-opacity: 0.5;
+    background:
+      radial-gradient(
+        ellipse at 58% 52%,
+        color-mix(in oklab, var(--primary) 16%, transparent) 0,
+        transparent 34rem
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--background) 82%, var(--primary) 18%) 0%,
+        var(--background) 74%
+      );
+  }
+
+  .entry-atmosphere-quiet {
+    --entry-blueprint-opacity: 0.3;
+    --entry-grid-opacity: 0.48;
+    --entry-glow-opacity: 0.72;
+    --entry-trace-opacity: 0.4;
+    --entry-motion-duration: 42s;
+  }
+
+  .entry-atmosphere-setup {
+    --entry-blueprint-opacity: 0.34;
+    --entry-grid-opacity: 0.72;
+    --entry-glow-opacity: 1;
+    --entry-trace-opacity: 0.7;
+    --entry-motion-duration: 30s;
+  }
+
+  .entry-atmosphere__glow,
+  .entry-atmosphere__blueprint,
+  .entry-atmosphere__grid,
+  .entry-atmosphere__trace {
+    position: absolute;
+    inset: 0;
+  }
+
+  .entry-atmosphere__glow {
+    opacity: var(--entry-glow-opacity);
+    transform: translate3d(-2%, -1%, 0) scale(1.04);
+    background:
+      radial-gradient(
+        ellipse at 57% 52%,
+        color-mix(in oklab, var(--primary) 38%, transparent) 0,
+        transparent 25rem
+      ),
+      radial-gradient(
+        ellipse at 37% 64%,
+        color-mix(in oklab, var(--primary) 22%, transparent) 0,
+        transparent 26rem
+      );
+    filter: blur(38px);
+    animation: entry-atmosphere-drift var(--entry-motion-duration)
+      cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
+    will-change: transform, opacity;
+  }
+
+  .entry-atmosphere__blueprint {
+    opacity: var(--entry-blueprint-opacity);
+    background:
+      linear-gradient(
+          90deg,
+          transparent 0 13.4rem,
+          color-mix(in oklab, var(--foreground) 12%, transparent) 13.4rem
+            calc(13.4rem + 1px),
+          transparent calc(13.4rem + 1px)
+        )
+        0 0 / 31rem 100%,
+      linear-gradient(
+          0deg,
+          transparent 0 10.8rem,
+          color-mix(in oklab, var(--foreground) 10%, transparent) 10.8rem
+            calc(10.8rem + 1px),
+          transparent calc(10.8rem + 1px)
+        )
+        0 0 / 100% 23rem,
+      linear-gradient(
+          90deg,
+          transparent 0 5.5rem,
+          color-mix(in oklab, var(--primary) 18%, transparent) 5.5rem
+            calc(5.5rem + 1px),
+          transparent calc(5.5rem + 1px)
+        )
+        4% 28% / 30rem 12rem no-repeat,
+      linear-gradient(
+          0deg,
+          transparent 0 4.75rem,
+          color-mix(in oklab, var(--primary) 16%, transparent) 4.75rem
+            calc(4.75rem + 1px),
+          transparent calc(4.75rem + 1px)
+        )
+        4% 28% / 30rem 12rem no-repeat,
+      linear-gradient(
+          90deg,
+          color-mix(in oklab, var(--foreground) 9%, transparent) 0 1px,
+          transparent 1px 100%
+        )
+        72% 3% / 20rem 13rem no-repeat,
+      linear-gradient(
+          0deg,
+          color-mix(in oklab, var(--foreground) 9%, transparent) 0 1px,
+          transparent 1px 100%
+        )
+        72% 3% / 20rem 13rem no-repeat,
+      linear-gradient(
+          90deg,
+          color-mix(in oklab, var(--foreground) 8%, transparent) 0 1px,
+          transparent 1px 100%
+        )
+        86% 78% / 12rem 8rem no-repeat,
+      linear-gradient(
+          0deg,
+          color-mix(in oklab, var(--foreground) 8%, transparent) 0 1px,
+          transparent 1px 100%
+        )
+        86% 78% / 12rem 8rem no-repeat,
+      radial-gradient(
+        circle at 27% 12%,
+        transparent 0 1.55rem,
+        color-mix(in oklab, var(--foreground) 10%, transparent) 1.6rem 1.66rem,
+        transparent 1.7rem
+      ),
+      radial-gradient(
+        circle at 82% 79%,
+        transparent 0 2rem,
+        color-mix(in oklab, var(--foreground) 10%, transparent) 2.05rem 2.12rem,
+        transparent 2.16rem
+      );
+    mask-image: linear-gradient(90deg, black, black 84%, transparent 100%);
+  }
+
+  .entry-atmosphere__grid {
+    opacity: var(--entry-grid-opacity);
+    background-image:
+      radial-gradient(
+        circle,
+        color-mix(in oklab, var(--foreground) 20%, transparent)
+          var(--entry-dot-size),
+        transparent calc(var(--entry-dot-size) + 0.7px)
+      ),
+      linear-gradient(
+        115deg,
+        transparent 0 42%,
+        color-mix(in oklab, var(--primary) 12%, transparent) 48% 52%,
+        transparent 58% 100%
+      );
+    background-size:
+      var(--entry-grid-size) var(--entry-grid-size),
+      100% 100%;
+    mask-image: radial-gradient(
+      ellipse at 55% 52%,
+      black 0 62%,
+      transparent 92%
+    );
+  }
+
+  .entry-atmosphere__trace {
+    opacity: var(--entry-trace-opacity);
+    background:
+      radial-gradient(
+        circle at 64% 42%,
+        color-mix(in oklab, var(--primary) 82%, transparent) 0 3px,
+        transparent 4px
+      ),
+      radial-gradient(
+        circle at 70% 47%,
+        color-mix(in oklab, var(--success) 70%, transparent) 0 2.5px,
+        transparent 3.5px
+      ),
+      radial-gradient(
+        circle at 6% 31%,
+        color-mix(in oklab, var(--primary) 76%, transparent) 0 3px,
+        transparent 4px
+      ),
+      radial-gradient(
+        circle at 37% 88%,
+        color-mix(in oklab, var(--primary) 56%, transparent) 0 2px,
+        transparent 3px
+      );
+    animation: entry-atmosphere-trace 8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  }
+
+  @keyframes entry-atmosphere-drift {
+    0% {
+      opacity: calc(var(--entry-glow-opacity) * 0.82);
+      transform: translate3d(-2%, -1%, 0) scale(1.04);
+    }
+
+    100% {
+      opacity: var(--entry-glow-opacity);
+      transform: translate3d(2.4%, 1.6%, 0) scale(1.08);
+    }
+  }
+
+  @keyframes entry-atmosphere-trace {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+
+    50% {
+      transform: translate3d(10px, -6px, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .entry-atmosphere__glow,
+    .entry-atmosphere__trace {
+      animation: none;
+    }
   }
 }

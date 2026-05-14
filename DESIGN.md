@@ -5,7 +5,7 @@ colors:
   background: "oklch(0.976 0.003 248)"
   foreground: "oklch(0.24 0.014 248)"
   card: "oklch(0.992 0.002 248)"
-  primary: "oklch(0.43 0.06 244)"
+  primary: "oklch(0.55 0.16 255)"
   primary-foreground: "oklch(0.992 0.002 95)"
   secondary: "oklch(0.948 0.004 248)"
   muted: "oklch(0.958 0.003 248)"
@@ -105,7 +105,7 @@ The palette is a cool, low-chroma operational system: tinted neutrals carry most
 
 ### Primary
 
-- **Work Blue** (`oklch(0.43 0.06 244)`): Primary actions, active navigation, selected states, and focused task affordances. It should be rare enough to retain authority.
+- **Work Blue** (`oklch(0.55 0.16 255)`): Primary actions, active navigation, selected states, and focused task affordances. It is intentionally brighter than the neutral workspace palette so primary actions feel clear, confident, and delightful without becoming decorative.
 - **Work Blue Ring** (`oklch(0.63 0.028 244)`): Focus rings and keyboard-visible outlines. Pair with border changes so focus remains crisp on both light and dark themes.
 
 ### Secondary

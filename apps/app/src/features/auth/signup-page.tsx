@@ -78,9 +78,9 @@ export function SignupPage({
   const isInvitationFlow = Boolean(search?.invitation);
 
   return (
-    <EntryShell>
+    <EntryShell atmosphere="standard">
       <EntrySurfaceCard
-        className="max-w-lg"
+        className="max-w-xl"
         title="Create an account"
         titleLevel={1}
         description={

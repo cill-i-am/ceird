@@ -95,7 +95,7 @@ export function OrganizationOnboardingPage() {
 
   return (
     <main className="flex min-h-screen">
-      <EntryShell>
+      <EntryShell atmosphere="setup">
         {createdOrganization ? (
           <InviteMembersStep
             organization={createdOrganization}
@@ -104,7 +104,7 @@ export function OrganizationOnboardingPage() {
           />
         ) : (
           <EntrySurfaceCard
-            className="max-w-lg"
+            className="max-w-xl"
             title="Create your team"
             titleLevel={1}
             description="This keeps your jobs, sites, and invites in one shared place."
@@ -225,7 +225,7 @@ function InviteMembersStep({
 
   return (
     <EntrySurfaceCard
-      className="max-w-lg"
+      className="max-w-xl"
       title="Invite members"
       titleLevel={1}
       description="Add the people who need access to jobs, sites, and invites."

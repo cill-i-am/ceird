@@ -92,9 +92,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
 
   if (!token) {
     return (
-      <EntryShell>
+      <EntryShell atmosphere="quiet">
         <EntrySurfaceCard
-          className="max-w-lg"
+          className="max-w-xl"
           title="Reset link expired"
           titleLevel={1}
           description="This password reset link is invalid or has expired."
@@ -125,9 +125,9 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
   }
 
   return (
-    <EntryShell>
+    <EntryShell atmosphere="quiet">
       <EntrySurfaceCard
-        className="max-w-lg"
+        className="max-w-xl"
         title="Reset password"
         titleLevel={1}
         description="Choose a new password, then sign in again."

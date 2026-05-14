@@ -80,9 +80,9 @@ export function PasswordResetRequestPage({
   });
 
   return (
-    <EntryShell>
+    <EntryShell atmosphere="quiet">
       <EntrySurfaceCard
-        className="max-w-lg"
+        className="max-w-xl"
         title={isSubmitted ? "Check your email" : "Reset your password"}
         titleLevel={1}
         description={

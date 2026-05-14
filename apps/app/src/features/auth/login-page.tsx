@@ -70,9 +70,9 @@ export function LoginPage({
   const isInvitationFlow = Boolean(search?.invitation);
 
   return (
-    <EntryShell>
+    <EntryShell atmosphere="quiet">
       <EntrySurfaceCard
-        className="max-w-lg"
+        className="max-w-xl"
         title="Sign in"
         titleLevel={1}
         description={

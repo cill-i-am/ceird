@@ -13,10 +13,13 @@ import { cn } from "#/lib/utils";
 import { AuthContextPanel } from "./auth-context-panel";
 import { AuthSplitShell } from "./auth-split-shell";
 import type { AuthSplitShellMode } from "./auth-split-shell";
+import { EntryProductContext } from "./entry-atmosphere";
+import type { EntryAtmosphereVariant } from "./entry-atmosphere";
 
 type EntryShellMode = AuthSplitShellMode;
 
 interface EntryShellProps {
+  readonly atmosphere?: EntryAtmosphereVariant;
   readonly children: ReactNode;
   readonly context?: ReactNode;
   readonly mode?: EntryShellMode;
@@ -42,13 +45,20 @@ interface EntrySurfaceCardProps {
 }
 
 export function EntryShell(props: EntryShellProps) {
-  const { children, context, mode = "full" } = props;
+  const { atmosphere, children, context, mode = "full" } = props;
+  const resolvedContext =
+    context === undefined && mode === "full" ? (
+      <EntryProductContext />
+    ) : (
+      context
+    );
 
   return (
     <AuthSplitShell
+      atmosphere={atmosphere}
       mode={mode}
       actionClassName={cn(mode === "full" ? "lg:pr-2" : "lg:pt-2")}
-      context={context}
+      context={resolvedContext}
     >
       {children}
     </AuthSplitShell>
@@ -98,7 +108,7 @@ export function EntrySurfaceCard(props: EntrySurfaceCardProps) {
   return (
     <Card
       className={cn(
-        "w-full max-w-xl animate-in rounded-2xl border border-border/70 bg-card/95 shadow-[0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] ring-1 ring-border/40 duration-200 ease-out [contain:layout_paint] fade-in-0 [view-transition-name:auth-card] slide-in-from-bottom-1 motion-reduce:animate-none",
+        "w-full max-w-xl animate-in rounded-2xl border border-border/70 bg-card shadow-[0_18px_60px_color-mix(in_oklab,var(--primary)_12%,transparent),0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] ring-1 ring-border/40 duration-200 ease-out [contain:layout_paint] fade-in-0 [view-transition-name:auth-card] slide-in-from-bottom-1 motion-reduce:animate-none",
         className
       )}
     >

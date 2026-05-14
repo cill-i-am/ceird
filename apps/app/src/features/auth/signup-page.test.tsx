@@ -191,12 +191,13 @@ describe("signup page", () => {
     expect(mockedSignUpEmail).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("keeps invitation setup context in the right column", () => {
+  it("keeps invitation navigation while showing the product context", () => {
     render(<SignupPage search={{ invitation: "inv_123" }} />);
 
+    expect(screen.getByLabelText("Auth context column")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Auth context column")
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Run your work. Together." })
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/login?invitation=inv_123"

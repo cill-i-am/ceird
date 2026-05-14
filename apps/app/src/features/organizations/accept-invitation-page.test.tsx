@@ -237,9 +237,10 @@ describe("accept invitation page", () => {
         name: "Sign in to continue",
       })
     ).resolves.toBeInTheDocument();
+    expect(screen.getByLabelText("Auth context column")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Auth context column")
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Run your work. Together." })
+    ).toBeInTheDocument();
     expect(screen.queryByText("Acme Field Ops")).not.toBeInTheDocument();
     expect(mockedGetInvitation).not.toHaveBeenCalled();
   }, 10_000);

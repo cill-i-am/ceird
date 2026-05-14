@@ -51,6 +51,10 @@ describe("auth split shell", () => {
     expect(
       within(contextColumn).getByText("Invited email: person@example.com")
     ).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-slot="entry-atmosphere"]')
+    ).toHaveAttribute("data-variant", "standard");
+    expect(container.querySelector('[data-slot="entry-logo"]')).not.toBeNull();
   }, 10_000);
 
   it("treats falsy boolean context as absent and collapses to a single-column layout", () => {
@@ -82,7 +86,7 @@ describe("auth split shell", () => {
     );
   }, 10_000);
 
-  it("keeps the compatibility shell single-column by default and accepts composed context", () => {
+  it("renders default product context and accepts composed context", () => {
     const { container, rerender } = render(
       <EntryShell>
         <button type="button">Action</button>
@@ -93,7 +97,10 @@ describe("auth split shell", () => {
       '[data-slot="auth-split-shell-context"]'
     );
 
-    expect(contextColumn).toBeNull();
+    expect(contextColumn).not.toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Run your work. Together." })
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("custom-context-details")
     ).not.toBeInTheDocument();
@@ -133,6 +140,9 @@ describe("auth split shell", () => {
     expect(
       screen.getByRole("heading", { name: "Your account is ready." })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Run your work. Together." })
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Invited email")).toBeInTheDocument();
     expect(screen.getByText("person@example.com")).toBeInTheDocument();
     expect(screen.getByText("Verification status")).toBeInTheDocument();
@@ -140,5 +150,17 @@ describe("auth split shell", () => {
     expect(
       container.querySelector('[data-slot="entry-support-panel"]')
     ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("passes the requested entry atmosphere through the compatibility shell", () => {
+    const { container } = render(
+      <EntryShell atmosphere="setup">
+        <button type="button">Action</button>
+      </EntryShell>
+    );
+
+    expect(
+      container.querySelector('[data-slot="entry-atmosphere"]')
+    ).toHaveAttribute("data-variant", "setup");
   }, 10_000);
 });
