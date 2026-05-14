@@ -386,6 +386,7 @@ function WorkspaceSetupStepper({ phase }: { readonly phase: SetupPhase }) {
         <WorkspaceSetupStep label="Create team" state={createState} />
         <span
           aria-hidden="true"
+          data-slot="workspace-setup-connector"
           className={cn(
             "h-px min-w-8 flex-1 rounded-full transition-[background-color,opacity] duration-200 motion-reduce:transition-none",
             getSetupConnectorClassName(createState)

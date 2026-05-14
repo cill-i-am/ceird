@@ -89,6 +89,7 @@ describe("auth split shell", () => {
   it("renders default product context and accepts composed context", () => {
     const { container, rerender } = render(
       <EntryShell>
+        <h1>Action</h1>
         <button type="button">Action</button>
       </EntryShell>
     );
@@ -99,8 +100,9 @@ describe("auth split shell", () => {
 
     expect(contextColumn).not.toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Run your work. Together." })
-    ).toBeInTheDocument();
+      container.querySelector('[data-slot="entry-product-headline"]')
+    ).toHaveTextContent("Run your work. Together.");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
       screen.queryByTestId("custom-context-details")
     ).not.toBeInTheDocument();
@@ -133,6 +135,7 @@ describe("auth split shell", () => {
           </EntryContextPanel>
         }
       >
+        <h1>Action</h1>
         <button type="button">Action</button>
       </EntryShell>
     );

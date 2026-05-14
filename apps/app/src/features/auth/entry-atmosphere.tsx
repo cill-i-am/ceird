@@ -85,10 +85,13 @@ export function EntryProductContext({
       )}
     >
       <div className="flex flex-col gap-4">
-        <h1 className="text-3xl leading-[1.08] font-medium tracking-normal text-balance sm:text-4xl">
+        <p
+          data-slot="entry-product-headline"
+          className="text-3xl leading-[1.08] font-medium tracking-normal text-balance sm:text-4xl"
+        >
           Run your work. <br />
           Together.
-        </h1>
+        </p>
         <p className="max-w-[33ch] text-sm/7 text-muted-foreground sm:text-base/7">
           Ceird brings jobs, sites, and your team into one place so you can work
           with clarity and confidence.

@@ -135,6 +135,19 @@ describe("organization onboarding page", () => {
       within(initialProgress).getByTitle("Current: Create team")
     ).toBeInTheDocument();
     expect(
+      within(initialProgress).getByTitle("Current: Create team")
+    ).toHaveClass("bg-primary/15", "text-primary", "ring-primary/35");
+    expect(
+      within(initialProgress)
+        .getByTitle("Current: Create team")
+        .querySelector(".bg-primary")
+    ).not.toBeNull();
+    expect(
+      initialProgress.querySelector('[data-slot="workspace-setup-connector"]')
+    ).toHaveClass(
+      "[background:linear-gradient(90deg,color-mix(in_oklab,var(--primary)_58%,var(--border))_0_48%,var(--border)_52%_100%)]"
+    );
+    expect(
       within(initialProgress).getByTitle("Optional: Invite members")
     ).toBeInTheDocument();
     expect(
@@ -165,6 +178,14 @@ describe("organization onboarding page", () => {
     expect(
       within(inviteProgress).getByTitle("Current: Invite members")
     ).toBeInTheDocument();
+    expect(
+      within(inviteProgress).getByTitle("Current: Invite members")
+    ).toHaveClass("bg-primary/15", "text-primary", "ring-primary/35");
+    expect(
+      within(inviteProgress)
+        .getByTitle("Current: Invite members")
+        .querySelector(".bg-primary")
+    ).not.toBeNull();
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
 

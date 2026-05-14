@@ -321,6 +321,10 @@
     --entry-motion-duration: 42s;
   }
 
+  .entry-atmosphere-quiet .entry-atmosphere__trace {
+    animation: none;
+  }
+
   .entry-atmosphere-setup {
     --entry-blueprint-opacity: 0.34;
     --entry-grid-opacity: 0.72;
@@ -338,6 +342,8 @@
   }
 
   .entry-atmosphere__glow {
+    inset: 8% 10%;
+    border-radius: 999px;
     opacity: var(--entry-glow-opacity);
     transform: translate3d(-2%, -1%, 0) scale(1.04);
     background:
@@ -354,7 +360,6 @@
     filter: blur(38px);
     animation: entry-atmosphere-drift var(--entry-motion-duration)
       cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
-    will-change: transform, opacity;
   }
 
   .entry-atmosphere__blueprint {

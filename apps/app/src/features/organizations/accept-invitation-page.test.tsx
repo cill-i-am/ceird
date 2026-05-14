@@ -239,8 +239,9 @@ describe("accept invitation page", () => {
     ).resolves.toBeInTheDocument();
     expect(screen.getByLabelText("Auth context column")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Run your work. Together." })
-    ).toBeInTheDocument();
+      document.querySelector('[data-slot="entry-product-headline"]')
+    ).toHaveTextContent("Run your work. Together.");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByText("Acme Field Ops")).not.toBeInTheDocument();
     expect(mockedGetInvitation).not.toHaveBeenCalled();
   }, 10_000);
