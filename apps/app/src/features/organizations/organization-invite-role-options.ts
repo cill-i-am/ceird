@@ -14,7 +14,7 @@ export const INVITE_ROLE_LABELS = {
   member: "Member",
 } satisfies Record<OrganizationMemberInviteInput["role"], string>;
 
-export const INVITE_ROLE_DESCRIPTIONS = {
+const INVITE_ROLE_DESCRIPTIONS = {
   admin: "Can manage members, settings, jobs, and sites.",
   external: "For subcontractors or partners with scoped access.",
   member: "For teammates working day to day in the workspace.",

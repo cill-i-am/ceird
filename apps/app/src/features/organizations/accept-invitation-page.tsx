@@ -214,11 +214,21 @@ function InvitationContextContent({
   );
 }
 
-export function AcceptInvitationPage({
-  invitationId,
-}: {
-  readonly invitationId: string;
-}) {
+interface AcceptInvitationPageModel {
+  readonly cardCopy: ReturnType<typeof getInvitationCardCopy>;
+  readonly handleAcceptInvitation: () => Promise<void>;
+  readonly handleSwitchAccount: () => Promise<void>;
+  readonly invitation?: InvitationPreviewDetails | InvitationDetails;
+  readonly isAcceptingInvitation: boolean;
+  readonly isSwitchingAccount: boolean;
+  readonly shellCopy: ReturnType<typeof getInvitationShellCopy>;
+  readonly showsAcceptInvitationCta: boolean;
+  readonly state: InvitationPageState;
+}
+
+function useAcceptInvitationPageModel(
+  invitationId: string
+): AcceptInvitationPageModel {
   const navigate = useNavigate({ from: "/accept-invitation/$invitationId" });
   const [state, setState] = React.useState<InvitationPageState>({
     status: "loading",
@@ -414,6 +424,46 @@ export function AcceptInvitationPage({
       state.status === "submitting") &&
     invitation !== undefined;
 
+  return {
+    cardCopy,
+    handleAcceptInvitation,
+    handleSwitchAccount,
+    invitation,
+    isAcceptingInvitation,
+    isSwitchingAccount,
+    shellCopy,
+    showsAcceptInvitationCta,
+    state,
+  };
+}
+
+function AcceptInvitationView({
+  cardCopy,
+  handleAcceptInvitation,
+  handleSwitchAccount,
+  invitation,
+  invitationId,
+  isAcceptingInvitation,
+  isSwitchingAccount,
+  shellCopy,
+  showsAcceptInvitationCta,
+  state,
+}: AcceptInvitationPageModel & {
+  readonly invitationId: string;
+}) {
+  const footer = showsAcceptInvitationCta ? (
+    <Button
+      className="w-full [view-transition-name:auth-card-action]"
+      size="lg"
+      loading={isAcceptingInvitation}
+      onClick={() => {
+        void handleAcceptInvitation();
+      }}
+    >
+      {isAcceptingInvitation ? "Accepting invitation…" : "Accept invitation"}
+    </Button>
+  ) : undefined;
+
   return (
     <EntryShell
       context={
@@ -433,86 +483,117 @@ export function AcceptInvitationPage({
         title={cardCopy.title}
         titleLevel={invitation ? undefined : 1}
         description={cardCopy.description}
-        footer={
-          showsAcceptInvitationCta ? (
-            <Button
-              className="w-full [view-transition-name:auth-card-action]"
-              size="lg"
-              loading={isAcceptingInvitation}
-              onClick={() => {
-                void handleAcceptInvitation();
-              }}
-            >
-              {isAcceptingInvitation
-                ? "Accepting invitation…"
-                : "Accept invitation"}
-            </Button>
-          ) : undefined
-        }
+        footer={footer}
       >
-        {state.status === "loading" ? (
-          <div
-            aria-label="Checking workspace details"
-            role="status"
-            className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-muted/25 p-4"
-          >
-            <Skeleton className="h-4 w-40 rounded-full" />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Skeleton className="h-14 rounded-xl" />
-              <Skeleton className="h-14 rounded-xl" />
-              <Skeleton className="h-14 rounded-xl" />
-              <Skeleton className="h-14 rounded-xl" />
-            </div>
-          </div>
-        ) : null}
-
-        {state.status === "signed-out" ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                {...getLoginNavigationTarget(invitationId)}
-                className={buttonVariants({
-                  className:
-                    "w-full sm:flex-1 [view-transition-name:auth-card-action]",
-                })}
-              >
-                Sign in
-              </Link>
-              <Link
-                {...getSignupNavigationTarget(invitationId)}
-                className={buttonVariants({
-                  className: "w-full sm:flex-1",
-                  variant: "secondary",
-                })}
-              >
-                Create account
-              </Link>
-            </div>
-          </div>
-        ) : null}
-
-        {state.status === "error" || state.status === "switching-account" ? (
-          <Alert variant="destructive">
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {(state.status === "error" && state.canSwitchAccount) ||
-        isSwitchingAccount ? (
-          <Button
-            className="w-full"
-            variant="outline"
-            loading={isSwitchingAccount}
-            onClick={() => {
-              void handleSwitchAccount();
-            }}
-          >
-            {isSwitchingAccount
-              ? "Signing out..."
-              : "Sign out and try another account"}
-          </Button>
-        ) : null}
+        <AcceptInvitationCardBody
+          invitationId={invitationId}
+          isSwitchingAccount={isSwitchingAccount}
+          onSwitchAccount={handleSwitchAccount}
+          state={state}
+        />
       </EntrySurfaceCard>
     </EntryShell>
   );
+}
+
+function AcceptInvitationCardBody({
+  invitationId,
+  isSwitchingAccount,
+  onSwitchAccount,
+  state,
+}: {
+  readonly invitationId: string;
+  readonly isSwitchingAccount: boolean;
+  readonly onSwitchAccount: () => Promise<void>;
+  readonly state: InvitationPageState;
+}) {
+  const showsSwitchAccountCta =
+    (state.status === "error" && state.canSwitchAccount) || isSwitchingAccount;
+
+  return (
+    <>
+      {state.status === "loading" ? <InvitationLoadingState /> : null}
+      {state.status === "signed-out" ? (
+        <InvitationSignedOutActions invitationId={invitationId} />
+      ) : null}
+      {state.status === "error" || state.status === "switching-account" ? (
+        <Alert variant="destructive">
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {showsSwitchAccountCta ? (
+        <Button
+          className="w-full"
+          variant="outline"
+          loading={isSwitchingAccount}
+          onClick={() => {
+            void onSwitchAccount();
+          }}
+        >
+          {isSwitchingAccount
+            ? "Signing out..."
+            : "Sign out and try another account"}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
+function InvitationLoadingState() {
+  return (
+    <div
+      aria-label="Checking workspace details"
+      role="status"
+      className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-muted/25 p-4"
+    >
+      <Skeleton className="h-4 w-40 rounded-full" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Skeleton className="h-14 rounded-xl" />
+        <Skeleton className="h-14 rounded-xl" />
+        <Skeleton className="h-14 rounded-xl" />
+        <Skeleton className="h-14 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+function InvitationSignedOutActions({
+  invitationId,
+}: {
+  readonly invitationId: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Link
+          {...getLoginNavigationTarget(invitationId)}
+          className={buttonVariants({
+            className:
+              "w-full sm:flex-1 [view-transition-name:auth-card-action]",
+          })}
+        >
+          Sign in
+        </Link>
+        <Link
+          {...getSignupNavigationTarget(invitationId)}
+          className={buttonVariants({
+            className: "w-full sm:flex-1",
+            variant: "secondary",
+          })}
+        >
+          Create account
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function AcceptInvitationPage({
+  invitationId,
+}: {
+  readonly invitationId: string;
+}) {
+  const model = useAcceptInvitationPageModel(invitationId);
+
+  return <AcceptInvitationView invitationId={invitationId} {...model} />;
 }

@@ -14,11 +14,15 @@ export class CreateOrganizationPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.locator('[data-slot="card-title"]', {
-      hasText: "Create your team",
+    this.heading = page.getByRole("heading", {
+      exact: true,
+      level: 1,
+      name: "Create your team",
     });
-    this.inviteHeading = page.locator('[data-slot="card-title"]', {
-      hasText: "Invite members",
+    this.inviteHeading = page.getByRole("heading", {
+      exact: true,
+      level: 1,
+      name: "Invite members",
     });
     this.name = page.getByLabel("Team name");
     this.skipInvites = page.getByRole("button", { name: "Skip for now" });

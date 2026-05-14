@@ -30,7 +30,7 @@ import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { cn } from "#/lib/utils";
 
-export interface CommandSelectOption {
+interface CommandSelectOption {
   readonly description?: string;
   readonly icon?: React.ComponentProps<typeof HugeiconsIcon>["icon"];
   readonly label: string;

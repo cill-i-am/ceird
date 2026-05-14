@@ -1,6 +1,6 @@
 import { Duration, Effect } from "effect";
 
-export const MUTATION_SUCCESS_MINIMUM_PENDING_MS = 500;
+const MUTATION_SUCCESS_MINIMUM_PENDING_MS = 500;
 
 export function beginMutationFeedback({
   minimumDurationMs = MUTATION_SUCCESS_MINIMUM_PENDING_MS,
@@ -18,7 +18,7 @@ export function beginMutationFeedback({
   };
 }
 
-export async function waitForMinimumMutationPendingDuration({
+async function waitForMinimumMutationPendingDuration({
   minimumDurationMs = MUTATION_SUCCESS_MINIMUM_PENDING_MS,
   startedAt,
 }: {
