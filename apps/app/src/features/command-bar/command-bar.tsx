@@ -14,11 +14,11 @@ import {
   CommandSeparator,
 } from "#/components/ui/command";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "#/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogTitle,
+} from "#/components/ui/responsive-dialog";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
 
@@ -174,15 +174,17 @@ function CommandBarDialog({
   const groups = React.useMemo(() => groupCommandActions(actions), [actions]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent
         className="overflow-hidden p-0 sm:max-w-xl"
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">Command bar</DialogTitle>
-        <DialogDescription className="sr-only">
+        <ResponsiveDialogTitle className="sr-only">
+          Command bar
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription className="sr-only">
           Search for a command to run.
-        </DialogDescription>
+        </ResponsiveDialogDescription>
         <Command>
           <CommandInput placeholder="Type a command or search..." />
           <CommandList className="max-h-[min(28rem,calc(100vh-10rem))]">
@@ -227,8 +229,8 @@ function CommandBarDialog({
             ))}
           </CommandList>
         </Command>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 

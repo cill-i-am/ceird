@@ -85,6 +85,77 @@ describe("shortcut hint", () => {
   );
 
   it(
+    "uses an outline-only tooltip keycap",
+    {
+      timeout: 1000,
+    },
+    () => {
+      render(
+        <div data-slot="tooltip-content">
+          <ShortcutHint hotkey="Mod+B" label="Toggle navigation" />
+        </div>
+      );
+
+      const shortcut = screen.getByLabelText(
+        /Toggle navigation shortcut: (Cmd|Ctrl)\+B/
+      );
+      const group = shortcut.querySelector('[data-slot="kbd-group"]');
+      const key = shortcut.querySelector('[data-slot="kbd"]');
+
+      expect(group).toHaveClass(
+        "in-data-[slot=tooltip-content]:bg-transparent",
+        "in-data-[slot=tooltip-content]:text-background/90",
+        "in-data-[slot=tooltip-content]:ring-background/25"
+      );
+      expect(key).toHaveClass(
+        "in-data-[slot=kbd-group]:bg-transparent",
+        "in-data-[slot=kbd-group]:text-current",
+        "in-data-[slot=tooltip-content]:ring-0"
+      );
+    }
+  );
+
+  it(
+    "styles button shortcuts as desktop-only action hints",
+    {
+      timeout: 1000,
+    },
+    () => {
+      render(
+        <button data-slot="button" type="button">
+          Invite teammate
+          <ShortcutHint
+            surface="button"
+            hotkey="N"
+            label="Invite teammate"
+            decorative
+          />
+        </button>
+      );
+
+      const shortcut = screen
+        .getByText("N")
+        .closest('[data-slot="shortcut-hint"]');
+      const group = shortcut?.querySelector('[data-slot="kbd-group"]');
+
+      expect(shortcut).toHaveAttribute("data-surface", "button");
+      expect(shortcut).toHaveClass(
+        "hidden",
+        "sm:inline-flex",
+        "opacity-80",
+        "group-hover/button:opacity-95"
+      );
+      expect(group).toHaveClass(
+        "bg-muted-foreground/10",
+        "ring-border/10",
+        "in-data-[surface=button]:bg-transparent",
+        "in-data-[surface=button]:text-current",
+        "in-data-[surface=button]:ring-current/20"
+      );
+    }
+  );
+
+  it(
     "renders sequences with separate groups",
     {
       timeout: 1000,

@@ -8,7 +8,8 @@ import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
-import type { ComponentProps, ReactNode } from "react";
+import { cloneElement, isValidElement } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
 import { createJobMutationAtom, jobsOptionsStateAtom } from "./jobs-state";
@@ -197,17 +198,19 @@ vi.mock("#/components/ui/popover", () => ({
   ),
   PopoverTrigger: ({
     children,
-    id,
-    render: _render,
+    render: renderElement,
     ...props
   }: ComponentProps<"button"> & {
     children?: ReactNode;
-    render?: unknown;
-  }) => (
-    <button type="button" id={id} {...props}>
-      {children}
-    </button>
-  ),
+    render?: ReactElement<ComponentProps<"button">>;
+  }) =>
+    isValidElement(renderElement) ? (
+      cloneElement(renderElement, props, children)
+    ) : (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    ),
 }));
 
 vi.mock("#/components/ui/select", () => ({

@@ -1,6 +1,6 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -449,10 +449,64 @@ describe("organization members page", () => {
     expect(
       screen.getByText("Invite someone so they can help run work from Ceird.")
     ).toBeVisible();
+    expect(screen.queryByText("1 active")).not.toBeInTheDocument();
     expect(screen.queryByText("Owner Example")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("list", { name: "Current members" })
     ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("does not render a fallback current-member row before members load", async () => {
+    const membersResult = createDeferredResult<ListMembersResult>();
+
+    mockedListMembers.mockReturnValue(membersResult.promise);
+    mockedListInvitations.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentMember={{
+          email: "fallback@example.com",
+          name: "Fallback Person",
+          role: "owner",
+        }}
+        currentUserId={currentUserId}
+      />
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Loading members" })
+    ).toBeVisible();
+    expect(screen.queryByText("Fallback Person")).not.toBeInTheDocument();
+    expect(screen.queryByText("fallback@example.com")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Current members" })
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      membersResult.resolve(
+        createMemberList([
+          createMember({
+            id: "mem_owner",
+            role: "owner",
+            user: {
+              email: "owner@example.com",
+              id: "user_owner",
+              image: null,
+              name: "Owner Example",
+            },
+            userId: "user_owner",
+          }),
+        ])
+      );
+      await membersResult.promise;
+    });
+
+    await expect(screen.findByText("No teammates yet.")).resolves.toBeVisible();
+    expect(screen.queryByText("Fallback Person")).not.toBeInTheDocument();
   }, 10_000);
 
   it("registers members page command actions", async () => {

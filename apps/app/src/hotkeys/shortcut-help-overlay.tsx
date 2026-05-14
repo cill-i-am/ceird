@@ -6,12 +6,12 @@ import * as React from "react";
 
 import { Button } from "#/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "#/components/ui/responsive-dialog";
 import { cn } from "#/lib/utils";
 
 import { ShortcutHint } from "./hotkey-display";
@@ -79,7 +79,7 @@ export function ShortcutHelpOverlay({
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
       <ShortcutHelpHotkeys setIsOpen={setIsOpen} />
       <Button
         type="button"
@@ -97,7 +97,7 @@ export function ShortcutHelpOverlay({
         <span className={labelClassName}>Keyboard shortcuts</span>
       </Button>
       {isOpen ? <ShortcutHelpContent activeScopes={activeScopes} /> : null}
-    </Dialog>
+    </ResponsiveDialog>
   );
 }
 
@@ -145,13 +145,13 @@ function ShortcutHelpContent({
   );
 
   return (
-    <DialogContent className="max-h-[min(38rem,calc(100vh-2rem))] overflow-y-auto rounded-2xl sm:max-w-xl">
-      <DialogHeader>
-        <DialogTitle>Keyboard shortcuts</DialogTitle>
-        <DialogDescription>
+    <ResponsiveDialogContent className="max-h-[min(38rem,calc(100vh-2rem))] overflow-y-auto rounded-2xl sm:max-w-xl">
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle>Keyboard shortcuts</ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
           Press ? anytime to open this reference.
-        </DialogDescription>
-      </DialogHeader>
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
       <div className="grid gap-5">
         {shortcutGroups.map(({ group, shortcuts }) => (
           <section key={group} aria-labelledby={`shortcut-group-${group}`}>
@@ -186,6 +186,6 @@ function ShortcutHelpContent({
           </section>
         ))}
       </div>
-    </DialogContent>
+    </ResponsiveDialogContent>
   );
 }

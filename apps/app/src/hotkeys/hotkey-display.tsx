@@ -70,11 +70,13 @@ export function ShortcutHint({
   decorative = false,
   hotkey,
   label,
+  surface = "default",
 }: {
   readonly className?: string;
   readonly decorative?: boolean;
   readonly hotkey: string;
   readonly label: string;
+  readonly surface?: "default" | "button";
 }) {
   const platform = useShortcutDisplayPlatform();
   const sequences = splitHotkeySequence(hotkey);
@@ -87,8 +89,14 @@ export function ShortcutHint({
     <span
       aria-hidden={decorative ? true : undefined}
       aria-label={decorative ? undefined : accessibleLabel}
-      className={cn("inline-flex items-center gap-1", className)}
+      className={cn(
+        "inline-flex items-center gap-1",
+        surface === "button" &&
+          "ml-1 hidden opacity-80 group-hover/button:opacity-95 group-focus-visible/button:opacity-95 sm:inline-flex",
+        className
+      )}
       data-slot="shortcut-hint"
+      data-surface={surface}
     >
       {sequences.map((sequence, sequenceIndex) => (
         <React.Fragment key={`${sequence}-${sequenceIndex}`}>

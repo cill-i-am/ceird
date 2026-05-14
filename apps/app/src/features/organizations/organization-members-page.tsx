@@ -37,16 +37,7 @@ import {
 import { Alert, AlertDescription } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { CommandSelect } from "#/components/ui/command-select";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog";
+import { ResponsiveCommandSelect } from "#/components/ui/command-select";
 import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 import {
   DropdownMenu,
@@ -65,6 +56,16 @@ import {
 } from "#/components/ui/empty";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "#/components/ui/responsive-dialog";
+import { Skeleton } from "#/components/ui/skeleton";
 import { getErrorText } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
@@ -75,6 +76,7 @@ import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
+import { cn } from "#/lib/utils";
 
 import {
   INVITE_ROLE_SELECTION_GROUPS,
@@ -113,7 +115,6 @@ const DEFAULT_INVITE_VALUES: OrganizationMemberInviteInput = {
   email: "",
   role: "member",
 };
-const FALLBACK_CURRENT_USER_ID = decodeOrganizationViewerUserId("current-user");
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the details and try again.";
 const MEMBERS_PAGE_SIZE = 100;
@@ -129,6 +130,20 @@ const MEMBER_ROLE_LABELS = {
   member: "Member",
   owner: "Owner",
 } satisfies Record<OrganizationRoleType, string>;
+const CURRENT_MEMBER_SKELETON_ROWS = [
+  {
+    descriptionWidth: "w-52",
+    titleWidth: "w-36",
+  },
+  {
+    descriptionWidth: "w-48",
+    titleWidth: "w-44",
+  },
+  {
+    descriptionWidth: "w-56",
+    titleWidth: "w-32",
+  },
+] as const;
 const isOrganizationRole = Schema.is(OrganizationRole);
 const invitationExpiryFormatter = new Intl.DateTimeFormat("en-IE", {
   day: "numeric",
@@ -147,6 +162,23 @@ type MemberAction =
       readonly memberId: string;
       readonly role: OrganizationRoleType;
       readonly type: "role";
+    };
+type CurrentMembersDisplayState =
+  | {
+      readonly kind: "loading";
+    }
+  | {
+      readonly kind: "error";
+      readonly message: string;
+    }
+  | {
+      readonly kind: "empty";
+    }
+  | {
+      readonly count: number;
+      readonly kind: "ready";
+      readonly loadErrorMessage: string | null;
+      readonly members: readonly OrganizationMemberSummary[];
     };
 
 function formatRoleLabel(role: OrganizationRoleType | string) {
@@ -175,6 +207,55 @@ function getMemberDisplayName(member: OrganizationMemberSummary) {
 
 function formatMemberCount(count: number) {
   return count === 1 ? "1 active" : `${count} active`;
+}
+
+function getCurrentMembersDisplayState({
+  currentUserId,
+  hasCurrentMemberState,
+  hasLoadedMembers,
+  memberLoadErrorMessage,
+  memberTotal,
+  members,
+}: {
+  readonly currentUserId?: UserId | undefined;
+  readonly hasCurrentMemberState: boolean;
+  readonly hasLoadedMembers: boolean;
+  readonly memberLoadErrorMessage: string | null;
+  readonly memberTotal: number | null;
+  readonly members: readonly OrganizationMemberSummary[];
+}): CurrentMembersDisplayState {
+  if (memberLoadErrorMessage && (!hasLoadedMembers || !hasCurrentMemberState)) {
+    return { kind: "error", message: memberLoadErrorMessage };
+  }
+
+  if (!hasLoadedMembers || !hasCurrentMemberState) {
+    return { kind: "loading" };
+  }
+
+  if (memberLoadErrorMessage) {
+    return {
+      count: memberTotal ?? members.length,
+      kind: "ready",
+      loadErrorMessage: memberLoadErrorMessage,
+      members,
+    };
+  }
+
+  const hasNoTeammates =
+    members.length === 0 ||
+    (members.length === 1 &&
+      isCurrentOrganizationMember(members[0], currentUserId));
+
+  if (hasNoTeammates) {
+    return { kind: "empty" };
+  }
+
+  return {
+    count: memberTotal ?? members.length,
+    kind: "ready",
+    loadErrorMessage: null,
+    members,
+  };
 }
 
 function isCurrentOrganizationMember(
@@ -222,7 +303,6 @@ export function OrganizationMembersPage({
     React.useState<string | null>(null);
   const [activeMemberAction, setActiveMemberAction] =
     React.useState<MemberAction | null>(null);
-  const [isLoadingMembers, setIsLoadingMembers] = React.useState(false);
   const [invitations, setInvitations] = React.useState<
     readonly InvitationSummary[]
   >([]);
@@ -274,7 +354,6 @@ export function OrganizationMembersPage({
     }
 
     setMemberLoadErrorMessage(null);
-    setIsLoadingMembers(true);
 
     try {
       const loadedMembers: OrganizationMemberSummary[] = [];
@@ -324,13 +403,6 @@ export function OrganizationMembersPage({
         return;
       }
       setMemberLoadErrorMessage(MEMBER_LOAD_FAILURE_MESSAGE);
-    } finally {
-      if (
-        requestSequence === memberRequestSequence.current &&
-        isLatestActiveOrganization(activeOrganizationId)
-      ) {
-        setIsLoadingMembers(false);
-      }
     }
   }, [activeOrganizationId, isLatestActiveOrganization]);
 
@@ -503,17 +575,19 @@ export function OrganizationMembersPage({
     currentUserId,
     members,
   });
+  const hasLoadedMembers = memberTotal !== null;
+  const hasCurrentMemberState =
+    membersOrganizationId.current === activeOrganizationId;
   const ownerCount = members.filter((member) => member.role === "owner").length;
-  const displayedMembers =
-    members.length > 0
-      ? members
-      : [toCurrentOrganizationMember(currentMember, currentUserId)];
-  const displayedMemberCount = memberTotal ?? displayedMembers.length;
   const canInviteMembers = isAdministrativeOrganizationRole(currentViewerRole);
-  const hasNoTeammates =
-    members.length === 0 ||
-    (displayedMembers.length === 1 &&
-      isCurrentOrganizationMember(displayedMembers[0], currentUserId));
+  const currentMembersDisplayState = getCurrentMembersDisplayState({
+    currentUserId,
+    hasCurrentMemberState,
+    hasLoadedMembers,
+    memberLoadErrorMessage,
+    memberTotal,
+    members,
+  });
 
   const handleMemberRoleChange = React.useCallback(
     async (member: OrganizationMemberSummary, role: OrganizationRoleType) => {
@@ -784,16 +858,10 @@ export function OrganizationMembersPage({
           activeMemberAction={activeMemberAction}
           currentUserId={currentUserId}
           currentViewerRole={currentViewerRole}
-          displayedMemberCount={displayedMemberCount}
-          displayedMembers={displayedMembers}
-          hasNoTeammates={hasNoTeammates}
+          displayState={currentMembersDisplayState}
           isHydrated={isHydrated}
-          isLoadingMembers={isLoadingMembers}
           memberActionErrors={memberActionErrors}
           memberActionSuccessMessage={memberActionSuccessMessage}
-          memberLoadErrorMessage={memberLoadErrorMessage}
-          memberTotal={memberTotal}
-          members={members}
           ownerCount={ownerCount}
           onMemberRemoval={handleMemberRemoval}
           onMemberRoleChange={handleMemberRoleChange}
@@ -813,7 +881,7 @@ export function OrganizationMembersPage({
         ) : null}
       </div>
 
-      <Dialog
+      <ResponsiveDialog
         open={isInviteDialogOpen}
         onOpenChange={(open) => {
           setIsInviteDialogOpen(open);
@@ -822,99 +890,106 @@ export function OrganizationMembersPage({
           }
         }}
       >
-        <DialogContent
+        <ResponsiveDialogContent
           ref={inviteDialogContentRef}
           className="sm:max-w-lg"
           initialFocus={inviteDialogContentRef}
         >
           <form
             ref={formRef}
-            className="flex flex-col gap-5"
+            className="flex flex-col sm:gap-5"
             method="post"
             noValidate
             onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
           >
-            <DialogHeader>
-              <DialogTitle>Invite teammate</DialogTitle>
-              <DialogDescription>
+            <ResponsiveDialogHeader>
+              <ResponsiveDialogTitle>Invite teammate</ResponsiveDialogTitle>
+              <ResponsiveDialogDescription>
                 Send an invitation to join this organization.
-              </DialogDescription>
-            </DialogHeader>
+              </ResponsiveDialogDescription>
+            </ResponsiveDialogHeader>
 
-            <FieldGroup>
-              <form.Field name="email">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+            <div className="flex flex-col gap-5 px-5 py-5 sm:px-0 sm:py-0">
+              <FieldGroup>
+                <form.Field name="email">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
 
-                  return (
-                    <AuthFormField
-                      label="Email"
-                      htmlFor="invite-email"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="invite-email"
-                        name={field.name}
-                        type="email"
-                        autoComplete="email"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
-
-              <form.Field name="role">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="Role"
-                      htmlFor="invite-role"
-                      errorText={errorText}
-                    >
-                      <CommandSelect
-                        id="invite-role"
-                        value={field.state.value}
-                        placeholder="Pick role"
-                        emptyText="No roles found."
-                        groups={INVITE_ROLE_SELECTION_GROUPS}
-                        searchable={false}
-                        ariaInvalid={errorText ? true : undefined}
-                        open={roleSelectOpen}
-                        triggerRef={roleSelectTriggerRef}
-                        onOpenChange={setRoleSelectOpen}
-                        onValueChange={(nextValue) => {
-                          if (!isInviteRole(nextValue)) {
-                            return;
+                    return (
+                      <AuthFormField
+                        label="Email"
+                        htmlFor="invite-email"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="invite-email"
+                          name={field.name}
+                          type="email"
+                          autoComplete="email"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            field.handleChange(event.target.value)
                           }
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </form.Field>
 
-                          field.handleChange(nextValue);
-                          field.handleBlur();
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </form.Field>
-            </FieldGroup>
+                <form.Field name="role">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
 
-            {errorMessage ? (
-              <p role="alert" className="text-sm text-destructive">
-                {errorMessage}
-              </p>
-            ) : null}
+                    return (
+                      <AuthFormField
+                        label="Role"
+                        htmlFor="invite-role"
+                        errorText={errorText}
+                      >
+                        <ResponsiveCommandSelect
+                          id="invite-role"
+                          value={field.state.value}
+                          drawerTitle="Role"
+                          nestedDrawer
+                          placeholder="Pick role"
+                          emptyText="No roles found."
+                          groups={INVITE_ROLE_SELECTION_GROUPS}
+                          searchable={false}
+                          showGroupHeadings={false}
+                          ariaInvalid={errorText ? true : undefined}
+                          open={roleSelectOpen}
+                          triggerRef={roleSelectTriggerRef}
+                          onOpenChange={setRoleSelectOpen}
+                          onValueChange={(nextValue) => {
+                            if (!isInviteRole(nextValue)) {
+                              return;
+                            }
 
-            <DialogFooter>
-              <DialogClose render={<Button type="button" variant="outline" />}>
+                            field.handleChange(nextValue);
+                            field.handleBlur();
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </form.Field>
+              </FieldGroup>
+
+              {errorMessage ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage}
+                </p>
+              ) : null}
+            </div>
+
+            <ResponsiveDialogFooter>
+              <ResponsiveDialogClose
+                render={<Button type="button" variant="outline" />}
+              >
                 Cancel
-              </DialogClose>
+              </ResponsiveDialogClose>
               <form.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
                   <Button
@@ -926,10 +1001,10 @@ export function OrganizationMembersPage({
                   </Button>
                 )}
               </form.Subscribe>
-            </DialogFooter>
+            </ResponsiveDialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }
@@ -962,7 +1037,7 @@ function MembersPageHeader({
             />
             Invite teammate
             <ShortcutHint
-              className="ml-1"
+              surface="button"
               hotkey={HOTKEYS.membersInvite.hotkey}
               label={HOTKEYS.membersInvite.label}
               decorative
@@ -978,16 +1053,10 @@ function CurrentMembersSection({
   activeMemberAction,
   currentUserId,
   currentViewerRole,
-  displayedMemberCount,
-  displayedMembers,
-  hasNoTeammates,
+  displayState,
   isHydrated,
-  isLoadingMembers,
   memberActionErrors,
   memberActionSuccessMessage,
-  memberLoadErrorMessage,
-  memberTotal,
-  members,
   ownerCount,
   onMemberRemoval,
   onMemberRoleChange,
@@ -995,16 +1064,10 @@ function CurrentMembersSection({
   readonly activeMemberAction: MemberAction | null;
   readonly currentUserId?: UserId | undefined;
   readonly currentViewerRole: OrganizationRoleType;
-  readonly displayedMemberCount: number;
-  readonly displayedMembers: readonly OrganizationMemberSummary[];
-  readonly hasNoTeammates: boolean;
+  readonly displayState: CurrentMembersDisplayState;
   readonly isHydrated: boolean;
-  readonly isLoadingMembers: boolean;
   readonly memberActionErrors: Readonly<Record<string, string>>;
   readonly memberActionSuccessMessage: string | null;
-  readonly memberLoadErrorMessage: string | null;
-  readonly memberTotal: number | null;
-  readonly members: readonly OrganizationMemberSummary[];
   readonly ownerCount: number;
   readonly onMemberRemoval: (
     member: OrganizationMemberSummary
@@ -1014,6 +1077,8 @@ function CurrentMembersSection({
     role: OrganizationRoleType
   ) => Promise<void>;
 }) {
+  const shouldShowMemberCount = displayState.kind === "ready";
+
   return (
     <div className="flex flex-col gap-6">
       <section aria-labelledby="current-members-heading">
@@ -1024,19 +1089,24 @@ function CurrentMembersSection({
           >
             Current members
           </h2>
-          <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-            {formatMemberCount(displayedMemberCount)}
-          </Badge>
+          {shouldShowMemberCount ? (
+            <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
+              {formatMemberCount(displayState.count)}
+            </Badge>
+          ) : null}
         </div>
-        {isLoadingMembers && members.length === 0 ? (
-          <DotMatrixLoadingState
-            label="Loading members"
-            className="justify-start border-y py-4"
-          />
+        {displayState.kind === "loading" ? (
+          <CurrentMembersSkeletonList />
         ) : null}
-        {memberLoadErrorMessage ? (
+        {displayState.kind === "error" ||
+        (displayState.kind === "ready" &&
+          displayState.loadErrorMessage !== null) ? (
           <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{memberLoadErrorMessage}</AlertDescription>
+            <AlertDescription>
+              {displayState.kind === "error"
+                ? displayState.message
+                : displayState.loadErrorMessage}
+            </AlertDescription>
           </Alert>
         ) : null}
         {memberActionSuccessMessage ? (
@@ -1044,10 +1114,7 @@ function CurrentMembersSection({
             {memberActionSuccessMessage}
           </p>
         ) : null}
-        {!isLoadingMembers &&
-        memberTotal !== null &&
-        !memberLoadErrorMessage &&
-        hasNoTeammates ? (
+        {displayState.kind === "empty" ? (
           <Empty className="min-h-64 rounded-[calc(var(--radius)*3)] bg-background/78 supports-[backdrop-filter]:bg-background/68">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -1059,9 +1126,10 @@ function CurrentMembersSection({
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
-        ) : (
+        ) : null}
+        {displayState.kind === "ready" ? (
           <AppRowList aria-label="Current members">
-            {displayedMembers.map((member) => (
+            {displayState.members.map((member) => (
               <CurrentMemberRow
                 key={member.id}
                 activeAction={activeMemberAction}
@@ -1079,8 +1147,53 @@ function CurrentMembersSection({
               />
             ))}
           </AppRowList>
-        )}
+        ) : null}
       </section>
+    </div>
+  );
+}
+
+function CurrentMembersSkeletonList() {
+  return (
+    <div aria-label="Loading members" role="status">
+      <AppRowList
+        aria-hidden="true"
+        className="pointer-events-none"
+        aria-busy="true"
+      >
+        {CURRENT_MEMBER_SKELETON_ROWS.map((row) => (
+          <AppRowListItem key={row.titleWidth}>
+            <AppRowListLeading aria-hidden="true">
+              <Skeleton className="size-full rounded-[calc(var(--radius)*2.2)]" />
+            </AppRowListLeading>
+            <AppRowListBody
+              title={
+                <span
+                  className={cn(
+                    "block h-4 animate-pulse rounded-2xl bg-muted",
+                    row.titleWidth
+                  )}
+                />
+              }
+              description={
+                <span
+                  className={cn(
+                    "block h-3.5 animate-pulse rounded-2xl bg-muted",
+                    row.descriptionWidth
+                  )}
+                />
+              }
+            />
+            <AppRowListMeta>
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-10 rounded-full" />
+            </AppRowListMeta>
+            <AppRowListActions>
+              <Skeleton className="size-8 rounded-full" />
+            </AppRowListActions>
+          </AppRowListItem>
+        ))}
+      </AppRowList>
     </div>
   );
 }
@@ -1282,21 +1395,23 @@ function CurrentMemberRow({
               ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Dialog
+          <ResponsiveDialog
             open={isRemoveDialogOpen}
             onOpenChange={setIsRemoveDialogOpen}
           >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Remove {displayName}?</DialogTitle>
-                <DialogDescription>
+            <ResponsiveDialogContent>
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle>
+                  Remove {displayName}?
+                </ResponsiveDialogTitle>
+                <ResponsiveDialogDescription>
                   They will lose access to this organization.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>
+                </ResponsiveDialogDescription>
+              </ResponsiveDialogHeader>
+              <ResponsiveDialogFooter>
+                <ResponsiveDialogClose render={<Button variant="outline" />}>
                   Cancel
-                </DialogClose>
+                </ResponsiveDialogClose>
                 <Button
                   type="button"
                   variant="destructive"
@@ -1309,9 +1424,9 @@ function CurrentMemberRow({
                 >
                   Remove member
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </ResponsiveDialogFooter>
+            </ResponsiveDialogContent>
+          </ResponsiveDialog>
         </AppRowListActions>
       ) : null}
     </AppRowListItem>
@@ -1438,19 +1553,6 @@ function toInvitation(input: {
     id: input.id,
     role: ParseResult.decodeUnknownSync(InvitableOrganizationRole)(input.role),
     status: input.status,
-  };
-}
-
-function toCurrentOrganizationMember(
-  currentMember: CurrentMemberSummary,
-  currentUserId: UserId | undefined = FALLBACK_CURRENT_USER_ID
-): OrganizationMemberSummary {
-  return {
-    email: currentMember.email,
-    id: `current-${currentUserId}`,
-    name: currentMember.name,
-    role: currentMember.role,
-    userId: currentUserId,
   };
 }
 

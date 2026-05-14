@@ -341,7 +341,7 @@ function RateCardForm({
           Save rate card
           <span aria-hidden="true">
             <ShortcutHint
-              className="ml-1"
+              surface="button"
               hotkey={HOTKEYS.settingsSubmit.hotkey}
               label="Save rate card"
             />

@@ -156,7 +156,7 @@ export function OrganizationServiceAreasSection() {
             Add service area
             <span aria-hidden="true">
               <ShortcutHint
-                className="ml-1"
+                surface="button"
                 hotkey={HOTKEYS.settingsSubmit.hotkey}
                 label="Add service area"
               />
@@ -361,7 +361,7 @@ function ServiceAreaRow({
                   Save {serviceArea.name}
                   <span aria-hidden="true">
                     <ShortcutHint
-                      className="ml-1"
+                      surface="button"
                       hotkey={HOTKEYS.settingsSubmit.hotkey}
                       label={`Save ${serviceArea.name}`}
                     />

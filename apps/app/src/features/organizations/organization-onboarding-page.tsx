@@ -5,7 +5,7 @@ import { Schema } from "effect";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
-import { CommandSelect } from "#/components/ui/command-select";
+import { ResponsiveCommandSelect } from "#/components/ui/command-select";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -269,13 +269,15 @@ function InviteMembersStep({
                   htmlFor="invite-role"
                   errorText={errorText}
                 >
-                  <CommandSelect
+                  <ResponsiveCommandSelect
                     id="invite-role"
                     value={field.state.value}
+                    drawerTitle="Role"
                     placeholder="Pick role"
                     emptyText="No roles found."
                     groups={INVITE_ROLE_SELECTION_GROUPS}
                     searchable={false}
+                    showGroupHeadings={false}
                     ariaInvalid={errorText ? true : undefined}
                     open={roleSelectOpen}
                     onOpenChange={setRoleSelectOpen}
