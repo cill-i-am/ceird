@@ -12,7 +12,11 @@ describe("active shortcut scopes", () => {
     ).toStrictEqual(["global", "jobs", "job-detail"]);
   });
 
-  it("activates members, settings, and map shortcut scopes on matching routes", () => {
+  it("activates sites, members, settings, and map shortcut scopes on matching routes", () => {
+    expect(getActiveShortcutScopes("/sites")).toStrictEqual([
+      "global",
+      "sites",
+    ]);
     expect(getActiveShortcutScopes("/members")).toStrictEqual([
       "global",
       "members",

@@ -16,6 +16,7 @@ export const HOTKEY_GROUPS = [
   "Layout",
   "Jobs",
   "Job drawer",
+  "Sites",
   "Members",
   "Settings",
   "Map",
@@ -334,6 +335,14 @@ export const HOTKEYS = {
     id: "jobDetailSubmit",
     label: "Submit focused form area",
     scope: "job-detail",
+  },
+  sitesCreate: {
+    group: "Sites",
+    hotkey: "N",
+    id: "sitesCreate",
+    label: "Create site",
+    scope: "sites",
+    when: "Viewer can create sites",
   },
   membersInvite: {
     group: "Members",

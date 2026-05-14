@@ -41,6 +41,9 @@ import {
   buildSiteAddressLines,
   hasSiteCoordinates,
 } from "#/features/sites/site-location";
+import { ShortcutHint } from "#/hotkeys/hotkey-display";
+import { HOTKEYS } from "#/hotkeys/hotkey-registry";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 
 import { sitesNoticeAtom, sitesOptionsStateAtom } from "./sites-state";
 
@@ -89,6 +92,7 @@ export function SitesPage({
         priority: 80,
         run: () => navigate({ to: "/sites/new" }),
         scope: "route",
+        shortcut: HOTKEYS.sitesCreate,
         title: "Create site",
       });
     }
@@ -97,6 +101,16 @@ export function SitesPage({
   }, [canCreateSites, navigate, options.sites]);
 
   useRegisterCommandActions(sitesPageCommandActions);
+  useAppHotkey(
+    "sitesCreate",
+    () => {
+      navigate({ to: "/sites/new" });
+    },
+    {
+      enabled: canCreateSites,
+      ignoreInputs: true,
+    }
+  );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -112,6 +126,12 @@ export function SitesPage({
                 data-icon="inline-start"
               />
               New site
+              <ShortcutHint
+                surface="button"
+                hotkey={HOTKEYS.sitesCreate.hotkey}
+                label={HOTKEYS.sitesCreate.label}
+                decorative
+              />
             </Link>
           ) : null
         }

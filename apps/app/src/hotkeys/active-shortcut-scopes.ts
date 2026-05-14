@@ -20,6 +20,10 @@ export function getActiveShortcutScopes(
       : ["global", "jobs"];
   }
 
+  if (pathname === "/sites") {
+    return ["global", "sites"];
+  }
+
   if (pathname === "/members") {
     return ["global", "members"];
   }

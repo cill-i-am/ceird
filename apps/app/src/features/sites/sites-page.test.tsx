@@ -6,6 +6,7 @@ import type {
   SitesOptionsResponse,
 } from "@ceird/sites-core";
 import { RegistryProvider } from "@effect-atom/atom-react";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   fireEvent,
   render,
@@ -93,6 +94,7 @@ describe("sites page", () => {
         "href",
         "/sites/new"
       );
+      expect(screen.getByText("N")).toBeInTheDocument();
 
       const row = screen.getByRole("row", { name: /docklands campus/i });
       expect(within(row).getByText("Dublin")).toBeInTheDocument();
@@ -156,6 +158,14 @@ describe("sites page", () => {
     }
   );
 
+  it("opens site creation with the route hotkey", () => {
+    renderSitesPage();
+
+    fireEvent.keyDown(document, { code: "KeyN", key: "n" });
+
+    expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites/new" });
+  });
+
   it(
     "caps eager site entity commands in the command bar",
     { timeout: 10_000 },
@@ -197,16 +207,18 @@ function renderSitesPage({
   readonly withCommandBar?: boolean;
 } = {}) {
   const page = (
-    <RegistryProvider
-      initialValues={[
-        [
-          sitesOptionsStateAtom,
-          seedSitesOptionsState(organizationId, pageOptions),
-        ],
-      ]}
-    >
-      <SitesPage viewer={{ role, userId }} />
-    </RegistryProvider>
+    <HotkeysProvider>
+      <RegistryProvider
+        initialValues={[
+          [
+            sitesOptionsStateAtom,
+            seedSitesOptionsState(organizationId, pageOptions),
+          ],
+        ]}
+      >
+        <SitesPage viewer={{ role, userId }} />
+      </RegistryProvider>
+    </HotkeysProvider>
   );
 
   render(
