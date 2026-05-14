@@ -86,9 +86,9 @@ components:
 
 **Creative North Star: "The Site Operations Console"**
 
-Ceird should feel like a serious operating surface for construction work: calm, exact, and responsive, with the polish of Linear and Vercel applied to jobs, sites, roles, labels, maps, and AI-assisted coordination. It is a product UI first, so design serves speed, trust, and repeat use.
+Ceird should feel like a serious operating surface for construction work: calm, exact, responsive, and delightful, with the polish of Linear and Vercel applied to jobs, sites, roles, labels, maps, and AI-assisted coordination. It is a product UI first, so design serves speed, trust, and repeat use.
 
-The system is light-mode-first because office admins and site users may use it across daylight, laptops, tablets, and phones. Dark mode exists as a preference, not the brand default. The aesthetic should be highly interactive without looking decorative, theatrical, or generated.
+The system is light-mode-first because office admins and site users may use it across daylight, laptops, tablets, and phones. Dark mode exists as a preference, not the brand default. The aesthetic should be highly interactive without looking decorative, theatrical, or generated. Delight is required, but it must feel product-native: fast, precise, useful, and respectful of the task.
 
 **Key Characteristics:**
 
@@ -97,6 +97,7 @@ The system is light-mode-first because office admins and site users may use it a
 - Restrained blue-neutral palette with semantic color for status and operational feedback.
 - Command-K, route shortcuts, icon tools, and keyboard-first workflows as native affordances.
 - AI features that feel embedded in the work rather than visually performative.
+- Delightful micro-feedback: crisp transitions, tactile pressed states, completion checks, concise success copy, and small signals that the system understood the action.
 
 ## 2. Colors
 
@@ -166,7 +167,21 @@ Ceird uses tonal layering and hairline borders more than shadows. Surfaces shoul
 
 **The Flat-At-Rest Rule.** Persistent product surfaces are mostly flat. Depth appears when state or layering requires it.
 
-## 5. Components
+## 5. Delight & Motion
+
+Delight in Ceird should feel like operational feedback, not decoration. Use motion and completion treatment to confirm that the system saw the user's action, moved them forward, or made the next step clearer.
+
+Good delight feels like a button that presses cleanly, a row that settles into its new state, a success message that is specific and calm, or a small completion mark that appears at the exact moment work is done. It may be playful in the sense of being satisfying, but it should not be bubbly, cartoonish, or performative.
+
+### Motion Rules
+
+- Keep most transitions between 150ms and 250ms.
+- Use motion for state changes, feedback, loading, reveal, and completion.
+- Respect reduced-motion preferences for nonessential animation.
+- Prefer small local changes over page-wide choreography.
+- Avoid bounce, elastic motion, long celebration sequences, and decorative animation loops.
+
+## 6. Components
 
 Components should feel familiar, precise, and keyboard-capable. Use the existing shadcn-style primitives and Hugeicons/Lucide-style icon vocabulary rather than inventing novel affordances for standard tasks.
 
@@ -204,11 +219,12 @@ Sidebar and top-header navigation should be predictable, compact, and role-aware
 
 Command-K and route actions are product identity. Command rows should be fast to scan, grouped by scope, and paired with keycap hints where shortcuts exist. The command surface should feel like part of the workspace, not an add-on.
 
-## 6. Do's and Don'ts
+## 7. Do's and Don'ts
 
 ### Do:
 
 - **Do** build dense, highly interactive product surfaces that still feel calm and exact.
+- **Do** make product interactions delightful through precise motion, completion feedback, warm success states, and thoughtful defaults.
 - **Do** preserve keyboard support, command bars, shortcut discoverability, and focus-visible polish.
 - **Do** make active organization, role, job, site, and permission context explicit.
 - **Do** use semantic color confidently for job, site, label, map, warning, and success states.
@@ -218,7 +234,8 @@ Command-K and route actions are product identity. Command rows should be fast to
 ### Don't:
 
 - **Don't** make Ceird look like generic project-management SaaS.
-- **Don't** use macho construction branding, high-vis cliches, safety-poster energy, or playful startup UI.
+- **Don't** use macho construction branding, high-vis cliches, safety-poster energy, or bubbly startup UI.
+- **Don't** confuse delight with cartoon celebration, confetti-cannon moments, joke copy, mascot energy, or anything that makes serious work feel unserious.
 - **Don't** ship dashboard clutter or identical card grids where lists, tables, maps, or command surfaces would be clearer.
 - **Don't** make anything look obviously AI-generated, including purple glow, glass panels, vague assistant magic, or synthetic illustration-first screens.
 - **Don't** simplify the product into a basic field app just because some users are on site.

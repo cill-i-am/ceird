@@ -20,13 +20,17 @@ Success looks like a small or medium construction business running its active wo
 
 ## Brand Personality
 
-Functional, interactive, Linear-like.
+Functional, interactive, Linear-like, delightful.
 
-The brand should feel precise, confident, modern, and tool-native. It should respect tradespeople and construction admins as capable professionals who deserve best-in-class software, not simplified or patronizing software. The product should feel as polished as Linear, as composed as Vercel, as cleanly operational as Midday AI, and compatible with the best shadcn UI dashboard examples.
+The brand should feel precise, confident, modern, tool-native, and quietly delightful. It should respect tradespeople and construction admins as capable professionals who deserve best-in-class software, not simplified or patronizing software. The product should feel as polished as Linear, as composed as Vercel, as cleanly operational as Midday AI, and compatible with the best shadcn UI dashboard examples.
+
+Delight in Ceird should come from speed, exact feedback, satisfying state changes, thoughtful defaults, and small moments that make the system feel alive and confident. Delight should never make serious work feel unserious.
 
 ## Anti-references
 
-Do not make Ceird look like generic project-management SaaS. Avoid macho construction branding, high-vis cliches, safety-poster energy, playful startup UI, dashboard clutter, and anything that reads as obviously AI-generated.
+Do not make Ceird look like generic project-management SaaS. Avoid macho construction branding, high-vis cliches, safety-poster energy, bubbly startup UI, dashboard clutter, and anything that reads as obviously AI-generated.
+
+Do not confuse delight with cartoon personality, confetti-cannon celebration, joke copy, mascot energy, or theatrical motion. Ceird can be warm, satisfying, and memorable, but it should stay composed and operational.
 
 Avoid decorative AI aesthetics: purple glow, glassy panels, vague assistant magic, and synthetic illustration-first interfaces. AI should feel embedded in expert workflows, not sprayed on top.
 
@@ -39,6 +43,7 @@ Avoid reducing the product to a basic field app. Site users need intuition, spee
 3. **Make organization context impossible to miss.** Multi-tenant and inter-organization workflows must always make the active workspace, role, job, site, and permissions legible.
 4. **Let AI act like infrastructure.** AI features should reduce coordination work, expose useful intent, and accelerate decisions without becoming the visual identity.
 5. **Prefer dense clarity over decorative simplicity.** The product can be rich and highly interactive, but every control, label, view, and animation must serve the work.
+6. **Make the product delightful through precision.** Crisp transitions, responsive controls, completion states, tactile pressed states, and useful microcopy should make the interface feel cared for without turning work into performance.
 
 ## Accessibility & Inclusion
 
