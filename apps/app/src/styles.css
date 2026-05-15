@@ -273,7 +273,25 @@
   }
 }
 
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
+  /* Vaul can leave initially-open route drawers at the off-canvas keyframe after direct route loads. */
+  .route-drawer-content[data-slot="drawer-content"][data-state="open"][data-vaul-drawer-direction="bottom"][data-vaul-snap-points="false"],
+  .route-side-drawer-content[data-slot="drawer-content"][data-state="open"][data-vaul-drawer-direction="right"][data-vaul-snap-points="false"] {
+    animation-name: none !important;
+    transform: translate3d(0, 0, 0) !important;
+  }
+
   .entry-atmosphere {
     --entry-dot-size: 1px;
     --entry-grid-size: 24px;

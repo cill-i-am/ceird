@@ -1,5 +1,10 @@
 "use client";
-import type { JobListItem, JobPriority, UserIdType } from "@ceird/jobs-core";
+import type {
+  JobListItem,
+  JobPriority,
+  JobStatus,
+  UserIdType,
+} from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
@@ -116,6 +121,15 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Canceled", value: "canceled" },
 ] as const;
 
+const JOB_QUEUE_STATUS_ORDER: readonly JobStatus[] = [
+  "new",
+  "triaged",
+  "in_progress",
+  "blocked",
+  "completed",
+  "canceled",
+];
+
 const relativeDateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
   month: "short",
@@ -152,6 +166,10 @@ export function JobsPage({
   const lookup = useAtomValue(jobsLookupAtom);
   const notice = useAtomValue(jobsNoticeAtom);
   const optionsState = useAtomValue(jobsOptionsStateAtom);
+  const statusCounts = React.useMemo(
+    () => buildJobStatusCounts(jobsListState.items),
+    [jobsListState.items]
+  );
   const refreshJobs = useAtomSet(refreshJobsListAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
   const setNotice = useAtomSet(jobsNoticeAtom);
@@ -228,6 +246,7 @@ export function JobsPage({
               priority: 90,
               run: () => navigate({ to: "/jobs/new" }),
               scope: "route" as const,
+              shortcut: HOTKEYS.jobsCreate,
               title: "Create job",
             },
           ]
@@ -252,6 +271,7 @@ export function JobsPage({
               priority: 80,
               run: () => setViewMode("list"),
               scope: "route" as const,
+              shortcut: HOTKEYS.jobsListView,
               title: "Switch to list view",
             },
             {
@@ -262,6 +282,7 @@ export function JobsPage({
               priority: 70,
               run: () => setViewMode("map"),
               scope: "route" as const,
+              shortcut: HOTKEYS.jobsMapView,
               title: "Switch to map view",
             },
           ]
@@ -296,6 +317,7 @@ export function JobsPage({
         priority: 90,
         run: () => setFilters(defaultJobsListFilters),
         scope: "route",
+        shortcut: HOTKEYS.jobsClearFilters,
         title: "Clear job filters",
       });
     }
@@ -388,6 +410,11 @@ export function JobsPage({
           savedViewsOpen={savedViewsOpen}
           searchInputRef={searchInputRef}
           showInternalFilters={canUseInternalOptions}
+        />
+        <JobStatusRail
+          counts={statusCounts}
+          status={filters.status}
+          onStatusChange={(status) => patchFilters({ status })}
         />
       </AppPageHeader>
 
@@ -819,6 +846,50 @@ function ViewModeSwitch({
   );
 }
 
+type JobStatusFilterValue = (typeof STATUS_FILTER_OPTIONS)[number]["value"];
+
+type JobStatusCounts = Record<JobStatusFilterValue, number>;
+
+function JobStatusRail({
+  counts,
+  onStatusChange,
+  status,
+}: {
+  readonly counts: JobStatusCounts;
+  readonly onStatusChange: (status: JobsListFilters["status"]) => void;
+  readonly status: JobsListFilters["status"];
+}) {
+  return (
+    <div
+      aria-label="Job status views"
+      className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto border-t pt-3"
+    >
+      {STATUS_FILTER_OPTIONS.map((option) => (
+        <Button
+          key={option.value}
+          type="button"
+          size="xs"
+          variant={status === option.value ? "secondary" : "ghost"}
+          className={cn(
+            "h-7 shrink-0 rounded-full px-2.5 text-xs",
+            status === option.value
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground"
+          )}
+          aria-label={`${option.label} ${counts[option.value]}`}
+          aria-pressed={status === option.value}
+          onClick={() => onStatusChange(option.value)}
+        >
+          <span>{option.label}</span>
+          <span className="text-muted-foreground tabular-nums">
+            {counts[option.value]}
+          </span>
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function ActiveFilterBar({
   filters,
   onClearAll,
@@ -871,6 +942,7 @@ function JobsListView({
   readonly totalJobs: number;
 }) {
   const lookup = useAtomValue(jobsLookupAtom);
+  const jobGroups = React.useMemo(() => buildJobStatusGroups(jobs), [jobs]);
 
   if (jobs.length === 0) {
     return (
@@ -888,18 +960,41 @@ function JobsListView({
       data-testid="jobs-queue-panel"
       className="overflow-hidden rounded-2xl border bg-background"
     >
-      <div className="border-b px-3 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <span className="size-2 rounded-full bg-primary" />
-          <span>Backlog</span>
+      <div className="divide-y">
+        {jobGroups.map((group) => (
+          <JobStatusGroup key={group.status} group={group} lookup={lookup} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function JobStatusGroup({
+  group,
+  lookup,
+}: {
+  readonly group: JobStatusGroupData;
+  readonly lookup: JobsLookup;
+}) {
+  const headingId = `jobs-status-group-${group.status}`;
+
+  return (
+    <section aria-labelledby={headingId}>
+      <div className="flex items-center gap-2 bg-muted/25 px-3 py-2 sm:px-4">
+        <h2
+          id={headingId}
+          aria-label={`${STATUS_LABELS[group.status]} ${group.jobs.length}`}
+          className="flex items-center gap-2 text-xs font-medium text-foreground"
+        >
+          <span>{STATUS_LABELS[group.status]}</span>
           <span className="text-muted-foreground tabular-nums">
-            {jobs.length}
+            {group.jobs.length}
           </span>
-        </div>
+        </h2>
       </div>
 
       <ul className="flex flex-col xl:hidden">
-        {jobs.map((job) => (
+        {group.jobs.map((job) => (
           <li key={job.id}>
             <JobIssueRow job={job} lookup={lookup} compact />
           </li>
@@ -919,7 +1014,7 @@ function JobsListView({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {jobs.map((job) => (
+            {group.jobs.map((job) => (
               <JobIssueTableRow key={job.id} job={job} lookup={lookup} />
             ))}
           </TableBody>
@@ -929,8 +1024,51 @@ function JobsListView({
   );
 }
 
+interface JobStatusGroupData {
+  readonly jobs: readonly JobListItem[];
+  readonly status: JobStatus;
+}
+
+function buildJobStatusGroups(jobs: readonly JobListItem[]) {
+  return JOB_QUEUE_STATUS_ORDER.flatMap((status) => {
+    const statusJobs = jobs.filter((job) => job.status === status);
+
+    return statusJobs.length > 0
+      ? [
+          {
+            jobs: statusJobs,
+            status,
+          } satisfies JobStatusGroupData,
+        ]
+      : [];
+  });
+}
+
 function useJobsLookup() {
   return useAtomValue(jobsLookupAtom);
+}
+
+function buildJobStatusCounts(jobs: readonly JobListItem[]): JobStatusCounts {
+  const counts: JobStatusCounts = {
+    active: 0,
+    all: jobs.length,
+    blocked: 0,
+    canceled: 0,
+    completed: 0,
+    in_progress: 0,
+    new: 0,
+    triaged: 0,
+  };
+
+  for (const job of jobs) {
+    if (job.status !== "completed" && job.status !== "canceled") {
+      counts.active += 1;
+    }
+
+    counts[job.status] += 1;
+  }
+
+  return counts;
 }
 
 function JobIssueTableRow({
@@ -1008,6 +1146,16 @@ function JobIssueRow({
   const assignee = job.assigneeId
     ? lookup.memberById.get(job.assigneeId)
     : undefined;
+  const metadata = [{ key: "site", value: site?.name ?? "No site" }];
+
+  if (site?.serviceAreaName) {
+    metadata.push({ key: "service-area", value: site.serviceAreaName });
+  }
+
+  metadata.push(
+    { key: "assignee", value: assignee?.name ?? "Unassigned" },
+    { key: "updated-at", value: formatRelativeDate(job.updatedAt) }
+  );
 
   return (
     <Link
@@ -1030,17 +1178,18 @@ function JobIssueRow({
           <LabelBadges labels={job.labels} />
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{site?.name ?? "No site"}</span>
-          {site?.serviceAreaName ? (
-            <>
-              <span>/</span>
-              <span>{site.serviceAreaName}</span>
-            </>
-          ) : null}
-          <span>/</span>
-          <span>{assignee?.name ?? "Unassigned"}</span>
-          <span>/</span>
-          <span>{formatRelativeDate(job.updatedAt)}</span>
+          {metadata.map((item) => (
+            <span
+              key={item.key}
+              className={cn(
+                "min-w-0 truncate",
+                item.key !== "site" &&
+                  "before:mr-2 before:text-muted-foreground/60 before:content-['/']"
+              )}
+            >
+              {item.value}
+            </span>
+          ))}
         </div>
       </div>
       <HugeiconsIcon
@@ -1068,6 +1217,12 @@ function JobsEmptyState({
     hasCustomFilters,
     totalJobs,
   });
+  const action = getJobsEmptyStateAction({
+    canCreateJobs,
+    hasCustomFilters,
+    onClearFilters,
+    totalJobs,
+  });
 
   return (
     <section data-testid="jobs-queue-panel">
@@ -1079,21 +1234,60 @@ function JobsEmptyState({
           <EmptyTitle>{copy.title}</EmptyTitle>
           <EmptyDescription>{copy.description}</EmptyDescription>
         </EmptyHeader>
-        {hasCustomFilters ? (
-          <EmptyContent>
-            <Button type="button" size="sm" onClick={onClearFilters}>
-              <HugeiconsIcon
-                icon={Cancel01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              Clear filters
-            </Button>
-          </EmptyContent>
-        ) : null}
+        {action}
       </Empty>
     </section>
   );
+}
+
+function getJobsEmptyStateAction({
+  canCreateJobs,
+  hasCustomFilters,
+  onClearFilters,
+  totalJobs,
+}: {
+  readonly canCreateJobs: boolean;
+  readonly hasCustomFilters: boolean;
+  readonly onClearFilters: () => void;
+  readonly totalJobs: number;
+}) {
+  if (hasCustomFilters) {
+    return (
+      <EmptyContent>
+        <Button type="button" size="sm" onClick={onClearFilters}>
+          <HugeiconsIcon
+            icon={Cancel01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          Clear filters
+        </Button>
+      </EmptyContent>
+    );
+  }
+
+  if (canCreateJobs && totalJobs === 0) {
+    return (
+      <EmptyContent>
+        <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
+          <HugeiconsIcon
+            icon={Add01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          New job
+          <ShortcutHint
+            surface="button"
+            hotkey={HOTKEYS.jobsCreate.hotkey}
+            label={HOTKEYS.jobsCreate.label}
+            decorative
+          />
+        </Link>
+      </EmptyContent>
+    );
+  }
+
+  return null;
 }
 
 function getJobsEmptyStateCopy({

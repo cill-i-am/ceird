@@ -270,9 +270,6 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
-  DrawerDescription: ({ children }: { children?: ReactNode }) => (
-    <p>{children}</p>
-  ),
   DrawerFooter: ({ children }: { children?: ReactNode }) => (
     <footer>{children}</footer>
   ),
@@ -341,8 +338,8 @@ vi.mock("./jobs-state", () => ({
   jobsLookupAtom: jobsLookupAtomToken,
 }));
 
-vi.mock("./jobs-detail-location-map-preview-canvas", () => ({
-  JobsDetailLocationMapPreviewCanvas: () => (
+vi.mock("#/features/sites/site-location-map-preview-canvas", () => ({
+  SiteLocationMapPreviewCanvas: () => (
     <div data-testid="location-map-preview" />
   ),
 }));
@@ -541,6 +538,72 @@ describe("jobs detail sheet", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("splits the operational detail surface into detail tabs", async () => {
+    renderDetailSheet(buildDetail());
+
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByRole("tab", { name: "Comments 1" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Costs" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Visits 1" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Activity 1" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Job detail sections" }).parentElement
+    ).toHaveClass("no-scrollbar");
+    expect(
+      screen.queryByText(
+        "Keep the status honest. Use blocked only when something is truly waiting on an unblock."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Give dispatch the site context and the fastest way into navigation."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Useful details for the person or organization connected to this work."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Move this job onto an existing site when the location becomes clear."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Changing the site clears the linked contact so it cannot point at the wrong place."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Share this job with external people without making them internal members."
+      )
+    ).not.toBeInTheDocument();
+    for (const removedCopy of [
+      "Keep the narrative in comments instead of hiding it in fields.",
+      "Capture the detail the next person will actually need.",
+      "The job is ready for its first bit of real context.",
+      "Track labour and materials without mixing them into the job narrative.",
+      "Keep it short: what was used or what work was carried out.",
+      "Add labour or materials once the work creates a real cost.",
+      "Log the site visits that explain the real effort behind the work.",
+      "Keep it short and concrete: what happened, what changed, what is next.",
+      "Add the field work once the crew starts showing up on site.",
+      "System activity stays separate from narrative comments.",
+      "The history will fill in as the job moves.",
+      "Job details, comments, costs, visits, and activity.",
+      "Optional reference from outside this workspace",
+      "Add one when there is a clear related person or organization.",
+      "Attach an external member when this job needs limited shared visibility.",
+    ]) {
+      expect(screen.queryByText(removedCopy)).not.toBeInTheDocument();
+    }
+    await expectExternalCollaboratorOptionsToLoad();
   });
 
   it(
@@ -893,6 +956,7 @@ describe("jobs detail sheet", () => {
 
       const user = userEvent.setup();
       renderDetailSheet(buildDetail());
+      await openJobDetailTab(user, /comments/i);
 
       const commentField = screen.getByLabelText("Add a comment");
       await user.type(commentField, "Need a follow-up inspection.");
@@ -1060,6 +1124,7 @@ describe("jobs detail sheet", () => {
           userId: externalUserId,
         }
       );
+      await openJobDetailTab(user, /comments/i);
 
       expect(screen.getByLabelText("Add a comment")).toBeInTheDocument();
       expect(screen.getByText("External Partner")).toBeInTheDocument();
@@ -1186,6 +1251,7 @@ describe("jobs detail sheet", () => {
     async () => {
       const user = userEvent.setup();
       renderDetailSheet(buildDetail());
+      await openJobDetailTab(user, /costs/i);
 
       await user.type(screen.getByLabelText("Cost description"), "Install kit");
       await user.clear(screen.getByLabelText("Quantity"));
@@ -1262,6 +1328,7 @@ describe("jobs detail sheet", () => {
 
       const user = userEvent.setup();
       renderDetailSheet(buildDetail());
+      await openJobDetailTab(user, /costs/i);
 
       await user.selectOptions(screen.getByLabelText("Cost type"), "material");
       await user.type(screen.getByLabelText("Cost description"), "Install kit");
@@ -1300,6 +1367,7 @@ describe("jobs detail sheet", () => {
 
       const user = userEvent.setup();
       renderDetailSheet(buildDetail());
+      await openJobDetailTab(user, /visits/i);
 
       await user.clear(screen.getByLabelText("Visit date"));
       await user.type(screen.getByLabelText("Visit date"), "2026-04-24");
@@ -1528,6 +1596,13 @@ function renderDetailSheet(
       sheet
     )
   );
+}
+
+async function openJobDetailTab(
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp | string
+) {
+  await user.click(screen.getByRole("tab", { name }));
 }
 
 async function expectExternalCollaboratorOptionsToLoad() {

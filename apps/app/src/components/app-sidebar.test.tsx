@@ -32,7 +32,10 @@ const {
   mockedSearch: {
     value: {} as Record<string, unknown>,
   },
-  mockedShortcutOverlayCalls: [] as { activeScopes: readonly string[] }[],
+  mockedShortcutOverlayCalls: [] as {
+    activeScopes: readonly string[];
+    registerHotkeys?: boolean;
+  }[],
 }));
 
 const { mockedOrganizationSwitcher } = vi.hoisted(() => ({
@@ -147,12 +150,14 @@ vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
     activeScopes,
     buttonClassName,
     labelClassName,
+    registerHotkeys,
   }: {
     activeScopes: readonly string[];
     buttonClassName?: string;
     labelClassName?: string;
+    registerHotkeys?: boolean;
   }) => {
-    mockedShortcutOverlayCalls.push({ activeScopes });
+    mockedShortcutOverlayCalls.push({ activeScopes, registerHotkeys });
 
     return (
       <button
@@ -453,6 +458,7 @@ describe("app sidebar", () => {
       "jobs",
       "map",
     ]);
+    expect(mockedShortcutOverlayCalls.at(-1)?.registerHotkeys).toBeTruthy();
   });
 
   it.each(["owner", "admin"] as const)(

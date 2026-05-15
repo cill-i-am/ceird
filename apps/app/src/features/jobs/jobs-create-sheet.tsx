@@ -37,7 +37,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { Cause, Exit, ParseResult } from "effect";
+import { Cause, Exit, Option, ParseResult } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -305,7 +305,7 @@ export function JobsCreateSheet() {
     const failure = Cause.failureOption(exit.cause);
 
     if (
-      failure._tag === "Some" &&
+      Option.isSome(failure) &&
       failure.value._tag === SITE_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
@@ -315,7 +315,7 @@ export function JobsCreateSheet() {
     }
 
     if (
-      failure._tag === "Some" &&
+      Option.isSome(failure) &&
       failure.value._tag === CONTACT_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
@@ -326,7 +326,7 @@ export function JobsCreateSheet() {
     }
 
     if (
-      failure._tag === "Some" &&
+      Option.isSome(failure) &&
       failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
@@ -599,7 +599,7 @@ export function JobsCreateSheet() {
         open={siteDrawerOpen}
         onOpenChange={setSiteDrawerOpen}
       >
-        <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
+        <DrawerContent className="route-drawer-content route-side-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
           <DrawerHeader className="border-b px-5 py-4 text-left md:px-6">
             <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
               Site

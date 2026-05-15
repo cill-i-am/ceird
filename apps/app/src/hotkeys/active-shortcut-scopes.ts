@@ -6,6 +6,10 @@ export function getActiveShortcutScopes(
   pathname: string,
   search?: unknown
 ): readonly HotkeyScope[] {
+  if (pathname === "/") {
+    return ["global", "home"];
+  }
+
   if (pathname === "/jobs/new") {
     return ["global", "jobs", "job-create"];
   }
@@ -21,6 +25,10 @@ export function getActiveShortcutScopes(
   }
 
   if (pathname === "/sites") {
+    return ["global", "sites"];
+  }
+
+  if (pathname === "/sites/new" || pathname.startsWith("/sites/")) {
     return ["global", "sites"];
   }
 

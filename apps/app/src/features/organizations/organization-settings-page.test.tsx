@@ -1,7 +1,7 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect, pipe } from "effect";
 
@@ -149,7 +149,13 @@ describe("organization settings page", () => {
     vi.clearAllMocks();
   });
 
-  it("renders editable name and read-only slug for the active organization", () => {
+  async function selectOrganizationTab(
+    name: "General" | "Labels" | "Rate card" | "Service areas"
+  ) {
+    await userEvent.click(screen.getByRole("tab", { name }));
+  }
+
+  it("frames organization settings with direct feature tabs", async () => {
     render(
       <OrganizationSettingsPage
         organization={{
@@ -162,23 +168,67 @@ describe("organization settings page", () => {
     );
 
     expect(
-      screen.getByRole("heading", {
-        hidden: true,
-        name: "Organization settings",
-      })
-    ).toHaveClass("sr-only");
+      screen.getByRole("heading", { name: "Organization settings" })
+    ).toBeVisible();
+    expect(screen.queryByText("Organization")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Keep the workspace identity, labels, service coverage, and billing defaults ready for field operations."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /organization status/i })
+    ).not.toBeInTheDocument();
+    const sectionTabs = screen.getByRole("tablist", {
+      name: /organization settings sections/i,
+    });
+
+    expect(
+      within(sectionTabs).queryByRole("tab", { name: "Overview" })
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "General" })
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Labels" })
+    ).toBeVisible();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Service areas" })
+    ).toBeVisible();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Rate card" })
+    ).toBeVisible();
+    expect(
+      within(sectionTabs).queryByRole("tab", { name: "Details" })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("ORGANIZATION")).not.toBeInTheDocument();
     expect(
       screen.queryByText(
         "Keep the workspace identity current for everyone on the team."
       )
     ).not.toBeInTheDocument();
+    await selectOrganizationTab("General");
     expect(screen.getByRole("heading", { name: "General" })).toBeVisible();
+    expect(
+      screen.queryByText("Update the name your team sees across Ceird.")
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Organization name")).toHaveValue(
       "Acme Field Ops"
     );
-    expect(screen.getByText("acme-field-ops")).toBeVisible();
+
+    await selectOrganizationTab("Labels");
+    expect(
+      screen.queryByText(
+        "Manage organization labels used to sort and filter work."
+      )
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Urgent")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Label actions for Urgent" })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Edit Urgent" })
+    ).not.toBeInTheDocument();
   }, 10_000);
 
   it("creates an organization label and refreshes route data", async () => {
@@ -195,6 +245,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("Labels");
     await user.type(screen.getByLabelText("New label name"), "Needs estimate");
     await user.click(screen.getByRole("button", { name: "Create label" }));
 
@@ -226,7 +277,13 @@ describe("organization settings page", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit Urgent" }));
+    await selectOrganizationTab("Labels");
+    await user.click(
+      screen.getByRole("button", { name: "Label actions for Urgent" })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit label" })
+    );
     await user.clear(screen.getByLabelText("Label name"));
     await user.type(screen.getByLabelText("Label name"), "Emergency");
     await user.click(
@@ -263,7 +320,13 @@ describe("organization settings page", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Archive Blocked" }));
+    await selectOrganizationTab("Labels");
+    await user.click(
+      screen.getByRole("button", { name: "Label actions for Blocked" })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Archive label" })
+    );
 
     await waitFor(() => {
       expect(mockedRunBrowserAppApiRequest).toHaveBeenCalledWith(
@@ -294,6 +357,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("Labels");
     await user.type(screen.getByLabelText("New label name"), "   ");
     await user.click(screen.getByRole("button", { name: "Create label" }));
 
@@ -328,6 +392,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("Labels");
     await user.type(screen.getByLabelText("New label name"), "Waiting  on PO");
     await user.click(screen.getByRole("button", { name: "Create label" }));
 
@@ -354,6 +419,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("Labels");
     await user.type(screen.getByLabelText("New label name"), "Needs estimate");
     await user.click(screen.getByRole("button", { name: "Create label" }));
 
@@ -375,6 +441,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Northwind");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -414,6 +481,7 @@ describe("organization settings page", () => {
       </HotkeysProvider>
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Northwind");
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -443,15 +511,17 @@ describe("organization settings page", () => {
       </HotkeysProvider>
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Northwind");
+    await selectOrganizationTab("Service areas");
     await user.click(screen.getByLabelText("Section field"));
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     expect(mockedUpdateOrganization).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("does not offer a save action before the name changes", () => {
+  it("does not offer a save action before the name changes", async () => {
     render(
       <OrganizationSettingsPage
         organization={{
@@ -462,6 +532,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(mockedUpdateOrganization).not.toHaveBeenCalled();
   }, 10_000);
@@ -487,6 +558,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Northwind");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -512,6 +584,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Northwind");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -524,7 +597,7 @@ describe("organization settings page", () => {
     expect(mockedInvalidate).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("resets the form baseline when the active organization changes", () => {
+  it("resets the form baseline when the active organization changes", async () => {
     const { rerender } = render(
       <OrganizationSettingsPage
         organization={{
@@ -535,6 +608,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     rerender(
       <OrganizationSettingsPage
         organization={{
@@ -545,13 +619,14 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     expect(screen.getByLabelText("Organization name")).toHaveValue(
       "Northwind Field Ops"
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   }, 10_000);
 
-  it("refreshes a pristine organization name when the same organization changes remotely", () => {
+  it("refreshes a pristine organization name when the same organization changes remotely", async () => {
     const { rerender } = render(
       <OrganizationSettingsPage
         organization={{
@@ -562,6 +637,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     rerender(
       <OrganizationSettingsPage
         organization={{
@@ -590,6 +666,7 @@ describe("organization settings page", () => {
       />
     );
 
+    await selectOrganizationTab("General");
     await user.clear(screen.getByLabelText("Organization name"));
     await user.type(screen.getByLabelText("Organization name"), "Local edit");
 

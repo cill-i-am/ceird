@@ -16,7 +16,7 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(page).toHaveURL(/\/$/);
   await expect(workspaceHome).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { name: "Open jobs" })
+    page.getByRole("link", { exact: true, name: "Jobs" })
   ).toBeVisible();
 }
 
@@ -28,6 +28,26 @@ async function openSettingsFromAccountMenu(page: Page) {
   await openAccountMenu(page);
   await page.getByRole("menuitem", { name: "Organization settings" }).click();
   await expect(page).toHaveURL(/\/organization\/settings$/);
+}
+
+async function openOrganizationSettingsTab(page: Page, name: string) {
+  const tab = page.getByRole("tab", { exact: true, name });
+
+  await page.waitForFunction((tabName) => {
+    const tabElement = [...document.querySelectorAll('[role="tab"]')].find(
+      (element) => element.textContent?.trim() === tabName
+    );
+
+    return (
+      tabElement !== undefined &&
+      Object.keys(tabElement).some(
+        (key) =>
+          key.startsWith("__reactFiber$") || key.startsWith("__reactProps$")
+      )
+    );
+  }, name);
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
 async function signUpAndCreateOrganization(
@@ -123,6 +143,7 @@ test("organization settings service areas and rate cards feed sites and job filt
 
   await openSettingsFromAccountMenu(page);
 
+  await openOrganizationSettingsTab(page, "Service areas");
   await page.getByLabel("New service area name").fill(serviceAreaName);
   await page.getByLabel("New service area description").fill("Northside work");
   await page.getByRole("button", { name: "Add service area" }).click();
@@ -134,8 +155,11 @@ test("organization settings service areas and rate cards feed sites and job filt
     name: `Service area ${serviceAreaName}`,
   });
   await serviceArea
-    .getByRole("button", { name: `Edit ${serviceAreaName}` })
+    .getByRole("button", {
+      name: `Service area actions for ${serviceAreaName}`,
+    })
     .click();
+  await page.getByRole("menuitem", { name: "Edit service area" }).click();
   await serviceArea
     .getByLabel(`Area name for ${serviceAreaName}`)
     .fill(updatedServiceAreaName);
@@ -159,6 +183,7 @@ test("organization settings service areas and rate cards feed sites and job filt
     })
   ).toContainText(updatedServiceAreaDescription);
 
+  await openOrganizationSettingsTab(page, "Rate card");
   await page.getByRole("button", { name: "Add line" }).click();
   await expect(page.getByLabel("Kind for line 1")).toHaveValue("labour");
   await page.getByLabel("Name for line 1").fill("Labour");
@@ -177,11 +202,13 @@ test("organization settings service areas and rate cards feed sites and job filt
   await expect(
     page.getByRole("heading", { name: "Organization settings" })
   ).toBeVisible();
+  await openOrganizationSettingsTab(page, "Service areas");
   await expect(
     page.getByRole("article", {
       name: `Service area ${updatedServiceAreaName}`,
     })
   ).toContainText(updatedServiceAreaDescription);
+  await openOrganizationSettingsTab(page, "Rate card");
   await expect(page.getByLabel("Name for line 1")).toHaveValue("Labour");
   await expect(page.getByLabel("Kind for line 1")).toHaveValue("labour");
   await expect(page.getByLabel("Value for line 1")).toHaveValue("85");
@@ -201,6 +228,7 @@ test("organization settings service areas and rate cards feed sites and job filt
     page.getByRole("button", { name: "Save rate card" }).click(),
   ]);
   await page.reload();
+  await openOrganizationSettingsTab(page, "Rate card");
   await expect(page.getByLabel("Name for line 1")).toHaveValue(
     "Priority callout"
   );
@@ -224,7 +252,7 @@ test("organization settings service areas and rate cards feed sites and job filt
   await expect(page.getByRole("status")).toContainText(siteName);
   await expect(page.getByRole("link", { name: siteName })).toBeVisible();
   await expect(
-    page.getByText(updatedServiceAreaName, { exact: true })
+    page.getByRole("table").getByText(updatedServiceAreaName, { exact: true })
   ).toBeVisible();
 
   await runCommandBarAction(page, "Go to Jobs");

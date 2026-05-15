@@ -1,4 +1,3 @@
-import type { SiteIdType } from "@ceird/sites-core";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 
 import { loadSiteDetailRouteData } from "#/features/sites/sites-detail-route-loader";
@@ -13,18 +12,21 @@ export const Route = createFileRoute("/_app/_org/sites/$siteId")({
     },
   },
   codeSplitGroupings: [["loader", "component"]],
-  loader: ({ params }): SiteIdType => loadSiteDetailRouteData(params.siteId),
+  loader: ({ context, params }) =>
+    loadSiteDetailRouteData(params.siteId, context),
   component: SitesDetailRoute,
 });
 
 function SitesDetailRoute() {
-  const siteId = loadSiteDetailRouteData(Route.useLoaderData());
+  const { hasMoreRelatedJobs, relatedJobs, siteId } = Route.useLoaderData();
   const { options, viewer } = sitesRouteApi.useLoaderData();
   const initialSite = options.sites.find((site) => site.id === siteId) ?? null;
 
   return (
     <SitesDetailSheet
+      hasMoreRelatedJobs={hasMoreRelatedJobs}
       initialSite={initialSite}
+      relatedJobs={relatedJobs}
       siteId={siteId}
       viewer={viewer}
     />

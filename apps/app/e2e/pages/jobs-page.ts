@@ -22,7 +22,7 @@ export class JobsPage {
   }
 
   async openFromHome() {
-    await this.page.getByRole("link", { name: "Open Jobs" }).click();
+    await this.page.getByRole("link", { exact: true, name: "Jobs" }).click();
     await this.expectLoaded();
   }
 
@@ -181,6 +181,18 @@ export class JobDetailSheet {
       ).toBeVisible(),
       waitForSubmitHydration(this.page),
     ]);
+  }
+
+  async openTab(
+    tabName: "Activity" | "Comments" | "Costs" | "Details" | "Visits"
+  ) {
+    const tab = this.page.getByRole("tab", {
+      name: new RegExp(`^${tabName}`),
+    });
+
+    await tab.click();
+    await tab.press("Enter");
+    await expect(tab).toHaveAttribute("aria-selected", "true");
   }
 
   async chooseStatusOption(optionLabel: string) {

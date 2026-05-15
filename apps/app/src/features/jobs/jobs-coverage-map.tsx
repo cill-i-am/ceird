@@ -1,6 +1,6 @@
 "use client";
 import type { JobListItem } from "@ceird/jobs-core";
-/* oxlint-disable unicorn/no-array-sort */
+import type { SiteIdType } from "@ceird/sites-core";
 import { Location01Icon, MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
@@ -15,6 +15,7 @@ import {
   EmptyTitle,
 } from "#/components/ui/empty";
 import { Skeleton } from "#/components/ui/skeleton";
+import { useCanRenderInteractiveMap } from "#/components/ui/use-can-render-interactive-map";
 import {
   buildGoogleMapsUrl,
   hasSiteCoordinates,
@@ -23,15 +24,14 @@ import type { SiteLocationLike } from "#/features/sites/site-location";
 import { cn } from "#/lib/utils";
 
 import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
-import { useCanRenderInteractiveMap } from "./use-can-render-interactive-map";
 
 type SiteRecord = SiteLocationLike & {
-  readonly id: string;
+  readonly id: SiteIdType;
 };
 
 interface JobsCoverageMapProps {
   readonly jobs: readonly JobListItem[];
-  readonly sites: ReadonlyMap<string, SiteRecord>;
+  readonly sites: ReadonlyMap<SiteIdType, SiteRecord>;
 }
 
 export { STATUS_LABELS };
@@ -41,6 +41,8 @@ const JobsCoverageMapCanvas = React.lazy(async () => {
 
   return { default: module.JobsCoverageMapCanvas };
 });
+
+const MAX_VISIBLE_SITE_RAIL_JOBS = 4;
 
 export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   const groupedSites = React.useMemo(
@@ -60,6 +62,7 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   );
   const canRenderInteractiveMap = useCanRenderInteractiveMap();
   const hasUnmappedJobs = unmappedJobs.length > 0;
+  const showSiteRail = groupedSites.length > 0 || hasUnmappedJobs;
 
   return (
     <div className="flex min-h-[calc(100vh-14rem)] flex-col overflow-hidden rounded-2xl border bg-background">
@@ -79,7 +82,7 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
       <div
         className={cn(
           "grid min-h-0 flex-1",
-          hasUnmappedJobs
+          showSiteRail
             ? "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]"
             : "lg:grid-cols-1"
         )}
@@ -91,75 +94,177 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
           />
         </div>
 
-        {hasUnmappedJobs ? (
-          <aside className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
-            <div className="border-b px-3 py-2">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Needs location
-              </p>
-            </div>
-            <ul className="flex min-h-0 flex-col overflow-y-auto">
-              {unmappedJobs.slice(0, 8).map((job) => {
-                const site = job.siteId ? sites.get(job.siteId) : undefined;
-                const googleMapsUrl = buildGoogleMapsUrl(site);
-
-                return (
-                  <li key={job.id} className="border-b last:border-b-0">
-                    <div className="flex flex-col gap-2 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={
-                            job.status === "blocked" ? "outline" : "secondary"
-                          }
-                        >
-                          {STATUS_LABELS[job.status]}
-                        </Badge>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {site?.name ?? "No site"}
-                        </span>
-                      </div>
-                      <p className="line-clamp-2 text-sm font-medium">
-                        {job.title}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Link
-                          to="/jobs/$jobId"
-                          params={{ jobId: job.id }}
-                          className={buttonVariants({
-                            size: "xs",
-                            variant: "ghost",
-                          })}
-                        >
-                          Open
-                        </Link>
-                        {googleMapsUrl ? (
-                          <a
-                            href={googleMapsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={buttonVariants({
-                              size: "xs",
-                              variant: "outline",
-                            })}
-                          >
-                            <HugeiconsIcon
-                              icon={MapsLocation01Icon}
-                              strokeWidth={2}
-                              data-icon="inline-start"
-                            />
-                            Maps
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
+        {showSiteRail ? (
+          <JobsMapSiteRail
+            groupedSites={groupedSites}
+            sites={sites}
+            unmappedJobs={unmappedJobs}
+          />
         ) : null}
       </div>
     </div>
+  );
+}
+
+function JobsMapSiteRail({
+  groupedSites,
+  sites,
+  unmappedJobs,
+}: {
+  readonly groupedSites: readonly MappedSiteGroup[];
+  readonly sites: ReadonlyMap<SiteIdType, SiteRecord>;
+  readonly unmappedJobs: readonly JobListItem[];
+}) {
+  return (
+    <aside className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
+      {groupedSites.length > 0 ? (
+        <section className="flex min-h-0 flex-col">
+          <div className="border-b px-3 py-2">
+            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Mapped sites
+            </h2>
+          </div>
+          <ul className="flex min-h-0 flex-col overflow-y-auto">
+            {groupedSites.map((group) => (
+              <JobsMapSiteRailItem key={group.site.id} group={group} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {unmappedJobs.length > 0 ? (
+        <section className="flex min-h-0 flex-col">
+          <div className="border-b px-3 py-2">
+            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Needs location
+            </h2>
+          </div>
+          <ul className="flex min-h-0 flex-col overflow-y-auto">
+            {unmappedJobs.slice(0, 8).map((job) => {
+              const site = job.siteId ? sites.get(job.siteId) : undefined;
+              const googleMapsUrl = buildGoogleMapsUrl(site);
+
+              return (
+                <li key={job.id} className="border-b last:border-b-0">
+                  <div className="flex flex-col gap-2 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          job.status === "blocked" ? "outline" : "secondary"
+                        }
+                      >
+                        {STATUS_LABELS[job.status]}
+                      </Badge>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {site?.name ?? "No site"}
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-sm font-medium">
+                      {job.title}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to="/jobs/$jobId"
+                        params={{ jobId: job.id }}
+                        className={buttonVariants({
+                          size: "xs",
+                          variant: "ghost",
+                        })}
+                      >
+                        Open
+                      </Link>
+                      {googleMapsUrl ? (
+                        <a
+                          href={googleMapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={buttonVariants({
+                            size: "xs",
+                            variant: "outline",
+                          })}
+                        >
+                          <HugeiconsIcon
+                            icon={MapsLocation01Icon}
+                            strokeWidth={2}
+                            data-icon="inline-start"
+                          />
+                          Maps
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+    </aside>
+  );
+}
+
+function JobsMapSiteRailItem({ group }: { readonly group: MappedSiteGroup }) {
+  const visibleJobs = group.jobs.slice(0, MAX_VISIBLE_SITE_RAIL_JOBS);
+  const hiddenJobCount = group.jobs.length - visibleJobs.length;
+
+  return (
+    <li className="border-b last:border-b-0">
+      <div className="flex flex-col gap-3 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <Link
+              to="/sites/$siteId"
+              params={{ siteId: group.site.id }}
+              className="block truncate rounded-sm text-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              {group.site.name ?? "Mapped site"}
+            </Link>
+            {group.site.serviceAreaName ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {group.site.serviceAreaName}
+              </p>
+            ) : null}
+          </div>
+          <Badge variant="secondary">
+            {group.jobs.length} job
+            {group.jobs.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {group.statuses.slice(0, 3).map((status) => (
+            <Badge key={status.status} variant="outline">
+              {status.count} {STATUS_LABELS[status.status]}
+            </Badge>
+          ))}
+        </div>
+
+        <ul className="flex flex-col gap-1">
+          {visibleJobs.map((job) => (
+            <li key={job.id}>
+              <Link
+                to="/jobs/$jobId"
+                params={{ jobId: job.id }}
+                className="block rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <span className="line-clamp-1">{job.title}</span>
+              </Link>
+            </li>
+          ))}
+          {hiddenJobCount > 0 ? (
+            <li>
+              <Link
+                to="/sites/$siteId"
+                params={{ siteId: group.site.id }}
+                className="block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                View {hiddenJobCount} more on site
+              </Link>
+            </li>
+          ) : null}
+        </ul>
+      </div>
+    </li>
   );
 }
 
@@ -254,10 +359,10 @@ export interface MappedSiteGroup {
 
 function groupJobsByMappedSite(
   jobs: readonly JobListItem[],
-  sites: ReadonlyMap<string, SiteRecord>
+  sites: ReadonlyMap<SiteIdType, SiteRecord>
 ) {
   const groups = new Map<
-    string,
+    SiteIdType,
     { jobs: JobListItem[]; site: MappedSiteGroup["site"] }
   >();
 
@@ -309,7 +414,7 @@ function groupJobsByMappedSite(
         tone: resolveGroupTone(groupedJobs),
       } satisfies MappedSiteGroup;
     })
-    .sort((left, right) => {
+    .toSorted((left, right) => {
       const leftBlocked = left.jobs.some((job) => job.status === "blocked");
       const rightBlocked = right.jobs.some((job) => job.status === "blocked");
 

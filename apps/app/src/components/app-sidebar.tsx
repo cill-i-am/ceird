@@ -16,6 +16,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  useSidebar,
 } from "#/components/ui/sidebar";
 import {
   useActiveOrganizationFromMatches,
@@ -94,6 +95,7 @@ export function AppSidebar({
 }
 
 function SidebarUtilities() {
+  const { isMobile } = useSidebar();
   const activeScopes = useRouterState({
     select: (state) =>
       getActiveShortcutScopes(state.location.pathname, state.location.search),
@@ -108,6 +110,7 @@ function SidebarUtilities() {
         activeScopes={activeScopes}
         buttonClassName={utilityButtonClassName}
         labelClassName={utilityLabelClassName}
+        registerHotkeys={!isMobile}
       />
       <ThemeToggle
         className={utilityButtonClassName}

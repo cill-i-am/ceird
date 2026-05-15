@@ -5,18 +5,27 @@ import type {
   LabelIdType,
   UpdateLabelInput,
 } from "@ceird/labels-core";
-/* oxlint-disable unicorn/no-array-sort */
 import { RegistryProvider } from "@effect-atom/atom-react";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Schema } from "effect";
-import { Archive, Check, Pencil, Plus, X } from "lucide-react";
+import { Archive, Check, MoreHorizontal, Pencil, Plus, X } from "lucide-react";
 import * as React from "react";
 
+import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
   getErrorText,
@@ -423,269 +432,291 @@ export function OrganizationSettingsPage({
     <RegistryProvider key={organization.id}>
       <div
         ref={settingsRootRef}
-        className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8"
+        className="flex flex-1 flex-col gap-5 p-4 sm:gap-6 sm:p-6 lg:p-8"
       >
-        <h1 className="sr-only">Organization settings</h1>
-        <div className="grid max-w-5xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
-          <AppUtilityPanel
-            title="General"
-            description="Update the name your team sees across Ceird."
-            className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
-          >
-            <form
-              ref={formRef}
-              className="flex max-w-xl flex-col gap-5"
-              method="post"
-              noValidate
-              onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
+        <AppPageHeader
+          title="Organization settings"
+          className="border-b-0 pb-0"
+        />
+
+        <Tabs defaultValue="general" className="max-w-5xl gap-5">
+          <div className="no-scrollbar overflow-x-auto border-b border-border/60">
+            <TabsList
+              aria-label="Organization settings sections"
+              variant="line"
+              className="h-10"
             >
-              <FieldGroup>
-                <form.Field name="name">
-                  {(field) => {
-                    const errorText = getErrorText(field.state.meta.errors);
+              <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="labels">Labels</TabsTrigger>
+              <TabsTrigger value="service-areas">Service areas</TabsTrigger>
+              <TabsTrigger value="rate-card">Rate card</TabsTrigger>
+            </TabsList>
+          </div>
 
-                    return (
-                      <AuthFormField
-                        label="Organization name"
-                        htmlFor="organization-name"
-                        errorText={errorText}
-                      >
-                        <Input
-                          id="organization-name"
-                          name={field.name}
-                          autoComplete="organization"
-                          value={field.state.value}
-                          aria-invalid={Boolean(errorText) || undefined}
-                          onBlur={field.handleBlur}
-                          onChange={(event) => {
-                            setSuccessMessage(null);
-                            field.handleChange(event.target.value);
-                          }}
-                        />
-                      </AuthFormField>
-                    );
-                  }}
-                </form.Field>
-              </FieldGroup>
-
-              <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
-                {(error) =>
-                  getFormErrorText(error) ? (
-                    <FieldError>{getFormErrorText(error)}</FieldError>
-                  ) : null
-                }
-              </form.Subscribe>
-
-              {successMessage ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {successMessage}
-                </p>
-              ) : null}
-
-              <form.Subscribe
-                selector={(state) => ({
-                  isDefaultValue: state.isDefaultValue,
-                  isSubmitting: state.isSubmitting,
-                })}
+          <TabsContent value="general" keepMounted>
+            <AppUtilityPanel id="organization-general" title="General">
+              <form
+                ref={formRef}
+                className="flex max-w-xl flex-col gap-5"
+                method="post"
+                noValidate
+                onSubmit={(event) => submitClientForm(event, form.handleSubmit)}
               >
-                {({ isDefaultValue, isSubmitting }) => (
+                <FieldGroup>
+                  <form.Field name="name">
+                    {(field) => {
+                      const errorText = getErrorText(field.state.meta.errors);
+
+                      return (
+                        <AuthFormField
+                          label="Organization name"
+                          htmlFor="organization-name"
+                          errorText={errorText}
+                        >
+                          <Input
+                            id="organization-name"
+                            name={field.name}
+                            autoComplete="organization"
+                            value={field.state.value}
+                            aria-invalid={Boolean(errorText) || undefined}
+                            onBlur={field.handleBlur}
+                            onChange={(event) => {
+                              setSuccessMessage(null);
+                              field.handleChange(event.target.value);
+                            }}
+                          />
+                        </AuthFormField>
+                      );
+                    }}
+                  </form.Field>
+                </FieldGroup>
+
+                <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
+                  {(error) =>
+                    getFormErrorText(error) ? (
+                      <FieldError>{getFormErrorText(error)}</FieldError>
+                    ) : null
+                  }
+                </form.Subscribe>
+
+                {successMessage ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {successMessage}
+                  </p>
+                ) : null}
+
+                <form.Subscribe
+                  selector={(state) => ({
+                    isDefaultValue: state.isDefaultValue,
+                    isSubmitting: state.isSubmitting,
+                  })}
+                >
+                  {({ isDefaultValue, isSubmitting }) => (
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="self-start max-sm:w-full max-sm:self-stretch"
+                      loading={isSubmitting}
+                      disabled={isDefaultValue || !isHydrated}
+                    >
+                      {isSubmitting ? "Saving..." : "Save changes"}
+                    </Button>
+                  )}
+                </form.Subscribe>
+              </form>
+            </AppUtilityPanel>
+          </TabsContent>
+
+          <TabsContent value="labels" keepMounted>
+            <AppUtilityPanel id="organization-labels" title="Labels">
+              <div className="flex max-w-3xl flex-col gap-5">
+                <form
+                  className="flex flex-col gap-3 sm:flex-row sm:items-end"
+                  onSubmit={(event) =>
+                    submitClientForm(event, handleCreateLabel)
+                  }
+                >
+                  <AuthFormField
+                    label="New label name"
+                    htmlFor="new-job-label-name"
+                    validationState={isCreateLabelError ? "invalid" : undefined}
+                    errorText={undefined}
+                  >
+                    <Input
+                      id="new-job-label-name"
+                      value={newLabelName}
+                      maxLength={48}
+                      aria-describedby={
+                        isCreateLabelError ? labelErrorId : undefined
+                      }
+                      aria-invalid={isCreateLabelError || undefined}
+                      onChange={(event) => {
+                        setNewLabelName(event.target.value);
+                        setLabelError(null);
+                        setLabelErrorTarget(null);
+                        setLabelStatus(null);
+                      }}
+                    />
+                  </AuthFormField>
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full sm:w-auto"
-                    loading={isSubmitting}
-                    disabled={isDefaultValue || !isHydrated}
+                    className="max-sm:w-full"
+                    loading={pendingLabelAction === "create"}
+                    disabled={!isHydrated}
                   >
-                    {isSubmitting ? "Saving..." : "Save changes"}
+                    <Plus aria-hidden="true" />
+                    Create label
                   </Button>
-                )}
-              </form.Subscribe>
-            </form>
-          </AppUtilityPanel>
+                </form>
 
-          <AppUtilityPanel
-            title="Identity"
-            description="These values are used when Ceird identifies this workspace."
-          >
-            <dl className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1 border-t border-border/60 pt-4 first:border-t-0 first:pt-0">
-                <dt className="text-xs font-medium text-muted-foreground uppercase">
-                  Slug
-                </dt>
-                <dd className="font-mono text-sm break-all text-foreground">
-                  {organization.slug}
-                </dd>
-              </div>
-              <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-                <dt className="text-xs font-medium text-muted-foreground uppercase">
-                  Access
-                </dt>
-                <dd className="text-sm/6 text-muted-foreground">
-                  Admins and owners can edit organization settings.
-                </dd>
-              </div>
-            </dl>
-          </AppUtilityPanel>
-        </div>
-
-        <div className="grid max-w-5xl gap-6">
-          <AppUtilityPanel
-            title="Labels"
-            description="Manage organization labels used to sort and filter work."
-            className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
-          >
-            <div className="flex max-w-3xl flex-col gap-5">
-              <form
-                className="flex flex-col gap-3 sm:flex-row sm:items-end"
-                onSubmit={(event) => submitClientForm(event, handleCreateLabel)}
-              >
-                <AuthFormField
-                  label="New label name"
-                  htmlFor="new-job-label-name"
-                  validationState={isCreateLabelError ? "invalid" : undefined}
-                  errorText={undefined}
-                >
-                  <Input
-                    id="new-job-label-name"
-                    value={newLabelName}
-                    maxLength={48}
-                    aria-describedby={
-                      isCreateLabelError ? labelErrorId : undefined
-                    }
-                    aria-invalid={isCreateLabelError || undefined}
-                    onChange={(event) => {
-                      setNewLabelName(event.target.value);
-                      setLabelError(null);
-                      setLabelErrorTarget(null);
-                      setLabelStatus(null);
-                    }}
-                  />
-                </AuthFormField>
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  loading={pendingLabelAction === "create"}
-                  disabled={!isHydrated}
-                >
-                  <Plus aria-hidden="true" />
-                  Create label
-                </Button>
-              </form>
-
-              {labelError ? (
-                <FieldError id={labelErrorId}>{labelError}</FieldError>
-              ) : null}
-              {labelStatus ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {labelStatus}
-                </p>
-              ) : null}
-
-              <div className="overflow-hidden rounded-lg border border-border/60">
-                {labels.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-muted-foreground">
-                    No labels yet.
+                {labelError ? (
+                  <FieldError id={labelErrorId}>{labelError}</FieldError>
+                ) : null}
+                {labelStatus ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {labelStatus}
                   </p>
-                ) : (
-                  <ul className="divide-y divide-border/60">
-                    {labels.map((label) => {
-                      const isEditing = editingLabelId === label.id;
+                ) : null}
 
-                      return (
-                        <li
-                          key={label.id}
-                          className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          {isEditing ? (
-                            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                              <label
-                                className="sr-only"
-                                htmlFor={`job-label-${label.id}`}
-                              >
-                                Label name
-                              </label>
-                              <Input
-                                id={`job-label-${label.id}`}
-                                value={editingLabelName}
-                                maxLength={48}
-                                aria-describedby={
-                                  isEditLabelError ? labelErrorId : undefined
-                                }
-                                aria-invalid={isEditLabelError || undefined}
-                                onChange={(event) => {
-                                  setEditingLabelName(event.target.value);
-                                  setLabelError(null);
-                                  setLabelErrorTarget(null);
-                                }}
-                              />
-                              <div className="flex gap-2">
-                                <IconButton
-                                  label="Save label changes"
-                                  disabled={pendingLabelAction !== null}
-                                  onClick={() => {
-                                    void handleUpdateLabel(label.id);
-                                  }}
+                <div className="overflow-hidden rounded-lg border border-border/60">
+                  {labels.length === 0 ? (
+                    <p className="px-4 py-6 text-sm text-muted-foreground">
+                      No labels yet.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border/60">
+                      {labels.map((label) => {
+                        const isEditing = editingLabelId === label.id;
+
+                        return (
+                          <li
+                            key={label.id}
+                            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            {isEditing ? (
+                              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                                <label
+                                  className="sr-only"
+                                  htmlFor={`job-label-${label.id}`}
                                 >
-                                  <Check aria-hidden="true" />
-                                </IconButton>
-                                <IconButton
-                                  label="Cancel label edit"
-                                  disabled={pendingLabelAction !== null}
-                                  onClick={() => {
-                                    setEditingLabelId(null);
-                                    setEditingLabelName("");
+                                  Label name
+                                </label>
+                                <Input
+                                  id={`job-label-${label.id}`}
+                                  value={editingLabelName}
+                                  maxLength={48}
+                                  aria-describedby={
+                                    isEditLabelError ? labelErrorId : undefined
+                                  }
+                                  aria-invalid={isEditLabelError || undefined}
+                                  onChange={(event) => {
+                                    setEditingLabelName(event.target.value);
                                     setLabelError(null);
                                     setLabelErrorTarget(null);
                                   }}
-                                >
-                                  <X aria-hidden="true" />
-                                </IconButton>
+                                />
+                                <div className="flex gap-2">
+                                  <IconButton
+                                    label="Save label changes"
+                                    disabled={pendingLabelAction !== null}
+                                    onClick={() => {
+                                      void handleUpdateLabel(label.id);
+                                    }}
+                                  >
+                                    <Check aria-hidden="true" />
+                                  </IconButton>
+                                  <IconButton
+                                    label="Cancel label edit"
+                                    disabled={pendingLabelAction !== null}
+                                    onClick={() => {
+                                      setEditingLabelId(null);
+                                      setEditingLabelName("");
+                                      setLabelError(null);
+                                      setLabelErrorTarget(null);
+                                    }}
+                                  >
+                                    <X aria-hidden="true" />
+                                  </IconButton>
+                                </div>
                               </div>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="min-w-0 text-sm font-medium text-foreground">
-                                {label.name}
-                              </span>
-                              <div className="flex gap-2">
-                                <IconButton
-                                  label={`Edit ${label.name}`}
-                                  disabled={pendingLabelAction !== null}
-                                  onClick={() => {
-                                    setEditingLabelId(label.id);
-                                    setEditingLabelName(label.name);
-                                    setLabelError(null);
-                                    setLabelErrorTarget(null);
-                                    setLabelStatus(null);
-                                  }}
-                                >
-                                  <Pencil aria-hidden="true" />
-                                </IconButton>
-                                <IconButton
-                                  label={`Archive ${label.name}`}
-                                  disabled={pendingLabelAction !== null}
-                                  onClick={() => {
-                                    void handleArchiveLabel(label.id);
-                                  }}
-                                >
-                                  <Archive aria-hidden="true" />
-                                </IconButton>
-                              </div>
-                            </>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                            ) : (
+                              <>
+                                <span className="min-w-0 text-sm font-medium text-foreground">
+                                  {label.name}
+                                </span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        type="button"
+                                        size="icon-sm"
+                                        variant="outline"
+                                        disabled={pendingLabelAction !== null}
+                                        aria-label={`Label actions for ${label.name}`}
+                                      />
+                                    }
+                                  >
+                                    <MoreHorizontal aria-hidden="true" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    className="w-44"
+                                  >
+                                    <DropdownMenuGroup>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setEditingLabelId(label.id);
+                                          setEditingLabelName(label.name);
+                                          setLabelError(null);
+                                          setLabelErrorTarget(null);
+                                          setLabelStatus(null);
+                                        }}
+                                      >
+                                        <Pencil
+                                          aria-hidden="true"
+                                          className="text-muted-foreground"
+                                        />
+                                        <span>Edit label</span>
+                                      </DropdownMenuItem>
+                                    </DropdownMenuGroup>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuGroup>
+                                      <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={() => {
+                                          void handleArchiveLabel(label.id);
+                                        }}
+                                      >
+                                        <Archive
+                                          aria-hidden="true"
+                                          className="text-muted-foreground"
+                                        />
+                                        <span>Archive label</span>
+                                      </DropdownMenuItem>
+                                    </DropdownMenuGroup>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               </div>
-            </div>
-          </AppUtilityPanel>
+            </AppUtilityPanel>
+          </TabsContent>
 
-          <OrganizationServiceAreasSection />
-          <OrganizationRateCardSection />
-        </div>
+          <TabsContent value="service-areas" keepMounted>
+            <OrganizationServiceAreasSection />
+          </TabsContent>
+
+          <TabsContent value="rate-card" keepMounted>
+            <OrganizationRateCardSection />
+          </TabsContent>
+        </Tabs>
       </div>
     </RegistryProvider>
   );

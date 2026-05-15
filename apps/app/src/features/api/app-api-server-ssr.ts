@@ -1,3 +1,8 @@
+import type {
+  JobListItem,
+  JobListQuery,
+  JobListResponse,
+} from "@ceird/jobs-core";
 import type { LabelsResponse } from "@ceird/labels-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 
@@ -59,5 +64,49 @@ export async function getCurrentServerSiteOptionsDirect(): Promise<SitesOptionsR
     request,
     "SitesServer.getSiteOptions",
     (client) => client.sites.getSiteOptions()
+  );
+}
+
+export async function listAllCurrentServerJobsDirect(
+  query: JobListQuery = {}
+): Promise<JobListResponse> {
+  const items: JobListItem[] = [];
+  const request = await readServerAppApiRequestStrict();
+  const { cursor: initialCursor, ...staticQuery } = query;
+  let cursor = initialCursor;
+
+  while (true) {
+    const pageQuery = cursor ? { ...staticQuery, cursor } : staticQuery;
+    const page = await runAppApiClient(
+      request,
+      "JobsServer.listJobs",
+      (client) =>
+        client.jobs.listJobs({
+          urlParams: pageQuery,
+        })
+    );
+
+    items.push(...page.items);
+
+    if (!page.nextCursor) {
+      return {
+        items,
+        nextCursor: undefined,
+      };
+    }
+
+    cursor = page.nextCursor;
+  }
+}
+
+export async function listCurrentServerJobsDirect(
+  query: JobListQuery = {}
+): Promise<JobListResponse> {
+  const request = await readServerAppApiRequestStrict();
+
+  return await runAppApiClient(request, "JobsServer.listJobs", (client) =>
+    client.jobs.listJobs({
+      urlParams: query,
+    })
   );
 }

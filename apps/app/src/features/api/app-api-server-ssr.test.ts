@@ -1,13 +1,20 @@
+import { JobListCursor, WorkItemId } from "@ceird/jobs-core";
+import type { JobListResponse, WorkItemIdType } from "@ceird/jobs-core";
 import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
+import { SiteId } from "@ceird/sites-core";
 import type {
   ServiceAreaIdType,
+  SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
 /* oxlint-disable unicorn/no-useless-undefined */
 // @vitest-environment node
+import { Schema } from "effect";
 
 import {
   getCurrentServerLabelsDirect as getCurrentServerLabels,
+  listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
+  listCurrentServerJobsDirect as listCurrentServerJobs,
   getCurrentServerSiteOptionsDirect as getCurrentServerSiteOptions,
 } from "./app-api-server-ssr";
 
@@ -18,6 +25,13 @@ const { mockedGetRequestHeader } = vi.hoisted(() => ({
 vi.mock(import("@tanstack/react-start/server"), () => ({
   getRequestHeader: mockedGetRequestHeader,
 }));
+
+const decodeSiteId: (value: unknown) => SiteIdType =
+  Schema.decodeUnknownSync(SiteId);
+const decodeWorkItemId: (value: unknown) => WorkItemIdType =
+  Schema.decodeUnknownSync(WorkItemId);
+const siteId = decodeSiteId("55555555-5555-4555-8555-555555555555");
+const nextCursor = Schema.decodeUnknownSync(JobListCursor)("cursor-one");
 
 const labelsResponse: LabelsResponse = {
   labels: [
@@ -38,6 +52,40 @@ const sitesOptionsResponse: SitesOptionsResponse = {
     },
   ],
   sites: [],
+};
+
+const firstJobsPage: JobListResponse = {
+  items: [
+    {
+      createdAt: "2026-04-23T10:00:00.000Z",
+      id: decodeWorkItemId("11111111-1111-4111-8111-111111111111"),
+      kind: "job",
+      labels: [],
+      priority: "high",
+      siteId,
+      status: "in_progress",
+      title: "Inspect boiler",
+      updatedAt: "2026-04-23T12:00:00.000Z",
+    },
+  ],
+  nextCursor,
+};
+
+const secondJobsPage: JobListResponse = {
+  items: [
+    {
+      createdAt: "2026-04-24T10:00:00.000Z",
+      id: decodeWorkItemId("22222222-2222-4222-8222-222222222222"),
+      kind: "job",
+      labels: [],
+      priority: "medium",
+      siteId,
+      status: "new",
+      title: "Replace valve",
+      updatedAt: "2026-04-24T12:00:00.000Z",
+    },
+  ],
+  nextCursor: undefined,
 };
 
 describe("shared app api server helpers", () => {
@@ -211,5 +259,81 @@ describe("shared app api server helpers", () => {
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
     });
+  }, 1000);
+
+  it("reads one filtered jobs page with auth and forwarded headers", async () => {
+    mockedGetRequestHeader.mockImplementation((name) => {
+      if (name === "cookie") {
+        return "better-auth.session_token=session-token";
+      }
+
+      if (name === "host") {
+        return "app.ceird.localhost:1355";
+      }
+    });
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(firstJobsPage));
+
+    await expect(
+      listCurrentServerJobs({ limit: 25, siteId })
+    ).resolves.toStrictEqual(firstJobsPage);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const requestUrl = new URL(String(url));
+
+    expect(requestUrl.origin + requestUrl.pathname).toBe(
+      "http://ceird-sbx-api:4301/jobs"
+    );
+    expect(requestUrl.searchParams.get("limit")).toBe("25");
+    expect(requestUrl.searchParams.get("siteId")).toBe(siteId);
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+      origin: "https://app.ceird.localhost:1355",
+      "x-forwarded-host": "api.ceird.localhost:1355",
+    });
+  }, 1000);
+
+  it("preserves static filters while paginating all jobs", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(firstJobsPage))
+      .mockResolvedValueOnce(Response.json(secondJobsPage));
+
+    await expect(listAllCurrentServerJobs({ siteId })).resolves.toStrictEqual({
+      items: [...firstJobsPage.items, ...secondJobsPage.items],
+      nextCursor: undefined,
+    });
+
+    const firstUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+
+    expect(firstUrl.origin + firstUrl.pathname).toBe(
+      "http://ceird-sbx-api:4301/jobs"
+    );
+    expect(firstUrl.searchParams.get("siteId")).toBe(siteId);
+    expect(firstUrl.searchParams.has("cursor")).toBeFalsy();
+    expect(secondUrl.searchParams.get("siteId")).toBe(siteId);
+    expect(secondUrl.searchParams.get("cursor")).toBe("cursor-one");
+  }, 1000);
+
+  it("does not fetch jobs without the current auth cookie", async () => {
+    mockedGetRequestHeader.mockReturnValue(undefined);
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(listCurrentServerJobs({ siteId })).rejects.toThrow(
+      "Cannot query the Ceird API without the current auth cookie."
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 });

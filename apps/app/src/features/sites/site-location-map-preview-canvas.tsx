@@ -12,13 +12,13 @@ import {
 import { hasSiteCoordinates } from "#/features/sites/site-location";
 import type { SiteLocationLike } from "#/features/sites/site-location";
 
-interface JobsDetailLocationMapPreviewCanvasProps {
+interface SiteLocationMapPreviewCanvasProps {
   readonly site: SiteLocationLike;
 }
 
-export function JobsDetailLocationMapPreviewCanvas({
+export function SiteLocationMapPreviewCanvas({
   site,
-}: JobsDetailLocationMapPreviewCanvasProps) {
+}: SiteLocationMapPreviewCanvasProps) {
   if (!hasSiteCoordinates(site)) {
     return (
       <div className="rounded-2xl border bg-muted/10 p-4 text-sm text-muted-foreground">
@@ -32,9 +32,6 @@ export function JobsDetailLocationMapPreviewCanvas({
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <p className="text-sm font-medium">Map preview</p>
-          <p className="text-xs text-muted-foreground">
-            A quick visual check before you open navigation.
-          </p>
         </div>
       </div>
       <div className="h-44">

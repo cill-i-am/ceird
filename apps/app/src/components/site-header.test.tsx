@@ -4,11 +4,28 @@ import userEvent from "@testing-library/user-event";
 
 import { SiteHeader } from "./site-header";
 
-const { mockedNavigate, mockedRole } = vi.hoisted(() => ({
+const {
+  mockedIsMobile,
+  mockedNavigate,
+  mockedPathname,
+  mockedRole,
+  mockedSearch,
+  mockedShortcutOverlayCalls,
+} = vi.hoisted(() => ({
+  mockedIsMobile: {
+    value: false,
+  },
   mockedNavigate: vi.fn<() => Promise<void>>(),
+  mockedPathname: {
+    value: "/",
+  },
   mockedRole: {
     value: undefined as "owner" | "admin" | "member" | "external" | undefined,
   },
+  mockedSearch: {
+    value: {} as Record<string, unknown>,
+  },
+  mockedShortcutOverlayCalls: [] as { activeScopes: readonly string[] }[],
 }));
 
 function setOrgMatches(
@@ -43,8 +60,47 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       return options?.select ? options.select(match) : match;
     }) as typeof actual.useMatch,
     useNavigate: () => mockedNavigate,
+    useRouterState: ((options?: {
+      select?: (state: {
+        location: { pathname: string; search: Record<string, unknown> };
+      }) => unknown;
+    }) => {
+      const state = {
+        location: {
+          pathname: mockedPathname.value,
+          search: mockedSearch.value,
+        },
+      };
+
+      return options?.select ? options.select(state) : state;
+    }) as typeof actual.useRouterState,
   };
 });
+
+vi.mock(import("#/hotkeys/shortcut-help-overlay"), () => ({
+  ShortcutHelpOverlay: ({
+    activeScopes,
+    buttonClassName,
+    labelClassName,
+  }: {
+    activeScopes: readonly string[];
+    buttonClassName?: string;
+    labelClassName?: string;
+  }) => {
+    mockedShortcutOverlayCalls.push({ activeScopes });
+
+    return (
+      <button
+        type="button"
+        aria-label="Keyboard shortcuts"
+        className={buttonClassName}
+        data-label-class-name={labelClassName}
+      >
+        Keyboard shortcuts
+      </button>
+    );
+  },
+}));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
@@ -62,12 +118,25 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
         aria-label={ariaLabel}
       />
     )) as typeof actual.SidebarTrigger,
+    useSidebar: () => ({
+      state: "expanded" as const,
+      open: true,
+      setOpen: () => {},
+      openMobile: false,
+      setOpenMobile: () => {},
+      isMobile: mockedIsMobile.value,
+      toggleSidebar: () => {},
+    }),
   };
 });
 
 describe("site header", () => {
   beforeEach(() => {
+    mockedIsMobile.value = false;
+    mockedPathname.value = "/";
     setOrgMatches();
+    mockedSearch.value = {};
+    mockedShortcutOverlayCalls.length = 0;
   });
 
   afterEach(() => {
@@ -105,6 +174,27 @@ describe("site header", () => {
       ).not.toBeInTheDocument();
     }
   );
+
+  it("exposes shortcut help directly in the mobile header", () => {
+    mockedIsMobile.value = true;
+    mockedPathname.value = "/jobs";
+    mockedSearch.value = { view: "map" };
+
+    render(
+      <HotkeysProvider>
+        <SiteHeader />
+      </HotkeysProvider>
+    );
+
+    expect(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    ).toBeInTheDocument();
+    expect(mockedShortcutOverlayCalls.at(-1)?.activeScopes).toStrictEqual([
+      "global",
+      "jobs",
+      "map",
+    ]);
+  });
 
   it.each(["owner", "admin"] as const)(
     "enables the activity route hotkey for %s role",

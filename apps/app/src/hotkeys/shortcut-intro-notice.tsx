@@ -41,6 +41,22 @@ function setShortcutIntroSeen() {
   window.dispatchEvent(new Event(SHORTCUT_INTRO_SEEN_EVENT));
 }
 
+export function resetShortcutIntroNoticeForTest() {
+  shortcutIntroSeenInMemory = false;
+
+  try {
+    const { localStorage } = window;
+
+    if (typeof localStorage.removeItem === "function") {
+      localStorage.removeItem(SHORTCUT_INTRO_STORAGE_KEY);
+    }
+  } catch {
+    // Tests can still reset the in-memory fallback when storage is unavailable.
+  }
+
+  window.dispatchEvent(new Event(SHORTCUT_INTRO_SEEN_EVENT));
+}
+
 function subscribeToShortcutIntroSeen(onStoreChange: () => void) {
   window.addEventListener(SHORTCUT_INTRO_SEEN_EVENT, onStoreChange);
 
@@ -65,7 +81,7 @@ export function ShortcutIntroNotice() {
   return (
     <div
       aria-live="polite"
-      className="fixed right-3 bottom-3 z-50 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-lg border border-border/70 bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg sm:right-5 sm:bottom-5"
+      className="pointer-events-none fixed right-3 bottom-3 z-50 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-lg border border-border/70 bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg sm:right-5 sm:bottom-5"
     >
       <span className="min-w-0">
         Keyboard shortcuts are available. Press ? anytime.
@@ -74,6 +90,7 @@ export function ShortcutIntroNotice() {
         type="button"
         variant="secondary"
         size="xs"
+        className="pointer-events-auto"
         onClick={() => {
           setShortcutIntroSeen();
         }}

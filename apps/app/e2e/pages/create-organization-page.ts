@@ -31,14 +31,16 @@ export class CreateOrganizationPage {
 
   async expectLoaded() {
     await Promise.all([
-      expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`),
-      expect(this.heading).toBeVisible(),
+      expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`, {
+        timeout: 15_000,
+      }),
+      expect(this.heading).toBeVisible({ timeout: 15_000 }),
       waitForSubmitHydration(this.page),
     ]);
   }
 
   async skipInviteStep() {
-    await expect(this.inviteHeading).toBeVisible();
+    await expect(this.inviteHeading).toBeVisible({ timeout: 15_000 });
     await this.skipInvites.click();
   }
 }

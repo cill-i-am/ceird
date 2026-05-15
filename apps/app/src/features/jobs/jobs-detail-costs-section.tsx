@@ -22,7 +22,6 @@ import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -222,10 +221,7 @@ export function JobCostsSection({
   }
 
   return (
-    <DetailSection
-      title="Costs"
-      description="Track labour and materials without mixing them into the job narrative."
-    >
+    <DetailSection title="Costs">
       <div className="flex flex-col gap-5">
         {costs === undefined ? null : (
           <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3">
@@ -366,9 +362,6 @@ export function JobCostsSection({
                       })
                     }
                   />
-                  <FieldDescription>
-                    Keep it short: what was used or what work was carried out.
-                  </FieldDescription>
                   <FieldError>{costLineForm.error}</FieldError>
                 </FieldContent>
               </Field>
@@ -450,12 +443,7 @@ function CostLines({ costs }: { readonly costs: JobDetailResponse["costs"] }) {
   }
 
   if (costs.lines.length === 0) {
-    return (
-      <DetailEmpty
-        title="No costs added yet."
-        description="Add labour or materials once the work creates a real cost."
-      />
-    );
+    return <DetailEmpty title="No costs added yet." />;
   }
 
   return (
