@@ -4,9 +4,10 @@ import {
 } from "@ceird/sites-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
+import * as React from "react";
 import type { ReactNode } from "react";
 
 import { SitesCreateSheet } from "./sites-create-sheet";
@@ -21,13 +22,23 @@ const serviceAreaId =
   "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 
-const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
-  () => ({
-    mockedNavigate: vi.fn<NavigateMock>(),
-    mockedUseAtomSet: vi.fn<AtomSetterMock>(),
-    mockedUseAtomValue: vi.fn<AtomValueMock>(),
-  })
-);
+const {
+  mockedDrawerRuntime,
+  mockedNavigate,
+  mockedPathname,
+  mockedUseAtomSet,
+  mockedUseAtomValue,
+} = vi.hoisted(() => ({
+  mockedDrawerRuntime: {
+    close: vi.fn<() => void>(),
+  },
+  mockedNavigate: vi.fn<NavigateMock>(),
+  mockedPathname: {
+    current: "/sites/new",
+  },
+  mockedUseAtomSet: vi.fn<AtomSetterMock>(),
+  mockedUseAtomValue: vi.fn<AtomValueMock>(),
+}));
 
 const mockedCreateSite = vi.fn<AsyncMutationMock>();
 let mockedCreateResult: unknown;
@@ -61,9 +72,34 @@ vi.mock(import("@effect-atom/atom-react"), async (importActual) => {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
+  useRouterState: <T,>({
+    select,
+  }: {
+    select: (state: { location: { pathname: string } }) => T;
+  }) => select({ location: { pathname: mockedPathname.current } }),
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DrawerClose: ({ children }: { children: ReactNode }) => {
+    if (
+      React.isValidElement<{
+        onClick?: React.MouseEventHandler<HTMLElement>;
+      }>(children)
+    ) {
+      return React.cloneElement(children, {
+        onClick: (event: React.MouseEvent<HTMLElement>) => {
+          children.props.onClick?.(event);
+          mockedDrawerRuntime.close();
+        },
+      });
+    }
+
+    return (
+      <button type="button" onClick={() => mockedDrawerRuntime.close()}>
+        {children}
+      </button>
+    );
+  },
   DrawerContent: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -82,22 +118,37 @@ vi.mock("#/components/ui/drawer", () => ({
 vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
+    onAnimationEnd,
+    onOpenChange,
     open,
   }: {
     children: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
+    onOpenChange?: (open: boolean) => void;
     open: boolean;
-  }) =>
-    open ? (
+  }) => {
+    mockedDrawerRuntime.close.mockImplementation(() => {
+      onOpenChange?.(false);
+      onAnimationEnd?.(false);
+    });
+
+    React.useEffect(() => {
+      onAnimationEnd?.(open);
+    }, [onAnimationEnd, open]);
+
+    return open ? (
       <div data-testid="responsive-drawer" data-open="true">
         {children}
       </div>
-    ) : null,
+    ) : null;
+  },
 }));
 
 describe("sites create sheet", () => {
   beforeEach(() => {
     mockedCreateSite.mockReset();
     mockedNavigate.mockReset();
+    mockedPathname.current = "/sites/new";
     mockedCreateResult = {
       waiting: false,
     };
@@ -180,7 +231,9 @@ describe("sites create sheet", () => {
         serviceAreaId,
         town: "Dublin",
       });
-      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
+      await waitFor(() => {
+        expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
+      });
     }
   );
 

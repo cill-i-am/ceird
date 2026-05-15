@@ -7,7 +7,13 @@ import type {
   SitesOptionsResponse,
 } from "@ceird/sites-core";
 import { RegistryProvider } from "@effect-atom/atom-react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { SitesDetailSheet } from "./sites-detail-sheet";
@@ -19,8 +25,11 @@ const serviceAreaId =
   "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 
-const { mockedNavigate } = vi.hoisted(() => ({
+const { mockedNavigate, mockedPathname } = vi.hoisted(() => ({
   mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
+  mockedPathname: {
+    current: "/sites/55555555-5555-4555-8555-555555555555",
+  },
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -38,82 +47,201 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       </a>
     )) as typeof actual.Link,
     useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
+    useRouterState: (({
+      select,
+    }: {
+      select: (state: { location: { pathname: string } }) => unknown;
+    }) =>
+      select({
+        location: {
+          pathname: mockedPathname.current,
+        },
+      })) as typeof actual.useRouterState,
   };
 });
 
 describe("sites detail sheet", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    mockedPathname.current = `/sites/${siteId}`;
   });
 
-  it("splits location details, notes, editing, and related jobs into tabs", () => {
+  it("shows site location, notes, and related jobs in one overview", () => {
     renderSiteDetailSheet();
 
-    expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Notes" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Jobs 1" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Edit" })).toBeInTheDocument();
-
-    const detailsPanel = screen.getByRole("tabpanel", { name: "Details" });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(
-      within(detailsPanel).getByRole("heading", { name: "Location summary" })
-    ).toBeInTheDocument();
-    expect(
-      within(detailsPanel).queryByText(
-        "Dispatch address, map readiness, and access context."
-      )
+      screen.queryByRole("button", { name: "Edit site" })
     ).not.toBeInTheDocument();
-    expect(within(detailsPanel).getByText("Mapped")).toBeInTheDocument();
-    expect(
-      within(detailsPanel).getByText("1 Custom House Quay")
-    ).toBeInTheDocument();
-    expect(
-      within(detailsPanel).getByText("Dublin, Dublin, D01 X2X2")
-    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Notes" }));
-    const notesPanel = screen.getByRole("tabpanel", { name: "Notes" });
+    const overview = screen.getByRole("region", {
+      name: "Docklands Campus overview",
+    });
+    const siteDetails = within(overview).getByRole("region", {
+      name: "Site details",
+    });
     expect(
-      within(notesPanel).getByRole("heading", { name: "Site notes" })
+      within(siteDetails).getByRole("heading", { name: "Location" })
     ).toBeInTheDocument();
     expect(
-      within(notesPanel).queryByText(
-        "Dispatch instructions and arrival context for anyone heading to this location."
-      )
-    ).not.toBeInTheDocument();
+      within(siteDetails).getByText("1 Custom House Quay")
+    ).toBeInTheDocument();
     expect(
-      within(notesPanel).getByText(
+      within(siteDetails).getByText("Dublin, Dublin, D01 X2X2")
+    ).toBeInTheDocument();
+    expect(within(siteDetails).getByText("Service area")).toBeInTheDocument();
+    expect(within(siteDetails).getByText("Dublin")).toBeInTheDocument();
+    expect(
+      within(siteDetails).queryByText("53.3498, -6.2603")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Map ready")).not.toBeInTheDocument();
+
+    expect(
+      within(siteDetails).getByRole("heading", { name: "Notes summary" })
+    ).toBeInTheDocument();
+    expect(
+      within(siteDetails).getByText(
         "Use the quay entrance beside the loading bay."
       )
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Jobs 1" }));
-    const jobsPanel = screen.getByRole("tabpanel", { name: "Jobs 1" });
     expect(
-      within(jobsPanel).getByRole("heading", { name: "Associated jobs" })
+      within(siteDetails).getByLabelText("Map preview")
+    ).toBeInTheDocument();
+
+    const relatedJobsRegion = within(overview).getByRole("region", {
+      name: "Related jobs",
+    });
+    expect(
+      within(relatedJobsRegion).getByRole("heading", { name: "Related jobs" })
+    ).toBeInTheDocument();
+    expect(within(relatedJobsRegion).getByText("1")).toBeInTheDocument();
+    expect(
+      within(relatedJobsRegion).getByText("Inspect boiler")
     ).toBeInTheDocument();
     expect(
-      within(jobsPanel).queryByText("Work currently attached to this site.")
-    ).not.toBeInTheDocument();
-    expect(within(jobsPanel).getByText("1 job linked")).toBeInTheDocument();
-    expect(within(jobsPanel).getByText("Inspect boiler")).toBeInTheDocument();
-    expect(within(jobsPanel).getByText("In Progress")).toBeInTheDocument();
-    expect(within(jobsPanel).getByText("High")).toBeInTheDocument();
+      within(relatedJobsRegion).getByText("In progress")
+    ).toBeInTheDocument();
+    expect(within(relatedJobsRegion).getByText("High")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit site name" })
+    ).toBeInTheDocument();
   });
 
   it("signals when the related jobs list is capped", () => {
     renderSiteDetailSheet({ hasMoreRelatedJobs: true });
 
-    expect(screen.getByRole("tab", { name: "Jobs 1+" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Jobs 1+" }));
-
-    const jobsPanel = screen.getByRole("tabpanel", { name: "Jobs 1+" });
-    expect(within(jobsPanel).getByText("1+ jobs linked")).toBeInTheDocument();
+    const overview = screen.getByRole("region", {
+      name: "Docklands Campus overview",
+    });
+    expect(within(overview).getByText("1+")).toBeInTheDocument();
     expect(
-      within(jobsPanel).getByText(
+      within(overview).getByText(
         "Showing the first 1 jobs linked to this site."
       )
+    ).toBeInTheDocument();
+  });
+
+  it("links the empty jobs state to the new job route for admins", () => {
+    renderSiteDetailSheet({ relatedJobs: [] });
+
+    const relatedJobsRegion = screen.getByRole("region", {
+      name: "Related jobs",
+    });
+    expect(within(relatedJobsRegion).getByText("0")).toBeInTheDocument();
+    expect(
+      within(relatedJobsRegion).getByRole("link", { name: "New job" })
+    ).toHaveAttribute("href", "/jobs/new");
+  });
+
+  it("hides the empty jobs creation link from members", () => {
+    renderSiteDetailSheet({ relatedJobs: [], role: "member" });
+
+    const relatedJobsRegion = screen.getByRole("region", {
+      name: "Related jobs",
+    });
+    expect(
+      within(relatedJobsRegion).queryByRole("link", { name: "New job" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits the site name inline from the drawer header", () => {
+    renderSiteDetailSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit site name" }));
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Edit Docklands Campus" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Site name")).toHaveValue("Docklands Campus");
+    expect(
+      screen.getByRole("button", { name: "Save site name" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancel site name editing" })
+    ).toBeInTheDocument();
+  });
+
+  it("lets Vaul close the base route drawer before routing back", async () => {
+    renderSiteDetailSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close site details" }));
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
+
+    await waitFor(
+      () => {
+        expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
+      },
+      { timeout: 1000 }
+    );
+  });
+
+  it("opens scoped editors for service area, notes, and location", async () => {
+    renderSiteDetailSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit service area" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit service area" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Service area")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save service area" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Edit notes summary" })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit notes summary" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit notes summary" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Notes summary")).toHaveValue(
+      "Use the quay entrance beside the loading bay."
+    );
+    expect(
+      screen.getByRole("button", { name: "Save notes" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Edit location" })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit location" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit location" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Address line 1")).toHaveValue(
+      "1 Custom House Quay"
+    );
+    expect(
+      screen.getByRole("button", { name: "Save location" })
     ).toBeInTheDocument();
   });
 });
@@ -121,9 +249,13 @@ describe("sites detail sheet", () => {
 function renderSiteDetailSheet({
   hasMoreRelatedJobs = false,
   options = siteOptions,
+  relatedJobs: jobs = relatedJobs,
+  role = "owner",
 }: {
   readonly hasMoreRelatedJobs?: boolean;
   readonly options?: SitesOptionsResponse;
+  readonly relatedJobs?: readonly JobListItem[];
+  readonly role?: "admin" | "member" | "owner";
 } = {}) {
   const [site] = options.sites;
 
@@ -140,10 +272,10 @@ function renderSiteDetailSheet({
       <SitesDetailSheet
         hasMoreRelatedJobs={hasMoreRelatedJobs}
         initialSite={site}
-        relatedJobs={relatedJobs}
+        relatedJobs={jobs}
         siteId={site.id}
         viewer={{
-          role: "owner",
+          role,
           userId,
         }}
       />

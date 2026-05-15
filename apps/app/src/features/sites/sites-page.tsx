@@ -1,10 +1,18 @@
 "use client";
-import type { SitesOptionsResponse } from "@ceird/sites-core";
+import type {
+  ServiceAreaIdType,
+  SitesOptionsResponse,
+} from "@ceird/sites-core";
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
+  ArrowRight01Icon,
+  FilterHorizontalIcon,
   Location01Icon,
+  MapPinCheckIcon,
+  MapPinXIcon,
   MapsSquare01Icon,
+  Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -27,6 +35,12 @@ import {
   EmptyTitle,
 } from "#/components/ui/empty";
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group";
+import { Select } from "#/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -42,6 +56,7 @@ import {
   buildSiteAddressLines,
   hasSiteCoordinates,
 } from "#/features/sites/site-location";
+import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
@@ -49,6 +64,17 @@ import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { sitesNoticeAtom, sitesOptionsStateAtom } from "./sites-state";
 
 const SITE_COMMAND_LIMIT = 25;
+
+type SiteDirectoryItem = SitesOptionsResponse["sites"][number];
+interface SiteDirectoryViewItem {
+  readonly addressSummary: string;
+  readonly isMapped: boolean;
+  readonly searchText: string;
+  readonly site: SiteDirectoryItem;
+}
+
+type SitesMapFilter = "all" | "mapped" | "unmapped";
+type SitesServiceAreaFilter = "all" | "none" | ServiceAreaIdType;
 
 export function SitesPage({
   children,
@@ -62,24 +88,75 @@ export function SitesPage({
   const notice = useAtomValue(sitesNoticeAtom);
   const setNotice = useAtomSet(sitesNoticeAtom);
   const canCreateSites = hasOrganizationElevatedAccess(viewer.role);
-  const siteStats = React.useMemo(
-    () => ({
-      mappedSites: options.sites.filter((site) => hasSiteCoordinates(site))
-        .length,
-      totalSites: options.sites.length,
-    }),
+  const isMobile = useIsMobile();
+  const [query, setQuery] = React.useState("");
+  const [mapFilter, setMapFilter] = React.useState<SitesMapFilter>("all");
+  const [serviceAreaFilter, setServiceAreaFilter] =
+    React.useState<SitesServiceAreaFilter>("all");
+  const siteDirectoryItems = React.useMemo<readonly SiteDirectoryViewItem[]>(
+    () =>
+      options.sites.map((site) => {
+        const addressSummary = buildSiteAddressSummary(site);
+        const isMapped = hasSiteCoordinates(site);
+
+        return {
+          addressSummary,
+          isMapped,
+          searchText: normalizeSearchValue(
+            [site.name, addressSummary, site.serviceAreaName ?? ""].join(" ")
+          ),
+          site,
+        };
+      }),
     [options.sites]
   );
+  const siteStats = React.useMemo(() => {
+    let mappedSites = 0;
+
+    for (const item of siteDirectoryItems) {
+      if (item.isMapped) {
+        mappedSites += 1;
+      }
+    }
+
+    return {
+      mappedSites,
+      totalSites: siteDirectoryItems.length,
+      unmappedSites: siteDirectoryItems.length - mappedSites,
+    };
+  }, [siteDirectoryItems]);
+  const filteredSiteItems = React.useMemo(() => {
+    const normalizedQuery = normalizeSearchValue(query);
+
+    return siteDirectoryItems.filter(({ isMapped, searchText, site }) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 || searchText.includes(normalizedQuery);
+      const matchesMap =
+        mapFilter === "all" ||
+        (mapFilter === "mapped" && isMapped) ||
+        (mapFilter === "unmapped" && !isMapped);
+      const matchesServiceArea =
+        serviceAreaFilter === "all" ||
+        site.serviceAreaId === serviceAreaFilter ||
+        (serviceAreaFilter === "none" && !site.serviceAreaId);
+
+      return matchesQuery && matchesMap && matchesServiceArea;
+    });
+  }, [mapFilter, query, serviceAreaFilter, siteDirectoryItems]);
+  const hasFilters =
+    query.trim().length > 0 ||
+    mapFilter !== "all" ||
+    serviceAreaFilter !== "all";
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {
-    const actions: CommandAction[] = options.sites
+    const actions: CommandAction[] = siteDirectoryItems
       .slice(0, SITE_COMMAND_LIMIT)
-      .map((site) => ({
+      .map(({ addressSummary, site }) => ({
         group: "Sites",
         icon: Location01Icon,
         id: `sites-open-${site.id}`,
-        keywords: [site.serviceAreaName, buildSiteAddressSummary(site)].filter(
+        keywords: [site.serviceAreaName, addressSummary].filter(
           (value): value is string => typeof value === "string"
         ),
         priority: 60,
@@ -107,7 +184,7 @@ export function SitesPage({
     }
 
     return actions;
-  }, [canCreateSites, navigate, options.sites]);
+  }, [canCreateSites, navigate, siteDirectoryItems]);
 
   useRegisterCommandActions(sitesPageCommandActions);
   useAppHotkey(
@@ -120,6 +197,19 @@ export function SitesPage({
       ignoreInputs: true,
     }
   );
+
+  function clearFilters() {
+    setQuery("");
+    setMapFilter("all");
+    setServiceAreaFilter("all");
+  }
+
+  function openSite(siteId: SiteDirectoryItem["id"]) {
+    navigate({
+      params: { siteId },
+      to: "/sites/$siteId",
+    });
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -171,77 +261,115 @@ export function SitesPage({
       ) : null}
 
       {options.sites.length > 0 ? (
-        <section
-          aria-labelledby="sites-directory-heading"
-          className="min-h-0 overflow-hidden rounded-2xl border bg-background"
-        >
-          <div className="flex items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
-            <div className="flex min-w-0 items-center gap-2">
-              <h2
-                id="sites-directory-heading"
-                className="text-sm font-medium text-foreground"
-              >
-                Site directory
-              </h2>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {siteStats.totalSites}
-              </span>
+        <section aria-labelledby="sites-directory-heading" className="min-h-0">
+          <div className="mb-3 flex flex-col gap-3">
+            <h2
+              id="sites-directory-heading"
+              className="text-sm font-medium text-foreground"
+            >
+              Site directory
+            </h2>
+
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(12rem,1fr)_minmax(10rem,14rem)] xl:w-[min(34rem,100%)]">
+                <InputGroup>
+                  <InputGroupAddon>
+                    <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    aria-label="Search sites"
+                    type="search"
+                    placeholder="Search sites..."
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </InputGroup>
+
+                <label className="sr-only" htmlFor="sites-service-area-filter">
+                  Filter by service area
+                </label>
+                <Select
+                  id="sites-service-area-filter"
+                  value={serviceAreaFilter}
+                  onChange={(event) =>
+                    setServiceAreaFilter(
+                      parseSitesServiceAreaFilter(
+                        event.target.value,
+                        options.serviceAreas
+                      )
+                    )
+                  }
+                >
+                  <option value="all">All service areas</option>
+                  {options.serviceAreas.map((serviceArea) => (
+                    <option key={serviceArea.id} value={serviceArea.id}>
+                      {serviceArea.name}
+                    </option>
+                  ))}
+                  <option value="none">No service area</option>
+                </Select>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <SitesMapFilterButton
+                  active={mapFilter === "all"}
+                  count={siteStats.totalSites}
+                  label="All sites"
+                  onClick={() => setMapFilter("all")}
+                />
+                <SitesMapFilterButton
+                  active={mapFilter === "mapped"}
+                  count={siteStats.mappedSites}
+                  label="Mapped"
+                  onClick={() => setMapFilter("mapped")}
+                />
+                <SitesMapFilterButton
+                  active={mapFilter === "unmapped"}
+                  count={siteStats.unmappedSites}
+                  label="Unmapped"
+                  onClick={() => setMapFilter("unmapped")}
+                />
+                {hasFilters ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearFilters}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
             </div>
-            <p className="shrink-0 text-xs text-muted-foreground">
-              {siteStats.mappedSites} mapped / {siteStats.totalSites} total
-            </p>
           </div>
-          <ul
-            aria-label="Sites mobile directory"
-            className="divide-y md:hidden"
-          >
-            {options.sites.map((site) => (
-              <SiteDirectoryCard key={site.id} site={site} />
-            ))}
-          </ul>
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Site</TableHead>
-                  <TableHead>Service area</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead className="w-28 text-right">Map</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {options.sites.map((site) => (
-                  <TableRow key={site.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        to="/sites/$siteId"
-                        params={{ siteId: site.id }}
-                        className="rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      >
-                        {site.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {site.serviceAreaName ? (
-                        <Badge variant="secondary">
-                          {site.serviceAreaName}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          No service area
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {buildSiteAddressSummary(site)}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      <SiteMapBadge site={site} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+
+          <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
+            {isMobile ? (
+              <SitesMobileDirectory items={filteredSiteItems} />
+            ) : (
+              <SitesDesktopDirectory
+                items={filteredSiteItems}
+                openSite={openSite}
+              />
+            )}
+
+            {filteredSiteItems.length === 0 ? (
+              <Empty className="min-h-72 border-transparent bg-transparent">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <HugeiconsIcon
+                      icon={FilterHorizontalIcon}
+                      strokeWidth={2}
+                    />
+                  </EmptyMedia>
+                  <EmptyTitle>No sites match these filters.</EmptyTitle>
+                  <EmptyDescription>
+                    Clear filters or search for another site, address, or
+                    service area.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : null}
           </div>
         </section>
       ) : (
@@ -263,9 +391,88 @@ export function SitesPage({
   );
 }
 
-type SiteDirectoryItem = SitesOptionsResponse["sites"][number];
+function SitesMobileDirectory({
+  items,
+}: {
+  readonly items: readonly SiteDirectoryViewItem[];
+}) {
+  return (
+    <ul aria-label="Sites mobile directory" className="divide-y">
+      {items.map((item) => (
+        <SiteDirectoryCard key={item.site.id} item={item} />
+      ))}
+    </ul>
+  );
+}
 
-function SiteDirectoryCard({ site }: { readonly site: SiteDirectoryItem }) {
+function SitesDesktopDirectory({
+  items,
+  openSite,
+}: {
+  readonly items: readonly SiteDirectoryViewItem[];
+  readonly openSite: (siteId: SiteDirectoryItem["id"]) => void;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Site</TableHead>
+          <TableHead>Service area</TableHead>
+          <TableHead className="w-10">
+            <span className="sr-only">Open</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {items.map(({ addressSummary, isMapped, site }) => (
+          <TableRow
+            key={site.id}
+            aria-label={`Open ${site.name}`}
+            className="cursor-pointer"
+            onClick={() => openSite(site.id)}
+          >
+            <TableCell>
+              <div className="flex min-w-0 items-center gap-2">
+                <SiteMapIndicator isMapped={isMapped} />
+                <div className="min-w-0">
+                  <Link
+                    to="/sites/$siteId"
+                    params={{ siteId: site.id }}
+                    className="block truncate font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {site.name}
+                  </Link>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {addressSummary}
+                  </p>
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>
+              {site.serviceAreaName ? (
+                <Badge variant="secondary">{site.serviceAreaName}</Badge>
+              ) : (
+                <span className="text-muted-foreground">No service area</span>
+              )}
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground">
+              <HugeiconsIcon
+                icon={ArrowRight01Icon}
+                strokeWidth={2}
+                aria-hidden
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
+  const { addressSummary, isMapped, site } = item;
+
   return (
     <li>
       <Link
@@ -279,17 +486,18 @@ function SiteDirectoryCard({ site }: { readonly site: SiteDirectoryItem }) {
               <span className="truncate font-medium text-foreground">
                 {site.name}
               </span>
-              <HugeiconsIcon
-                icon={Location01Icon}
-                strokeWidth={2}
-                className="shrink-0 text-muted-foreground"
-              />
+              <SiteMapIndicator isMapped={isMapped} size="compact" />
             </div>
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {buildSiteAddressSummary(site)}
+              {addressSummary}
             </p>
           </div>
-          <SiteMapBadge site={site} />
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            strokeWidth={2}
+            className="shrink-0 text-muted-foreground"
+            aria-hidden
+          />
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-medium">Service area</span>
@@ -304,11 +512,56 @@ function SiteDirectoryCard({ site }: { readonly site: SiteDirectoryItem }) {
   );
 }
 
-function SiteMapBadge({ site }: { readonly site: SiteDirectoryItem }) {
-  return hasSiteCoordinates(site) ? (
-    <Badge variant="secondary">Mapped</Badge>
-  ) : (
-    <Badge variant="outline">Unmapped</Badge>
+function SitesMapFilterButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  readonly active: boolean;
+  readonly count: number;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={active ? "default" : "outline"}
+      aria-pressed={active}
+      aria-label={`${label} ${count}`}
+      onClick={onClick}
+    >
+      {label}
+      <Badge variant={active ? "secondary" : "outline"}>{count}</Badge>
+    </Button>
+  );
+}
+
+function SiteMapIndicator({
+  isMapped,
+  size = "default",
+}: {
+  readonly isMapped: boolean;
+  readonly size?: "compact" | "default";
+}) {
+  return (
+    <span
+      aria-label={isMapped ? "Map ready" : "Map coordinates missing"}
+      className={
+        isMapped
+          ? "flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+          : "flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+      }
+      title={isMapped ? "Map ready" : "Map coordinates missing"}
+    >
+      <HugeiconsIcon
+        icon={isMapped ? MapPinCheckIcon : MapPinXIcon}
+        strokeWidth={2}
+        className={size === "compact" ? "size-4" : undefined}
+        aria-hidden
+      />
+    </span>
   );
 }
 
@@ -318,4 +571,21 @@ function buildSiteAddressSummary(
   const address = buildSiteAddressLines(site).join(", ");
 
   return address || "No address";
+}
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLocaleLowerCase("en-IE");
+}
+
+function parseSitesServiceAreaFilter(
+  value: string,
+  serviceAreas: readonly { readonly id: ServiceAreaIdType }[]
+): SitesServiceAreaFilter {
+  if (value === "all" || value === "none") {
+    return value;
+  }
+
+  return serviceAreas.some((serviceArea) => serviceArea.id === value)
+    ? (value as ServiceAreaIdType)
+    : "all";
 }

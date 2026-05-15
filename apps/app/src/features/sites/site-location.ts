@@ -13,6 +13,11 @@ export interface SiteLocationLike {
   readonly town?: string;
 }
 
+export type MappedSiteLocationLike = SiteLocationLike & {
+  readonly latitude: number;
+  readonly longitude: number;
+};
+
 export const DEFAULT_SITE_MAP_CENTER = [-8.243_89, 53.412_91] as const;
 export const DEFAULT_SITE_MAP_ZOOM = 5.8;
 
@@ -22,10 +27,7 @@ function compactLocationParts(parts: readonly (string | undefined)[]) {
 
 export function hasSiteCoordinates(
   site: SiteLocationLike | null | undefined
-): site is SiteLocationLike & {
-  readonly latitude: number;
-  readonly longitude: number;
-} {
+): site is MappedSiteLocationLike {
   return (
     site !== undefined &&
     site !== null &&

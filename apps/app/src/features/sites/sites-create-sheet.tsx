@@ -6,13 +6,14 @@ import {
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import {
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -40,6 +41,9 @@ export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
 
 export function SitesCreateSheet() {
   const navigate = useNavigate({ from: "/sites/new" });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const options = useAtomValue(sitesOptionsStateAtom).data;
   const createSite = useAtomSet(createSiteMutationAtom, {
     mode: "promiseExit",
@@ -51,45 +55,30 @@ export function SitesCreateSheet() {
   const [values, setValues] = React.useState<SiteCreateDraft>(
     defaultSiteCreateDraft
   );
-  const [overlayOpen, setOverlayOpen] = React.useState(true);
-  const closeNavigationTimeout = React.useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const navigateAfterCloseRef = React.useRef(false);
+  const resetAfterCloseRef = React.useRef(false);
+  const successCloseRef = React.useRef<HTMLButtonElement>(null);
   const serviceAreaGroups = React.useMemo(
     () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
     [options.serviceAreas]
   );
 
-  React.useEffect(
-    () => () => {
-      if (closeNavigationTimeout.current) {
-        clearTimeout(closeNavigationTimeout.current);
-      }
-    },
-    []
-  );
+  React.useEffect(() => {
+    if (pathname === "/sites/new") {
+      setOverlayOpen(true);
+    }
+  }, [pathname]);
 
-  function closeSheet({
-    delayed = false,
-  }: { readonly delayed?: boolean } = {}) {
+  function navigateToSites() {
+    React.startTransition(() => {
+      navigate({ to: "/sites" });
+    });
+  }
+
+  function closeSheet() {
+    navigateAfterCloseRef.current = true;
     setOverlayOpen(false);
-
-    if (closeNavigationTimeout.current) {
-      clearTimeout(closeNavigationTimeout.current);
-    }
-
-    const navigateToSites = () => {
-      React.startTransition(() => {
-        navigate({ to: "/sites" });
-      });
-    };
-
-    if (!delayed) {
-      navigateToSites();
-      return;
-    }
-
-    closeNavigationTimeout.current = setTimeout(navigateToSites, 140);
   }
 
   async function handleSubmit() {
@@ -105,8 +94,8 @@ export function SitesCreateSheet() {
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      setValues(defaultSiteCreateDraft);
-      closeSheet();
+      resetAfterCloseRef.current = true;
+      successCloseRef.current?.click();
       return;
     }
 
@@ -138,7 +127,20 @@ export function SitesCreateSheet() {
       open={overlayOpen}
       onOpenChange={(open) => {
         if (!open && !createResult.waiting) {
-          closeSheet({ delayed: true });
+          closeSheet();
+        }
+      }}
+      onAnimationEnd={(open) => {
+        if (!open) {
+          if (resetAfterCloseRef.current) {
+            setValues(defaultSiteCreateDraft);
+            resetAfterCloseRef.current = false;
+          }
+
+          if (navigateAfterCloseRef.current) {
+            navigateAfterCloseRef.current = false;
+            navigateToSites();
+          }
         }
       }}
     >
@@ -156,6 +158,15 @@ export function SitesCreateSheet() {
           noValidate
           onSubmit={(event) => submitClientForm(event, handleSubmit)}
         >
+          <DrawerClose asChild>
+            <button
+              ref={successCloseRef}
+              type="button"
+              className="hidden"
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </DrawerClose>
           <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
             {Result.builder(createResult)
               .onError((error) =>
@@ -189,14 +200,15 @@ export function SitesCreateSheet() {
           </div>
 
           <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={createResult.waiting}
-              onClick={() => closeSheet({ delayed: true })}
-            >
-              Cancel
-            </Button>
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={createResult.waiting}
+              >
+                Cancel
+              </Button>
+            </DrawerClose>
             <Button type="submit" loading={createResult.waiting}>
               {createResult.waiting ? (
                 "Creating..."
