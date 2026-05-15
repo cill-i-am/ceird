@@ -2214,8 +2214,9 @@ members` remain visible.
 - Browser proof after reload and row-open:
   - `NORTHPOINT RISER CHECK` drawer keeps `No contact yet` and
     `No external collaborators yet`.
-  - The drawer no longer includes `Job details, comments, costs, visits, and
-    activity.`, `Optional reference from outside this workspace`,
+  - The drawer no longer includes the old generic helper copy:
+    `Job details, comments, costs, visits, and activity.`,
+    `Optional reference from outside this workspace`,
     `Add one when there is a clear related person or organization.`, or
     `Attach an external member when this job needs limited shared visibility.`
   - Document width remains equal to viewport width; no horizontal overflow.
@@ -2507,6 +2508,14 @@ Initial source-backed feature modules to explore and redesign:
   just the active tab, fields, rows, and actions.
 - The repeated `data-tsd-source` hydration warning has been fixed by disabling
   Devtools source injection while preserving the Devtools plugin.
+- GitHub check repair pass: React Doctor is back to 100/100 after reducing
+  settings state churn, hoisting site detail formatting, tightening metadata
+  keys, and removing redundant padding axes. E2E has been aligned with the new
+  tabbed settings and job detail flows, including hydration waits for tab
+  activation after reloads.
+- Local proof for the GitHub repair: `pnpm format`, `pnpm lint`,
+  `pnpm check-types`, `pnpm --filter app react-doctor`, and
+  `pnpm --filter app e2e` all pass before pushing the check-fix commit.
 
 ### Candidate Implementation Targets
 

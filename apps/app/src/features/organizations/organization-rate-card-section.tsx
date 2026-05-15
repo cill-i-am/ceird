@@ -393,7 +393,7 @@ function RateCardLineRow({
   useRegisterCommandActions(commandActions);
 
   return (
-    <div className="grid gap-3 border-b border-border/60 px-3 py-3 last:border-b-0 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">
+    <div className="grid gap-3 border-b border-border/60 p-3 last:border-b-0 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">
       <label
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={kindId}

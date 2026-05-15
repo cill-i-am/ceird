@@ -41,6 +41,92 @@ export interface UserSettingsAccount {
 
 type AccountSettingsTab = "email" | "password" | "profile";
 
+interface UserSettingsState {
+  readonly activeTab: AccountSettingsTab;
+  readonly dismissedEmailStatus: EmailChangeStatus | null;
+  readonly emailMessage: string | null;
+  readonly passwordMessage: string | null;
+  readonly profileMessage: string | null;
+}
+
+type UserSettingsAction =
+  | {
+      readonly status: EmailChangeStatus | null;
+      readonly type: "clearEmailMessage";
+    }
+  | { readonly type: "clearPasswordMessage" }
+  | { readonly type: "clearProfileMessage" }
+  | { readonly message: string; readonly type: "setEmailMessage" }
+  | { readonly message: string; readonly type: "setPasswordMessage" }
+  | { readonly message: string; readonly type: "setProfileMessage" }
+  | { readonly tab: AccountSettingsTab; readonly type: "setActiveTab" };
+
+function createUserSettingsState(
+  emailChangeStatus: EmailChangeStatus | undefined
+): UserSettingsState {
+  return {
+    activeTab: emailChangeStatus ? "email" : "profile",
+    dismissedEmailStatus: null,
+    emailMessage: null,
+    passwordMessage: null,
+    profileMessage: null,
+  };
+}
+
+function userSettingsReducer(
+  state: UserSettingsState,
+  action: UserSettingsAction
+): UserSettingsState {
+  switch (action.type) {
+    case "clearEmailMessage": {
+      return {
+        ...state,
+        dismissedEmailStatus: action.status,
+        emailMessage: null,
+      };
+    }
+    case "clearPasswordMessage": {
+      return {
+        ...state,
+        passwordMessage: null,
+      };
+    }
+    case "clearProfileMessage": {
+      return {
+        ...state,
+        profileMessage: null,
+      };
+    }
+    case "setActiveTab": {
+      return {
+        ...state,
+        activeTab: action.tab,
+      };
+    }
+    case "setEmailMessage": {
+      return {
+        ...state,
+        emailMessage: action.message,
+      };
+    }
+    case "setPasswordMessage": {
+      return {
+        ...state,
+        passwordMessage: action.message,
+      };
+    }
+    case "setProfileMessage": {
+      return {
+        ...state,
+        profileMessage: action.message,
+      };
+    }
+    default: {
+      return state;
+    }
+  }
+}
+
 function FormStatus({
   children,
   tone = "neutral",
@@ -62,7 +148,7 @@ function FormStatus({
   );
 }
 
-// The settings page owns three independent forms that share the same hotkey scope.
+// The settings page still carries the three account forms until these sections split into route-owned modules.
 // react-doctor-disable-next-line
 export function UserSettingsPage({
   user,
@@ -73,21 +159,21 @@ export function UserSettingsPage({
 }) {
   const router = useRouter();
   const isHydrated = useIsHydrated();
-  const [profileMessage, setProfileMessage] = React.useState<string | null>(
-    null
+  const [settingsState, dispatch] = React.useReducer(
+    userSettingsReducer,
+    emailChangeStatus,
+    createUserSettingsState
   );
+  const {
+    activeTab,
+    dismissedEmailStatus,
+    emailMessage,
+    passwordMessage,
+    profileMessage,
+  } = settingsState;
   const emailStatusMessage = React.useMemo(
     () => getEmailChangeStatusMessage(emailChangeStatus),
     [emailChangeStatus]
-  );
-  const [emailMessage, setEmailMessage] = React.useState<string | null>(null);
-  const [dismissedEmailStatus, setDismissedEmailStatus] =
-    React.useState<EmailChangeStatus | null>(null);
-  const [passwordMessage, setPasswordMessage] = React.useState<string | null>(
-    null
-  );
-  const [activeTab, setActiveTab] = React.useState<AccountSettingsTab>(() =>
-    emailChangeStatus ? "email" : "profile"
   );
   const emailFormRef = React.useRef<HTMLFormElement | null>(null);
   const passwordFormRef = React.useRef<HTMLFormElement | null>(null);
@@ -96,12 +182,6 @@ export function UserSettingsPage({
   const visibleEmailMessage =
     emailMessage ??
     (emailChangeStatus === dismissedEmailStatus ? null : emailStatusMessage);
-
-  React.useEffect(() => {
-    if (emailChangeStatus) {
-      setActiveTab("email");
-    }
-  }, [emailChangeStatus]);
 
   const profileForm = useForm({
     defaultValues: {
@@ -113,11 +193,14 @@ export function UserSettingsPage({
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
-      setProfileMessage(null);
+      dispatch({ type: "clearProfileMessage" });
 
       const input = decodeProfileSettingsInput(value);
       if (input.name === user.name && input.image === (user.image ?? null)) {
-        setProfileMessage("No profile changes to save.");
+        dispatch({
+          message: "No profile changes to save.",
+          type: "setProfileMessage",
+        });
         return;
       }
 
@@ -138,7 +221,7 @@ export function UserSettingsPage({
       }
 
       await mutationFeedback.waitForSuccess();
-      setProfileMessage("Profile updated.");
+      dispatch({ message: "Profile updated.", type: "setProfileMessage" });
       await router.invalidate();
     },
   });
@@ -152,8 +235,10 @@ export function UserSettingsPage({
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
-      setEmailMessage(null);
-      setDismissedEmailStatus(emailChangeStatus ?? null);
+      dispatch({
+        status: emailChangeStatus ?? null,
+        type: "clearEmailMessage",
+      });
 
       const input = decodeChangeEmailInput(value);
       if (input.email.toLowerCase() === user.email.toLowerCase()) {
@@ -184,7 +269,10 @@ export function UserSettingsPage({
 
       await mutationFeedback.waitForSuccess();
       formApi.reset();
-      setEmailMessage("Check the new email address to confirm this change.");
+      dispatch({
+        message: "Check the new email address to confirm this change.",
+        type: "setEmailMessage",
+      });
     },
   });
 
@@ -199,7 +287,7 @@ export function UserSettingsPage({
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
-      setPasswordMessage(null);
+      dispatch({ type: "clearPasswordMessage" });
 
       const input = decodeChangePasswordInput(value);
       const mutationFeedback = beginMutationFeedback();
@@ -221,7 +309,7 @@ export function UserSettingsPage({
 
       await mutationFeedback.waitForSuccess();
       formApi.reset();
-      setPasswordMessage("Password updated.");
+      dispatch({ message: "Password updated.", type: "setPasswordMessage" });
     },
   });
 
@@ -272,7 +360,7 @@ export function UserSettingsPage({
         value={activeTab}
         onValueChange={(nextValue) => {
           if (isAccountSettingsTab(nextValue)) {
-            setActiveTab(nextValue);
+            dispatch({ tab: nextValue, type: "setActiveTab" });
           }
         }}
         className="max-w-5xl gap-5"
@@ -322,11 +410,11 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setProfileMessage(null);
+                            dispatch({ type: "clearProfileMessage" });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setProfileMessage(null);
+                            dispatch({ type: "clearProfileMessage" });
                             field.handleChange(event.target.value);
                           }}
                         />
@@ -355,11 +443,11 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setProfileMessage(null);
+                            dispatch({ type: "clearProfileMessage" });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setProfileMessage(null);
+                            dispatch({ type: "clearProfileMessage" });
                             field.handleChange(event.target.value);
                           }}
                         />
@@ -447,13 +535,17 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setEmailMessage(null);
-                            setDismissedEmailStatus(emailChangeStatus ?? null);
+                            dispatch({
+                              status: emailChangeStatus ?? null,
+                              type: "clearEmailMessage",
+                            });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setEmailMessage(null);
-                            setDismissedEmailStatus(emailChangeStatus ?? null);
+                            dispatch({
+                              status: emailChangeStatus ?? null,
+                              type: "clearEmailMessage",
+                            });
                             field.handleChange(event.target.value);
                           }}
                         />
@@ -535,11 +627,11 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.target.value);
                           }}
                         />
@@ -567,11 +659,11 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.target.value);
                           }}
                         />
@@ -599,11 +691,11 @@ export function UserSettingsPage({
                           aria-invalid={Boolean(errorText) || undefined}
                           onBlur={field.handleBlur}
                           onInput={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.currentTarget.value);
                           }}
                           onChange={(event) => {
-                            setPasswordMessage(null);
+                            dispatch({ type: "clearPasswordMessage" });
                             field.handleChange(event.target.value);
                           }}
                         />

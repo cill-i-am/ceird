@@ -84,12 +84,18 @@ function getShortcutGroupRank(
   shortcuts: readonly HotkeyDefinition[],
   activeScopeRank: ReadonlyMap<HotkeyScope, number>
 ) {
-  const contextualRanks = shortcuts
-    .filter(
-      (shortcut) => shortcut.group === group && shortcut.scope !== "global"
-    )
-    .map((shortcut) => activeScopeRank.get(shortcut.scope))
-    .filter((rank): rank is number => typeof rank === "number");
+  const contextualRanks: number[] = [];
+
+  for (const shortcut of shortcuts) {
+    if (shortcut.group !== group || shortcut.scope === "global") {
+      continue;
+    }
+
+    const rank = activeScopeRank.get(shortcut.scope);
+    if (typeof rank === "number") {
+      contextualRanks.push(rank);
+    }
+  }
 
   return Math.min(...contextualRanks, Number.POSITIVE_INFINITY);
 }

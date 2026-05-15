@@ -66,12 +66,20 @@ interface SitesDetailSheetProps {
   readonly viewer: OrganizationViewer;
 }
 
+const EMPTY_RELATED_JOBS: readonly JobListItem[] = [];
+const SITE_JOB_UPDATED_AT_FORMATTER = new Intl.DateTimeFormat("en-IE", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+  year: "numeric",
+});
+
 // The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
 // react-doctor-disable-next-line
 export function SitesDetailSheet({
   hasMoreRelatedJobs = false,
   initialSite,
-  relatedJobs = [],
+  relatedJobs = EMPTY_RELATED_JOBS,
   siteId,
   viewer,
 }: SitesDetailSheetProps) {
@@ -489,7 +497,7 @@ function SiteDetailSummary({ site }: { readonly site: SiteOption }) {
           </Badge>
         </div>
 
-        <div className="grid gap-4 px-4 py-4 sm:grid-cols-2">
+        <div className="grid gap-4 p-4 sm:grid-cols-2">
           <SummaryItem
             label="Service area"
             value={site.serviceAreaName ?? "No service area"}
@@ -547,7 +555,7 @@ function SiteDetailNotes({ site }: { readonly site: SiteOption }) {
         <h3 className="text-sm font-medium text-foreground">Site notes</h3>
       </div>
 
-      <div className="px-4 py-4">
+      <div className="p-4">
         {site.accessNotes ? (
           <p className="max-w-prose text-sm leading-6 text-foreground">
             {site.accessNotes}
@@ -690,12 +698,7 @@ function formatJobPriority(priority: JobListItem["priority"]) {
 }
 
 function formatJobUpdatedAt(updatedAt: string) {
-  return new Intl.DateTimeFormat("en-IE", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(updatedAt));
+  return SITE_JOB_UPDATED_AT_FORMATTER.format(new Date(updatedAt));
 }
 
 function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {

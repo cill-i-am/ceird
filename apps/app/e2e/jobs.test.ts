@@ -99,10 +99,12 @@ test.describe("jobs flow", () => {
       detailSheet.root.getByText(contactName, { exact: true }).first()
     ).toBeVisible();
 
+    await detailSheet.openTab("Comments");
     await detailSheet.commentBody.fill(comment);
     await detailSheet.addComment.click();
     await expect(detailSheet.commentItem(comment)).toBeVisible();
 
+    await detailSheet.openTab("Details");
     await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
@@ -128,6 +130,7 @@ test.describe("jobs flow", () => {
       detailSheet.root.getByText("Blocked reason", { exact: true })
     ).not.toBeVisible();
 
+    await detailSheet.openTab("Visits");
     await detailSheet.visitDate.fill("2026-04-24");
     await detailSheet.chooseVisitDurationOption("2 hours");
     await detailSheet.visitNote.fill(visitNote);
@@ -135,6 +138,7 @@ test.describe("jobs flow", () => {
     await expect(detailSheet.visitItem(visitNote)).toBeVisible();
     await expect(detailSheet.root.getByText("2h logged")).toBeVisible();
 
+    await detailSheet.openTab("Details");
     await detailSheet.chooseStatusOption("Completed");
     await detailSheet.applyStatusChange.click();
     await expect(detailSheet.reopenJob).toBeVisible();

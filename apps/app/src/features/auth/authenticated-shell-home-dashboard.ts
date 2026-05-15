@@ -39,7 +39,7 @@ export interface AuthenticatedHomeDashboard {
   };
 }
 
-export interface AuthenticatedHomeActivityItem {
+interface AuthenticatedHomeActivityItem {
   readonly actorName?: string | undefined;
   readonly createdAt: string;
   readonly description: string;
@@ -57,7 +57,7 @@ export interface AuthenticatedHomeJobItem {
   readonly updatedAt: string;
 }
 
-export interface AuthenticatedHomeJobStats {
+interface AuthenticatedHomeJobStats {
   readonly activeJobs: number;
   readonly blockedJobs: number;
   readonly priorityWatchJobs: number;
@@ -74,7 +74,7 @@ export interface AuthenticatedHomeSiteItem {
   readonly updatedAt: string;
 }
 
-export interface AuthenticatedHomeSiteStats {
+interface AuthenticatedHomeSiteStats {
   readonly mappedSites: number;
   readonly totalSites: number;
 }

@@ -1146,15 +1146,15 @@ function JobIssueRow({
   const assignee = job.assigneeId
     ? lookup.memberById.get(job.assigneeId)
     : undefined;
-  const metadata = [site?.name ?? "No site"];
+  const metadata = [{ key: "site", value: site?.name ?? "No site" }];
 
   if (site?.serviceAreaName) {
-    metadata.push(site.serviceAreaName);
+    metadata.push({ key: "service-area", value: site.serviceAreaName });
   }
 
   metadata.push(
-    assignee?.name ?? "Unassigned",
-    formatRelativeDate(job.updatedAt)
+    { key: "assignee", value: assignee?.name ?? "Unassigned" },
+    { key: "updated-at", value: formatRelativeDate(job.updatedAt) }
   );
 
   return (
@@ -1178,16 +1178,16 @@ function JobIssueRow({
           <LabelBadges labels={job.labels} />
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {metadata.map((item, index) => (
+          {metadata.map((item) => (
             <span
-              key={`${item}-${index}`}
+              key={item.key}
               className={cn(
                 "min-w-0 truncate",
-                index > 0 &&
+                item.key !== "site" &&
                   "before:mr-2 before:text-muted-foreground/60 before:content-['/']"
               )}
             >
-              {item}
+              {item.value}
             </span>
           ))}
         </div>
