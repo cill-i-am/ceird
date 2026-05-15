@@ -87,6 +87,11 @@ describe("organization service areas section", () => {
     await expect(
       screen.findByRole("heading", { name: "Service areas" })
     ).resolves.toBeVisible();
+    expect(
+      screen.queryByText(
+        "Maintain the named areas used for sites, filtering, and team planning."
+      )
+    ).not.toBeInTheDocument();
     await expect(screen.findByText("Dublin")).resolves.toBeVisible();
   });
 
@@ -158,7 +163,14 @@ describe("organization service areas section", () => {
     const area = await screen.findByRole("article", {
       name: "Service area Dublin",
     });
-    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+    await user.click(
+      within(area).getByRole("button", {
+        name: "Service area actions for Dublin",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit service area" })
+    );
     await user.clear(within(area).getByLabelText("Area name for Dublin"));
     await user.type(
       within(area).getByLabelText("Area name for Dublin"),
@@ -191,7 +203,14 @@ describe("organization service areas section", () => {
     const area = await screen.findByRole("article", {
       name: "Service area Dublin",
     });
-    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+    await user.click(
+      within(area).getByRole("button", {
+        name: "Service area actions for Dublin",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit service area" })
+    );
     await user.clear(within(area).getByLabelText("Description for Dublin"));
     await user.click(within(area).getByRole("button", { name: "Save Dublin" }));
 
@@ -215,7 +234,14 @@ describe("organization service areas section", () => {
     const area = await screen.findByRole("article", {
       name: "Service area Dublin",
     });
-    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+    await user.click(
+      within(area).getByRole("button", {
+        name: "Service area actions for Dublin",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit service area" })
+    );
     await user.clear(within(area).getByLabelText("Area name for Dublin"));
     await user.type(
       within(area).getByLabelText("Area name for Dublin"),
@@ -225,7 +251,14 @@ describe("organization service areas section", () => {
     await user.click(within(area).getByRole("button", { name: "Cancel" }));
     expect(within(area).queryByLabelText("Area name for Dublin")).toBeNull();
 
-    await user.click(within(area).getByRole("button", { name: "Edit Dublin" }));
+    await user.click(
+      within(area).getByRole("button", {
+        name: "Service area actions for Dublin",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit service area" })
+    );
 
     expect(within(area).getByLabelText("Area name for Dublin")).toHaveValue(
       "Dublin"

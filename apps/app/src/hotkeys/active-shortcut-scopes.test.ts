@@ -1,6 +1,10 @@
 import { getActiveShortcutScopes } from "./active-shortcut-scopes";
 
 describe("active shortcut scopes", () => {
+  it("activates home shortcut scope on the organization home route", () => {
+    expect(getActiveShortcutScopes("/")).toStrictEqual(["global", "home"]);
+  });
+
   it("activates job drawer shortcut scopes for job drawer routes", () => {
     expect(getActiveShortcutScopes("/jobs/new")).toStrictEqual([
       "global",
@@ -17,6 +21,13 @@ describe("active shortcut scopes", () => {
       "global",
       "sites",
     ]);
+    expect(getActiveShortcutScopes("/sites/new")).toStrictEqual([
+      "global",
+      "sites",
+    ]);
+    expect(
+      getActiveShortcutScopes("/sites/55555555-5555-4555-8555-555555555555")
+    ).toStrictEqual(["global", "sites"]);
     expect(getActiveShortcutScopes("/members")).toStrictEqual([
       "global",
       "members",

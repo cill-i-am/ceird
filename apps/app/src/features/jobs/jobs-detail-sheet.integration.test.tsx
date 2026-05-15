@@ -145,9 +145,6 @@ vi.mock("#/components/ui/drawer", () => ({
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
-  DrawerDescription: ({ children }: { children?: ReactNode }) => (
-    <p>{children}</p>
-  ),
   DrawerFooter: ({ children }: { children?: ReactNode }) => (
     <footer>{children}</footer>
   ),
@@ -469,6 +466,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
+      await openJobDetailTab(user, /comments/i);
 
       await user.type(
         screen.getByLabelText("Add a comment"),
@@ -522,6 +520,7 @@ describe("jobs detail sheet integration", () => {
           },
         }
       );
+      await openJobDetailTab(user, /comments/i);
 
       await user.type(
         screen.getByLabelText("Add a comment"),
@@ -566,6 +565,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
+      await openJobDetailTab(user, /visits/i);
 
       await user.clear(screen.getByLabelText("Visit date"));
       await user.type(screen.getByLabelText("Visit date"), "2026-04-24");
@@ -616,6 +616,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
+      await openJobDetailTab(user, /costs/i);
 
       expect(screen.getByText("Cost total")).toBeInTheDocument();
       expect(screen.getByText("€45.00")).toBeInTheDocument();
@@ -781,6 +782,13 @@ function renderDetailSheet(
       content
     )
   );
+}
+
+async function openJobDetailTab(
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp | string
+) {
+  await user.click(screen.getByRole("tab", { name }));
 }
 
 function JobsListProbe() {

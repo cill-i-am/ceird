@@ -263,6 +263,30 @@ describe("jobs page", () => {
       const queuePanel = getPrimaryQueuePanel();
 
       expect(screen.getByRole("heading", { name: "Jobs" })).toBeInTheDocument();
+      const statusViews = screen.getByLabelText("Job status views");
+
+      expect(
+        within(statusViews).getByRole("button", { name: /active 4/i })
+      ).toBeInTheDocument();
+      expect(
+        within(statusViews).getByRole("button", { name: /all jobs 6/i })
+      ).toBeInTheDocument();
+      expect(
+        within(statusViews).getByRole("button", { name: /blocked 1/i })
+      ).toBeInTheDocument();
+      expect(
+        within(queuePanel).getByRole("heading", { name: "New 1" })
+      ).toBeInTheDocument();
+      expect(
+        within(queuePanel).getByRole("heading", { name: "Triaged 2" })
+      ).toBeInTheDocument();
+      expect(
+        within(queuePanel).getByRole("heading", { name: "Blocked 1" })
+      ).toBeInTheDocument();
+      expect(
+        within(queuePanel).queryByText("Job queue")
+      ).not.toBeInTheDocument();
+      expect(within(queuePanel).queryByText("Backlog")).not.toBeInTheDocument();
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
@@ -293,11 +317,20 @@ describe("jobs page", () => {
       await chooseCommandFilter(user, /status filter/i, "All jobs");
 
       expect(
+        within(statusViews).getByRole("button", { name: /all jobs 6/i })
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
         within(queuePanel).getAllByText("Closed inspection").length
       ).toBeGreaterThan(0);
       expect(
         within(queuePanel).getAllByText("Canceled visit").length
       ).toBeGreaterThan(0);
+      expect(
+        within(queuePanel).getByRole("heading", { name: "Completed 1" })
+      ).toBeInTheDocument();
+      expect(
+        within(queuePanel).getByRole("heading", { name: "Canceled 1" })
+      ).toBeInTheDocument();
     }
   );
 
@@ -380,6 +413,17 @@ describe("jobs page", () => {
           screen.getByRole("option", { name: /apply blocked view/i })
         ).toBeInTheDocument();
       });
+
+      expect(
+        within(screen.getByRole("option", { name: /create job/i })).getByText(
+          "N"
+        )
+      ).toBeInTheDocument();
+      const mapViewOption = screen.getByRole("option", {
+        name: /switch to map view/i,
+      });
+      expect(within(mapViewOption).getByText("V")).toBeInTheDocument();
+      expect(within(mapViewOption).getByText("M")).toBeInTheDocument();
 
       await user.click(
         screen.getByRole("option", { name: /apply blocked view/i })
@@ -577,10 +621,12 @@ describe("jobs page", () => {
     expect(
       screen.queryByText("Clear filters or add the next piece of work.")
     ).not.toBeInTheDocument();
-    const [newJobLink] = screen.getAllByRole("link", { name: /new job/i });
+    expect(screen.getAllByRole("link", { name: /new job/i })).toHaveLength(2);
+    const emptyState = screen.getByTestId("jobs-queue-panel");
 
-    expect(screen.getAllByRole("link", { name: /new job/i })).toHaveLength(1);
-    expect(newJobLink).toHaveAttribute("href", "/jobs/new");
+    expect(
+      within(emptyState).getByRole("link", { name: /new job/i })
+    ).toHaveAttribute("href", "/jobs/new");
   }, 10_000);
 
   it(

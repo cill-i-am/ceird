@@ -17,8 +17,7 @@ import {
   hasSiteCoordinates,
 } from "#/features/sites/site-location";
 import type { SiteLocationLike } from "#/features/sites/site-location";
-
-import { JobsDetailLocationMapPreview } from "./jobs-detail-location-map-preview";
+import { SiteLocationMapPreview } from "#/features/sites/site-location-map-preview";
 
 interface JobsDetailLocationProps {
   readonly site?: SiteLocationLike;
@@ -97,7 +96,7 @@ export function JobsDetailLocation({ site }: JobsDetailLocationProps) {
           </a>
         ) : null}
 
-        {hasCoordinates ? <JobsDetailLocationMapPreview site={site} /> : null}
+        {hasCoordinates ? <SiteLocationMapPreview site={site} /> : null}
       </div>
     </DetailLocationSection>
   );
@@ -116,9 +115,6 @@ function DetailLocationSection({
             <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
             <h3 className="text-sm font-medium text-foreground">Location</h3>
           </div>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Give dispatch the site context and the fastest way into navigation.
-          </p>
         </div>
         <div className="min-w-0">{children}</div>
       </div>

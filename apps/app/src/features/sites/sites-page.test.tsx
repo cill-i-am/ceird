@@ -95,6 +95,26 @@ describe("sites page", () => {
         "/sites/new"
       );
       expect(screen.getByText("N")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: /site coverage/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "Keep job locations, service areas, and map readiness in one operational directory."
+        )
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Site directory" })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Sites mobile directory")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "Addresses, service areas, and map readiness for active work."
+        )
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("1 mapped / 1 total")).toBeInTheDocument();
 
       const row = screen.getByRole("row", { name: /docklands campus/i });
       expect(within(row).getByText("Dublin")).toBeInTheDocument();
@@ -115,7 +135,7 @@ describe("sites page", () => {
       expect(
         screen.queryByRole("link", { name: /new site/i })
       ).not.toBeInTheDocument();
-      expect(screen.getByText("Docklands Campus")).toBeInTheDocument();
+      expect(screen.getAllByText("Docklands Campus").length).toBeGreaterThan(0);
     }
   );
 
@@ -127,7 +147,10 @@ describe("sites page", () => {
       },
     });
 
-    expect(screen.getByText("No sites yet.")).toBeInTheDocument();
+    expect(screen.getByText("No sites in this workspace.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /site coverage/i })
+    ).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /new site/i })).toHaveLength(1);
   });
 

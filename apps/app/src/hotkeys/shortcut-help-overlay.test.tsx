@@ -3,7 +3,10 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ShortcutHelpOverlay } from "./shortcut-help-overlay";
-import { ShortcutIntroNotice } from "./shortcut-intro-notice";
+import {
+  resetShortcutIntroNoticeForTest,
+  ShortcutIntroNotice,
+} from "./shortcut-intro-notice";
 import { useAppHotkey, useAppHotkeySequence } from "./use-app-hotkey";
 
 function RegisteredShortcut({
@@ -105,6 +108,33 @@ describe("shortcut help overlay", () => {
     expect(within(dialog).queryByText("Create job")).not.toBeInTheDocument();
   }, 1000);
 
+  it("prioritizes the active page shortcut group before global shortcuts", async () => {
+    renderShortcutHelpOverlay(
+      ["global", "jobs"],
+      <>
+        <RegisteredShortcutSequence id="goJobs" />
+        <RegisteredShortcut id="toggleSidebar" />
+        <RegisteredShortcut id="jobsSearch" />
+      </>
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+    const [firstHeading] = within(dialog).getAllByRole("heading", {
+      level: 3,
+    });
+
+    expect(firstHeading).toHaveTextContent("Jobs");
+    expect(within(dialog).getByText("Search jobs")).toBeVisible();
+    expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+    expect(within(dialog).getByText("Toggle sidebar")).toBeVisible();
+  }, 1000);
+
   it("does not list disabled registered shortcuts", async () => {
     renderShortcutHelpOverlay(
       ["global"],
@@ -166,9 +196,28 @@ describe("shortcut help overlay", () => {
 });
 
 describe("shortcut intro notice", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetShortcutIntroNoticeForTest();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  it("does not let the passive notice block nearby mobile header controls", async () => {
+    render(<ShortcutIntroNotice />);
+
+    const noticeText = await screen.findByText(
+      "Keyboard shortcuts are available. Press ? anytime."
+    );
+    const notice = noticeText.closest("[aria-live='polite']");
+
+    expect(notice).toHaveClass("pointer-events-none");
+    expect(screen.getByRole("button", { name: /got it/i })).toHaveClass(
+      "pointer-events-auto"
+    );
+  }, 1000);
 
   it("hides for the session when localStorage access is denied", async () => {
     const user = userEvent.setup();

@@ -2,10 +2,18 @@
 import type { ServiceArea } from "@ceird/sites-core";
 import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Exit } from "effect";
+import { MoreHorizontal, Pencil } from "lucide-react";
 import * as React from "react";
 
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
@@ -101,12 +109,11 @@ export function OrganizationServiceAreasSection() {
   return (
     <AppUtilityPanel
       title="Service areas"
-      description="Maintain the named areas used for sites, filtering, and team planning."
       className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
     >
       <form
         ref={createFormRef}
-        className="grid gap-3 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_auto]"
+        className="grid gap-3 rounded-lg border border-border/60 bg-background/70 p-3 lg:grid-cols-[minmax(12rem,0.8fr)_minmax(14rem,1fr)_auto]"
         method="post"
         noValidate
         onSubmit={(event) => submitClientForm(event, handleSubmit)}
@@ -187,9 +194,12 @@ function ServiceAreasList({
 }) {
   if (serviceAreas.length > 0) {
     return (
-      <ul className="flex flex-col divide-y divide-border/60 border-y border-border/60">
+      <ul className="overflow-hidden rounded-lg border border-border/60">
         {serviceAreas.map((serviceArea) => (
-          <li key={serviceArea.id} className="py-3">
+          <li
+            key={serviceArea.id}
+            className="border-b border-border/60 px-4 py-3 last:border-b-0"
+          >
             <ServiceAreaRow serviceArea={serviceArea} />
           </li>
         ))}
@@ -394,14 +404,31 @@ function ServiceAreaRow({
               </p>
             ) : null}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={enterEditMode}
-          >
-            Edit {serviceArea.name}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={`Service area actions for ${serviceArea.name}`}
+                />
+              }
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={enterEditMode}>
+                  <Pencil
+                    aria-hidden="true"
+                    className="text-muted-foreground"
+                  />
+                  <span>Edit service area</span>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </article>

@@ -64,26 +64,33 @@ export function EmailVerificationBanner({
   return (
     <Alert
       variant="warning"
-      className="mx-3 mt-3 min-h-16 w-auto min-w-0 pr-4 sm:mx-4 sm:mt-4 sm:pr-64 lg:mx-5"
+      className="mx-3 mt-3 min-h-16 w-auto min-w-0 overflow-hidden pr-4 has-data-[slot=alert-action]:!pr-4 sm:mx-4 sm:mt-4 lg:mx-5"
       aria-label="Email verification reminder"
     >
       <HugeiconsIcon icon={Alert01Icon} strokeWidth={2} />
       <AlertTitle>Verify your email</AlertTitle>
       <AlertDescription>
-        <p className="truncate">{email} is not verified yet.</p>
+        <p className="[overflow-wrap:anywhere]">{email} is not verified yet.</p>
       </AlertDescription>
-      <AlertAction className="static col-span-full mt-3 flex min-w-0 flex-col gap-2 sm:absolute sm:top-3 sm:right-4 sm:col-span-1 sm:mt-0 sm:flex-row sm:items-center">
+      <AlertAction className="static col-span-full mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         {successText ? (
-          <p className="text-muted-foreground" role="status">
+          <p
+            className="[overflow-wrap:anywhere] text-muted-foreground"
+            role="status"
+          >
             {successText}
           </p>
         ) : null}
         {errorText ? (
-          <p className="text-destructive" role="status">
+          <p
+            className="[overflow-wrap:anywhere] text-destructive"
+            role="status"
+          >
             {errorText}
           </p>
         ) : null}
         <Button
+          className="w-full sm:w-auto"
           type="button"
           size="sm"
           variant="secondary"

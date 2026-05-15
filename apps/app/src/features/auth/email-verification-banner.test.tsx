@@ -113,4 +113,28 @@ describe("email verification banner", () => {
       ).toBeInTheDocument();
     }
   );
+
+  it("uses a mobile-safe layout for long email addresses", () => {
+    render(
+      <EmailVerificationBanner
+        email="avery.long.email.address.for.site.supervisors@example-contractors.invalid"
+        emailVerified={false}
+      />
+    );
+
+    const alert = screen.getByRole("alert", {
+      name: "Email verification reminder",
+    });
+    const emailText = screen.getByText(
+      /avery\.long\.email\.address\.for\.site\.supervisors/i
+    );
+    const resendButton = screen.getByRole("button", {
+      name: "Resend verification email",
+    });
+
+    expect(alert).toHaveClass("overflow-hidden");
+    expect(emailText).not.toHaveClass("truncate");
+    expect(emailText).toHaveClass("[overflow-wrap:anywhere]");
+    expect(resendButton).toHaveClass("w-full");
+  });
 });

@@ -7,7 +7,7 @@ import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { Cause, Exit } from "effect";
+import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -113,7 +113,7 @@ export function SitesCreateSheet() {
     const failure = Cause.failureOption(exit.cause);
 
     if (
-      failure._tag === "Some" &&
+      Option.isSome(failure) &&
       failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
@@ -123,7 +123,7 @@ export function SitesCreateSheet() {
     }
 
     if (
-      failure._tag === "Some" &&
+      Option.isSome(failure) &&
       failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
@@ -142,7 +142,7 @@ export function SitesCreateSheet() {
         }
       }}
     >
-      <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
+      <DrawerContent className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <DrawerTitle>New site</DrawerTitle>
           <DrawerDescription>

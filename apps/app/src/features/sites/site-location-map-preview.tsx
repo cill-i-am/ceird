@@ -2,23 +2,20 @@
 import * as React from "react";
 
 import { Skeleton } from "#/components/ui/skeleton";
+import { useCanRenderInteractiveMap } from "#/components/ui/use-can-render-interactive-map";
 import type { SiteLocationLike } from "#/features/sites/site-location";
 
-import { useCanRenderInteractiveMap } from "./use-can-render-interactive-map";
+const SiteLocationMapPreviewCanvas = React.lazy(async () => {
+  const module = await import("./site-location-map-preview-canvas");
 
-const JobsDetailLocationMapPreviewCanvas = React.lazy(async () => {
-  const module = await import("./jobs-detail-location-map-preview-canvas");
-
-  return { default: module.JobsDetailLocationMapPreviewCanvas };
+  return { default: module.SiteLocationMapPreviewCanvas };
 });
 
-interface JobsDetailLocationMapPreviewProps {
+interface SiteLocationMapPreviewProps {
   readonly site: SiteLocationLike;
 }
 
-export function JobsDetailLocationMapPreview({
-  site,
-}: JobsDetailLocationMapPreviewProps) {
+export function SiteLocationMapPreview({ site }: SiteLocationMapPreviewProps) {
   const canRenderInteractiveMap = useCanRenderInteractiveMap();
 
   if (!canRenderInteractiveMap) {
@@ -32,13 +29,13 @@ export function JobsDetailLocationMapPreview({
   }
 
   return (
-    <React.Suspense fallback={<JobsDetailLocationMapPreviewSkeleton />}>
-      <JobsDetailLocationMapPreviewCanvas site={site} />
+    <React.Suspense fallback={<SiteLocationMapPreviewSkeleton />}>
+      <SiteLocationMapPreviewCanvas site={site} />
     </React.Suspense>
   );
 }
 
-function JobsDetailLocationMapPreviewSkeleton() {
+function SiteLocationMapPreviewSkeleton() {
   return (
     <div className="rounded-2xl border bg-muted/10 p-4">
       <Skeleton className="h-44 w-full rounded-2xl" />

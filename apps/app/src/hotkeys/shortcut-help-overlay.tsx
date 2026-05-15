@@ -42,8 +42,13 @@ function getShortcutsForScopes(
   );
 }
 
-function groupShortcuts(shortcuts: readonly HotkeyDefinition[]) {
-  return HOTKEY_GROUPS.flatMap((group) => {
+function groupShortcuts(
+  shortcuts: readonly HotkeyDefinition[],
+  activeScopes: readonly HotkeyScope[]
+) {
+  const groupOrder = buildShortcutGroupOrder(shortcuts, activeScopes);
+
+  return groupOrder.flatMap((group) => {
     const groupedShortcuts = shortcuts.filter(
       (shortcut) => shortcut.group === group
     );
@@ -52,6 +57,41 @@ function groupShortcuts(shortcuts: readonly HotkeyDefinition[]) {
       ? [{ group, shortcuts: groupedShortcuts }]
       : [];
   });
+}
+
+function buildShortcutGroupOrder(
+  shortcuts: readonly HotkeyDefinition[],
+  activeScopes: readonly HotkeyScope[]
+) {
+  const activeScopeRank = new Map(
+    activeScopes.map((scope, index) => [scope, index] as const)
+  );
+
+  return HOTKEY_GROUPS.toSorted((left, right) => {
+    const leftRank = getShortcutGroupRank(left, shortcuts, activeScopeRank);
+    const rightRank = getShortcutGroupRank(right, shortcuts, activeScopeRank);
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return HOTKEY_GROUPS.indexOf(left) - HOTKEY_GROUPS.indexOf(right);
+  });
+}
+
+function getShortcutGroupRank(
+  group: HotkeyDefinition["group"],
+  shortcuts: readonly HotkeyDefinition[],
+  activeScopeRank: ReadonlyMap<HotkeyScope, number>
+) {
+  const contextualRanks = shortcuts
+    .filter(
+      (shortcut) => shortcut.group === group && shortcut.scope !== "global"
+    )
+    .map((shortcut) => activeScopeRank.get(shortcut.scope))
+    .filter((rank): rank is number => typeof rank === "number");
+
+  return Math.min(...contextualRanks, Number.POSITIVE_INFINITY);
 }
 
 const ShortcutHelpHotkeys = React.memo(function ShortcutHelpHotkeys({
@@ -71,16 +111,18 @@ export function ShortcutHelpOverlay({
   activeScopes,
   buttonClassName,
   labelClassName,
+  registerHotkeys = true,
 }: {
   readonly activeScopes: readonly HotkeyScope[];
   readonly buttonClassName?: string | undefined;
   readonly labelClassName?: string | undefined;
+  readonly registerHotkeys?: boolean | undefined;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
     <ResponsiveDialog open={isOpen} onOpenChange={setIsOpen}>
-      <ShortcutHelpHotkeys setIsOpen={setIsOpen} />
+      {registerHotkeys ? <ShortcutHelpHotkeys setIsOpen={setIsOpen} /> : null}
       <Button
         type="button"
         variant="outline"
@@ -141,7 +183,8 @@ function ShortcutHelpContent({
     return idSet;
   }, [hotkeys, sequences]);
   const shortcutGroups = groupShortcuts(
-    getShortcutsForScopes(activeScopes, registeredShortcutIds)
+    getShortcutsForScopes(activeScopes, registeredShortcutIds),
+    activeScopes
   );
 
   return (

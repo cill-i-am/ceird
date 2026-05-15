@@ -340,15 +340,33 @@ describe("organization members page", () => {
     expect(screen.getByRole("heading", { name: "Members" })).toBeVisible();
     expect(screen.queryByText("Organization access")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Member access overview" })
-    ).toBeVisible();
+      screen.queryByText(
+        "Owners, admins, teammates, and external collaborators with active access."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Invites that have not been accepted yet.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Member access overview" })
+    ).not.toBeInTheDocument();
     await expect(
       screen.findByRole("heading", { name: "Pending invitations" })
     ).resolves.toBeVisible();
     await expect(screen.findByTitle(longEmail)).resolves.toBeVisible();
     expect(screen.getByText("Expires 12 Apr 2026")).toBeVisible();
     expect(screen.queryByText("accepted@example.com")).not.toBeInTheDocument();
-    expect(screen.getAllByText("1 open")).toHaveLength(2);
+    expect(screen.getByText("1 open")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: `Invitation actions for ${longEmail}`,
+      })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", {
+        name: `Resend invitation to ${longEmail}`,
+      })
+    ).not.toBeInTheDocument();
     expect(mockedListInvitations).toHaveBeenCalledWith({
       query: {
         organizationId: "org_123",
@@ -389,7 +407,7 @@ describe("organization members page", () => {
     expect(within(members).getByText("owner@example.com")).toBeVisible();
     expect(within(members).getByText("Foreperson Example")).toBeVisible();
     expect(within(members).getByText("foreperson@example.com")).toBeVisible();
-    expect(screen.getAllByText("2 active")).toHaveLength(2);
+    expect(screen.getByText("2 active")).toBeVisible();
     expect(mockedListMembers).toHaveBeenCalledWith({
       query: {
         limit: 100,
@@ -455,7 +473,7 @@ describe("organization members page", () => {
 
     expect(within(members).getByText("Owner Example")).toBeVisible();
     expect(within(members).getByText("owner@example.com")).toBeVisible();
-    expect(screen.getAllByText("1 active")).toHaveLength(2);
+    expect(screen.getByText("1 active")).toBeVisible();
     expect(screen.queryByText("No teammates yet.")).not.toBeInTheDocument();
   }, 10_000);
 
@@ -586,7 +604,7 @@ describe("organization members page", () => {
     );
 
     await expect(screen.findByText("Member 100")).resolves.toBeVisible();
-    expect(screen.getAllByText("101 active")).toHaveLength(2);
+    expect(screen.getByText("101 active")).toBeVisible();
     expect(mockedListMembers).toHaveBeenNthCalledWith(1, {
       query: {
         limit: 100,
@@ -1282,7 +1300,7 @@ describe("organization members page", () => {
     );
 
     await expect(screen.findByText("ops@example.com")).resolves.toBeVisible();
-    expect(screen.getAllByText("1 open")).toHaveLength(2);
+    expect(screen.getByText("1 open")).toBeVisible();
 
     const dialog = await openInviteDialog(user);
 
@@ -1321,7 +1339,7 @@ describe("organization members page", () => {
     await expect(
       screen.findByTitle("member@example.com")
     ).resolves.toBeVisible();
-    expect(screen.getAllByText("2 open")).toHaveLength(2);
+    expect(screen.getByText("2 open")).toBeVisible();
   }, 10_000);
 
   it("submits the invite form with the submit hotkey", async () => {
@@ -1451,8 +1469,11 @@ describe("organization members page", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Resend invitation to pending@example.com",
+        name: "Invitation actions for pending@example.com",
       })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Resend invitation" })
     );
 
     await waitFor(() => {
@@ -1489,8 +1510,11 @@ describe("organization members page", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Resend invitation to pending@example.com",
+        name: "Invitation actions for pending@example.com",
       })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Resend invitation" })
     );
 
     await expect(
@@ -1515,8 +1539,11 @@ describe("organization members page", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Cancel invitation to pending@example.com",
+        name: "Invitation actions for pending@example.com",
       })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Cancel invitation" })
     );
 
     await waitFor(() => {
@@ -1554,8 +1581,11 @@ describe("organization members page", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Cancel invitation to pending@example.com",
+        name: "Invitation actions for pending@example.com",
       })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Cancel invitation" })
     );
 
     await expect(
@@ -1758,6 +1788,6 @@ describe("organization members page", () => {
         "Send the first invite when you're ready to add someone."
       )
     ).not.toBeInTheDocument();
-    expect(screen.getByText("0 open")).toBeVisible();
+    expect(screen.queryByText("0 open")).not.toBeInTheDocument();
   }, 10_000);
 });

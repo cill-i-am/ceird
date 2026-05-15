@@ -94,7 +94,18 @@ describe("organization rate card section", () => {
     await expect(
       screen.findByRole("heading", { name: "Rate card" })
     ).resolves.toBeVisible();
-    await expect(screen.findByText("Standard")).resolves.toBeVisible();
+    await expect(screen.findByText("Standard rates")).resolves.toBeVisible();
+    expect(
+      screen.queryByText(
+        "Maintain a standard reference list for admin and quoting conversations."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "One editable standard card for organization reference rates."
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("0 lines")).toBeVisible();
   });
 
   it("creates the single Standard card on first save when none exists", async () => {
@@ -121,7 +132,7 @@ describe("organization rate card section", () => {
     const user = userEvent.setup();
     renderRateCardSection();
 
-    await screen.findByText("Standard");
+    await screen.findByText("Standard rates");
     await user.click(screen.getByRole("button", { name: "Save rate card" }));
 
     expect(mockedUpdateRateCard).not.toHaveBeenCalled();
@@ -167,7 +178,7 @@ describe("organization rate card section", () => {
     const user = userEvent.setup();
     renderRateCardSection();
 
-    await screen.findByText("Standard");
+    await screen.findByText("Standard rates");
     await user.click(screen.getByRole("button", { name: "Add line" }));
     await user.selectOptions(
       screen.getByLabelText("Kind for line 1"),
@@ -262,7 +273,7 @@ describe("organization rate card section", () => {
     const user = userEvent.setup();
     renderRateCardSection();
 
-    await screen.findByText("Standard");
+    await screen.findByText("Standard rates");
     await user.click(screen.getByRole("button", { name: "Add line" }));
     await user.clear(screen.getByLabelText("Value for line 1"));
     await user.type(screen.getByLabelText("Value for line 1"), "-1");
@@ -279,7 +290,7 @@ describe("organization rate card section", () => {
     const user = userEvent.setup();
     renderRateCardSection();
 
-    await screen.findByText("Standard");
+    await screen.findByText("Standard rates");
     await user.click(screen.getByRole("button", { name: "Add line" }));
     await user.type(screen.getByLabelText("Name for line 1"), "labour");
     await user.clear(screen.getByLabelText("Value for line 1"));

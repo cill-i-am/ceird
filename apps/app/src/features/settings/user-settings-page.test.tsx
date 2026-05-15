@@ -1,5 +1,5 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type * as AuthClientModule from "#/lib/auth-client";
@@ -105,18 +105,52 @@ describe("user settings page", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps the settings title accessible without repeating it visually", () => {
+  async function selectTab(name: "Email" | "Password" | "Profile") {
+    await userEvent.click(screen.getByRole("tab", { name }));
+  }
+
+  it("frames account settings with direct form tabs", async () => {
     render(<UserSettingsPage user={user} />);
 
     expect(
-      screen.getByRole("heading", { hidden: true, name: "Settings" })
-    ).toHaveClass("sr-only");
+      screen.getByRole("heading", { name: "Account settings" })
+    ).toBeVisible();
     expect(screen.queryByText("ACCOUNT")).not.toBeInTheDocument();
+    expect(screen.queryByText("SETTINGS")).not.toBeInTheDocument();
     expect(
       screen.queryByText(
         "Keep your sign-in details and account identity current for invites, recovery, and team updates."
       )
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Keep identity, sign-in email, and password details ready for invitations, recovery, and team activity."
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /account status/i })
+    ).not.toBeInTheDocument();
+    const sectionTabs = screen.getByRole("tablist", {
+      name: /settings sections/i,
+    });
+
+    expect(
+      within(sectionTabs).queryByRole("tab", { name: "Overview" })
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Profile" })
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Profile" })
+    ).toBeVisible();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Email" })
+    ).toBeVisible();
+    expect(
+      within(sectionTabs).getByRole("tab", { name: "Password" })
+    ).toBeVisible();
+
+    await selectTab("Profile");
     expect(screen.getByRole("heading", { name: "Profile" })).toBeVisible();
   });
 
@@ -124,6 +158,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
     await interaction.clear(nameInput);
@@ -144,8 +179,9 @@ describe("user settings page", () => {
     expect(mockedRouterInvalidate).toHaveBeenCalledOnce();
   }, 10_000);
 
-  it("disables unchanged profile saves", () => {
+  it("disables unchanged profile saves", async () => {
     render(<UserSettingsPage user={user} />);
+    await selectTab("Profile");
 
     expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
     expect(mockedUpdateUser).not.toHaveBeenCalled();
@@ -156,6 +192,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
     await interaction.clear(nameInput);
@@ -177,6 +214,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Email");
 
     await interaction.type(
       screen.getByLabelText("New email"),
@@ -251,6 +289,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Email");
 
     await interaction.type(
       screen.getByLabelText("New email"),
@@ -270,6 +309,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Password");
 
     await interaction.type(
       screen.getByLabelText("Current password"),
@@ -308,11 +348,13 @@ describe("user settings page", () => {
       </HotkeysProvider>
     );
 
+    await selectTab("Profile");
     await interaction.clear(screen.getByLabelText("Display name"));
     await interaction.type(
       screen.getByLabelText("Display name"),
       "Taylor Hotkey"
     );
+    await selectTab("Email");
     await interaction.type(
       screen.getByLabelText("New email"),
       "hotkey@example.com"
@@ -328,6 +370,7 @@ describe("user settings page", () => {
     expect(mockedUpdateUser).not.toHaveBeenCalled();
     expect(mockedChangePassword).not.toHaveBeenCalled();
 
+    await selectTab("Profile");
     await interaction.click(screen.getByLabelText("Display name"));
     await interaction.keyboard("{Control>}{Enter}{/Control}");
 
@@ -339,6 +382,7 @@ describe("user settings page", () => {
     });
     expect(mockedChangePassword).not.toHaveBeenCalled();
 
+    await selectTab("Password");
     await interaction.type(
       screen.getByLabelText("Current password"),
       "old-password"
@@ -366,6 +410,7 @@ describe("user settings page", () => {
     const interaction = userEvent.setup();
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Password");
 
     await interaction.type(
       screen.getByLabelText("Current password"),
@@ -403,6 +448,7 @@ describe("user settings page", () => {
     });
 
     render(<UserSettingsPage user={{ ...user, name: "Original Name" }} />);
+    await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
     await interaction.clear(nameInput);
@@ -429,6 +475,7 @@ describe("user settings page", () => {
     });
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Email");
 
     await interaction.type(
       screen.getByLabelText("New email"),
@@ -455,6 +502,7 @@ describe("user settings page", () => {
     });
 
     render(<UserSettingsPage user={user} />);
+    await selectTab("Password");
 
     await interaction.type(
       screen.getByLabelText("Current password"),

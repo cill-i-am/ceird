@@ -140,6 +140,15 @@ describe("organization activity page", () => {
         screen.getByRole("heading", { name: "Activity" })
       ).toBeInTheDocument();
       expect(
+        screen.getByRole("heading", { name: "Activity timeline" })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "Audit trail for job changes, visits, labels, and costs."
+        )
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("1 event shown")).toBeInTheDocument();
+      expect(
         screen.getByText("Taylor Owner created the job.")
       ).toBeInTheDocument();
       expect(screen.getByLabelText("Actor")).toBeInTheDocument();
@@ -147,6 +156,10 @@ describe("organization activity page", () => {
       expect(screen.getByLabelText("From date")).toBeInTheDocument();
       expect(screen.getByLabelText("To date")).toBeInTheDocument();
       expect(screen.getByLabelText("Job title")).toBeInTheDocument();
+      expect(screen.getByLabelText("Activity filters")).toHaveClass(
+        "grid-cols-2",
+        "lg:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)_8.5rem_8.5rem_minmax(10rem,1.1fr)]"
+      );
       expect(
         screen.getByRole("link", { name: "Inspect boiler" })
       ).toHaveAttribute("href", "/jobs/11111111-1111-4111-8111-111111111111");
@@ -216,6 +229,10 @@ describe("organization activity page", () => {
       expect(screen.getByLabelText("Event type")).toHaveValue(
         "cost_line_added"
       );
+      expect(screen.getByText("1 of 3 events shown")).toBeInTheDocument();
+      expect(
+        screen.getByText("Event type: Cost line added")
+      ).toBeInTheDocument();
       expect(
         screen.getByText("Taylor Owner added a material cost line.")
       ).toBeInTheDocument();
@@ -310,12 +327,19 @@ describe("organization activity page", () => {
         />
       );
 
-      expect(screen.getByText("No activity yet.")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Activity timeline" })
+      ).toBeInTheDocument();
+      expect(screen.getByText("No activity recorded yet.")).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Changes to jobs, members, and settings will appear here."
+          "Create or update a job and this timeline becomes the audit trail for the workspace."
         )
       ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open jobs" })).toHaveAttribute(
+        "href",
+        "/jobs"
+      );
       expect(screen.queryByLabelText("Actor")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Event type")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Job title")).not.toBeInTheDocument();
@@ -354,9 +378,15 @@ describe("organization activity page", () => {
         />
       );
 
-      expect(screen.getByText("No matching activity.")).toBeInTheDocument();
+      expect(screen.getByText("0 of 3 events shown")).toBeInTheDocument();
+      expect(screen.getByText("Event type: Visit logged")).toBeInTheDocument();
       expect(
-        screen.getByText("Clear filters to return to the full timeline.")
+        screen.getByText("No events match these filters.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Clear filters or adjust the actor, event, date, or job title to widen the audit trail."
+        )
       ).toBeInTheDocument();
       expect(screen.getByLabelText("Event type")).toHaveValue("visit_logged");
 

@@ -868,10 +868,6 @@ export function OrganizationMembersPage({
     isLoadingInvitations,
     loadErrorMessage,
   });
-  const activeMemberCount =
-    currentMembersDisplayState.kind === "ready"
-      ? currentMembersDisplayState.count
-      : null;
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-3 sm:p-4 lg:p-5">
@@ -886,14 +882,6 @@ export function OrganizationMembersPage({
           {successMessage}
         </p>
       ) : null}
-
-      <AccessOverview
-        activeMemberCount={activeMemberCount}
-        currentViewerRole={currentViewerRole}
-        isLoadingInvitations={isLoadingInvitations}
-        isLoadingMembers={currentMembersDisplayState.kind === "loading"}
-        openInvitationCount={invitations.length}
-      />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
         <CurrentMembersSection
@@ -1092,65 +1080,6 @@ function MembersPageHeader({
   );
 }
 
-function AccessOverview({
-  activeMemberCount,
-  currentViewerRole,
-  isLoadingInvitations,
-  isLoadingMembers,
-  openInvitationCount,
-}: {
-  readonly activeMemberCount: number | null;
-  readonly currentViewerRole: OrganizationRoleType;
-  readonly isLoadingInvitations: boolean;
-  readonly isLoadingMembers: boolean;
-  readonly openInvitationCount: number;
-}) {
-  return (
-    <section
-      aria-label="Member access overview"
-      className="grid overflow-hidden rounded-[calc(var(--radius)*3)] border border-border/60 bg-background/78 shadow-[0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] supports-[backdrop-filter]:bg-background/68 sm:grid-cols-3"
-    >
-      <AccessOverviewItem
-        label="Active members"
-        value={
-          isLoadingMembers
-            ? "Loading"
-            : formatMemberCount(activeMemberCount ?? 0)
-        }
-      />
-      <AccessOverviewItem
-        label="Open invitations"
-        value={
-          isLoadingInvitations
-            ? "Loading"
-            : formatInvitationCount(openInvitationCount)
-        }
-      />
-      <AccessOverviewItem
-        label="Your role"
-        value={formatRoleLabel(currentViewerRole)}
-      />
-    </section>
-  );
-}
-
-function AccessOverviewItem({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 border-b border-border/60 px-4 py-3 last:border-b-0 sm:border-r sm:border-b-0 sm:last:border-r-0">
-      <p className="text-[0.68rem] font-medium text-muted-foreground uppercase">
-        {label}
-      </p>
-      <p className="truncate text-sm font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
-
 function CurrentMembersSection({
   activeMemberAction,
   currentUserId,
@@ -1192,10 +1121,6 @@ function CurrentMembersSection({
             >
               Current members
             </h2>
-            <p className="max-w-[58ch] text-sm/6 text-muted-foreground">
-              Owners, admins, teammates, and external collaborators with active
-              access.
-            </p>
           </div>
           {shouldShowMemberCount ? (
             <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
@@ -1344,9 +1269,6 @@ function PendingInvitationsSection({
           >
             Pending invitations
           </h2>
-          <p className="max-w-[44ch] text-sm/6 text-muted-foreground">
-            Invites that have not been accepted yet.
-          </p>
         </div>
         <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
           {formatInvitationCount(invitations.length)}
@@ -1569,6 +1491,7 @@ function PendingInvitationRow({
   const isCanceling =
     activeAction?.invitationId === invitation.id &&
     activeAction.type === "cancel";
+  const isPending = isResending || isCanceling;
 
   return (
     <AppRowListItem>
@@ -1590,32 +1513,52 @@ function PendingInvitationRow({
         <Badge variant="outline">{formatRoleLabel(invitation.status)}</Badge>
       </AppRowListMeta>
       <AppRowListActions>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          loading={isResending}
-          disabled={actionsDisabled}
-          aria-label={`Resend invitation to ${invitation.email}`}
-          onClick={() => {
-            void onInvitationAction(invitation, "resend");
-          }}
-        >
-          Resend
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          loading={isCanceling}
-          disabled={actionsDisabled}
-          aria-label={`Cancel invitation to ${invitation.email}`}
-          onClick={() => {
-            void onInvitationAction(invitation, "cancel");
-          }}
-        >
-          Cancel
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                loading={isPending}
+                disabled={actionsDisabled}
+                aria-label={`Invitation actions for ${invitation.email}`}
+              />
+            }
+          >
+            <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              disabled={actionsDisabled}
+              onClick={() => {
+                void onInvitationAction(invitation, "resend");
+              }}
+            >
+              <HugeiconsIcon
+                icon={Refresh01Icon}
+                strokeWidth={2}
+                className="text-muted-foreground"
+              />
+              <span>Resend invitation</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={actionsDisabled}
+              variant="destructive"
+              onClick={() => {
+                void onInvitationAction(invitation, "cancel");
+              }}
+            >
+              <HugeiconsIcon
+                icon={UserRemove01Icon}
+                strokeWidth={2}
+                className="text-muted-foreground"
+              />
+              <span>Cancel invitation</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </AppRowListActions>
     </AppRowListItem>
   );

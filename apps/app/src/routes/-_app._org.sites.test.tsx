@@ -1,5 +1,6 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { UserId as UserIdType } from "@ceird/identity-core";
+import type { JobListResponse, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen } from "@testing-library/react";
@@ -13,11 +14,13 @@ const {
   mockedEnsureActiveOrganizationId,
   mockedGetCurrentOrganizationMemberRole,
   mockedGetCurrentServerSiteOptions,
+  mockedListAllCurrentServerJobs,
   mockedNavigate,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerSiteOptions: vi.fn<AsyncLoaderMock>(),
+  mockedListAllCurrentServerJobs: vi.fn<AsyncLoaderMock>(),
   mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
 
@@ -41,6 +44,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
 vi.mock("#/features/api/app-api-server", () => ({
   getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
+  listCurrentServerJobs: mockedListAllCurrentServerJobs,
 }));
 
 vi.mock(
@@ -131,6 +135,54 @@ describe("sites route loader", () => {
   );
 
   it(
+    "loads jobs related to the selected site for the detail route",
+    { timeout: 10_000 },
+    async () => {
+      const relatedJobId =
+        "77777777-7777-4777-8777-777777777777" as WorkItemIdType;
+      const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
+      const jobList: JobListResponse = {
+        items: [
+          {
+            createdAt: "2026-04-23T10:00:00.000Z",
+            id: relatedJobId,
+            kind: "job",
+            labels: [],
+            priority: "high",
+            siteId,
+            status: "in_progress",
+            title: "Inspect boiler",
+            updatedAt: "2026-04-23T12:00:00.000Z",
+          },
+        ],
+        nextCursor: undefined,
+      };
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(jobList);
+
+      const { loadSiteDetailRouteData } =
+        await import("#/features/sites/sites-detail-route-loader");
+
+      await expect(
+        loadSiteDetailRouteData(siteId, {
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+        })
+      ).resolves.toStrictEqual({
+        hasMoreRelatedJobs: false,
+        relatedJobs: jobList.items,
+        siteId,
+      });
+      expect(mockedListAllCurrentServerJobs).toHaveBeenCalledWith({
+        limit: 25,
+        siteId,
+      });
+    }
+  );
+
+  it(
     "renders sites from loader-seeded atom state on the first paint",
     { timeout: 10_000 },
     async () => {
@@ -164,7 +216,7 @@ describe("sites route loader", () => {
         />
       );
 
-      expect(screen.getByText("Docklands Campus")).toBeInTheDocument();
+      expect(screen.getAllByText("Docklands Campus")).toHaveLength(2);
     }
   );
 });

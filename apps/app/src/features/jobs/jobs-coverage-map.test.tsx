@@ -99,6 +99,16 @@ describe("jobs coverage map", () => {
     await expect(
       screen.findByTestId("coverage-map-canvas")
     ).resolves.toHaveTextContent("Depot");
+    expect(
+      screen.getByRole("heading", { name: /mapped sites/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Depot" })).toHaveAttribute(
+      "href",
+      "/sites/$siteId"
+    );
+    expect(
+      screen.getByRole("link", { name: "Await switchgear" })
+    ).toBeInTheDocument();
     expect(screen.getByText(/1 unmapped/i)).toBeInTheDocument();
     expect(screen.getByText(/needs location/i)).toBeInTheDocument();
     expect(screen.getByText("Check classroom snag")).toBeInTheDocument();
@@ -106,6 +116,99 @@ describe("jobs coverage map", () => {
       "href",
       expect.stringContaining("Main+Street")
     );
+  }, 5000);
+
+  it("keeps mapped site context visible when every job is on the map", async () => {
+    render(
+      <JobsCoverageMap
+        jobs={[
+          buildJob({
+            id: depotJobId,
+            priority: "high",
+            siteId: depotSiteId,
+            status: "in_progress",
+            title: "Replace plant room valve",
+          }),
+        ]}
+        sites={
+          new Map([
+            [
+              depotSiteId,
+              {
+                id: depotSiteId,
+                latitude: 53.3498,
+                longitude: -6.2603,
+                name: "Depot",
+                serviceAreaName: "North",
+              },
+            ],
+          ])
+        }
+      />
+    );
+
+    await expect(
+      screen.findByTestId("coverage-map-canvas")
+    ).resolves.toHaveTextContent("Depot");
+    expect(
+      screen.getByRole("heading", { name: /mapped sites/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Depot" })).toHaveAttribute(
+      "href",
+      "/sites/$siteId"
+    );
+    expect(screen.getByText("1 job")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Replace plant room valve" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /needs location/i })
+    ).not.toBeInTheDocument();
+  }, 5000);
+
+  it("routes overflow grouped jobs to the site detail", async () => {
+    render(
+      <JobsCoverageMap
+        jobs={Array.from({ length: 5 }, (_, index) =>
+          buildJob({
+            id: `55555555-5555-4555-8555-55555555555${index}` as WorkItemIdType,
+            priority: "medium",
+            siteId: depotSiteId,
+            status: "triaged",
+            title: `Depot job ${index + 1}`,
+          })
+        )}
+        sites={
+          new Map([
+            [
+              depotSiteId,
+              {
+                id: depotSiteId,
+                latitude: 53.3498,
+                longitude: -6.2603,
+                name: "Depot",
+                serviceAreaName: "North",
+              },
+            ],
+          ])
+        }
+      />
+    );
+
+    await expect(
+      screen.findByTestId("coverage-map-canvas")
+    ).resolves.toHaveTextContent("Depot");
+    expect(screen.getByText("5 jobs")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Depot job 1" })).toHaveAttribute(
+      "href",
+      "/jobs/$jobId"
+    );
+    expect(
+      screen.queryByRole("link", { name: "Depot job 5" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View 1 more on site" })
+    ).toHaveAttribute("href", "/sites/$siteId");
   }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {

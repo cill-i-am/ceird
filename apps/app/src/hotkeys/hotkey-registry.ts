@@ -1,5 +1,6 @@
 const HOTKEY_SCOPES = [
   "global",
+  "home",
   "jobs",
   "job-create",
   "job-detail",
@@ -14,6 +15,7 @@ export type HotkeyScope = (typeof HOTKEY_SCOPES)[number];
 export const HOTKEY_GROUPS = [
   "Navigation",
   "Layout",
+  "Home",
   "Jobs",
   "Job drawer",
   "Sites",
@@ -119,6 +121,14 @@ export const HOTKEYS = {
     label: "Switch organization",
     scope: "global",
     when: "Multiple organizations are available",
+  },
+  homeCreateJob: {
+    group: "Home",
+    hotkey: "N",
+    id: "homeCreateJob",
+    label: "Create job",
+    scope: "home",
+    when: "Organization home is active",
   },
   switchOrganization1: {
     group: "Navigation",

@@ -6,7 +6,7 @@ import type {
   OrganizationActivityItem,
   OrganizationActivityListResponse,
 } from "@ceird/jobs-core";
-import { Activity01Icon } from "@hugeicons/core-free-icons";
+import { Activity01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type * as React from "react";
@@ -14,7 +14,7 @@ import { useState } from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Empty,
   EmptyContent,
@@ -66,8 +66,14 @@ export function OrganizationActivityPage({
   );
   const hasActivity = visibleActivityItems.length > 0;
   const hasActiveFilters = hasActivitySearchFilters(search);
+  const activeFilterLabels = buildActiveActivityFilterLabels(search, options);
   const emptyStateCopy = getActivityEmptyStateCopy(hasActiveFilters);
   const shouldShowFilters = activity.items.length > 0 || hasActiveFilters;
+  const timelineScope = buildTimelineScopeText({
+    totalCount: activity.items.length,
+    visibleCount: visibleActivityItems.length,
+    hasActiveFilters,
+  });
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -84,70 +90,114 @@ export function OrganizationActivityPage({
         ) : null}
       </AppPageHeader>
 
-      {hasActivity ? (
-        <section aria-label="Organization activity" className="min-h-0">
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <div className="divide-y">
-              {visibleActivityItems.map((item) => {
-                const actorName = item.actor?.name;
-                const actorLabel = actorName ?? "System";
-                const summary = describeJobActivity(actorName, item.payload);
-
-                return (
-                  <article
-                    className="grid gap-3 p-4 transition-colors hover:bg-muted/40 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
-                    key={item.id}
-                  >
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Badge variant="outline">
-                          {EVENT_TYPE_LABELS[item.eventType]}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatJobDateTime(item.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium text-foreground">
-                        {summary}
-                      </p>
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        <span>{actorLabel}</span>
-                        <Link
-                          className="truncate font-medium text-primary underline-offset-4 hover:underline"
-                          params={{ jobId: item.workItemId }}
-                          to="/jobs/$jobId"
-                        >
-                          {item.jobTitle}
-                        </Link>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+      <section aria-labelledby="activity-timeline-heading" className="min-h-0">
+        <div className="overflow-hidden rounded-2xl border bg-background">
+          <div className="flex flex-col gap-3 border-b px-3 py-3 sm:px-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2
+                  id="activity-timeline-heading"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Activity timeline
+                </h2>
+              </div>
+              <p className="text-xs text-muted-foreground">{timelineScope}</p>
             </div>
-          </div>
-        </section>
-      ) : (
-        <Empty className="min-h-64 border-transparent bg-transparent p-8">
-          <EmptyHeader>
-            <EmptyTitle>{emptyStateCopy.title}</EmptyTitle>
-            <EmptyDescription>{emptyStateCopy.description}</EmptyDescription>
-          </EmptyHeader>
-          {hasActiveFilters ? (
-            <EmptyContent>
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                onClick={() => onSearchChange({})}
+
+            {activeFilterLabels.length > 0 ? (
+              <div
+                aria-label="Active activity filters"
+                className="flex min-w-0 flex-wrap items-center gap-2"
               >
-                Clear filters
-              </Button>
-            </EmptyContent>
-          ) : null}
-        </Empty>
-      )}
+                {activeFilterLabels.map((label) => (
+                  <Badge key={label} variant="secondary">
+                    {label}
+                  </Badge>
+                ))}
+                <Button
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => onSearchChange({})}
+                >
+                  Clear filters
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {hasActivity ? (
+            <div className="divide-y">
+              {visibleActivityItems.map((item) => (
+                <ActivityTimelineRow key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <Empty className="min-h-72 border-transparent bg-transparent p-8">
+              <EmptyHeader>
+                <EmptyTitle>{emptyStateCopy.title}</EmptyTitle>
+                <EmptyDescription>
+                  {emptyStateCopy.description}
+                </EmptyDescription>
+              </EmptyHeader>
+              {hasActiveFilters ? null : (
+                <EmptyContent>
+                  <Link
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    to="/jobs"
+                  >
+                    Open jobs
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-end"
+                    />
+                  </Link>
+                </EmptyContent>
+              )}
+            </Empty>
+          )}
+        </div>
+      </section>
     </main>
+  );
+}
+
+function ActivityTimelineRow({
+  item,
+}: {
+  readonly item: OrganizationActivityItem;
+}) {
+  const actorName = item.actor?.name;
+  const actorLabel = actorName ?? "System";
+  const summary = describeJobActivity(actorName, item.payload);
+
+  return (
+    <article className="grid gap-3 px-3 py-4 transition-colors hover:bg-muted/40 sm:px-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+      <div className="min-w-0 space-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge variant="outline">{EVENT_TYPE_LABELS[item.eventType]}</Badge>
+          <span className="text-xs text-muted-foreground">
+            {formatJobDateTime(item.createdAt)}
+          </span>
+        </div>
+        <p className="text-sm font-medium text-foreground">{summary}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>{actorLabel}</span>
+          <Link
+            className="truncate font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            params={{ jobId: item.workItemId }}
+            to="/jobs/$jobId"
+          >
+            {item.jobTitle}
+          </Link>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -164,15 +214,74 @@ function hasActivitySearchFilters(search: ActivitySearch) {
 function getActivityEmptyStateCopy(hasActiveFilters: boolean) {
   if (hasActiveFilters) {
     return {
-      description: "Clear filters to return to the full timeline.",
-      title: "No matching activity.",
+      description:
+        "Clear filters or adjust the actor, event, date, or job title to widen the audit trail.",
+      title: "No events match these filters.",
     };
   }
 
   return {
-    description: "Changes to jobs, members, and settings will appear here.",
-    title: "No activity yet.",
+    description:
+      "Create or update a job and this timeline becomes the audit trail for the workspace.",
+    title: "No activity recorded yet.",
   };
+}
+
+function buildTimelineScopeText({
+  hasActiveFilters,
+  totalCount,
+  visibleCount,
+}: {
+  readonly hasActiveFilters: boolean;
+  readonly totalCount: number;
+  readonly visibleCount: number;
+}) {
+  const visibleEventLabel = pluralizeEventCount(visibleCount);
+
+  if (hasActiveFilters) {
+    return `${visibleCount} of ${totalCount} ${
+      totalCount === 1 ? "event" : "events"
+    } shown`;
+  }
+
+  return `${visibleEventLabel} shown`;
+}
+
+function pluralizeEventCount(count: number) {
+  return `${count} ${count === 1 ? "event" : "events"}`;
+}
+
+function buildActiveActivityFilterLabels(
+  search: ActivitySearch,
+  options: JobMemberOptionsResponse
+) {
+  const labels: string[] = [];
+
+  if (search.actorUserId !== undefined) {
+    const actorName =
+      options.members.find((member) => member.id === search.actorUserId)
+        ?.name ?? search.actorUserId;
+
+    labels.push(`Actor: ${actorName}`);
+  }
+
+  if (search.eventType !== undefined) {
+    labels.push(`Event type: ${EVENT_TYPE_LABELS[search.eventType]}`);
+  }
+
+  if (search.fromDate !== undefined) {
+    labels.push(`From: ${search.fromDate}`);
+  }
+
+  if (search.toDate !== undefined) {
+    labels.push(`To: ${search.toDate}`);
+  }
+
+  if (search.jobTitle !== undefined) {
+    labels.push(`Job title: ${search.jobTitle}`);
+  }
+
+  return labels;
 }
 
 function activityItemMatchesSearch(
@@ -204,7 +313,10 @@ function ActivityFilters({
   readonly onSearchChange: (search: ActivitySearch) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(10rem,1fr)_minmax(11rem,1fr)_9rem_9rem_minmax(12rem,1.2fr)]">
+    <div
+      aria-label="Activity filters"
+      className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)_8.5rem_8.5rem_minmax(10rem,1.1fr)]"
+    >
       <FilterField label="Actor">
         <Select
           aria-label="Actor"
@@ -279,6 +391,7 @@ function ActivityFilters({
 
       <JobTitleFilter
         key={`job-title:${search.jobTitle ?? ""}`}
+        className="col-span-2 lg:col-span-1"
         onSearchChange={onSearchChange}
         search={search}
       />
@@ -287,9 +400,11 @@ function ActivityFilters({
 }
 
 function JobTitleFilter({
+  className,
   onSearchChange,
   search,
 }: {
+  readonly className?: string;
   readonly search: ActivitySearch;
   readonly onSearchChange: (search: ActivitySearch) => void;
 }) {
@@ -309,7 +424,7 @@ function JobTitleFilter({
   }
 
   return (
-    <FilterField label="Job title">
+    <FilterField label="Job title" className={className}>
       <Input
         aria-label="Job title"
         placeholder="Filter by job title"

@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import { devtools } from "@tanstack/devtools-vite";
+import { defineDevtoolsConfig, devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -12,6 +12,11 @@ const clientApiOrigin =
     ? process.env.VITE_API_ORIGIN
     : serverApiOrigin;
 const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
+const devtoolsConfig = defineDevtoolsConfig({
+  injectSource: {
+    enabled: false,
+  },
+});
 
 const config = defineConfig({
   build: isCloudflareBuild
@@ -42,7 +47,7 @@ const config = defineConfig({
         entry: "./src/server.ts",
       },
     }),
-    devtools(),
+    devtools(devtoolsConfig),
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
     viteReact(),

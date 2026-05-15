@@ -6,8 +6,7 @@ import type {
   RateCardLineInput,
   RateCardLineKind,
 } from "@ceird/jobs-core";
-import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
-import type { Result } from "@effect-atom/atom-react";
+import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { Delete02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Exit } from "effect";
@@ -99,27 +98,16 @@ export function OrganizationRateCardSection() {
   return (
     <AppUtilityPanel
       title="Rate card"
-      description="Maintain a standard reference list for admin and quoting conversations."
       className="rounded-none border-x-0 border-t border-b bg-transparent p-0 pt-5 shadow-none supports-[backdrop-filter]:bg-transparent sm:p-0 sm:pt-5"
     >
-      <div className="flex flex-col gap-1 border-y border-border/60 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">
-            {STANDARD_RATE_CARD_NAME}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            One editable standard card for organization reference rates.
-          </p>
-        </div>
-        {listResult.waiting ? (
-          <p className="text-sm text-muted-foreground">Loading&hellip;</p>
-        ) : null}
-      </div>
+      {listResult.waiting ? (
+        <p className="text-sm text-muted-foreground">Loading&hellip;</p>
+      ) : null}
 
       <OrganizationAsyncResultError result={listResult} />
 
       <RateCardEditorSlot
-        listFailed={listResult._tag === "Failure"}
+        listFailed={Result.isFailure(listResult)}
         rateCardsLoaded={rateCardsLoaded}
         standardRateCard={standardRateCard}
       />
@@ -303,8 +291,39 @@ function RateCardForm({
       noValidate
       onSubmit={(event) => submitClientForm(event, handleSubmit)}
     >
+      <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-foreground">
+            {STANDARD_RATE_CARD_NAME} rates
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {formatRateCardLineCount(lines.length)}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={mutationResult.waiting}
+            onClick={addLine}
+          >
+            Add line
+          </Button>
+          <Button type="submit" loading={mutationResult.waiting}>
+            Save rate card
+            <span aria-hidden="true">
+              <ShortcutHint
+                surface="button"
+                hotkey={HOTKEYS.settingsSubmit.hotkey}
+                label="Save rate card"
+              />
+            </span>
+          </Button>
+        </div>
+      </div>
+
       {lines.length > 0 ? (
-        <div className="flex flex-col divide-y divide-border/60 border-y border-border/60">
+        <div className="overflow-hidden rounded-lg border border-border/60">
           {lines.map((line, index) => (
             <RateCardLineRow
               key={line.id}
@@ -327,29 +346,12 @@ function RateCardForm({
       )}
 
       <OrganizationAsyncResultError result={mutationResult} />
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={mutationResult.waiting}
-          onClick={addLine}
-        >
-          Add line
-        </Button>
-        <Button type="submit" loading={mutationResult.waiting}>
-          Save rate card
-          <span aria-hidden="true">
-            <ShortcutHint
-              surface="button"
-              hotkey={HOTKEYS.settingsSubmit.hotkey}
-              label="Save rate card"
-            />
-          </span>
-        </Button>
-      </div>
     </form>
   );
+}
+
+function formatRateCardLineCount(count: number) {
+  return count === 1 ? "1 line" : `${count} lines`;
 }
 
 function RateCardLineRow({
@@ -391,14 +393,15 @@ function RateCardLineRow({
   useRegisterCommandActions(commandActions);
 
   return (
-    <div className="grid gap-3 py-3 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">
+    <div className="grid gap-3 border-b border-border/60 px-3 py-3 last:border-b-0 md:grid-cols-[minmax(8rem,0.85fr)_minmax(9rem,1fr)_minmax(7rem,0.55fr)_minmax(7rem,0.6fr)_auto]">
       <label
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={kindId}
       >
-        Kind for line {lineNumber}
+        Kind
         <select
           id={kindId}
+          aria-label={`Kind for line ${lineNumber}`}
           className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
           value={line.kind}
           onChange={(event) => {
@@ -425,9 +428,10 @@ function RateCardLineRow({
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={nameId}
       >
-        Name for line {lineNumber}
+        Name
         <Input
           id={nameId}
+          aria-label={`Name for line ${lineNumber}`}
           value={line.name}
           aria-invalid={Boolean(errors.name) || undefined}
           onChange={(event) =>
@@ -443,9 +447,10 @@ function RateCardLineRow({
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={valueId}
       >
-        Value for line {lineNumber}
+        Value
         <Input
           id={valueId}
+          aria-label={`Value for line ${lineNumber}`}
           type="number"
           min="0"
           step="0.01"
@@ -464,9 +469,10 @@ function RateCardLineRow({
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"
         htmlFor={unitId}
       >
-        Unit for line {lineNumber}
+        Unit
         <Input
           id={unitId}
+          aria-label={`Unit for line ${lineNumber}`}
           value={line.unit}
           aria-invalid={Boolean(errors.unit) || undefined}
           onChange={(event) =>

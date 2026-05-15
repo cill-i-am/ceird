@@ -3,10 +3,12 @@ import { useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import * as React from "react";
 
+import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import {
   getErrorText,
   getFormErrorText,
@@ -32,9 +34,12 @@ import type { EmailChangeStatus } from "./user-settings-search";
 
 export interface UserSettingsAccount {
   readonly email: string;
+  readonly emailVerified?: boolean | null;
   readonly image?: string | null;
   readonly name: string;
 }
+
+type AccountSettingsTab = "email" | "password" | "profile";
 
 function FormStatus({
   children,
@@ -81,6 +86,9 @@ export function UserSettingsPage({
   const [passwordMessage, setPasswordMessage] = React.useState<string | null>(
     null
   );
+  const [activeTab, setActiveTab] = React.useState<AccountSettingsTab>(() =>
+    emailChangeStatus ? "email" : "profile"
+  );
   const emailFormRef = React.useRef<HTMLFormElement | null>(null);
   const passwordFormRef = React.useRef<HTMLFormElement | null>(null);
   const profileFormRef = React.useRef<HTMLFormElement | null>(null);
@@ -88,6 +96,12 @@ export function UserSettingsPage({
   const visibleEmailMessage =
     emailMessage ??
     (emailChangeStatus === dismissedEmailStatus ? null : emailStatusMessage);
+
+  React.useEffect(() => {
+    if (emailChangeStatus) {
+      setActiveTab("email");
+    }
+  }, [emailChangeStatus]);
 
   const profileForm = useForm({
     defaultValues: {
@@ -251,356 +265,392 @@ export function UserSettingsPage({
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <h1 className="sr-only">Settings</h1>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <AppUtilityPanel
-          title="Profile"
-          description="This is how your teammates see you across jobs and organization activity."
-          className="xl:row-span-2"
-        >
-          <form
-            ref={profileFormRef}
-            className="flex flex-col gap-5"
-            method="post"
-            noValidate
-            onSubmit={(event) =>
-              submitClientForm(event, profileForm.handleSubmit)
-            }
+    <div className="flex flex-1 flex-col gap-5 p-4 sm:gap-6 sm:p-6 lg:p-8">
+      <AppPageHeader title="Account settings" className="border-b-0 pb-0" />
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(nextValue) => {
+          if (isAccountSettingsTab(nextValue)) {
+            setActiveTab(nextValue);
+          }
+        }}
+        className="max-w-5xl gap-5"
+      >
+        <div className="no-scrollbar overflow-x-auto border-b border-border/60">
+          <TabsList
+            aria-label="Settings sections"
+            variant="line"
+            className="h-10"
           >
-            <FieldGroup>
-              <profileForm.Field name="name">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="email">Email</TabsTrigger>
+            <TabsTrigger value="password">Password</TabsTrigger>
+          </TabsList>
+        </div>
 
-                  return (
-                    <AuthFormField
-                      label="Display name"
-                      htmlFor="settings-name"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-name"
-                        name={field.name}
-                        autoComplete="name"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setProfileMessage(null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setProfileMessage(null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </profileForm.Field>
-
-              <profileForm.Field name="image">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="Avatar image URL"
-                      htmlFor="settings-image"
-                      descriptionText="Optional. Use a direct http or https image URL."
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-image"
-                        name={field.name}
-                        type="url"
-                        autoComplete="url"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setProfileMessage(null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setProfileMessage(null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </profileForm.Field>
-            </FieldGroup>
-
-            <profileForm.Subscribe
-              selector={(state) => state.errorMap.onSubmit}
-            >
-              {(error) =>
-                getFormErrorText(error) ? (
-                  <FieldError>{getFormErrorText(error)}</FieldError>
-                ) : null
-              }
-            </profileForm.Subscribe>
-            {profileMessage ? <FormStatus>{profileMessage}</FormStatus> : null}
-
-            <profileForm.Subscribe
-              selector={(state) => ({
-                isDefaultValue: state.isDefaultValue,
-                isSubmitting: state.isSubmitting,
-              })}
-            >
-              {({ isDefaultValue, isSubmitting }) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  loading={isSubmitting}
-                  disabled={isDefaultValue || !isHydrated}
-                >
-                  {isSubmitting ? "Saving profile..." : "Save profile"}
-                </Button>
-              )}
-            </profileForm.Subscribe>
-          </form>
-        </AppUtilityPanel>
-
-        <AppUtilityPanel
-          title="Email"
-          description="Email changes are verified before they replace your current sign-in address."
-        >
-          <div className="rounded-[calc(var(--radius)*2)] border border-border/60 bg-muted/30 px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase">
-              Current email
-            </p>
-            <p className="mt-1 text-sm font-medium break-all text-foreground">
-              {user.email}
-            </p>
-          </div>
-
-          <form
-            ref={emailFormRef}
-            className="flex flex-col gap-5"
-            method="post"
-            noValidate
-            onSubmit={(event) =>
-              submitClientForm(event, emailForm.handleSubmit)
-            }
+        <TabsContent value="profile" keepMounted>
+          <AppUtilityPanel
+            title="Profile"
+            description="This is how your teammates see you across jobs and organization activity."
           >
-            <FieldGroup>
-              <emailForm.Field name="email">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="New email"
-                      htmlFor="settings-email"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-email"
-                        name={field.name}
-                        type="email"
-                        autoComplete="email"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setEmailMessage(null);
-                          setDismissedEmailStatus(emailChangeStatus ?? null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setEmailMessage(null);
-                          setDismissedEmailStatus(emailChangeStatus ?? null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </emailForm.Field>
-            </FieldGroup>
-
-            <emailForm.Subscribe selector={(state) => state.errorMap.onSubmit}>
-              {(error) =>
-                getFormErrorText(error) ? (
-                  <FieldError>{getFormErrorText(error)}</FieldError>
-                ) : null
+            <form
+              ref={profileFormRef}
+              className="flex flex-col gap-5"
+              method="post"
+              noValidate
+              onSubmit={(event) =>
+                submitClientForm(event, profileForm.handleSubmit)
               }
-            </emailForm.Subscribe>
-            {visibleEmailMessage ? (
-              <FormStatus
-                tone={
-                  emailChangeStatus === "failed" ? "destructive" : "neutral"
-                }
+            >
+              <FieldGroup>
+                <profileForm.Field name="name">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
+
+                    return (
+                      <AuthFormField
+                        label="Display name"
+                        htmlFor="settings-name"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-name"
+                          name={field.name}
+                          autoComplete="name"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setProfileMessage(null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setProfileMessage(null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </profileForm.Field>
+
+                <profileForm.Field name="image">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
+
+                    return (
+                      <AuthFormField
+                        label="Avatar image URL"
+                        htmlFor="settings-image"
+                        descriptionText="Optional. Use a direct http or https image URL."
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-image"
+                          name={field.name}
+                          type="url"
+                          autoComplete="url"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setProfileMessage(null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setProfileMessage(null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </profileForm.Field>
+              </FieldGroup>
+
+              <profileForm.Subscribe
+                selector={(state) => state.errorMap.onSubmit}
               >
-                {visibleEmailMessage}
-              </FormStatus>
-            ) : null}
+                {(error) =>
+                  getFormErrorText(error) ? (
+                    <FieldError>{getFormErrorText(error)}</FieldError>
+                  ) : null
+                }
+              </profileForm.Subscribe>
+              {profileMessage ? (
+                <FormStatus>{profileMessage}</FormStatus>
+              ) : null}
 
-            <emailForm.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  loading={isSubmitting}
-                  disabled={!isHydrated}
-                >
-                  {isSubmitting
-                    ? "Sending verification..."
-                    : "Send verification email"}
-                </Button>
-              )}
-            </emailForm.Subscribe>
-          </form>
-        </AppUtilityPanel>
+              <profileForm.Subscribe
+                selector={(state) => ({
+                  isDefaultValue: state.isDefaultValue,
+                  isSubmitting: state.isSubmitting,
+                })}
+              >
+                {({ isDefaultValue, isSubmitting }) => (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="self-start max-sm:w-full max-sm:self-stretch"
+                    loading={isSubmitting}
+                    disabled={isDefaultValue || !isHydrated}
+                  >
+                    {isSubmitting ? "Saving profile..." : "Save profile"}
+                  </Button>
+                )}
+              </profileForm.Subscribe>
+            </form>
+          </AppUtilityPanel>
+        </TabsContent>
 
-        <AppUtilityPanel
-          title="Password"
-          description="Use a password you have not used anywhere else. Other sessions are signed out after this changes."
-        >
-          <form
-            ref={passwordFormRef}
-            className="flex flex-col gap-5"
-            method="post"
-            noValidate
-            onSubmit={(event) =>
-              submitClientForm(event, passwordForm.handleSubmit)
-            }
+        <TabsContent value="email" keepMounted>
+          <AppUtilityPanel
+            title="Email"
+            description="Email changes are verified before they replace your current sign-in address."
           >
-            <FieldGroup>
-              <passwordForm.Field name="currentPassword">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
+            <div className="rounded-[calc(var(--radius)*2)] border border-border/60 bg-muted/30 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase">
+                Current email
+              </p>
+              <p className="mt-1 text-sm font-medium break-all text-foreground">
+                {user.email}
+              </p>
+            </div>
 
-                  return (
-                    <AuthFormField
-                      label="Current password"
-                      htmlFor="settings-current-password"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-current-password"
-                        name={field.name}
-                        type="password"
-                        autoComplete="current-password"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </passwordForm.Field>
-
-              <passwordForm.Field name="newPassword">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="New password"
-                      htmlFor="settings-new-password"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-new-password"
-                        name={field.name}
-                        type="password"
-                        autoComplete="new-password"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </passwordForm.Field>
-
-              <passwordForm.Field name="confirmPassword">
-                {(field) => {
-                  const errorText = getErrorText(field.state.meta.errors);
-
-                  return (
-                    <AuthFormField
-                      label="Confirm new password"
-                      htmlFor="settings-confirm-password"
-                      errorText={errorText}
-                    >
-                      <Input
-                        id="settings-confirm-password"
-                        name={field.name}
-                        type="password"
-                        autoComplete="new-password"
-                        value={field.state.value}
-                        aria-invalid={Boolean(errorText) || undefined}
-                        onBlur={field.handleBlur}
-                        onInput={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.currentTarget.value);
-                        }}
-                        onChange={(event) => {
-                          setPasswordMessage(null);
-                          field.handleChange(event.target.value);
-                        }}
-                      />
-                    </AuthFormField>
-                  );
-                }}
-              </passwordForm.Field>
-            </FieldGroup>
-
-            <passwordForm.Subscribe
-              selector={(state) => state.errorMap.onSubmit}
-            >
-              {(error) =>
-                getFormErrorText(error) ? (
-                  <FieldError>{getFormErrorText(error)}</FieldError>
-                ) : null
+            <form
+              ref={emailFormRef}
+              className="flex flex-col gap-5"
+              method="post"
+              noValidate
+              onSubmit={(event) =>
+                submitClientForm(event, emailForm.handleSubmit)
               }
-            </passwordForm.Subscribe>
-            {passwordMessage ? (
-              <FormStatus>{passwordMessage}</FormStatus>
-            ) : null}
+            >
+              <FieldGroup>
+                <emailForm.Field name="email">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
 
-            <passwordForm.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => (
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  loading={isSubmitting}
-                  disabled={!isHydrated}
+                    return (
+                      <AuthFormField
+                        label="New email"
+                        htmlFor="settings-email"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-email"
+                          name={field.name}
+                          type="email"
+                          autoComplete="email"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setEmailMessage(null);
+                            setDismissedEmailStatus(emailChangeStatus ?? null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setEmailMessage(null);
+                            setDismissedEmailStatus(emailChangeStatus ?? null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </emailForm.Field>
+              </FieldGroup>
+
+              <emailForm.Subscribe
+                selector={(state) => state.errorMap.onSubmit}
+              >
+                {(error) =>
+                  getFormErrorText(error) ? (
+                    <FieldError>{getFormErrorText(error)}</FieldError>
+                  ) : null
+                }
+              </emailForm.Subscribe>
+              {visibleEmailMessage ? (
+                <FormStatus
+                  tone={
+                    emailChangeStatus === "failed" ? "destructive" : "neutral"
+                  }
                 >
-                  {isSubmitting ? "Updating password..." : "Update password"}
-                </Button>
-              )}
-            </passwordForm.Subscribe>
-          </form>
-        </AppUtilityPanel>
-      </div>
+                  {visibleEmailMessage}
+                </FormStatus>
+              ) : null}
+
+              <emailForm.Subscribe selector={(state) => state.isSubmitting}>
+                {(isSubmitting) => (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="self-start max-sm:w-full max-sm:self-stretch"
+                    loading={isSubmitting}
+                    disabled={!isHydrated}
+                  >
+                    {isSubmitting
+                      ? "Sending verification..."
+                      : "Send verification email"}
+                  </Button>
+                )}
+              </emailForm.Subscribe>
+            </form>
+          </AppUtilityPanel>
+        </TabsContent>
+
+        <TabsContent value="password" keepMounted>
+          <AppUtilityPanel
+            title="Password"
+            description="Use a password you have not used anywhere else. Other sessions are signed out after this changes."
+          >
+            <form
+              ref={passwordFormRef}
+              className="flex flex-col gap-5"
+              method="post"
+              noValidate
+              onSubmit={(event) =>
+                submitClientForm(event, passwordForm.handleSubmit)
+              }
+            >
+              <FieldGroup>
+                <passwordForm.Field name="currentPassword">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
+
+                    return (
+                      <AuthFormField
+                        label="Current password"
+                        htmlFor="settings-current-password"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-current-password"
+                          name={field.name}
+                          type="password"
+                          autoComplete="current-password"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </passwordForm.Field>
+
+                <passwordForm.Field name="newPassword">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
+
+                    return (
+                      <AuthFormField
+                        label="New password"
+                        htmlFor="settings-new-password"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-new-password"
+                          name={field.name}
+                          type="password"
+                          autoComplete="new-password"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </passwordForm.Field>
+
+                <passwordForm.Field name="confirmPassword">
+                  {(field) => {
+                    const errorText = getErrorText(field.state.meta.errors);
+
+                    return (
+                      <AuthFormField
+                        label="Confirm new password"
+                        htmlFor="settings-confirm-password"
+                        errorText={errorText}
+                      >
+                        <Input
+                          id="settings-confirm-password"
+                          name={field.name}
+                          type="password"
+                          autoComplete="new-password"
+                          value={field.state.value}
+                          aria-invalid={Boolean(errorText) || undefined}
+                          onBlur={field.handleBlur}
+                          onInput={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.currentTarget.value);
+                          }}
+                          onChange={(event) => {
+                            setPasswordMessage(null);
+                            field.handleChange(event.target.value);
+                          }}
+                        />
+                      </AuthFormField>
+                    );
+                  }}
+                </passwordForm.Field>
+              </FieldGroup>
+
+              <passwordForm.Subscribe
+                selector={(state) => state.errorMap.onSubmit}
+              >
+                {(error) =>
+                  getFormErrorText(error) ? (
+                    <FieldError>{getFormErrorText(error)}</FieldError>
+                  ) : null
+                }
+              </passwordForm.Subscribe>
+              {passwordMessage ? (
+                <FormStatus>{passwordMessage}</FormStatus>
+              ) : null}
+
+              <passwordForm.Subscribe selector={(state) => state.isSubmitting}>
+                {(isSubmitting) => (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="self-start max-sm:w-full max-sm:self-stretch"
+                    loading={isSubmitting}
+                    disabled={!isHydrated}
+                  >
+                    {isSubmitting ? "Updating password..." : "Update password"}
+                  </Button>
+                )}
+              </passwordForm.Subscribe>
+            </form>
+          </AppUtilityPanel>
+        </TabsContent>
+      </Tabs>
     </div>
   );
+}
+
+function isAccountSettingsTab(
+  value: string | null
+): value is AccountSettingsTab {
+  return value === "email" || value === "password" || value === "profile";
 }
 
 function getEmailChangeStatusMessage(

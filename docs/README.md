@@ -37,6 +37,10 @@ contains implementation plans that were written before or during feature work.
 Use these documents for intent and decision history, but verify current behavior
 against source code before treating them as authoritative.
 
+`docs/superpowers/progress` contains living progress notes for long-running
+agent goals, including feature exploration, design direction, implementation
+status, and validation notes that should be updated on each run.
+
 ## Documentation Maintenance
 
 When code changes affect a boundary, update the matching guide in the same
