@@ -1,6 +1,6 @@
 "use client";
 import type { OrganizationId } from "@ceird/identity-core";
-import type { CreateLabelInput, Label, LabelIdType } from "@ceird/labels-core";
+import type { CreateLabelInput, LabelIdType } from "@ceird/labels-core";
 import type {
   AddSiteCommentInput,
   AddSiteCommentResponse,
@@ -21,8 +21,8 @@ import { Effect, Option } from "effect";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import {
-  organizationLabelsStateAtom,
-  upsertOrganizationLabel,
+  createBrowserLabel,
+  syncOrganizationLabel,
 } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
@@ -224,7 +224,7 @@ export const createAndAssignSiteLabelMutationAtomFamily = Atom.family(
       withMinimumMutationPendingDurationEffect(
         createBrowserLabel(input).pipe(
           Effect.tap((label) =>
-            Effect.sync(() => syncCreatedOrganizationLabel(get, label))
+            Effect.sync(() => syncOrganizationLabel(get, label))
           ),
           Effect.flatMap((label) =>
             assignBrowserSiteLabel(siteId, { labelId: label.id })
@@ -308,14 +308,6 @@ function assignBrowserSiteLabel(
   );
 }
 
-function createBrowserLabel(input: CreateLabelInput) {
-  return runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
-    client.labels.createLabel({
-      payload: input,
-    })
-  );
-}
-
 function removeBrowserSiteLabel(siteId: SiteIdType, labelId: LabelIdType) {
   return runBrowserAppApiRequest("SitesBrowser.removeSiteLabel", (client) =>
     client.sites.removeSiteLabel({
@@ -330,15 +322,6 @@ function syncChangedSiteDetail(get: Atom.FnContext, site: SiteDetail) {
   get.set(sitesOptionsStateAtom, {
     data: upsertSiteOption(currentOptionsState.data, site),
     organizationId: currentOptionsState.organizationId,
-  });
-}
-
-function syncCreatedOrganizationLabel(get: Atom.FnContext, label: Label) {
-  const currentLabelsState = get(organizationLabelsStateAtom);
-
-  get.set(organizationLabelsStateAtom, {
-    labels: upsertOrganizationLabel(currentLabelsState.labels, label),
-    organizationId: currentLabelsState.organizationId,
   });
 }
 

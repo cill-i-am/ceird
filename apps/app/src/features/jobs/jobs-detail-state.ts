@@ -26,6 +26,11 @@ import { Effect, Option } from "effect";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
+import {
+  createBrowserLabel,
+  syncOrganizationLabel,
+  upsertOrganizationLabel,
+} from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 import {
@@ -232,7 +237,10 @@ export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
       withMinimumMutationPendingDurationEffect(
         createBrowserLabel(input).pipe(
           Effect.tap((label) =>
-            Effect.sync(() => upsertJobOptionLabel(get, label))
+            Effect.sync(() => {
+              upsertJobOptionLabel(get, label);
+              syncOrganizationLabel(get, label);
+            })
           ),
           Effect.flatMap((label) =>
             assignBrowserJobLabel(workItemId, { labelId: label.id })
@@ -394,14 +402,6 @@ function detachBrowserJobCollaborator(
   );
 }
 
-function createBrowserLabel(input: CreateLabelInput) {
-  return runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
-    client.labels.createLabel({
-      payload: input,
-    })
-  );
-}
-
 function removeBrowserJobLabel(
   workItemId: WorkItemIdType,
   labelId: LabelIdType
@@ -472,17 +472,11 @@ function syncChangedJobDetail(
 
 function upsertJobOptionLabel(get: Atom.FnContext, label: Label) {
   const currentOptionsState = get(jobsOptionsStateAtom);
-  const labels = [
-    label,
-    ...currentOptionsState.data.labels.filter(
-      (current) => current.id !== label.id
-    ),
-  ].sort(compareLabels);
 
   get.set(jobsOptionsStateAtom, {
     data: {
       ...currentOptionsState.data,
-      labels,
+      labels: upsertOrganizationLabel(currentOptionsState.data.labels, label),
     },
     organizationId: currentOptionsState.organizationId,
   });
@@ -502,12 +496,6 @@ function upsertJobCollaborator(
       ...current.filter((item) => item.id !== collaborator.id),
     ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel))
   );
-}
-
-function compareLabels(left: Label, right: Label) {
-  const nameOrder = left.name.localeCompare(right.name);
-
-  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
 }
 
 function refreshJobDetailIfPossible(

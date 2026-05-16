@@ -1,10 +1,5 @@
 import { normalizeLabelName } from "@ceird/labels-core";
-import type {
-  CreateLabelInput,
-  Label,
-  LabelIdType,
-  UpdateLabelInput,
-} from "@ceird/labels-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
 import { RegistryProvider } from "@effect-atom/atom-react";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
@@ -26,13 +21,21 @@ import {
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
-import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
   getErrorText,
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { validateLabelName } from "#/features/labels/label-name-validation";
+import {
+  archiveBrowserLabel,
+  createBrowserLabel,
+  getOrganizationLabelsKey,
+  removeOrganizationLabel,
+  sortOrganizationLabels,
+  updateBrowserLabel,
+  upsertOrganizationLabel,
+} from "#/features/labels/labels-state";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
@@ -78,7 +81,7 @@ export function OrganizationSettingsPage({
   );
   const savedOrganizationNameRef = React.useRef(organization.name);
   const [labels, setLabels] = React.useState(() =>
-    sortLabels(organizationLabels)
+    sortOrganizationLabels(organizationLabels)
   );
   const [newLabelName, setNewLabelName] = React.useState("");
   const [editingLabelId, setEditingLabelId] =
@@ -101,7 +104,7 @@ export function OrganizationSettingsPage({
   const latestOrganizationIdRef = React.useRef(organization.id);
   latestOrganizationIdRef.current = organization.id;
   const organizationLabelsKey = React.useMemo(
-    () => getLabelsKey(organizationLabels),
+    () => getOrganizationLabelsKey(organizationLabels),
     [organizationLabels]
   );
   const previousLabelsKeyRef = React.useRef(organizationLabelsKey);
@@ -199,7 +202,7 @@ export function OrganizationSettingsPage({
     previousLabelsKeyRef.current = organizationLabelsKey;
 
     if (labelsChanged || isNewOrganization) {
-      setLabels(sortLabels(organizationLabels));
+      setLabels(sortOrganizationLabels(organizationLabels));
       setEditingLabelId(null);
       setEditingLabelName("");
       setLabelError(null);
@@ -299,7 +302,9 @@ export function OrganizationSettingsPage({
 
     try {
       const mutationFeedback = beginMutationFeedback();
-      const label = await createBrowserLabel({ name: decodedName.name });
+      const label = await Effect.runPromise(
+        createBrowserLabel({ name: decodedName.name })
+      );
 
       await mutationFeedback.waitForSuccess();
 
@@ -307,7 +312,7 @@ export function OrganizationSettingsPage({
         return;
       }
 
-      setLabels((current) => upsertLabel(current, label));
+      setLabels((current) => upsertOrganizationLabel(current, label));
       setNewLabelName("");
       setLabelStatus("Label created.");
       await refreshRouteData();
@@ -359,9 +364,11 @@ export function OrganizationSettingsPage({
 
     try {
       const mutationFeedback = beginMutationFeedback();
-      const label = await updateBrowserLabel(labelId, {
-        name: decodedName.name,
-      });
+      const label = await Effect.runPromise(
+        updateBrowserLabel(labelId, {
+          name: decodedName.name,
+        })
+      );
 
       await mutationFeedback.waitForSuccess();
 
@@ -369,7 +376,7 @@ export function OrganizationSettingsPage({
         return;
       }
 
-      setLabels((current) => upsertLabel(current, label));
+      setLabels((current) => upsertOrganizationLabel(current, label));
       setEditingLabelId(null);
       setEditingLabelName("");
       setLabelStatus("Label updated.");
@@ -395,14 +402,14 @@ export function OrganizationSettingsPage({
 
     try {
       const mutationFeedback = beginMutationFeedback();
-      await archiveBrowserLabel(labelId);
+      await Effect.runPromise(archiveBrowserLabel(labelId));
       await mutationFeedback.waitForSuccess();
 
       if (latestOrganizationIdRef.current !== actionOrganizationId) {
         return;
       }
 
-      setLabels((current) => current.filter((label) => label.id !== labelId));
+      setLabels((current) => removeOrganizationLabel(current, labelId));
       setLabelStatus("Label archived.");
 
       if (editingLabelId === labelId) {
@@ -745,40 +752,6 @@ function IconButton({
   );
 }
 
-function createBrowserLabel(input: CreateLabelInput): Promise<Label> {
-  return Effect.runPromise(
-    runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
-      client.labels.createLabel({
-        payload: input,
-      })
-    )
-  );
-}
-
-function updateBrowserLabel(
-  labelId: LabelIdType,
-  input: UpdateLabelInput
-): Promise<Label> {
-  return Effect.runPromise(
-    runBrowserAppApiRequest("LabelsBrowser.updateLabel", (client) =>
-      client.labels.updateLabel({
-        path: { labelId },
-        payload: input,
-      })
-    )
-  );
-}
-
-function archiveBrowserLabel(labelId: LabelIdType): Promise<Label> {
-  return Effect.runPromise(
-    runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
-      client.labels.deleteLabel({
-        path: { labelId },
-      })
-    )
-  );
-}
-
 function hasDuplicateLabelName(
   labels: readonly Label[],
   name: string,
@@ -791,25 +764,4 @@ function hasDuplicateLabelName(
       label.id !== ignoredLabelId &&
       normalizeLabelName(label.name) === normalizedName
   );
-}
-
-function upsertLabel(labels: readonly Label[], label: Label) {
-  return sortLabels([
-    label,
-    ...labels.filter((currentLabel) => currentLabel.id !== label.id),
-  ]);
-}
-
-function sortLabels(labels: readonly Label[]) {
-  return labels.toSorted(compareLabels);
-}
-
-function compareLabels(left: Label, right: Label) {
-  const nameOrder = left.name.localeCompare(right.name);
-
-  return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
-}
-
-function getLabelsKey(labels: readonly Label[]) {
-  return labels.map((label) => `${label.id}:${label.name}`).join("|");
 }
