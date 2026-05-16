@@ -34,6 +34,10 @@ import { Effect, Option, Schema } from "effect";
 
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { generateSiteId } from "./id-generation.js";
+import {
+  listSiteLabelsForOrganization,
+  listSiteLabelsForSites,
+} from "./site-label-queries.js";
 export { ServiceAreasRepository } from "./service-areas-repository.js";
 
 interface IdRow {
@@ -80,12 +84,9 @@ interface LabelAssignmentRow extends LabelRow {
   readonly site_id: string | null;
 }
 
-interface SiteLabelRow {
-  readonly created_at: Date;
-  readonly label_id: string;
-  readonly name: string;
-  readonly site_id: string;
-  readonly updated_at: Date;
+interface LabelRemovalRow extends LabelRow {
+  readonly deleted_count: number;
+  readonly site_id: string | null;
 }
 
 export interface CreateSiteRecordInput {
@@ -207,58 +208,6 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         return Option.fromNullable(rows[0]?.id).pipe(Option.map(decodeSiteId));
       });
 
-      const listLabelsForSites = Effect.fn(
-        "SitesRepository.listLabelsForSites"
-      )(function* (organizationId: OrganizationId, siteIds: readonly SiteId[]) {
-        if (siteIds.length === 0) {
-          return new Map<SiteId, Label[]>();
-        }
-
-        const rows = yield* sql<SiteLabelRow>`
-          select
-            site_labels.site_id,
-            site_labels.label_id,
-            labels.created_at,
-            labels.name,
-            labels.updated_at
-          from site_labels
-          join labels on labels.id = site_labels.label_id
-          join sites on sites.id = site_labels.site_id
-          where site_labels.organization_id = ${organizationId}
-            and labels.organization_id = ${organizationId}
-            and sites.organization_id = ${organizationId}
-            and site_labels.site_id in ${sql.in(siteIds)}
-            and labels.archived_at is null
-          order by labels.name asc, labels.id asc
-        `;
-
-        return groupSiteLabelsBySiteId(rows);
-      });
-
-      const listLabelsForOrganization = Effect.fn(
-        "SitesRepository.listLabelsForOrganization"
-      )(function* (organizationId: OrganizationId) {
-        const rows = yield* sql<SiteLabelRow>`
-          select
-            site_labels.site_id,
-            site_labels.label_id,
-            labels.created_at,
-            labels.name,
-            labels.updated_at
-          from site_labels
-          join labels on labels.id = site_labels.label_id
-          join sites on sites.id = site_labels.site_id
-          where site_labels.organization_id = ${organizationId}
-            and labels.organization_id = ${organizationId}
-            and sites.organization_id = ${organizationId}
-            and sites.archived_at is null
-            and labels.archived_at is null
-          order by site_labels.site_id asc, labels.name asc, labels.id asc
-        `;
-
-        return groupSiteLabelsBySiteId(rows);
-      });
-
       const create = Effect.fn("SitesRepository.create")(function* (
         input: CreateSiteRecordInput
       ) {
@@ -317,31 +266,35 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
       const listOptions = Effect.fn("SitesRepository.listOptions")(function* (
         organizationId: OrganizationId
       ) {
-        const rows = yield* sql<SiteOptionRow>`
-          select
-            sites.access_notes,
-            sites.address_line_1,
-            sites.address_line_2,
-            sites.country,
-            sites.county,
-            sites.eircode,
-            sites.geocoded_at,
-            sites.geocoding_provider,
-            sites.id,
-            sites.latitude,
-            sites.longitude,
-            sites.name,
-            service_areas.id as service_area_id,
-            service_areas.name as service_area_name,
-            sites.town
-          from sites
-          left join service_areas on service_areas.id = sites.service_area_id
-          where sites.organization_id = ${organizationId}
-            and sites.archived_at is null
-          order by sites.name asc nulls last, sites.id asc
-        `;
-
-        const labelsBySiteId = yield* listLabelsForOrganization(organizationId);
+        const [rows, labelsBySiteId] = yield* Effect.all(
+          [
+            sql<SiteOptionRow>`
+              select
+                sites.access_notes,
+                sites.address_line_1,
+                sites.address_line_2,
+                sites.country,
+                sites.county,
+                sites.eircode,
+                sites.geocoded_at,
+                sites.geocoding_provider,
+                sites.id,
+                sites.latitude,
+                sites.longitude,
+                sites.name,
+                service_areas.id as service_area_id,
+                service_areas.name as service_area_name,
+                sites.town
+              from sites
+              left join service_areas on service_areas.id = sites.service_area_id
+              where sites.organization_id = ${organizationId}
+                and sites.archived_at is null
+              order by sites.name asc nulls last, sites.id asc
+            `,
+            listSiteLabelsForOrganization(sql, organizationId),
+          ],
+          { concurrency: 2 }
+        );
 
         return rows.map((row) => {
           const siteId = decodeSiteId(row.id);
@@ -423,13 +376,16 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         `;
 
         const pageRows = rows.slice(0, limit);
-        const labelsBySiteId = yield* listLabelsForSites(
+        const labelsBySiteId = yield* listSiteLabelsForSites(
+          sql,
           organizationId,
           pageRows.map((row) => decodeSiteId(row.id))
         );
-        const items = pageRows.map((row) =>
-          mapSiteOptionRow(row, labelsBySiteId.get(row.id) ?? [])
-        );
+        const items = pageRows.map((row) => {
+          const siteId = decodeSiteId(row.id);
+
+          return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+        });
         const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
         const nextCursor =
           nextCursorRow === undefined
@@ -475,9 +431,11 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
             return Option.none<SiteOption>();
           }
 
-          const labelsBySiteId = yield* listLabelsForSites(organizationId, [
-            siteId,
-          ]);
+          const labelsBySiteId = yield* listSiteLabelsForSites(
+            sql,
+            organizationId,
+            [siteId]
+          );
 
           return Option.some(
             mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? [])
@@ -528,40 +486,6 @@ export class SiteLabelAssignmentsRepository extends Effect.Service<SiteLabelAssi
         }
 
         return siteId;
-      });
-
-      const findActiveLabel = Effect.fn(
-        "SiteLabelAssignmentsRepository.findActiveLabel"
-      )(function* (organizationId: OrganizationId, labelId: LabelId) {
-        const rows = yield* sql<LabelRow>`
-          select *
-          from labels
-          where organization_id = ${organizationId}
-            and id = ${labelId}
-            and archived_at is null
-          limit 1
-        `;
-
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapLabelRow));
-      });
-
-      const getActiveLabelOrFail = Effect.fn(
-        "SiteLabelAssignmentsRepository.getActiveLabelOrFail"
-      )(function* (organizationId: OrganizationId, labelId: LabelId) {
-        const label = yield* findActiveLabel(organizationId, labelId).pipe(
-          Effect.map(Option.getOrUndefined)
-        );
-
-        if (label === undefined) {
-          return yield* Effect.fail(
-            new LabelNotFoundError({
-              labelId,
-              message: "Label does not exist in the organization",
-            })
-          );
-        }
-
-        return label;
       });
 
       const assignToSite = Effect.fn(
@@ -645,28 +569,57 @@ export class SiteLabelAssignmentsRepository extends Effect.Service<SiteLabelAssi
         yield* Effect.annotateCurrentSpan("siteId", input.siteId);
         yield* Effect.annotateCurrentSpan("labelId", input.labelId);
 
-        const label = yield* getActiveLabelOrFail(
-          input.organizationId,
-          input.labelId
-        );
-        yield* ensureSiteInOrganization(input.organizationId, input.siteId);
-
-        const rows = yield* sql<IdRow>`
-          delete from site_labels
-          using labels, sites
-          where site_labels.label_id = labels.id
-            and site_labels.site_id = sites.id
-            and site_labels.organization_id = ${input.organizationId}
-            and labels.organization_id = ${input.organizationId}
-            and labels.id = ${input.labelId}
-            and sites.organization_id = ${input.organizationId}
-            and sites.id = ${input.siteId}
-          returning site_labels.label_id as id
+        const rows = yield* sql<LabelRemovalRow>`
+          with active_label as (
+            select *
+            from labels
+            where organization_id = ${input.organizationId}
+              and id = ${input.labelId}
+              and archived_at is null
+            for share
+          ),
+          organization_site as (
+            select id
+            from sites
+            where organization_id = ${input.organizationId}
+              and id = ${input.siteId}
+              and archived_at is null
+          ),
+          deleted_label as (
+            delete from site_labels
+            using active_label, organization_site
+            where site_labels.organization_id = ${input.organizationId}
+              and site_labels.label_id = active_label.id
+              and site_labels.site_id = organization_site.id
+            returning site_labels.label_id
+          )
+          select
+            active_label.*,
+            organization_site.id as site_id,
+            (select count(*) from deleted_label)::integer as deleted_count
+          from active_label
+          left join organization_site on true
+          limit 1
         `;
 
+        const [row] = rows;
+
+        if (row === undefined) {
+          return yield* Effect.fail(
+            new LabelNotFoundError({
+              labelId: input.labelId,
+              message: "Label does not exist in the organization",
+            })
+          );
+        }
+
+        if (row.site_id === null) {
+          yield* ensureSiteInOrganization(input.organizationId, input.siteId);
+        }
+
         return {
-          changed: rows.length > 0,
-          label,
+          changed: row.deleted_count > 0,
+          label: mapLabelRow(row),
         };
       });
 
@@ -753,26 +706,6 @@ function decodeSiteCursor(cursor: SiteListCursor): {
     organizationId: value.organizationId,
     serviceAreaId: value.serviceAreaId,
   };
-}
-
-function groupSiteLabelsBySiteId(rows: readonly SiteLabelRow[]) {
-  const labelsBySiteId = new Map<SiteId, Label[]>();
-
-  for (const row of rows) {
-    const siteId = decodeSiteId(row.site_id);
-    const labels = labelsBySiteId.get(siteId) ?? [];
-    labels.push(
-      decodeLabel({
-        createdAt: row.created_at.toISOString(),
-        id: decodeLabelId(row.label_id),
-        name: row.name,
-        updatedAt: row.updated_at.toISOString(),
-      })
-    );
-    labelsBySiteId.set(siteId, labels);
-  }
-
-  return labelsBySiteId;
 }
 
 function mapLabelRow(row: LabelRow): Label {

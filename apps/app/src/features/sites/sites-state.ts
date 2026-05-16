@@ -20,11 +20,7 @@ import { Effect, Option } from "effect";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
-import {
-  createBrowserLabel,
-  organizationLabelsStateAtom,
-  syncOrganizationLabel,
-} from "#/features/labels/labels-state";
+import { createBrowserLabel } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 export interface SitesNotice {
@@ -226,20 +222,12 @@ export const assignSiteLabelMutationAtomFamily = Atom.family(
 export const createAndAssignSiteLabelMutationAtomFamily = Atom.family(
   (siteId: SiteIdType) =>
     Atom.fn<AppApiError, SiteDetail, CreateLabelInput>((input, get) => {
-      const expectedLabelsOrganizationId = get(
-        organizationLabelsStateAtom
-      ).organizationId;
       const expectedSitesOrganizationId = get(
         sitesOptionsStateAtom
       ).organizationId;
 
       return withMinimumMutationPendingDurationEffect(
         createBrowserLabel(input).pipe(
-          Effect.tap((label) =>
-            Effect.sync(() =>
-              syncOrganizationLabel(get, label, expectedLabelsOrganizationId)
-            )
-          ),
           Effect.flatMap((label) =>
             assignBrowserSiteLabel(siteId, { labelId: label.id })
           )

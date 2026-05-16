@@ -24,11 +24,6 @@ import type * as EffectPackage from "effect";
 import { useState } from "react";
 
 import {
-  organizationLabelsStateAtom,
-  seedOrganizationLabelsState,
-} from "#/features/labels/labels-state";
-
-import {
   addSiteCommentMutationAtomFamily,
   assignSiteLabelMutationAtomFamily,
   createSiteMutationAtom,
@@ -235,42 +230,11 @@ describe("sites state integration", () => {
         path: { siteId: existingSiteId },
         payload: { labelId: warrantyLabelId },
       });
-      expect(screen.getByTestId("organization-labels")).toHaveTextContent(
-        "Warranty"
-      );
     }
   );
 
   it(
-    "keeps a created organization label when the follow-up site assignment fails",
-    {
-      timeout: 10_000,
-    },
-    async () => {
-      const warrantyLabel = buildLabel(warrantyLabelId, "Warranty");
-      mockedCreateLabel.mockReturnValue(Effect.succeed(warrantyLabel));
-      mockedAssignSiteLabel.mockReturnValue(
-        Effect.fail(new Error("assign failed"))
-      );
-
-      const user = userEvent.setup();
-      renderSitesStateProbe();
-
-      await user.click(
-        screen.getByRole("button", { name: "Create and assign label" })
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId("organization-labels")).toHaveTextContent(
-          "Warranty"
-        );
-      });
-      expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
-    }
-  );
-
-  it(
-    "does not sync a created site label after switching organizations",
+    "does not sync the returned site detail after switching organizations",
     {
       timeout: 10_000,
     },
@@ -299,12 +263,6 @@ describe("sites state integration", () => {
       await waitFor(() => {
         expect(screen.getByTestId("last-exit")).toHaveTextContent("success");
       });
-      expect(screen.getByTestId("organization-labels")).toHaveTextContent(
-        "Other Org Label"
-      );
-      expect(screen.getByTestId("organization-labels")).not.toHaveTextContent(
-        "Warranty"
-      );
       expect(screen.getByTestId("site-names")).toHaveTextContent("Other Site");
       expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
     }
@@ -628,10 +586,6 @@ function renderSitesStateProbe({
           }),
         ],
         [siteCommentsStateAtomFamily(existingSiteId), comments],
-        [
-          organizationLabelsStateAtom,
-          seedOrganizationLabelsState(organizationId, []),
-        ],
       ]}
     >
       <SitesStateProbe />
@@ -680,9 +634,7 @@ function SitesStateProbe() {
   const options = useAtomValue(sitesOptionsStateAtom).data;
   const comments = useAtomValue(siteCommentsStateAtomFamily(existingSiteId));
   const notice = useAtomValue(sitesNoticeAtom);
-  const organizationLabels = useAtomValue(organizationLabelsStateAtom).labels;
   const setSitesOptions = useAtomSet(sitesOptionsStateAtom);
-  const setOrganizationLabels = useAtomSet(organizationLabelsStateAtom);
 
   return (
     <div>
@@ -729,11 +681,6 @@ function SitesStateProbe() {
               sites: [buildSite(existingSiteId, "Other Site")],
             })
           );
-          setOrganizationLabels(
-            seedOrganizationLabelsState(otherOrganizationId, [
-              buildLabel(urgentLabelId, "Other Org Label"),
-            ])
-          );
         }}
       >
         Switch org
@@ -773,9 +720,6 @@ function SitesStateProbe() {
         {options.sites
           .flatMap((site) => site.labels.map((label) => label.name))
           .join(" | ") || "none"}
-      </output>
-      <output data-testid="organization-labels">
-        {organizationLabels.map((label) => label.name).join(" | ") || "none"}
       </output>
       <output data-testid="comment-bodies">
         {comments.map((comment) => comment.body).join(" | ")}

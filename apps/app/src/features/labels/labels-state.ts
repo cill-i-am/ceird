@@ -1,34 +1,12 @@
 "use client";
-import type { OrganizationId } from "@ceird/identity-core";
 import type {
   CreateLabelInput,
   Label,
   LabelIdType,
   UpdateLabelInput,
 } from "@ceird/labels-core";
-import { Atom } from "@effect-atom/atom-react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
-
-export interface OrganizationLabelsState {
-  readonly labels: readonly Label[];
-  readonly organizationId: OrganizationId | null;
-}
-
-export const organizationLabelsStateAtom = Atom.make<OrganizationLabelsState>({
-  labels: [],
-  organizationId: null,
-}).pipe(Atom.keepAlive);
-
-export function seedOrganizationLabelsState(
-  organizationId: OrganizationId,
-  labels: readonly Label[]
-): OrganizationLabelsState {
-  return {
-    labels,
-    organizationId,
-  };
-}
 
 export function upsertOrganizationLabel(
   labels: readonly Label[],
@@ -53,26 +31,6 @@ export function sortOrganizationLabels(labels: readonly Label[]) {
 
 export function getOrganizationLabelsKey(labels: readonly Label[]) {
   return labels.map((label) => `${label.id}:${label.name}`).join("|");
-}
-
-export function syncOrganizationLabel(
-  get: Atom.FnContext,
-  label: Label,
-  expectedOrganizationId?: OrganizationId | null
-) {
-  const currentLabelsState = get(organizationLabelsStateAtom);
-
-  if (
-    expectedOrganizationId !== undefined &&
-    currentLabelsState.organizationId !== expectedOrganizationId
-  ) {
-    return;
-  }
-
-  get.set(organizationLabelsStateAtom, {
-    labels: upsertOrganizationLabel(currentLabelsState.labels, label),
-    organizationId: currentLabelsState.organizationId,
-  });
 }
 
 export function createBrowserLabel(input: CreateLabelInput) {

@@ -345,7 +345,7 @@ export class SitesService extends Effect.Service<SitesService>()(
       ) {
         const actor = yield* loadActor();
         yield* authorization
-          .ensureCanCreateSite(actor)
+          .ensureCanManageLabels(actor)
           .pipe(
             Effect.catchTag(
               ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
@@ -389,7 +389,7 @@ export class SitesService extends Effect.Service<SitesService>()(
       ) {
         const actor = yield* loadActor();
         yield* authorization
-          .ensureCanCreateSite(actor)
+          .ensureCanManageLabels(actor)
           .pipe(
             Effect.catchTag(
               ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,

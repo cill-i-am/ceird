@@ -519,11 +519,11 @@ describe("sites service", () => {
 
     expect(getFailure(assignExit)).toBeInstanceOf(SiteAccessDeniedError);
     expect(getFailure(assignExit)).toMatchObject({
-      message: "Only organization owners and admins can create sites",
+      message: "Only organization owners and admins can manage labels",
     });
     expect(getFailure(removeExit)).toBeInstanceOf(SiteAccessDeniedError);
     expect(getFailure(removeExit)).toMatchObject({
-      message: "Only organization owners and admins can create sites",
+      message: "Only organization owners and admins can manage labels",
     });
     expect(harness.calls.assignLabel).toBe(0);
     expect(harness.calls.removeLabel).toBe(0);

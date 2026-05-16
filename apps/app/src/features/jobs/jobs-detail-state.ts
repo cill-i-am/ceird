@@ -29,8 +29,6 @@ import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import {
   createBrowserLabel,
-  organizationLabelsStateAtom,
-  syncOrganizationLabel,
   upsertOrganizationLabel,
 } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
@@ -236,9 +234,6 @@ export const detachJobCollaboratorMutationAtomFamily = Atom.family(
 export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
     Atom.fn<AppApiError, JobDetailResponse, CreateLabelInput>((input, get) => {
-      const expectedLabelsOrganizationId = get(
-        organizationLabelsStateAtom
-      ).organizationId;
       const expectedJobsOptionsOrganizationId =
         get(jobsOptionsStateAtom).organizationId;
 
@@ -251,7 +246,6 @@ export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
                 label,
                 expectedJobsOptionsOrganizationId
               );
-              syncOrganizationLabel(get, label, expectedLabelsOrganizationId);
             })
           ),
           Effect.flatMap((label) =>
