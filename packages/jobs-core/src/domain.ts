@@ -1,6 +1,9 @@
 import { IsoDateTimeString as IdentityIsoDateTimeString } from "@ceird/identity-core";
 import { Schema } from "effect";
 
+export { CommentBodySchema as JobCommentBodySchema } from "@ceird/comments-core";
+export type { CommentBody as JobCommentBody } from "@ceird/comments-core";
+
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -149,9 +152,6 @@ export const ContactNotesSchema = Schema.Trim.pipe(
   Schema.maxLength(2000)
 );
 export type ContactNotes = Schema.Schema.Type<typeof ContactNotesSchema>;
-
-export const JobCommentBodySchema = Schema.Trim.pipe(Schema.minLength(1));
-export type JobCommentBody = Schema.Schema.Type<typeof JobCommentBodySchema>;
 
 export const JobVisitNoteSchema = Schema.Trim.pipe(Schema.minLength(1));
 export type JobVisitNote = Schema.Schema.Type<typeof JobVisitNoteSchema>;

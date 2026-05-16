@@ -1,4 +1,8 @@
 import {
+  CommentBodySchema as SharedCommentBodySchema,
+  CommentId as SharedCommentId,
+} from "@ceird/comments-core";
+import {
   LabelsApi,
   LabelNameSchema,
   LabelSchema,
@@ -32,6 +36,7 @@ import {
   AttachJobCollaboratorInputSchema,
   calculateJobCostLineTotalMinor,
   calculateJobCostSummary,
+  CommentId,
   CreateJobInputSchema,
   CreateRateCardInputSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
@@ -42,11 +47,13 @@ import {
   JobCollaboratorRoleLabelSchema,
   JobCollaboratorSubjectTypeSchema,
   JobCollaboratorsResponseSchema,
+  JobCommentSchema,
   JobDetailResponseSchema,
   JobContactOptionSchema,
   JobExternalMemberOptionsResponseSchema,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
+  JobCommentBodySchema,
   JobListItemSchema,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
@@ -127,6 +134,29 @@ describe("jobs-core", () => {
       accessLevel: "read",
     });
   }, 5000);
+
+  it("keeps job comments compatible with the existing API shape", () => {
+    const decode = Schema.decodeUnknownSync(JobCommentSchema);
+
+    expect(
+      decode({
+        id: "77777777-7777-4777-8777-777777777777",
+        workItemId: "11111111-1111-4111-8111-111111111111",
+        authorUserId: "user_123",
+        authorName: "Ciara",
+        body: "Pump room inspected.",
+        createdAt: "2026-05-16T09:30:00.000Z",
+      })
+    ).toMatchObject({
+      authorUserId: "user_123",
+      body: "Pump room inspected.",
+    });
+  });
+
+  it("re-exports shared comment primitives under job public names", () => {
+    expect(CommentId).toBe(SharedCommentId);
+    expect(JobCommentBodySchema).toBe(SharedCommentBodySchema);
+  });
 
   it("keeps job collaborator mutation inputs strict and shapeable", () => {
     expect(() =>

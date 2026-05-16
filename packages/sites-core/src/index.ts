@@ -22,6 +22,8 @@ export type {
   GoogleMapsApiKey as GoogleMapsApiKeyType,
 } from "./domain.js";
 export {
+  AddSiteCommentInputSchema,
+  AddSiteCommentResponseSchema,
   CreateServiceAreaInputSchema,
   CreateServiceAreaResponseSchema,
   CreateSiteInputSchema,
@@ -29,6 +31,8 @@ export {
   ServiceAreaListResponseSchema,
   ServiceAreaOptionSchema,
   ServiceAreaSchema,
+  SiteCommentSchema,
+  SiteCommentsResponseSchema,
   SiteDetailSchema,
   SiteOptionSchema,
   SitesOptionsResponseSchema,
@@ -38,6 +42,8 @@ export {
   UpdateSiteResponseSchema,
 } from "./dto.js";
 export type {
+  AddSiteCommentInput,
+  AddSiteCommentResponse,
   CreateServiceAreaInput,
   CreateServiceAreaResponse,
   CreateSiteInput,
@@ -45,6 +51,8 @@ export type {
   ServiceArea,
   ServiceAreaListResponse,
   ServiceAreaOption,
+  SiteComment,
+  SiteCommentsResponse,
   SiteDetail,
   SiteOption,
   SitesOptionsResponse,

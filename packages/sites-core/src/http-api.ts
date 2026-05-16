@@ -2,11 +2,14 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
 import { Schema } from "effect";
 
 import {
+  AddSiteCommentInputSchema,
+  AddSiteCommentResponseSchema,
   CreateServiceAreaInputSchema,
   CreateServiceAreaResponseSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
   ServiceAreaListResponseSchema,
+  SiteCommentsResponseSchema,
   SitesOptionsResponseSchema,
   UpdateServiceAreaInputSchema,
   UpdateServiceAreaResponseSchema,
@@ -50,6 +53,23 @@ const sitesGroup = HttpApiGroup.make("sites")
       .addError(SiteNotFoundError)
       .addError(SiteGeocodingFailedError)
       .addError(SiteGeocodingProviderError)
+      .addError(SiteStorageError)
+  )
+  .add(
+    HttpApiEndpoint.get("listSiteComments", "/sites/:siteId/comments")
+      .setPath(Schema.Struct({ siteId: SiteId }))
+      .addSuccess(SiteCommentsResponseSchema)
+      .addError(SiteAccessDeniedError)
+      .addError(SiteNotFoundError)
+      .addError(SiteStorageError)
+  )
+  .add(
+    HttpApiEndpoint.post("addSiteComment", "/sites/:siteId/comments")
+      .setPath(Schema.Struct({ siteId: SiteId }))
+      .setPayload(AddSiteCommentInputSchema)
+      .addSuccess(AddSiteCommentResponseSchema, { status: 201 })
+      .addError(SiteAccessDeniedError)
+      .addError(SiteNotFoundError)
       .addError(SiteStorageError)
   );
 

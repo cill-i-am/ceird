@@ -7,6 +7,22 @@ application. Keep package APIs narrow and source-backed. Move code into a
 package when more than one workspace needs the same runtime contract or domain
 primitive.
 
+## `@ceird/comments-core`
+
+Path: `packages/comments-core`
+
+Exports shared comment primitives used by target-specific packages:
+
+- `CommentId`
+- `CommentBodySchema`
+- base comment and editable-comment DTO schemas
+- add-comment input/response schemas
+
+Target packages extend the base comment DTO with their own target IDs, such as
+`workItemId` in `@ceird/jobs-core` or `siteId` in `@ceird/sites-core`. Keep
+authorization, SQL ownership rows, and target-specific service behavior out of
+this package.
+
 ## `@ceird/identity-core`
 
 Path: `packages/identity-core`
@@ -35,8 +51,9 @@ Exports the shared jobs contract:
 - branded IDs for jobs, contacts, rate cards, visits, collaborators, cost
   lines, activity, users, and organizations
 - domain literals and schemas for job kind, status, priority, collaborator
-  access, rate-card line kind, cost line fields, comments, visits, and
+  access, rate-card line kind, cost line fields, visits, and
   activity event types
+- job comment DTOs extended from `@ceird/comments-core`
 - DTO schemas and inferred DTO types
 - cost summary helpers
 - typed `Schema.TaggedError` classes with HTTP status annotations
@@ -56,6 +73,7 @@ Exports the shared sites and service-area contract:
 - `SiteId` and `ServiceAreaId`
 - site country, geocoding provider, latitude, and longitude schemas
 - site create/update inputs, rich site option/detail DTOs, site options response
+- site comment DTOs extended from `@ceird/comments-core`
 - service-area create/update/list DTOs
 - typed site, service-area, access-denied, storage, and geocoding errors
 - `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
@@ -153,6 +171,7 @@ apps/app
   -> @ceird/sandbox-core
 
 apps/api
+  -> @ceird/comments-core
   -> @ceird/identity-core
   -> @ceird/jobs-core
   -> @ceird/sites-core
@@ -163,11 +182,16 @@ packages/sandbox-cli
   -> @ceird/sandbox-core
 
 packages/jobs-core
+  -> @ceird/comments-core
   -> @ceird/identity-core
   -> @ceird/sites-core
   -> @ceird/labels-core
 
 packages/sites-core
+  -> @ceird/comments-core
+  -> @ceird/identity-core
+
+packages/comments-core
   -> @ceird/identity-core
 
 packages/labels-core
@@ -186,6 +210,7 @@ applicable:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test

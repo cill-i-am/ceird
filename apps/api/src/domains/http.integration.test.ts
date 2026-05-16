@@ -17,10 +17,12 @@ import {
   LabelsResponseSchema,
 } from "@ceird/labels-core";
 import {
+  AddSiteCommentResponseSchema,
   CreateServiceAreaResponseSchema,
   CreateSiteResponseSchema,
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   ServiceAreaListResponseSchema,
+  SiteCommentsResponseSchema,
   SitesOptionsResponseSchema,
   UpdateServiceAreaResponseSchema,
 } from "@ceird/sites-core";
@@ -485,6 +487,63 @@ describe("domain http integration", () => {
       });
       expect(JSON.stringify(siteOptionsAfterSite.serviceAreas)).not.toContain(
         "description"
+      );
+
+      const emptySiteCommentsResponse = await api.handler(
+        makeRequest(`/sites/${createdSite.id}/comments`, {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(emptySiteCommentsResponse.status).toBe(200);
+      expect(
+        ParseResult.decodeUnknownSync(SiteCommentsResponseSchema)(
+          await emptySiteCommentsResponse.json()
+        )
+      ).toStrictEqual({ comments: [] });
+
+      const missingSiteCommentsResponse = await api.handler(
+        makeRequest("/sites/99999999-9999-4999-8999-999999999999/comments", {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(missingSiteCommentsResponse.status).toBe(404);
+
+      const addSiteCommentResponse = await api.handler(
+        makeJsonRequest(
+          `/sites/${createdSite.id}/comments`,
+          {
+            body: "Gate code changed to 2468.",
+          },
+          {
+            cookieJar: memberCookieJar,
+          }
+        )
+      );
+      expect(addSiteCommentResponse.status).toBe(201);
+      const addedSiteComment = ParseResult.decodeUnknownSync(
+        AddSiteCommentResponseSchema
+      )(await addSiteCommentResponse.json());
+      expect(addedSiteComment).toMatchObject({
+        authorName: "Member User",
+        body: "Gate code changed to 2468.",
+        siteId: createdSite.id,
+      });
+
+      const listSiteCommentsResponse = await api.handler(
+        makeRequest(`/sites/${createdSite.id}/comments`, {
+          cookieJar: memberCookieJar,
+        })
+      );
+      expect(listSiteCommentsResponse.status).toBe(200);
+      const siteComments = ParseResult.decodeUnknownSync(
+        SiteCommentsResponseSchema
+      )(await listSiteCommentsResponse.json());
+      expect(siteComments.comments).toContainEqual(
+        expect.objectContaining({
+          authorName: "Member User",
+          body: "Gate code changed to 2468.",
+          siteId: createdSite.id,
+        })
       );
 
       const memberOptionsAfterSiteResponse = await api.handler(
@@ -1507,6 +1566,29 @@ describe("domain http integration", () => {
         })
       );
       expect(deniedSitesOptionsResponse.status).toBe(403);
+
+      const grantedJobSiteId = externalDetail.site?.id;
+      expect(grantedJobSiteId).toBeDefined();
+
+      const deniedSiteCommentsResponse = await api.handler(
+        makeRequest(`/sites/${grantedJobSiteId}/comments`, {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(deniedSiteCommentsResponse.status).toBe(403);
+
+      const deniedAddSiteCommentResponse = await api.handler(
+        makeJsonRequest(
+          `/sites/${grantedJobSiteId}/comments`,
+          {
+            body: "External users cannot comment on organization sites.",
+          },
+          {
+            cookieJar: externalCookieJar,
+          }
+        )
+      );
+      expect(deniedAddSiteCommentResponse.status).toBe(403);
 
       const deniedActivityResponse = await api.handler(
         makeRequest("/activity", {

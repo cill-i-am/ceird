@@ -1,8 +1,10 @@
+import { OpenApi } from "@effect/platform";
 import { describe, expect, it } from "@effect/vitest";
 import { ParseResult, Schema } from "effect";
 
 import type { SiteId } from "./index.js";
 import {
+  AddSiteCommentInputSchema,
   CreateServiceAreaInputSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
@@ -11,6 +13,8 @@ import {
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
+  SiteCommentSchema,
+  SiteCommentsResponseSchema,
   SiteNotFoundError,
   SitesApi,
   SitesApiGroup,
@@ -121,6 +125,43 @@ describe("sites-core", () => {
       id: "33333333-3333-4333-8333-333333333333",
       name: "North Dublin",
     });
+  });
+
+  it("decodes site comment contracts", () => {
+    const decodeInput = Schema.decodeUnknownSync(AddSiteCommentInputSchema);
+    const decodeComment = Schema.decodeUnknownSync(SiteCommentSchema);
+    const decodeResponse = Schema.decodeUnknownSync(SiteCommentsResponseSchema);
+
+    const comment = decodeComment({
+      id: "77777777-7777-4777-8777-777777777777",
+      siteId: "22222222-2222-4222-8222-222222222222",
+      authorUserId: "user_123",
+      authorName: "Ciara",
+      body: "Gate code changed.",
+      createdAt: "2026-05-16T09:30:00.000Z",
+    });
+
+    expect(decodeInput({ body: "  Use north gate.  " })).toStrictEqual({
+      body: "Use north gate.",
+    });
+    expect(decodeResponse({ comments: [comment] })).toStrictEqual({
+      comments: [comment],
+    });
+  });
+
+  it("documents site comment API operations", () => {
+    const spec = OpenApi.fromApi(SitesApi);
+    const siteComments = spec.paths["/sites/{siteId}/comments"];
+
+    expect(siteComments?.get?.operationId).toBe("sites.listSiteComments");
+    expect(siteComments?.get?.responses["200"]).toBeDefined();
+    expect(siteComments?.get?.responses["403"]).toBeDefined();
+    expect(siteComments?.get?.responses["404"]).toBeDefined();
+    expect(siteComments?.post?.operationId).toBe("sites.addSiteComment");
+    expect(siteComments?.post?.requestBody).toBeDefined();
+    expect(siteComments?.post?.responses["201"]).toBeDefined();
+    expect(siteComments?.post?.responses["403"]).toBeDefined();
+    expect(siteComments?.post?.responses["404"]).toBeDefined();
   });
 
   it("exports site API groups and typed errors", () => {

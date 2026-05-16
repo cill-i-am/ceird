@@ -36,6 +36,16 @@ const SitesHandlersLive = HttpApiBuilder.group(AppApi, "sites", (handlers) =>
         sitesService
           .update(path.siteId, payload)
           .pipe(observeSitesOperation("updateSite"))
+      )
+      .handle("listSiteComments", ({ path }) =>
+        sitesService
+          .listComments(path.siteId)
+          .pipe(observeSitesOperation("listSiteComments"))
+      )
+      .handle("addSiteComment", ({ path, payload }) =>
+        sitesService
+          .addComment(path.siteId, payload)
+          .pipe(observeSitesOperation("addSiteComment"))
       );
   })
 );

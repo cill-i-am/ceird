@@ -1,3 +1,4 @@
+import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
 import { Schema } from "effect";
 
 import {
@@ -114,6 +115,31 @@ export type SiteOption = Schema.Schema.Type<typeof SiteOptionSchema>;
 
 export const SiteDetailSchema = SiteOptionSchema;
 export type SiteDetail = Schema.Schema.Type<typeof SiteDetailSchema>;
+
+export const SiteCommentSchema = Schema.extend(
+  CommentSchema,
+  Schema.Struct({
+    siteId: SiteId,
+  })
+);
+export type SiteComment = Schema.Schema.Type<typeof SiteCommentSchema>;
+
+export const AddSiteCommentInputSchema = AddCommentInputSchema;
+export type AddSiteCommentInput = Schema.Schema.Type<
+  typeof AddSiteCommentInputSchema
+>;
+
+export const AddSiteCommentResponseSchema = SiteCommentSchema;
+export type AddSiteCommentResponse = Schema.Schema.Type<
+  typeof AddSiteCommentResponseSchema
+>;
+
+export const SiteCommentsResponseSchema = Schema.Struct({
+  comments: Schema.Array(SiteCommentSchema),
+});
+export type SiteCommentsResponse = Schema.Schema.Type<
+  typeof SiteCommentsResponseSchema
+>;
 
 export const CreateSiteResponseSchema = SiteOptionSchema;
 export type CreateSiteResponse = Schema.Schema.Type<

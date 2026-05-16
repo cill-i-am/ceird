@@ -127,6 +127,13 @@
       "when": 1777964161066,
       "tag": "0017_absent_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778940641850,
+      "tag": "0018_chilly_galactus",
+      "breakpoints": true
     }
   ]
 }

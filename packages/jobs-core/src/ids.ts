@@ -1,3 +1,5 @@
+import { CommentId as SharedCommentId } from "@ceird/comments-core";
+import type { CommentIdType as SharedCommentIdType } from "@ceird/comments-core";
 import {
   OrganizationId as IdentityOrganizationId,
   UserId as IdentityUserId,
@@ -13,6 +15,10 @@ export type OrganizationId = OrganizationIdType;
 
 export const UserId = IdentityUserId;
 export type UserId = UserIdType;
+
+export const CommentId = SharedCommentId;
+export type CommentId = SharedCommentIdType;
+export type CommentIdType = SharedCommentIdType;
 
 export const WorkItemId = Schema.UUID.pipe(
   Schema.brand("@ceird/jobs-core/WorkItemId")
@@ -33,11 +39,6 @@ export const ContactId = Schema.UUID.pipe(
   Schema.brand("@ceird/jobs-core/ContactId")
 );
 export type ContactId = Schema.Schema.Type<typeof ContactId>;
-
-export const CommentId = Schema.UUID.pipe(
-  Schema.brand("@ceird/jobs-core/CommentId")
-);
-export type CommentId = Schema.Schema.Type<typeof CommentId>;
 
 export const ActivityId = Schema.UUID.pipe(
   Schema.brand("@ceird/jobs-core/ActivityId")

@@ -11,6 +11,7 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
+    "@ceird/comments-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
     "@ceird/labels-core": "workspace:*",
     "@ceird/sites-core": "workspace:*",

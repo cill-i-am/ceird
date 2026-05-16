@@ -1,5 +1,5 @@
 {
-  "name": "@ceird/sites-core",
+  "name": "@ceird/comments-core",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,9 +11,7 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
-    "@ceird/comments-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
-    "@effect/platform": "^0.96.1",
     "effect": "^3.21.2"
   },
   "devDependencies": {

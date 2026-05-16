@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ceird/comments-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
     "@ceird/jobs-core": "workspace:*",
     "@ceird/labels-core": "workspace:*",

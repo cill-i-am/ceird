@@ -33,10 +33,12 @@ import {
 } from "../platform/database/schema.js";
 import {
   applyAllMigrations,
+  applyMigration,
   canConnect,
   createTestDatabase,
   withPool,
 } from "../platform/database/test-database.js";
+import { CommentsRepository } from "./comments/repository.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
@@ -331,6 +333,453 @@ describe("domain persistence integration", () => {
     expect(createdContactOption).not.toHaveProperty("notes");
     expect(Option.getOrUndefined(foundSiteId)).toBe(createdSiteId);
     expect(Option.getOrUndefined(foundContactId)).toBe(createdContactId);
+  }, 30_000);
+
+  it("persists work item and site comments through shared ownership rows", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "comments_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Comments integration database unavailable; skipping shared comments coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const serviceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "Dublin"
+    );
+    const siteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        addressLine1: "12 Shared Comment Street",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D02 X000",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        latitude: 53.3498,
+        longitude: -6.2603,
+        name: "Shared Comment Site",
+        organizationId: identity.organizationId,
+        serviceAreaId,
+        town: "Dublin",
+      })
+    );
+    const job = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.create({
+        createdByUserId: identity.ownerUserId,
+        organizationId: identity.organizationId,
+        siteId,
+        title: "Shared comment job",
+      })
+    );
+
+    const [jobComment, siteCommentOption] = await runJobsEffect(
+      databaseUrl,
+      withJobsTransaction(
+        Effect.all([
+          CommentsRepository.addForWorkItem({
+            authorUserId: identity.ownerUserId,
+            body: "Job comment lives in the shared comments table.",
+            organizationId: identity.organizationId,
+            workItemId: job.id,
+          }),
+          CommentsRepository.addForSite({
+            authorUserId: identity.assigneeUserId,
+            body: "Site comment uses its own ownership row.",
+            organizationId: identity.organizationId,
+            siteId,
+          }),
+        ])
+      )
+    );
+    const siteComment = expectSome(siteCommentOption);
+
+    const [jobComments, siteComments, detail] = await runJobsEffect(
+      databaseUrl,
+      Effect.all([
+        CommentsRepository.listForWorkItem(identity.organizationId, job.id),
+        CommentsRepository.listForSite(identity.organizationId, siteId),
+        JobsRepository.getDetail(identity.organizationId, job.id),
+      ])
+    );
+
+    expect(jobComments).toStrictEqual([jobComment]);
+    expect(siteComments).toStrictEqual([siteComment]);
+    expect(expectSome(detail).comments).toStrictEqual([jobComment]);
+
+    await withPool(databaseUrl, async (pool) => {
+      const foreignIdentity = await seedIdentityRecords(databaseUrl);
+      const sharedComments = await pool.query(
+        `
+          select
+            comments.id,
+            comments.organization_id,
+            work_item_comments.work_item_id,
+            site_comments.site_id
+          from comments
+          left join work_item_comments
+            on work_item_comments.comment_id = comments.id
+          left join site_comments
+            on site_comments.comment_id = comments.id
+          where comments.id = any($1::uuid[])
+          order by comments.created_at asc, comments.id asc
+        `,
+        [[jobComment.id, siteComment.id]]
+      );
+
+      expect(sharedComments.rows).toMatchObject([
+        {
+          id: jobComment.id,
+          organization_id: identity.organizationId,
+          site_id: null,
+          work_item_id: job.id,
+        },
+        {
+          id: siteComment.id,
+          organization_id: identity.organizationId,
+          site_id: siteId,
+          work_item_id: null,
+        },
+      ]);
+
+      const crossOrgAuthorCommentId = randomUUID();
+      await expect(
+        pool.query(
+          `
+            insert into comments (
+              id,
+              organization_id,
+              author_user_id,
+              body
+            )
+            values ($1, $2, $3, 'Cross-org author should fail')
+          `,
+          [
+            crossOrgAuthorCommentId,
+            identity.organizationId,
+            foreignIdentity.ownerUserId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "comments_author_member_chk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            update comments
+            set updated_by_user_id = $1
+            where id = $2
+          `,
+          [foreignIdentity.ownerUserId, siteComment.id]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "comments_updated_by_member_chk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into comments (
+              id,
+              organization_id,
+              author_user_id,
+              body
+            )
+            values ($1, $2, $3, 'Ownerless comments should fail')
+          `,
+          [randomUUID(), identity.organizationId, identity.ownerUserId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "comments_ownership_chk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            delete from member
+            where organization_id = $1
+              and user_id = $2
+          `,
+          [identity.organizationId, identity.assigneeUserId]
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      const commentAfterMemberRemoval = await pool.query(
+        "select id from comments where id = $1",
+        [siteComment.id]
+      );
+      expect(commentAfterMemberRemoval.rows).toStrictEqual([
+        { id: siteComment.id },
+      ]);
+
+      await expect(
+        pool.query(
+          `
+            update comments
+            set updated_by_user_id = $1
+            where id = $2
+          `,
+          [identity.ownerUserId, siteComment.id]
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      const singleOwnedCommentId = randomUUID();
+      await pool.query("begin");
+      try {
+        await pool.query(
+          `
+            insert into comments (
+              id,
+              organization_id,
+              author_user_id,
+              body
+            )
+            values ($1, $2, $3, 'Shared comment cannot have two ownership rows')
+          `,
+          [singleOwnedCommentId, identity.organizationId, identity.ownerUserId]
+        );
+        await pool.query(
+          `
+            insert into work_item_comments (
+              comment_id,
+              organization_id,
+              work_item_id
+            )
+            values ($1, $2, $3)
+          `,
+          [singleOwnedCommentId, identity.organizationId, job.id]
+        );
+        await pool.query("commit");
+      } catch (error) {
+        await pool.query("rollback");
+        throw error;
+      }
+
+      await pool.query("begin");
+      await expect(
+        pool.query(
+          `
+            insert into site_comments (
+              comment_id,
+              organization_id,
+              site_id
+            )
+            values ($1, $2, $3)
+          `,
+          [singleOwnedCommentId, identity.organizationId, siteId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "comments_single_ownership_chk",
+      });
+      await pool.query("rollback");
+
+      await pool.query("delete from work_item_comments where comment_id = $1", [
+        singleOwnedCommentId,
+      ]);
+      const noLongerOwnedSingleComment = await pool.query(
+        "select id from comments where id = $1",
+        [singleOwnedCommentId]
+      );
+      expect(noLongerOwnedSingleComment.rows).toStrictEqual([]);
+
+      await expect(
+        pool.query(
+          `
+            update site_comments
+            set comment_id = $1
+            where comment_id = $2
+          `,
+          [jobComment.id, siteComment.id]
+        )
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "comments_ownership_identity_immutable_chk",
+      });
+
+      await pool.query("delete from work_items where id = $1", [job.id]);
+      await pool.query("delete from sites where id = $1", [siteId]);
+
+      const remainingComments = await pool.query(
+        `
+          select id
+          from comments
+          where id = any($1::uuid[])
+        `,
+        [[jobComment.id, siteComment.id]]
+      );
+      expect(remainingComments.rows).toStrictEqual([]);
+    });
+  }, 30_000);
+
+  it("migrates legacy work item comments into shared comments", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "legacy_comments",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Comments integration database unavailable; skipping legacy migration coverage"
+      );
+    }
+
+    await applyMigrationsBeforeSharedComments(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const legacyWorkItemId = decodeWorkItemId(randomUUID());
+    const newerLegacyCommentId = "00000000-0000-4000-8000-000000000001";
+    const olderLegacyCommentId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const newerLegacyBody = "Newer legacy migrated comment.";
+    const olderLegacyBody = "Older legacy migrated comment. ".repeat(700);
+    const newerLegacyCreatedAt = new Date("2026-04-20T10:30:00.000Z");
+    const olderLegacyCreatedAt = new Date("2026-04-20T09:30:00.000Z");
+
+    await withPool(databaseUrl, async (pool) => {
+      await pool.query(
+        `
+          insert into work_items (
+            id,
+            organization_id,
+            kind,
+            title,
+            status,
+            priority,
+            created_by_user_id
+          )
+          values ($1, $2, 'job', 'Legacy comment migration', 'new', 'none', $3)
+        `,
+        [legacyWorkItemId, identity.organizationId, identity.ownerUserId]
+      );
+      await pool.query(
+        `
+          insert into work_item_comments (
+            id,
+            work_item_id,
+            author_user_id,
+            body,
+            created_at
+          )
+          values
+            ($1, $3, $4, $5, $7),
+            ($2, $3, $4, $6, $8)
+        `,
+        [
+          newerLegacyCommentId,
+          olderLegacyCommentId,
+          legacyWorkItemId,
+          identity.ownerUserId,
+          newerLegacyBody,
+          olderLegacyBody,
+          newerLegacyCreatedAt,
+          olderLegacyCreatedAt,
+        ]
+      );
+    });
+
+    await applyMigration(databaseUrl, "0018_chilly_galactus.sql");
+
+    await withPool(databaseUrl, async (pool) => {
+      const migrated = await pool.query(
+        `
+          select
+            comments.id,
+            comments.organization_id,
+            comments.author_user_id,
+            comments.body,
+            comments.created_at,
+            comments.updated_at,
+            work_item_comments.comment_id,
+            work_item_comments.created_at as ownership_created_at,
+            work_item_comments.work_item_id,
+            work_item_comments.organization_id as ownership_organization_id
+          from comments
+          inner join work_item_comments
+            on work_item_comments.comment_id = comments.id
+            and work_item_comments.organization_id = comments.organization_id
+          where comments.id = any($1::uuid[])
+          order by work_item_comments.created_at asc, work_item_comments.comment_id asc
+        `,
+        [[newerLegacyCommentId, olderLegacyCommentId]]
+      );
+
+      expect(migrated.rows).toMatchObject([
+        {
+          author_user_id: identity.ownerUserId,
+          body: olderLegacyBody,
+          comment_id: olderLegacyCommentId,
+          id: olderLegacyCommentId,
+          organization_id: identity.organizationId,
+          ownership_organization_id: identity.organizationId,
+          work_item_id: legacyWorkItemId,
+        },
+        {
+          author_user_id: identity.ownerUserId,
+          body: newerLegacyBody,
+          comment_id: newerLegacyCommentId,
+          id: newerLegacyCommentId,
+          organization_id: identity.organizationId,
+          ownership_organization_id: identity.organizationId,
+          work_item_id: legacyWorkItemId,
+        },
+      ]);
+      expect(migrated.rows[0]?.created_at).toStrictEqual(olderLegacyCreatedAt);
+      expect(migrated.rows[0]?.updated_at).toStrictEqual(olderLegacyCreatedAt);
+      expect(migrated.rows[0]?.ownership_created_at).toStrictEqual(
+        olderLegacyCreatedAt
+      );
+      expect(migrated.rows[1]?.created_at).toStrictEqual(newerLegacyCreatedAt);
+      expect(migrated.rows[1]?.updated_at).toStrictEqual(newerLegacyCreatedAt);
+      expect(migrated.rows[1]?.ownership_created_at).toStrictEqual(
+        newerLegacyCreatedAt
+      );
+      expect(olderLegacyBody.length).toBeGreaterThan(10_000);
+    });
+
+    const detail = await runJobsEffect(
+      databaseUrl,
+      JobsRepository.getDetail(identity.organizationId, legacyWorkItemId)
+    );
+
+    expect(expectSome(detail).comments).toMatchObject([
+      {
+        body: olderLegacyBody,
+        id: olderLegacyCommentId,
+        workItemId: legacyWorkItemId,
+      },
+      {
+        body: newerLegacyBody,
+        id: newerLegacyCommentId,
+        workItemId: legacyWorkItemId,
+      },
+    ]);
   }, 30_000);
 
   it("filters and paginates job lists by org-scoped fields", async (context: {
@@ -2049,6 +2498,162 @@ describe("domain persistence integration", () => {
         constraint: "work_item_labels_work_item_org_fk",
       });
 
+      const crossOrgCommentId = randomUUID();
+
+      await pool.query("begin");
+      await pool.query(
+        `
+          insert into comments (
+            id,
+            organization_id,
+            author_user_id,
+            body
+          )
+          values ($1, $2, $3, 'Cross-org shared comment')
+        `,
+        [
+          crossOrgCommentId,
+          primaryIdentity.organizationId,
+          primaryIdentity.ownerUserId,
+        ]
+      );
+      await expect(
+        pool.query(
+          `
+            insert into work_item_comments (
+              comment_id,
+              organization_id,
+              work_item_id
+            )
+            values ($1, $2, $3)
+          `,
+          [crossOrgCommentId, foreignIdentity.organizationId, primaryJob.id]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_comments_comment_org_fk",
+      });
+      await pool.query("rollback");
+
+      const crossOrgSiteCommentId = randomUUID();
+
+      await pool.query("begin");
+      await pool.query(
+        `
+          insert into comments (
+            id,
+            organization_id,
+            author_user_id,
+            body
+          )
+          values ($1, $2, $3, 'Cross-org shared site comment')
+        `,
+        [
+          crossOrgSiteCommentId,
+          primaryIdentity.organizationId,
+          primaryIdentity.ownerUserId,
+        ]
+      );
+      await expect(
+        pool.query(
+          `
+            insert into site_comments (
+              comment_id,
+              organization_id,
+              site_id
+            )
+            values ($1, $2, $3)
+          `,
+          [crossOrgSiteCommentId, foreignIdentity.organizationId, primarySiteId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "site_comments_comment_org_fk",
+      });
+      await pool.query("rollback");
+
+      const crossOrgTargetCommentId = randomUUID();
+
+      await pool.query("begin");
+      await pool.query(
+        `
+          insert into comments (
+            id,
+            organization_id,
+            author_user_id,
+            body
+          )
+          values ($1, $2, $3, 'Cross-org target shared comment')
+        `,
+        [
+          crossOrgTargetCommentId,
+          foreignIdentity.organizationId,
+          foreignIdentity.ownerUserId,
+        ]
+      );
+      await expect(
+        pool.query(
+          `
+            insert into work_item_comments (
+              comment_id,
+              organization_id,
+              work_item_id
+            )
+            values ($1, $2, $3)
+          `,
+          [
+            crossOrgTargetCommentId,
+            foreignIdentity.organizationId,
+            primaryJob.id,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "work_item_comments_work_item_org_fk",
+      });
+      await pool.query("rollback");
+
+      const crossOrgTargetSiteCommentId = randomUUID();
+
+      await pool.query("begin");
+      await pool.query(
+        `
+          insert into comments (
+            id,
+            organization_id,
+            author_user_id,
+            body
+          )
+          values ($1, $2, $3, 'Cross-org target shared site comment')
+        `,
+        [
+          crossOrgTargetSiteCommentId,
+          foreignIdentity.organizationId,
+          foreignIdentity.ownerUserId,
+        ]
+      );
+      await expect(
+        pool.query(
+          `
+            insert into site_comments (
+              comment_id,
+              organization_id,
+              site_id
+            )
+            values ($1, $2, $3)
+          `,
+          [
+            crossOrgTargetSiteCommentId,
+            foreignIdentity.organizationId,
+            primarySiteId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "site_comments_site_org_fk",
+      });
+      await pool.query("rollback");
+
       await expect(
         pool.query(
           `
@@ -2474,6 +3079,7 @@ function prepareJobsEffect<Value, Error, Requirements>(
   effect: Effect.Effect<Value, Error, Requirements>
 ) {
   return effect.pipe(
+    Effect.provide(CommentsRepository.Default),
     Effect.provide(LabelsRepository.Default),
     Effect.provide(ConfigurationRepository.Default),
     Effect.provide(SitesRepository.Default),
@@ -2481,6 +3087,33 @@ function prepareJobsEffect<Value, Error, Requirements>(
     Effect.provide(AppEffectSqlRuntimeLive),
     Effect.withConfigProvider(makeConfigProvider(databaseUrl))
   ) as Effect.Effect<Value, Error, never>;
+}
+
+const migrationsBeforeSharedComments = [
+  "0000_careless_anita_blake.sql",
+  "0001_giant_speedball.sql",
+  "0002_slippery_hulk.sql",
+  "0003_organizations.sql",
+  "0004_spotty_rick_jones.sql",
+  "0005_add-site-coordinates.sql",
+  "0006_careless_william_stryker.sql",
+  "0007_organization_role_contracts.sql",
+  "0008_marvelous_cloak.sql",
+  "0009_slow_bloodscream.sql",
+  "0010_spicy_boomerang.sql",
+  "0011_mature_vertigo.sql",
+  "0012_chunky_mercury.sql",
+  "0013_old_cobalt_man.sql",
+  "0014_peaceful_shadow_king.sql",
+  "0015_steep_mojo.sql",
+  "0016_work_item_collaborators.sql",
+  "0017_absent_iron_fist.sql",
+] as const;
+
+async function applyMigrationsBeforeSharedComments(databaseUrl: string) {
+  for (const migration of migrationsBeforeSharedComments) {
+    await applyMigration(databaseUrl, migration);
+  }
 }
 
 async function seedIdentityRecords(databaseUrl: string) {

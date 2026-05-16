@@ -3,11 +3,14 @@ import {
   SiteAccessDeniedError,
   ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
+  SiteNotFoundError,
   SiteStorageError,
 } from "@ceird/sites-core";
 import type {
+  AddSiteCommentInput,
   CreateSiteInput,
   ServiceArea,
+  SiteComment,
   SiteIdType as SiteId,
   SiteOption as JobSiteOption,
   SitesOptionsResponse,
@@ -16,6 +19,7 @@ import { HttpServerRequest } from "@effect/platform";
 import { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, Exit, Layer, Option } from "effect";
 
+import { CommentsRepository } from "../comments/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -28,7 +32,9 @@ const serviceAreaId = "33333333-3333-4333-8333-333333333333" as NonNullable<
   JobSiteOption["serviceAreaId"]
 >;
 const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
+const commentId = "55555555-5555-4555-8555-555555555555" as SiteComment["id"];
 const geocodedAt = "2026-04-22T10:00:00.000Z";
+const commentedAt = "2026-04-22T11:00:00.000Z";
 const siteInput = {
   addressLine1: "1 Custom House Quay",
   country: "IE",
@@ -54,11 +60,15 @@ function makeActor(
 interface SitesServiceHarness {
   readonly calls: {
     createSite: number;
+    addComment: number;
+    findById: number;
     ensureServiceArea: number;
     geocode: number;
     getOptionById: number;
+    listComments: number;
     listOptions: number;
     listServiceAreas: number;
+    withTransaction: number;
   };
   readonly layer: Layer.Layer<
     SitesService | HttpServerRequest.HttpServerRequest
@@ -71,17 +81,23 @@ function makeHarness(
     readonly geocodingFailure?: SiteGeocodingFailedError;
     readonly serviceAreaFailure?: ServiceAreaNotFoundError;
     readonly serviceAreaStorageFailure?: SqlError;
+    readonly siteExists?: boolean;
   } = {}
 ): SitesServiceHarness {
   const actor = options.actor ?? makeActor("owner");
   const calls = {
     createSite: 0,
+    addComment: 0,
+    findById: 0,
     ensureServiceArea: 0,
     geocode: 0,
     getOptionById: 0,
+    listComments: 0,
     listOptions: 0,
     listServiceAreas: 0,
+    withTransaction: 0,
   };
+  const siteExists = options.siteExists ?? true;
   const createdSiteOption: JobSiteOption = {
     addressLine1: "1 Custom House Quay",
     country: "IE",
@@ -96,6 +112,14 @@ function makeHarness(
     serviceAreaId,
     serviceAreaName: "Dublin",
     town: "Dublin",
+  };
+  const siteComment: SiteComment = {
+    authorName: "Actor User",
+    authorUserId: actor.userId,
+    body: "Gate code changed to 2468.",
+    createdAt: commentedAt,
+    id: commentId,
+    siteId,
   };
   const unexpected = (label: string) =>
     Effect.die(new Error(`Unexpected repository call: ${label}`));
@@ -161,8 +185,14 @@ function makeHarness(
 
         return requestedServiceAreaId;
       }),
-    findById: (_organizationId: OrganizationId, _siteId: SiteId) =>
-      Effect.succeed(Option.some(siteId)),
+    findById: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
+      Effect.sync(() => {
+        calls.findById += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedSiteId).toBe(siteId);
+
+        return siteExists ? Option.some(siteId) : Option.none<SiteId>();
+      }),
     getOptionById: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
       Effect.sync(() => {
         calls.getOptionById += 1;
@@ -183,6 +213,60 @@ function makeHarness(
       _siteId: SiteId,
       _input: unknown
     ) => unexpected("sites.update"),
+    withTransaction: <Value, Error, Requirements>(
+      effect: Effect.Effect<Value, Error, Requirements>
+    ) =>
+      Effect.gen(function* () {
+        calls.withTransaction += 1;
+
+        return yield* effect;
+      }),
+  });
+
+  const commentsRepository = CommentsRepository.make({
+    addForSite: (input: {
+      readonly authorUserId: UserId;
+      readonly body: string;
+      readonly organizationId: OrganizationId;
+      readonly siteId: SiteId;
+    }) =>
+      Effect.sync(() => {
+        calls.addComment += 1;
+        expect(input).toStrictEqual({
+          authorUserId: actor.userId,
+          body: siteComment.body,
+          organizationId: actor.organizationId,
+          siteId,
+        });
+
+        return siteExists
+          ? Option.some(siteComment)
+          : Option.none<typeof siteComment>();
+      }),
+    addForWorkItem: (_input: unknown) => unexpected("comments.addForWorkItem"),
+    listForExistingSite: (
+      organizationId: OrganizationId,
+      requestedSiteId: SiteId
+    ) =>
+      Effect.sync(() => {
+        calls.listComments += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedSiteId).toBe(siteId);
+
+        return siteExists
+          ? Option.some([siteComment] satisfies readonly SiteComment[])
+          : Option.none<readonly SiteComment[]>();
+      }),
+    listForSite: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
+      Effect.sync(() => {
+        calls.listComments += 1;
+        expect(organizationId).toBe(actor.organizationId);
+        expect(requestedSiteId).toBe(siteId);
+
+        return [siteComment] satisfies readonly SiteComment[];
+      }),
+    listForWorkItem: (_organizationId: OrganizationId, _workItemId: unknown) =>
+      unexpected("comments.listForWorkItem"),
     withTransaction: <Value, Error, Requirements>(
       effect: Effect.Effect<Value, Error, Requirements>
     ) => effect,
@@ -234,6 +318,7 @@ function makeHarness(
           get: () => Effect.succeed(actor),
         })
       ),
+      Layer.succeed(CommentsRepository, commentsRepository),
       Layer.succeed(SitesRepository, sitesRepository),
       Layer.succeed(ServiceAreasRepository, serviceAreasRepository),
       Layer.succeed(SiteGeocoder, siteGeocoder),
@@ -422,5 +507,171 @@ describe("sites service", () => {
     expect(harness.calls.geocode).toBe(1);
     expect(harness.calls.createSite).toBe(0);
     expect(harness.calls.getOptionById).toBe(0);
+  }, 10_000);
+});
+
+describe("site comments service", () => {
+  const commentInput = {
+    body: "Gate code changed to 2468.",
+  } satisfies AddSiteCommentInput;
+
+  it("allows internal actors to list site comments", async () => {
+    const harness = makeHarness({ actor: makeActor("owner") });
+
+    await expect(
+      runSitesService(
+        Effect.gen(function* () {
+          const sites = yield* SitesService;
+
+          return yield* sites.listComments(siteId);
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      comments: [
+        {
+          body: "Gate code changed to 2468.",
+          siteId,
+        },
+      ],
+    });
+
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.listComments).toBe(1);
+  }, 10_000);
+
+  it("allows members to list site comments", async () => {
+    const harness = makeHarness({ actor: makeActor("member") });
+
+    await expect(
+      runSitesService(
+        Effect.gen(function* () {
+          const sites = yield* SitesService;
+
+          return yield* sites.listComments(siteId);
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      comments: [
+        {
+          body: "Gate code changed to 2468.",
+          siteId,
+        },
+      ],
+    });
+
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.listComments).toBe(1);
+  }, 10_000);
+
+  it("allows members to add site comments without site creation permission", async () => {
+    const harness = makeHarness({ actor: makeActor("member") });
+
+    await expect(
+      runSitesService(
+        Effect.gen(function* () {
+          const sites = yield* SitesService;
+
+          return yield* sites.addComment(siteId, commentInput);
+        }),
+        harness
+      )
+    ).resolves.toMatchObject({
+      body: "Gate code changed to 2468.",
+      siteId,
+    });
+
+    expect(harness.calls.withTransaction).toBe(0);
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.addComment).toBe(1);
+    expect(harness.calls.geocode).toBe(0);
+    expect(harness.calls.createSite).toBe(0);
+  }, 10_000);
+
+  it("denies external actors listing site comments", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.listComments(siteId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "External collaborators cannot view organization-wide data",
+      siteId,
+    });
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.listComments).toBe(0);
+  }, 10_000);
+
+  it("denies external actors adding site comments", async () => {
+    const harness = makeHarness({ actor: makeActor("external") });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.addComment(siteId, commentInput);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "External collaborators cannot view organization-wide data",
+      siteId,
+    });
+    expect(harness.calls.withTransaction).toBe(0);
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.addComment).toBe(0);
+  }, 10_000);
+
+  it("returns not found when listing comments for a missing site", async () => {
+    const harness = makeHarness({ siteExists: false });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.listComments(siteId);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(SiteNotFoundError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Site does not exist",
+      siteId,
+    });
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.listComments).toBe(1);
+  }, 10_000);
+
+  it("returns not found when adding comments to a missing site", async () => {
+    const harness = makeHarness({ siteExists: false });
+
+    const exit = await runSitesServiceExit(
+      Effect.gen(function* () {
+        const sites = yield* SitesService;
+
+        return yield* sites.addComment(siteId, commentInput);
+      }),
+      harness
+    );
+
+    expect(getFailure(exit)).toBeInstanceOf(SiteNotFoundError);
+    expect(getFailure(exit)).toMatchObject({
+      message: "Site does not exist",
+      siteId,
+    });
+    expect(harness.calls.withTransaction).toBe(0);
+    expect(harness.calls.findById).toBe(0);
+    expect(harness.calls.addComment).toBe(1);
   }, 10_000);
 });

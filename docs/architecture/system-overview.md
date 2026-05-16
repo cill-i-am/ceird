@@ -4,8 +4,8 @@
 
 Ceird is a job-tracking application for trades and construction teams. The
 current product surface includes authentication, organizations, members,
-invitations, jobs, sites, labels, cost lines, collaborator access, service
-areas, rate cards, activity, settings, and a local sandbox workflow.
+invitations, jobs, sites, comments, labels, cost lines, collaborator access,
+service areas, rate cards, activity, settings, and a local sandbox workflow.
 
 The repository is still greenfield. Backward compatibility is not a constraint;
 clear APIs, strong type boundaries, and simple architecture matter more than
@@ -39,6 +39,7 @@ PlanetScale resources.
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.            | Database schema, API business rules, shared DTO definitions. |
 | `apps/api`               | HTTP handlers, Better Auth wiring, Effect services, repositories, migrations, Worker entrypoint, and database runtime. | Browser UI, app-specific layout concerns.                    |
+| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                              | Target ownership, authorization, repositories, or UI state.  |
 | `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                 | Better Auth adapter setup or persistence.                    |
 | `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                       | Repository SQL or React state.                               |
 | `packages/sandbox-core`  | Pure sandbox naming, identity, ports, URLs, health payload, env decoding, runtime spec, and registry types.            | Process execution or Docker commands.                        |
@@ -73,8 +74,12 @@ The API exports a combined Drizzle schema from
 
 - `authSchema` contains Better Auth users, sessions, accounts,
   verifications, rate limits, organizations, members, and invitations.
-- `jobsSchema` contains service areas, rate cards, sites, contacts, work
-  items, comments, activity, visits, labels, collaborators, and cost lines.
+- `commentsSchema` contains shared comment rows and target ownership rows for
+  jobs and sites.
+- `jobsSchema` contains rate cards, contacts, work items, activity, visits,
+  labels, collaborators, and cost lines.
+- `sitesSchema` contains sites and service areas. Site access notes remain on
+  the site record; site comments are separate internal collaboration records.
 - `databaseSchema` merges both for the full database runtime.
 - `appSchema` exposes the app-domain subset for app-specific repositories.
 

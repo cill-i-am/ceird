@@ -3,9 +3,10 @@
 ## Scope
 
 `apps/api` is the backend service. It exposes Effect HTTP APIs for system,
-jobs, sites, labels, and organization configuration routes, mounts Better Auth
-under `/api/auth/*`, owns database schema and migrations, and can run as either
-a Node dev server or a Cloudflare Worker.
+jobs, sites, comments-backed collaboration, labels, and organization
+configuration routes, mounts Better Auth under `/api/auth/*`, owns database
+schema and migrations, and can run as either a Node dev server or a Cloudflare
+Worker.
 
 ## Entry Points
 
@@ -98,7 +99,7 @@ Core files:
 | `authorization.ts`         | Role and access checks for jobs operations.                                                                                              |
 | `actor-access.ts`          | Actor resolution error mapping.                                                                                                          |
 | `activity-recorder.ts`     | Work item activity events.                                                                                                               |
-| `schema.ts`                | Jobs-owned Drizzle tables and relations, including job-label assignment rows.                                                            |
+| `schema.ts`                | Jobs-owned Drizzle tables and relations, including job-label assignment rows. Job comments are stored through the comments domain.       |
 | `errors.ts`                | API-domain error helpers where needed.                                                                                                   |
 
 The jobs service flow is:
@@ -120,6 +121,27 @@ failures instead of defects.
 External organization members can have collaborator-style access to specific
 jobs. Elevated internal roles can manage organization-wide configuration such
 as labels, service areas, sites, and rate cards through the owning domain.
+
+## Comments Domain
+
+Reusable comments persistence lives in `src/domains/comments` and shared DTO
+primitives live in `@ceird/comments-core`. The API stores comment content in a
+single `comments` table and keeps target ownership in separate join tables:
+
+- `work_item_comments` links comments to jobs.
+- `site_comments` links comments to sites.
+
+The core `comments` row owns author, organization, body, creation timestamp,
+and edit metadata (`updated_at`, `updated_by_user_id`). Target join tables own
+the target foreign key and ordering timestamp. Database triggers enforce exactly
+one ownership target per comment, validate that comment authors/editors are
+members of the comment organization without pinning historical comments to
+membership rows after a member is removed, and delete a shared comment after its
+ownership row is removed.
+
+Site comments are internal-only at the service authorization layer for now.
+Site `accessNotes` remain part of the site record and are not deprecated by the
+comments API.
 
 ## Jobs API Endpoints
 
@@ -171,14 +193,16 @@ Core files:
 
 Sites live in `src/domains/sites` and are exposed through
 `@ceird/sites-core`. Sites and service areas are independent organization data
-that jobs can reference.
+that jobs can reference. Sites can also have internal comments through the
+comments domain. Site access notes remain a single structured field on the site
+itself for operational access instructions.
 
 Core files:
 
 | File                       | Responsibility                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------- |
 | `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS. |
-| `service.ts`               | Site create, update, and options use cases.                                             |
+| `service.ts`               | Site create, update, options, and internal comments use cases.                          |
 | `service-areas-service.ts` | Service-area list, create, and update use cases.                                        |
 | `repositories.ts`          | SQL repository layer for sites, service areas, and site-contact links.                  |
 | `schema.ts`                | Sites and service-area Drizzle tables and relations.                                    |
@@ -221,6 +245,8 @@ handlers live in `apps/api/src/domains/sites/http.ts`.
 | `GET`   | `/sites/options`                | `getSiteOptions`    |
 | `POST`  | `/sites`                        | `createSite`        |
 | `PATCH` | `/sites/:siteId`                | `updateSite`        |
+| `GET`   | `/sites/:siteId/comments`       | `listSiteComments`  |
+| `POST`  | `/sites/:siteId/comments`       | `addSiteComment`    |
 
 ## Database
 
@@ -235,9 +261,9 @@ The API uses Drizzle with Postgres.
 | Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
-`databaseSchema` merges authentication, labels, sites, and jobs tables. Keep
-schema changes in the domain that owns the tables, then export through the
-schema barrel.
+`databaseSchema` merges authentication, comments, labels, sites, and jobs
+tables. Keep schema changes in the domain that owns the tables, then export
+through the schema barrel.
 
 ## Errors And Runtime Schemas
 

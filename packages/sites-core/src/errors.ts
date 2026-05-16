@@ -25,6 +25,7 @@ export class SiteStorageError extends Schema.TaggedError<SiteStorageError>()(
   {
     message: Schema.String,
     cause: Schema.optional(Schema.String),
+    siteId: Schema.optional(SiteId),
   },
   HttpApiSchema.annotations({ status: 503 })
 ) {}

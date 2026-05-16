@@ -8,7 +8,6 @@ import {
   IsoDateTimeString as IsoDateTimeStringSchema,
   JobActivityPayloadSchema,
   JobActivitySchema,
-  JobCommentSchema,
   JobCollaboratorConflictError,
   JobCollaboratorId as JobCollaboratorIdSchema,
   JobCollaboratorNotFoundError,
@@ -47,7 +46,6 @@ import type {
   Job,
   JobActivity,
   JobActivityPayload,
-  JobComment,
   JobCollaborator,
   JobCollaboratorAccessLevel,
   JobCollaboratorIdType as JobCollaboratorId,
@@ -94,10 +92,10 @@ import { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql";
 import { Config, Effect, Layer, Option, Schema } from "effect";
 
+import { CommentsRepository } from "../comments/repository.js";
 import { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   generateActivityId,
-  generateCommentId,
   generateContactId,
   generateCostLineId,
   generateJobCollaboratorId,
@@ -132,15 +130,6 @@ interface WorkItemRow {
   readonly status: string;
   readonly title: string;
   readonly updated_at: Date;
-}
-
-interface WorkItemCommentRow {
-  readonly author_name?: string | null;
-  readonly author_user_id: string;
-  readonly body: string;
-  readonly created_at: Date;
-  readonly id: string;
-  readonly work_item_id: string;
 }
 
 interface WorkItemCollaboratorRow {
@@ -435,7 +424,6 @@ const decodeOrganizationActivityListResponse = Schema.decodeUnknownSync(
 );
 const decodeContactId = Schema.decodeUnknownSync(ContactIdSchema);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
-const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobCollaborator = Schema.decodeUnknownSync(JobCollaboratorSchema);
 const decodeJobCollaboratorId = Schema.decodeUnknownSync(
   JobCollaboratorIdSchema
@@ -476,8 +464,10 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
   "@ceird/domains/jobs/JobsRepository",
   {
     accessors: true,
+    dependencies: [CommentsRepository.Default],
     effect: Effect.gen(function* JobsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      const commentsRepository = yield* CommentsRepository;
       const defaultListLimit = yield* Config.integer(
         "JOBS_DEFAULT_LIST_LIMIT"
       ).pipe(Config.withDefault(50));
@@ -1351,16 +1341,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         }
 
         const [comments, labelsByWorkItemId] = yield* Effect.all([
-          sql<WorkItemCommentRow>`
-            select
-              work_item_comments.*,
-              "user".name as author_name
-            from work_item_comments
-            inner join "user"
-              on "user".id = work_item_comments.author_user_id
-            where work_item_comments.work_item_id = ${workItemId}
-            order by work_item_comments.created_at asc, work_item_comments.id asc
-          `,
+          commentsRepository.listForWorkItem(organizationId, workItemId),
           listLabelsForWorkItems(organizationId, [workItemId]),
         ]);
         const [activity, visits, costLines] =
@@ -1415,7 +1396,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
               resolvedAccess.visibility === "external"
                 ? []
                 : activity.map(mapJobActivityRow),
-            comments: comments.map(mapJobCommentRow),
+            comments,
             contact,
             site,
             costs:
@@ -1712,28 +1693,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           input.authorUserId
         );
 
-        const rows = yield* sql<WorkItemCommentRow>`
-          with inserted as (
-            insert into work_item_comments ${sql
-              .insert({
-                author_user_id: input.authorUserId,
-                body: input.body,
-                id: generateCommentId(),
-                work_item_id: input.workItemId,
-              })
-              .returning("*")}
-          )
-          select
-            inserted.*,
-            "user".name as author_name
-          from inserted
-          inner join "user"
-            on "user".id = inserted.author_user_id
-        `;
-
-        const row = yield* getRequiredRow(rows, "inserted work item comment");
-
-        return mapJobCommentRow(row);
+        return yield* commentsRepository.addForWorkItem(input);
       });
 
       const addActivity = Effect.fn("JobsRepository.addActivity")(function* (
@@ -2364,6 +2324,7 @@ export class JobLabelAssignmentsRepository extends Effect.Service<JobLabelAssign
 ) {}
 
 export const JobsRepositoriesLive = Layer.mergeAll(
+  CommentsRepository.Default,
   JobsRepository.Default,
   ContactsRepository.Default,
   JobLabelAssignmentsRepository.Default,
@@ -2561,17 +2522,6 @@ function mapJobContactDetailRow(row: JobContactDetailRow): JobContactDetail {
     name: row.name,
     notes: nullableToUndefined(row.notes),
     phone: nullableToUndefined(row.phone),
-  });
-}
-
-function mapJobCommentRow(row: WorkItemCommentRow): JobComment {
-  return decodeJobComment({
-    authorName: nullableToUndefined(row.author_name ?? null),
-    authorUserId: row.author_user_id,
-    body: row.body,
-    createdAt: row.created_at.toISOString(),
-    id: row.id,
-    workItemId: row.work_item_id,
   });
 }
 

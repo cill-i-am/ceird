@@ -1,8 +1,18 @@
+import { commentsSchema } from "../../domains/comments/schema.js";
 import { authSchema } from "../../domains/identity/authentication/schema.js";
 import { jobsSchema } from "../../domains/jobs/schema.js";
 import { labelsSchema } from "../../domains/labels/schema.js";
 import { sitesSchema } from "../../domains/sites/schema.js";
 
+export {
+  comment,
+  commentRelations,
+  commentsSchema,
+  siteComment,
+  siteCommentRelations,
+  workItemComment,
+  workItemCommentRelations,
+} from "../../domains/comments/schema.js";
 export {
   account,
   accountRelations,
@@ -37,8 +47,6 @@ export {
   workItemCollaboratorRelations,
   workItemCostLine,
   workItemCostLineRelations,
-  workItemComment,
-  workItemCommentRelations,
   workItemLabel,
   workItemLabelRelations,
   workItemRelations,
@@ -60,12 +68,14 @@ export {
 
 export const databaseSchema = {
   ...authSchema,
+  ...commentsSchema,
   ...labelsSchema,
   ...sitesSchema,
   ...jobsSchema,
 };
 
 export const appSchema = {
+  ...commentsSchema,
   ...labelsSchema,
   ...sitesSchema,
   ...jobsSchema,

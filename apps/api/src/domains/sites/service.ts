@@ -1,4 +1,5 @@
 import type {
+  AddSiteCommentInput,
   CreateSiteInput,
   ServiceAreaOption,
   SiteIdType as SiteId,
@@ -11,6 +12,7 @@ import {
 } from "@ceird/sites-core";
 import { Array as EffectArray, Effect, HashMap, Option } from "effect";
 
+import { CommentsRepository } from "../comments/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
   hasElevatedOrganizationAccess,
@@ -31,6 +33,7 @@ export class SitesService extends Effect.Service<SitesService>()(
   {
     accessors: true,
     dependencies: [
+      CommentsRepository.Default,
       CurrentOrganizationActor.Default,
       OrganizationAuthorization.Default,
       ServiceAreasRepository.Default,
@@ -38,6 +41,7 @@ export class SitesService extends Effect.Service<SitesService>()(
     ],
     effect: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
+      const commentsRepository = yield* CommentsRepository;
       const serviceAreasRepository = yield* ServiceAreasRepository;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
       const siteGeocoder = yield* SiteGeocoder;
@@ -225,9 +229,73 @@ export class SitesService extends Effect.Service<SitesService>()(
         } as const;
       });
 
+      const listComments = Effect.fn("SitesService.listComments")(function* (
+        siteId: SiteId
+      ) {
+        const actor = yield* loadActor();
+        yield* ensureCanUseSiteComments(actor, authorization, siteId);
+        yield* Effect.annotateCurrentSpan("action", "listComments");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("siteId", siteId);
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        const comments = yield* commentsRepository
+          .listForExistingSite(actor.organizationId, siteId)
+          .pipe(
+            Effect.catchTag("SqlError", (error) =>
+              failSitesStorageError(error, { siteId })
+            )
+          );
+
+        return yield* Option.match(comments, {
+          onNone: () => failSiteNotFound(siteId),
+          onSome: (siteComments) => Effect.succeed({ comments: siteComments }),
+        });
+      });
+
+      const addComment = Effect.fn("SitesService.addComment")(function* (
+        siteId: SiteId,
+        input: AddSiteCommentInput
+      ) {
+        const actor = yield* loadActor();
+        yield* ensureCanUseSiteComments(actor, authorization, siteId);
+        yield* Effect.annotateCurrentSpan("action", "addComment");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("siteId", siteId);
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        const comment = yield* commentsRepository
+          .addForSite({
+            authorUserId: actor.userId,
+            body: input.body,
+            organizationId: actor.organizationId,
+            siteId,
+          })
+          .pipe(
+            Effect.catchTag("SqlError", (error) =>
+              failSitesStorageError(error, { siteId })
+            )
+          );
+
+        return yield* Option.match(comment, {
+          onNone: () => failSiteNotFound(siteId),
+          onSome: Effect.succeed,
+        });
+      });
+
       return {
+        addComment,
         create,
         getOptions,
+        listComments,
         update,
       };
     }),
@@ -235,12 +303,17 @@ export class SitesService extends Effect.Service<SitesService>()(
 ) {}
 
 function failSitesStorageError(
-  error: unknown
+  error: unknown,
+  context: { readonly siteId?: SiteId } = {}
 ): Effect.Effect<never, SiteStorageError> {
+  const siteContext =
+    context.siteId === undefined ? {} : { siteId: context.siteId };
+
   return Effect.fail(
     new SiteStorageError({
       cause: error instanceof Error ? error.message : String(error),
       message: "Sites storage operation failed",
+      ...siteContext,
     })
   );
 }
@@ -270,12 +343,46 @@ function ensureCanViewOrganizationSiteOptions(
   });
 }
 
+function ensureCanUseSiteComments(
+  actor: OrganizationActor,
+  authorization: OrganizationAuthorization,
+  siteId: SiteId
+) {
+  return authorization
+    .ensureCanViewOrganizationData(actor)
+    .pipe(
+      Effect.catchTag(ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG, (error) =>
+        failSiteAccessDenied(error, { siteId })
+      )
+    );
+}
+
 const mapSitesActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new SiteAccessDeniedError({ message })
 );
 
-function failSiteAccessDenied(error: { readonly message: string }) {
-  return Effect.fail(new SiteAccessDeniedError({ message: error.message }));
+function failSiteAccessDenied(
+  error: { readonly message: string },
+  context: { readonly siteId?: SiteId } = {}
+) {
+  const siteContext =
+    context.siteId === undefined ? {} : { siteId: context.siteId };
+
+  return Effect.fail(
+    new SiteAccessDeniedError({
+      message: error.message,
+      ...siteContext,
+    })
+  );
+}
+
+function failSiteNotFound(siteId: SiteId) {
+  return Effect.fail(
+    new SiteNotFoundError({
+      message: "Site does not exist",
+      siteId,
+    })
+  );
 }
 
 function deriveServiceAreaOptionsFromSites(

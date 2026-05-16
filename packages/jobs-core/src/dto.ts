@@ -1,3 +1,4 @@
+import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
 import { LabelId, LabelNameSchema, LabelSchema } from "@ceird/labels-core";
 import {
   CreateSiteInputSchema,
@@ -18,7 +19,6 @@ import {
   IsoDateTimeString,
   JobActivityEventTypeSchema,
   JobBlockedReasonSchema,
-  JobCommentBodySchema,
   JobCollaboratorAccessLevelSchema,
   JobCollaboratorRoleLabelSchema,
   JobCollaboratorSubjectTypeSchema,
@@ -38,7 +38,6 @@ import {
 } from "./domain.js";
 import {
   ActivityId,
-  CommentId,
   ContactId,
   CostLineId,
   JobCollaboratorId,
@@ -192,14 +191,12 @@ export const JobListItemSchema = Schema.Struct({
 });
 export type JobListItem = Schema.Schema.Type<typeof JobListItemSchema>;
 
-export const JobCommentSchema = Schema.Struct({
-  id: CommentId,
-  workItemId: WorkItemId,
-  authorUserId: UserId,
-  authorName: Schema.optional(Schema.String),
-  body: JobCommentBodySchema,
-  createdAt: IsoDateTimeString,
-});
+export const JobCommentSchema = Schema.extend(
+  CommentSchema,
+  Schema.Struct({
+    workItemId: WorkItemId,
+  })
+);
 export type JobComment = Schema.Schema.Type<typeof JobCommentSchema>;
 
 export const JobCollaboratorSchema = Schema.Struct({
@@ -529,9 +526,7 @@ export type ReopenJobResponse = Schema.Schema.Type<
   typeof ReopenJobResponseSchema
 >;
 
-export const AddJobCommentInputSchema = Schema.Struct({
-  body: JobCommentBodySchema,
-});
+export const AddJobCommentInputSchema = AddCommentInputSchema;
 export type AddJobCommentInput = Schema.Schema.Type<
   typeof AddJobCommentInputSchema
 >;

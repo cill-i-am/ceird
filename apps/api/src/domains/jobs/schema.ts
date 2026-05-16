@@ -382,28 +382,6 @@ export const workItemLabel = pgTable(
   ]
 );
 
-export const workItemComment = pgTable(
-  "work_item_comments",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    workItemId: uuid("work_item_id")
-      .notNull()
-      .references(() => workItem.id, { onDelete: "cascade" }),
-    authorUserId: text("author_user_id")
-      .notNull()
-      .references(() => user.id),
-    body: text("body").notNull(),
-    createdAt: jobsTimestamp("created_at"),
-  },
-  (table) => [
-    index("work_item_comments_work_item_created_at_idx").on(
-      table.workItemId,
-      table.createdAt.asc(),
-      table.id.asc()
-    ),
-  ]
-);
-
 export const workItemActivity = pgTable(
   "work_item_activity",
   {
@@ -590,7 +568,6 @@ export const siteContactRelations = relations(siteContact, ({ one }) => ({
 export const workItemRelations = relations(workItem, ({ many, one }) => ({
   activity: many(workItemActivity),
   workItemCollaborators: many(workItemCollaborator),
-  comments: many(workItemComment),
   contact: one(contact, {
     fields: [workItem.contactId],
     references: [contact.id],
@@ -636,20 +613,6 @@ export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
     references: [workItem.id],
   }),
 }));
-
-export const workItemCommentRelations = relations(
-  workItemComment,
-  ({ one }) => ({
-    author: one(user, {
-      fields: [workItemComment.authorUserId],
-      references: [user.id],
-    }),
-    workItem: one(workItem, {
-      fields: [workItemComment.workItemId],
-      references: [workItem.id],
-    }),
-  })
-);
 
 export const workItemActivityRelations = relations(
   workItemActivity,
@@ -711,7 +674,6 @@ export const jobsSchema = {
   workItemActivity,
   workItemCollaborator,
   workItemCostLine,
-  workItemComment,
   workItemLabel,
   workItemVisit,
 };
