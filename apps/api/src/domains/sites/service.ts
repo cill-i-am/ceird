@@ -1,7 +1,10 @@
+import type { LabelIdType as LabelId } from "@ceird/labels-core";
 import type {
   AddSiteCommentInput,
+  AssignSiteLabelInput,
   CreateSiteInput,
   ServiceAreaOption,
+  SiteDetail,
   SiteIdType as SiteId,
   SiteListQuery,
   UpdateSiteInput,
@@ -27,7 +30,11 @@ import {
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
 } from "../organizations/errors.js";
 import { SiteGeocoder } from "./geocoder.js";
-import { ServiceAreasRepository, SitesRepository } from "./repositories.js";
+import {
+  ServiceAreasRepository,
+  SiteLabelAssignmentsRepository,
+  SitesRepository,
+} from "./repositories.js";
 
 export class SitesService extends Effect.Service<SitesService>()(
   "@ceird/domains/sites/SitesService",
@@ -38,6 +45,7 @@ export class SitesService extends Effect.Service<SitesService>()(
       CurrentOrganizationActor.Default,
       OrganizationAuthorization.Default,
       ServiceAreasRepository.Default,
+      SiteLabelAssignmentsRepository.Default,
       SitesRepository.Default,
     ],
     effect: Effect.gen(function* SitesServiceLive() {
@@ -45,6 +53,8 @@ export class SitesService extends Effect.Service<SitesService>()(
       const commentsRepository = yield* CommentsRepository;
       const serviceAreasRepository = yield* ServiceAreasRepository;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
+      const siteLabelAssignmentsRepository =
+        yield* SiteLabelAssignmentsRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
@@ -330,17 +340,125 @@ export class SitesService extends Effect.Service<SitesService>()(
         });
       });
 
+      const assignLabel = Effect.fn("SitesService.assignLabel")(function* (
+        siteId: SiteId,
+        input: AssignSiteLabelInput
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization
+          .ensureCanCreateSite(actor)
+          .pipe(
+            Effect.catchTag(
+              ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+              failSiteAccessDenied
+            )
+          );
+        yield* Effect.annotateCurrentSpan("action", "assignLabel");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("siteId", siteId);
+        yield* Effect.annotateCurrentSpan("labelId", input.labelId);
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        yield* sitesRepository
+          .withTransaction(
+            siteLabelAssignmentsRepository.assignToSite({
+              labelId: input.labelId,
+              organizationId: actor.organizationId,
+              siteId,
+            })
+          )
+          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+
+        return yield* loadSiteDetailOrFail(
+          actor.organizationId,
+          siteId,
+          sitesRepository
+        );
+      });
+
+      const removeLabel = Effect.fn("SitesService.removeLabel")(function* (
+        siteId: SiteId,
+        labelId: LabelId
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization
+          .ensureCanCreateSite(actor)
+          .pipe(
+            Effect.catchTag(
+              ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+              failSiteAccessDenied
+            )
+          );
+        yield* Effect.annotateCurrentSpan("action", "removeLabel");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("siteId", siteId);
+        yield* Effect.annotateCurrentSpan("labelId", labelId);
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        yield* sitesRepository
+          .withTransaction(
+            siteLabelAssignmentsRepository.removeFromSite({
+              labelId,
+              organizationId: actor.organizationId,
+              siteId,
+            })
+          )
+          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+
+        return yield* loadSiteDetailOrFail(
+          actor.organizationId,
+          siteId,
+          sitesRepository
+        );
+      });
+
       return {
         addComment,
+        assignLabel,
         create,
         getOptions,
         list,
         listComments,
+        removeLabel,
         update,
       };
     }),
   }
 ) {}
+
+function loadSiteDetailOrFail(
+  organizationId: OrganizationActor["organizationId"],
+  siteId: SiteId,
+  sitesRepository: SitesRepository
+): Effect.Effect<SiteDetail, SiteNotFoundError | SiteStorageError> {
+  return Effect.gen(function* () {
+    const site = yield* sitesRepository
+      .getOptionById(organizationId, siteId)
+      .pipe(
+        Effect.catchTag("SqlError", failSitesStorageError),
+        Effect.map(Option.getOrUndefined)
+      );
+
+    if (site !== undefined) {
+      return site;
+    }
+
+    return yield* Effect.fail(
+      new SiteNotFoundError({
+        message: "Site does not exist",
+        siteId,
+      })
+    );
+  });
+}
 
 function failSitesStorageError(
   error: unknown,

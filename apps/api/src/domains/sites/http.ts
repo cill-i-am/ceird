@@ -46,6 +46,16 @@ const SitesHandlersLive = HttpApiBuilder.group(AppApi, "sites", (handlers) =>
         sitesService
           .addComment(path.siteId, payload)
           .pipe(observeSitesOperation("addSiteComment"))
+      )
+      .handle("assignSiteLabel", ({ path, payload }) =>
+        sitesService
+          .assignLabel(path.siteId, payload)
+          .pipe(observeSitesOperation("assignSiteLabel"))
+      )
+      .handle("removeSiteLabel", ({ path }) =>
+        sitesService
+          .removeLabel(path.siteId, path.labelId)
+          .pipe(observeSitesOperation("removeSiteLabel"))
       );
   })
 );
