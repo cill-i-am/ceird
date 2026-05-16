@@ -10,7 +10,8 @@ import {
   CreateSiteResponseSchema,
   ServiceAreaListResponseSchema,
   SiteCommentsResponseSchema,
-  SitesOptionsResponseSchema,
+  SiteListQuerySchema,
+  SiteListResponseSchema,
   UpdateServiceAreaInputSchema,
   UpdateServiceAreaResponseSchema,
   UpdateSiteInputSchema,
@@ -21,6 +22,7 @@ import {
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
+  SiteListCursorInvalidError,
   SiteNotFoundError,
   SiteStorageError,
 } from "./errors.js";
@@ -28,8 +30,10 @@ import { ServiceAreaId, SiteId } from "./ids.js";
 
 const sitesGroup = HttpApiGroup.make("sites")
   .add(
-    HttpApiEndpoint.get("getSiteOptions", "/sites/options")
-      .addSuccess(SitesOptionsResponseSchema)
+    HttpApiEndpoint.get("listSites", "/sites")
+      .setUrlParams(SiteListQuerySchema)
+      .addSuccess(SiteListResponseSchema)
+      .addError(SiteListCursorInvalidError)
       .addError(SiteAccessDeniedError)
       .addError(SiteStorageError)
   )

@@ -21,9 +21,10 @@ import {
   CreateServiceAreaResponseSchema,
   CreateSiteResponseSchema,
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+  SITE_LIST_CURSOR_INVALID_ERROR_TAG,
   ServiceAreaListResponseSchema,
   SiteCommentsResponseSchema,
-  SitesOptionsResponseSchema,
+  SiteListResponseSchema,
   UpdateServiceAreaResponseSchema,
 } from "@ceird/sites-core";
 import { ParseResult } from "effect";
@@ -466,28 +467,44 @@ describe("domain http integration", () => {
         serviceAreaName: "Dublin",
       });
 
-      const siteOptionsAfterSiteResponse = await api.handler(
-        makeRequest("/sites/options", {
+      const sitesAfterSiteResponse = await api.handler(
+        makeRequest("/sites", {
           cookieJar: ownerCookieJar,
         })
       );
-      expect(siteOptionsAfterSiteResponse.status).toBe(200);
-      const siteOptionsAfterSite = ParseResult.decodeUnknownSync(
-        SitesOptionsResponseSchema
-      )(await siteOptionsAfterSiteResponse.json());
-      expect(siteOptionsAfterSite.sites).toContainEqual(
+      expect(sitesAfterSiteResponse.status).toBe(200);
+      const sitesAfterSite = ParseResult.decodeUnknownSync(
+        SiteListResponseSchema
+      )(await sitesAfterSiteResponse.json());
+      expect(sitesAfterSite.items).toContainEqual(
         expect.objectContaining({
           id: createdSite.id,
           name: "Docklands Campus",
         })
       );
-      expect(siteOptionsAfterSite.serviceAreas).toContainEqual({
+
+      const invalidSiteCursorResponse = await api.handler(
+        makeRequest("/sites?cursor=not-json", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(invalidSiteCursorResponse.status).toBe(400);
+      await expect(invalidSiteCursorResponse.json()).resolves.toMatchObject({
+        _tag: SITE_LIST_CURSOR_INVALID_ERROR_TAG,
+      });
+
+      const removedSiteOptionsResponse = await api.handler(
+        makeRequest("/sites/options", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(removedSiteOptionsResponse.status).not.toBe(200);
+
+      expect(serviceAreas.items).toContainEqual({
         id: createdServiceArea.id,
         name: "Dublin",
       });
-      expect(JSON.stringify(siteOptionsAfterSite.serviceAreas)).not.toContain(
-        "description"
-      );
+      expect(JSON.stringify(serviceAreas.items)).not.toContain("description");
 
       const emptySiteCommentsResponse = await api.handler(
         makeRequest(`/sites/${createdSite.id}/comments`, {
@@ -1560,12 +1577,12 @@ describe("domain http integration", () => {
         visibility: "external",
       });
 
-      const deniedSitesOptionsResponse = await api.handler(
-        makeRequest("/sites/options", {
+      const deniedSitesResponse = await api.handler(
+        makeRequest("/sites", {
           cookieJar: externalCookieJar,
         })
       );
-      expect(deniedSitesOptionsResponse.status).toBe(403);
+      expect(deniedSitesResponse.status).toBe(403);
 
       const grantedJobSiteId = externalDetail.site?.id;
       expect(grantedJobSiteId).toBeDefined();

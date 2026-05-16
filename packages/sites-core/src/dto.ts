@@ -141,6 +141,33 @@ export type SiteCommentsResponse = Schema.Schema.Type<
   typeof SiteCommentsResponseSchema
 >;
 
+export const SiteListCursor = Schema.String.pipe(
+  Schema.minLength(1),
+  Schema.brand("@ceird/sites-core/SiteListCursor")
+);
+export type SiteListCursor = Schema.Schema.Type<typeof SiteListCursor>;
+
+export const SiteListQuerySchema = Schema.Struct({
+  cursor: Schema.optional(SiteListCursor),
+  limit: Schema.optional(
+    Schema.NumberFromString.pipe(
+      Schema.int(),
+      Schema.positive(),
+      Schema.lessThanOrEqualTo(100)
+    )
+  ),
+  serviceAreaId: Schema.optional(ServiceAreaId),
+});
+export type SiteListQuery = Schema.Schema.Type<typeof SiteListQuerySchema>;
+
+export const SiteListResponseSchema = Schema.Struct({
+  items: Schema.Array(SiteOptionSchema),
+  nextCursor: Schema.optional(SiteListCursor),
+});
+export type SiteListResponse = Schema.Schema.Type<
+  typeof SiteListResponseSchema
+>;
+
 export const CreateSiteResponseSchema = SiteOptionSchema;
 export type CreateSiteResponse = Schema.Schema.Type<
   typeof CreateSiteResponseSchema

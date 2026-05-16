@@ -162,7 +162,9 @@ function findJobsServerDomainHelperViolations(
     for (const importedName of getImportedNames(imports)) {
       if (
         importedName === "getCurrentServerLabels" ||
-        importedName === "getCurrentServerSiteOptions"
+        importedName === "getCurrentServerServiceAreas" ||
+        importedName === "listAllCurrentServerSites" ||
+        importedName === "listCurrentServerSites"
       ) {
         violations.push(`${filePath}: ${importedName}`);
       }

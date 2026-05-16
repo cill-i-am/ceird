@@ -211,15 +211,6 @@ function upsertSiteOption(
   };
 }
 
-function mergeSiteOptions(
-  siteOptions: SitesOptionsResponse
-): SitesOptionsResponse {
-  return {
-    serviceAreas: siteOptions.serviceAreas,
-    sites: siteOptions.sites,
-  };
-}
-
 function createBrowserSite(input: CreateSiteInput) {
   return runBrowserAppApiRequest("SitesBrowser.createSite", (client) =>
     client.sites.createSite({ payload: input })
@@ -252,37 +243,13 @@ function addBrowserSiteComment(siteId: SiteIdType, input: AddSiteCommentInput) {
   );
 }
 
-function getBrowserSiteOptions() {
-  return runBrowserAppApiRequest("SitesBrowser.getSiteOptions", (client) =>
-    client.sites.getSiteOptions()
-  );
-}
-
 function refreshSiteOptionsOrUpsert(get: Atom.FnContext, site: SiteOption) {
-  return Effect.gen(function* () {
-    const siteOptions = yield* getBrowserSiteOptions().pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning(
-          "Site options refresh failed; using optimistic site",
-          {
-            error: error.message,
-            siteId: site.id,
-          }
-        )
-      ),
-      Effect.option
-    );
+  return Effect.sync(() => {
     const currentOptionsState = get(sitesOptionsStateAtom);
-    const nextOptions = Option.match(siteOptions, {
-      onNone: () => upsertSiteOption(currentOptionsState.data, site),
-      onSome: mergeSiteOptions,
-    });
 
-    yield* Effect.sync(() => {
-      get.set(sitesOptionsStateAtom, {
-        data: nextOptions,
-        organizationId: currentOptionsState.organizationId,
-      });
+    get.set(sitesOptionsStateAtom, {
+      data: upsertSiteOption(currentOptionsState.data, site),
+      organizationId: currentOptionsState.organizationId,
     });
   });
 }

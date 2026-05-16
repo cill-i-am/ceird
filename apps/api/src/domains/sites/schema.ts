@@ -81,12 +81,16 @@ export const site = pgTable(
       table.organizationId,
       table.serviceAreaId
     ),
+    index("sites_service_area_id_idx").on(table.serviceAreaId),
     uniqueIndex("sites_id_organization_idx").on(table.id, table.organizationId),
     index("sites_organization_active_name_idx")
+      .on(table.organizationId, table.name.asc().nullsLast(), table.id)
+      .where(sql`${table.archivedAt} is null`),
+    index("sites_organization_service_area_active_name_idx")
       .on(
         table.organizationId,
+        table.serviceAreaId,
         table.name.asc().nullsLast(),
-        table.createdAt,
         table.id
       )
       .where(sql`${table.archivedAt} is null`),

@@ -215,24 +215,29 @@ describe("app API client", () => {
     expect(requestInit?.method).toBe("POST");
   }, 1000);
 
-  it("loads standalone site options through the shared Ceird API client", async () => {
+  it("loads standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json(siteOptionsResponse));
+      .mockResolvedValue(
+        Response.json({ items: siteOptionsResponse.sites, nextCursor: "next" })
+      );
 
     await expect(
       runAppApiClient(
         {
           requestOrigin: "http://127.0.0.1:3000",
         },
-        "SitesServer.test.getSiteOptions",
-        (client) => client.sites.getSiteOptions()
+        "SitesServer.test.listSites",
+        (client) => client.sites.listSites({ urlParams: { limit: 25 } })
       )
-    ).resolves.toStrictEqual(siteOptionsResponse);
+    ).resolves.toStrictEqual({
+      items: siteOptionsResponse.sites,
+      nextCursor: "next",
+    });
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://127.0.0.1:3001/sites/options");
+    expect(String(url)).toBe("http://127.0.0.1:3001/sites?limit=25");
     expect(requestInit?.method).toBe("GET");
   }, 1000);
 

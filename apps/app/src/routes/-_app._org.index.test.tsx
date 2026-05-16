@@ -8,12 +8,12 @@ const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedGetCurrentServerJobMemberOptions,
-  mockedGetCurrentServerSiteOptions,
+  mockedListAllCurrentServerSites,
   mockedListAllCurrentServerJobs,
   mockedListCurrentServerOrganizationActivity,
 } = vi.hoisted(() => ({
   mockedGetCurrentServerJobMemberOptions: vi.fn<() => Promise<unknown>>(),
-  mockedGetCurrentServerSiteOptions: vi.fn<() => Promise<unknown>>(),
+  mockedListAllCurrentServerSites: vi.fn<() => Promise<unknown>>(),
   mockedListAllCurrentServerJobs: vi.fn<() => Promise<unknown>>(),
   mockedListCurrentServerOrganizationActivity:
     vi.fn<(query?: OrganizationActivityQuery) => Promise<unknown>>(),
@@ -27,7 +27,7 @@ vi.mock("#/features/jobs/jobs-server", () => ({
 }));
 
 vi.mock("#/features/api/app-api-server", () => ({
-  getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
+  listAllCurrentServerSites: mockedListAllCurrentServerSites,
 }));
 
 describe("organization home route", () => {
@@ -85,9 +85,9 @@ describe("organization home route", () => {
     mockedGetCurrentServerJobMemberOptions.mockResolvedValue({
       members: [{ id: "user_123", name: "Taylor Owner" }],
     });
-    mockedGetCurrentServerSiteOptions.mockResolvedValue({
-      serviceAreas: [],
-      sites: [],
+    mockedListAllCurrentServerSites.mockResolvedValue({
+      items: [],
+      nextCursor: undefined,
     });
     mockedListCurrentServerOrganizationActivity.mockResolvedValue({
       items: [],
@@ -123,7 +123,7 @@ describe("organization home route", () => {
     });
     expect(mockedListAllCurrentServerJobs).toHaveBeenCalledOnce();
     expect(mockedGetCurrentServerJobMemberOptions).toHaveBeenCalledOnce();
-    expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
+    expect(mockedListAllCurrentServerSites).toHaveBeenCalledOnce();
     expect(mockedListCurrentServerOrganizationActivity).toHaveBeenCalledWith({
       limit: 5,
     });

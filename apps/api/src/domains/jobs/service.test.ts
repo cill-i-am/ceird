@@ -611,6 +611,8 @@ function makeHarness(
       Effect.succeed(Option.some(siteId)),
     getOptionById: (_organizationId: OrganizationId, _siteId: SiteId) =>
       Effect.succeed(Option.none()),
+    list: (_organizationId: OrganizationId, _query: unknown) =>
+      Effect.succeed({ items: [], nextCursor: undefined }),
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly JobSiteOption[]),
     update: (

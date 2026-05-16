@@ -3,6 +3,7 @@ import type {
   CreateSiteInput,
   ServiceAreaOption,
   SiteIdType as SiteId,
+  SiteListQuery,
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
@@ -196,6 +197,44 @@ export class SitesService extends Effect.Service<SitesService>()(
         );
       });
 
+      const list = Effect.fn("SitesService.list")(function* (
+        query: SiteListQuery
+      ) {
+        const actor = yield* loadActor();
+        yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
+        yield* Effect.annotateCurrentSpan("action", "list");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+        yield* Effect.annotateCurrentSpan("limit", query.limit ?? 50);
+        yield* Effect.annotateCurrentSpan(
+          "hasCursor",
+          query.cursor !== undefined
+        );
+
+        if (query.serviceAreaId !== undefined) {
+          yield* Effect.annotateCurrentSpan(
+            "serviceAreaId",
+            query.serviceAreaId
+          );
+        }
+
+        const result = yield* sitesRepository
+          .list(actor.organizationId, query)
+          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+
+        yield* Effect.annotateCurrentSpan("resultCount", result.items.length);
+        yield* Effect.annotateCurrentSpan(
+          "hasNextCursor",
+          result.nextCursor !== undefined
+        );
+
+        return result;
+      });
+
       const getOptions = Effect.fn("SitesService.getOptions")(function* () {
         const actor = yield* loadActor();
         yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
@@ -295,6 +334,7 @@ export class SitesService extends Effect.Service<SitesService>()(
         addComment,
         create,
         getOptions,
+        list,
         listComments,
         update,
       };

@@ -201,6 +201,13 @@ function makeHarness(
 
         return Option.some(createdSiteOption);
       }),
+    list: (organizationId: OrganizationId, _query: unknown) =>
+      Effect.sync(() => {
+        calls.listOptions += 1;
+        expect(organizationId).toBe(actor.organizationId);
+
+        return { items: [], nextCursor: undefined };
+      }),
     listOptions: (organizationId: OrganizationId) =>
       Effect.sync(() => {
         calls.listOptions += 1;

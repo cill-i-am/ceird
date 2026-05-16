@@ -93,6 +93,7 @@ import type { SqlError } from "@effect/sql";
 import { Config, Effect, Layer, Option, Schema } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
+import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   generateActivityId,
@@ -2632,24 +2633,6 @@ function decodeOrganizationActivityCursorValue(
   cursor: OrganizationActivityCursor
 ): OrganizationActivityCursorState {
   return decodeJsonCursor(cursor, decodeOrganizationActivityCursorState);
-}
-
-function encodeJsonCursor<Cursor extends string>(
-  value: unknown,
-  decodeCursorValue: (value: string) => Cursor
-): Cursor {
-  return decodeCursorValue(
-    Buffer.from(JSON.stringify(value)).toString("base64url")
-  );
-}
-
-function decodeJsonCursor<State>(
-  cursor: string,
-  decodeState: (value: unknown) => State
-): State {
-  return decodeState(
-    JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
-  );
 }
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {

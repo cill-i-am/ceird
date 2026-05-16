@@ -1,8 +1,13 @@
+import { OrganizationId as OrganizationIdSchema } from "@ceird/identity-core";
 import type { OrganizationId } from "@ceird/identity-core";
 import {
   IsoDateTimeString as IsoDateTimeStringSchema,
+  ServiceAreaId as ServiceAreaIdSchema,
   ServiceAreaNotFoundError,
   SiteId as SiteIdSchema,
+  SiteListCursor as SiteListCursorSchema,
+  SiteListCursorInvalidError,
+  SiteListResponseSchema,
   SiteOptionSchema,
 } from "@ceird/sites-core";
 import type {
@@ -11,11 +16,14 @@ import type {
   SiteCountry,
   SiteGeocodingProvider,
   SiteIdType as SiteId,
+  SiteListCursorType as SiteListCursor,
+  SiteListQuery,
   SiteOption,
 } from "@ceird/sites-core";
 import { SqlClient } from "@effect/sql";
 import { Effect, Option, Schema } from "effect";
 
+import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { generateSiteId } from "./id-generation.js";
 export { ServiceAreasRepository } from "./service-areas-repository.js";
 
@@ -39,6 +47,13 @@ interface SiteOptionRow {
   readonly service_area_id: string | null;
   readonly service_area_name: string | null;
   readonly town: string | null;
+}
+
+interface SiteCursorState {
+  readonly id: SiteId;
+  readonly name: string;
+  readonly organizationId: OrganizationId;
+  readonly serviceAreaId?: ServiceAreaId | undefined;
 }
 
 export interface CreateSiteRecordInput {
@@ -75,7 +90,17 @@ export interface UpdateSiteRecordInput {
 }
 
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
+const decodeSiteListCursor = Schema.decodeUnknownSync(SiteListCursorSchema);
+const decodeSiteListResponse = Schema.decodeUnknownSync(SiteListResponseSchema);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
+const decodeSiteCursorState = Schema.decodeUnknownSync(
+  Schema.Struct({
+    id: SiteIdSchema,
+    name: Schema.String,
+    organizationId: OrganizationIdSchema,
+    serviceAreaId: Schema.optional(ServiceAreaIdSchema),
+  })
+);
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
 );
@@ -216,10 +241,95 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           left join service_areas on service_areas.id = sites.service_area_id
           where sites.organization_id = ${organizationId}
             and sites.archived_at is null
-          order by sites.name asc nulls last, sites.created_at asc, sites.id asc
+          order by sites.name asc nulls last, sites.id asc
         `;
 
         return rows.map(mapSiteOptionRow);
+      });
+
+      const list = Effect.fn("SitesRepository.list")(function* (
+        organizationId: OrganizationId,
+        query: SiteListQuery
+      ) {
+        const limit = clampSiteListLimit(query.limit ?? 50);
+        const clauses = [
+          sql`sites.organization_id = ${organizationId}`,
+          sql`sites.archived_at is null`,
+        ];
+
+        if (query.serviceAreaId !== undefined) {
+          clauses.push(sql`sites.service_area_id = ${query.serviceAreaId}`);
+        }
+
+        if (query.cursor !== undefined) {
+          const encodedCursor = query.cursor;
+          const cursor = yield* Effect.try({
+            try: () => decodeSiteCursor(encodedCursor),
+            catch: () =>
+              new SiteListCursorInvalidError({
+                cursor: encodedCursor,
+                message: "Site list cursor is invalid",
+              }),
+          });
+
+          if (
+            cursor.organizationId !== organizationId ||
+            cursor.serviceAreaId !== query.serviceAreaId
+          ) {
+            return yield* Effect.fail(
+              new SiteListCursorInvalidError({
+                cursor: encodedCursor,
+                message: "Site list cursor does not match the requested scope",
+              })
+            );
+          }
+
+          clauses.push(
+            sql`(
+              sites.name > ${cursor.name}
+              or (
+                sites.name = ${cursor.name}
+                and sites.id > ${cursor.id}
+              )
+            )`
+          );
+        }
+
+        const rows = yield* sql<SiteOptionRow>`
+          select
+            sites.access_notes,
+            sites.address_line_1,
+            sites.address_line_2,
+            sites.country,
+            sites.county,
+            sites.eircode,
+            sites.geocoded_at,
+            sites.geocoding_provider,
+            sites.id,
+            sites.latitude,
+            sites.longitude,
+            sites.name,
+            service_areas.id as service_area_id,
+            service_areas.name as service_area_name,
+            sites.town
+          from sites
+          left join service_areas on service_areas.id = sites.service_area_id
+          where ${sql.and(clauses)}
+          order by sites.name asc nulls last, sites.id asc
+          limit ${limit + 1}
+        `;
+
+        const items = rows.slice(0, limit).map(mapSiteOptionRow);
+        const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
+        const nextCursor =
+          nextCursorRow === undefined
+            ? undefined
+            : encodeSiteCursor(nextCursorRow, {
+                organizationId,
+                serviceAreaId: query.serviceAreaId,
+              });
+
+        return decodeSiteListResponse({ items, nextCursor });
       });
 
       const getOptionById = Effect.fn("SitesRepository.getOptionById")(
@@ -260,6 +370,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
         ensureServiceAreaInOrganization,
         findById,
         getOptionById,
+        list,
         listOptions,
         update,
         withTransaction,
@@ -310,6 +421,37 @@ function mapSiteOptionRow(row: SiteOptionRow): SiteOption {
   });
 }
 
+function encodeSiteCursor(
+  row: Pick<SiteOptionRow, "id" | "name">,
+  state: Pick<SiteCursorState, "organizationId" | "serviceAreaId">
+) {
+  return encodeJsonCursor(
+    {
+      id: decodeSiteId(row.id),
+      name: row.name,
+      organizationId: state.organizationId,
+      serviceAreaId: state.serviceAreaId,
+    } satisfies SiteCursorState,
+    decodeSiteListCursor
+  );
+}
+
+function decodeSiteCursor(cursor: SiteListCursor): {
+  readonly id: SiteId;
+  readonly name: string;
+  readonly organizationId: OrganizationId;
+  readonly serviceAreaId?: ServiceAreaId | undefined;
+} {
+  const value = decodeJsonCursor(cursor, decodeSiteCursorState);
+
+  return {
+    id: value.id,
+    name: value.name,
+    organizationId: value.organizationId,
+    serviceAreaId: value.serviceAreaId,
+  };
+}
+
 function isoDateTimeStringToDate(value: IsoDateTimeString): Date {
   return new Date(decodeIsoDateTimeString(value));
 }
@@ -329,4 +471,8 @@ function getRequiredRow<Value>(
   }
 
   return Effect.succeed(row);
+}
+
+function clampSiteListLimit(limit: number): number {
+  return Math.min(100, Math.max(1, limit));
 }
