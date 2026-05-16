@@ -303,21 +303,7 @@ function makeDefaultMcpResourceUrl(
     "appOrigin" | "baseUrl" | "portlessUrl"
   >
 ) {
-  const url = new URL(
-    environment.appOrigin ?? environment.portlessUrl ?? environment.baseUrl
-  );
-
-  if (environment.appOrigin === undefined) {
-    if (url.hostname.includes(".api.ceird.localhost")) {
-      url.hostname = url.hostname.replace(
-        ".api.ceird.localhost",
-        ".app.ceird.localhost"
-      );
-    } else if (url.hostname === "api.ceird.localhost") {
-      url.hostname = "app.ceird.localhost";
-    }
-  }
-
+  const url = new URL(environment.portlessUrl ?? environment.baseUrl);
   return new URL(DEFAULT_MCP_RESOURCE_PATH, url.origin).toString();
 }
 

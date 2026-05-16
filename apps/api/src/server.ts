@@ -2,8 +2,10 @@ import { createServer } from "node:http";
 
 import { makeHealthPayloadFromSandboxIdInput } from "@ceird/sandbox-core";
 import {
+  HttpApp,
   HttpApiBuilder,
   HttpMiddleware,
+  HttpServer,
   HttpServerError,
   HttpServerRequest,
 } from "@effect/platform";
@@ -14,8 +16,10 @@ import {
   AuthenticationHttpLive,
   AuthenticationLive,
 } from "./domains/identity/authentication/auth.js";
+import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
+import { makeMcpWebHandler } from "./domains/mcp/http.js";
 import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { AppApi } from "./http-api.js";
@@ -149,27 +153,49 @@ function shouldSkipRequestLog(path: string) {
   return path === "/health";
 }
 
-export const ServerLive = HttpApiBuilder.serve(apiRequestLogger).pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      ApiLive,
-      NodeHttpServer.layerConfig(createServer, ServerConfig)
-    )
-  )
-);
-
 export const makeApiWebHandler = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
   siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local,
   baseLive: ApiBaseLive = Layer.empty
 ) => {
+  const authConfig = Effect.runSync(
+    loadAuthenticationConfig.pipe(Effect.provide(baseLive))
+  );
+  const runtimeLive = Layer.mergeAll(
+    databaseRuntimeLive,
+    authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
+    siteGeocoderLive
+  );
+  const mcpWebHandler = makeMcpWebHandler({
+    authConfig,
+    baseLive,
+    runtimeLive,
+  });
   const apiLayer = Layer.mergeAll(
     makeApiLive(databaseRuntimeLive, authenticationLive, siteGeocoderLive),
     NodeHttpServer.layerContext
   ).pipe(Layer.provide(baseLive));
-
-  return HttpApiBuilder.toWebHandler(apiLayer, {
+  const handler = HttpApiBuilder.toWebHandler(apiLayer, {
     middleware: apiRequestLogger,
   });
+
+  return {
+    dispose: handler.dispose,
+    handler: async (request: Request) =>
+      (await mcpWebHandler(request)) ?? handler.handler(request),
+  };
 };
+
+export const ServerLive = Layer.scopedDiscard(
+  Effect.gen(function* runNodeServer() {
+    const webHandler = yield* Effect.acquireRelease(
+      Effect.sync(() => makeApiWebHandler()),
+      ({ dispose }) => Effect.promise(() => dispose()).pipe(Effect.orDie)
+    );
+
+    yield* HttpApp.fromWebHandler(webHandler.handler).pipe(
+      HttpServer.serveEffect()
+    );
+  })
+).pipe(Layer.provide(NodeHttpServer.layerConfig(createServer, ServerConfig)));

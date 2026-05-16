@@ -170,7 +170,7 @@ describe("makeAuthenticationConfig()", () => {
     );
   }, 10_000);
 
-  it("defaults the MCP resource URL to the app origin when configured", () => {
+  it("defaults the MCP resource URL to the API origin when configured", () => {
     const config = makeAuthenticationConfig({
       appOrigin: "https://app.ceird.example",
       baseUrl: "https://api.ceird.example/api/auth",
@@ -178,7 +178,7 @@ describe("makeAuthenticationConfig()", () => {
       databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
-    expect(config.mcpResourceUrl).toBe("https://app.ceird.example/mcp");
+    expect(config.mcpResourceUrl).toBe("https://api.ceird.example/mcp");
   }, 10_000);
 
   it("applies a dedicated resend verification email rate limit", () => {
@@ -617,7 +617,7 @@ describe("createAuthentication()", () => {
           oauthAuthServerConfig: true,
           openidConfig: true,
         },
-        validAudiences: ["http://127.0.0.1:3000", "http://127.0.0.1:4173/mcp"],
+        validAudiences: ["http://127.0.0.1:3000", "http://127.0.0.1:3000/mcp"],
       });
       expect(
         oauthPlugin?.options?.advertisedMetadata?.scopes_supported

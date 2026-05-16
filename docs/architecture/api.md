@@ -24,6 +24,18 @@ System endpoints are defined in `src/server.ts`:
 - `GET /` returns a plain API marker string.
 - `GET /health` returns a sandbox-compatible `HealthPayload`.
 
+`src/server.ts` also intercepts MCP resource-server traffic before falling
+through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or
+to the path component of `MCP_RESOURCE_URL` when that environment variable is
+set. Protected-resource metadata is served at
+`/.well-known/oauth-protected-resource` and at the path-specific well-known URL,
+for example `/.well-known/oauth-protected-resource/mcp`.
+
+MCP uses the official `@modelcontextprotocol/sdk` Web Standard Streamable HTTP
+transport in stateless JSON-response mode. Ceird intentionally does not mount
+an `xmcp` generated worker or use the packaged xmcp Better Auth adapter in the
+API runtime.
+
 ## Observability
 
 The API enables a custom Effect HTTP request logger for both the Node server and
@@ -81,6 +93,34 @@ Organization rules are enforced through Better Auth plugin hooks and shared
 decoders from `@ceird/identity-core`. Only organization name can be
 updated through the supported update path, and writable roles are decoded
 against the shared role schema.
+
+## MCP Resource Server
+
+MCP tools live in `src/domains/mcp` and call the same domain services as the
+HTTP API. Tool execution validates the bearer token through Better Auth's OAuth
+Provider support, resolves the current organization actor from the token's
+Better Auth session id and subject, and then lets the existing labels, sites,
+jobs, and configuration authorization rules decide access.
+
+Initial MCP tools:
+
+| Tool                       | Domain service method                  | Scope         |
+| -------------------------- | -------------------------------------- | ------------- |
+| `ceird.labels.list`        | `LabelsService.list`                   | `ceird:read`  |
+| `ceird.sites.options`      | `SitesService.getOptions`              | `ceird:read`  |
+| `ceird.jobs.list`          | `JobsService.list`                     | `ceird:read`  |
+| `ceird.jobs.detail`        | `JobsService.getDetail`                | `ceird:read`  |
+| `ceird.jobs.options`       | `JobsService.getOptions`               | `ceird:read`  |
+| `ceird.jobs.activity.list` | `JobsService.listOrganizationActivity` | `ceird:admin` |
+| `ceird.rate_cards.list`    | `ConfigurationService.listRateCards`   | `ceird:admin` |
+| `ceird.jobs.add_comment`   | `JobsService.addComment`               | `ceird:write` |
+| `ceird.jobs.assign_label`  | `JobsService.assignLabel`              | `ceird:write` |
+| `ceird.jobs.remove_label`  | `JobsService.removeLabel`              | `ceird:write` |
+
+`ceird:admin` satisfies all MCP tool scope checks. `ceird:write` does not imply
+read access, and `ceird:read` does not imply write access. All tools fail closed
+when the bearer token lacks a Better Auth session id, lacks a subject, or lacks
+the required Ceird scope.
 
 ## Jobs Domain
 

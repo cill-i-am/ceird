@@ -25,6 +25,7 @@ Authentication currently supports only:
 - redirecting authenticated users away from guest-only auth pages
 - OAuth/OIDC authorization-server configuration for MCP clients
 - app-owned OAuth consent UI for Better Auth authorization requests
+- MCP resource-server bearer-token validation and tool authorization
 
 Authentication explicitly does not currently support:
 
@@ -34,7 +35,7 @@ Authentication explicitly does not currently support:
 - roles, permissions, or authorization rules
 - custom app-owned auth endpoints such as `/me` or `/viewer`
 - a custom app-owned auth service layer that wraps Better Auth behavior
-- MCP tools or MCP resource-server request handling
+- machine-to-machine `client_credentials` grants for Ceird MCP scopes
 
 ## Architectural Summary
 
@@ -106,7 +107,7 @@ Current config decisions:
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
 - `MCP_RESOURCE_URL` is optional; when omitted the valid MCP resource audience
-  defaults to the configured app origin plus `/mcp`
+  defaults to the API origin plus `/mcp`
 - `OAUTH_ISSUER_URL` is optional; when omitted OAuth/OIDC issuer metadata
   defaults to `BETTER_AUTH_BASE_URL`; explicit issuer URLs are canonicalized to
   match Better Auth discovery metadata before token signing uses them
@@ -118,12 +119,39 @@ base path:
 - `/api/auth/.well-known/oauth-authorization-server`
 - `/api/auth/.well-known/openid-configuration`
 
-Root `/.well-known/*` forwarding is intentionally not part of the current auth
-runtime.
+The MCP resource server also exposes protected-resource metadata at:
 
-Ceird does not use the packaged `@xmcp-dev/better-auth` adapter. MCP auth uses
-Ceird's Better Auth runtime and will be consumed by custom xmcp middleware in
-the MCP API slice.
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-protected-resource/<mcp-resource-path>`
+
+Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
+`xmcp` runtime in `apps/api`. MCP auth uses Ceird's existing Better Auth OAuth
+Provider runtime, and MCP HTTP uses the official `@modelcontextprotocol/sdk`
+web-standard transport inside the API worker.
+
+### MCP Bearer Sessions
+
+The MCP endpoint validates OAuth Provider access tokens as JWT bearer tokens.
+Token verification requires:
+
+- issuer equal to the configured OAuth issuer
+- audience equal to `MCP_RESOURCE_URL`
+- a token subject (`sub`) matching the Better Auth user
+- a Better Auth session id (`sid`)
+
+MCP tool execution does not synthesize cookie headers. It resolves the
+organization actor by loading the Better Auth `session` row from `sid`, checking
+that the row belongs to `sub`, reading the active organization id from that
+session, and then loading the user's `member` role in that organization. The
+same domain authorization services used by the HTTP API decide whether that
+actor can perform each operation.
+
+Current Ceird MCP scopes are:
+
+- `ceird:read` for read-only labels, sites, jobs, and options tools
+- `ceird:write` for job comments and job-label assignment tools
+- `ceird:admin` for organization activity and rate-card tools; this scope also
+  satisfies read and write tool checks
 
 Current rate-limit rules:
 
