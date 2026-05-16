@@ -23,7 +23,8 @@ Authentication currently supports only:
 - session lookup
 - route protection for the authenticated app shell
 - redirecting authenticated users away from guest-only auth pages
-- OAuth/OIDC authorization-server configuration for future MCP clients
+- OAuth/OIDC authorization-server configuration for MCP clients
+- app-owned OAuth consent UI for Better Auth authorization requests
 
 Authentication explicitly does not currently support:
 
@@ -47,6 +48,7 @@ The system is intentionally split into two layers:
    - session-aware route guards
    - authenticated shell rendering
    - sign-out UX
+   - OAuth consent review and approve/deny actions
 
 The core rule is:
 
@@ -324,6 +326,7 @@ Responsibilities:
 - export `AUTH_BASE_PATH` as `/api/auth`
 - derive the API auth origin from the current app origin when needed
 - create a shared Better Auth React client
+- install Better Auth client plugins for organization and OAuth provider flows
 
 Rules:
 
@@ -341,6 +344,22 @@ The app resolves its auth base URL in two steps:
 
 The fallback host-rewrite behavior is intentionally limited to local and
 Portless-style development.
+
+### OAuth Consent UI
+
+`apps/app/src/features/auth/oauth-consent-page.tsx` owns the public
+`/oauth/consent` review screen used by Better Auth's OAuth Provider.
+
+Current behavior:
+
+- parses the authorization query for display through the TanStack Router route
+- shows the requesting `client_id`, requested scopes, and redirect host
+- leaves signed-query verification to Better Auth
+- submits approve or deny decisions through `authClient.oauth2.consent`
+- relies on the OAuth provider client plugin to forward the original signed
+  `window.location.search` query on submit
+- avoids route hotkeys because consent is security-sensitive and should require
+  an explicit focused button action
 
 Current mappings:
 
@@ -728,6 +747,8 @@ These are the important current rules we are following.
   Password reset completion UI with invalid/expired-link feedback.
 - `apps/app/src/features/auth/email-verification-page.tsx`
   Public verification result UI for the `/verify-email` route.
+- `apps/app/src/features/auth/oauth-consent-page.tsx`
+  OAuth consent review UI for the `/oauth/consent` route.
 - `apps/app/src/features/auth/email-verification-banner.tsx`
   Authenticated-shell reminder with resend support when email is unverified.
 - `apps/app/src/components/nav-user.tsx`

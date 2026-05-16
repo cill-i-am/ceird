@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
@@ -63,6 +64,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 } as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcceptInvitationInvitationIdRoute =
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/create-organization': typeof AppCreateOrganizationRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRouteWithChildren
   '/members': typeof AppOrgMembersRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/create-organization': typeof AppCreateOrganizationRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRouteWithChildren
   '/members': typeof AppOrgMembersRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/_app/create-organization': typeof AppCreateOrganizationRoute
   '/_app/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/_app/_org/activity': typeof AppOrgActivityRoute
   '/_app/_org/jobs': typeof AppOrgJobsRouteWithChildren
   '/_app/_org/members': typeof AppOrgMembersRoute
@@ -216,6 +225,7 @@ export interface FileRouteTypes {
     | '/create-organization'
     | '/settings'
     | '/accept-invitation/$invitationId'
+    | '/oauth/consent'
     | '/activity'
     | '/jobs'
     | '/members'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/create-organization'
     | '/settings'
     | '/accept-invitation/$invitationId'
+    | '/oauth/consent'
     | '/activity'
     | '/jobs'
     | '/members'
@@ -259,6 +270,7 @@ export interface FileRouteTypes {
     | '/_app/create-organization'
     | '/_app/settings'
     | '/accept-invitation/$invitationId'
+    | '/oauth/consent'
     | '/_app/_org/activity'
     | '/_app/_org/jobs'
     | '/_app/_org/members'
@@ -280,6 +292,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
+  OauthConsentRoute: typeof OauthConsentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -331,6 +344,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accept-invitation/$invitationId': {
@@ -506,6 +526,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
+  OauthConsentRoute: OauthConsentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

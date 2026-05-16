@@ -1,3 +1,4 @@
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { decodePublicInvitationPreview } from "@ceird/identity-core";
 import type {
   OrganizationRole,
@@ -64,6 +65,7 @@ export function createCeirdAuthClient(baseURL?: string | undefined) {
       organizationClient({
         roles: BETTER_AUTH_ORGANIZATION_ROLES,
       }),
+      oauthProviderClient(),
     ],
     ...(baseURL ? { baseURL } : {}),
   });
