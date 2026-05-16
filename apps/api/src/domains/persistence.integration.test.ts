@@ -1815,6 +1815,129 @@ describe("domain persistence integration", () => {
     });
   }, 30_000);
 
+  it("enforces same-organization site label assignments at the database boundary", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "site_labels" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping site label boundary coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const primaryIdentity = await seedIdentityRecords(databaseUrl);
+    const foreignIdentity = await seedIdentityRecords(databaseUrl);
+    const primaryServiceAreaId = await insertServiceArea(
+      databaseUrl,
+      primaryIdentity.organizationId,
+      "Primary site label area"
+    );
+    const foreignServiceAreaId = await insertServiceArea(
+      databaseUrl,
+      foreignIdentity.organizationId,
+      "Foreign site label area"
+    );
+    const primarySiteId = await insertSite(
+      databaseUrl,
+      primaryIdentity.organizationId,
+      primaryServiceAreaId,
+      "Primary labelled site"
+    );
+    const foreignSiteId = await insertSite(
+      databaseUrl,
+      foreignIdentity.organizationId,
+      foreignServiceAreaId,
+      "Foreign labelled site"
+    );
+    const primaryLabelId = randomUUID();
+    const foreignLabelId = randomUUID();
+
+    await withPool(databaseUrl, async (pool) => {
+      await pool.query(
+        `
+          insert into labels (
+            id,
+            organization_id,
+            name,
+            normalized_name,
+            created_at,
+            updated_at
+          )
+          values
+            ($1, $2, 'Primary label', 'primary label', now(), now()),
+            ($3, $4, 'Foreign label', 'foreign label', now(), now())
+        `,
+        [
+          primaryLabelId,
+          primaryIdentity.organizationId,
+          foreignLabelId,
+          foreignIdentity.organizationId,
+        ]
+      );
+
+      await expect(
+        pool.query(
+          `
+            insert into site_labels (
+              site_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [primarySiteId, primaryLabelId, primaryIdentity.organizationId]
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      await expect(
+        pool.query(
+          `
+            insert into site_labels (
+              site_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [primarySiteId, foreignLabelId, primaryIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "site_labels_label_org_fk",
+      });
+
+      await expect(
+        pool.query(
+          `
+            insert into site_labels (
+              site_id,
+              label_id,
+              organization_id,
+              created_at
+            )
+            values ($1, $2, $3, now())
+          `,
+          [foreignSiteId, primaryLabelId, primaryIdentity.organizationId]
+        )
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "site_labels_site_org_fk",
+      });
+    });
+  }, 30_000);
+
   it("lists organization activity with organization and filter boundaries", async (context: {
     skip: (note?: string) => never;
   }) => {

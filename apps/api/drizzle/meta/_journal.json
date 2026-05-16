@@ -141,6 +141,13 @@
       "when": 1778961484098,
       "tag": "0019_abnormal_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778965908807,
+      "tag": "0020_tranquil_spot",
+      "breakpoints": true
     }
   ]
 }

@@ -2,8 +2,10 @@ import { relations, sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
+  foreignKey,
   index,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -11,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { organization } from "../identity/authentication/schema.js";
+import { label } from "../labels/schema.js";
 import { generateServiceAreaId, generateSiteId } from "./id-generation.js";
 
 const sitesTimestamp = (name: string) =>
@@ -122,6 +125,36 @@ export const site = pgTable(
   ]
 );
 
+export const siteLabel = pgTable(
+  "site_labels",
+  {
+    siteId: uuid("site_id").notNull(),
+    labelId: uuid("label_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: sitesTimestamp("created_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.siteId, table.labelId] }),
+    foreignKey({
+      columns: [table.siteId, table.organizationId],
+      foreignColumns: [site.id, site.organizationId],
+      name: "site_labels_site_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.labelId, table.organizationId],
+      foreignColumns: [label.id, label.organizationId],
+      name: "site_labels_label_org_fk",
+    }).onDelete("cascade"),
+    index("site_labels_label_site_idx").on(
+      table.organizationId,
+      table.labelId,
+      table.siteId
+    ),
+  ]
+);
+
 export const serviceAreaRelations = relations(serviceArea, ({ many, one }) => ({
   organization: one(organization, {
     fields: [serviceArea.organizationId],
@@ -130,7 +163,7 @@ export const serviceAreaRelations = relations(serviceArea, ({ many, one }) => ({
   sites: many(site),
 }));
 
-export const siteRelations = relations(site, ({ one }) => ({
+export const siteRelations = relations(site, ({ many, one }) => ({
   organization: one(organization, {
     fields: [site.organizationId],
     references: [organization.id],
@@ -139,9 +172,22 @@ export const siteRelations = relations(site, ({ one }) => ({
     fields: [site.serviceAreaId],
     references: [serviceArea.id],
   }),
+  labels: many(siteLabel),
+}));
+
+export const siteLabelRelations = relations(siteLabel, ({ one }) => ({
+  label: one(label, {
+    fields: [siteLabel.labelId],
+    references: [label.id],
+  }),
+  site: one(site, {
+    fields: [siteLabel.siteId],
+    references: [site.id],
+  }),
 }));
 
 export const sitesSchema = {
   serviceArea,
   site,
+  siteLabel,
 };

@@ -62,6 +62,8 @@ export {
   serviceArea,
   serviceAreaRelations,
   site,
+  siteLabel,
+  siteLabelRelations,
   siteRelations,
   sitesSchema,
 } from "../../domains/sites/schema.js";
