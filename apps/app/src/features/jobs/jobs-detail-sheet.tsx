@@ -177,47 +177,47 @@ export function JobsDetailSheet({
   const detailState = useAtomValue(jobDetailStateAtomFamily(workItemId));
   const detail = detailState ?? initialDetail;
   const collaborators = useAtomValue(
-    jobCollaboratorsStateAtomFamily(workItemId),
+    jobCollaboratorsStateAtomFamily(workItemId)
   );
   const lookup = useAtomValue(jobsLookupAtom);
   const refreshCollaboratorsResult = useAtomValue(
-    refreshJobCollaboratorsAtomFamily(workItemId),
+    refreshJobCollaboratorsAtomFamily(workItemId)
   );
   const attachCollaboratorResult = useAtomValue(
-    attachJobCollaboratorMutationAtomFamily(workItemId),
+    attachJobCollaboratorMutationAtomFamily(workItemId)
   );
   const updateCollaboratorResult = useAtomValue(
-    updateJobCollaboratorMutationAtomFamily(workItemId),
+    updateJobCollaboratorMutationAtomFamily(workItemId)
   );
   const detachCollaboratorResult = useAtomValue(
-    detachJobCollaboratorMutationAtomFamily(workItemId),
+    detachJobCollaboratorMutationAtomFamily(workItemId)
   );
   const transitionResult = useAtomValue(
-    transitionJobMutationAtomFamily(workItemId),
+    transitionJobMutationAtomFamily(workItemId)
   );
   const reopenResult = useAtomValue(reopenJobMutationAtomFamily(workItemId));
   const patchResult = useAtomValue(patchJobMutationAtomFamily(workItemId));
   const commentResult = useAtomValue(
-    addJobCommentMutationAtomFamily(workItemId),
+    addJobCommentMutationAtomFamily(workItemId)
   );
   const visitResult = useAtomValue(addJobVisitMutationAtomFamily(workItemId));
   const assignLabelResult = useAtomValue(
-    assignJobLabelMutationAtomFamily(workItemId),
+    assignJobLabelMutationAtomFamily(workItemId)
   );
   const createAndAssignLabelResult = useAtomValue(
-    createAndAssignJobLabelMutationAtomFamily(workItemId),
+    createAndAssignJobLabelMutationAtomFamily(workItemId)
   );
   const removeLabelResult = useAtomValue(
-    removeJobLabelMutationAtomFamily(workItemId),
+    removeJobLabelMutationAtomFamily(workItemId)
   );
   const costLineResult = useAtomValue(
-    addJobCostLineMutationAtomFamily(workItemId),
+    addJobCostLineMutationAtomFamily(workItemId)
   );
   const transitionJob = useAtomSet(
     transitionJobMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const reopenJob = useAtomSet(reopenJobMutationAtomFamily(workItemId), {
     mode: "promiseExit",
@@ -229,7 +229,7 @@ export function JobsDetailSheet({
     addJobCommentMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const addJobVisit = useAtomSet(addJobVisitMutationAtomFamily(workItemId), {
     mode: "promiseExit",
@@ -238,53 +238,53 @@ export function JobsDetailSheet({
     assignJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const createAndAssignJobLabel = useAtomSet(
     createAndAssignJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const removeJobLabel = useAtomSet(
     removeJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const addJobCostLine = useAtomSet(
     addJobCostLineMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const refreshCollaborators = useAtomSet(
     refreshJobCollaboratorsAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const attachCollaborator = useAtomSet(
     attachJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const updateCollaborator = useAtomSet(
     updateJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const detachCollaborator = useAtomSet(
     detachJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    },
+    }
   );
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
-    detail.job.assigneeId,
+    detail.job.assigneeId
   );
   const canManageCollaborators = hasJobsElevatedAccess(viewer.role);
   const isExternalViewer = isExternalJobsViewer(viewer);
@@ -301,11 +301,11 @@ export function JobsDetailSheet({
     buildTransitionSelectionGroups(transitionOptions);
 
   const [selectedStatus, setSelectedStatus] = React.useState<JobStatus | "">(
-    "",
+    ""
   );
   const [blockedReason, setBlockedReason] = React.useState("");
   const [transitionError, setTransitionError] = React.useState<string | null>(
-    null,
+    null
   );
   const [selectedSiteId, setSelectedSiteId] = React.useState<
     SiteIdType | typeof NO_SITE_VALUE
@@ -360,19 +360,19 @@ export function JobsDetailSheet({
     : undefined;
   const siteSelectionGroups = React.useMemo(
     () => buildSiteSelectionGroups([...lookup.siteById.values()]),
-    [lookup.siteById],
+    [lookup.siteById]
   );
   const organizationLabels = React.useMemo<readonly Label[]>(
     () => getSortedLabels([...lookup.labelById.values()]),
-    [lookup.labelById],
+    [lookup.labelById]
   );
   const assignedLabelIds = React.useMemo<ReadonlySet<LabelIdType>>(
     () => new Set(detail.job.labels.map((label) => label.id)),
-    [detail.job.labels],
+    [detail.job.labels]
   );
   const availableLabels = React.useMemo<readonly Label[]>(
     () => organizationLabels.filter((label) => !assignedLabelIds.has(label.id)),
-    [assignedLabelIds, organizationLabels],
+    [assignedLabelIds, organizationLabels]
   );
   const selectedSiteChanged =
     selectedSiteId !== (detail.job.siteId ?? NO_SITE_VALUE);
@@ -390,9 +390,9 @@ export function JobsDetailSheet({
         externalMembers.map((externalMember) => [
           externalMember.userId,
           externalMember,
-        ]),
+        ])
       ),
-    [externalMembers],
+    [externalMembers]
   );
 
   React.useEffect(() => {
@@ -462,7 +462,7 @@ export function JobsDetailSheet({
         clearTimeout(closeNavigationTimeoutRef.current);
       }
     },
-    [],
+    []
   );
 
   const navigateToJobs = React.useCallback(() => {
@@ -493,7 +493,7 @@ export function JobsDetailSheet({
 
     closeNavigationTimeoutRef.current = setTimeout(
       finishClosedSheet,
-      DRAWER_CLOSE_FALLBACK_MS,
+      DRAWER_CLOSE_FALLBACK_MS
     );
   }, [finishClosedSheet]);
 
@@ -505,7 +505,7 @@ export function JobsDetailSheet({
 
     if (selectedStatus === "blocked" && blockedReason.trim().length === 0) {
       setTransitionError(
-        "Add the blocker so the next person knows what is stuck.",
+        "Add the blocker so the next person knows what is stuck."
       );
       return;
     }
@@ -638,7 +638,7 @@ export function JobsDetailSheet({
 
     if (Exit.isSuccess(exit)) {
       setSiteAssignmentMessage(
-        nextSiteId === null ? "Site removed." : "Site assignment updated.",
+        nextSiteId === null ? "Site removed." : "Site assignment updated."
       );
     }
   }
@@ -736,7 +736,7 @@ export function JobsDetailSheet({
 
     if (!selectedCollaboratorUserId || roleLabel.length === 0) {
       setCollaboratorsError(
-        "Choose an external collaborator and add a role label.",
+        "Choose an external collaborator and add a role label."
       );
       return;
     }
@@ -775,7 +775,7 @@ export function JobsDetailSheet({
   }
 
   async function handleDetachCollaborator(
-    collaboratorId: JobCollaborator["id"],
+    collaboratorId: JobCollaborator["id"]
   ) {
     setCollaboratorsMutationError(null);
     const exit = await detachCollaborator(collaboratorId);
@@ -1183,51 +1183,79 @@ export function JobsDetailSheet({
     );
   }
 
-  const activePanelContent =
-    activePanel === "workflow" && !isExternalViewer ? (
-      <DetailSection title="Workflow">
-        <div className="flex flex-col gap-4">{statusActionContent}</div>
-      </DetailSection>
-    ) : activePanel === "site" ? (
-      renderSiteAssignmentPanel()
-    ) : activePanel === "collaborators" && canManageCollaborators ? (
-      <JobCollaboratorsSection
-        collaborators={collaborators}
-        detachCollaborator={handleDetachCollaborator}
-        errorMessage={collaboratorsMutationError ?? collaboratorsError}
-        externalMemberById={externalMemberById}
-        externalMembers={externalMembers}
-        isLoading={
-          refreshCollaboratorsResult.waiting || attachCollaboratorResult.waiting
-        }
-        selectedAccessLevel={collaboratorAccessLevel}
-        selectedRoleLabel={collaboratorRoleLabel}
-        selectedUserId={selectedCollaboratorUserId}
-        updateCollaborator={handleUpdateCollaborator}
-        updatingOrRemoving={
-          updateCollaboratorResult.waiting || detachCollaboratorResult.waiting
-        }
-        onAccessLevelChange={setCollaboratorAccessLevel}
-        onAttach={handleAttachCollaborator}
-        onRoleLabelChange={setCollaboratorRoleLabel}
-        onUserChange={(userId) =>
-          setSelectedCollaboratorUserId(decodeCollaboratorUserId(userId))
-        }
-      />
-    ) : activePanel === "comments" ? (
-      renderCommentsPanel()
-    ) : activePanel === "costs" && !isExternalViewer ? (
-      <JobCostsSection
-        key={workItemId}
-        addJobCostLine={addJobCostLine}
-        canAddCostLine={canAddCostLine}
-        detail={detail}
-        mutationError={renderMutationError(costLineResult)}
-        waiting={costLineResult.waiting}
-      />
-    ) : activePanel === "visits" ? (
-      renderVisitsPanel()
-    ) : null;
+  const collaboratorsCount = isExternalViewer ? 0 : collaborators.length;
+  const costLinesCount = isExternalViewer
+    ? 0
+    : (detail.costs?.lines.length ?? 0);
+  const visitsCount = isExternalViewer ? 0 : detail.visits.length;
+
+  function renderActivePanelContent() {
+    if (activePanel === "workflow" && !isExternalViewer) {
+      return (
+        <DetailSection title="Workflow">
+          <div className="flex flex-col gap-4">{statusActionContent}</div>
+        </DetailSection>
+      );
+    }
+
+    if (activePanel === "site") {
+      return renderSiteAssignmentPanel();
+    }
+
+    if (activePanel === "collaborators" && canManageCollaborators) {
+      return (
+        <JobCollaboratorsSection
+          collaborators={collaborators}
+          detachCollaborator={handleDetachCollaborator}
+          errorMessage={collaboratorsMutationError ?? collaboratorsError}
+          externalMemberById={externalMemberById}
+          externalMembers={externalMembers}
+          isLoading={
+            refreshCollaboratorsResult.waiting ||
+            attachCollaboratorResult.waiting
+          }
+          selectedAccessLevel={collaboratorAccessLevel}
+          selectedRoleLabel={collaboratorRoleLabel}
+          selectedUserId={selectedCollaboratorUserId}
+          updateCollaborator={handleUpdateCollaborator}
+          updatingOrRemoving={
+            updateCollaboratorResult.waiting || detachCollaboratorResult.waiting
+          }
+          onAccessLevelChange={setCollaboratorAccessLevel}
+          onAttach={handleAttachCollaborator}
+          onRoleLabelChange={setCollaboratorRoleLabel}
+          onUserChange={(userId) =>
+            setSelectedCollaboratorUserId(decodeCollaboratorUserId(userId))
+          }
+        />
+      );
+    }
+
+    if (activePanel === "comments") {
+      return renderCommentsPanel();
+    }
+
+    if (activePanel === "costs" && !isExternalViewer) {
+      return (
+        <JobCostsSection
+          key={workItemId}
+          addJobCostLine={addJobCostLine}
+          canAddCostLine={canAddCostLine}
+          detail={detail}
+          mutationError={renderMutationError(costLineResult)}
+          waiting={costLineResult.waiting}
+        />
+      );
+    }
+
+    if (activePanel === "visits") {
+      return renderVisitsPanel();
+    }
+
+    return null;
+  }
+
+  const activePanelContent = renderActivePanelContent();
 
   return (
     <ResponsiveDrawer
@@ -1344,11 +1372,9 @@ export function JobsDetailSheet({
               canManageSite={!isExternalViewer}
               canManageWorkflow={!isExternalViewer}
               commentsCount={detail.comments.length}
-              collaboratorsCount={!isExternalViewer ? collaborators.length : 0}
-              costLinesCount={
-                !isExternalViewer ? (detail.costs?.lines.length ?? 0) : 0
-              }
-              visitsCount={!isExternalViewer ? detail.visits.length : 0}
+              collaboratorsCount={collaboratorsCount}
+              costLinesCount={costLinesCount}
+              visitsCount={visitsCount}
               onPanelChange={setActivePanel}
             />
 
@@ -1381,11 +1407,11 @@ export function JobsDetailSheet({
               </DetailSection>
             ) : null}
 
-            {!isExternalViewer ? (
+            {isExternalViewer ? null : (
               <DetailSection title="Activity">
                 <JobActivityList activity={detail.activity} lookup={lookup} />
               </DetailSection>
-            ) : null}
+            )}
           </div>
         </div>
       </DrawerContent>
@@ -1420,30 +1446,39 @@ function JobDetailActionRail({
   readonly onPanelChange: (panel: JobDetailActionPanel | null) => void;
   readonly visitsCount: number;
 }) {
-  const actions = [
-    canManageWorkflow
-      ? { label: "Status", panel: "workflow" as const, value: undefined }
-      : null,
-    canManageSite
-      ? { label: "Site", panel: "site" as const, value: undefined }
-      : null,
-    canAddComment || commentsCount > 0
-      ? { label: "Comment", panel: "comments" as const, value: commentsCount }
-      : null,
-    canAddCostLine || costLinesCount > 0
-      ? { label: "Cost", panel: "costs" as const, value: costLinesCount }
-      : null,
-    canAddVisit || visitsCount > 0
-      ? { label: "Visit", panel: "visits" as const, value: visitsCount }
-      : null,
-    canManageCollaborators || collaboratorsCount > 0
-      ? {
-          label: "Collaborator",
-          panel: "collaborators" as const,
-          value: collaboratorsCount,
-        }
-      : null,
-  ].filter((action): action is NonNullable<typeof action> => Boolean(action));
+  const actions: {
+    readonly label: string;
+    readonly panel: JobDetailActionPanel;
+    readonly value: number | undefined;
+  }[] = [];
+
+  if (canManageWorkflow) {
+    actions.push({ label: "Status", panel: "workflow", value: undefined });
+  }
+
+  if (canManageSite) {
+    actions.push({ label: "Site", panel: "site", value: undefined });
+  }
+
+  if (canAddComment || commentsCount > 0) {
+    actions.push({ label: "Comment", panel: "comments", value: commentsCount });
+  }
+
+  if (canAddCostLine || costLinesCount > 0) {
+    actions.push({ label: "Cost", panel: "costs", value: costLinesCount });
+  }
+
+  if (canAddVisit || visitsCount > 0) {
+    actions.push({ label: "Visit", panel: "visits", value: visitsCount });
+  }
+
+  if (canManageCollaborators || collaboratorsCount > 0) {
+    actions.push({
+      label: "Collaborator",
+      panel: "collaborators",
+      value: collaboratorsCount,
+    });
+  }
 
   if (actions.length === 0) {
     return null;
@@ -1470,7 +1505,7 @@ function JobDetailActionRail({
             >
               {action.label}
               {action.value && action.value > 0 ? (
-                <span className="ml-1 text-xs tabular-nums text-muted-foreground">
+                <span className="ml-1 text-xs text-muted-foreground tabular-nums">
                   {action.value}
                 </span>
               ) : null}
@@ -1737,7 +1772,7 @@ function JobDetailFactsCard({
 }
 
 function getContactSupportingText(
-  contact: JobContactDetail | JobContactOption | undefined,
+  contact: JobContactDetail | JobContactOption | undefined
 ) {
   return [contact?.email, contact?.phone].filter(Boolean).join(" · ");
 }
@@ -1761,7 +1796,7 @@ function JobCollaboratorsSection({
 }: {
   readonly collaborators: readonly JobCollaborator[];
   readonly detachCollaborator: (
-    collaboratorId: JobCollaborator["id"],
+    collaboratorId: JobCollaborator["id"]
   ) => Promise<unknown>;
   readonly errorMessage: string | null;
   readonly externalMemberById: ReadonlyMap<UserIdType, ExternalMemberOption>;
@@ -1787,8 +1822,8 @@ function JobCollaboratorsSection({
     .filter(
       (member) =>
         !collaborators.some(
-          (collaborator) => collaborator.userId === member.userId,
-        ),
+          (collaborator) => collaborator.userId === member.userId
+        )
     )
     .map((member) => ({
       label: member.name,
@@ -1923,7 +1958,7 @@ function JobCollaboratorRow({
   readonly accessLevelGroups: readonly CommandSelectGroup[];
   readonly collaborator: JobCollaborator;
   readonly detachCollaborator: (
-    collaboratorId: JobCollaborator["id"],
+    collaboratorId: JobCollaborator["id"]
   ) => Promise<unknown>;
   readonly disabled: boolean;
   readonly externalMember: ExternalMemberOption | undefined;
@@ -2138,7 +2173,7 @@ function LabelPicker({
   const hasExistingLabelName =
     normalizedCreateName.length > 0 &&
     organizationLabels.some(
-      (label) => normalizeLabelName(label.name) === normalizedCreateName,
+      (label) => normalizeLabelName(label.name) === normalizedCreateName
     );
   const showCreate =
     canCreateLabels && canCreateLabelName && !hasExistingLabelName;
@@ -2161,7 +2196,7 @@ function LabelPicker({
         disabled={disabled}
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
-          "rounded-full bg-background",
+          "rounded-full bg-background"
         )}
       >
         <HugeiconsIcon
@@ -2242,7 +2277,7 @@ function LabelPicker({
 }
 
 function buildTransitionSelectionGroups(
-  transitionOptions: readonly JobStatus[],
+  transitionOptions: readonly JobStatus[]
 ) {
   return [
     {
@@ -2271,10 +2306,10 @@ function getCollaboratorAccessLevelGroups() {
 }
 
 function decodeOptionalJobCollaboratorAccessLevel(
-  input: unknown,
+  input: unknown
 ): JobCollaboratorAccessLevel | undefined {
   const decoded = Schema.decodeUnknownOption(JobCollaboratorAccessLevelSchema)(
-    input,
+    input
   );
 
   return Option.getOrUndefined(decoded);
@@ -2336,7 +2371,7 @@ function toExternalMemberOptions(
     readonly email: string;
     readonly id: UserIdType;
     readonly name: string;
-  }[],
+  }[]
 ): readonly ExternalMemberOption[] {
   let externalMembers: readonly ExternalMemberOption[] = [];
 
@@ -2347,7 +2382,7 @@ function toExternalMemberOptions(
   }))) {
     externalMembers = insertSortedExternalMember(
       externalMembers,
-      externalMember,
+      externalMember
     );
   }
 
@@ -2356,10 +2391,10 @@ function toExternalMemberOptions(
 
 function insertSortedExternalMember(
   members: readonly ExternalMemberOption[],
-  member: ExternalMemberOption,
+  member: ExternalMemberOption
 ) {
   const insertIndex = members.findIndex(
-    (current) => member.name.localeCompare(current.name) < 0,
+    (current) => member.name.localeCompare(current.name) < 0
   );
 
   if (insertIndex === -1) {
@@ -2374,7 +2409,7 @@ function insertSortedExternalMember(
 }
 
 function renderMutationError(
-  result: Result.Result<unknown, { readonly message: string }>,
+  result: Result.Result<unknown, { readonly message: string }>
 ) {
   return Result.builder(result)
     .onError((error) => (
@@ -2428,7 +2463,7 @@ function formatDuration(durationMinutes: number) {
 
 function describeJobDetailActivity(
   actorName: string | undefined,
-  payload: JobDetailResponse["activity"][number]["payload"],
+  payload: JobDetailResponse["activity"][number]["payload"]
 ) {
   const actorPrefix = actorName ? `${actorName} ` : "";
 

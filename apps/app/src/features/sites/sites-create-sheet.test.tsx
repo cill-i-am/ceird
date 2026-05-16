@@ -137,12 +137,6 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
       onAnimationEnd?.(false);
     });
 
-    React.useEffect(() => {
-      if (open) {
-        onAnimationEnd?.(true);
-      }
-    }, [onAnimationEnd, open]);
-
     return open ? (
       <div data-testid="responsive-drawer" data-open="true">
         {children}
@@ -204,30 +198,30 @@ describe("sites create sheet", () => {
         Exit.succeed({
           id: siteId,
           name: "Docklands Campus",
-        }),
+        })
       );
 
       const user = userEvent.setup();
       render(<SitesCreateSheet />);
 
       expect(
-        screen.getByRole("heading", { name: "New site" }),
+        screen.getByRole("heading", { name: "New site" })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: "Basics" }),
+        screen.getByRole("heading", { name: "Basics" })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: "Location" }),
+        screen.getByRole("heading", { name: "Location" })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: "Access" }),
+        screen.getByRole("heading", { name: "Access" })
       ).toBeInTheDocument();
       expect(screen.queryByText("Draft")).not.toBeInTheDocument();
       expect(
-        screen.queryByLabelText(new RegExp(`^Lat${"itude"}$`)),
+        screen.queryByLabelText(new RegExp(`^Lat${"itude"}$`))
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByLabelText(new RegExp(`^Long${"itude"}$`)),
+        screen.queryByLabelText(new RegExp(`^Long${"itude"}$`))
       ).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Site lead")).not.toBeInTheDocument();
@@ -242,7 +236,7 @@ describe("sites create sheet", () => {
       await user.click(screen.getByRole("option", { name: "Dublin" }));
       await user.type(
         screen.getByLabelText("Address line 1"),
-        "1 Custom House Quay",
+        "1 Custom House Quay"
       );
       await user.type(screen.getByLabelText("Town"), "Dublin");
       await user.type(screen.getByLabelText("County"), "Dublin");
@@ -265,7 +259,7 @@ describe("sites create sheet", () => {
       });
 
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
-    },
+    }
   );
 
   it("waits for the drawer close animation before leaving the new site route", () => {
@@ -300,29 +294,29 @@ describe("sites create sheet", () => {
       await user.click(screen.getByRole("button", { name: /create site/i }));
 
       expect(
-        screen.getByText("Add a site name before creating it."),
+        screen.getByText("Add a site name before creating it.")
       ).toBeInTheDocument();
       expect(screen.getByText("Add address line 1.")).toBeInTheDocument();
       expect(screen.getByText("Add county.")).toBeInTheDocument();
       expect(screen.getByText("Add Eircode.")).toBeInTheDocument();
       expect(screen.getByLabelText("Site name")).toHaveAttribute(
         "aria-describedby",
-        "site-name-error",
+        "site-name-error"
       );
       expect(screen.getByLabelText("Address line 1")).toHaveAttribute(
         "aria-describedby",
-        "site-address-line-1-error",
+        "site-address-line-1-error"
       );
       expect(screen.getByLabelText("County")).toHaveAttribute(
         "aria-describedby",
-        "site-county-error",
+        "site-county-error"
       );
       expect(screen.getByLabelText("Eircode")).toHaveAttribute(
         "aria-describedby",
-        "site-eircode-error",
+        "site-eircode-error"
       );
       expect(mockedCreateSite).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -337,7 +331,7 @@ describe("sites create sheet", () => {
 
       expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
       expect(screen.getByRole("button", { name: /creating/i })).toBeDisabled();
-    },
+    }
   );
 
   it(
@@ -348,7 +342,7 @@ describe("sites create sheet", () => {
         Exit.fail({
           _tag: SERVICE_AREA_NOT_FOUND_ERROR_TAG,
           message: "Service area is no longer available.",
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -359,7 +353,7 @@ describe("sites create sheet", () => {
       await user.click(screen.getByRole("option", { name: "Dublin" }));
       await user.type(
         screen.getByLabelText("Address line 1"),
-        "1 Custom House Quay",
+        "1 Custom House Quay"
       );
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
@@ -368,17 +362,17 @@ describe("sites create sheet", () => {
       const serviceAreaControl = screen.getByLabelText("Service area");
 
       expect(
-        screen.getByText("Service area is no longer available."),
+        screen.getByText("Service area is no longer available.")
       ).toBeInTheDocument();
       expect(serviceAreaControl).toHaveAttribute("aria-invalid", "true");
       expect(serviceAreaControl).toHaveAttribute(
         "aria-describedby",
-        "site-service-area-error",
+        "site-service-area-error"
       );
       expect(
-        screen.queryByText("We couldn't create that site."),
+        screen.queryByText("We couldn't create that site.")
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -392,8 +386,8 @@ describe("sites create sheet", () => {
             eircode: "D01 X2X2",
             message:
               "We could not locate that site address. Check the Eircode and address details.",
-          }),
-        ),
+          })
+        )
       );
 
       const user = userEvent.setup();
@@ -402,7 +396,7 @@ describe("sites create sheet", () => {
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
       await user.type(
         screen.getByLabelText("Address line 1"),
-        "1 Custom House Quay",
+        "1 Custom House Quay"
       );
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
@@ -412,11 +406,11 @@ describe("sites create sheet", () => {
 
       expect(
         screen.getByText(
-          "We could not locate that site address. Check the Eircode and address details.",
-        ),
+          "We could not locate that site address. Check the Eircode and address details."
+        )
       ).toBeInTheDocument();
       expect(eircodeField).toHaveAttribute("aria-invalid", "true");
-    },
+    }
   );
 
   it(
@@ -434,8 +428,8 @@ describe("sites create sheet", () => {
       render(<SitesCreateSheet />);
 
       expect(
-        screen.queryByText("We couldn't create that site."),
+        screen.queryByText("We couldn't create that site.")
       ).not.toBeInTheDocument();
-    },
+    }
   );
 });

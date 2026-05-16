@@ -96,7 +96,7 @@ const initialCostLineFormState: CostLineFormState = {
 
 function costLineFormReducer(
   state: CostLineFormState,
-  action: CostLineFormAction,
+  action: CostLineFormAction
 ): CostLineFormState {
   switch (action.type) {
     case "reset": {
@@ -136,7 +136,7 @@ function costLineFormReducer(
 
 interface JobCostsSectionProps {
   readonly addJobCostLine: (
-    input: AddJobCostLineInput,
+    input: AddJobCostLineInput
   ) => Promise<Exit.Exit<AddJobCostLineResponse, unknown>>;
   readonly canAddCostLine: boolean;
   readonly detail: JobDetailResponse;
@@ -155,7 +155,7 @@ export function JobCostsSection({
   const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const [costLineForm, dispatchCostLineForm] = React.useReducer(
     costLineFormReducer,
-    initialCostLineFormState,
+    initialCostLineFormState
   );
 
   useAppHotkey(
@@ -165,7 +165,7 @@ export function JobCostsSection({
     },
     {
       enabled: canAddCostLine,
-    },
+    }
   );
 
   async function handleAddCostLine() {
@@ -483,7 +483,7 @@ function decodeCostLineType(value: string): CostLineType | null {
 }
 
 function parseCostLineQuantity(
-  value: string,
+  value: string
 ):
   | { readonly ok: true; readonly quantity: number }
   | { readonly ok: false; readonly error: string } {
@@ -527,7 +527,7 @@ function parseCostLineQuantity(
 }
 
 function parseCostLineUnitPriceMinor(
-  value: string,
+  value: string
 ):
   | { readonly ok: true; readonly unitPriceMinor: number }
   | { readonly ok: false; readonly error: string } {

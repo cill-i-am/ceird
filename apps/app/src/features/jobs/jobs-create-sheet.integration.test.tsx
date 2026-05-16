@@ -127,12 +127,12 @@ vi.mock("#/features/api/app-api-client", async () => {
     provideBrowserAppApiHttp: (effect: unknown) => effect,
     runBrowserAppApiRequest: (
       _operation: string,
-      execute: (client: unknown) => unknown,
+      execute: (client: unknown) => unknown
     ) =>
       (mockedMakeBrowserAppApiClient() as Effect.Effect<unknown, unknown>).pipe(
         EffectModule.flatMap(
-          (client) => execute(client) as Effect.Effect<unknown, unknown>,
-        ),
+          (client) => execute(client) as Effect.Effect<unknown, unknown>
+        )
       ),
   };
 });
@@ -152,7 +152,7 @@ describe("jobs create sheet integration", () => {
           getJobOptions: mockedGetJobOptions,
           listJobs: mockedListJobs,
         },
-      }),
+      })
     );
   });
 
@@ -171,7 +171,7 @@ describe("jobs create sheet integration", () => {
       mockedCreateJob.mockReturnValue(Effect.succeed(createdJob));
       mockedListJobs.mockReturnValue(Effect.fail(new Error("refresh failed")));
       mockedGetJobOptions.mockReturnValue(
-        Effect.fail(new Error("refresh failed")),
+        Effect.fail(new Error("refresh failed"))
       );
 
       const user = userEvent.setup();
@@ -180,20 +180,20 @@ describe("jobs create sheet integration", () => {
       await user.type(screen.getByLabelText("Title"), "Replace air valve");
       await user.type(
         screen.getByLabelText("External reference"),
-        "CLAIM-2026-0042",
+        "CLAIM-2026-0042"
       );
       await createInlineContact(user, "Alex Caller");
       await user.type(
         screen.getByLabelText("Contact email"),
-        "alex@example.com",
+        "alex@example.com"
       );
       await user.type(
         screen.getByLabelText("Contact phone"),
-        "+353 87 123 4567",
+        "+353 87 123 4567"
       );
       await user.type(
         screen.getByLabelText("Contact notes"),
-        "Prefers morning calls.",
+        "Prefers morning calls."
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
@@ -215,19 +215,19 @@ describe("jobs create sheet integration", () => {
             },
             externalReference: "CLAIM-2026-0042",
           }),
-        }),
+        })
       );
 
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
-        "Replace air valve | Existing queue job",
+        "Replace air valve | Existing queue job"
       );
       expect(screen.getByTestId("notice-title")).toHaveTextContent(
-        "Replace air valve",
+        "Replace air valve"
       );
       expect(
-        screen.queryByText(/we couldn't create that job/i),
+        screen.queryByText(/we couldn't create that job/i)
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -253,10 +253,10 @@ describe("jobs create sheet integration", () => {
             },
           ],
           nextCursor: undefined,
-        }),
+        })
       );
       mockedGetJobOptions.mockReturnValue(
-        Effect.fail(new Error("refresh failed")),
+        Effect.fail(new Error("refresh failed"))
       );
 
       const user = userEvent.setup();
@@ -271,13 +271,13 @@ describe("jobs create sheet integration", () => {
       });
 
       expect(screen.getByTestId("job-titles")).toHaveTextContent(
-        "Canonical queue title",
+        "Canonical queue title"
       );
       expect(mockedGetJobOptions).toHaveBeenCalledOnce();
       expect(
-        screen.queryByText(/we couldn't create that job/i),
+        screen.queryByText(/we couldn't create that job/i)
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -295,11 +295,11 @@ describe("jobs create sheet integration", () => {
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       await expect(
-        screen.findByText(/we couldn't create that job/i),
+        screen.findByText(/we couldn't create that job/i)
       ).resolves.toBeInTheDocument();
       expect(screen.getByText("API down")).toBeInTheDocument();
       expect(mockedNavigate).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -325,15 +325,15 @@ describe("jobs create sheet integration", () => {
       expect(mockedCreateJob).not.toHaveBeenCalled();
       expect(mockedNavigate).not.toHaveBeenCalled();
       expect(
-        screen.getByText("Use 120 characters or fewer."),
+        screen.getByText("Use 120 characters or fewer.")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Enter a valid email address."),
+        screen.getByText("Enter a valid email address.")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Use 2,000 characters or fewer."),
+        screen.getByText("Use 2,000 characters or fewer.")
       ).toBeInTheDocument();
-    },
+    }
   );
 });
 
@@ -396,7 +396,7 @@ function renderCreateSheet() {
     >
       <JobsCreateSheet />
       <JobsStateProbe />
-    </RegistryProvider>,
+    </RegistryProvider>
   );
 }
 
@@ -416,14 +416,14 @@ function JobsStateProbe() {
 
 async function createInlineContact(
   user: ReturnType<typeof userEvent.setup>,
-  contactName: string,
+  contactName: string
 ) {
   await user.click(screen.getByLabelText("Contact"));
   await user.type(screen.getByPlaceholderText("Contact"), contactName);
   await user.click(
     screen.getByRole("option", {
       name: `Create new contact: "${contactName}"`,
-    }),
+    })
   );
 }
 

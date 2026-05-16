@@ -158,7 +158,7 @@ const decodeContactEmail = ParseResult.decodeUnknownSync(ContactEmailSchema);
 const decodeContactName = ParseResult.decodeUnknownSync(ContactNameSchema);
 const decodeContactNotes = ParseResult.decodeUnknownSync(ContactNotesSchema);
 const decodeJobExternalReference = ParseResult.decodeUnknownSync(
-  JobExternalReferenceSchema,
+  JobExternalReferenceSchema
 );
 
 const defaultFormState: JobsCreateFormState = {
@@ -184,11 +184,11 @@ export function JobsCreateSheet() {
   });
   const createResult = useAtomValue(createJobMutationAtom);
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
-    {},
+    {}
   );
   const [values, setValues] =
     React.useState<JobsCreateFormState>(defaultFormState);
-  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const [overlayOpen, setOverlayOpen] = React.useState(true);
   const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
   const navigateAfterCloseRef = React.useRef(false);
   const resetAfterCloseRef = React.useRef(false);
@@ -204,7 +204,7 @@ export function JobsCreateSheet() {
   const contactGroups = deriveContactsForSite(options.contacts, selectedSiteId);
   const prioritySelectionGroups = buildPrioritySelectionGroups();
   const siteServiceAreaSelectionGroups = buildSiteServiceAreaSelectionGroups(
-    options.serviceAreas,
+    options.serviceAreas
   );
   const siteSelectionGroups = buildSiteSelectionGroups(options.sites);
   const contactSelectionGroups = buildContactSelectionGroups(contactGroups);
@@ -227,17 +227,13 @@ export function JobsCreateSheet() {
     }
   }, [fieldErrors.site, values.siteSelection]);
 
-  React.useEffect(() => {
-    setOverlayOpen(true);
-  }, []);
-
   React.useEffect(
     () => () => {
       if (closeNavigationTimeoutRef.current) {
         clearTimeout(closeNavigationTimeoutRef.current);
       }
     },
-    [],
+    []
   );
 
   function navigateToJobs() {
@@ -273,7 +269,7 @@ export function JobsCreateSheet() {
 
     closeNavigationTimeoutRef.current = setTimeout(
       finishClosedSheet,
-      DRAWER_CLOSE_FALLBACK_MS,
+      DRAWER_CLOSE_FALLBACK_MS
     );
   }
 
@@ -315,7 +311,7 @@ export function JobsCreateSheet() {
     const payload = buildCreateJobInput(
       values,
       selectionIds,
-      options.serviceAreas,
+      options.serviceAreas
     );
     const exit = await createJob(payload);
 
@@ -393,7 +389,7 @@ export function JobsCreateSheet() {
                   <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
                   <AlertDescription>{error.message}</AlertDescription>
                 </Alert>
-              ),
+              )
             )
             .render()}
 
@@ -824,7 +820,7 @@ function LinearContactSelect({
           className={cn(
             buttonVariants({ variant: "outline" }),
             CREATE_JOB_FIELD_TRIGGER_CLASS_NAME,
-            "justify-between font-normal",
+            "justify-between font-normal"
           )}
         >
           <span className="flex min-w-0 items-center gap-1.5">
@@ -1018,7 +1014,7 @@ function buildPrioritySelectionGroups() {
 }
 
 function buildContactSelectionGroups(
-  contactGroups: ReturnType<typeof deriveContactsForSite>,
+  contactGroups: ReturnType<typeof deriveContactsForSite>
 ) {
   const hasExistingContacts =
     contactGroups.linked.length > 0 || contactGroups.others.length > 0;
@@ -1061,7 +1057,7 @@ function buildContactSelectionGroups(
 
 function validate(
   values: JobsCreateFormState,
-  serviceAreas: readonly ServiceAreaOption[],
+  serviceAreas: readonly ServiceAreaOption[]
 ): JobsCreateFieldErrors {
   const validateInlineSite = values.siteSelection === INLINE_CREATE_VALUE;
   const validateInlineContact = values.contactSelection === INLINE_CREATE_VALUE;
@@ -1076,7 +1072,7 @@ function validate(
       ? validateOptionalBoundaryField(
           values.contactEmail,
           decodeContactEmail,
-          "Enter a valid email address.",
+          "Enter a valid email address."
         )
       : undefined,
     contactName:
@@ -1088,13 +1084,13 @@ function validate(
       ? validateOptionalBoundaryField(
           values.contactNotes,
           decodeContactNotes,
-          "Use 2,000 characters or fewer.",
+          "Use 2,000 characters or fewer."
         )
       : undefined,
     externalReference: validateOptionalBoundaryField(
       values.externalReference,
       decodeJobExternalReference,
-      "Use 120 characters or fewer.",
+      "Use 120 characters or fewer."
     ),
     site:
       siteErrors && hasSiteCreateFieldErrors(siteErrors)
@@ -1126,7 +1122,7 @@ function hasFieldErrors(errors: JobsCreateFieldErrors) {
 function validateOptionalBoundaryField(
   value: string,
   decode: (value: unknown) => unknown,
-  errorText: string,
+  errorText: string
 ) {
   const trimmedValue = toOptionalTrimmedString(value);
 
@@ -1138,7 +1134,7 @@ function validateOptionalBoundaryField(
 
 function isValidBoundaryValue(
   value: unknown,
-  decode: (value: unknown) => unknown,
+  decode: (value: unknown) => unknown
 ) {
   try {
     decode(value);
@@ -1149,7 +1145,7 @@ function isValidBoundaryValue(
 }
 
 function clearInlineSiteFieldErrors(
-  current: JobsCreateFieldErrors,
+  current: JobsCreateFieldErrors
 ): JobsCreateFieldErrors {
   return {
     ...current,
@@ -1159,7 +1155,7 @@ function clearInlineSiteFieldErrors(
 }
 
 function clearSiteSelectionFieldError(
-  current: JobsCreateFieldErrors,
+  current: JobsCreateFieldErrors
 ): JobsCreateFieldErrors {
   return {
     ...current,
@@ -1181,7 +1177,7 @@ function isHandledCreateJobError(error: unknown) {
 function buildCreateJobInput(
   values: JobsCreateFormState,
   selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceAreaOption[],
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateJobInput {
   return {
     contact: resolveCreateJobContactInput(values, selectionIds),
@@ -1194,7 +1190,7 @@ function buildCreateJobInput(
 
 function resolveCreateJobContactInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput["contact"] {
   if (values.contactSelection === NONE_VALUE) {
     return undefined;
@@ -1220,7 +1216,7 @@ function resolveCreateJobContactInput(
     kind: "existing",
     contactId: expectDefined(
       selectionIds.contactId,
-      "Expected contactId for existing contact selection.",
+      "Expected contactId for existing contact selection."
     ),
   };
 }
@@ -1228,7 +1224,7 @@ function resolveCreateJobContactInput(
 function resolveCreateJobSiteInput(
   values: JobsCreateFormState,
   selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceAreaOption[],
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateJobInput["site"] {
   if (values.siteSelection === NONE_VALUE) {
     return undefined;
@@ -1245,7 +1241,7 @@ function resolveCreateJobSiteInput(
     kind: "existing",
     siteId: expectDefined(
       selectionIds.siteId,
-      "Expected siteId for existing site selection.",
+      "Expected siteId for existing site selection."
     ),
   };
 }
@@ -1260,7 +1256,7 @@ function resolveCreateSelectionIds(
   options: {
     readonly contacts: readonly JobContactOption[];
     readonly sites: readonly SiteOption[];
-  },
+  }
 ): JobsCreateSelectionIds {
   return {
     contactId:
@@ -1278,14 +1274,14 @@ function resolveCreateSelectionIds(
 
 function resolveSelectedOptionId<Id extends string>(
   options: readonly { readonly id: Id }[],
-  value: string,
+  value: string
 ): Id | undefined {
   return options.find((option) => option.id === value)?.id;
 }
 
 function expectDefined<Value>(
   value: Value | undefined,
-  message: string,
+  message: string
 ): Value {
   if (value === undefined) {
     throw new Error(message);

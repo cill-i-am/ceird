@@ -224,7 +224,7 @@ vi.mock("#/components/ui/command-select", () => ({
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
-        )),
+        ))
       )}
     </select>
   ),
@@ -568,66 +568,66 @@ describe("jobs detail sheet", () => {
     vi.clearAllMocks();
   });
 
-  it("renders job sub-surfaces as one stacked briefing", async () => {
+  it("renders job sub-surfaces as one stacked briefing", () => {
     renderDetailSheet(buildDetail());
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Site" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Job details" }),
+      screen.getByRole("heading", { name: "Job details" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Comments" }),
+      screen.getByRole("heading", { name: "Comments" })
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Visits" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Activity" }),
+      screen.getByRole("heading", { name: "Activity" })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Workflow" }),
+      screen.queryByRole("heading", { name: "Workflow" })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Costs" }),
+      screen.queryByRole("heading", { name: "Costs" })
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Status" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Site" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Comment 1" }),
+      screen.getByRole("button", { name: "Comment 1" })
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cost" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Visit 1" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Collaborator" }),
+      screen.getByRole("button", { name: "Collaborator" })
     ).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Keep the status honest. Use blocked only when something is truly waiting on an unblock.",
-      ),
+        "Keep the status honest. Use blocked only when something is truly waiting on an unblock."
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Give dispatch the site context and the fastest way into navigation.",
-      ),
+        "Give dispatch the site context and the fastest way into navigation."
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Useful details for the person or organization connected to this work.",
-      ),
+        "Useful details for the person or organization connected to this work."
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Move this job onto an existing site when the location becomes clear.",
-      ),
+        "Move this job onto an existing site when the location becomes clear."
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Changing the site clears the linked contact so it cannot point at the wrong place.",
-      ),
+        "Changing the site clears the linked contact so it cannot point at the wrong place."
+      )
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Share this job with external people without making them internal members.",
-      ),
+        "Share this job with external people without making them internal members."
+      )
     ).not.toBeInTheDocument();
     for (const removedCopy of [
       "Keep the narrative in comments instead of hiding it in fields.",
@@ -684,43 +684,43 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       renderDetailSheet(buildDetail());
 
       expect(
-        screen.getByRole("heading", { name: "Inspect boiler" }),
+        screen.getByRole("heading", { name: "Inspect boiler" })
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Checked the burner and reset the controls."),
+        screen.getByText("Checked the burner and reset the controls.")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("pat@example.com · +353 87 765 4321"),
+        screen.getByText("pat@example.com · +353 87 765 4321")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Replaced faulty relay and tested startup."),
+        screen.getByText("Replaced faulty relay and tested startup.")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Taylor Owner created the job."),
+        screen.getByText("Taylor Owner created the job.")
       ).toBeInTheDocument();
       expect(screen.getByText("Urgent callout")).toBeInTheDocument();
       expect(screen.getAllByText("Docklands Campus").length).toBeGreaterThan(0);
       expect(
-        screen.getByText("1 Custom House Quay, North Dock"),
+        screen.getByText("1 Custom House Quay, North Dock")
       ).toBeInTheDocument();
       expect(screen.getByText("Dublin, Dublin, D01 X2X2")).toBeInTheDocument();
       expect(
-        screen.getByText("Use the south gate and ring reception."),
+        screen.getByText("Use the south gate and ring reception.")
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: /view on map/i }),
+        screen.getByRole("link", { name: /view on map/i })
       ).toHaveAttribute(
         "href",
-        "https://www.google.com/maps/search/?api=1&query=53.3498%2C-6.2603",
+        "https://www.google.com/maps/search/?api=1&query=53.3498%2C-6.2603"
       );
       expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
         [`detail:${workItemId}`, buildDetail()],
       ]);
-    },
+    }
   );
 
   it(
@@ -728,17 +728,17 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       lookupSiteById = new Map();
 
       renderDetailSheet(buildDetail({ site: buildSiteOption() }));
 
       expect(screen.getAllByText("Docklands Campus").length).toBeGreaterThan(0);
       expect(
-        screen.getByText("1 Custom House Quay, North Dock"),
+        screen.getByText("1 Custom House Quay, North Dock")
       ).toBeInTheDocument();
       expect(screen.queryByText("No site yet")).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -758,7 +758,7 @@ describe("jobs detail sheet", () => {
       expect(mockedAssignLabel).toHaveBeenCalledWith({
         labelId: accessLabelId,
       });
-    },
+    }
   );
 
   it(
@@ -777,13 +777,13 @@ describe("jobs detail sheet", () => {
       await user.click(
         screen.getByRole("option", {
           name: 'Create new label: "Warranty"',
-        }),
+        })
       );
 
       expect(mockedCreateAndAssignLabel).toHaveBeenCalledWith({
         name: "Warranty",
       });
-    },
+    }
   );
 
   it(
@@ -798,16 +798,16 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /add label/i }));
       await user.type(
         screen.getByPlaceholderText("Search labels"),
-        "x".repeat(49),
+        "x".repeat(49)
       );
 
       expect(
         screen.queryByRole("option", {
           name: `Create new label: "${"x".repeat(49)}"`,
-        }),
+        })
       ).not.toBeInTheDocument();
       expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -824,11 +824,11 @@ describe("jobs detail sheet", () => {
       await user.click(
         screen.getByRole("button", {
           name: /remove urgent callout label/i,
-        }),
+        })
       );
 
       expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
-    },
+    }
   );
 
   it(
@@ -851,14 +851,14 @@ describe("jobs detail sheet", () => {
       await user.click(
         screen.getByRole("button", {
           name: /remove urgent callout label/i,
-        }),
+        })
       );
 
       expect(mockedAssignLabel).toHaveBeenCalledWith({
         labelId: accessLabelId,
       });
       expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
-    },
+    }
   );
 
   it(
@@ -882,7 +882,7 @@ describe("jobs detail sheet", () => {
       expect(
         screen.queryByRole("option", {
           name: 'Create new label: "Warranty"',
-        }),
+        })
       ).not.toBeInTheDocument();
 
       await user.clear(screen.getByPlaceholderText("Search labels"));
@@ -890,7 +890,7 @@ describe("jobs detail sheet", () => {
       await user.click(
         screen.getByRole("button", {
           name: /remove urgent callout label/i,
-        }),
+        })
       );
 
       expect(mockedAssignLabel).toHaveBeenCalledWith({
@@ -898,7 +898,7 @@ describe("jobs detail sheet", () => {
       });
       expect(mockedRemoveLabel).toHaveBeenCalledWith(urgentLabelId);
       expect(mockedCreateAndAssignLabel).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -911,21 +911,21 @@ describe("jobs detail sheet", () => {
       renderDetailSheet(
         buildDetail({
           labels: [buildLabel(waitingLabelId, "Waiting on PO")],
-        }),
+        })
       );
 
       await user.click(screen.getByRole("button", { name: /add label/i }));
       await user.type(
         screen.getByPlaceholderText("Search labels"),
-        "Waiting  on PO",
+        "Waiting  on PO"
       );
 
       expect(
         screen.queryByRole("option", {
           name: 'Create new label: "Waiting  on PO"',
-        }),
+        })
       ).not.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -942,9 +942,9 @@ describe("jobs detail sheet", () => {
       renderDetailSheet(buildDetail());
 
       await expect(
-        screen.findByTestId("location-map-preview"),
+        screen.findByTestId("location-map-preview")
       ).resolves.toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -952,16 +952,16 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       renderDetailSheet(buildDetail({ siteId: undefined }));
 
       expect(screen.getByText("No site attached yet.")).toBeInTheDocument();
       expect(
         screen.getByText(
-          /it will not show up on the map until a site is added/i,
-        ),
+          /it will not show up on the map until a site is added/i
+        )
       ).toBeInTheDocument();
-    },
+    }
   );
 
   it(
@@ -976,16 +976,16 @@ describe("jobs detail sheet", () => {
 
       await user.selectOptions(screen.getByLabelText("Next status"), "blocked");
       await user.click(
-        screen.getByRole("button", { name: /apply status change/i }),
+        screen.getByRole("button", { name: /apply status change/i })
       );
 
       expect(
         screen.getByText(
-          /add the blocker so the next person knows what is stuck/i,
-        ),
+          /add the blocker so the next person knows what is stuck/i
+        )
       ).toBeInTheDocument();
       expect(mockedTransitionJob).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -1001,16 +1001,16 @@ describe("jobs detail sheet", () => {
       const statusSelect = screen.getByLabelText("Next status");
 
       expect(
-        screen.getByRole("option", { name: "In progress" }),
+        screen.getByRole("option", { name: "In progress" })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Canceled" }),
+        screen.getByRole("option", { name: "Canceled" })
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("option", { name: "Completed" }),
+        screen.queryByRole("option", { name: "Completed" })
       ).not.toBeInTheDocument();
       expect(statusSelect).toHaveValue("");
-    },
+    }
   );
 
   it(
@@ -1026,7 +1026,7 @@ describe("jobs detail sheet", () => {
           createdAt: "2026-04-23T12:00:00.000Z",
           id: "44444444-4444-4444-8444-444444444444" as CommentIdType,
           workItemId,
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1041,7 +1041,7 @@ describe("jobs detail sheet", () => {
         body: "Need a follow-up inspection.",
       });
       expect(commentField).toHaveValue("");
-    },
+    }
   );
 
   it(
@@ -1054,7 +1054,7 @@ describe("jobs detail sheet", () => {
         Exit.succeed({
           ...buildDetail().job,
           status: "completed",
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1064,18 +1064,18 @@ describe("jobs detail sheet", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("option", { name: /mark job completed/i }),
+          screen.getByRole("option", { name: /mark job completed/i })
         ).toBeInTheDocument();
       });
 
       await user.click(
-        screen.getByRole("option", { name: /mark job completed/i }),
+        screen.getByRole("option", { name: /mark job completed/i })
       );
 
       expect(mockedTransitionJob).toHaveBeenCalledWith({
         status: "completed",
       });
-    },
+    }
   );
 
   it(
@@ -1091,18 +1091,18 @@ describe("jobs detail sheet", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("option", { name: /prepare blocked status/i }),
+          screen.getByRole("option", { name: /prepare blocked status/i })
         ).toBeInTheDocument();
       });
 
       await user.click(
-        screen.getByRole("option", { name: /prepare blocked status/i }),
+        screen.getByRole("option", { name: /prepare blocked status/i })
       );
 
       expect(screen.getByLabelText("Why is it blocked?")).toBeInTheDocument();
       expect(screen.getByLabelText("Next status")).toHaveValue("blocked");
       expect(mockedTransitionJob).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it("registers the cost hotkey only when the viewer can add costs", () => {
@@ -1114,7 +1114,7 @@ describe("jobs detail sheet", () => {
     expect(mockedUseAppHotkey).toHaveBeenCalledWith(
       "jobDetailCost",
       expect.any(Function),
-      { enabled: true },
+      { enabled: true }
     );
 
     mockedUseAppHotkey.mockClear();
@@ -1127,7 +1127,7 @@ describe("jobs detail sheet", () => {
     expect(mockedUseAppHotkey).toHaveBeenCalledWith(
       "jobDetailCost",
       expect.any(Function),
-      { enabled: false },
+      { enabled: false }
     );
   }, 1000);
 
@@ -1139,10 +1139,10 @@ describe("jobs detail sheet", () => {
     expect(screen.queryByText("Cost total")).not.toBeInTheDocument();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Cost details are not available here."),
+      screen.getByText("Cost details are not available here.")
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add cost line/i }),
+      screen.queryByRole("button", { name: /add cost line/i })
     ).not.toBeInTheDocument();
   }, 1000);
 
@@ -1158,40 +1158,40 @@ describe("jobs detail sheet", () => {
       {
         role: "external",
         userId: actorUserId,
-      },
+      }
     );
 
     expect(screen.getByText("Inspect boiler")).toBeInTheDocument();
     expect(
-      screen.getByText("Checked the burner and reset the controls."),
+      screen.getByText("Checked the burner and reset the controls.")
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Add a comment")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add comment/i }),
+      screen.queryByRole("button", { name: /add comment/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /apply status change/i }),
+      screen.queryByRole("button", { name: /apply status change/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /log visit/i }),
+      screen.queryByRole("button", { name: /log visit/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add cost line/i }),
+      screen.queryByRole("button", { name: /add cost line/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^visit\b/i }),
+      screen.queryByRole("button", { name: /^visit\b/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^cost\b/i }),
+      screen.queryByRole("button", { name: /^cost\b/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Taylor Owner created the job."),
+      screen.queryByText("Taylor Owner created the job.")
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add label/i }),
+      screen.queryByRole("button", { name: /add label/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /save site/i }),
+      screen.queryByRole("button", { name: /save site/i })
     ).not.toBeInTheDocument();
   }, 1000);
 
@@ -1209,7 +1209,7 @@ describe("jobs detail sheet", () => {
           createdAt: "2026-04-23T12:00:00.000Z",
           id: "44444444-4444-4444-8444-444444444444" as CommentIdType,
           workItemId,
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1234,38 +1234,38 @@ describe("jobs detail sheet", () => {
         {
           role: "external",
           userId: externalUserId,
-        },
+        }
       );
       await openJobDetailTab(user, /comments/i);
 
       expect(screen.getByLabelText("Add a comment")).toBeInTheDocument();
       expect(screen.getByText("External Partner")).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /apply status change/i }),
+        screen.queryByRole("button", { name: /apply status change/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /log visit/i }),
+        screen.queryByRole("button", { name: /log visit/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /add cost line/i }),
+        screen.queryByRole("button", { name: /add cost line/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /add label/i }),
+        screen.queryByRole("button", { name: /add label/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /save site/i }),
+        screen.queryByRole("button", { name: /save site/i })
       ).not.toBeInTheDocument();
 
       await user.type(
         screen.getByLabelText("Add a comment"),
-        "  I can be there at 9.  ",
+        "  I can be there at 9.  "
       );
       await user.click(screen.getByRole("button", { name: /add comment/i }));
 
       expect(mockedAddComment).toHaveBeenCalledWith({
         body: "I can be there at 9.",
       });
-    },
+    }
   );
 
   it(
@@ -1280,14 +1280,14 @@ describe("jobs detail sheet", () => {
           buildCollaborator({
             id: "45454545-4545-4454-8454-454545454545" as JobCollaboratorIdType,
             roleLabel: "Tenant contact",
-          }),
-        ),
+          })
+        )
       );
       mockedUpdateCollaborator.mockResolvedValue(
-        Exit.succeed(buildCollaborator({ roleLabel: "Read-only contact" })),
+        Exit.succeed(buildCollaborator({ roleLabel: "Read-only contact" }))
       );
       mockedDetachCollaborator.mockResolvedValue(
-        Exit.succeed(buildCollaborator()),
+        Exit.succeed(buildCollaborator())
       );
 
       const user = userEvent.setup();
@@ -1305,13 +1305,13 @@ describe("jobs detail sheet", () => {
 
       await user.selectOptions(
         screen.getByLabelText("External collaborator"),
-        secondExternalUserId,
+        secondExternalUserId
       );
       await user.clear(screen.getByLabelText("Role label"));
       await user.type(screen.getByLabelText("Role label"), "Tenant contact");
       await user.selectOptions(
         screen.getByLabelText("Access level"),
-        "comment",
+        "comment"
       );
       await user.click(screen.getByRole("button", { name: /grant access/i }));
 
@@ -1322,20 +1322,20 @@ describe("jobs detail sheet", () => {
       });
 
       await user.clear(
-        screen.getByLabelText("Role label for External Partner"),
+        screen.getByLabelText("Role label for External Partner")
       );
       await user.type(
         screen.getByLabelText("Role label for External Partner"),
-        "Read-only contact",
+        "Read-only contact"
       );
       await user.selectOptions(
         screen.getByLabelText("Access level for External Partner"),
-        "read",
+        "read"
       );
       await user.click(
         screen.getByRole("button", {
           name: /save external partner access/i,
-        }),
+        })
       );
 
       expect(mockedUpdateCollaborator).toHaveBeenCalledWith({
@@ -1349,11 +1349,11 @@ describe("jobs detail sheet", () => {
       await user.click(
         screen.getByRole("button", {
           name: /remove external partner access/i,
-        }),
+        })
       );
 
       expect(mockedDetachCollaborator).toHaveBeenCalledWith(collaboratorId);
-    },
+    }
   );
 
   it(
@@ -1380,7 +1380,7 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /add cost line/i }));
 
       expect(
-        screen.getByText("Unit price can use at most 2 decimal places."),
+        screen.getByText("Unit price can use at most 2 decimal places.")
       ).toBeInTheDocument();
       expect(mockedAddCostLine).not.toHaveBeenCalled();
 
@@ -1390,7 +1390,7 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /add cost line/i }));
 
       expect(
-        screen.getByText("Unit price must be no more than €21,474,836.47."),
+        screen.getByText("Unit price must be no more than €21,474,836.47.")
       ).toBeInTheDocument();
       expect(mockedAddCostLine).not.toHaveBeenCalled();
 
@@ -1403,7 +1403,7 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /add cost line/i }));
 
       expect(
-        screen.getByText("Quantity can use at most 2 decimal places."),
+        screen.getByText("Quantity can use at most 2 decimal places.")
       ).toBeInTheDocument();
       expect(mockedAddCostLine).not.toHaveBeenCalled();
 
@@ -1413,10 +1413,10 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /add cost line/i }));
 
       expect(
-        screen.getByText("Quantity must be no more than 9,999,999,999.99."),
+        screen.getByText("Quantity must be no more than 9,999,999,999.99.")
       ).toBeInTheDocument();
       expect(mockedAddCostLine).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it(
@@ -1436,7 +1436,7 @@ describe("jobs detail sheet", () => {
           type: "material",
           unitPriceMinor: 80,
           workItemId,
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1457,7 +1457,7 @@ describe("jobs detail sheet", () => {
         type: "material",
         unitPriceMinor: 80,
       });
-    },
+    }
   );
 
   it(
@@ -1475,7 +1475,7 @@ describe("jobs detail sheet", () => {
           note: "Second trip to confirm the repair held.",
           visitDate: "2026-04-24",
           workItemId,
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1488,7 +1488,7 @@ describe("jobs detail sheet", () => {
       const visitNoteField = screen.getByLabelText("Visit note");
       await user.type(
         visitNoteField,
-        "Second trip to confirm the repair held.",
+        "Second trip to confirm the repair held."
       );
       await user.click(screen.getByRole("button", { name: /log visit/i }));
 
@@ -1498,7 +1498,7 @@ describe("jobs detail sheet", () => {
         visitDate: "2026-04-24",
       });
       expect(visitNoteField).toHaveValue("");
-    },
+    }
   );
 
   it(
@@ -1511,7 +1511,7 @@ describe("jobs detail sheet", () => {
         Exit.succeed({
           ...buildDetail({ status: "completed" }).job,
           status: "in_progress",
-        }),
+        })
       );
 
       const user = userEvent.setup();
@@ -1521,7 +1521,7 @@ describe("jobs detail sheet", () => {
       await user.click(screen.getByRole("button", { name: /reopen job/i }));
 
       expect(mockedReopenJob).toHaveBeenCalledWith();
-    },
+    }
   );
 
   it("hides transition and visit actions from unassigned members", async () => {
@@ -1533,25 +1533,25 @@ describe("jobs detail sheet", () => {
     await openJobDetailTab(user, /status/i);
 
     expect(
-      screen.queryByRole("button", { name: /apply status change/i }),
+      screen.queryByRole("button", { name: /apply status change/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /log visit/i }),
+      screen.queryByRole("button", { name: /log visit/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add label/i }),
+      screen.queryByRole("button", { name: /add label/i })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
         name: /remove urgent callout label/i,
-      }),
+      })
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/status changes open once this job is assigned to you/i),
+      screen.getByText(/status changes open once this job is assigned to you/i)
     ).toBeInTheDocument();
     await openJobDetailTab(user, /visits/i);
     expect(
-      screen.getByText(/members can only log visits on jobs assigned to them/i),
+      screen.getByText(/members can only log visits on jobs assigned to them/i)
     ).toBeInTheDocument();
   }, 1000);
 });
@@ -1676,7 +1676,7 @@ interface TestJobCollaborator {
 }
 
 function buildCollaborator(
-  overrides?: Partial<TestJobCollaborator>,
+  overrides?: Partial<TestJobCollaborator>
 ): TestJobCollaborator {
   return {
     accessLevel: "comment" as const,
@@ -1703,7 +1703,7 @@ function buildLabel(id: LabelIdType, name: string) {
 function renderDetailSheet(
   initialDetail: ReturnType<typeof buildDetail>,
   viewer?: JobsViewer,
-  options?: { readonly withCommandBar?: boolean },
+  options?: { readonly withCommandBar?: boolean }
 ) {
   const sheet = (
     <JobsDetailSheet
@@ -1722,28 +1722,30 @@ function renderDetailSheet(
       <CommandBarProvider>{sheet}</CommandBarProvider>
     ) : (
       sheet
-    ),
+    )
   );
 }
 
 async function openJobDetailTab(
   user: ReturnType<typeof userEvent.setup>,
-  name: RegExp | string,
+  name: RegExp | string
 ) {
   const text = String(name).toLowerCase();
-  const buttonName = text.includes("comment")
-    ? /comment/i
-    : text.includes("cost")
-      ? /cost/i
-      : text.includes("visit")
-        ? /visit/i
-        : text.includes("site")
-          ? /^site$/i
-          : text.includes("workflow") || text.includes("status")
-            ? /status/i
-            : text.includes("collaborator")
-              ? /collaborator/i
-              : name;
+  let buttonName = name;
+
+  if (text.includes("comment")) {
+    buttonName = /comment/i;
+  } else if (text.includes("cost")) {
+    buttonName = /cost/i;
+  } else if (text.includes("visit")) {
+    buttonName = /visit/i;
+  } else if (text.includes("site")) {
+    buttonName = /^site$/i;
+  } else if (text.includes("workflow") || text.includes("status")) {
+    buttonName = /status/i;
+  } else if (text.includes("collaborator")) {
+    buttonName = /collaborator/i;
+  }
 
   await user.click(screen.getByRole("button", { name: buttonName }));
 }

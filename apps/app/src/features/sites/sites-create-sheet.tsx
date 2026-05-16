@@ -55,10 +55,10 @@ export function SitesCreateSheet() {
   });
   const createResult = useAtomValue(createSiteMutationAtom);
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
-    {},
+    {}
   );
   const [values, setValues] = React.useState<SiteCreateDraft>(
-    defaultSiteCreateDraft,
+    defaultSiteCreateDraft
   );
   const [overlayOpen, setOverlayOpen] = React.useState(false);
   const navigateAfterCloseRef = React.useRef(false);
@@ -68,7 +68,7 @@ export function SitesCreateSheet() {
   > | null>(null);
   const serviceAreaGroups = React.useMemo(
     () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
-    [options.serviceAreas],
+    [options.serviceAreas]
   );
 
   React.useEffect(() => {
@@ -110,7 +110,7 @@ export function SitesCreateSheet() {
 
     closeNavigationTimeoutRef.current = setTimeout(
       finishClosedSheet,
-      DRAWER_CLOSE_FALLBACK_MS,
+      DRAWER_CLOSE_FALLBACK_MS
     );
   }
 
@@ -120,7 +120,7 @@ export function SitesCreateSheet() {
         clearTimeout(closeNavigationTimeoutRef.current);
       }
     },
-    [],
+    []
   );
 
   async function handleSubmit() {
@@ -216,7 +216,7 @@ export function SitesCreateSheet() {
                     <AlertTitle>We couldn&apos;t create that site.</AlertTitle>
                     <AlertDescription>{error.message}</AlertDescription>
                   </Alert>
-                ),
+                )
               )
               .render()}
 

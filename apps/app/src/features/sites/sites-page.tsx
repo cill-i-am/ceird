@@ -76,6 +76,8 @@ interface SiteDirectoryViewItem {
 type SitesMapFilter = "all" | "mapped" | "unmapped";
 type SitesServiceAreaFilter = "all" | "none" | ServiceAreaIdType;
 
+// Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
+// react-doctor-disable-next-line
 export function SitesPage({
   children,
   viewer,

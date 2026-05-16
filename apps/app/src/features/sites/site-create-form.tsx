@@ -63,7 +63,7 @@ export const defaultSiteCreateDraft: SiteCreateDraft = {
 };
 
 export function buildSiteServiceAreaSelectionGroups(
-  serviceAreas: readonly { readonly id: string; readonly name: string }[],
+  serviceAreas: readonly { readonly id: string; readonly name: string }[]
 ) {
   return [
     {
@@ -84,7 +84,7 @@ export function validateSiteCreateDraft(
   serviceAreas: readonly ServiceAreaOption[],
   options: {
     readonly nameRequiredMessage?: string;
-  } = {},
+  } = {}
 ): SiteCreateFieldErrors {
   return {
     addressLine1:
@@ -111,7 +111,7 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 
 export function buildCreateSiteInputFromDraft(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[],
+  serviceAreas: readonly ServiceAreaOption[]
 ): CreateSiteInput {
   const selectedServiceArea = findSelectedServiceArea(values, serviceAreas);
 
@@ -134,67 +134,13 @@ export function toOptionalTrimmedString(value: string) {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
-interface SiteCreateFieldsProps {
+interface SiteCreateDrawerFieldsProps {
   readonly draft: SiteCreateDraft;
   readonly errors: SiteCreateFieldErrors;
   readonly idPrefix: string;
   readonly onDraftChange: (draft: SiteCreateDraft) => void;
   readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
   readonly serviceAreaGroups: readonly CommandSelectGroup[];
-}
-
-type SiteCreateDrawerFieldsProps = SiteCreateFieldsProps;
-
-export function SiteCreateFields({
-  draft,
-  errors,
-  idPrefix,
-  onDraftChange,
-  onServiceAreaSelectionChange,
-  serviceAreaGroups,
-}: SiteCreateFieldsProps) {
-  const updateDraft = (patch: Partial<SiteCreateDraft>) => {
-    onDraftChange({
-      ...draft,
-      ...patch,
-    });
-  };
-
-  return (
-    <>
-      <FieldGroup>
-        <SiteNameField
-          draft={draft}
-          errors={errors}
-          idPrefix={idPrefix}
-          onDraftPatch={updateDraft}
-        />
-        <SiteServiceAreaField
-          draft={draft}
-          errors={errors}
-          idPrefix={idPrefix}
-          serviceAreaGroups={serviceAreaGroups}
-          onDraftPatch={updateDraft}
-          onServiceAreaSelectionChange={onServiceAreaSelectionChange}
-        />
-      </FieldGroup>
-
-      <SiteAddressFields
-        draft={draft}
-        errors={errors}
-        idPrefix={idPrefix}
-        onDraftPatch={updateDraft}
-      />
-
-      <FieldGroup>
-        <SiteAccessNotesField
-          draft={draft}
-          idPrefix={idPrefix}
-          onDraftPatch={updateDraft}
-        />
-      </FieldGroup>
-    </>
-  );
 }
 
 export function SiteCreateDrawerFields({
@@ -285,7 +231,7 @@ function SiteCreateSection({
   );
 }
 
-export function SiteNameField({
+function SiteNameField({
   draft,
   errors,
   idPrefix,
@@ -317,7 +263,7 @@ interface SiteServiceAreaFieldProps extends SiteCreateFieldSectionProps {
   readonly serviceAreaGroups: readonly CommandSelectGroup[];
 }
 
-export function SiteServiceAreaField({
+function SiteServiceAreaField({
   draft,
   errors,
   idPrefix,
@@ -541,13 +487,13 @@ export function SiteAccessNotesField({
 
 function findSelectedServiceArea(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[],
+  serviceAreas: readonly ServiceAreaOption[]
 ) {
   if (values.serviceAreaSelection === SITE_CREATE_NONE_VALUE) {
     return;
   }
 
   return serviceAreas.find(
-    (serviceArea) => serviceArea.id === values.serviceAreaSelection,
+    (serviceArea) => serviceArea.id === values.serviceAreaSelection
   );
 }

@@ -93,14 +93,14 @@ const RELATED_JOB_STATUS_LABELS = {
 } satisfies Record<JobStatus, string>;
 type SiteDetailEditor = "location" | "notes" | "service-area";
 
-// The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
-// react-doctor-disable-next-line
 export function SitesDetailSheet({
   hasMoreRelatedJobs = false,
   initialSite,
   relatedJobs = EMPTY_RELATED_JOBS,
   siteId,
   viewer,
+  // The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
+  // react-doctor-disable-next-line
 }: SitesDetailSheetProps) {
   const navigate = useNavigate({ from: "/sites/$siteId" });
   const pathname = useRouterState({
@@ -605,7 +605,7 @@ function SiteDetailsCard({
         </div>
       </div>
 
-      <div className="group/site-notes border-t px-4 py-4">
+      <div className="group/site-notes border-t p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-medium text-foreground">Notes summary</h3>
           {canEdit ? (
@@ -848,7 +848,7 @@ function SiteRelatedJobs({
           <h3 className="text-sm font-medium text-foreground">Related jobs</h3>
           <Badge variant="outline">0</Badge>
         </div>
-        <div className="px-4 py-4">
+        <div className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
