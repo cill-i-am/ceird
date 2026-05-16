@@ -55,8 +55,19 @@ export function getOrganizationLabelsKey(labels: readonly Label[]) {
   return labels.map((label) => `${label.id}:${label.name}`).join("|");
 }
 
-export function syncOrganizationLabel(get: Atom.FnContext, label: Label) {
+export function syncOrganizationLabel(
+  get: Atom.FnContext,
+  label: Label,
+  expectedOrganizationId?: OrganizationId | null
+) {
   const currentLabelsState = get(organizationLabelsStateAtom);
+
+  if (
+    expectedOrganizationId !== undefined &&
+    currentLabelsState.organizationId !== expectedOrganizationId
+  ) {
+    return;
+  }
 
   get.set(organizationLabelsStateAtom, {
     labels: upsertOrganizationLabel(currentLabelsState.labels, label),

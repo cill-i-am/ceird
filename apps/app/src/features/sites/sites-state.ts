@@ -22,6 +22,7 @@ import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import {
   createBrowserLabel,
+  organizationLabelsStateAtom,
   syncOrganizationLabel,
 } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
@@ -207,24 +208,37 @@ export const addSiteCommentMutationAtomFamily = Atom.family(
 
 export const assignSiteLabelMutationAtomFamily = Atom.family(
   (siteId: SiteIdType) =>
-    Atom.fn<AppApiError, SiteDetail, AssignSiteLabelInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
+    Atom.fn<AppApiError, SiteDetail, AssignSiteLabelInput>((input, get) => {
+      const expectedOrganizationId = get(sitesOptionsStateAtom).organizationId;
+
+      return withMinimumMutationPendingDurationEffect(
         assignBrowserSiteLabel(siteId, input)
       ).pipe(
         Effect.tap((site) =>
-          Effect.sync(() => syncChangedSiteDetail(get, site))
+          Effect.sync(() =>
+            syncChangedSiteDetail(get, site, expectedOrganizationId)
+          )
         )
-      )
-    )
+      );
+    })
 );
 
 export const createAndAssignSiteLabelMutationAtomFamily = Atom.family(
   (siteId: SiteIdType) =>
-    Atom.fn<AppApiError, SiteDetail, CreateLabelInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
+    Atom.fn<AppApiError, SiteDetail, CreateLabelInput>((input, get) => {
+      const expectedLabelsOrganizationId = get(
+        organizationLabelsStateAtom
+      ).organizationId;
+      const expectedSitesOrganizationId = get(
+        sitesOptionsStateAtom
+      ).organizationId;
+
+      return withMinimumMutationPendingDurationEffect(
         createBrowserLabel(input).pipe(
           Effect.tap((label) =>
-            Effect.sync(() => syncOrganizationLabel(get, label))
+            Effect.sync(() =>
+              syncOrganizationLabel(get, label, expectedLabelsOrganizationId)
+            )
           ),
           Effect.flatMap((label) =>
             assignBrowserSiteLabel(siteId, { labelId: label.id })
@@ -232,23 +246,29 @@ export const createAndAssignSiteLabelMutationAtomFamily = Atom.family(
         )
       ).pipe(
         Effect.tap((site) =>
-          Effect.sync(() => syncChangedSiteDetail(get, site))
+          Effect.sync(() =>
+            syncChangedSiteDetail(get, site, expectedSitesOrganizationId)
+          )
         )
-      )
-    )
+      );
+    })
 );
 
 export const removeSiteLabelMutationAtomFamily = Atom.family(
   (siteId: SiteIdType) =>
-    Atom.fn<AppApiError, SiteDetail, LabelIdType>((labelId, get) =>
-      withMinimumMutationPendingDurationEffect(
+    Atom.fn<AppApiError, SiteDetail, LabelIdType>((labelId, get) => {
+      const expectedOrganizationId = get(sitesOptionsStateAtom).organizationId;
+
+      return withMinimumMutationPendingDurationEffect(
         removeBrowserSiteLabel(siteId, labelId)
       ).pipe(
         Effect.tap((site) =>
-          Effect.sync(() => syncChangedSiteDetail(get, site))
+          Effect.sync(() =>
+            syncChangedSiteDetail(get, site, expectedOrganizationId)
+          )
         )
-      )
-    )
+      );
+    })
 );
 
 function upsertSiteOption(
@@ -316,8 +336,19 @@ function removeBrowserSiteLabel(siteId: SiteIdType, labelId: LabelIdType) {
   );
 }
 
-function syncChangedSiteDetail(get: Atom.FnContext, site: SiteDetail) {
+function syncChangedSiteDetail(
+  get: Atom.FnContext,
+  site: SiteDetail,
+  expectedOrganizationId?: OrganizationId | null
+) {
   const currentOptionsState = get(sitesOptionsStateAtom);
+
+  if (
+    expectedOrganizationId !== undefined &&
+    currentOptionsState.organizationId !== expectedOrganizationId
+  ) {
+    return;
+  }
 
   get.set(sitesOptionsStateAtom, {
     data: upsertSiteOption(currentOptionsState.data, site),

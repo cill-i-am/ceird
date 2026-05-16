@@ -370,7 +370,11 @@ export class SitesService extends Effect.Service<SitesService>()(
               siteId,
             })
           )
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(
+            Effect.catchTag("SqlError", (error) =>
+              failSitesStorageError(error, { siteId })
+            )
+          );
 
         return yield* loadSiteDetailOrFail(
           actor.organizationId,
@@ -410,7 +414,11 @@ export class SitesService extends Effect.Service<SitesService>()(
               siteId,
             })
           )
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(
+            Effect.catchTag("SqlError", (error) =>
+              failSitesStorageError(error, { siteId })
+            )
+          );
 
         return yield* loadSiteDetailOrFail(
           actor.organizationId,
@@ -445,7 +453,9 @@ const loadSiteDetailOrFail = Effect.fn("SitesService.loadSiteDetailOrFail")(
     const site = yield* sitesRepository
       .getOptionById(organizationId, siteId)
       .pipe(
-        Effect.catchTag("SqlError", failSitesStorageError),
+        Effect.catchTag("SqlError", (error) =>
+          failSitesStorageError(error, { siteId })
+        ),
         Effect.map(Option.getOrUndefined)
       );
 

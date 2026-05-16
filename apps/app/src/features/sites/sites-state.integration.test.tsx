@@ -45,11 +45,12 @@ import {
 type EffectClientMock = (...args: unknown[]) => unknown;
 
 const organizationId = decodeOrganizationId("org_123");
+const otherOrganizationId = decodeOrganizationId("org_456");
 const existingSiteId = "11111111-1111-4111-8111-111111111111" as SiteIdType;
 const createdSiteId = "22222222-2222-4222-8222-222222222222" as SiteIdType;
 const urgentLabelId = "33333333-3333-4333-8333-333333333333" as LabelIdType;
-const warrantyLabelId =
-  "44444444-4444-4444-8444-444444444444" as LabelIdType;
+const warrantyLabelId = "44444444-4444-4444-8444-444444444444" as LabelIdType;
+let resolveCreatedLabel: (label: Label) => void = () => {};
 
 const {
   mockedAddSiteComment,
@@ -264,6 +265,47 @@ describe("sites state integration", () => {
           "Warranty"
         );
       });
+      expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
+    }
+  );
+
+  it(
+    "does not sync a created site label after switching organizations",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const warrantyLabel = buildLabel(warrantyLabelId, "Warranty");
+      mockedCreateLabel.mockReturnValue(
+        Effect.async<Label>((resume) => {
+          resolveCreatedLabel = (label) => resume(Effect.succeed(label));
+        })
+      );
+      mockedAssignSiteLabel.mockReturnValue(
+        Effect.succeed(
+          buildSite(existingSiteId, "Existing Site", [warrantyLabel])
+        )
+      );
+
+      const user = userEvent.setup();
+      renderSitesStateProbe();
+
+      await user.click(
+        screen.getByRole("button", { name: "Create and assign label" })
+      );
+      await user.click(screen.getByRole("button", { name: "Switch org" }));
+      resolveCreatedLabel(warrantyLabel);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("last-exit")).toHaveTextContent("success");
+      });
+      expect(screen.getByTestId("organization-labels")).toHaveTextContent(
+        "Other Org Label"
+      );
+      expect(screen.getByTestId("organization-labels")).not.toHaveTextContent(
+        "Warranty"
+      );
+      expect(screen.getByTestId("site-names")).toHaveTextContent("Other Site");
       expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
     }
   );
@@ -639,6 +681,8 @@ function SitesStateProbe() {
   const comments = useAtomValue(siteCommentsStateAtomFamily(existingSiteId));
   const notice = useAtomValue(sitesNoticeAtom);
   const organizationLabels = useAtomValue(organizationLabelsStateAtom).labels;
+  const setSitesOptions = useAtomSet(sitesOptionsStateAtom);
+  const setOrganizationLabels = useAtomSet(organizationLabelsStateAtom);
 
   return (
     <div>
@@ -669,10 +713,30 @@ function SitesStateProbe() {
       <button
         type="button"
         onClick={() => {
-          void createAndAssignSiteLabel({ name: "Warranty" });
+          void createAndAssignSiteLabel({ name: "Warranty" }).then((exit) => {
+            setLastExit(Exit.isFailure(exit) ? "failure" : "success");
+          });
         }}
       >
         Create and assign label
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setSitesOptions(
+            seedSitesOptionsState(otherOrganizationId, {
+              serviceAreas: [],
+              sites: [buildSite(existingSiteId, "Other Site")],
+            })
+          );
+          setOrganizationLabels(
+            seedOrganizationLabelsState(otherOrganizationId, [
+              buildLabel(urgentLabelId, "Other Org Label"),
+            ])
+          );
+        }}
+      >
+        Switch org
       </button>
       <button
         type="button"

@@ -1,4 +1,5 @@
 "use client";
+import type { OrganizationId } from "@ceird/identity-core";
 import type {
   AddJobCommentInput,
   AddJobCommentResponse,
@@ -28,6 +29,7 @@ import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import {
   createBrowserLabel,
+  organizationLabelsStateAtom,
   syncOrganizationLabel,
   upsertOrganizationLabel,
 } from "#/features/labels/labels-state";
@@ -233,13 +235,23 @@ export const detachJobCollaboratorMutationAtomFamily = Atom.family(
 
 export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
   (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse, CreateLabelInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
+    Atom.fn<AppApiError, JobDetailResponse, CreateLabelInput>((input, get) => {
+      const expectedLabelsOrganizationId = get(
+        organizationLabelsStateAtom
+      ).organizationId;
+      const expectedJobsOptionsOrganizationId =
+        get(jobsOptionsStateAtom).organizationId;
+
+      return withMinimumMutationPendingDurationEffect(
         createBrowserLabel(input).pipe(
           Effect.tap((label) =>
             Effect.sync(() => {
-              upsertJobOptionLabel(get, label);
-              syncOrganizationLabel(get, label);
+              upsertJobOptionLabel(
+                get,
+                label,
+                expectedJobsOptionsOrganizationId
+              );
+              syncOrganizationLabel(get, label, expectedLabelsOrganizationId);
             })
           ),
           Effect.flatMap((label) =>
@@ -250,8 +262,8 @@ export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
         Effect.tap((detail) =>
           Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
         )
-      )
-    )
+      );
+    })
 );
 
 export const removeJobLabelMutationAtomFamily = Atom.family(
@@ -470,8 +482,19 @@ function syncChangedJobDetail(
   updateJobsListJob(get, detail.job);
 }
 
-function upsertJobOptionLabel(get: Atom.FnContext, label: Label) {
+function upsertJobOptionLabel(
+  get: Atom.FnContext,
+  label: Label,
+  expectedOrganizationId?: OrganizationId | null
+) {
   const currentOptionsState = get(jobsOptionsStateAtom);
+
+  if (
+    expectedOrganizationId !== undefined &&
+    currentOptionsState.organizationId !== expectedOrganizationId
+  ) {
+    return;
+  }
 
   get.set(jobsOptionsStateAtom, {
     data: {

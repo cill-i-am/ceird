@@ -76,6 +76,7 @@ const mixedSitesOptions: SitesOptionsResponse = {
       geocodedAt: "2026-04-27T10:00:00.000Z",
       geocodingProvider: "stub",
       id: "66666666-6666-4666-8666-666666666666" as SiteIdType,
+      labels: [],
       latitude: 53.4049,
       longitude: -6.2462,
       name: "Northpoint Office",

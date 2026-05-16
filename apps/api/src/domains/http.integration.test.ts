@@ -1771,9 +1771,6 @@ describe("domain http integration", () => {
       );
       expect(deniedSitesResponse.status).toBe(403);
 
-      const grantedJobSiteId = externalDetail.site?.id;
-      expect(grantedJobSiteId).toBeDefined();
-
       const deniedSiteCommentsResponse = await api.handler(
         makeRequest(`/sites/${grantedJobSiteId}/comments`, {
           cookieJar: externalCookieJar,
