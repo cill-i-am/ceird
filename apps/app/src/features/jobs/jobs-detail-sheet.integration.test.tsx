@@ -142,6 +142,7 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DrawerClose: ({ children }: { children?: ReactNode }) => <>{children}</>,
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
@@ -409,6 +410,7 @@ describe("jobs detail sheet integration", () => {
       const user = userEvent.setup();
       renderDetailSheet();
 
+      await openJobDetailPanel(user, /status/i);
       await user.selectOptions(
         screen.getByLabelText("Next status"),
         "completed"
@@ -425,16 +427,11 @@ describe("jobs detail sheet integration", () => {
 
       expect(screen.getByText("Completed")).toBeInTheDocument();
       expect(screen.getAllByText("PO-4471").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("pat@example.com").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("+353 87 765 4321").length).toBeGreaterThan(0);
-      expect(
-        screen.getAllByText("Use email for routine updates.").length
-      ).toBeGreaterThan(0);
       expect(
         screen.getByText("Use reception and the south gate.")
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: /open in google maps/i })
+        screen.getByRole("link", { name: /view on map/i })
       ).toBeInTheDocument();
       expect(screen.getByTestId("list-statuses")).toHaveTextContent(
         "completed"
@@ -466,7 +463,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
-      await openJobDetailTab(user, /comments/i);
+      await openJobDetailPanel(user, /comment/i);
 
       await user.type(
         screen.getByLabelText("Add a comment"),
@@ -520,7 +517,7 @@ describe("jobs detail sheet integration", () => {
           },
         }
       );
-      await openJobDetailTab(user, /comments/i);
+      await openJobDetailPanel(user, /comment/i);
 
       await user.type(
         screen.getByLabelText("Add a comment"),
@@ -565,7 +562,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
-      await openJobDetailTab(user, /visits/i);
+      await openJobDetailPanel(user, /visit/i);
 
       await user.clear(screen.getByLabelText("Visit date"));
       await user.type(screen.getByLabelText("Visit date"), "2026-04-24");
@@ -616,7 +613,7 @@ describe("jobs detail sheet integration", () => {
 
       const user = userEvent.setup();
       renderDetailSheet();
-      await openJobDetailTab(user, /costs/i);
+      await openJobDetailPanel(user, /cost/i);
 
       expect(screen.getByText("Cost total")).toBeInTheDocument();
       expect(screen.getByText("€45.00")).toBeInTheDocument();
@@ -663,13 +660,19 @@ describe("jobs detail sheet integration", () => {
       const user = userEvent.setup();
       renderDetailSheet();
 
-      await user.selectOptions(screen.getByLabelText("Site"), "__none__");
+      await openJobDetailPanel(user, /site/i);
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "Site" }),
+        "__none__"
+      );
       await user.click(screen.getByRole("button", { name: /save site/i }));
 
       await waitFor(() => {
         expect(screen.getAllByText("No contact yet").length).toBeGreaterThan(0);
       });
-      expect(screen.getAllByText("No site yet").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("No site attached yet.").length
+      ).toBeGreaterThan(0);
       expect(
         screen.queryByText("Use email for routine updates.")
       ).not.toBeInTheDocument();
@@ -784,11 +787,11 @@ function renderDetailSheet(
   );
 }
 
-async function openJobDetailTab(
+async function openJobDetailPanel(
   user: ReturnType<typeof userEvent.setup>,
   name: RegExp | string
 ) {
-  await user.click(screen.getByRole("tab", { name }));
+  await user.click(screen.getByRole("button", { name }));
 }
 
 function JobsListProbe() {

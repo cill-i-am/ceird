@@ -250,7 +250,9 @@ test("organization settings service areas and rate cards feed sites and job filt
   await page.getByRole("button", { name: "Create site" }).click();
   await expect(page).toHaveURL(/\/sites$/);
   await expect(page.getByRole("status")).toContainText(siteName);
-  await expect(page.getByRole("link", { name: siteName })).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: `Open ${siteName}` })
+  ).toBeVisible();
   await expect(
     page.getByRole("table").getByText(updatedServiceAreaName, { exact: true })
   ).toBeVisible();

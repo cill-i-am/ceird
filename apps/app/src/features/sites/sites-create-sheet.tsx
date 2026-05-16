@@ -4,15 +4,21 @@ import {
   SITE_GEOCODING_FAILED_ERROR_TAG,
 } from "@ceird/sites-core";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
-import { Add01Icon, Location01Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  Cancel01Icon,
+  Location01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import {
+  DRAWER_CLOSE_FALLBACK_MS,
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -23,7 +29,7 @@ import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
-  SiteCreateFields,
+  SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
   buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
@@ -40,6 +46,9 @@ export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
 
 export function SitesCreateSheet() {
   const navigate = useNavigate({ from: "/sites/new" });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const options = useAtomValue(sitesOptionsStateAtom).data;
   const createSite = useAtomSet(createSiteMutationAtom, {
     mode: "promiseExit",
@@ -51,8 +60,10 @@ export function SitesCreateSheet() {
   const [values, setValues] = React.useState<SiteCreateDraft>(
     defaultSiteCreateDraft
   );
-  const [overlayOpen, setOverlayOpen] = React.useState(true);
-  const closeNavigationTimeout = React.useRef<ReturnType<
+  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const navigateAfterCloseRef = React.useRef(false);
+  const resetAfterCloseRef = React.useRef(false);
+  const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const serviceAreaGroups = React.useMemo(
@@ -60,37 +71,57 @@ export function SitesCreateSheet() {
     [options.serviceAreas]
   );
 
+  React.useEffect(() => {
+    if (pathname === "/sites/new") {
+      setOverlayOpen(true);
+    }
+  }, [pathname]);
+
+  function navigateToSites() {
+    React.startTransition(() => {
+      navigate({ to: "/sites" });
+    });
+  }
+
+  function finishClosedSheet() {
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
+      closeNavigationTimeoutRef.current = null;
+    }
+
+    if (resetAfterCloseRef.current) {
+      setValues(defaultSiteCreateDraft);
+      resetAfterCloseRef.current = false;
+    }
+
+    if (navigateAfterCloseRef.current) {
+      navigateAfterCloseRef.current = false;
+      navigateToSites();
+    }
+  }
+
+  function closeSheet() {
+    navigateAfterCloseRef.current = true;
+    setOverlayOpen(false);
+
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
+    }
+
+    closeNavigationTimeoutRef.current = setTimeout(
+      finishClosedSheet,
+      DRAWER_CLOSE_FALLBACK_MS
+    );
+  }
+
   React.useEffect(
     () => () => {
-      if (closeNavigationTimeout.current) {
-        clearTimeout(closeNavigationTimeout.current);
+      if (closeNavigationTimeoutRef.current) {
+        clearTimeout(closeNavigationTimeoutRef.current);
       }
     },
     []
   );
-
-  function closeSheet({
-    delayed = false,
-  }: { readonly delayed?: boolean } = {}) {
-    setOverlayOpen(false);
-
-    if (closeNavigationTimeout.current) {
-      clearTimeout(closeNavigationTimeout.current);
-    }
-
-    const navigateToSites = () => {
-      React.startTransition(() => {
-        navigate({ to: "/sites" });
-      });
-    };
-
-    if (!delayed) {
-      navigateToSites();
-      return;
-    }
-
-    closeNavigationTimeout.current = setTimeout(navigateToSites, 140);
-  }
 
   async function handleSubmit() {
     const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
@@ -105,7 +136,7 @@ export function SitesCreateSheet() {
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      setValues(defaultSiteCreateDraft);
+      resetAfterCloseRef.current = true;
       closeSheet();
       return;
     }
@@ -138,16 +169,36 @@ export function SitesCreateSheet() {
       open={overlayOpen}
       onOpenChange={(open) => {
         if (!open && !createResult.waiting) {
-          closeSheet({ delayed: true });
+          closeSheet();
+        }
+      }}
+      onAnimationEnd={(open) => {
+        if (!open) {
+          finishClosedSheet();
         }
       }}
     >
-      <DrawerContent className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
-        <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
-          <DrawerTitle>New site</DrawerTitle>
-          <DrawerDescription>
-            Add the address and service area for dispatch.
-          </DrawerDescription>
+      <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-xl">
+        <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
+          <div className="flex min-w-0 items-start justify-between gap-4">
+            <div className="min-w-0">
+              <DrawerTitle>New site</DrawerTitle>
+              <DrawerDescription className="sr-only">
+                Add a site name, service area, address, and access notes.
+              </DrawerDescription>
+            </div>
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close new site"
+                disabled={createResult.waiting}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </DrawerClose>
+          </div>
         </DrawerHeader>
 
         <form
@@ -156,7 +207,7 @@ export function SitesCreateSheet() {
           noValidate
           onSubmit={(event) => submitClientForm(event, handleSubmit)}
         >
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
+          <div className="flex flex-1 flex-col overflow-y-auto px-5 py-2 sm:px-6">
             {Result.builder(createResult)
               .onError((error) =>
                 isHandledCreateSiteError(error) ? null : (
@@ -169,7 +220,7 @@ export function SitesCreateSheet() {
               )
               .render()}
 
-            <SiteCreateFields
+            <SiteCreateDrawerFields
               draft={values}
               errors={fieldErrors}
               idPrefix="site"
@@ -188,15 +239,16 @@ export function SitesCreateSheet() {
             />
           </div>
 
-          <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={createResult.waiting}
-              onClick={() => closeSheet({ delayed: true })}
-            >
-              Cancel
-            </Button>
+          <DrawerFooter className="shrink-0 flex-col-reverse gap-2 border-t px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={createResult.waiting}
+              >
+                Cancel
+              </Button>
+            </DrawerClose>
             <Button type="submit" loading={createResult.waiting}>
               {createResult.waiting ? (
                 "Creating..."

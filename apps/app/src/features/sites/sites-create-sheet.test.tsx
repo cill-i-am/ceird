@@ -4,9 +4,10 @@ import {
 } from "@ceird/sites-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
+import * as React from "react";
 import type { ReactNode } from "react";
 
 import { SitesCreateSheet } from "./sites-create-sheet";
@@ -21,13 +22,24 @@ const serviceAreaId =
   "33333333-3333-4333-8333-333333333333" as ServiceAreaIdType;
 const siteId = "55555555-5555-4555-8555-555555555555" as SiteIdType;
 
-const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
-  () => ({
-    mockedNavigate: vi.fn<NavigateMock>(),
-    mockedUseAtomSet: vi.fn<AtomSetterMock>(),
-    mockedUseAtomValue: vi.fn<AtomValueMock>(),
-  })
-);
+const {
+  mockedDrawerRuntime,
+  mockedNavigate,
+  mockedPathname,
+  mockedUseAtomSet,
+  mockedUseAtomValue,
+} = vi.hoisted(() => ({
+  mockedDrawerRuntime: {
+    close: vi.fn<() => void>(),
+    finishCloseAnimation: vi.fn<() => void>(),
+  },
+  mockedNavigate: vi.fn<NavigateMock>(),
+  mockedPathname: {
+    current: "/sites/new",
+  },
+  mockedUseAtomSet: vi.fn<AtomSetterMock>(),
+  mockedUseAtomValue: vi.fn<AtomValueMock>(),
+}));
 
 const mockedCreateSite = vi.fn<AsyncMutationMock>();
 let mockedCreateResult: unknown;
@@ -61,9 +73,35 @@ vi.mock(import("@effect-atom/atom-react"), async (importActual) => {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
+  useRouterState: <T,>({
+    select,
+  }: {
+    select: (state: { location: { pathname: string } }) => T;
+  }) => select({ location: { pathname: mockedPathname.current } }),
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DRAWER_CLOSE_FALLBACK_MS: 550,
+  DrawerClose: ({ children }: { children: ReactNode }) => {
+    if (
+      React.isValidElement<{
+        onClick?: React.MouseEventHandler<HTMLElement>;
+      }>(children)
+    ) {
+      return React.cloneElement(children, {
+        onClick: (event: React.MouseEvent<HTMLElement>) => {
+          children.props.onClick?.(event);
+          mockedDrawerRuntime.close();
+        },
+      });
+    }
+
+    return (
+      <button type="button" onClick={() => mockedDrawerRuntime.close()}>
+        {children}
+      </button>
+    );
+  },
   DrawerContent: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -82,22 +120,36 @@ vi.mock("#/components/ui/drawer", () => ({
 vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
+    onAnimationEnd,
+    onOpenChange,
     open,
   }: {
     children: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
+    onOpenChange?: (open: boolean) => void;
     open: boolean;
-  }) =>
-    open ? (
+  }) => {
+    mockedDrawerRuntime.close.mockImplementation(() => {
+      onOpenChange?.(false);
+    });
+
+    mockedDrawerRuntime.finishCloseAnimation.mockImplementation(() => {
+      onAnimationEnd?.(false);
+    });
+
+    return open ? (
       <div data-testid="responsive-drawer" data-open="true">
         {children}
       </div>
-    ) : null,
+    ) : null;
+  },
 }));
 
 describe("sites create sheet", () => {
   beforeEach(() => {
     mockedCreateSite.mockReset();
     mockedNavigate.mockReset();
+    mockedPathname.current = "/sites/new";
     mockedCreateResult = {
       waiting: false,
     };
@@ -153,11 +205,31 @@ describe("sites create sheet", () => {
       render(<SitesCreateSheet />);
 
       expect(
+        screen.getByRole("heading", { name: "New site" })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Basics" })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Location" })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Access" })
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Draft")).not.toBeInTheDocument();
+      expect(
         screen.queryByLabelText(new RegExp(`^Lat${"itude"}$`))
       ).not.toBeInTheDocument();
       expect(
         screen.queryByLabelText(new RegExp(`^Long${"itude"}$`))
       ).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Site lead")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Phone")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Labels")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Site notes")).not.toBeInTheDocument();
+      expect(screen.queryByText("Map preview")).not.toBeInTheDocument();
 
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
       await user.click(screen.getByLabelText("Service area"));
@@ -180,9 +252,37 @@ describe("sites create sheet", () => {
         serviceAreaId,
         town: "Dublin",
       });
+      expect(mockedNavigate).not.toHaveBeenCalled();
+
+      act(() => {
+        mockedDrawerRuntime.finishCloseAnimation();
+      });
+
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
     }
   );
+
+  it("waits for the drawer close animation before leaving the new site route", () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+
+    try {
+      render(<SitesCreateSheet />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(mockedNavigate).not.toHaveBeenCalled();
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 550);
+      expect(mockedNavigate).not.toHaveBeenCalled();
+
+      act(() => {
+        mockedDrawerRuntime.finishCloseAnimation();
+      });
+
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/sites" });
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
 
   it(
     "validates the required name and address details before submitting",
@@ -199,6 +299,22 @@ describe("sites create sheet", () => {
       expect(screen.getByText("Add address line 1.")).toBeInTheDocument();
       expect(screen.getByText("Add county.")).toBeInTheDocument();
       expect(screen.getByText("Add Eircode.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Site name")).toHaveAttribute(
+        "aria-describedby",
+        "site-name-error"
+      );
+      expect(screen.getByLabelText("Address line 1")).toHaveAttribute(
+        "aria-describedby",
+        "site-address-line-1-error"
+      );
+      expect(screen.getByLabelText("County")).toHaveAttribute(
+        "aria-describedby",
+        "site-county-error"
+      );
+      expect(screen.getByLabelText("Eircode")).toHaveAttribute(
+        "aria-describedby",
+        "site-eircode-error"
+      );
       expect(mockedCreateSite).not.toHaveBeenCalled();
     }
   );

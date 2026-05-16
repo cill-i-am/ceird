@@ -229,7 +229,7 @@ export function JobCostsSection({
               Cost total
             </span>
             <span className="text-lg font-semibold text-foreground">
-              {formatMoneyMinor(costs.summary.subtotalMinor)}
+              {formatJobMoneyMinor(costs.summary.subtotalMinor)}
             </span>
           </div>
         )}
@@ -461,11 +461,11 @@ function CostLines({ costs }: { readonly costs: JobDetailResponse["costs"] }) {
                 </Badge>
                 <span>
                   {formatQuantity(costLine.quantity)} x{" "}
-                  {formatMoneyMinor(costLine.unitPriceMinor)}
+                  {formatJobMoneyMinor(costLine.unitPriceMinor)}
                 </span>
               </div>
               <span className="text-sm font-semibold text-foreground">
-                Line total {formatMoneyMinor(costLine.lineTotalMinor)}
+                Line total {formatJobMoneyMinor(costLine.lineTotalMinor)}
               </span>
             </div>
             <p className="text-sm leading-7 whitespace-pre-wrap">
@@ -597,7 +597,7 @@ function getDecimalParts(value: string) {
   };
 }
 
-function formatMoneyMinor(value: number) {
+export function formatJobMoneyMinor(value: number) {
   return moneyFormatter.format(value / 100);
 }
 

@@ -227,11 +227,6 @@ describe("job detail route", () => {
       expect(screen.getAllByText("Pat Contact").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
       expect(screen.getAllByText("PO-4471").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("pat@example.com").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("+353 87 765 4321").length).toBeGreaterThan(0);
-      expect(
-        screen.getAllByText("Use email for routine updates.").length
-      ).toBeGreaterThan(0);
       expect(
         screen.getByText("Checked the burner and reset the controls.")
       ).toBeInTheDocument();

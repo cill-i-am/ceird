@@ -8,7 +8,7 @@ import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
-import { cloneElement, isValidElement } from "react";
+import { cloneElement, isValidElement, useEffect } from "react";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
@@ -220,16 +220,25 @@ vi.mock("#/components/ui/select", () => ({
 vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
+    onAnimationEnd,
     open = true,
   }: {
     children?: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
     open?: boolean;
-  }) =>
-    open ? (
+  }) => {
+    useEffect(() => {
+      if (!open) {
+        onAnimationEnd?.(false);
+      }
+    }, [onAnimationEnd, open]);
+
+    return open ? (
       <div data-testid="responsive-drawer" data-nested="false">
         {children}
       </div>
-    ) : null,
+    ) : null;
+  },
   ResponsiveNestedDrawer: ({
     children,
     open = true,
@@ -245,6 +254,8 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DRAWER_CLOSE_FALLBACK_MS: 550,
+  DrawerClose: ({ children }: { children?: ReactNode }) => <>{children}</>,
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
@@ -604,7 +615,7 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
       await user.type(
-        screen.getByLabelText("Access notes"),
+        screen.getByLabelText("Notes"),
         "Use reception and the south gate."
       );
       await user.click(

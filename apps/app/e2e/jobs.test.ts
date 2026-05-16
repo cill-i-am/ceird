@@ -48,10 +48,7 @@ test.describe("jobs flow", () => {
     await runCommandBarAction(page, "Switch to map view");
 
     await expect(page.getByTestId("jobs-coverage-panel")).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Map" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
+    await expect(page.getByRole("button", { name: "List" })).toBeVisible();
   });
 
   test("supports the core jobs happy path from intake through reopen", async ({
@@ -63,7 +60,6 @@ test.describe("jobs flow", () => {
     const jobTitle = `Replace boiler relay ${randomUUID().slice(0, 8)}`;
     const siteName = `North depot ${randomUUID().slice(0, 4)}`;
     const contactName = `Pat Caller ${randomUUID().slice(0, 4)}`;
-    const blockedReason = "Waiting on the replacement relay to arrive";
     const comment = "Crew inspected the panel and isolated the failed relay.";
     const visitNote =
       "Second trip to fit the replacement relay and verify startup.";
@@ -91,6 +87,7 @@ test.describe("jobs flow", () => {
 
     await jobsPage.openJob(jobTitle);
     await detailSheet.expectOpen(jobTitle);
+    await detailSheet.openPanel("Status");
     await expect(detailSheet.pickStatusChange).toBeDisabled();
     await expect(
       detailSheet.root.getByText(siteName, { exact: true }).first()
@@ -99,38 +96,22 @@ test.describe("jobs flow", () => {
       detailSheet.root.getByText(contactName, { exact: true }).first()
     ).toBeVisible();
 
-    await detailSheet.openTab("Comments");
+    await detailSheet.openPanel("Comment");
     await detailSheet.commentBody.fill(comment);
     await detailSheet.addComment.click();
     await expect(detailSheet.commentItem(comment)).toBeVisible();
 
-    await detailSheet.openTab("Details");
-    await detailSheet.chooseStatusOption("In progress");
-    await detailSheet.applyStatusChange.click();
-    await expect(
-      detailSheet.root.getByText("In progress", { exact: true })
-    ).toBeVisible();
-
-    await detailSheet.chooseStatusOption("Blocked");
-    await detailSheet.blockedReason.fill(blockedReason);
-    await detailSheet.applyStatusChange.click();
-    await expect(
-      detailSheet.root.getByText("Blocked reason", { exact: true })
-    ).toBeVisible();
-    await expect(
-      detailSheet.root.getByText(blockedReason, { exact: true })
-    ).toBeVisible();
-
+    await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("In progress");
     await detailSheet.applyStatusChange.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
     await expect(
-      detailSheet.root.getByText("Blocked reason", { exact: true })
-    ).not.toBeVisible();
+      detailSheet.root.getByText(/changed status from New to In progress/)
+    ).toBeVisible();
 
-    await detailSheet.openTab("Visits");
+    await detailSheet.openPanel("Visit");
     await detailSheet.visitDate.fill("2026-04-24");
     await detailSheet.chooseVisitDurationOption("2 hours");
     await detailSheet.visitNote.fill(visitNote);
@@ -138,15 +119,24 @@ test.describe("jobs flow", () => {
     await expect(detailSheet.visitItem(visitNote)).toBeVisible();
     await expect(detailSheet.root.getByText("2h logged")).toBeVisible();
 
-    await detailSheet.openTab("Details");
+    await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("Completed");
     await detailSheet.applyStatusChange.click();
+    await expect(
+      detailSheet.root.getByText(/changed status from In progress to Completed/)
+    ).toBeVisible();
+    if (!(await detailSheet.reopenJob.isVisible())) {
+      await detailSheet.openPanel("Status");
+    }
     await expect(detailSheet.reopenJob).toBeVisible();
 
     await detailSheet.reopenJob.click();
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
+    if (!(await detailSheet.pickStatusChange.isVisible())) {
+      await detailSheet.openPanel("Status");
+    }
     await expect(detailSheet.pickStatusChange).toBeDisabled();
   });
 });

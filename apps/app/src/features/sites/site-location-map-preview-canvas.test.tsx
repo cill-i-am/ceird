@@ -42,20 +42,19 @@ describe("site location map preview canvas", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders a coordinate-required state when the site is unmapped", () => {
+  it("renders an embedded map preview", () => {
     render(
       <SiteLocationMapPreviewCanvas
+        variant="embedded"
         site={{
+          latitude: 53.3498,
+          longitude: -6.2603,
           name: "Docklands Campus",
         }}
       />
     );
 
-    expect(
-      screen.getByText(
-        "The preview needs site coordinates before it can render a map."
-      )
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("map")).not.toBeInTheDocument();
+    expect(screen.getByTestId("map")).toBeInTheDocument();
+    expect(screen.queryByText("Map preview")).not.toBeInTheDocument();
   });
 });

@@ -216,7 +216,9 @@ describe("sites route loader", () => {
         />
       );
 
-      expect(screen.getAllByText("Docklands Campus")).toHaveLength(2);
+      expect(
+        screen.getByRole("link", { name: "Docklands Campus" })
+      ).toBeInTheDocument();
     }
   );
 });

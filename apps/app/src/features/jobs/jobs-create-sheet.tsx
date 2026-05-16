@@ -27,6 +27,7 @@ import {
   AlertSquareIcon,
   ArrowDown01Icon,
   Briefcase01Icon,
+  Cancel01Icon,
   Flag01Icon,
   Location01Icon,
   MinusSignIcon,
@@ -41,7 +42,6 @@ import { Cause, Exit, Option, ParseResult } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
-import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
   Command,
@@ -55,6 +55,8 @@ import {
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
+  DRAWER_CLOSE_FALLBACK_MS,
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -75,7 +77,7 @@ import {
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import {
-  SiteCreateFields,
+  SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
   buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
@@ -98,6 +100,8 @@ import {
 
 const INLINE_CREATE_VALUE = "__create__";
 const NONE_VALUE = "__none__";
+const CREATE_JOB_FIELD_TRIGGER_CLASS_NAME =
+  "h-9 w-full rounded-3xl border-transparent bg-input/50 px-3 shadow-none hover:bg-input/60 aria-expanded:bg-input/60";
 
 const PRIORITY_OPTIONS: readonly {
   readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
@@ -186,7 +190,9 @@ export function JobsCreateSheet() {
     React.useState<JobsCreateFormState>(defaultFormState);
   const [overlayOpen, setOverlayOpen] = React.useState(true);
   const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
-  const closeNavigationTimeout = React.useRef<ReturnType<
+  const navigateAfterCloseRef = React.useRef(false);
+  const resetAfterCloseRef = React.useRef(false);
+  const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
 
@@ -223,34 +229,48 @@ export function JobsCreateSheet() {
 
   React.useEffect(
     () => () => {
-      if (closeNavigationTimeout.current) {
-        clearTimeout(closeNavigationTimeout.current);
+      if (closeNavigationTimeoutRef.current) {
+        clearTimeout(closeNavigationTimeoutRef.current);
       }
     },
     []
   );
 
-  function closeSheet({
-    delayed = false,
-  }: { readonly delayed?: boolean } = {}) {
+  function navigateToJobs() {
+    React.startTransition(() => {
+      navigate({ to: "/jobs" });
+    });
+  }
+
+  function finishClosedSheet() {
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
+      closeNavigationTimeoutRef.current = null;
+    }
+
+    if (resetAfterCloseRef.current) {
+      setValues(defaultFormState);
+      resetAfterCloseRef.current = false;
+    }
+
+    if (navigateAfterCloseRef.current) {
+      navigateAfterCloseRef.current = false;
+      navigateToJobs();
+    }
+  }
+
+  function closeSheet() {
+    navigateAfterCloseRef.current = true;
     setOverlayOpen(false);
 
-    if (closeNavigationTimeout.current) {
-      clearTimeout(closeNavigationTimeout.current);
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
     }
 
-    const navigateToJobs = () => {
-      React.startTransition(() => {
-        navigate({ to: "/jobs" });
-      });
-    };
-
-    if (!delayed) {
-      navigateToJobs();
-      return;
-    }
-
-    closeNavigationTimeout.current = setTimeout(navigateToJobs, 140);
+    closeNavigationTimeoutRef.current = setTimeout(
+      finishClosedSheet,
+      DRAWER_CLOSE_FALLBACK_MS
+    );
   }
 
   async function handleSubmit() {
@@ -297,7 +317,7 @@ export function JobsCreateSheet() {
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      setValues(defaultFormState);
+      resetAfterCloseRef.current = true;
       closeSheet();
       return;
     }
@@ -344,8 +364,13 @@ export function JobsCreateSheet() {
     <ResponsiveCreateOverlay
       open={overlayOpen}
       onOpenChange={(open) => {
+        if (!open && !createResult.waiting) {
+          closeSheet();
+        }
+      }}
+      onAnimationEnd={(open) => {
         if (!open) {
-          closeSheet({ delayed: true });
+          finishClosedSheet();
         }
       }}
     >
@@ -355,7 +380,7 @@ export function JobsCreateSheet() {
         noValidate
         onSubmit={(event) => submitClientForm(event, handleSubmit)}
       >
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
+        <div className="flex flex-1 flex-col overflow-y-auto px-5 py-2 sm:px-6">
           {Result.builder(createResult)
             .onError((error) =>
               isHandledCreateJobError(error) ? null : (
@@ -368,213 +393,232 @@ export function JobsCreateSheet() {
             )
             .render()}
 
-          <FieldGroup>
-            <AuthFormField
-              label="Title"
-              htmlFor="job-title"
-              errorText={fieldErrors.title}
-            >
-              <Input
-                id="job-title"
-                value={values.title}
-                aria-invalid={Boolean(fieldErrors.title) || undefined}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-              />
-            </AuthFormField>
-          </FieldGroup>
-
-          <FieldGroup>
-            <AuthFormField
-              label="External reference"
-              htmlFor="job-external-reference"
-              errorText={fieldErrors.externalReference}
-            >
-              <Input
-                id="job-external-reference"
-                value={values.externalReference}
-                aria-invalid={
-                  Boolean(fieldErrors.externalReference) || undefined
-                }
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    externalReference: event.target.value,
-                  }))
-                }
-              />
-            </AuthFormField>
-          </FieldGroup>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <LinearMetadataSelect
-                id="job-priority"
-                label="Priority"
-                value={values.priority}
-                placeholder="Priority"
-                emptyText="No priorities found."
-                groups={prioritySelectionGroups}
-                icon={Flag01Icon}
-                searchPlaceholder="Set priority to..."
-                showGroupHeadings={false}
-                onValueChange={(nextValue) =>
-                  setValues((current) => ({
-                    ...current,
-                    priority: nextValue as JobPriority,
-                  }))
-                }
-              />
-              <LinearMetadataSelect
-                id="job-site"
-                label="Site"
-                value={values.siteSelection}
-                placeholder="Site"
-                emptyText="No sites found."
-                groups={siteSelectionGroups}
-                icon={Location01Icon}
-                errorText={fieldErrors.siteSelection}
-                onValueChange={(nextValue) => {
-                  setValues((current) => ({
-                    ...current,
-                    siteSelection: nextValue,
-                  }));
-
-                  if (nextValue === INLINE_CREATE_VALUE) {
-                    setFieldErrors(clearSiteSelectionFieldError);
-                    setSiteDrawerOpen(true);
-                    return;
-                  }
-
-                  setFieldErrors(clearInlineSiteFieldErrors);
-                }}
-              />
-              <LinearContactSelect
-                id="job-contact"
-                value={values.contactSelection}
-                contactName={values.contactName}
-                groups={contactSelectionGroups}
-                errorText={fieldErrors.contactName}
-                onValueChange={(nextValue) =>
-                  setValues((current) => ({
-                    ...current,
-                    contactEmail: "",
-                    contactName: "",
-                    contactNotes: "",
-                    contactPhone: "",
-                    contactSelection: nextValue,
-                  }))
-                }
-                onCreateContact={(contactName) =>
-                  setValues((current) => ({
-                    ...current,
-                    contactName,
-                    contactSelection: INLINE_CREATE_VALUE,
-                  }))
-                }
-              />
-            </div>
-            {fieldErrors.siteSelection ? (
-              <p className="text-sm text-destructive">
-                {fieldErrors.siteSelection}
-              </p>
-            ) : null}
-            {fieldErrors.contactName ? (
-              <p className="text-sm text-destructive">
-                {fieldErrors.contactName}
-              </p>
-            ) : null}
-          </div>
-
-          {values.contactSelection === INLINE_CREATE_VALUE ? (
-            <FieldGroup>
+          <CreateFormSection title="Job details">
+            <FieldGroup className="gap-3">
               <AuthFormField
-                label="Contact email"
-                htmlFor="job-contact-email"
-                errorText={fieldErrors.contactEmail}
+                label="Title"
+                htmlFor="job-title"
+                errorText={fieldErrors.title}
               >
                 <Input
-                  id="job-contact-email"
-                  type="email"
-                  value={values.contactEmail}
-                  aria-invalid={Boolean(fieldErrors.contactEmail) || undefined}
+                  id="job-title"
+                  value={values.title}
+                  placeholder="e.g. Boiler relay and pipework replacement"
+                  aria-invalid={Boolean(fieldErrors.title) || undefined}
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
-                      contactEmail: event.target.value,
+                      title: event.target.value,
                     }))
                   }
                 />
               </AuthFormField>
-              <AuthFormField label="Contact phone" htmlFor="job-contact-phone">
-                <Input
-                  id="job-contact-phone"
-                  value={values.contactPhone}
-                  onChange={(event) =>
+
+              <AuthFormField label="Priority" htmlFor="job-priority">
+                <LinearMetadataSelect
+                  id="job-priority"
+                  label="Priority"
+                  value={values.priority}
+                  placeholder="Priority"
+                  emptyText="No priorities found."
+                  groups={prioritySelectionGroups}
+                  icon={Flag01Icon}
+                  searchPlaceholder="Set priority to..."
+                  showGroupHeadings={false}
+                  onValueChange={(nextValue) =>
                     setValues((current) => ({
                       ...current,
-                      contactPhone: event.target.value,
+                      priority: nextValue as JobPriority,
                     }))
                   }
                 />
               </AuthFormField>
+
               <AuthFormField
-                label="Contact notes"
-                htmlFor="job-contact-notes"
-                errorText={fieldErrors.contactNotes}
+                label="External reference"
+                htmlFor="job-external-reference"
+                errorText={fieldErrors.externalReference}
               >
-                <Textarea
-                  id="job-contact-notes"
-                  value={values.contactNotes}
-                  aria-invalid={Boolean(fieldErrors.contactNotes) || undefined}
+                <Input
+                  id="job-external-reference"
+                  value={values.externalReference}
+                  placeholder="e.g. CLAIM-2026-0042"
+                  aria-invalid={
+                    Boolean(fieldErrors.externalReference) || undefined
+                  }
                   onChange={(event) =>
                     setValues((current) => ({
                       ...current,
-                      contactNotes: event.target.value,
+                      externalReference: event.target.value,
                     }))
                   }
                 />
               </AuthFormField>
             </FieldGroup>
-          ) : null}
+          </CreateFormSection>
 
-          <FieldGroup>
-            {showInlineSiteSummary ? (
-              <div className="flex items-center justify-between gap-3 border-y py-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">New site</p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {values.siteDraft.name.trim()}
-                    </p>
+          <CreateFormSection title="Location">
+            <FieldGroup className="gap-3">
+              <AuthFormField
+                label="Site"
+                htmlFor="job-site"
+                errorText={fieldErrors.siteSelection}
+              >
+                <LinearMetadataSelect
+                  id="job-site"
+                  label="Site"
+                  value={values.siteSelection}
+                  placeholder="Select site"
+                  emptyText="No sites found."
+                  groups={siteSelectionGroups}
+                  icon={Location01Icon}
+                  errorText={fieldErrors.siteSelection}
+                  onValueChange={(nextValue) => {
+                    setValues((current) => ({
+                      ...current,
+                      siteSelection: nextValue,
+                    }));
+
+                    if (nextValue === INLINE_CREATE_VALUE) {
+                      setFieldErrors(clearSiteSelectionFieldError);
+                      setSiteDrawerOpen(true);
+                      return;
+                    }
+
+                    setFieldErrors(clearInlineSiteFieldErrors);
+                  }}
+                />
+              </AuthFormField>
+
+              {showInlineSiteSummary ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">New site</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {values.siteDraft.name.trim()}
+                      </p>
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSiteDrawerOpen(true)}
+                  >
+                    Edit details
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSiteDrawerOpen(true)}
-                >
-                  Edit details
-                </Button>
-              </div>
-            ) : null}
-          </FieldGroup>
+              ) : null}
+            </FieldGroup>
+          </CreateFormSection>
+
+          <CreateFormSection title="Contact / customer">
+            <FieldGroup className="gap-3">
+              <AuthFormField
+                label="Contact"
+                htmlFor="job-contact"
+                errorText={fieldErrors.contactName}
+              >
+                <LinearContactSelect
+                  id="job-contact"
+                  value={values.contactSelection}
+                  contactName={values.contactName}
+                  groups={contactSelectionGroups}
+                  errorText={fieldErrors.contactName}
+                  onValueChange={(nextValue) =>
+                    setValues((current) => ({
+                      ...current,
+                      contactEmail: "",
+                      contactName: "",
+                      contactNotes: "",
+                      contactPhone: "",
+                      contactSelection: nextValue,
+                    }))
+                  }
+                  onCreateContact={(contactName) =>
+                    setValues((current) => ({
+                      ...current,
+                      contactName,
+                      contactSelection: INLINE_CREATE_VALUE,
+                    }))
+                  }
+                />
+              </AuthFormField>
+
+              {values.contactSelection === INLINE_CREATE_VALUE ? (
+                <>
+                  <AuthFormField
+                    label="Contact email"
+                    htmlFor="job-contact-email"
+                    errorText={fieldErrors.contactEmail}
+                  >
+                    <Input
+                      id="job-contact-email"
+                      type="email"
+                      value={values.contactEmail}
+                      placeholder="name@company.ie"
+                      aria-invalid={
+                        Boolean(fieldErrors.contactEmail) || undefined
+                      }
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          contactEmail: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
+                  <AuthFormField
+                    label="Contact phone"
+                    htmlFor="job-contact-phone"
+                  >
+                    <Input
+                      id="job-contact-phone"
+                      value={values.contactPhone}
+                      placeholder="+353 1 555 0123"
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          contactPhone: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
+                  <AuthFormField
+                    label="Contact notes"
+                    htmlFor="job-contact-notes"
+                    errorText={fieldErrors.contactNotes}
+                  >
+                    <Textarea
+                      id="job-contact-notes"
+                      value={values.contactNotes}
+                      aria-invalid={
+                        Boolean(fieldErrors.contactNotes) || undefined
+                      }
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          contactNotes: event.target.value,
+                        }))
+                      }
+                    />
+                  </AuthFormField>
+                </>
+              ) : null}
+            </FieldGroup>
+          </CreateFormSection>
         </div>
 
-        <DrawerFooter className="flex flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <DrawerFooter className="shrink-0 flex-col-reverse gap-2 border-t px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             disabled={createResult.waiting}
-            onClick={() => closeSheet({ delayed: true })}
+            onClick={closeSheet}
           >
             Cancel
           </Button>
@@ -599,20 +643,29 @@ export function JobsCreateSheet() {
         open={siteDrawerOpen}
         onOpenChange={setSiteDrawerOpen}
       >
-        <DrawerContent className="route-drawer-content route-side-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
-          <DrawerHeader className="border-b px-5 py-4 text-left md:px-6">
-            <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-              Site
-            </Badge>
-            <DrawerTitle>New site</DrawerTitle>
-            <DrawerDescription>
-              Capture the place once. The address will be geocoded when the job
-              is created.
-            </DrawerDescription>
+        <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-xl">
+          <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
+            <div className="flex min-w-0 items-start justify-between gap-4">
+              <div className="min-w-0">
+                <DrawerTitle>New site</DrawerTitle>
+                <DrawerDescription className="sr-only">
+                  Add a site name, service area, address, and access notes.
+                </DrawerDescription>
+              </div>
+              <Button
+                type="button"
+                size="icon-lg"
+                variant="ghost"
+                aria-label="Close new site"
+                onClick={() => setSiteDrawerOpen(false)}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </div>
           </DrawerHeader>
 
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
-            <SiteCreateFields
+          <div className="flex flex-1 flex-col overflow-y-auto px-5 py-2 sm:px-6">
+            <SiteCreateDrawerFields
               draft={values.siteDraft}
               errors={fieldErrors.site ?? {}}
               idPrefix="new-site"
@@ -642,7 +695,7 @@ export function JobsCreateSheet() {
             />
           </div>
 
-          <DrawerFooter className="flex-row justify-end border-t px-5 py-4 sm:px-6">
+          <DrawerFooter className="shrink-0 flex-row justify-end border-t px-5 py-3 sm:px-6">
             <Button type="button" onClick={() => setSiteDrawerOpen(false)}>
               Close site details
             </Button>
@@ -685,10 +738,7 @@ function LinearMetadataSelect({
   const triggerIcon = selectedOption?.icon ?? icon;
 
   return (
-    <div>
-      <label htmlFor={id} className="sr-only">
-        {label}
-      </label>
+    <div className="w-full">
       <CommandSelect
         id={id}
         value={value}
@@ -697,13 +747,30 @@ function LinearMetadataSelect({
         groups={groups}
         ariaLabel={label}
         ariaInvalid={errorText ? true : undefined}
-        className="h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
+        className={CREATE_JOB_FIELD_TRIGGER_CLASS_NAME}
         prefix={<HugeiconsIcon icon={triggerIcon} strokeWidth={2} />}
         searchPlaceholder={searchPlaceholder}
         showGroupHeadings={showGroupHeadings}
         onValueChange={onValueChange}
       />
     </div>
+  );
+}
+
+function CreateFormSection({
+  children,
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly title: string;
+}) {
+  return (
+    <section className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0">
+      <div className="mb-2.5">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -737,10 +804,7 @@ function LinearContactSelect({
   const visibleGroups = groups.filter((group) => group.options.length > 0);
 
   return (
-    <div>
-      <label htmlFor={id} className="sr-only">
-        Contact
-      </label>
+    <div className="w-full">
       <Popover
         open={open}
         onOpenChange={(nextOpen) => {
@@ -755,15 +819,18 @@ function LinearContactSelect({
           aria-invalid={errorText ? true : undefined}
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "h-9 w-auto justify-start gap-1.5 rounded-full bg-background px-3 shadow-xs"
+            CREATE_JOB_FIELD_TRIGGER_CLASS_NAME,
+            "justify-between font-normal"
           )}
         >
-          <HugeiconsIcon
-            icon={UserIcon}
-            strokeWidth={2}
-            data-icon="inline-start"
-          />
-          <span>{triggerLabel}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <HugeiconsIcon
+              icon={UserIcon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+            <span className="truncate">{triggerLabel}</span>
+          </span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             strokeWidth={2}
@@ -858,21 +925,42 @@ function LinearContactSelect({
 
 function ResponsiveCreateOverlay({
   children,
+  onAnimationEnd,
   onOpenChange,
   open,
 }: {
   readonly children: React.ReactNode;
+  readonly onAnimationEnd: (open: boolean) => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
 }) {
   return (
-    <ResponsiveDrawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(56rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
-        <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
-          <DrawerTitle>New job</DrawerTitle>
-          <DrawerDescription>
-            Capture the work, then add assignment and location context.
-          </DrawerDescription>
+    <ResponsiveDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      onAnimationEnd={onAnimationEnd}
+    >
+      <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg">
+        <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
+          <div className="flex min-w-0 items-start justify-between gap-4">
+            <div className="min-w-0">
+              <DrawerTitle>New job</DrawerTitle>
+              <DrawerDescription className="sr-only">
+                Add a job title, priority, site, contact, and external
+                reference.
+              </DrawerDescription>
+            </div>
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                size="icon-lg"
+                variant="ghost"
+                aria-label="Close new job"
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </DrawerClose>
+          </div>
         </DrawerHeader>
         {children}
       </DrawerContent>

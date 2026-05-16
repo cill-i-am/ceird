@@ -9,50 +9,66 @@ import {
   MarkerContent,
   MarkerLabel,
 } from "#/components/ui/map";
-import { hasSiteCoordinates } from "#/features/sites/site-location";
-import type { SiteLocationLike } from "#/features/sites/site-location";
+import type { MappedSiteLocationLike } from "#/features/sites/site-location";
+
+import { SiteLocationMapPreviewFrame } from "./site-location-map-preview-frame";
+import type { SiteLocationMapPreviewVariant } from "./site-location-map-preview-frame";
 
 interface SiteLocationMapPreviewCanvasProps {
-  readonly site: SiteLocationLike;
+  readonly site: MappedSiteLocationLike;
+  readonly variant?: SiteLocationMapPreviewVariant;
 }
 
 export function SiteLocationMapPreviewCanvas({
   site,
+  variant = "card",
 }: SiteLocationMapPreviewCanvasProps) {
-  if (!hasSiteCoordinates(site)) {
+  if (variant === "embedded") {
     return (
-      <div className="rounded-2xl border bg-muted/10 p-4 text-sm text-muted-foreground">
-        The preview needs site coordinates before it can render a map.
-      </div>
+      <SiteLocationMapPreviewFrame variant="embedded">
+        <SiteLocationMap site={site} />
+      </SiteLocationMapPreviewFrame>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-muted/10">
+    <SiteLocationMapPreviewFrame variant="card" className="overflow-hidden p-0">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <p className="text-sm font-medium">Map preview</p>
         </div>
       </div>
       <div className="h-44">
-        <Map
-          center={[site.longitude, site.latitude]}
-          zoom={12}
-          dragRotate={false}
-          pitchWithRotate={false}
-          touchPitch={false}
-        >
-          <MapControls position="bottom-right" controls={["zoom"]} />
-          <MapMarker latitude={site.latitude} longitude={site.longitude}>
-            <MarkerContent>
-              <div className="flex size-10 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-lg">
-                <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
-              </div>
-              <MarkerLabel>{site.name ?? "Mapped site"}</MarkerLabel>
-            </MarkerContent>
-          </MapMarker>
-        </Map>
+        <SiteLocationMap site={site} label={site.name ?? "Mapped site"} />
       </div>
-    </div>
+    </SiteLocationMapPreviewFrame>
+  );
+}
+
+function SiteLocationMap({
+  label,
+  site,
+}: {
+  readonly label?: React.ReactNode;
+  readonly site: MappedSiteLocationLike;
+}) {
+  return (
+    <Map
+      center={[site.longitude, site.latitude]}
+      zoom={12}
+      dragRotate={false}
+      pitchWithRotate={false}
+      touchPitch={false}
+    >
+      <MapControls position="bottom-right" controls={["zoom"]} />
+      <MapMarker latitude={site.latitude} longitude={site.longitude}>
+        <MarkerContent>
+          <div className="flex size-10 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-lg">
+            <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
+          </div>
+          {label ? <MarkerLabel>{label}</MarkerLabel> : null}
+        </MarkerContent>
+      </MapMarker>
+    </Map>
   );
 }

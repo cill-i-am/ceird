@@ -1,48 +1,51 @@
 "use client";
-import type { JobListItem } from "@ceird/jobs-core";
+import type { JobListItem, JobPriority, JobStatus } from "@ceird/jobs-core";
 import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
-  Briefcase01Icon,
+  ArrowUpRight01Icon,
+  Cancel01Icon,
   Location01Icon,
-  MapsLocation01Icon,
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
-import { CommandSelect } from "#/components/ui/command-select";
+import { Button, buttonVariants } from "#/components/ui/button";
+import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
+  DrawerTrigger,
 } from "#/components/ui/drawer";
-import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
-import { Textarea } from "#/components/ui/textarea";
-import { AuthFormField } from "#/features/auth/auth-form-field";
+import {
+  ResponsiveDrawer,
+  ResponsiveNestedDrawer,
+} from "#/components/ui/responsive-drawer";
 import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import {
   buildGoogleMapsUrl,
   buildSiteAddressLines,
-  hasSiteCoordinates,
 } from "#/features/sites/site-location";
 import { SiteLocationMapPreview } from "#/features/sites/site-location-map-preview";
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
   SITE_CREATE_NONE_VALUE,
+  SiteAccessNotesField,
+  SiteAddressFields,
+  SiteNestedServiceAreaField,
   buildCreateSiteInputFromDraft,
   buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
@@ -73,20 +76,41 @@ const SITE_JOB_UPDATED_AT_FORMATTER = new Intl.DateTimeFormat("en-IE", {
   timeZone: "UTC",
   year: "numeric",
 });
+const RELATED_JOB_PRIORITY_LABELS = {
+  high: "High",
+  low: "Low",
+  medium: "Medium",
+  none: "No priority",
+  urgent: "Urgent",
+} satisfies Record<JobPriority, string>;
+const RELATED_JOB_STATUS_LABELS = {
+  blocked: "Blocked",
+  canceled: "Canceled",
+  completed: "Completed",
+  in_progress: "In progress",
+  new: "New",
+  triaged: "Triaged",
+} satisfies Record<JobStatus, string>;
+type SiteDetailEditor = "location" | "notes" | "service-area";
 
-// The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
-// react-doctor-disable-next-line
 export function SitesDetailSheet({
   hasMoreRelatedJobs = false,
   initialSite,
   relatedJobs = EMPTY_RELATED_JOBS,
   siteId,
   viewer,
+  // The detail sheet owns the editable site draft while the atom-backed option can refresh underneath it.
+  // react-doctor-disable-next-line
 }: SitesDetailSheetProps) {
   const navigate = useNavigate({ from: "/sites/$siteId" });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const options = useAtomValue(sitesOptionsStateAtom).data;
-  const currentSite =
-    options.sites.find((site) => site.id === siteId) ?? initialSite;
+  const currentSite = React.useMemo(
+    () => options.sites.find((site) => site.id === siteId) ?? initialSite,
+    [initialSite, options.sites, siteId]
+  );
   const updateResult = useAtomValue(updateSiteMutationAtomFamily(siteId));
   const updateSite = useAtomSet(updateSiteMutationAtomFamily(siteId), {
     mode: "promiseExit",
@@ -102,42 +126,91 @@ export function SitesDetailSheet({
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
   );
-  const [activeTab, setActiveTab] = React.useState("details");
+  const [activeEditor, setActiveEditor] =
+    React.useState<SiteDetailEditor | null>(null);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [editorOpen, setEditorOpen] = React.useState(false);
+  const [isEditingName, setIsEditingName] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState(currentSite?.name ?? "");
+  const navigateAfterCloseRef = React.useRef(false);
 
   // Reset the editable draft when the backing site record changes.
   // react-doctor-disable-next-line
   React.useEffect(() => {
     if (currentSite) {
       setValues(buildFormStateFromSite(currentSite));
+      setNameDraft(currentSite.name);
       setFieldErrors({});
     }
   }, [currentSite]);
 
-  function closeSheet() {
+  React.useEffect(() => {
+    if (pathname === `/sites/${siteId}`) {
+      setDrawerOpen(true);
+    }
+  }, [pathname, siteId]);
+
+  function navigateToSites() {
     React.startTransition(() => {
       navigate({ to: "/sites" });
     });
   }
 
-  async function handleSubmit() {
-    if (!canEdit) {
+  function closeSheet() {
+    navigateAfterCloseRef.current = true;
+    setDrawerOpen(false);
+  }
+
+  function openEditor(editor: SiteDetailEditor) {
+    if (!currentSite) {
       return;
     }
 
-    const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
+    setValues(buildFormStateFromSite(currentSite));
+    setFieldErrors({});
+    setActiveEditor(editor);
+    setEditorOpen(true);
+  }
+
+  const resetEditorAfterClose = React.useCallback(() => {
+    if (!currentSite) {
+      setValues(defaultSiteCreateDraft);
+      setFieldErrors({});
+      setActiveEditor(null);
+      return;
+    }
+
+    setValues(buildFormStateFromSite(currentSite));
+    setFieldErrors({});
+    setActiveEditor(null);
+  }, [currentSite]);
+
+  async function submitSiteDraft(
+    nextValues: SitesCreateFormState,
+    onSuccess?: () => void
+  ) {
+    if (!canEdit) {
+      return false;
+    }
+
+    const nextErrors = validateSiteCreateDraft(
+      nextValues,
+      options.serviceAreas
+    );
     setFieldErrors(nextErrors);
 
     if (hasSiteCreateFieldErrors(nextErrors)) {
-      return;
+      return false;
     }
 
     const exit = await updateSite(
-      buildCreateSiteInputFromDraft(values, options.serviceAreas)
+      buildCreateSiteInputFromDraft(nextValues, options.serviceAreas)
     );
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
-      return;
+      onSuccess?.();
+      return true;
     }
 
     const failure = Cause.failureOption(exit.cause);
@@ -151,11 +224,45 @@ export function SitesDetailSheet({
         serviceAreaSelection: failure.value.message,
       }));
     }
+
+    return false;
+  }
+
+  async function handleEditorSubmit() {
+    return await submitSiteDraft(values);
+  }
+
+  async function handleNameSubmit() {
+    if (!currentSite) {
+      return;
+    }
+
+    const nextValues = {
+      ...buildFormStateFromSite(currentSite),
+      name: nameDraft,
+    };
+
+    await submitSiteDraft(nextValues, () => {
+      setIsEditingName(false);
+    });
   }
 
   if (!currentSite) {
     return (
-      <ResponsiveDrawer open onOpenChange={(open) => !open && closeSheet()}>
+      <ResponsiveDrawer
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeSheet();
+          }
+        }}
+        onAnimationEnd={(open) => {
+          if (!open && navigateAfterCloseRef.current) {
+            navigateAfterCloseRef.current = false;
+            navigateToSites();
+          }
+        }}
+      >
         <DrawerContent className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
           <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
             <DrawerTitle>Site not found</DrawerTitle>
@@ -164,9 +271,9 @@ export function SitesDetailSheet({
             </DrawerDescription>
           </DrawerHeader>
           <DrawerFooter className="border-t px-5 py-4 sm:px-6">
-            <Button type="button" onClick={closeSheet}>
-              Back to sites
-            </Button>
+            <DrawerClose asChild>
+              <Button type="button">Back to sites</Button>
+            </DrawerClose>
           </DrawerFooter>
         </DrawerContent>
       </ResponsiveDrawer>
@@ -174,347 +281,275 @@ export function SitesDetailSheet({
   }
 
   return (
-    <ResponsiveDrawer open onOpenChange={(open) => !open && closeSheet()}>
+    <ResponsiveDrawer
+      open={drawerOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          closeSheet();
+        }
+      }}
+      onAnimationEnd={(open) => {
+        if (!open && navigateAfterCloseRef.current) {
+          navigateAfterCloseRef.current = false;
+          navigateToSites();
+        }
+      }}
+    >
       <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
         <DrawerHeader className="shrink-0 gap-3 border-b px-5 py-4 text-left md:px-6 md:py-5">
-          <div className="flex flex-wrap items-center gap-2">
-            {currentSite.serviceAreaName ? (
-              <Badge variant="secondary">{currentSite.serviceAreaName}</Badge>
-            ) : (
-              <Badge variant="outline">No service area</Badge>
-            )}
-            <Badge
-              variant={
-                hasSiteCoordinates(currentSite) ? "secondary" : "outline"
-              }
-            >
-              {hasSiteCoordinates(currentSite) ? "Mapped" : "Unmapped"}
-            </Badge>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <SiteTitleEditor
+              canEdit={canEdit}
+              errorText={fieldErrors.name}
+              isEditing={isEditingName}
+              name={currentSite.name}
+              nameDraft={nameDraft}
+              setFieldErrors={setFieldErrors}
+              setIsEditing={setIsEditingName}
+              setNameDraft={setNameDraft}
+              submit={handleNameSubmit}
+              waiting={updateResult.waiting}
+            />
+            <div className="flex shrink-0 items-center gap-2">
+              <DrawerClose asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Close site details"
+                >
+                  <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+                </Button>
+              </DrawerClose>
+            </div>
           </div>
-          <DrawerTitle>{currentSite.name}</DrawerTitle>
           <DrawerDescription className="sr-only">
             Site location details, editable dispatch fields, and related jobs.
           </DrawerDescription>
         </DrawerHeader>
 
-        <form
-          className="flex min-h-0 flex-1 flex-col"
-          method="post"
-          noValidate
-          onSubmit={(event) => submitClientForm(event, handleSubmit)}
+        <ResponsiveNestedDrawer
+          open={editorOpen}
+          onOpenChange={(open) => {
+            setEditorOpen(open);
+          }}
+          onAnimationEnd={(open) => {
+            if (!open) {
+              resetEditorAfterClose();
+            }
+          }}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {Result.builder(updateResult)
-              .onError((error) =>
-                isServiceAreaNotFoundError(error) ? null : (
-                  <Alert variant="destructive" className="mx-5 mt-4 sm:mx-6">
-                    <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-                    <AlertTitle>We couldn&apos;t update that site.</AlertTitle>
-                    <AlertDescription>{error.message}</AlertDescription>
-                  </Alert>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {Result.builder(updateResult)
+                .onError((error) =>
+                  isServiceAreaNotFoundError(error) ? null : (
+                    <Alert variant="destructive" className="mx-5 mt-4 sm:mx-6">
+                      <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+                      <AlertTitle>
+                        We couldn&apos;t update that site.
+                      </AlertTitle>
+                      <AlertDescription>{error.message}</AlertDescription>
+                    </Alert>
+                  )
                 )
-              )
-              .render()}
+                .render()}
 
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="min-h-0 flex-1 flex-col gap-0 overflow-hidden"
-            >
-              <div className="relative z-10 no-scrollbar shrink-0 overflow-x-auto border-b bg-popover px-4 sm:px-6">
-                <TabsList
-                  aria-label="Site detail sections"
-                  variant="line"
-                  className="h-10"
-                >
-                  <TabsTrigger value="details">Details</TabsTrigger>
-                  <TabsTrigger value="notes">Notes</TabsTrigger>
-                  <TabsTrigger value="jobs">
-                    Jobs{" "}
-                    <TabCount>
-                      {relatedJobs.length}
-                      {hasMoreRelatedJobs ? "+" : ""}
-                    </TabCount>
-                  </TabsTrigger>
-                  <TabsTrigger value="edit">Edit</TabsTrigger>
-                </TabsList>
-              </div>
-
-              <TabsContent
-                value="details"
-                keepMounted
+              <section
+                aria-label={`${currentSite.name} overview`}
                 className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6"
               >
-                <SiteDetailSummary site={currentSite} />
-              </TabsContent>
-
-              <TabsContent
-                value="notes"
-                keepMounted
-                className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6"
-              >
-                <SiteDetailNotes site={currentSite} />
-              </TabsContent>
-
-              <TabsContent
-                value="jobs"
-                keepMounted
-                className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6"
-              >
-                <SiteRelatedJobs
-                  hasMoreJobs={hasMoreRelatedJobs}
-                  jobs={relatedJobs}
-                />
-              </TabsContent>
-
-              <TabsContent
-                value="edit"
-                keepMounted
-                className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6"
-              >
-                <div className="flex flex-col gap-5">
-                  <FieldGroup>
-                    <AuthFormField
-                      label="Site name"
-                      htmlFor="site-edit-name"
-                      errorText={fieldErrors.name}
-                    >
-                      <Input
-                        id="site-edit-name"
-                        disabled={!canEdit}
-                        value={values.name}
-                        aria-invalid={Boolean(fieldErrors.name) || undefined}
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            name: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-
-                    <AuthFormField
-                      label="Service area"
-                      htmlFor="site-edit-service-area"
-                      errorText={fieldErrors.serviceAreaSelection}
-                    >
-                      <CommandSelect
-                        id="site-edit-service-area"
-                        value={values.serviceAreaSelection}
-                        placeholder="Pick service area"
-                        emptyText="No service areas found."
-                        groups={serviceAreaGroups}
-                        ariaInvalid={
-                          fieldErrors.serviceAreaSelection ? true : undefined
-                        }
-                        disabled={!canEdit}
-                        onValueChange={(nextValue) => {
-                          setFieldErrors((current) => ({
-                            ...current,
-                            serviceAreaSelection: undefined,
-                          }));
-                          setValues((current) => ({
-                            ...current,
-                            serviceAreaSelection: nextValue,
-                          }));
-                        }}
-                      />
-                    </AuthFormField>
-                  </FieldGroup>
-
-                  <FieldGroup>
-                    <AuthFormField
-                      label="Address line 1"
-                      htmlFor="site-edit-address-line-1"
-                      errorText={fieldErrors.addressLine1}
-                    >
-                      <Input
-                        id="site-edit-address-line-1"
-                        disabled={!canEdit}
-                        value={values.addressLine1}
-                        aria-invalid={
-                          Boolean(fieldErrors.addressLine1) || undefined
-                        }
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            addressLine1: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-
-                    <AuthFormField
-                      label="Address line 2"
-                      htmlFor="site-edit-address-line-2"
-                    >
-                      <Input
-                        id="site-edit-address-line-2"
-                        disabled={!canEdit}
-                        value={values.addressLine2}
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            addressLine2: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <AuthFormField label="Town" htmlFor="site-edit-town">
-                        <Input
-                          id="site-edit-town"
-                          disabled={!canEdit}
-                          value={values.town}
-                          onChange={(event) =>
-                            setValues((current) => ({
-                              ...current,
-                              town: event.target.value,
-                            }))
-                          }
-                        />
-                      </AuthFormField>
-
-                      <AuthFormField
-                        label="County"
-                        htmlFor="site-edit-county"
-                        errorText={fieldErrors.county}
-                      >
-                        <Input
-                          id="site-edit-county"
-                          disabled={!canEdit}
-                          value={values.county}
-                          aria-invalid={
-                            Boolean(fieldErrors.county) || undefined
-                          }
-                          onChange={(event) =>
-                            setValues((current) => ({
-                              ...current,
-                              county: event.target.value,
-                            }))
-                          }
-                        />
-                      </AuthFormField>
-                    </div>
-
-                    <AuthFormField
-                      label="Eircode"
-                      htmlFor="site-edit-eircode"
-                      errorText={fieldErrors.eircode}
-                    >
-                      <Input
-                        id="site-edit-eircode"
-                        disabled={!canEdit}
-                        value={values.eircode}
-                        aria-invalid={Boolean(fieldErrors.eircode) || undefined}
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            eircode: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-
-                    <AuthFormField
-                      label="Access notes"
-                      htmlFor="site-edit-access-notes"
-                    >
-                      <Textarea
-                        id="site-edit-access-notes"
-                        disabled={!canEdit}
-                        rows={3}
-                        value={values.accessNotes}
-                        onChange={(event) =>
-                          setValues((current) => ({
-                            ...current,
-                            accessNotes: event.target.value,
-                          }))
-                        }
-                      />
-                    </AuthFormField>
-                  </FieldGroup>
+                <div className="flex flex-col gap-4">
+                  <SiteDetailsCard
+                    canEdit={canEdit}
+                    onOpenEditor={openEditor}
+                    site={currentSite}
+                  />
+                  <SiteRelatedJobs
+                    canCreateJobs={canEdit}
+                    hasMoreJobs={hasMoreRelatedJobs}
+                    jobs={relatedJobs}
+                  />
                 </div>
-              </TabsContent>
-            </Tabs>
+              </section>
+            </div>
           </div>
 
-          <DrawerFooter className="flex shrink-0 flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={updateResult.waiting}
-              onClick={closeSheet}
-            >
-              Close
-            </Button>
-            {canEdit && activeTab === "edit" ? (
-              <Button type="submit" loading={updateResult.waiting}>
-                {updateResult.waiting ? (
-                  "Saving..."
-                ) : (
-                  <>
-                    <HugeiconsIcon
-                      icon={PencilEdit02Icon}
-                      strokeWidth={2}
-                      data-icon="inline-start"
-                    />
-                    Save changes
-                  </>
-                )}
-              </Button>
-            ) : null}
-          </DrawerFooter>
-        </form>
+          <SiteDetailEditorDrawer
+            activeEditor={activeEditor}
+            fieldErrors={fieldErrors}
+            onSubmit={handleEditorSubmit}
+            serviceAreaGroups={serviceAreaGroups}
+            setFieldErrors={setFieldErrors}
+            setValues={setValues}
+            values={values}
+            waiting={updateResult.waiting}
+          />
+        </ResponsiveNestedDrawer>
       </DrawerContent>
     </ResponsiveDrawer>
   );
 }
 
-function SiteDetailSummary({ site }: { readonly site: SiteOption }) {
-  const addressLines = buildSiteAddressLines(site);
-  const googleMapsUrl = buildGoogleMapsUrl(site);
-  const isMapped = hasSiteCoordinates(site);
+function SiteTitleEditor({
+  canEdit,
+  errorText,
+  isEditing,
+  name,
+  nameDraft,
+  setFieldErrors,
+  setIsEditing,
+  setNameDraft,
+  submit,
+  waiting,
+}: {
+  readonly canEdit: boolean;
+  readonly errorText: string | undefined;
+  readonly isEditing: boolean;
+  readonly name: string;
+  readonly nameDraft: string;
+  readonly setFieldErrors: React.Dispatch<
+    React.SetStateAction<SitesCreateFieldErrors>
+  >;
+  readonly setIsEditing: React.Dispatch<React.SetStateAction<boolean>>;
+  readonly setNameDraft: React.Dispatch<React.SetStateAction<string>>;
+  readonly submit: () => Promise<void>;
+  readonly waiting: boolean;
+}) {
+  if (isEditing) {
+    return (
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="site-title-edit" className="sr-only">
+              Site name
+            </label>
+            <Input
+              id="site-title-edit"
+              value={nameDraft}
+              aria-invalid={Boolean(errorText) || undefined}
+              aria-describedby={errorText ? "site-title-edit-error" : undefined}
+              disabled={waiting}
+              onChange={(event) => {
+                clearSiteFieldError(setFieldErrors, "name");
+                setNameDraft(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setNameDraft(name);
+                  clearSiteFieldError(setFieldErrors, "name");
+                  setIsEditing(false);
+                }
+
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+            />
+            {errorText ? (
+              <p
+                id="site-title-edit-error"
+                className="mt-1 text-xs text-destructive"
+              >
+                {errorText}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-label="Save site name"
+            loading={waiting}
+            onClick={() => void submit()}
+          >
+            Save
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label="Cancel site name editing"
+            disabled={waiting}
+            onClick={() => {
+              setNameDraft(name);
+              clearSiteFieldError(setFieldErrors, "name");
+              setIsEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-5">
-      <section className="rounded-2xl border bg-background">
-        <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-              <h3 className="text-sm font-medium text-foreground">
-                Location summary
-              </h3>
-            </div>
-          </div>
-          <Badge
-            variant={isMapped ? "secondary" : "outline"}
-            className="shrink-0"
-          >
-            {isMapped ? "Mapped" : "Unmapped"}
-          </Badge>
+    <div className="group/title flex min-w-0 items-center gap-2">
+      <DrawerTitle className="truncate">{name}</DrawerTitle>
+      {canEdit ? (
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label="Edit site name"
+          className="opacity-70 group-hover/title:opacity-100 focus-visible:opacity-100"
+          onClick={() => {
+            setNameDraft(name);
+            clearSiteFieldError(setFieldErrors, "name");
+            setIsEditing(true);
+          }}
+        >
+          <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function SiteDetailsCard({
+  canEdit,
+  onOpenEditor,
+  site,
+}: {
+  readonly canEdit: boolean;
+  readonly onOpenEditor: (editor: SiteDetailEditor) => void;
+  readonly site: SiteOption;
+}) {
+  const addressLines = buildSiteAddressLines(site);
+  const googleMapsUrl = buildGoogleMapsUrl(site);
+
+  return (
+    <section
+      aria-label="Site details"
+      className="overflow-hidden rounded-lg border bg-card"
+    >
+      <div className="group/site-location flex flex-col gap-4 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-medium text-foreground">Location</h3>
+          {canEdit ? (
+            <DrawerTrigger asChild>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                aria-label="Edit location"
+                className="opacity-0 transition-opacity group-hover/site-location:opacity-100 focus-visible:opacity-100"
+                onClick={() => onOpenEditor("location")}
+              >
+                Edit
+              </Button>
+            </DrawerTrigger>
+          ) : null}
         </div>
 
-        <div className="grid gap-4 p-4 sm:grid-cols-2">
-          <SummaryItem
-            label="Service area"
-            value={site.serviceAreaName ?? "No service area"}
-          />
-          <SummaryItem
-            label="Coordinates"
-            value={
-              isMapped
-                ? `${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)}`
-                : "Coordinates pending"
-            }
-          />
-          <div className="sm:col-span-2">
-            <SummaryItem
-              label="Address"
-              value={
-                addressLines.length > 0 ? (
+        <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(15rem,1.1fr)]">
+          <div className="flex min-h-44 min-w-0 flex-col gap-4">
+            <div className="flex flex-1 flex-col gap-1">
+              <div className="text-sm leading-6 text-foreground">
+                {addressLines.length > 0 ? (
                   <span className="flex flex-col gap-1">
                     {addressLines.map((line) => (
                       <span key={line}>{line}</span>
@@ -522,63 +557,259 @@ function SiteDetailSummary({ site }: { readonly site: SiteOption }) {
                   </span>
                 ) : (
                   "No address"
-                )
-              }
-            />
+                )}
+              </div>
+            </div>
+
+            {googleMapsUrl ? (
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-fit items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none has-data-[icon=inline-end]:pr-2"
+              >
+                View on map
+                <HugeiconsIcon
+                  icon={ArrowUpRight01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-end"
+                />
+              </a>
+            ) : null}
           </div>
+
+          <SiteLocationMapPreview site={site} variant="embedded" />
         </div>
-
-        {googleMapsUrl ? (
-          <div className="border-t px-4 py-3">
-            <a
-              href={googleMapsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
-              Open in Google Maps
-            </a>
-          </div>
-        ) : null}
-      </section>
-
-      {isMapped ? <SiteLocationMapPreview site={site} /> : null}
-    </div>
-  );
-}
-
-function SiteDetailNotes({ site }: { readonly site: SiteOption }) {
-  return (
-    <section className="rounded-2xl border bg-background">
-      <div className="flex flex-col gap-1 border-b px-4 py-3">
-        <h3 className="text-sm font-medium text-foreground">Site notes</h3>
       </div>
 
-      <div className="p-4">
+      <div className="group/site-service-area border-t px-4 py-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <SummaryItem
+            label="Service area"
+            value={site.serviceAreaName ?? "No service area"}
+          />
+          {canEdit ? (
+            <DrawerTrigger asChild>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                aria-label="Edit service area"
+                className="opacity-0 transition-opacity group-hover/site-service-area:opacity-100 focus-visible:opacity-100"
+                onClick={() => onOpenEditor("service-area")}
+              >
+                Edit
+              </Button>
+            </DrawerTrigger>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="group/site-notes border-t p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-medium text-foreground">Notes summary</h3>
+          {canEdit ? (
+            <DrawerTrigger asChild>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                aria-label={
+                  site.accessNotes ? "Edit notes summary" : "Add notes summary"
+                }
+                className="opacity-0 transition-opacity group-hover/site-notes:opacity-100 focus-visible:opacity-100"
+                onClick={() => onOpenEditor("notes")}
+              >
+                {site.accessNotes ? "Edit" : "Add"}
+              </Button>
+            </DrawerTrigger>
+          ) : null}
+        </div>
+
         {site.accessNotes ? (
           <p className="max-w-prose text-sm leading-6 text-foreground">
             {site.accessNotes}
           </p>
         ) : (
-          <div className="flex items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">
-                No site notes yet.
-              </p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Add gate codes, arrival instructions, or safety context from the
-                edit tab when the site needs it.
-              </p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              No site notes yet.
+            </p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Add gate codes, arrival instructions, or safety context when the
+              site needs it.
+            </p>
           </div>
         )}
       </div>
     </section>
   );
+}
+
+function SiteDetailEditorDrawer({
+  activeEditor,
+  fieldErrors,
+  onSubmit,
+  serviceAreaGroups,
+  setFieldErrors,
+  setValues,
+  values,
+  waiting,
+}: {
+  readonly activeEditor: SiteDetailEditor | null;
+  readonly fieldErrors: SitesCreateFieldErrors;
+  readonly onSubmit: () => Promise<boolean>;
+  readonly serviceAreaGroups: readonly CommandSelectGroup[];
+  readonly setFieldErrors: React.Dispatch<
+    React.SetStateAction<SitesCreateFieldErrors>
+  >;
+  readonly setValues: React.Dispatch<
+    React.SetStateAction<SitesCreateFormState>
+  >;
+  readonly values: SitesCreateFormState;
+  readonly waiting: boolean;
+}) {
+  const successCloseRef = React.useRef<HTMLButtonElement>(null);
+
+  if (!activeEditor) {
+    return null;
+  }
+
+  const editorCopy = getSiteDetailEditorCopy(activeEditor);
+  const updateDraft = (patch: Partial<SitesCreateFormState>) => {
+    clearSiteFieldErrorsForPatch(setFieldErrors, patch);
+    setValues((current) => ({
+      ...current,
+      ...patch,
+    }));
+  };
+
+  return (
+    <DrawerContent
+      overlayClassName="z-[55]"
+      className="z-[60] flex max-h-[88vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=bottom]:pb-[calc(0.5rem+env(safe-area-inset-bottom))] data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg"
+    >
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        method="post"
+        noValidate
+        onSubmit={(event) =>
+          submitClientForm(event, async () => {
+            const didSave = await onSubmit();
+
+            if (didSave) {
+              successCloseRef.current?.click();
+            }
+          })
+        }
+      >
+        <DrawerClose asChild>
+          <button
+            ref={successCloseRef}
+            type="button"
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+        </DrawerClose>
+        <DrawerHeader className="shrink-0 gap-1.5 border-b px-5 py-4 text-left md:px-6 md:py-5">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <DrawerTitle>{editorCopy.title}</DrawerTitle>
+              <DrawerDescription className="mt-1 max-w-prose">
+                {editorCopy.description}
+              </DrawerDescription>
+            </div>
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Close ${editorCopy.title.toLowerCase()}`}
+                disabled={waiting}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </DrawerClose>
+          </div>
+        </DrawerHeader>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
+          {activeEditor === "service-area" ? (
+            <SiteNestedServiceAreaField
+              draft={values}
+              errors={fieldErrors}
+              idPrefix="site-detail-editor"
+              serviceAreaGroups={serviceAreaGroups}
+              onDraftPatch={updateDraft}
+            />
+          ) : null}
+
+          {activeEditor === "notes" ? (
+            <SiteAccessNotesField
+              draft={values}
+              idPrefix="site-detail-editor"
+              label="Notes summary"
+              rows={5}
+              onDraftPatch={updateDraft}
+            />
+          ) : null}
+
+          {activeEditor === "location" ? (
+            <SiteAddressFields
+              draft={values}
+              errors={fieldErrors}
+              idPrefix="site-detail-editor"
+              onDraftPatch={updateDraft}
+            />
+          ) : null}
+        </div>
+
+        <DrawerFooter className="shrink-0 flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <DrawerClose asChild>
+            <Button type="button" variant="outline" disabled={waiting}>
+              Cancel
+            </Button>
+          </DrawerClose>
+          <Button type="submit" loading={waiting}>
+            {editorCopy.saveLabel}
+          </Button>
+        </DrawerFooter>
+      </form>
+    </DrawerContent>
+  );
+}
+
+function getSiteDetailEditorCopy(editor: SiteDetailEditor) {
+  switch (editor) {
+    case "location": {
+      return {
+        description: "Update the address used for dispatch and map lookup.",
+        saveLabel: "Save location",
+        title: "Edit location",
+      };
+    }
+    case "notes": {
+      return {
+        description:
+          "Keep this to the access or safety context people need before visiting.",
+        saveLabel: "Save notes",
+        title: "Edit notes summary",
+      };
+    }
+    case "service-area": {
+      return {
+        description: "Assign this site to the operational area that owns it.",
+        saveLabel: "Save service area",
+        title: "Edit service area",
+      };
+    }
+    default: {
+      const exhaustiveEditor: never = editor;
+
+      return exhaustiveEditor;
+    }
+  }
 }
 
 function SummaryItem({
@@ -599,26 +830,45 @@ function SummaryItem({
 }
 
 function SiteRelatedJobs({
+  canCreateJobs,
   hasMoreJobs,
   jobs,
 }: {
+  readonly canCreateJobs: boolean;
   readonly hasMoreJobs: boolean;
   readonly jobs: readonly JobListItem[];
 }) {
   if (jobs.length === 0) {
     return (
-      <section className="rounded-2xl border bg-background px-4 py-5">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-foreground">
-              No jobs linked to this site yet.
-            </h3>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Jobs attached to this site will collect here once work starts.
-            </p>
+      <section
+        aria-label="Related jobs"
+        className="overflow-hidden rounded-lg border bg-card"
+      >
+        <div className="flex items-center gap-2 border-b px-4 py-3">
+          <h3 className="text-sm font-medium text-foreground">Related jobs</h3>
+          <Badge variant="outline">0</Badge>
+        </div>
+        <div className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                No jobs linked to this site yet.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Jobs attached to this site will collect here once work starts.
+              </p>
+            </div>
+            {canCreateJobs ? (
+              <Link
+                to="/jobs/new"
+                className={buttonVariants({
+                  size: "sm",
+                  variant: "outline",
+                })}
+              >
+                New job
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
@@ -626,17 +876,15 @@ function SiteRelatedJobs({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border bg-background">
-      <div className="flex flex-col gap-1 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">
-            Associated jobs
-          </h3>
-        </div>
+    <section
+      aria-label="Related jobs"
+      className="overflow-hidden rounded-lg border bg-card"
+    >
+      <div className="flex items-center gap-2 border-b px-4 py-3">
+        <h3 className="text-sm font-medium text-foreground">Related jobs</h3>
         <Badge variant="secondary">
           {jobs.length}
-          {hasMoreJobs ? "+" : ""}{" "}
-          {jobs.length === 1 && !hasMoreJobs ? "job linked" : "jobs linked"}
+          {hasMoreJobs ? "+" : ""}
         </Badge>
       </div>
 
@@ -657,11 +905,13 @@ function SiteRelatedJobs({
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              <Badge variant="secondary">{formatJobStatus(job.status)}</Badge>
+              <Badge variant="secondary">
+                {RELATED_JOB_STATUS_LABELS[job.status]}
+              </Badge>
               <Badge
                 variant={job.priority === "none" ? "outline" : "secondary"}
               >
-                {formatJobPriority(job.priority)}
+                {RELATED_JOB_PRIORITY_LABELS[job.priority]}
               </Badge>
             </div>
           </Link>
@@ -676,30 +926,53 @@ function SiteRelatedJobs({
   );
 }
 
-function TabCount({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs leading-none text-muted-foreground">
-      {children}
-    </span>
-  );
-}
-
-function formatJobStatus(status: JobListItem["status"]) {
-  return status
-    .split("_")
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatJobPriority(priority: JobListItem["priority"]) {
-  return priority === "none"
-    ? "No priority"
-    : priority.slice(0, 1).toUpperCase() + priority.slice(1);
-}
-
 function formatJobUpdatedAt(updatedAt: string) {
   return SITE_JOB_UPDATED_AT_FORMATTER.format(new Date(updatedAt));
 }
+
+function clearSiteFieldError(
+  setFieldErrors: React.Dispatch<React.SetStateAction<SitesCreateFieldErrors>>,
+  field: keyof SitesCreateFieldErrors
+) {
+  setFieldErrors((current) => {
+    if (current[field] === undefined) {
+      return current;
+    }
+
+    return {
+      ...current,
+      [field]: undefined,
+    };
+  });
+}
+
+function clearSiteFieldErrorsForPatch(
+  setFieldErrors: React.Dispatch<React.SetStateAction<SitesCreateFieldErrors>>,
+  patch: Partial<SitesCreateFormState>
+) {
+  setFieldErrors((current) => {
+    let next: SitesCreateFieldErrors | null = null;
+
+    for (const field of SITE_DETAIL_PATCH_ERROR_FIELDS) {
+      if (field in patch && current[field] !== undefined) {
+        next = {
+          ...(next ?? current),
+          [field]: undefined,
+        };
+      }
+    }
+
+    return next ?? current;
+  });
+}
+
+const SITE_DETAIL_PATCH_ERROR_FIELDS = [
+  "addressLine1",
+  "county",
+  "eircode",
+  "name",
+  "serviceAreaSelection",
+] as const satisfies readonly (keyof SitesCreateFieldErrors)[];
 
 function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {
   return {

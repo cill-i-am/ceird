@@ -1,6 +1,7 @@
 import type {
   ActivityIdType,
   CommentIdType,
+  ContactIdType,
   JobCollaboratorIdType,
   JobDetailResponse,
   UserIdType,
@@ -10,7 +11,13 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
 import type { ComponentProps, ReactNode } from "react";
@@ -35,6 +42,7 @@ const secondExternalUserId =
   "45454545-4545-4454-8454-454545454545" as UserIdType;
 const collaboratorId =
   "23232323-2323-4232-8232-232323232323" as JobCollaboratorIdType;
+const contactId = "34343434-3434-4343-8343-343434343434" as ContactIdType;
 const urgentLabelId = "99999999-9999-4999-8999-999999999999" as LabelIdType;
 const accessLabelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as LabelIdType;
 const waitingLabelId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" as LabelIdType;
@@ -46,6 +54,7 @@ const {
   mockedUseAtomInitialValues,
   mockedUseAtomSet,
   mockedUseAtomValue,
+  responsiveDrawerPropsRef,
 } = vi.hoisted(() => ({
   mockedGetExternalMemberOptions: vi.fn<() => Promise<unknown>>(),
   mockedNavigate: vi.fn<NavigateMock>(),
@@ -53,6 +62,13 @@ const {
   mockedUseAtomInitialValues: vi.fn<InitialValuesMock>(),
   mockedUseAtomSet: vi.fn<AtomSetterMock>(),
   mockedUseAtomValue: vi.fn<AtomValueMock>(),
+  responsiveDrawerPropsRef: {
+    current: null as null | {
+      onAnimationEnd?: (open: boolean) => void;
+      onOpenChange?: (open: boolean) => void;
+      open?: boolean;
+    },
+  },
 }));
 
 const { jobsLookupAtomToken } = vi.hoisted(() => ({
@@ -260,13 +276,23 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
     open = true,
+    onAnimationEnd,
+    onOpenChange,
   }: {
     children?: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
+    onOpenChange?: (open: boolean) => void;
     open?: boolean;
-  }) => (open ? <div>{children}</div> : null),
+  }) => {
+    responsiveDrawerPropsRef.current = { onAnimationEnd, onOpenChange, open };
+
+    return <div data-testid="responsive-drawer">{children}</div>;
+  },
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DRAWER_CLOSE_FALLBACK_MS: 550,
+  DrawerClose: ({ children }: { children?: ReactNode }) => <>{children}</>,
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
@@ -348,6 +374,7 @@ describe("jobs detail sheet", () => {
   beforeEach(() => {
     lookupSiteById = new Map([[siteId, buildSiteOption()]]);
     collaboratorState = [];
+    responsiveDrawerPropsRef.current = null;
 
     mockedNavigate.mockReset();
     mockedUseAtomInitialValues.mockReset();
@@ -537,23 +564,41 @@ describe("jobs detail sheet", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it("splits the operational detail surface into detail tabs", async () => {
+  it("renders job sub-surfaces as one stacked briefing", () => {
     renderDetailSheet(buildDetail());
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    expect(screen.getByRole("tab", { name: "Comments 1" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Costs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Visits 1" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Activity 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Site" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Job detail sections" }).parentElement
-    ).toHaveClass("no-scrollbar");
+      screen.getByRole("heading", { name: "Job details" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Comments" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Visits" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Activity" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Workflow" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Costs" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Site" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Comment 1" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cost" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Visit 1" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Collaborator" })
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(
         "Keep the status honest. Use blocked only when something is truly waiting on an unblock."
@@ -603,7 +648,35 @@ describe("jobs detail sheet", () => {
     ]) {
       expect(screen.queryByText(removedCopy)).not.toBeInTheDocument();
     }
-    await expectExternalCollaboratorOptionsToLoad();
+  });
+
+  it("waits for the drawer close animation before leaving the route", () => {
+    vi.useFakeTimers();
+    try {
+      renderDetailSheet(buildDetail());
+
+      expect(responsiveDrawerPropsRef.current?.open).toBeTruthy();
+
+      act(() => {
+        responsiveDrawerPropsRef.current?.onOpenChange?.(false);
+      });
+
+      expect(mockedNavigate).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(549);
+      });
+
+      expect(mockedNavigate).not.toHaveBeenCalled();
+
+      act(() => {
+        responsiveDrawerPropsRef.current?.onAnimationEnd?.(false);
+      });
+
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it(
@@ -611,7 +684,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       renderDetailSheet(buildDetail());
 
       expect(
@@ -619,6 +692,9 @@ describe("jobs detail sheet", () => {
       ).toBeInTheDocument();
       expect(
         screen.getByText("Checked the burner and reset the controls.")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("pat@example.com · +353 87 765 4321")
       ).toBeInTheDocument();
       expect(
         screen.getByText("Replaced faulty relay and tested startup.")
@@ -636,7 +712,7 @@ describe("jobs detail sheet", () => {
         screen.getByText("Use the south gate and ring reception.")
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: /open in google maps/i })
+        screen.getByRole("link", { name: /view on map/i })
       ).toHaveAttribute(
         "href",
         "https://www.google.com/maps/search/?api=1&query=53.3498%2C-6.2603"
@@ -644,7 +720,6 @@ describe("jobs detail sheet", () => {
       expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
         [`detail:${workItemId}`, buildDetail()],
       ]);
-      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -653,7 +728,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       lookupSiteById = new Map();
 
       renderDetailSheet(buildDetail({ site: buildSiteOption() }));
@@ -663,7 +738,6 @@ describe("jobs detail sheet", () => {
         screen.getByText("1 Custom House Quay, North Dock")
       ).toBeInTheDocument();
       expect(screen.queryByText("No site yet")).not.toBeInTheDocument();
-      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -878,7 +952,7 @@ describe("jobs detail sheet", () => {
     {
       timeout: 10_000,
     },
-    async () => {
+    () => {
       renderDetailSheet(buildDetail({ siteId: undefined }));
 
       expect(screen.getByText("No site attached yet.")).toBeInTheDocument();
@@ -887,7 +961,6 @@ describe("jobs detail sheet", () => {
           /it will not show up on the map until a site is added/i
         )
       ).toBeInTheDocument();
-      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -899,6 +972,7 @@ describe("jobs detail sheet", () => {
     async () => {
       const user = userEvent.setup();
       renderDetailSheet(buildDetail());
+      await openJobDetailTab(user, /status/i);
 
       await user.selectOptions(screen.getByLabelText("Next status"), "blocked");
       await user.click(
@@ -920,7 +994,9 @@ describe("jobs detail sheet", () => {
       timeout: 10_000,
     },
     async () => {
+      const user = userEvent.setup();
       renderDetailSheet(buildDetail({ status: "blocked" }));
+      await openJobDetailTab(user, /status/i);
 
       const statusSelect = screen.getByLabelText("Next status");
 
@@ -934,7 +1010,6 @@ describe("jobs detail sheet", () => {
         screen.queryByRole("option", { name: "Completed" })
       ).not.toBeInTheDocument();
       expect(statusSelect).toHaveValue("");
-      await expectExternalCollaboratorOptionsToLoad();
     }
   );
 
@@ -1003,6 +1078,33 @@ describe("jobs detail sheet", () => {
     }
   );
 
+  it(
+    "opens the workflow panel when the blocked command needs a reason",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      renderDetailSheet(buildDetail(), undefined, { withCommandBar: true });
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /prepare blocked status/i })
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole("option", { name: /prepare blocked status/i })
+      );
+
+      expect(screen.getByLabelText("Why is it blocked?")).toBeInTheDocument();
+      expect(screen.getByLabelText("Next status")).toHaveValue("blocked");
+      expect(mockedTransitionJob).not.toHaveBeenCalled();
+    }
+  );
+
   it("registers the cost hotkey only when the viewer can add costs", () => {
     renderDetailSheet(buildDetail(), {
       role: "member",
@@ -1030,7 +1132,9 @@ describe("jobs detail sheet", () => {
   }, 1000);
 
   it("does not render a zero cost total when costs are omitted", async () => {
+    const user = userEvent.setup();
     renderDetailSheet(buildDetail({ costs: undefined }));
+    await openJobDetailTab(user, /costs/i);
 
     expect(screen.queryByText("Cost total")).not.toBeInTheDocument();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
@@ -1040,7 +1144,6 @@ describe("jobs detail sheet", () => {
     expect(
       screen.queryByRole("button", { name: /add cost line/i })
     ).not.toBeInTheDocument();
-    await expectExternalCollaboratorOptionsToLoad();
   }, 1000);
 
   it("renders assigned external collaborator details as read-only when comments are disabled", () => {
@@ -1074,6 +1177,15 @@ describe("jobs detail sheet", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /add cost line/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^visit\b/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^cost\b/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Taylor Owner created the job.")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /add label/i })
@@ -1183,6 +1295,7 @@ describe("jobs detail sheet", () => {
         role: "admin",
         userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
       });
+      await openJobDetailTab(user, /collaborator/i);
 
       await screen.findByText("Collaborators");
       await screen.findByText("External Partner");
@@ -1403,6 +1516,7 @@ describe("jobs detail sheet", () => {
 
       const user = userEvent.setup();
       renderDetailSheet(buildDetail({ status: "completed" }));
+      await openJobDetailTab(user, /status/i);
 
       await user.click(screen.getByRole("button", { name: /reopen job/i }));
 
@@ -1410,11 +1524,13 @@ describe("jobs detail sheet", () => {
     }
   );
 
-  it("hides transition and visit actions from unassigned members", () => {
+  it("hides transition and visit actions from unassigned members", async () => {
+    const user = userEvent.setup();
     renderDetailSheet(buildDetail(), {
       role: "member",
       userId: "99999999-9999-4999-8999-999999999999" as UserIdType,
     });
+    await openJobDetailTab(user, /status/i);
 
     expect(
       screen.queryByRole("button", { name: /apply status change/i })
@@ -1433,6 +1549,7 @@ describe("jobs detail sheet", () => {
     expect(
       screen.getByText(/status changes open once this job is assigned to you/i)
     ).toBeInTheDocument();
+    await openJobDetailTab(user, /visits/i);
     expect(
       screen.getByText(/members can only log visits on jobs assigned to them/i)
     ).toBeInTheDocument();
@@ -1441,6 +1558,7 @@ describe("jobs detail sheet", () => {
 
 function buildDetail(overrides?: {
   readonly comments?: JobDetailResponse["comments"];
+  readonly contact?: JobDetailResponse["contact"];
   readonly costs?: JobDetailResponse["costs"];
   readonly labels?: ReturnType<typeof buildLabel>[];
   readonly site?: JobDetailResponse["site"];
@@ -1474,6 +1592,16 @@ function buildDetail(overrides?: {
         workItemId,
       },
     ],
+    contact:
+      overrides && "contact" in overrides
+        ? overrides.contact
+        : {
+            email: "pat@example.com",
+            id: contactId,
+            name: "Pat Contact",
+            notes: "Use email for routine updates.",
+            phone: "+353 87 765 4321",
+          },
     costs:
       overrides && "costs" in overrides
         ? overrides.costs
@@ -1602,11 +1730,22 @@ async function openJobDetailTab(
   user: ReturnType<typeof userEvent.setup>,
   name: RegExp | string
 ) {
-  await user.click(screen.getByRole("tab", { name }));
-}
+  const text = String(name).toLowerCase();
+  let buttonName = name;
 
-async function expectExternalCollaboratorOptionsToLoad() {
-  await expect(
-    screen.findByRole("option", { name: "External Partner" })
-  ).resolves.toBeInTheDocument();
+  if (text.includes("comment")) {
+    buttonName = /comment/i;
+  } else if (text.includes("cost")) {
+    buttonName = /cost/i;
+  } else if (text.includes("visit")) {
+    buttonName = /visit/i;
+  } else if (text.includes("site")) {
+    buttonName = /^site$/i;
+  } else if (text.includes("workflow") || text.includes("status")) {
+    buttonName = /status/i;
+  } else if (text.includes("collaborator")) {
+    buttonName = /collaborator/i;
+  }
+
+  await user.click(screen.getByRole("button", { name: buttonName }));
 }

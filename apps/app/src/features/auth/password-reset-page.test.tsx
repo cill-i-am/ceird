@@ -129,6 +129,17 @@ describe("password reset page", () => {
         newPassword: "password123",
       });
     });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          invitation: "inv_123",
+        },
+        to: "/login",
+        viewTransition: {
+          types: ["auth-card"],
+        },
+      });
+    });
   }, 10_000);
 
   it("navigates to /login after a successful reset", async () => {

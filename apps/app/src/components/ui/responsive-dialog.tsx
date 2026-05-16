@@ -22,6 +22,8 @@ import {
 import { useIsMobile } from "#/hooks/use-mobile";
 import { cn } from "#/lib/utils";
 
+const ResponsiveDialogModeContext = React.createContext(false);
+
 interface ResponsiveDialogProps {
   readonly children?: React.ReactNode;
   readonly defaultOpen?: boolean;
@@ -32,27 +34,24 @@ interface ResponsiveDialogProps {
 function ResponsiveDialog({ children, ...props }: ResponsiveDialogProps) {
   const isMobile = useIsMobile();
 
-  if (isMobile) {
-    return (
-      <Drawer direction="bottom" {...props}>
-        {children}
-      </Drawer>
-    );
-  }
+  const content = isMobile ? (
+    <Drawer direction="bottom" {...props}>
+      {children}
+    </Drawer>
+  ) : (
+    <Dialog {...props}>{children}</Dialog>
+  );
 
-  return <Dialog {...props}>{children}</Dialog>;
+  return (
+    <ResponsiveDialogModeContext.Provider value={isMobile}>
+      {content}
+    </ResponsiveDialogModeContext.Provider>
+  );
 }
 
-type ResponsiveDialogContentProps = Omit<
-  React.ComponentProps<"div">,
-  "children"
-> & {
-  readonly children?: React.ReactNode;
-  readonly dialogClassName?: string;
-  readonly drawerClassName?: string;
-  readonly initialFocus?: React.RefObject<HTMLElement | null>;
-  readonly showCloseButton?: boolean;
-};
+function useResponsiveDialogMode() {
+  return React.use(ResponsiveDialogModeContext);
+}
 
 function ResponsiveDialogContent({
   children,
@@ -64,7 +63,7 @@ function ResponsiveDialogContent({
   showCloseButton,
   ...props
 }: ResponsiveDialogContentProps) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (isMobile) {
     return (
@@ -91,11 +90,22 @@ function ResponsiveDialogContent({
   );
 }
 
+type ResponsiveDialogContentProps = Omit<
+  React.ComponentProps<"div">,
+  "children"
+> & {
+  readonly children?: React.ReactNode;
+  readonly dialogClassName?: string;
+  readonly drawerClassName?: string;
+  readonly initialFocus?: React.RefObject<HTMLElement | null>;
+  readonly showCloseButton?: boolean;
+};
+
 function ResponsiveDialogHeader({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (isMobile) {
     return (
@@ -116,7 +126,7 @@ function ResponsiveDialogFooter({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (isMobile) {
     return (
@@ -137,7 +147,7 @@ function ResponsiveDialogTitle({
   className,
   ...props
 }: React.ComponentProps<"h2">) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (isMobile) {
     return <DrawerTitle className={className} {...props} />;
@@ -150,7 +160,7 @@ function ResponsiveDialogDescription({
   className,
   ...props
 }: React.ComponentProps<"p">) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (isMobile) {
     return <DrawerDescription className={className} {...props} />;
@@ -169,7 +179,7 @@ function ResponsiveDialogClose({
   render,
   ...props
 }: ResponsiveDialogCloseProps) {
-  const isMobile = useIsMobile();
+  const isMobile = useResponsiveDialogMode();
 
   if (!isMobile) {
     return (

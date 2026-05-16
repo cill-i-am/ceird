@@ -234,19 +234,32 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
+      params,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    )) as typeof actual.Link,
+    }: ComponentProps<"a"> & {
+      params?: Readonly<Record<string, string>>;
+      to?: string;
+    }) => {
+      const href =
+        to?.replaceAll(
+          /\$([A-Za-z0-9_]+)/g,
+          (_match, key: string) => params?.[key] ?? `$${key}`
+        ) ?? "";
+
+      return (
+        <a href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
     useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
 describe("jobs page", () => {
   afterEach(() => {
+    cleanup();
     setViewportWidth(originalInnerWidth);
     vi.clearAllMocks();
   });
@@ -275,13 +288,13 @@ describe("jobs page", () => {
         within(statusViews).getByRole("button", { name: /blocked 1/i })
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "New 1" })
+        within(queuePanel).getByRole("heading", { name: "New jobs" })
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Triaged 2" })
+        within(queuePanel).getByRole("heading", { name: "Triaged jobs" })
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Blocked 1" })
+        within(queuePanel).getByRole("heading", { name: "Blocked jobs" })
       ).toBeInTheDocument();
       expect(
         within(queuePanel).queryByText("Job queue")
@@ -314,7 +327,9 @@ describe("jobs page", () => {
         0
       );
 
-      await chooseCommandFilter(user, /status filter/i, "All jobs");
+      await user.click(
+        within(statusViews).getByRole("button", { name: /all jobs 6/i })
+      );
 
       expect(
         within(statusViews).getByRole("button", { name: /all jobs 6/i })
@@ -326,10 +341,10 @@ describe("jobs page", () => {
         within(queuePanel).getAllByText("Canceled visit").length
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getByRole("heading", { name: "Completed 1" })
+        within(queuePanel).getByRole("heading", { name: "Completed jobs" })
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Canceled 1" })
+        within(queuePanel).getByRole("heading", { name: "Canceled jobs" })
       ).toBeInTheDocument();
     }
   );
@@ -349,15 +364,54 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "Map" }));
+      await user.click(screen.getByRole("button", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
-          "aria-selected",
-          "true"
-        );
+        expect(
+          screen.getByRole("button", { name: "List" })
+        ).toBeInTheDocument();
       });
+    }
+  );
+
+  it(
+    "opens the job drawer from the whole desktop row",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({ viewportWidth: 1280 });
+
+      await user.click(
+        within(getPrimaryQueuePanel()).getByRole("row", {
+          name: /open inspect boiler/i,
+        })
+      );
+
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        params: { jobId: initialList.items[0]?.id },
+        to: "/jobs/$jobId",
+      });
+    }
+  );
+
+  it(
+    "exposes a semantic desktop row link",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      renderJobsPage({ viewportWidth: 1280 });
+
+      const link = within(getPrimaryQueuePanel()).getByRole("link", {
+        name: /inspect boiler/i,
+      });
+      link.focus();
+
+      expect(link).toHaveAttribute("href", `/jobs/${initialList.items[0]?.id}`);
     }
   );
 
@@ -376,7 +430,7 @@ describe("jobs page", () => {
         screen.queryByTestId("jobs-coverage-panel")
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "Map" }));
+      await user.click(screen.getByRole("button", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
@@ -384,7 +438,7 @@ describe("jobs page", () => {
 
       expect(screen.queryByTestId("jobs-queue-panel")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "List" }));
+      await user.click(screen.getByRole("button", { name: "List" }));
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
     }
@@ -442,10 +496,9 @@ describe("jobs page", () => {
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
-          "aria-selected",
-          "true"
-        );
+        expect(
+          screen.getByRole("button", { name: "List" })
+        ).toBeInTheDocument();
       });
 
       fireEvent.keyDown(window, { key: "k", metaKey: true });
@@ -679,9 +732,7 @@ describe("jobs page", () => {
       });
 
       expect(screen.getByLabelText("Search jobs")).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /status filter/i })
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Job status views")).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: /saved view/i })
       ).not.toBeInTheDocument();
@@ -707,7 +758,11 @@ describe("jobs page", () => {
         screen.queryByRole("link", { name: /new job/i })
       ).not.toBeInTheDocument();
 
-      await chooseCommandFilter(user, /status filter/i, "All jobs");
+      await user.click(
+        within(screen.getByLabelText("Job status views")).getByRole("button", {
+          name: /all jobs 6/i,
+        })
+      );
 
       const queuePanel = getPrimaryQueuePanel();
       expect(
@@ -868,7 +923,7 @@ describe("jobs page", () => {
   );
 
   it(
-    "shows labels in every list layout and filters by label",
+    "shows labels in the desktop list layout and filters by label",
     {
       timeout: 10_000,
     },
@@ -896,16 +951,17 @@ describe("jobs page", () => {
       expect(
         screen.getByRole("button", { name: /remove label: compliance/i })
       ).toBeInTheDocument();
-
-      cleanup();
-      renderJobsPage({ viewportWidth: 720 });
-      const compactQueuePanel = getPrimaryQueuePanel();
-
-      expect(
-        within(compactQueuePanel).getAllByText("Access needed").length
-      ).toBeGreaterThan(0);
     }
   );
+
+  it("shows labels in the compact list layout", () => {
+    renderJobsPage({ viewportWidth: 720 });
+    const compactQueuePanel = getPrimaryQueuePanel();
+
+    expect(
+      within(compactQueuePanel).getAllByText("Access needed").length
+    ).toBeGreaterThan(0);
+  });
 
   it(
     "searches jobs by service area name",

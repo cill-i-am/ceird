@@ -12,6 +12,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
@@ -66,16 +67,25 @@ vi.mock("@hugeicons/react", () => ({
 vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
+    onAnimationEnd,
     open = true,
   }: {
     children?: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
     open?: boolean;
-  }) =>
-    open ? (
+  }) => {
+    useEffect(() => {
+      if (!open) {
+        onAnimationEnd?.(false);
+      }
+    }, [onAnimationEnd, open]);
+
+    return open ? (
       <div data-testid="responsive-drawer" data-nested="false">
         {children}
       </div>
-    ) : null,
+    ) : null;
+  },
   ResponsiveNestedDrawer: ({
     children,
     open = true,
@@ -91,6 +101,8 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DRAWER_CLOSE_FALLBACK_MS: 550,
+  DrawerClose: ({ children }: { children?: ReactNode }) => <>{children}</>,
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),

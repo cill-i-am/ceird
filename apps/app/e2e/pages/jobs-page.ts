@@ -179,23 +179,23 @@ export class JobDetailSheet {
       expect(
         this.page.getByRole("heading", { level: 2, name: title })
       ).toBeVisible(),
-      waitForSubmitHydration(this.page),
     ]);
   }
 
-  async openTab(
-    tabName: "Activity" | "Comments" | "Costs" | "Details" | "Visits"
-  ) {
-    const tab = this.page.getByRole("tab", {
-      name: new RegExp(`^${tabName}`),
+  async openPanel(panelName: "Comment" | "Cost" | "Site" | "Status" | "Visit") {
+    const panel = this.root.getByRole("button", {
+      name: new RegExp(`^${panelName}(?: \\d+)?$`),
     });
 
-    await tab.click();
-    await tab.press("Enter");
-    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await panel.click();
   }
 
   async chooseStatusOption(optionLabel: string) {
+    if (!(await this.statusSelect.isVisible())) {
+      await this.openPanel("Status");
+    }
+
+    await expect(this.statusSelect).toBeVisible();
     // The status options are rendered only after the picker is opened.
     // react-doctor-disable-next-line
     await this.statusSelect.click();
