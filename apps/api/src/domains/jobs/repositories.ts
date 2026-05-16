@@ -199,6 +199,14 @@ interface WorkItemLabelRow {
   readonly work_item_id: string;
 }
 
+interface SiteLabelRow {
+  readonly created_at: Date;
+  readonly label_id: string;
+  readonly name: string;
+  readonly site_id: string;
+  readonly updated_at: Date;
+}
+
 interface WorkItemCostLineRow {
   readonly author_user_id: string;
   readonly created_at: Date;
@@ -847,6 +855,49 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
         return mapJobRow(row, labelsByWorkItemId.get(workItemId) ?? []);
       });
 
+      const listLabelsForSites = Effect.fn("JobsRepository.listLabelsForSites")(
+        function* (organizationId: OrganizationId, siteIds: readonly SiteId[]) {
+          if (siteIds.length === 0) {
+            return new Map<string, Label[]>();
+          }
+
+          const rows = yield* sql<SiteLabelRow>`
+          select
+            site_labels.site_id,
+            site_labels.label_id,
+            labels.created_at,
+            labels.name,
+            labels.updated_at
+          from site_labels
+          join labels on labels.id = site_labels.label_id
+          join sites on sites.id = site_labels.site_id
+          where site_labels.organization_id = ${organizationId}
+            and labels.organization_id = ${organizationId}
+            and sites.organization_id = ${organizationId}
+            and site_labels.site_id in ${sql.in(siteIds)}
+            and labels.archived_at is null
+          order by labels.name asc, labels.id asc
+        `;
+
+          const labelsBySiteId = new Map<string, Label[]>();
+
+          for (const row of rows) {
+            const labels = labelsBySiteId.get(row.site_id) ?? [];
+            labels.push(
+              decodeLabel({
+                createdAt: row.created_at.toISOString(),
+                id: decodeLabelId(row.label_id),
+                name: row.name,
+                updatedAt: row.updated_at.toISOString(),
+              })
+            );
+            labelsBySiteId.set(row.site_id, labels);
+          }
+
+          return labelsBySiteId;
+        }
+      );
+
       const list = Effect.fn("JobsRepository.list")(function* (
         organizationId: OrganizationId,
         query: JobListQuery,
@@ -1453,8 +1504,18 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           limit 1
         `;
 
-          return Option.fromNullable(rows[0]).pipe(
-            Option.map(mapSiteOptionRow)
+          const [row] = rows;
+
+          if (row === undefined) {
+            return Option.none<SiteOption>();
+          }
+
+          const labelsBySiteId = yield* listLabelsForSites(organizationId, [
+            siteId,
+          ]);
+
+          return Option.some(
+            mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? [])
           );
         }
       );
@@ -2458,7 +2519,10 @@ function groupRateCardLinesByRateCardId(lines: readonly RateCardLineRow[]) {
   return linesByRateCardId;
 }
 
-function mapSiteOptionRow(row: SiteOptionRow): SiteOption {
+function mapSiteOptionRow(
+  row: SiteOptionRow,
+  labels: readonly Label[] = []
+): SiteOption {
   return decodeSiteOption({
     accessNotes: nullableToUndefined(row.access_notes),
     addressLine1: row.address_line_1,
@@ -2469,6 +2533,7 @@ function mapSiteOptionRow(row: SiteOptionRow): SiteOption {
     geocodedAt: dateToIsoString(row.geocoded_at),
     geocodingProvider: row.geocoding_provider,
     id: row.id,
+    labels,
     name: row.name,
     latitude: row.latitude,
     longitude: row.longitude,

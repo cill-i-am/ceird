@@ -50,6 +50,7 @@ import {
 import { LabelsRepository } from "./labels/repositories.js";
 import {
   ServiceAreasRepository as ConfigurationRepository,
+  SiteLabelAssignmentsRepository,
   SitesRepository,
 } from "./sites/repositories.js";
 
@@ -130,6 +131,22 @@ describe("domain persistence integration", () => {
         notes: "Prefers morning calls.",
         organizationId: identity.organizationId,
         phone: "+353871234567",
+      })
+    );
+    const siteLabel = await runJobsEffect(
+      databaseUrl,
+      LabelsRepository.create({
+        name: "Requires Escort",
+        organizationId: identity.organizationId,
+      })
+    );
+
+    await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: siteLabel.id,
+        organizationId: identity.organizationId,
+        siteId: createdSiteId,
       })
     );
 
@@ -241,6 +258,7 @@ describe("domain persistence integration", () => {
       serviceAreaName: "Dublin",
       town: "Dublin",
     });
+    expect(detailValue.site?.labels).toStrictEqual([siteLabel]);
     expect(detailValue.site?.addressLine2).toBeUndefined();
     expect(detailValue.comments).toHaveLength(1);
     expect(detailValue.comments[0]?.body).toContain("water ingress");
@@ -292,6 +310,7 @@ describe("domain persistence integration", () => {
     });
     expect(createdSiteOption?.addressLine2).toBeUndefined();
     expect(createdSiteOption?.county).toBe("Dublin");
+    expect(createdSiteOption?.labels).toStrictEqual([siteLabel]);
     expect(Option.getOrUndefined(createdSiteOptionById)).toStrictEqual(
       createdSiteOption
     );
@@ -1737,6 +1756,213 @@ describe("domain persistence integration", () => {
     expect(labelsAfterArchive.map((jobLabel) => jobLabel.id)).not.toContain(
       updatedLabel.id
     );
+  }, 30_000);
+
+  it("manages site label assignments idempotently", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "site_labels" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping site label assignment coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+    const identity = await seedIdentityRecords(databaseUrl);
+    const foreignIdentity = await seedIdentityRecords(databaseUrl);
+
+    const serviceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "North"
+    );
+    const foreignServiceAreaId = await insertServiceArea(
+      databaseUrl,
+      foreignIdentity.organizationId,
+      "Foreign"
+    );
+    const siteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        addressLine1: "7 Label Lane",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D07 LABL",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        latitude: 53.35,
+        longitude: -6.26,
+        name: "Labelled Site",
+        organizationId: identity.organizationId,
+        serviceAreaId,
+        town: "Dublin",
+      })
+    );
+    const foreignSiteId = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.create({
+        addressLine1: "1 Other Org Road",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D01 FORN",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        latitude: 53.35,
+        longitude: -6.26,
+        name: "Foreign Site",
+        organizationId: foreignIdentity.organizationId,
+        serviceAreaId: foreignServiceAreaId,
+        town: "Dublin",
+      })
+    );
+    const label = await runJobsEffect(
+      databaseUrl,
+      LabelsRepository.create({
+        name: "Gate Access",
+        organizationId: identity.organizationId,
+      })
+    );
+    const foreignLabel = await runJobsEffect(
+      databaseUrl,
+      LabelsRepository.create({
+        name: "Gate Access",
+        organizationId: foreignIdentity.organizationId,
+      })
+    );
+
+    const assigned = await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    expect(assigned).toStrictEqual({
+      changed: true,
+      label,
+    });
+
+    const duplicateAssigned = await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    expect(duplicateAssigned).toStrictEqual({
+      changed: false,
+      label,
+    });
+
+    const option = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        SitesRepository.getOptionById(identity.organizationId, siteId)
+      )
+    );
+    expect(option.labels).toStrictEqual([label]);
+
+    const options = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.listOptions(identity.organizationId)
+    );
+    expect(
+      options.find((siteOption) => siteOption.id === siteId)?.labels
+    ).toStrictEqual([label]);
+
+    const assignForeignLabelExit = await runJobsEffectExit(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: foreignLabel.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    expectFailureTag(assignForeignLabelExit, LABEL_NOT_FOUND_ERROR_TAG);
+
+    const assignForeignSiteExit = await runJobsEffectExit(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId: foreignSiteId,
+      })
+    );
+    expectFailureTag(assignForeignSiteExit, SITE_NOT_FOUND_ERROR_TAG);
+
+    const removed = await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.removeFromSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    expect(removed).toStrictEqual({
+      changed: true,
+      label,
+    });
+
+    const secondRemoved = await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.removeFromSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    expect(secondRemoved).toStrictEqual({
+      changed: false,
+      label,
+    });
+
+    const optionAfterRemove = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        SitesRepository.getOptionById(identity.organizationId, siteId)
+      )
+    );
+    expect(optionAfterRemove.labels).toStrictEqual([]);
+
+    await runJobsEffect(
+      databaseUrl,
+      SiteLabelAssignmentsRepository.assignToSite({
+        labelId: label.id,
+        organizationId: identity.organizationId,
+        siteId,
+      })
+    );
+    await runJobsEffect(
+      databaseUrl,
+      LabelsRepository.archive(identity.organizationId, label.id)
+    );
+
+    const optionAfterArchive = expectSome(
+      await runJobsEffect(
+        databaseUrl,
+        SitesRepository.getOptionById(identity.organizationId, siteId)
+      )
+    );
+    expect(optionAfterArchive.labels).toStrictEqual([]);
+
+    const optionsAfterArchive = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.listOptions(identity.organizationId)
+    );
+    expect(
+      optionsAfterArchive.find((siteOption) => siteOption.id === siteId)?.labels
+    ).toStrictEqual([]);
   }, 30_000);
 
   it("rejects invalid label names at the database boundary", async (context: {
@@ -3400,6 +3626,7 @@ function prepareJobsEffect<Value, Error, Requirements>(
     Effect.provide(LabelsRepository.Default),
     Effect.provide(ConfigurationRepository.Default),
     Effect.provide(SitesRepository.Default),
+    Effect.provide(SiteLabelAssignmentsRepository.Default),
     Effect.provide(JobsRepositoriesLive),
     Effect.provide(AppEffectSqlRuntimeLive),
     Effect.withConfigProvider(makeConfigProvider(databaseUrl))
