@@ -42,14 +42,12 @@ const createdSiteId = "22222222-2222-4222-8222-222222222222" as SiteIdType;
 const {
   mockedAddSiteComment,
   mockedCreateSite,
-  mockedGetSiteOptions,
   mockedListSiteComments,
   mockedMakeBrowserAppApiClient,
   mockedUpdateSite,
 } = vi.hoisted(() => ({
   mockedAddSiteComment: vi.fn<EffectClientMock>(),
   mockedCreateSite: vi.fn<EffectClientMock>(),
-  mockedGetSiteOptions: vi.fn<EffectClientMock>(),
   mockedListSiteComments: vi.fn<EffectClientMock>(),
   mockedMakeBrowserAppApiClient: vi.fn<EffectClientMock>(),
   mockedUpdateSite: vi.fn<EffectClientMock>(),
@@ -78,7 +76,6 @@ describe("sites state integration", () => {
   beforeEach(() => {
     mockedAddSiteComment.mockReset();
     mockedCreateSite.mockReset();
-    mockedGetSiteOptions.mockReset();
     mockedListSiteComments.mockReset();
     mockedMakeBrowserAppApiClient.mockReset();
     mockedUpdateSite.mockReset();
@@ -88,7 +85,6 @@ describe("sites state integration", () => {
         sites: {
           addSiteComment: mockedAddSiteComment,
           createSite: mockedCreateSite,
-          getSiteOptions: mockedGetSiteOptions,
           listSiteComments: mockedListSiteComments,
           updateSite: mockedUpdateSite,
         },
@@ -101,22 +97,13 @@ describe("sites state integration", () => {
   });
 
   it(
-    "uses refreshed site options after creating a site",
+    "upserts the canonical site after creating it",
     {
       timeout: 10_000,
     },
     async () => {
       mockedCreateSite.mockReturnValue(
         Effect.succeed(buildSite(createdSiteId, "Draft Site"))
-      );
-      mockedGetSiteOptions.mockReturnValue(
-        Effect.succeed({
-          serviceAreas: [],
-          sites: [
-            buildSite(existingSiteId, "Existing Site"),
-            buildSite(createdSiteId, "Canonical Site"),
-          ],
-        })
       );
 
       const user = userEvent.setup();
@@ -126,10 +113,9 @@ describe("sites state integration", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("site-names")).toHaveTextContent(
-          "Existing Site | Canonical Site"
+          "Draft Site | Existing Site"
         );
       });
-      expect(mockedGetSiteOptions).toHaveBeenCalledOnce();
       expect(screen.getByTestId("notice")).toHaveTextContent(
         "created:Draft Site"
       );
@@ -137,16 +123,13 @@ describe("sites state integration", () => {
   );
 
   it(
-    "optimistically upserts an updated site when options refresh fails",
+    "upserts an updated site",
     {
       timeout: 10_000,
     },
     async () => {
       mockedUpdateSite.mockReturnValue(
         Effect.succeed(buildSite(existingSiteId, "Updated Site"))
-      );
-      mockedGetSiteOptions.mockReturnValue(
-        Effect.fail(new Error("refresh failed"))
       );
 
       const user = userEvent.setup();
@@ -159,7 +142,6 @@ describe("sites state integration", () => {
           "Updated Site"
         );
       });
-      expect(mockedGetSiteOptions).toHaveBeenCalledOnce();
       expect(screen.getByTestId("notice")).toHaveTextContent(
         "updated:Updated Site"
       );

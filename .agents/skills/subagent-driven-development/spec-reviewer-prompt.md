@@ -4,6 +4,9 @@ Use this template when dispatching a spec compliance reviewer subagent.
 
 **Purpose:** Verify implementer built what was requested (nothing more, nothing less)
 
+Codex reasoning default: `medium`. Use `high` for broad, ambiguous, or
+user-facing workflow specs.
+
 ```
 Task tool (general-purpose):
   description: "Review spec compliance for Task N"

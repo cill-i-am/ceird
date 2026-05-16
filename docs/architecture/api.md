@@ -202,7 +202,7 @@ Core files:
 | File                       | Responsibility                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------- |
 | `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS. |
-| `service.ts`               | Site create, update, options, and internal comments use cases.                          |
+| `service.ts`               | Site list, create, update, internal option, and internal comment use cases.             |
 | `service-areas-service.ts` | Service-area list, create, and update use cases.                                        |
 | `repositories.ts`          | SQL repository layer for sites, service areas, and site-contact links.                  |
 | `schema.ts`                | Sites and service-area Drizzle tables and relations.                                    |
@@ -242,11 +242,17 @@ handlers live in `apps/api/src/domains/sites/http.ts`.
 | `GET`   | `/service-areas`                | `listServiceAreas`  |
 | `POST`  | `/service-areas`                | `createServiceArea` |
 | `PATCH` | `/service-areas/:serviceAreaId` | `updateServiceArea` |
-| `GET`   | `/sites/options`                | `getSiteOptions`    |
+| `GET`   | `/sites`                        | `listSites`         |
 | `POST`  | `/sites`                        | `createSite`        |
 | `PATCH` | `/sites/:siteId`                | `updateSite`        |
 | `GET`   | `/sites/:siteId/comments`       | `listSiteComments`  |
 | `POST`  | `/sites/:siteId/comments`       | `addSiteComment`    |
+
+`GET /sites` is cursor-paginated with `cursor`, `limit`, and
+`serviceAreaId` query parameters. Responses return `{ items, nextCursor }` and
+use the stable directory order `name asc, id asc`. Site form
+support data is composed by clients from `GET /sites` and `GET /service-areas`
+rather than a public options endpoint.
 
 ## Database
 

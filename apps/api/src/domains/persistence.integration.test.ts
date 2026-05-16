@@ -971,6 +971,200 @@ describe("domain persistence integration", () => {
     expect(byStatus.items.map((item) => item.id)).toStrictEqual([middleJobId]);
   }, 30_000);
 
+  it("filters and paginates site lists by org-scoped fields", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "sites_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Sites integration database unavailable; skipping repository pagination coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const identity = await seedIdentityRecords(databaseUrl);
+    const otherOrganizationId =
+      Schema.decodeUnknownSync(OrganizationId)("org_cursor_other");
+    const northServiceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "North"
+    );
+    const southServiceAreaId = await insertServiceArea(
+      databaseUrl,
+      identity.organizationId,
+      "South"
+    );
+
+    await withPool(databaseUrl, async (pool) => {
+      const db = drizzle(pool);
+
+      await db.insert(site).values([
+        {
+          addressLine1: "Alpha House",
+          country: "IE",
+          county: "Dublin",
+          createdAt: new Date("2026-04-20T09:00:00.000Z"),
+          eircode: "D01 X2X2",
+          geocodedAt: new Date("2026-04-27T10:00:00.000Z"),
+          geocodingProvider: "stub",
+          id: decodeSiteId("10000000-0000-4000-8000-000000000001"),
+          latitude: 53.3498,
+          longitude: -6.2603,
+          name: "Alpha House",
+          organizationId: identity.organizationId,
+          serviceAreaId: northServiceAreaId,
+          updatedAt: new Date("2026-04-20T09:00:00.000Z"),
+        },
+        {
+          addressLine1: "Beta Yard",
+          country: "IE",
+          county: "Dublin",
+          createdAt: new Date("2026-04-20T10:00:00.000Z"),
+          eircode: "D02 X2X2",
+          geocodedAt: new Date("2026-04-27T10:00:00.000Z"),
+          geocodingProvider: "stub",
+          id: decodeSiteId("10000000-0000-4000-8000-000000000002"),
+          latitude: 53.3498,
+          longitude: -6.2603,
+          name: "Beta Yard",
+          organizationId: identity.organizationId,
+          serviceAreaId: southServiceAreaId,
+          updatedAt: new Date("2026-04-20T10:00:00.000Z"),
+        },
+        {
+          addressLine1: "Alpha House Annexe",
+          country: "IE",
+          county: "Dublin",
+          createdAt: new Date("2026-04-20T09:00:00.000Z"),
+          eircode: "D01 Y2Y2",
+          geocodedAt: new Date("2026-04-27T10:00:00.000Z"),
+          geocodingProvider: "stub",
+          id: decodeSiteId("10000000-0000-4000-8000-000000000004"),
+          latitude: 53.3498,
+          longitude: -6.2603,
+          name: "Alpha House",
+          organizationId: identity.organizationId,
+          serviceAreaId: northServiceAreaId,
+          updatedAt: new Date("2026-04-20T09:00:00.000Z"),
+        },
+        {
+          addressLine1: "Charlie Depot",
+          country: "IE",
+          county: "Dublin",
+          createdAt: new Date("2026-04-20T11:00:00.000Z"),
+          eircode: "D03 X2X2",
+          geocodedAt: new Date("2026-04-27T10:00:00.000Z"),
+          geocodingProvider: "stub",
+          id: decodeSiteId("10000000-0000-4000-8000-000000000003"),
+          latitude: 53.3498,
+          longitude: -6.2603,
+          name: "Charlie Depot",
+          organizationId: identity.organizationId,
+          serviceAreaId: northServiceAreaId,
+          updatedAt: new Date("2026-04-20T11:00:00.000Z"),
+        },
+      ]);
+    });
+
+    const firstPage = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, { limit: 1 })
+    );
+
+    expect(firstPage.items.map((item) => item.id)).toStrictEqual([
+      decodeSiteId("10000000-0000-4000-8000-000000000001"),
+    ]);
+    expect(firstPage.nextCursor).toBeDefined();
+
+    const secondPage = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, {
+        cursor: firstPage.nextCursor,
+        limit: 1,
+      })
+    );
+
+    expect(secondPage.items.map((item) => item.id)).toStrictEqual([
+      decodeSiteId("10000000-0000-4000-8000-000000000004"),
+    ]);
+    expect(secondPage.nextCursor).toBeDefined();
+
+    const remainingPage = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, {
+        cursor: secondPage.nextCursor,
+        limit: 2,
+      })
+    );
+
+    expect(remainingPage.items.map((item) => item.name)).toStrictEqual([
+      "Beta Yard",
+      "Charlie Depot",
+    ]);
+    expect(remainingPage.nextCursor).toBeUndefined();
+
+    const firstNorthPage = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, {
+        limit: 1,
+        serviceAreaId: northServiceAreaId,
+      })
+    );
+
+    expect(firstNorthPage.items.map((item) => item.id)).toStrictEqual([
+      decodeSiteId("10000000-0000-4000-8000-000000000001"),
+    ]);
+    expect(firstNorthPage.nextCursor).toBeDefined();
+
+    const secondNorthPage = await runJobsEffect(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, {
+        cursor: firstNorthPage.nextCursor,
+        limit: 2,
+        serviceAreaId: northServiceAreaId,
+      })
+    );
+
+    expect(secondNorthPage.items.map((item) => item.id)).toStrictEqual([
+      decodeSiteId("10000000-0000-4000-8000-000000000004"),
+      decodeSiteId("10000000-0000-4000-8000-000000000003"),
+    ]);
+    expect(secondNorthPage.nextCursor).toBeUndefined();
+
+    await expect(
+      runJobsEffect(
+        databaseUrl,
+        SitesRepository.list(identity.organizationId, {
+          cursor: firstPage.nextCursor,
+          serviceAreaId: northServiceAreaId,
+        })
+      )
+    ).rejects.toMatchObject({
+      _tag: "@ceird/sites-core/SiteListCursorInvalidError",
+    });
+
+    await expect(
+      runJobsEffect(
+        databaseUrl,
+        SitesRepository.list(otherOrganizationId, {
+          cursor: firstPage.nextCursor,
+        })
+      )
+    ).rejects.toMatchObject({
+      _tag: "@ceird/sites-core/SiteListCursorInvalidError",
+    });
+  }, 30_000);
+
   it("manages collaborators and scopes external repository access to grants", async (context: {
     skip: (note?: string) => never;
   }) => {

@@ -33,6 +33,11 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 Use Task tool with superpowers:code-reviewer type, fill template at `code-reviewer.md`
 
+In Codex, use `spawn_agent(agent_type="worker", reasoning_effort="high", ...)`
+by default for this reviewer. Use `reasoning_effort="xhigh"` for broad or risky
+reviews involving architecture, auth/security, persistence, migrations,
+infrastructure, or cross-package contracts.
+
 **Placeholders:**
 - `{WHAT_WAS_IMPLEMENTED}` - What you just built
 - `{PLAN_OR_REQUIREMENTS}` - What it should do

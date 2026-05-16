@@ -1,7 +1,7 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { getCurrentServerSiteOptions } from "#/features/api/app-api-server";
+import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import { AuthenticatedShellHome } from "#/features/auth/authenticated-shell-home";
 import {
   EMPTY_AUTHENTICATED_HOME_DASHBOARD,
@@ -14,6 +14,7 @@ import {
 } from "#/features/jobs/jobs-server";
 import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
 
 export const Route = createFileRoute("/_app/_org/")({
   staticData: {
@@ -49,7 +50,7 @@ export async function loadOrganizationHomeDashboardRouteData(context: {
   const [jobs, jobMemberOptions, sites, activity] = await Promise.all([
     listAllCurrentServerJobs({}),
     getCurrentServerJobMemberOptions(),
-    getCurrentServerSiteOptions(),
+    listAllCurrentServerSites(),
     canLoadHomeActivity(context.currentOrganizationRole)
       ? listCurrentServerOrganizationActivity({ limit: 5 })
       : Promise.resolve({ items: [], nextCursor: undefined }),
@@ -60,7 +61,10 @@ export async function loadOrganizationHomeDashboardRouteData(context: {
     activityAvailable: canLoadHomeActivity(context.currentOrganizationRole),
     jobs: jobs.items,
     jobMemberOptions,
-    sites,
+    sites: {
+      serviceAreas: deriveServiceAreasFromSites(sites.items),
+      sites: sites.items,
+    },
   });
 }
 

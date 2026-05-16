@@ -2,6 +2,11 @@
 
 You are reviewing code changes for production readiness.
 
+Codex dispatch default: use `reasoning_effort="high"` for this reviewer. Use
+`reasoning_effort="xhigh"` for broad or risky reviews involving architecture,
+auth/security, persistence, migrations, infrastructure, or cross-package
+contracts.
+
 **Your task:**
 1. Review {WHAT_WAS_IMPLEMENTED}
 2. Compare against {PLAN_OR_REQUIREMENTS}

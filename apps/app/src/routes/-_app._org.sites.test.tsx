@@ -13,13 +13,15 @@ const userId = "user_123" as UserIdType;
 const {
   mockedEnsureActiveOrganizationId,
   mockedGetCurrentOrganizationMemberRole,
-  mockedGetCurrentServerSiteOptions,
+  mockedGetCurrentServerServiceAreas,
+  mockedListAllCurrentServerSites,
   mockedListAllCurrentServerJobs,
   mockedNavigate,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
-  mockedGetCurrentServerSiteOptions: vi.fn<AsyncLoaderMock>(),
+  mockedGetCurrentServerServiceAreas: vi.fn<AsyncLoaderMock>(),
+  mockedListAllCurrentServerSites: vi.fn<AsyncLoaderMock>(),
   mockedListAllCurrentServerJobs: vi.fn<AsyncLoaderMock>(),
   mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
@@ -43,7 +45,8 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 });
 
 vi.mock("#/features/api/app-api-server", () => ({
-  getCurrentServerSiteOptions: mockedGetCurrentServerSiteOptions,
+  getCurrentServerServiceAreas: mockedGetCurrentServerServiceAreas,
+  listAllCurrentServerSites: mockedListAllCurrentServerSites,
   listCurrentServerJobs: mockedListAllCurrentServerJobs,
 }));
 
@@ -76,7 +79,13 @@ describe("sites route loader", () => {
         sites: [],
       };
 
-      mockedGetCurrentServerSiteOptions.mockResolvedValue(siteOptions);
+      mockedListAllCurrentServerSites.mockResolvedValue({
+        items: siteOptions.sites,
+        nextCursor: undefined,
+      });
+      mockedGetCurrentServerServiceAreas.mockResolvedValue({
+        items: siteOptions.serviceAreas,
+      });
 
       const { loadSitesRouteData } =
         await import("#/features/sites/sites-route-loader");
@@ -103,7 +112,8 @@ describe("sites route loader", () => {
       });
       expect(mockedEnsureActiveOrganizationId).not.toHaveBeenCalled();
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
-      expect(mockedGetCurrentServerSiteOptions).toHaveBeenCalledOnce();
+      expect(mockedListAllCurrentServerSites).toHaveBeenCalledOnce();
+      expect(mockedGetCurrentServerServiceAreas).toHaveBeenCalledOnce();
     }
   );
 
@@ -129,7 +139,8 @@ describe("sites route loader", () => {
         options: { to: "/jobs" },
       });
       await expect(result).rejects.toSatisfy(isRedirect);
-      expect(mockedGetCurrentServerSiteOptions).not.toHaveBeenCalled();
+      expect(mockedListAllCurrentServerSites).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerServiceAreas).not.toHaveBeenCalled();
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
     }
   );

@@ -53,6 +53,21 @@ When a task is associated with a Linear issue, use the Linear issue title as the
 
 This lets Linear associate the pull request with the issue and move workflow states automatically.
 
+## Sub-Agent Defaults
+
+When spawning Codex sub-agents, set `reasoning_effort` explicitly because
+sub-agents otherwise inherit the parent thread's reasoning effort.
+
+- Use `low` for focused exploration, bounded implementation, and parallel
+  investigation tasks.
+- Use `medium` for spec compliance review and fix agents unless the task is
+  clearly mechanical.
+- Use `high` for code quality review and final implementation review.
+- Use `xhigh` for broad or risky reviews involving architecture, auth/security,
+  persistence, migrations, infrastructure, or cross-package contracts.
+- When using `medium` or higher, mention the reason in the dispatch context or
+  progress update.
+
 ## Type Boundaries
 
 Model runtime and type safety according to the boundary the code is crossing.

@@ -2,6 +2,9 @@
 
 Use this template when dispatching an implementer subagent.
 
+Codex reasoning default: `low`. Use `medium` for multi-file integration and
+`high` only for tricky debugging or architectural changes.
+
 ```
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"

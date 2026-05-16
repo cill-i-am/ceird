@@ -134,6 +134,13 @@
       "when": 1778940641850,
       "tag": "0018_chilly_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778961484098,
+      "tag": "0019_abnormal_karnak",
+      "breakpoints": true
     }
   ]
 }

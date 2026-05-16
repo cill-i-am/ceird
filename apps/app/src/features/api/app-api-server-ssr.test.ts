@@ -4,6 +4,7 @@ import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
 import { SiteId } from "@ceird/sites-core";
 import type {
   ServiceAreaIdType,
+  SiteListCursorType,
   SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
@@ -13,9 +14,10 @@ import { Schema } from "effect";
 
 import {
   getCurrentServerLabelsDirect as getCurrentServerLabels,
+  listAllCurrentServerSitesDirect as listAllCurrentServerSites,
   listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
   listCurrentServerJobsDirect as listCurrentServerJobs,
-  getCurrentServerSiteOptionsDirect as getCurrentServerSiteOptions,
+  listCurrentServerSitesDirect as listCurrentServerSites,
 } from "./app-api-server-ssr";
 
 const { mockedGetRequestHeader } = vi.hoisted(() => ({
@@ -28,6 +30,7 @@ vi.mock(import("@tanstack/react-start/server"), () => ({
 
 const decodeSiteId: (value: unknown) => SiteIdType =
   Schema.decodeUnknownSync(SiteId);
+const siteNextCursor = "cursor-one" as SiteListCursorType;
 const decodeWorkItemId: (value: unknown) => WorkItemIdType =
   Schema.decodeUnknownSync(WorkItemId);
 const siteId = decodeSiteId("55555555-5555-4555-8555-555555555555");
@@ -238,7 +241,34 @@ describe("shared app api server helpers", () => {
     });
   }, 1000);
 
-  it("forwards the current auth cookie when reading site options", async () => {
+  it("reads one sites page without hiding the next cursor", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        items: sitesOptionsResponse.sites,
+        nextCursor: siteNextCursor,
+      })
+    );
+
+    await expect(listCurrentServerSites({ limit: 25 })).resolves.toStrictEqual({
+      items: sitesOptionsResponse.sites,
+      nextCursor: siteNextCursor,
+    });
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://ceird-sbx-api:4301/sites?limit=25");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("forwards the current auth cookie while reading every sites page", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -246,18 +276,56 @@ describe("shared app api server helpers", () => {
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json(sitesOptionsResponse));
+      .mockResolvedValueOnce(
+        Response.json({
+          items: sitesOptionsResponse.sites,
+          nextCursor: siteNextCursor,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({ items: [], nextCursor: undefined })
+      );
 
-    await expect(getCurrentServerSiteOptions()).resolves.toStrictEqual(
-      sitesOptionsResponse
-    );
+    await expect(listAllCurrentServerSites()).resolves.toStrictEqual({
+      items: sitesOptionsResponse.sites,
+      nextCursor: undefined,
+    });
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const [secondUrl] = fetchMock.mock.calls[1] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/sites/options");
+    expect(String(url)).toBe("http://ceird-sbx-api:4301/sites?limit=100");
+    expect(String(secondUrl)).toBe(
+      "http://ceird-sbx-api:4301/sites?cursor=cursor-one&limit=100"
+    );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("rejects repeated cursors while reading every sites page", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          items: sitesOptionsResponse.sites,
+          nextCursor: siteNextCursor,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [],
+          nextCursor: siteNextCursor,
+        })
+      );
+
+    await expect(listAllCurrentServerSites()).rejects.toMatchObject({
+      message: "Site pagination returned a repeated cursor.",
     });
   }, 1000);
 

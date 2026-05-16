@@ -11,6 +11,8 @@ import {
   ServiceAreaSchema,
   ServiceAreasApiGroup,
   SiteAccessDeniedError,
+  SiteListQuerySchema,
+  SiteListResponseSchema,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
   SiteCommentSchema,
@@ -169,6 +171,10 @@ describe("sites-core", () => {
     expect(SitesApiGroup).toBeDefined();
     expect(ServiceAreasApiGroup).toBeDefined();
 
+    const spec = OpenApi.fromApi(SitesApi);
+    expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
+    expect(spec.paths["/sites/options"]).toBeUndefined();
+
     expect(
       new SiteNotFoundError({
         message: "Site does not exist",
@@ -197,5 +203,55 @@ describe("sites-core", () => {
     expect(new SiteStorageError({ message: "Storage failed" })._tag).toBe(
       "@ceird/sites-core/SiteStorageError"
     );
+  });
+
+  it("decodes cursor-paginated site list requests and responses", () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        id: "550e8400-e29b-41d4-a716-446655440010",
+        name: "Docklands Campus",
+        organizationId: "org_123",
+        serviceAreaId: "33333333-3333-4333-8333-333333333333",
+      })
+    ).toString("base64url");
+
+    expect(
+      Schema.decodeUnknownSync(SiteListQuerySchema)({
+        cursor,
+        limit: "25",
+        serviceAreaId: "33333333-3333-4333-8333-333333333333",
+      })
+    ).toStrictEqual({
+      cursor,
+      limit: 25,
+      serviceAreaId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(SiteListResponseSchema)({
+        items: [
+          {
+            addressLine1: "1 Custom House Quay",
+            county: "Dublin",
+            country: "IE",
+            eircode: "D01 X2X2",
+            geocodedAt: "2026-04-22T10:00:00.000Z",
+            geocodingProvider: "google",
+            id: "550e8400-e29b-41d4-a716-446655440010",
+            latitude: 53.3498,
+            longitude: -6.2603,
+            name: "Docklands Campus",
+          },
+        ],
+        nextCursor: cursor,
+      })
+    ).toMatchObject({
+      items: [
+        {
+          name: "Docklands Campus",
+        },
+      ],
+      nextCursor: cursor,
+    });
   });
 });

@@ -30,6 +30,13 @@ Claude Code skills reference named agent types like `superpowers:code-reviewer`.
 Codex does not have a named agent registry — `spawn_agent` creates generic agents
 from built-in roles (`default`, `explorer`, `worker`).
 
+Codex subagent dispatches should set `reasoning_effort` explicitly to avoid
+accidentally inheriting the parent thread's reasoning effort. Use low reasoning
+for focused exploration, bounded implementation, and parallel investigation;
+medium for spec compliance and fix agents; high for code review; and xhigh for
+broad or risky review across architecture, auth/security, persistence,
+migrations, infrastructure, or cross-package contracts.
+
 When a skill says to dispatch a named agent type:
 
 1. Find the agent's prompt file (e.g., `agents/code-reviewer.md` or the skill's
@@ -40,8 +47,8 @@ When a skill says to dispatch a named agent type:
 
 | Skill instruction | Codex equivalent |
 |-------------------|------------------|
-| `Task tool (superpowers:code-reviewer)` | `spawn_agent(agent_type="worker", message=...)` with `code-reviewer.md` content |
-| `Task tool (general-purpose)` with inline prompt | `spawn_agent(message=...)` with the same prompt |
+| `Task tool (superpowers:code-reviewer)` | `spawn_agent(agent_type="worker", reasoning_effort="high", message=...)` with `code-reviewer.md` content; use `xhigh` for broad or risky reviews |
+| `Task tool (general-purpose)` with inline prompt | `spawn_agent(reasoning_effort="low", message=...)` with the same prompt unless the role-specific skill doc sets a higher default |
 
 ### Message framing
 

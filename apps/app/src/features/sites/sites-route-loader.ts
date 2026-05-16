@@ -5,15 +5,22 @@ import type {
 } from "@ceird/identity-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 
-import { getCurrentServerSiteOptions } from "#/features/api/app-api-server";
+import {
+  getCurrentServerServiceAreas,
+  listAllCurrentServerSites,
+} from "#/features/api/app-api-server";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   assertOrganizationInternalRole,
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
-import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
+import {
+  decodeOrganizationViewerUserId,
+  hasOrganizationElevatedAccess,
+} from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
 
 const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   serviceAreas: [],
@@ -62,7 +69,18 @@ export async function loadSitesRouteData(
 
   assertOrganizationInternalRole({ role: activeRole });
 
-  const siteOptions = await getCurrentServerSiteOptions();
+  const [sites, serviceAreas] = await Promise.all([
+    listAllCurrentServerSites(),
+    hasOrganizationElevatedAccess(activeRole)
+      ? getCurrentServerServiceAreas()
+      : Promise.resolve({ items: [] }),
+  ]);
+  const siteOptions = {
+    serviceAreas: hasOrganizationElevatedAccess(activeRole)
+      ? serviceAreas.items.map(({ id, name }) => ({ id, name }))
+      : deriveServiceAreasFromSites(sites.items),
+    sites: sites.items,
+  } satisfies SitesOptionsResponse;
 
   return {
     options: siteOptions,

@@ -88,6 +88,17 @@ digraph process {
 
 Use the least powerful model that can handle each role to conserve cost and increase speed.
 
+For Codex, dispatch subagents with an explicit `reasoning_effort`; otherwise
+they inherit the controller's reasoning effort. Use these role defaults:
+
+| Subagent role | Default reasoning | Escalate when |
+|---------------|-------------------|---------------|
+| Implementer | `low` | `medium` for multi-file integration; `high` for tricky debugging or architectural changes |
+| Spec reviewer | `medium` | `high` for broad, ambiguous, or user-facing workflow specs |
+| Code quality reviewer | `high` | `xhigh` for large diffs, architecture changes, auth/security, persistence, migrations, infrastructure, or cross-package contracts |
+| Final code reviewer | `high` | `xhigh` for broad or merge-risky branches |
+| Fix subagent | `medium` | `high` when the prior failure involved subtle reasoning, concurrency, types, data, or test flakiness |
+
 **Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use a fast, cheap model. Most implementation tasks are mechanical when the plan is well-specified.
 
 **Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use a standard model.

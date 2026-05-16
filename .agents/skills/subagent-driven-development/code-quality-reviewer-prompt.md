@@ -4,6 +4,10 @@ Use this template when dispatching a code quality reviewer subagent.
 
 **Purpose:** Verify implementation is well-built (clean, tested, maintainable)
 
+Codex reasoning default: `high`. Use `xhigh` for large diffs, architecture
+changes, auth/security, persistence, migrations, infrastructure, or
+cross-package contracts.
+
 **Only dispatch after spec compliance review passes.**
 
 ```

@@ -65,6 +65,11 @@ Each agent gets:
 
 ### 3. Dispatch in Parallel
 
+For Codex, pass `reasoning_effort="low"` on each `spawn_agent` call by default.
+Parallel agents are usually scoped investigations or contained fixes, so low
+reasoning should be the baseline. Escalate only for a specific agent whose
+problem domain clearly needs deeper reasoning.
+
 ```typescript
 // In Claude Code / AI environment
 Task("Fix agent-tool-abort.test.ts failures")

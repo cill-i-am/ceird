@@ -72,7 +72,8 @@ Exports the shared sites and service-area contract:
 
 - `SiteId` and `ServiceAreaId`
 - site country, geocoding provider, latitude, and longitude schemas
-- site create/update inputs, rich site option/detail DTOs, site options response
+- site create/update inputs, rich site option/detail DTOs, site options response,
+  and cursor-paginated site list request/response DTOs
 - site comment DTOs extended from `@ceird/comments-core`
 - service-area create/update/list DTOs
 - typed site, service-area, access-denied, storage, and geocoding errors

@@ -41,6 +41,17 @@ export class SiteNotFoundError extends Schema.TaggedError<SiteNotFoundError>()(
   HttpApiSchema.annotations({ status: 404 })
 ) {}
 
+export const SITE_LIST_CURSOR_INVALID_ERROR_TAG =
+  "@ceird/sites-core/SiteListCursorInvalidError" as const;
+export class SiteListCursorInvalidError extends Schema.TaggedError<SiteListCursorInvalidError>()(
+  SITE_LIST_CURSOR_INVALID_ERROR_TAG,
+  {
+    cursor: Schema.String,
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 400 })
+) {}
+
 export const SITE_GEOCODING_FAILED_ERROR_TAG =
   "@ceird/sites-core/SiteGeocodingFailedError" as const;
 export class SiteGeocodingFailedError extends Schema.TaggedError<SiteGeocodingFailedError>()(
@@ -85,6 +96,7 @@ export type SitesError =
   | SiteAccessDeniedError
   | SiteStorageError
   | SiteNotFoundError
+  | SiteListCursorInvalidError
   | SiteGeocodingFailedError
   | SiteGeocodingProviderError
   | ServiceAreaNotFoundError;
