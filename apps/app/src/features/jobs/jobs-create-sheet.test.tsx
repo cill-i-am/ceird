@@ -8,7 +8,7 @@ import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Exit } from "effect";
-import { cloneElement, isValidElement } from "react";
+import { cloneElement, isValidElement, useEffect } from "react";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
@@ -30,7 +30,7 @@ const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
     mockedNavigate: vi.fn<NavigateMock>(),
     mockedUseAtomSet: vi.fn<AtomSetterMock>(),
     mockedUseAtomValue: vi.fn<AtomValueMock>(),
-  })
+  }),
 );
 
 const mockedCreateJob = vi.fn<AsyncMutationMock>();
@@ -220,16 +220,25 @@ vi.mock("#/components/ui/select", () => ({
 vi.mock("#/components/ui/responsive-drawer", () => ({
   ResponsiveDrawer: ({
     children,
+    onAnimationEnd,
     open = true,
   }: {
     children?: ReactNode;
+    onAnimationEnd?: (open: boolean) => void;
     open?: boolean;
-  }) =>
-    open ? (
+  }) => {
+    useEffect(() => {
+      if (!open) {
+        onAnimationEnd?.(false);
+      }
+    }, [onAnimationEnd, open]);
+
+    return open ? (
       <div data-testid="responsive-drawer" data-nested="false">
         {children}
       </div>
-    ) : null,
+    ) : null;
+  },
   ResponsiveNestedDrawer: ({
     children,
     open = true,
@@ -245,6 +254,8 @@ vi.mock("#/components/ui/responsive-drawer", () => ({
 }));
 
 vi.mock("#/components/ui/drawer", () => ({
+  DRAWER_CLOSE_FALLBACK_MS: 550,
+  DrawerClose: ({ children }: { children?: ReactNode }) => <>{children}</>,
   DrawerContent: ({ children }: { children?: ReactNode }) => (
     <section>{children}</section>
   ),
@@ -286,7 +297,7 @@ vi.mock("#/features/auth/auth-form-field", () => ({
 async function choosePickerOption(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
-  optionLabel: string
+  optionLabel: string,
 ) {
   await user.click(screen.getByLabelText(label));
   await user.click(screen.getByRole("button", { name: optionLabel }));
@@ -294,14 +305,14 @@ async function choosePickerOption(
 
 async function createInlineContact(
   user: ReturnType<typeof userEvent.setup>,
-  contactName: string
+  contactName: string,
 ) {
   await user.click(screen.getByLabelText("Contact"));
   await user.type(screen.getByPlaceholderText("Contact"), contactName);
   await user.click(
     screen.getByRole("button", {
       name: `Create new contact: "${contactName}"`,
-    })
+    }),
   );
 }
 
@@ -424,7 +435,7 @@ describe("jobs create sheet", () => {
         title: "Fix boiler",
       });
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs" });
-    }
+    },
   );
 
   it(
@@ -434,7 +445,7 @@ describe("jobs create sheet", () => {
     },
     async () => {
       mockedCreateJob.mockResolvedValue(
-        Exit.succeed({ title: "Replace sensor" })
+        Exit.succeed({ title: "Replace sensor" }),
       );
 
       const user = userEvent.setup();
@@ -447,7 +458,7 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D04 X2X2");
       await user.click(
-        screen.getByRole("button", { name: "Close site details" })
+        screen.getByRole("button", { name: "Close site details" }),
       );
       await createInlineContact(user, "Alex Caller");
       await user.click(screen.getByRole("button", { name: /create job/i }));
@@ -476,7 +487,7 @@ describe("jobs create sheet", () => {
         },
         title: "Replace sensor",
       });
-    }
+    },
   );
 
   it(
@@ -493,14 +504,14 @@ describe("jobs create sheet", () => {
       const siteDrawer = getResponsiveDrawerForHeading("New site");
       expect(siteDrawer).toHaveAttribute("data-nested", "true");
       expect(
-        within(siteDrawer).getByLabelText("Address line 1")
+        within(siteDrawer).getByLabelText("Address line 1"),
       ).toBeInTheDocument();
       expect(within(siteDrawer).getByLabelText("County")).toBeInTheDocument();
       expect(within(siteDrawer).getByLabelText("Eircode")).toBeInTheDocument();
       expect(
-        within(siteDrawer).queryByRole("button", { name: /edit location/i })
+        within(siteDrawer).queryByRole("button", { name: /edit location/i }),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -515,13 +526,13 @@ describe("jobs create sheet", () => {
       await choosePickerOption(user, "Site", "Create a new site");
 
       expect(
-        screen.queryByText("Name, service area, and location")
+        screen.queryByText("Name, service area, and location"),
       ).not.toBeInTheDocument();
 
       await user.type(screen.getByLabelText("Site name"), "Warehouse");
 
       expect(screen.getByText("Warehouse")).toBeInTheDocument();
-    }
+    },
   );
 
   it("hides empty existing groups and no-contact clearing actions", async () => {
@@ -554,25 +565,25 @@ describe("jobs create sheet", () => {
 
     expect(screen.queryByText("Existing sites")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "No site yet" })
+      screen.queryByRole("button", { name: "No site yet" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Create a new site" })
+      screen.getByRole("button", { name: "Create a new site" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByLabelText("Contact"));
 
     expect(
-      screen.queryByRole("button", { name: "No contact yet" })
+      screen.queryByRole("button", { name: "No contact yet" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create a new contact" })
+      screen.queryByRole("button", { name: "Create a new contact" }),
     ).not.toBeInTheDocument();
     await user.type(screen.getByPlaceholderText("Contact"), "Alex Caller");
     expect(
       screen.getByRole("button", {
         name: 'Create new contact: "Alex Caller"',
-      })
+      }),
     ).toBeInTheDocument();
   }, 10_000);
 
@@ -583,7 +594,7 @@ describe("jobs create sheet", () => {
     },
     async () => {
       mockedCreateJob.mockResolvedValue(
-        Exit.succeed({ title: "Trace intermittent fault" })
+        Exit.succeed({ title: "Trace intermittent fault" }),
       );
 
       const user = userEvent.setup();
@@ -591,26 +602,26 @@ describe("jobs create sheet", () => {
 
       await user.type(
         screen.getByLabelText("Title"),
-        "Trace intermittent fault"
+        "Trace intermittent fault",
       );
       await choosePickerOption(user, "Site", "Create a new site");
       await user.type(screen.getByLabelText("Site name"), "Docklands Campus");
       await choosePickerOption(user, "Service area", "North");
       await user.type(
         screen.getByLabelText("Address line 1"),
-        "1 Custom House Quay"
+        "1 Custom House Quay",
       );
       await user.type(screen.getByLabelText("Town"), "Dublin");
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D01 X2X2");
       await user.type(
-        screen.getByLabelText("Access notes"),
-        "Use reception and the south gate."
+        screen.getByLabelText("Notes"),
+        "Use reception and the south gate.",
       );
       await user.click(
         within(getResponsiveDrawerForHeading("New site")).getByRole("button", {
           name: "Close site details",
-        })
+        }),
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
@@ -633,7 +644,7 @@ describe("jobs create sheet", () => {
         },
         title: "Trace intermittent fault",
       });
-    }
+    },
   );
 
   it(
@@ -647,21 +658,21 @@ describe("jobs create sheet", () => {
 
       await choosePickerOption(user, "Site", "Create a new site");
       await user.click(
-        screen.getByRole("button", { name: "Close site details" })
+        screen.getByRole("button", { name: "Close site details" }),
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(
-        screen.getByText(/give the job a clear title before you create it/i)
+        screen.getByText(/give the job a clear title before you create it/i),
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/add the site name or pick an existing site/i)
+        screen.getByText(/add the site name or pick an existing site/i),
       ).toBeInTheDocument();
       expect(screen.getByText("Add address line 1.")).toBeInTheDocument();
       expect(screen.getByText("Add county.")).toBeInTheDocument();
       expect(screen.getByText("Add Eircode.")).toBeInTheDocument();
       expect(mockedCreateJob).not.toHaveBeenCalled();
-    }
+    },
   );
 
   it(
@@ -675,12 +686,12 @@ describe("jobs create sheet", () => {
 
       await choosePickerOption(user, "Site", "Create a new site");
       await user.click(
-        screen.getByRole("button", { name: "Close site details" })
+        screen.getByRole("button", { name: "Close site details" }),
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
       expect(
-        screen.getByText(/add the site name or pick an existing site/i)
+        screen.getByText(/add the site name or pick an existing site/i),
       ).toBeInTheDocument();
       expect(screen.getByText("Add address line 1.")).toBeInTheDocument();
       expect(screen.getByText("Add county.")).toBeInTheDocument();
@@ -689,12 +700,12 @@ describe("jobs create sheet", () => {
       await choosePickerOption(user, "Site", "Depot");
 
       expect(
-        screen.queryByText(/add the site name or pick an existing site/i)
+        screen.queryByText(/add the site name or pick an existing site/i),
       ).not.toBeInTheDocument();
       expect(screen.queryByText("Add address line 1.")).not.toBeInTheDocument();
       expect(screen.queryByText("Add county.")).not.toBeInTheDocument();
       expect(screen.queryByText("Add Eircode.")).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -708,7 +719,7 @@ describe("jobs create sheet", () => {
           _tag: SITE_NOT_FOUND_ERROR_TAG,
           message: "Missing site",
           siteId: depotSiteId,
-        })
+        }),
       );
 
       const user = userEvent.setup();
@@ -720,10 +731,10 @@ describe("jobs create sheet", () => {
 
       expect(
         screen.getByText(
-          /that site is no longer available\. pick another one\./i
-        )
+          /that site is no longer available\. pick another one\./i,
+        ),
       ).toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -737,7 +748,7 @@ describe("jobs create sheet", () => {
           _tag: SITE_NOT_FOUND_ERROR_TAG,
           message: "Missing site",
           siteId: depotSiteId,
-        })
+        }),
       );
 
       const user = userEvent.setup();
@@ -749,8 +760,8 @@ describe("jobs create sheet", () => {
 
       expect(
         screen.getByText(
-          /that site is no longer available\. pick another one\./i
-        )
+          /that site is no longer available\. pick another one\./i,
+        ),
       ).toBeInTheDocument();
 
       await choosePickerOption(user, "Site", "Create a new site");
@@ -758,10 +769,10 @@ describe("jobs create sheet", () => {
       const siteDrawer = getResponsiveDrawerForHeading("New site");
       expect(
         within(siteDrawer).queryByText(
-          /that site is no longer available\. pick another one\./i
-        )
+          /that site is no longer available\. pick another one\./i,
+        ),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -777,8 +788,8 @@ describe("jobs create sheet", () => {
             eircode: "D04 X2X2",
             message:
               "We could not locate that site address. Check the Eircode and address details.",
-          })
-        )
+          }),
+        ),
       );
 
       const user = userEvent.setup();
@@ -791,7 +802,7 @@ describe("jobs create sheet", () => {
       await user.type(screen.getByLabelText("County"), "Dublin");
       await user.type(screen.getByLabelText("Eircode"), "D04 X2X2");
       await user.click(
-        screen.getByRole("button", { name: "Close site details" })
+        screen.getByRole("button", { name: "Close site details" }),
       );
       await user.click(screen.getByRole("button", { name: /create job/i }));
 
@@ -800,10 +811,10 @@ describe("jobs create sheet", () => {
 
       expect(
         within(siteDrawer).getByText(
-          "We could not locate that site address. Check the Eircode and address details."
-        )
+          "We could not locate that site address. Check the Eircode and address details.",
+        ),
       ).toBeInTheDocument();
       expect(eircodeField).toHaveAttribute("aria-invalid", "true");
-    }
+    },
   );
 });

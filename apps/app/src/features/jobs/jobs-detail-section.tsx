@@ -18,16 +18,16 @@ export function DetailSection({
   readonly title: string;
 }) {
   return (
-    <section className="border-b py-5 last:border-b-0">
-      <div className="grid gap-4 md:grid-cols-[9.5rem_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-foreground">{title}</h3>
-          {description ? (
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
+    <section className="rounded-lg border bg-background">
+      <div className="border-b px-4 py-3">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        {description ? (
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      <div className="p-4">
         <div className="min-w-0">{children}</div>
       </div>
     </section>

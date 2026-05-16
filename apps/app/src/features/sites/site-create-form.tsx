@@ -63,13 +63,13 @@ export const defaultSiteCreateDraft: SiteCreateDraft = {
 };
 
 export function buildSiteServiceAreaSelectionGroups(
-  serviceAreas: readonly { readonly id: string; readonly name: string }[]
+  serviceAreas: readonly { readonly id: string; readonly name: string }[],
 ) {
   return [
     {
       label: "Service area",
       options: [
-        { label: "No service area yet", value: SITE_CREATE_NONE_VALUE },
+        { label: "No service area", value: SITE_CREATE_NONE_VALUE },
         ...serviceAreas.map((serviceArea) => ({
           label: serviceArea.name,
           value: serviceArea.id,
@@ -84,7 +84,7 @@ export function validateSiteCreateDraft(
   serviceAreas: readonly ServiceAreaOption[],
   options: {
     readonly nameRequiredMessage?: string;
-  } = {}
+  } = {},
 ): SiteCreateFieldErrors {
   return {
     addressLine1:
@@ -111,7 +111,7 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 
 export function buildCreateSiteInputFromDraft(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[]
+  serviceAreas: readonly ServiceAreaOption[],
 ): CreateSiteInput {
   const selectedServiceArea = findSelectedServiceArea(values, serviceAreas);
 
@@ -142,6 +142,8 @@ interface SiteCreateFieldsProps {
   readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
   readonly serviceAreaGroups: readonly CommandSelectGroup[];
 }
+
+type SiteCreateDrawerFieldsProps = SiteCreateFieldsProps;
 
 export function SiteCreateFields({
   draft,
@@ -195,12 +197,103 @@ export function SiteCreateFields({
   );
 }
 
+export function SiteCreateDrawerFields({
+  draft,
+  errors,
+  idPrefix,
+  onDraftChange,
+  onServiceAreaSelectionChange,
+  serviceAreaGroups,
+}: SiteCreateDrawerFieldsProps) {
+  const updateDraft = (patch: Partial<SiteCreateDraft>) => {
+    onDraftChange({
+      ...draft,
+      ...patch,
+    });
+  };
+
+  return (
+    <div className="flex flex-col">
+      <SiteCreateSection title="Basics">
+        <FieldGroup className="gap-3">
+          <SiteNameField
+            draft={draft}
+            errors={errors}
+            idPrefix={idPrefix}
+            placeholder="e.g. Riverside Apartments"
+            onDraftPatch={updateDraft}
+          />
+          <SiteServiceAreaField
+            draft={draft}
+            errors={errors}
+            idPrefix={idPrefix}
+            placeholder="Select service area"
+            serviceAreaGroups={serviceAreaGroups}
+            onDraftPatch={updateDraft}
+            onServiceAreaSelectionChange={onServiceAreaSelectionChange}
+          />
+        </FieldGroup>
+      </SiteCreateSection>
+
+      <SiteCreateSection title="Location">
+        <SiteAddressFields
+          className="gap-3"
+          draft={draft}
+          errors={errors}
+          idPrefix={idPrefix}
+          placeholders={{
+            addressLine1: "e.g. 42 North Road",
+            addressLine2: "Building, floor, unit",
+            county: "Dublin",
+            eircode: "D01 F5P2",
+            town: "Dublin",
+          }}
+          onDraftPatch={updateDraft}
+        />
+      </SiteCreateSection>
+
+      <SiteCreateSection title="Access">
+        <FieldGroup className="gap-3">
+          <SiteAccessNotesField
+            draft={draft}
+            idPrefix={idPrefix}
+            label="Notes"
+            placeholder="e.g. Gate code, arrival notes, safety context."
+            rows={3}
+            onDraftPatch={updateDraft}
+          />
+        </FieldGroup>
+      </SiteCreateSection>
+    </div>
+  );
+}
+
+function SiteCreateSection({
+  children,
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly title: string;
+}) {
+  return (
+    <section className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0">
+      <div className="mb-2.5">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function SiteNameField({
   draft,
   errors,
   idPrefix,
   onDraftPatch,
-}: SiteCreateFieldSectionProps) {
+  placeholder,
+}: SiteCreateFieldSectionProps & {
+  readonly placeholder?: string;
+}) {
   return (
     <AuthFormField
       label="Site name"
@@ -211,6 +304,7 @@ export function SiteNameField({
         id={`${idPrefix}-name`}
         value={draft.name}
         aria-invalid={Boolean(errors.name) || undefined}
+        placeholder={placeholder}
         onChange={(event) => onDraftPatch({ name: event.target.value })}
       />
     </AuthFormField>
@@ -219,6 +313,7 @@ export function SiteNameField({
 
 interface SiteServiceAreaFieldProps extends SiteCreateFieldSectionProps {
   readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
+  readonly placeholder?: string;
   readonly serviceAreaGroups: readonly CommandSelectGroup[];
 }
 
@@ -228,6 +323,7 @@ export function SiteServiceAreaField({
   idPrefix,
   onDraftPatch,
   onServiceAreaSelectionChange,
+  placeholder,
   serviceAreaGroups,
 }: SiteServiceAreaFieldProps) {
   const selectProps = buildSiteServiceAreaSelectProps({
@@ -236,6 +332,7 @@ export function SiteServiceAreaField({
     idPrefix,
     onDraftPatch,
     onServiceAreaSelectionChange,
+    placeholder,
     serviceAreaGroups,
   });
 
@@ -255,6 +352,7 @@ export function SiteNestedServiceAreaField({
   idPrefix,
   onDraftPatch,
   onServiceAreaSelectionChange,
+  placeholder,
   serviceAreaGroups,
 }: SiteServiceAreaFieldProps) {
   const selectProps = buildSiteServiceAreaSelectProps({
@@ -263,6 +361,7 @@ export function SiteNestedServiceAreaField({
     idPrefix,
     onDraftPatch,
     onServiceAreaSelectionChange,
+    placeholder,
     serviceAreaGroups,
   });
 
@@ -306,6 +405,7 @@ function buildSiteServiceAreaSelectProps({
   idPrefix,
   onDraftPatch,
   onServiceAreaSelectionChange,
+  placeholder = "Pick service area",
   serviceAreaGroups,
 }: SiteServiceAreaFieldProps): CommandSelectProps {
   return {
@@ -316,19 +416,32 @@ function buildSiteServiceAreaSelectProps({
     onValueChange:
       onServiceAreaSelectionChange ??
       ((nextValue) => onDraftPatch({ serviceAreaSelection: nextValue })),
-    placeholder: "Pick service area",
+    placeholder,
     value: draft.serviceAreaSelection,
   };
 }
 
+interface SiteAddressFieldPlaceholders {
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly county?: string;
+  readonly eircode?: string;
+  readonly town?: string;
+}
+
 export function SiteAddressFields({
+  className,
   draft,
   errors,
   idPrefix,
   onDraftPatch,
-}: SiteCreateFieldSectionProps) {
+  placeholders,
+}: SiteCreateFieldSectionProps & {
+  readonly className?: string;
+  readonly placeholders?: SiteAddressFieldPlaceholders;
+}) {
   return (
-    <FieldGroup>
+    <FieldGroup className={className}>
       <AuthFormField
         label="Address line 1"
         htmlFor={`${idPrefix}-address-line-1`}
@@ -338,6 +451,7 @@ export function SiteAddressFields({
           id={`${idPrefix}-address-line-1`}
           value={draft.addressLine1}
           aria-invalid={Boolean(errors.addressLine1) || undefined}
+          placeholder={placeholders?.addressLine1}
           onChange={(event) =>
             onDraftPatch({ addressLine1: event.target.value })
           }
@@ -351,6 +465,7 @@ export function SiteAddressFields({
         <Input
           id={`${idPrefix}-address-line-2`}
           value={draft.addressLine2}
+          placeholder={placeholders?.addressLine2}
           onChange={(event) =>
             onDraftPatch({ addressLine2: event.target.value })
           }
@@ -362,6 +477,7 @@ export function SiteAddressFields({
           <Input
             id={`${idPrefix}-town`}
             value={draft.town}
+            placeholder={placeholders?.town}
             onChange={(event) => onDraftPatch({ town: event.target.value })}
           />
         </AuthFormField>
@@ -375,6 +491,7 @@ export function SiteAddressFields({
             id={`${idPrefix}-county`}
             value={draft.county}
             aria-invalid={Boolean(errors.county) || undefined}
+            placeholder={placeholders?.county}
             onChange={(event) => onDraftPatch({ county: event.target.value })}
           />
         </AuthFormField>
@@ -389,6 +506,7 @@ export function SiteAddressFields({
           id={`${idPrefix}-eircode`}
           value={draft.eircode}
           aria-invalid={Boolean(errors.eircode) || undefined}
+          placeholder={placeholders?.eircode}
           onChange={(event) => onDraftPatch({ eircode: event.target.value })}
         />
       </AuthFormField>
@@ -401,9 +519,11 @@ export function SiteAccessNotesField({
   idPrefix,
   label = "Access notes",
   onDraftPatch,
+  placeholder,
   rows = 3,
 }: Omit<SiteCreateFieldSectionProps, "errors"> & {
   readonly label?: string;
+  readonly placeholder?: string;
   readonly rows?: number;
 }) {
   return (
@@ -412,6 +532,7 @@ export function SiteAccessNotesField({
         id={`${idPrefix}-access-notes`}
         rows={rows}
         value={draft.accessNotes}
+        placeholder={placeholder}
         onChange={(event) => onDraftPatch({ accessNotes: event.target.value })}
       />
     </AuthFormField>
@@ -420,13 +541,13 @@ export function SiteAccessNotesField({
 
 function findSelectedServiceArea(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[]
+  serviceAreas: readonly ServiceAreaOption[],
 ) {
   if (values.serviceAreaSelection === SITE_CREATE_NONE_VALUE) {
     return;
   }
 
   return serviceAreas.find(
-    (serviceArea) => serviceArea.id === values.serviceAreaSelection
+    (serviceArea) => serviceArea.id === values.serviceAreaSelection,
   );
 }

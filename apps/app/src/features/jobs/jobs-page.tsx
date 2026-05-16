@@ -15,7 +15,6 @@ import {
   CheckmarkCircle02Icon,
   FilterHorizontalIcon,
   LeftToRightListBulletIcon,
-  Location01Icon,
   MapsSquare01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
@@ -23,7 +22,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
-import { AppPageHeader } from "#/components/app-page-header";
 import {
   Alert,
   AlertAction,
@@ -68,7 +66,6 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -76,7 +73,7 @@ import {
 } from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
-import { hasSiteCoordinates } from "#/features/sites/site-location";
+import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
@@ -130,6 +127,55 @@ const JOB_QUEUE_STATUS_ORDER: readonly JobStatus[] = [
   "canceled",
 ];
 
+const JOB_STATUS_TONES: Record<
+  JobStatus,
+  { readonly className: string; readonly dotClassName: string }
+> = {
+  blocked: {
+    className: "border-destructive/25 bg-destructive/5 text-destructive",
+    dotClassName: "bg-destructive",
+  },
+  canceled: {
+    className: "bg-muted text-muted-foreground",
+    dotClassName: "bg-muted-foreground",
+  },
+  completed: {
+    className: "bg-success/10 text-success",
+    dotClassName: "bg-success",
+  },
+  in_progress: {
+    className: "bg-primary/10 text-primary",
+    dotClassName: "bg-primary",
+  },
+  new: {
+    className: "bg-muted text-muted-foreground",
+    dotClassName: "bg-muted-foreground",
+  },
+  triaged: {
+    className: "bg-muted text-muted-foreground",
+    dotClassName: "bg-muted-foreground",
+  },
+};
+
+const JOB_PRIORITY_TONES: Record<JobPriority, { readonly className: string }> =
+  {
+    high: {
+      className: "bg-destructive/10 text-destructive",
+    },
+    low: {
+      className: "bg-success/10 text-success",
+    },
+    medium: {
+      className: "bg-warning/10 text-warning",
+    },
+    none: {
+      className: "text-muted-foreground",
+    },
+    urgent: {
+      className: "bg-destructive/10 text-destructive",
+    },
+  };
+
 const relativeDateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
   month: "short",
@@ -168,7 +214,7 @@ export function JobsPage({
   const optionsState = useAtomValue(jobsOptionsStateAtom);
   const statusCounts = React.useMemo(
     () => buildJobStatusCounts(jobsListState.items),
-    [jobsListState.items]
+    [jobsListState.items],
   );
   const refreshJobs = useAtomSet(refreshJobsListAtom);
   const setFilters = useAtomSet(jobsListFiltersAtom);
@@ -179,11 +225,12 @@ export function JobsPage({
   const visibleViewMode = canUseInternalOptions ? viewMode : "list";
   const [savedViewsOpen, setSavedViewsOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const isMobile = useIsMobile();
   const activeFilters = buildActiveFilterBadges(filters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
   const savedViews = React.useMemo(
     () => buildJobSavedViews(viewer.userId),
-    [viewer.userId]
+    [viewer.userId],
   );
   const activeSavedView = findMatchingJobSavedView(filters, savedViews);
 
@@ -210,7 +257,7 @@ export function JobsPage({
         ...patch,
       }));
     },
-    [setFilters]
+    [setFilters],
   );
 
   const setViewMode = React.useCallback(
@@ -225,14 +272,23 @@ export function JobsPage({
 
       onViewModeChange?.(nextViewMode);
     },
-    [controlledViewMode, onViewModeChange, viewMode]
+    [controlledViewMode, onViewModeChange, viewMode],
   );
 
   const applySavedView = React.useCallback(
     (savedView: JobSavedView) => {
       setFilters(savedView.filters);
     },
-    [setFilters]
+    [setFilters],
+  );
+  const openJob = React.useCallback(
+    (jobId: JobListItem["id"]) => {
+      navigate({
+        params: { jobId },
+        to: "/jobs/$jobId",
+      });
+    },
+    [navigate],
   );
 
   const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
@@ -345,69 +401,90 @@ export function JobsPage({
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     },
-    { enabled: listHotkeysEnabled }
+    { enabled: listHotkeysEnabled },
   );
   useAppHotkey(
     "jobsCreate",
     () => {
       navigate({ to: "/jobs/new" });
     },
-    { enabled: listHotkeysEnabled && canCreateJobs }
+    { enabled: listHotkeysEnabled && canCreateJobs },
   );
   useAppHotkey(
     "jobsRefresh",
     () => {
       refreshJobs();
     },
-    { enabled: listHotkeysEnabled }
+    { enabled: listHotkeysEnabled },
   );
   useAppHotkeySequence(
     "jobsListView",
     () => {
       setViewMode("list");
     },
-    { enabled: listHotkeysEnabled && canUseInternalOptions }
+    { enabled: listHotkeysEnabled && canUseInternalOptions },
   );
   useAppHotkeySequence(
     "jobsMapView",
     () => {
       setViewMode("map");
     },
-    { enabled: listHotkeysEnabled && canUseInternalOptions }
+    { enabled: listHotkeysEnabled && canUseInternalOptions },
   );
   useAppHotkeySequence(
     "jobsSavedViews",
     () => {
       setSavedViewsOpen(true);
     },
-    { enabled: listHotkeysEnabled && canUseInternalOptions }
+    { enabled: listHotkeysEnabled && canUseInternalOptions },
   );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
-      <AppPageHeader
-        title="Jobs"
-        leading={<HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />}
-        actions={
-          <>
+      <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate font-heading text-xl font-medium text-foreground">
+              Jobs
+            </h1>
+            {canUseInternalOptions && !isMobile ? (
+              <SavedViewsControl
+                activeSavedView={activeSavedView}
+                className="h-8 w-36 shrink-0 bg-background"
+                id="jobs-saved-view-desktop"
+                onOpenChange={setSavedViewsOpen}
+                onSavedViewSelect={applySavedView}
+                open={savedViewsOpen}
+                savedViews={savedViews}
+              />
+            ) : null}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {canUseInternalOptions ? (
               <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
             ) : null}
             {canCreateJobs ? <NewJobLink /> : null}
-          </>
-        }
-      >
+          </div>
+        </div>
         <JobsCommandToolbar
-          activeSavedView={activeSavedView}
           filters={filters}
           hasCustomFilters={hasCustomFilters}
-          onSavedViewSelect={applySavedView}
-          onSavedViewsOpenChange={setSavedViewsOpen}
           optionsState={optionsState.data}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
           onFiltersChange={patchFilters}
-          savedViews={savedViews}
-          savedViewsOpen={savedViewsOpen}
+          savedViewsControl={
+            canUseInternalOptions && isMobile ? (
+              <SavedViewsControl
+                activeSavedView={activeSavedView}
+                className="h-8 w-40"
+                id="jobs-saved-view-mobile"
+                onOpenChange={setSavedViewsOpen}
+                onSavedViewSelect={applySavedView}
+                open={savedViewsOpen}
+                savedViews={savedViews}
+              />
+            ) : null
+          }
           searchInputRef={searchInputRef}
           showInternalFilters={canUseInternalOptions}
         />
@@ -416,7 +493,7 @@ export function JobsPage({
           status={filters.status}
           onStatusChange={(status) => patchFilters({ status })}
         />
-      </AppPageHeader>
+      </header>
 
       {notice ? (
         <Alert
@@ -457,6 +534,7 @@ export function JobsPage({
           hasCustomFilters={hasCustomFilters}
           totalJobs={jobsListState.items.length}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
+          onOpenJob={openJob}
         />
       ) : (
         <section data-testid="jobs-coverage-panel" className="min-h-0">
@@ -481,26 +559,20 @@ function JobsCoverageMapFallback() {
 }
 
 function JobsCommandToolbar({
-  activeSavedView,
   filters,
   hasCustomFilters,
   onClearFilters,
   onFiltersChange,
-  onSavedViewSelect,
-  onSavedViewsOpenChange,
+  savedViewsControl,
   optionsState,
-  savedViews,
-  savedViewsOpen,
   searchInputRef,
   showInternalFilters,
 }: {
-  readonly activeSavedView: JobSavedView | undefined;
   readonly filters: JobsListFilters;
   readonly hasCustomFilters: boolean;
   readonly onClearFilters: () => void;
   readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
-  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
-  readonly onSavedViewsOpenChange: (open: boolean) => void;
+  readonly savedViewsControl?: React.ReactNode;
   readonly optionsState: {
     readonly labels: readonly { readonly id: string; readonly name: string }[];
     readonly members: readonly {
@@ -517,24 +589,13 @@ function JobsCommandToolbar({
       readonly serviceAreaId?: string | undefined;
     }[];
   };
-  readonly savedViews: readonly JobSavedView[];
-  readonly savedViewsOpen: boolean;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
   readonly showInternalFilters: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-        {showInternalFilters ? (
-          <SavedViewsControl
-            activeSavedView={activeSavedView}
-            onOpenChange={onSavedViewsOpenChange}
-            onSavedViewSelect={onSavedViewSelect}
-            open={savedViewsOpen}
-            savedViews={savedViews}
-          />
-        ) : null}
-        <InputGroup className="h-8 bg-background xl:max-w-72">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+        <InputGroup className="h-8 border-border bg-background xl:w-72">
           <InputGroupAddon>
             <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
           </InputGroupAddon>
@@ -548,14 +609,7 @@ function JobsCommandToolbar({
         </InputGroup>
 
         <div className="no-scrollbar flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
-          <CommandFilter
-            label="Status"
-            value={filters.status}
-            options={STATUS_FILTER_OPTIONS}
-            onValueChange={(value) =>
-              onFiltersChange({ status: value as JobsListFilters["status"] })
-            }
-          />
+          {savedViewsControl}
           {showInternalFilters ? (
             <>
               <CommandFilter
@@ -576,7 +630,7 @@ function JobsCommandToolbar({
                   onFiltersChange({
                     assigneeId: parseJobsAssigneeFilterValue(
                       value,
-                      optionsState.members
+                      optionsState.members,
                     ),
                   })
                 }
@@ -620,7 +674,7 @@ function JobsCommandToolbar({
                   { label: "All sites", value: "all" },
                   ...buildSiteFilterOptions(
                     optionsState.sites,
-                    filters.serviceAreaId
+                    filters.serviceAreaId,
                   ),
                 ]}
                 onValueChange={(value) =>
@@ -689,12 +743,16 @@ function JobsCommandToolbar({
 
 function SavedViewsControl({
   activeSavedView,
+  className,
+  id = "jobs-saved-view",
   onOpenChange,
   onSavedViewSelect,
   open,
   savedViews,
 }: {
   readonly activeSavedView: JobSavedView | undefined;
+  readonly className?: string;
+  readonly id?: string;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSavedViewSelect: (savedView: JobSavedView) => void;
   readonly open: boolean;
@@ -712,12 +770,12 @@ function SavedViewsControl({
           })),
         },
       ] satisfies readonly CommandSelectGroup[],
-    [savedViews]
+    [savedViews],
   );
 
   return (
     <CommandSelect
-      id="jobs-saved-view"
+      id={id}
       value={activeSavedView?.id ?? ""}
       placeholder="Custom view"
       emptyText="No views."
@@ -732,7 +790,7 @@ function SavedViewsControl({
         }
       }}
       ariaLabel={`Saved view: ${label}`}
-      className="h-8 w-full shrink-0 bg-background xl:w-44"
+      className={cn("h-8 w-full shrink-0 bg-background xl:w-44", className)}
       prefix={<HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />}
       searchPlaceholder="Switch saved view"
     />
@@ -811,38 +869,22 @@ function ViewModeSwitch({
   readonly onValueChange: (value: JobsViewMode) => void;
   readonly value: JobsViewMode;
 }) {
+  const nextView = value === "list" ? "map" : "list";
+  const label = nextView === "map" ? "Map" : "List";
+  const icon =
+    nextView === "map" ? MapsSquare01Icon : LeftToRightListBulletIcon;
+
   return (
-    <Tabs
-      className="w-fit"
-      value={value}
-      onValueChange={(nextValue) => {
-        if (nextValue === "list" || nextValue === "map") {
-          onValueChange(nextValue);
-        }
-      }}
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="bg-background"
+      onClick={() => onValueChange(nextView)}
     >
-      <TabsList
-        aria-label="Jobs view"
-        className="h-8 rounded-full border bg-background p-0.5"
-      >
-        <TabsTrigger className="h-7" value="list">
-          <HugeiconsIcon
-            icon={LeftToRightListBulletIcon}
-            strokeWidth={2}
-            data-icon="inline-start"
-          />
-          List
-        </TabsTrigger>
-        <TabsTrigger className="h-7" value="map">
-          <HugeiconsIcon
-            icon={MapsSquare01Icon}
-            strokeWidth={2}
-            data-icon="inline-start"
-          />
-          Map
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+      <HugeiconsIcon icon={icon} strokeWidth={2} data-icon="inline-start" />
+      {label}
+    </Button>
   );
 }
 
@@ -862,29 +904,27 @@ function JobStatusRail({
   return (
     <div
       aria-label="Job status views"
-      className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto border-t pt-3"
+      className="no-scrollbar flex min-w-0 items-center gap-4 overflow-x-auto border-t pt-2"
     >
       {STATUS_FILTER_OPTIONS.map((option) => (
-        <Button
+        <button
           key={option.value}
           type="button"
-          size="xs"
-          variant={status === option.value ? "secondary" : "ghost"}
           className={cn(
-            "h-7 shrink-0 rounded-full px-2.5 text-xs",
+            "-mb-3 flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-0 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             status === option.value
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
           aria-label={`${option.label} ${counts[option.value]}`}
           aria-pressed={status === option.value}
           onClick={() => onStatusChange(option.value)}
         >
           <span>{option.label}</span>
-          <span className="text-muted-foreground tabular-nums">
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums">
             {counts[option.value]}
           </span>
-        </Button>
+        </button>
       ))}
     </div>
   );
@@ -933,15 +973,18 @@ function JobsListView({
   hasCustomFilters,
   jobs,
   onClearFilters,
+  onOpenJob,
   totalJobs,
 }: {
   readonly canCreateJobs: boolean;
   readonly hasCustomFilters: boolean;
   readonly jobs: readonly JobListItem[];
   readonly onClearFilters: () => void;
+  readonly onOpenJob: (jobId: JobListItem["id"]) => void;
   readonly totalJobs: number;
 }) {
   const lookup = useAtomValue(jobsLookupAtom);
+  const isMobile = useIsMobile();
   const jobGroups = React.useMemo(() => buildJobStatusGroups(jobs), [jobs]);
 
   if (jobs.length === 0) {
@@ -958,69 +1001,157 @@ function JobsListView({
   return (
     <section
       data-testid="jobs-queue-panel"
-      className="overflow-hidden rounded-2xl border bg-background"
+      aria-labelledby="jobs-directory-heading"
+      className="min-h-0"
     >
-      <div className="divide-y">
-        {jobGroups.map((group) => (
-          <JobStatusGroup key={group.status} group={group} lookup={lookup} />
-        ))}
+      <h2 id="jobs-directory-heading" className="sr-only">
+        Job directory
+      </h2>
+      <div className="overflow-hidden rounded-lg border bg-background">
+        {isMobile ? (
+          <JobsMobileDirectory
+            canCreateJobs={canCreateJobs}
+            groups={jobGroups}
+            lookup={lookup}
+          />
+        ) : (
+          <JobsDesktopDirectory
+            canCreateJobs={canCreateJobs}
+            groups={jobGroups}
+            lookup={lookup}
+            onOpenJob={onOpenJob}
+          />
+        )}
       </div>
     </section>
   );
 }
 
-function JobStatusGroup({
-  group,
+function JobsMobileDirectory({
+  canCreateJobs,
+  groups,
   lookup,
 }: {
-  readonly group: JobStatusGroupData;
+  readonly canCreateJobs: boolean;
+  readonly groups: readonly JobStatusGroupData[];
   readonly lookup: JobsLookup;
 }) {
-  const headingId = `jobs-status-group-${group.status}`;
-
   return (
-    <section aria-labelledby={headingId}>
-      <div className="flex items-center gap-2 bg-muted/25 px-3 py-2 sm:px-4">
-        <h2
-          id={headingId}
-          aria-label={`${STATUS_LABELS[group.status]} ${group.jobs.length}`}
-          className="flex items-center gap-2 text-xs font-medium text-foreground"
+    <div className="divide-y">
+      {groups.map((group) => (
+        <section
+          key={group.status}
+          aria-labelledby={`jobs-mobile-status-group-${group.status}`}
         >
-          <span>{STATUS_LABELS[group.status]}</span>
-          <span className="text-muted-foreground tabular-nums">
-            {group.jobs.length}
-          </span>
-        </h2>
-      </div>
-
-      <ul className="flex flex-col xl:hidden">
-        {group.jobs.map((job) => (
-          <li key={job.id}>
-            <JobIssueRow job={job} lookup={lookup} compact />
-          </li>
-        ))}
-      </ul>
-
-      <div className="hidden xl:block">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[48%]">Job</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Site</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead className="text-right">Updated</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+          <JobGroupHeading
+            id={`jobs-mobile-status-group-${group.status}`}
+            status={group.status}
+          />
+          <ul className="flex flex-col">
             {group.jobs.map((job) => (
-              <JobIssueTableRow key={job.id} job={job} lookup={lookup} />
+              <li key={job.id}>
+                <JobIssueRow job={job} lookup={lookup} compact />
+              </li>
             ))}
-          </TableBody>
-        </Table>
-      </div>
-    </section>
+          </ul>
+          {canCreateJobs ? <AddJobGroupLink /> : null}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function JobsDesktopDirectory({
+  canCreateJobs,
+  groups,
+  lookup,
+  onOpenJob,
+}: {
+  readonly canCreateJobs: boolean;
+  readonly groups: readonly JobStatusGroupData[];
+  readonly lookup: JobsLookup;
+  readonly onOpenJob: (jobId: JobListItem["id"]) => void;
+}) {
+  return (
+    <div>
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-[40%]">Title</TableHead>
+            <TableHead className="w-[12%]">Status</TableHead>
+            <TableHead className="w-[12%]">Priority</TableHead>
+            <TableHead className="w-[15%]">Site</TableHead>
+            <TableHead className="w-[12%]">Assignee</TableHead>
+            <TableHead className="w-[9%] text-right">Updated</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.map((group) => (
+            <React.Fragment key={group.status}>
+              <TableRow className="bg-background hover:bg-transparent">
+                <TableCell colSpan={6} className="h-9 px-3 py-2">
+                  <JobGroupHeading
+                    id={`jobs-desktop-status-group-${group.status}`}
+                    status={group.status}
+                  />
+                </TableCell>
+              </TableRow>
+              {group.jobs.map((job) => (
+                <JobIssueTableRow
+                  key={job.id}
+                  job={job}
+                  lookup={lookup}
+                  onOpenJob={onOpenJob}
+                />
+              ))}
+              {canCreateJobs ? (
+                <TableRow className="hover:bg-muted/30">
+                  <TableCell colSpan={6} className="px-3 py-2">
+                    <AddJobGroupLink />
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </React.Fragment>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function JobGroupHeading({
+  id,
+  status,
+}: {
+  readonly id: string;
+  readonly status: JobStatus;
+}) {
+  return (
+    <h2
+      id={id}
+      aria-label={`${STATUS_LABELS[status]} jobs`}
+      className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-foreground xl:px-0 xl:py-0"
+    >
+      <HugeiconsIcon
+        icon={ArrowRight01Icon}
+        strokeWidth={2}
+        className="size-3 rotate-90 text-muted-foreground"
+        aria-hidden
+      />
+      <span>{STATUS_LABELS[status]}</span>
+    </h2>
+  );
+}
+
+function AddJobGroupLink() {
+  return (
+    <Link
+      to="/jobs/new"
+      className="flex w-fit items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
+      Add job
+    </Link>
   );
 }
 
@@ -1074,35 +1205,35 @@ function buildJobStatusCounts(jobs: readonly JobListItem[]): JobStatusCounts {
 function JobIssueTableRow({
   job,
   lookup,
+  onOpenJob,
 }: {
   readonly job: JobListItem;
   readonly lookup: JobsLookup;
+  readonly onOpenJob: (jobId: JobListItem["id"]) => void;
 }) {
   const site = job.siteId ? lookup.siteById.get(job.siteId) : undefined;
   const assignee = job.assigneeId
     ? lookup.memberById.get(job.assigneeId)
     : undefined;
+  const openJob = React.useCallback(() => {
+    onOpenJob(job.id);
+  }, [job.id, onOpenJob]);
 
   return (
-    <TableRow className="group h-12 bg-transparent hover:bg-muted/30">
-      <TableCell>
+    <TableRow
+      aria-label={`Open ${job.title}`}
+      className="group h-12 cursor-pointer bg-transparent hover:bg-muted/30"
+      onClick={openJob}
+    >
+      <TableCell className="min-w-0">
         <Link
           to="/jobs/$jobId"
           params={{ jobId: job.id }}
           className="flex min-w-0 items-center gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          onClick={(event) => event.stopPropagation()}
         >
-          <span className="flex size-5 items-center justify-center text-muted-foreground">
-            <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-          </span>
           <span className="min-w-0 truncate font-medium">{job.title}</span>
           <LabelBadges labels={job.labels} />
-          {site && hasSiteCoordinates(site) ? (
-            <HugeiconsIcon
-              icon={Location01Icon}
-              strokeWidth={2}
-              className="text-muted-foreground"
-            />
-          ) : null}
         </Link>
       </TableCell>
       <TableCell>
@@ -1111,7 +1242,7 @@ function JobIssueTableRow({
       <TableCell>
         <PriorityBadge priority={job.priority} />
       </TableCell>
-      <TableCell className="max-w-48 text-muted-foreground">
+      <TableCell className="min-w-0 text-muted-foreground">
         {site ? (
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{site.name}</span>
@@ -1123,7 +1254,7 @@ function JobIssueTableRow({
           "No site"
         )}
       </TableCell>
-      <TableCell className="max-w-40 truncate text-muted-foreground">
+      <TableCell className="truncate text-muted-foreground">
         {assignee?.name ?? "Unassigned"}
       </TableCell>
       <TableCell className="text-right text-muted-foreground">
@@ -1154,7 +1285,7 @@ function JobIssueRow({
 
   metadata.push(
     { key: "assignee", value: assignee?.name ?? "Unassigned" },
-    { key: "updated-at", value: formatRelativeDate(job.updatedAt) }
+    { key: "updated-at", value: formatRelativeDate(job.updatedAt) },
   );
 
   return (
@@ -1164,7 +1295,7 @@ function JobIssueRow({
       className={cn(
         "group flex min-w-0 items-center gap-3 border-b px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/30",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-        compact ? "items-start" : "items-center"
+        compact ? "items-start" : "items-center",
       )}
     >
       <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-muted-foreground">
@@ -1184,7 +1315,7 @@ function JobIssueRow({
               className={cn(
                 "min-w-0 truncate",
                 item.key !== "site" &&
-                  "before:mr-2 before:text-muted-foreground/60 before:content-['/']"
+                  "before:mr-2 before:text-muted-foreground/60 before:content-['/']",
               )}
             >
               {item.value}
@@ -1352,22 +1483,36 @@ function StatusBadge({
 }: {
   readonly status: keyof typeof STATUS_LABELS;
 }) {
+  const tone = JOB_STATUS_TONES[status];
+
   return (
     <Badge
       variant={status === "blocked" ? "outline" : "secondary"}
-      className="rounded-full"
+      className={cn("rounded-full", tone.className)}
     >
+      <span className={cn("size-1.5 rounded-full", tone.dotClassName)} />
       {STATUS_LABELS[status]}
     </Badge>
   );
 }
 
 function PriorityBadge({ priority }: { readonly priority: JobPriority }) {
+  const tone = JOB_PRIORITY_TONES[priority];
+
   return (
     <Badge
       variant={priority === "none" ? "outline" : "secondary"}
-      className="rounded-full"
+      className={cn("rounded-full", tone.className)}
     >
+      {priority === "none" ? null : (
+        <span
+          className={cn(
+            "relative size-3 text-current before:absolute before:top-0.5 before:left-1.5 before:h-2 before:w-px before:bg-current after:absolute after:top-0.5 after:left-1 after:size-1.5 after:-rotate-45 after:border-t after:border-r after:border-current",
+            priority === "low" && "rotate-180",
+          )}
+          aria-hidden
+        />
+      )}
       {PRIORITY_LABELS[priority]}
     </Badge>
   );
@@ -1405,7 +1550,7 @@ function buildSiteFilterOptions(
     readonly name: string;
     readonly serviceAreaId?: string;
   }[],
-  serviceAreaId: JobsListFilters["serviceAreaId"]
+  serviceAreaId: JobsListFilters["serviceAreaId"],
 ) {
   const options: { readonly label: string; readonly value: string }[] = [];
 
@@ -1435,7 +1580,7 @@ function buildActiveFilterBadges(
     readonly memberById: ReadonlyMap<string, { readonly name: string }>;
     readonly serviceAreaById: ReadonlyMap<string, { readonly name: string }>;
     readonly siteById: ReadonlyMap<string, { readonly name: string }>;
-  }
+  },
 ): readonly ActiveFilterBadge[] {
   const badges: ActiveFilterBadge[] = [];
 
@@ -1445,7 +1590,7 @@ function buildActiveFilterBadges(
 
   if (filters.status !== defaultJobsListFilters.status) {
     const selectedStatus = STATUS_FILTER_OPTIONS.find(
-      (option) => option.value === filters.status
+      (option) => option.value === filters.status,
     );
 
     badges.push({
@@ -1457,7 +1602,7 @@ function buildActiveFilterBadges(
   if (
     !isJobsAssigneeFilterEqual(
       filters.assigneeId,
-      defaultJobsListFilters.assigneeId
+      defaultJobsListFilters.assigneeId,
     )
   ) {
     badges.push({
@@ -1489,7 +1634,7 @@ function buildActiveFilterBadges(
     filters.labelId,
     defaultJobsListFilters.labelId,
     "Label",
-    lookup.labelById
+    lookup.labelById,
   );
   addLookupFilterBadge(
     badges,
@@ -1497,7 +1642,7 @@ function buildActiveFilterBadges(
     filters.serviceAreaId,
     defaultJobsListFilters.serviceAreaId,
     "Service area",
-    lookup.serviceAreaById
+    lookup.serviceAreaById,
   );
   addLookupFilterBadge(
     badges,
@@ -1505,7 +1650,7 @@ function buildActiveFilterBadges(
     filters.siteId,
     defaultJobsListFilters.siteId,
     "Site",
-    lookup.siteById
+    lookup.siteById,
   );
 
   return badges;
@@ -1517,7 +1662,7 @@ function addLookupFilterBadge(
   value: string,
   defaultValue: string,
   labelPrefix: string,
-  lookup: ReadonlyMap<string, { readonly name: string }>
+  lookup: ReadonlyMap<string, { readonly name: string }>,
 ) {
   if (value === defaultValue) {
     return;
@@ -1533,7 +1678,7 @@ function buildAssigneeFilterBadgeLabel(
   assigneeId: JobsAssigneeFilter,
   lookup: {
     readonly memberById: ReadonlyMap<string, { readonly name: string }>;
-  }
+  },
 ) {
   if (assigneeId.kind === "unassigned") {
     return "Assignee: Unassigned";
@@ -1556,7 +1701,7 @@ function formatJobsAssigneeFilterValue(filter: JobsAssigneeFilter): string {
 
 function parseJobsAssigneeFilterValue(
   value: string,
-  members: readonly { readonly id: UserIdType }[]
+  members: readonly { readonly id: UserIdType }[],
 ): JobsAssigneeFilter {
   if (value === "all") {
     return { kind: "all" };
@@ -1571,7 +1716,7 @@ function parseJobsAssigneeFilterValue(
       formatJobsAssigneeFilterValue({
         kind: "user",
         userId: candidate.id,
-      }) === value
+      }) === value,
   );
 
   return member ? { kind: "user", userId: member.id } : { kind: "all" };

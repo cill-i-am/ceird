@@ -96,7 +96,7 @@ const initialCostLineFormState: CostLineFormState = {
 
 function costLineFormReducer(
   state: CostLineFormState,
-  action: CostLineFormAction
+  action: CostLineFormAction,
 ): CostLineFormState {
   switch (action.type) {
     case "reset": {
@@ -136,7 +136,7 @@ function costLineFormReducer(
 
 interface JobCostsSectionProps {
   readonly addJobCostLine: (
-    input: AddJobCostLineInput
+    input: AddJobCostLineInput,
   ) => Promise<Exit.Exit<AddJobCostLineResponse, unknown>>;
   readonly canAddCostLine: boolean;
   readonly detail: JobDetailResponse;
@@ -155,7 +155,7 @@ export function JobCostsSection({
   const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const [costLineForm, dispatchCostLineForm] = React.useReducer(
     costLineFormReducer,
-    initialCostLineFormState
+    initialCostLineFormState,
   );
 
   useAppHotkey(
@@ -165,7 +165,7 @@ export function JobCostsSection({
     },
     {
       enabled: canAddCostLine,
-    }
+    },
   );
 
   async function handleAddCostLine() {
@@ -229,7 +229,7 @@ export function JobCostsSection({
               Cost total
             </span>
             <span className="text-lg font-semibold text-foreground">
-              {formatMoneyMinor(costs.summary.subtotalMinor)}
+              {formatJobMoneyMinor(costs.summary.subtotalMinor)}
             </span>
           </div>
         )}
@@ -461,11 +461,11 @@ function CostLines({ costs }: { readonly costs: JobDetailResponse["costs"] }) {
                 </Badge>
                 <span>
                   {formatQuantity(costLine.quantity)} x{" "}
-                  {formatMoneyMinor(costLine.unitPriceMinor)}
+                  {formatJobMoneyMinor(costLine.unitPriceMinor)}
                 </span>
               </div>
               <span className="text-sm font-semibold text-foreground">
-                Line total {formatMoneyMinor(costLine.lineTotalMinor)}
+                Line total {formatJobMoneyMinor(costLine.lineTotalMinor)}
               </span>
             </div>
             <p className="text-sm leading-7 whitespace-pre-wrap">
@@ -483,7 +483,7 @@ function decodeCostLineType(value: string): CostLineType | null {
 }
 
 function parseCostLineQuantity(
-  value: string
+  value: string,
 ):
   | { readonly ok: true; readonly quantity: number }
   | { readonly ok: false; readonly error: string } {
@@ -527,7 +527,7 @@ function parseCostLineQuantity(
 }
 
 function parseCostLineUnitPriceMinor(
-  value: string
+  value: string,
 ):
   | { readonly ok: true; readonly unitPriceMinor: number }
   | { readonly ok: false; readonly error: string } {
@@ -597,7 +597,7 @@ function getDecimalParts(value: string) {
   };
 }
 
-function formatMoneyMinor(value: number) {
+export function formatJobMoneyMinor(value: number) {
   return moneyFormatter.format(value / 100);
 }
 

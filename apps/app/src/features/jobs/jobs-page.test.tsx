@@ -234,19 +234,31 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
+      params,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    )) as typeof actual.Link,
+    }: ComponentProps<"a"> & {
+      params?: Readonly<Record<string, string>>;
+      to?: string;
+    }) => {
+      const href =
+        to?.replace(/\$([A-Za-z0-9_]+)/g, (_match, key: string) => {
+          return params?.[key] ?? `$${key}`;
+        }) ?? "";
+
+      return (
+        <a href={href} {...props}>
+          {children}
+        </a>
+      );
+    }) as typeof actual.Link,
     useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
 describe("jobs page", () => {
   afterEach(() => {
+    cleanup();
     setViewportWidth(originalInnerWidth);
     vi.clearAllMocks();
   });
@@ -266,72 +278,74 @@ describe("jobs page", () => {
       const statusViews = screen.getByLabelText("Job status views");
 
       expect(
-        within(statusViews).getByRole("button", { name: /active 4/i })
+        within(statusViews).getByRole("button", { name: /active 4/i }),
       ).toBeInTheDocument();
       expect(
-        within(statusViews).getByRole("button", { name: /all jobs 6/i })
+        within(statusViews).getByRole("button", { name: /all jobs 6/i }),
       ).toBeInTheDocument();
       expect(
-        within(statusViews).getByRole("button", { name: /blocked 1/i })
+        within(statusViews).getByRole("button", { name: /blocked 1/i }),
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "New 1" })
+        within(queuePanel).getByRole("heading", { name: "New jobs" }),
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Triaged 2" })
+        within(queuePanel).getByRole("heading", { name: "Triaged jobs" }),
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Blocked 1" })
+        within(queuePanel).getByRole("heading", { name: "Blocked jobs" }),
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).queryByText("Job queue")
+        within(queuePanel).queryByText("Job queue"),
       ).not.toBeInTheDocument();
       expect(within(queuePanel).queryByText("Backlog")).not.toBeInTheDocument();
       expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(queuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(queuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Finalize snag list").length
+        within(queuePanel).getAllByText("Finalize snag list").length,
       ).toBeGreaterThan(0);
       expect(within(queuePanel).getAllByText("North").length).toBeGreaterThan(
-        0
+        0,
       );
       expect(within(queuePanel).getAllByText("West").length).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Closed inspection")
+        within(queuePanel).queryByText("Closed inspection"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).queryByText("Canceled visit")
+        within(queuePanel).queryByText("Canceled visit"),
       ).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: /new job/i })).toHaveAttribute(
         "href",
-        "/jobs/new"
+        "/jobs/new",
       );
       expect(within(queuePanel).getAllByText(/Jan 1/).length).toBeGreaterThan(
-        0
+        0,
       );
 
-      await chooseCommandFilter(user, /status filter/i, "All jobs");
+      await user.click(
+        within(statusViews).getByRole("button", { name: /all jobs 6/i }),
+      );
 
       expect(
-        within(statusViews).getByRole("button", { name: /all jobs 6/i })
+        within(statusViews).getByRole("button", { name: /all jobs 6/i }),
       ).toHaveAttribute("aria-pressed", "true");
       expect(
-        within(queuePanel).getAllByText("Closed inspection").length
+        within(queuePanel).getAllByText("Closed inspection").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Canceled visit").length
+        within(queuePanel).getAllByText("Canceled visit").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getByRole("heading", { name: "Completed 1" })
+        within(queuePanel).getByRole("heading", { name: "Completed jobs" }),
       ).toBeInTheDocument();
       expect(
-        within(queuePanel).getByRole("heading", { name: "Canceled 1" })
+        within(queuePanel).getByRole("heading", { name: "Canceled jobs" }),
       ).toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -346,19 +360,58 @@ describe("jobs page", () => {
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
       expect(
-        screen.queryByTestId("jobs-coverage-panel")
+        screen.queryByTestId("jobs-coverage-panel"),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "Map" }));
+      await user.click(screen.getByRole("button", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
-          "aria-selected",
-          "true"
-        );
+        expect(
+          screen.getByRole("button", { name: "List" }),
+        ).toBeInTheDocument();
       });
-    }
+    },
+  );
+
+  it(
+    "opens the job drawer from the whole desktop row",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+
+      renderJobsPage({ viewportWidth: 1280 });
+
+      await user.click(
+        within(getPrimaryQueuePanel()).getByRole("row", {
+          name: /open inspect boiler/i,
+        }),
+      );
+
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        params: { jobId: initialList.items[0]?.id },
+        to: "/jobs/$jobId",
+      });
+    },
+  );
+
+  it(
+    "exposes a semantic desktop row link",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      renderJobsPage({ viewportWidth: 1280 });
+
+      const link = within(getPrimaryQueuePanel()).getByRole("link", {
+        name: /inspect boiler/i,
+      });
+      link.focus();
+
+      expect(link).toHaveAttribute("href", `/jobs/${initialList.items[0]?.id}`);
+    },
   );
 
   it(
@@ -373,10 +426,10 @@ describe("jobs page", () => {
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
       expect(
-        screen.queryByTestId("jobs-coverage-panel")
+        screen.queryByTestId("jobs-coverage-panel"),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "Map" }));
+      await user.click(screen.getByRole("button", { name: "Map" }));
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
@@ -384,10 +437,10 @@ describe("jobs page", () => {
 
       expect(screen.queryByTestId("jobs-queue-panel")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("tab", { name: "List" }));
+      await user.click(screen.getByRole("button", { name: "List" }));
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
-    }
+    },
   );
 
   it(
@@ -404,20 +457,20 @@ describe("jobs page", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("option", { name: /create job/i })
+          screen.getByRole("option", { name: /create job/i }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("option", { name: /switch to map view/i })
+          screen.getByRole("option", { name: /switch to map view/i }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("option", { name: /apply blocked view/i })
+          screen.getByRole("option", { name: /apply blocked view/i }),
         ).toBeInTheDocument();
       });
 
       expect(
         within(screen.getByRole("option", { name: /create job/i })).getByText(
-          "N"
-        )
+          "N",
+        ),
       ).toBeInTheDocument();
       const mapViewOption = screen.getByRole("option", {
         name: /switch to map view/i,
@@ -426,33 +479,32 @@ describe("jobs page", () => {
       expect(within(mapViewOption).getByText("M")).toBeInTheDocument();
 
       await user.click(
-        screen.getByRole("option", { name: /apply blocked view/i })
+        screen.getByRole("option", { name: /apply blocked view/i }),
       );
 
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: /saved view: blocked/i })
+          screen.getByRole("button", { name: /saved view: blocked/i }),
         ).toBeInTheDocument();
       });
 
       fireEvent.keyDown(window, { key: "k", metaKey: true });
       await user.click(
-        screen.getByRole("option", { name: /switch to map view/i })
+        screen.getByRole("option", { name: /switch to map view/i }),
       );
 
       await waitFor(() => {
         expect(screen.getAllByTestId("jobs-coverage-panel")).toHaveLength(1);
-        expect(screen.getByRole("tab", { name: "Map" })).toHaveAttribute(
-          "aria-selected",
-          "true"
-        );
+        expect(
+          screen.getByRole("button", { name: "List" }),
+        ).toBeInTheDocument();
       });
 
       fireEvent.keyDown(window, { key: "k", metaKey: true });
       await user.click(screen.getByRole("option", { name: /create job/i }));
 
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs/new" });
-    }
+    },
   );
 
   it(
@@ -466,35 +518,35 @@ describe("jobs page", () => {
       renderJobsPage();
 
       expect(
-        screen.getByRole("button", { name: /saved view: active jobs/i })
+        screen.getByRole("button", { name: /saved view: active jobs/i }),
       ).toBeInTheDocument();
 
       await chooseCommandFilter(user, /saved view/i, "Completed");
 
       let queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Closed inspection").length
+        within(queuePanel).getAllByText("Closed inspection").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Inspect boiler")
+        within(queuePanel).queryByText("Inspect boiler"),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /saved view: completed/i })
+        screen.getByRole("button", { name: /saved view: completed/i }),
       ).toBeInTheDocument();
 
       await chooseCommandFilter(user, /saved view/i, "Blocked");
 
       queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(queuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Closed inspection")
+        within(queuePanel).queryByText("Closed inspection"),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /saved view: blocked/i })
+        screen.getByRole("button", { name: /saved view: blocked/i }),
       ).toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -516,37 +568,37 @@ describe("jobs page", () => {
 
       let queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(queuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(queuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Finalize snag list")
+        within(queuePanel).queryByText("Finalize snag list"),
       ).not.toBeInTheDocument();
 
       await chooseCommandFilter(user, /saved view/i, "Unassigned");
 
       queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Needs assignment").length
+        within(queuePanel).getAllByText("Needs assignment").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Inspect boiler")
+        within(queuePanel).queryByText("Inspect boiler"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).queryByText("Await materials")
+        within(queuePanel).queryByText("Await materials"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).queryByText("Canceled visit")
+        within(queuePanel).queryByText("Canceled visit"),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /saved view: unassigned/i })
+        screen.getByRole("button", { name: /saved view: unassigned/i }),
       ).toBeInTheDocument();
       expect(
         within(screen.getByLabelText("Active filters")).getByText(
-          "Assignee: Unassigned"
-        )
+          "Assignee: Unassigned",
+        ),
       ).toBeInTheDocument();
 
       await chooseCommandFilter(user, /saved view/i, "Active jobs");
@@ -554,12 +606,12 @@ describe("jobs page", () => {
 
       queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Needs assignment").length
+        within(queuePanel).getAllByText("Needs assignment").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Inspect boiler")
+        within(queuePanel).queryByText("Inspect boiler"),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -574,23 +626,23 @@ describe("jobs page", () => {
 
       await chooseCommandFilter(user, /saved view/i, "Blocked");
       expect(
-        screen.getByRole("button", { name: /saved view: blocked/i })
+        screen.getByRole("button", { name: /saved view: blocked/i }),
       ).toBeInTheDocument();
 
       await chooseCommandFilter(user, /priority filter/i, "Urgent");
 
       expect(
-        screen.getByRole("button", { name: /saved view: custom view/i })
+        screen.getByRole("button", { name: /saved view: custom view/i }),
       ).toBeInTheDocument();
 
       const activeFilters = screen.getByLabelText("Active filters");
       expect(
-        within(activeFilters).getByText("Status: Blocked")
+        within(activeFilters).getByText("Status: Blocked"),
       ).toBeInTheDocument();
       expect(
-        within(activeFilters).getByText("Priority: Urgent")
+        within(activeFilters).getByText("Priority: Urgent"),
       ).toBeInTheDocument();
-    }
+    },
   );
 
   it("hides the create affordance for members", () => {
@@ -602,7 +654,7 @@ describe("jobs page", () => {
     });
 
     expect(
-      screen.queryByRole("link", { name: /new job/i })
+      screen.queryByRole("link", { name: /new job/i }),
     ).not.toBeInTheDocument();
   }, 10_000);
 
@@ -616,16 +668,16 @@ describe("jobs page", () => {
 
     expect(screen.getByText("No jobs yet.")).toBeInTheDocument();
     expect(
-      screen.getByText("Create the first job when work is ready to schedule.")
+      screen.getByText("Create the first job when work is ready to schedule."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Clear filters or add the next piece of work.")
+      screen.queryByText("Clear filters or add the next piece of work."),
     ).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /new job/i })).toHaveLength(2);
     const emptyState = screen.getByTestId("jobs-queue-panel");
 
     expect(
-      within(emptyState).getByRole("link", { name: /new job/i })
+      within(emptyState).getByRole("link", { name: /new job/i }),
     ).toHaveAttribute("href", "/jobs/new");
   }, 10_000);
 
@@ -642,25 +694,25 @@ describe("jobs page", () => {
       await chooseCommandFilter(
         user,
         /more filter/i,
-        "Coordinator: Taylor Owner"
+        "Coordinator: Taylor Owner",
       );
       await chooseCommandFilter(user, /more filter/i, "Service area: North");
 
       expect(screen.getByText("No matching jobs.")).toBeInTheDocument();
       expect(
-        screen.getByText("Clear filters to return to the full queue.")
+        screen.getByText("Clear filters to return to the full queue."),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText("Clear filters or add the next piece of work.")
+        screen.queryByText("Clear filters or add the next piece of work."),
       ).not.toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /clear filters/i }));
 
       expect(screen.queryByText("No matching jobs.")).not.toBeInTheDocument();
       expect(
-        within(getPrimaryQueuePanel()).getAllByText("Inspect boiler").length
+        within(getPrimaryQueuePanel()).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
-    }
+    },
   );
 
   it(
@@ -679,41 +731,43 @@ describe("jobs page", () => {
       });
 
       expect(screen.getByLabelText("Search jobs")).toBeInTheDocument();
+      expect(screen.getByLabelText("Job status views")).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /status filter/i })
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByRole("button", { name: /saved view/i })
+        screen.queryByRole("button", { name: /saved view/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /assignee filter/i })
+        screen.queryByRole("button", { name: /assignee filter/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /priority filter/i })
+        screen.queryByRole("button", { name: /priority filter/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /label filter/i })
+        screen.queryByRole("button", { name: /label filter/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /site filter/i })
+        screen.queryByRole("button", { name: /site filter/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /more filter/i })
+        screen.queryByRole("button", { name: /more filter/i }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("tab", { name: "Map" })
+        screen.queryByRole("tab", { name: "Map" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("link", { name: /new job/i })
+        screen.queryByRole("link", { name: /new job/i }),
       ).not.toBeInTheDocument();
 
-      await chooseCommandFilter(user, /status filter/i, "All jobs");
+      await user.click(
+        within(screen.getByLabelText("Job status views")).getByRole("button", {
+          name: /all jobs 6/i,
+        }),
+      );
 
       const queuePanel = getPrimaryQueuePanel();
       expect(
-        within(queuePanel).getAllByText("Closed inspection").length
+        within(queuePanel).getAllByText("Closed inspection").length,
       ).toBeGreaterThan(0);
-    }
+    },
   );
 
   it(
@@ -730,12 +784,12 @@ describe("jobs page", () => {
       await user.type(screen.getByLabelText("Search jobs"), "PO-4471");
 
       expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(queuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Await materials")
+        within(queuePanel).queryByText("Await materials"),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
@@ -755,17 +809,17 @@ describe("jobs page", () => {
         await user.type(searchInput, query);
 
         expect(
-          within(queuePanel).getAllByText("Inspect boiler").length
+          within(queuePanel).getAllByText("Inspect boiler").length,
         ).toBeGreaterThan(0);
         expect(
-          within(queuePanel).queryByText("Await materials")
+          within(queuePanel).queryByText("Await materials"),
         ).not.toBeInTheDocument();
       }
 
       await expectSearchMatchesContact("Primary Contact");
       await expectSearchMatchesContact("contact.search@example.com");
       await expectSearchMatchesContact("+353 1 555 0199");
-    }
+    },
   );
 
   it(
@@ -782,42 +836,42 @@ describe("jobs page", () => {
       await chooseCommandFilter(user, /assignee filter/i, "Taylor Owner");
 
       expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(queuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(queuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).queryByText("Finalize snag list")
+        within(queuePanel).queryByText("Finalize snag list"),
       ).not.toBeInTheDocument();
 
       await chooseCommandFilter(user, /priority filter/i, "Urgent");
 
       expect(
-        within(queuePanel).queryByText("Inspect boiler")
+        within(queuePanel).queryByText("Inspect boiler"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).getAllByText("Await materials").length
+        within(queuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       const activeFilters = screen.getByLabelText("Active filters");
       expect(
-        within(activeFilters).getByText("Assignee: Taylor Owner")
+        within(activeFilters).getByText("Assignee: Taylor Owner"),
       ).toBeInTheDocument();
       expect(
-        within(activeFilters).getByText("Priority: Urgent")
+        within(activeFilters).getByText("Priority: Urgent"),
       ).toBeInTheDocument();
 
       await user.click(
-        within(activeFilters).getByRole("button", { name: /clear all/i })
+        within(activeFilters).getByRole("button", { name: /clear all/i }),
       );
 
       expect(
-        within(queuePanel).getAllByText("Inspect boiler").length
+        within(queuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(queuePanel).getAllByText("Finalize snag list").length
+        within(queuePanel).getAllByText("Finalize snag list").length,
       ).toBeGreaterThan(0);
-    }
+    },
   );
 
   it(
@@ -834,17 +888,17 @@ describe("jobs page", () => {
       await chooseCommandFilter(
         user,
         /more filter/i,
-        "Coordinator: Taylor Owner"
+        "Coordinator: Taylor Owner",
       );
 
       expect(
-        within(queuePanel).queryByText("Inspect boiler")
+        within(queuePanel).queryByText("Inspect boiler"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).queryByText("Await materials")
+        within(queuePanel).queryByText("Await materials"),
       ).not.toBeInTheDocument();
       expect(
-        within(queuePanel).getAllByText("Finalize snag list").length
+        within(queuePanel).getAllByText("Finalize snag list").length,
       ).toBeGreaterThan(0);
 
       await chooseCommandFilter(user, /more filter/i, "Service area: North");
@@ -856,19 +910,19 @@ describe("jobs page", () => {
 
       const filteredQueuePanel = getPrimaryQueuePanel();
       expect(
-        within(filteredQueuePanel).getAllByText("Inspect boiler").length
+        within(filteredQueuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(filteredQueuePanel).getAllByText("Await materials").length
+        within(filteredQueuePanel).getAllByText("Await materials").length,
       ).toBeGreaterThan(0);
       expect(
-        within(filteredQueuePanel).queryByText("Finalize snag list")
+        within(filteredQueuePanel).queryByText("Finalize snag list"),
       ).not.toBeInTheDocument();
-    }
+    },
   );
 
   it(
-    "shows labels in every list layout and filters by label",
+    "shows labels in the desktop list layout and filters by label",
     {
       timeout: 10_000,
     },
@@ -879,33 +933,34 @@ describe("jobs page", () => {
       const desktopQueuePanel = getPrimaryQueuePanel();
 
       expect(
-        within(desktopQueuePanel).getAllByText("Compliance").length
+        within(desktopQueuePanel).getAllByText("Compliance").length,
       ).toBeGreaterThan(0);
       expect(
-        within(desktopQueuePanel).getAllByText("Access needed").length
+        within(desktopQueuePanel).getAllByText("Access needed").length,
       ).toBeGreaterThan(0);
 
       await chooseCommandFilter(user, /label filter/i, "Compliance");
 
       expect(
-        within(desktopQueuePanel).getAllByText("Inspect boiler").length
+        within(desktopQueuePanel).getAllByText("Inspect boiler").length,
       ).toBeGreaterThan(0);
       expect(
-        within(desktopQueuePanel).queryByText("Await materials")
+        within(desktopQueuePanel).queryByText("Await materials"),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /remove label: compliance/i })
+        screen.getByRole("button", { name: /remove label: compliance/i }),
       ).toBeInTheDocument();
-
-      cleanup();
-      renderJobsPage({ viewportWidth: 720 });
-      const compactQueuePanel = getPrimaryQueuePanel();
-
-      expect(
-        within(compactQueuePanel).getAllByText("Access needed").length
-      ).toBeGreaterThan(0);
-    }
+    },
   );
+
+  it("shows labels in the compact list layout", () => {
+    renderJobsPage({ viewportWidth: 720 });
+    const compactQueuePanel = getPrimaryQueuePanel();
+
+    expect(
+      within(compactQueuePanel).getAllByText("Access needed").length,
+    ).toBeGreaterThan(0);
+  });
 
   it(
     "searches jobs by service area name",
@@ -920,26 +975,26 @@ describe("jobs page", () => {
 
       await user.type(
         screen.getByRole("textbox", { name: /search jobs/i }),
-        "West"
+        "West",
       );
 
       expect(within(queuePanel).queryAllByText("Inspect boiler")).toHaveLength(
-        0
+        0,
       );
       expect(within(queuePanel).queryAllByText("Await materials")).toHaveLength(
-        0
+        0,
       );
       expect(
-        within(queuePanel).getAllByText("Finalize snag list").length
+        within(queuePanel).getAllByText("Finalize snag list").length,
       ).toBeGreaterThan(0);
-    }
+    },
   );
 });
 
 async function chooseCommandFilter(
   user: ReturnType<typeof userEvent.setup>,
   buttonName: RegExp,
-  optionText: string
+  optionText: string,
 ) {
   await user.click(screen.getByRole("button", { name: buttonName }));
   await waitFor(() => {
@@ -1002,7 +1057,7 @@ function renderJobsPage(options?: {
       <CommandBarProvider>{page}</CommandBarProvider>
     ) : (
       page
-    )
+    ),
   );
 }
 

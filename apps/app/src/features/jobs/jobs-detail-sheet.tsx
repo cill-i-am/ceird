@@ -54,8 +54,9 @@ import {
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
+  DRAWER_CLOSE_FALLBACK_MS,
+  DrawerClose,
   DrawerContent,
-  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "#/components/ui/drawer";
@@ -75,12 +76,12 @@ import {
 } from "#/components/ui/popover";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { validateLabelName } from "#/features/labels/label-name-validation";
+import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
@@ -89,7 +90,10 @@ import {
   JOB_PRIORITY_LABELS as PRIORITY_LABELS,
   JOB_STATUS_LABELS as STATUS_LABELS,
 } from "./job-display";
-import { JobCostsSection } from "./jobs-detail-costs-section";
+import {
+  formatJobMoneyMinor,
+  JobCostsSection,
+} from "./jobs-detail-costs-section";
 import { JobsDetailLocation } from "./jobs-detail-location";
 import { DetailEmpty, DetailSection } from "./jobs-detail-section";
 import {
@@ -138,6 +142,13 @@ const COLLABORATOR_ACCESS_LEVEL_LABELS = {
   comment: "Comment-only",
   read: "Read-only",
 } satisfies Record<JobCollaboratorAccessLevel, string>;
+type JobDetailActionPanel =
+  | "collaborators"
+  | "comments"
+  | "costs"
+  | "site"
+  | "visits"
+  | "workflow";
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
 
@@ -166,47 +177,47 @@ export function JobsDetailSheet({
   const detailState = useAtomValue(jobDetailStateAtomFamily(workItemId));
   const detail = detailState ?? initialDetail;
   const collaborators = useAtomValue(
-    jobCollaboratorsStateAtomFamily(workItemId)
+    jobCollaboratorsStateAtomFamily(workItemId),
   );
   const lookup = useAtomValue(jobsLookupAtom);
   const refreshCollaboratorsResult = useAtomValue(
-    refreshJobCollaboratorsAtomFamily(workItemId)
+    refreshJobCollaboratorsAtomFamily(workItemId),
   );
   const attachCollaboratorResult = useAtomValue(
-    attachJobCollaboratorMutationAtomFamily(workItemId)
+    attachJobCollaboratorMutationAtomFamily(workItemId),
   );
   const updateCollaboratorResult = useAtomValue(
-    updateJobCollaboratorMutationAtomFamily(workItemId)
+    updateJobCollaboratorMutationAtomFamily(workItemId),
   );
   const detachCollaboratorResult = useAtomValue(
-    detachJobCollaboratorMutationAtomFamily(workItemId)
+    detachJobCollaboratorMutationAtomFamily(workItemId),
   );
   const transitionResult = useAtomValue(
-    transitionJobMutationAtomFamily(workItemId)
+    transitionJobMutationAtomFamily(workItemId),
   );
   const reopenResult = useAtomValue(reopenJobMutationAtomFamily(workItemId));
   const patchResult = useAtomValue(patchJobMutationAtomFamily(workItemId));
   const commentResult = useAtomValue(
-    addJobCommentMutationAtomFamily(workItemId)
+    addJobCommentMutationAtomFamily(workItemId),
   );
   const visitResult = useAtomValue(addJobVisitMutationAtomFamily(workItemId));
   const assignLabelResult = useAtomValue(
-    assignJobLabelMutationAtomFamily(workItemId)
+    assignJobLabelMutationAtomFamily(workItemId),
   );
   const createAndAssignLabelResult = useAtomValue(
-    createAndAssignJobLabelMutationAtomFamily(workItemId)
+    createAndAssignJobLabelMutationAtomFamily(workItemId),
   );
   const removeLabelResult = useAtomValue(
-    removeJobLabelMutationAtomFamily(workItemId)
+    removeJobLabelMutationAtomFamily(workItemId),
   );
   const costLineResult = useAtomValue(
-    addJobCostLineMutationAtomFamily(workItemId)
+    addJobCostLineMutationAtomFamily(workItemId),
   );
   const transitionJob = useAtomSet(
     transitionJobMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const reopenJob = useAtomSet(reopenJobMutationAtomFamily(workItemId), {
     mode: "promiseExit",
@@ -218,7 +229,7 @@ export function JobsDetailSheet({
     addJobCommentMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const addJobVisit = useAtomSet(addJobVisitMutationAtomFamily(workItemId), {
     mode: "promiseExit",
@@ -227,53 +238,53 @@ export function JobsDetailSheet({
     assignJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const createAndAssignJobLabel = useAtomSet(
     createAndAssignJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const removeJobLabel = useAtomSet(
     removeJobLabelMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const addJobCostLine = useAtomSet(
     addJobCostLineMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const refreshCollaborators = useAtomSet(
     refreshJobCollaboratorsAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const attachCollaborator = useAtomSet(
     attachJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const updateCollaborator = useAtomSet(
     updateJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const detachCollaborator = useAtomSet(
     detachJobCollaboratorMutationAtomFamily(workItemId),
     {
       mode: "promiseExit",
-    }
+    },
   );
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
-    detail.job.assigneeId
+    detail.job.assigneeId,
   );
   const canManageCollaborators = hasJobsElevatedAccess(viewer.role);
   const isExternalViewer = isExternalJobsViewer(viewer);
@@ -290,11 +301,11 @@ export function JobsDetailSheet({
     buildTransitionSelectionGroups(transitionOptions);
 
   const [selectedStatus, setSelectedStatus] = React.useState<JobStatus | "">(
-    ""
+    "",
   );
   const [blockedReason, setBlockedReason] = React.useState("");
   const [transitionError, setTransitionError] = React.useState<string | null>(
-    null
+    null,
   );
   const [selectedSiteId, setSelectedSiteId] = React.useState<
     SiteIdType | typeof NO_SITE_VALUE
@@ -326,6 +337,13 @@ export function JobsDetailSheet({
     React.useState("Requester");
   const [collaboratorAccessLevel, setCollaboratorAccessLevel] =
     React.useState<JobCollaboratorAccessLevel>("read");
+  const [activePanel, setActivePanel] =
+    React.useState<JobDetailActionPanel | null>(null);
+  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const navigateAfterCloseRef = React.useRef(false);
+  const closeNavigationTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const site =
     detail.site ??
     (detail.job.siteId ? lookup.siteById.get(detail.job.siteId) : undefined);
@@ -342,22 +360,40 @@ export function JobsDetailSheet({
     : undefined;
   const siteSelectionGroups = React.useMemo(
     () => buildSiteSelectionGroups([...lookup.siteById.values()]),
-    [lookup.siteById]
+    [lookup.siteById],
   );
   const organizationLabels = React.useMemo<readonly Label[]>(
     () => getSortedLabels([...lookup.labelById.values()]),
-    [lookup.labelById]
+    [lookup.labelById],
   );
   const assignedLabelIds = React.useMemo<ReadonlySet<LabelIdType>>(
     () => new Set(detail.job.labels.map((label) => label.id)),
-    [detail.job.labels]
+    [detail.job.labels],
   );
   const availableLabels = React.useMemo<readonly Label[]>(
     () => organizationLabels.filter((label) => !assignedLabelIds.has(label.id)),
-    [assignedLabelIds, organizationLabels]
+    [assignedLabelIds, organizationLabels],
   );
   const selectedSiteChanged =
     selectedSiteId !== (detail.job.siteId ?? NO_SITE_VALUE);
+  const hasComments = detail.comments.length > 0;
+  const hasCostLines =
+    detail.costs !== undefined && detail.costs.lines.length > 0;
+  const hasVisits = detail.visits.length > 0;
+  const hasCollaborators = collaborators.length > 0;
+  const shouldLoadCollaboratorDetails =
+    canManageCollaborators &&
+    (activePanel === "collaborators" || hasCollaborators);
+  const externalMemberById = React.useMemo(
+    () =>
+      new Map(
+        externalMembers.map((externalMember) => [
+          externalMember.userId,
+          externalMember,
+        ]),
+      ),
+    [externalMembers],
+  );
 
   React.useEffect(() => {
     setSelectedStatus("");
@@ -373,18 +409,19 @@ export function JobsDetailSheet({
     setVisitNote("");
     setVisitError(null);
     setLabelError(null);
+    setActivePanel(null);
   }, [detail.job.siteId, detail.job.status, workItemId]);
 
   React.useEffect(() => {
-    if (!canManageCollaborators) {
+    if (!shouldLoadCollaboratorDetails) {
       return;
     }
 
     void refreshCollaborators();
-  }, [canManageCollaborators, refreshCollaborators, workItemId]);
+  }, [refreshCollaborators, shouldLoadCollaboratorDetails, workItemId]);
 
   React.useEffect(() => {
-    if (!canManageCollaborators) {
+    if (!shouldLoadCollaboratorDetails) {
       return;
     }
 
@@ -413,13 +450,52 @@ export function JobsDetailSheet({
     return () => {
       ignore = true;
     };
-  }, [canManageCollaborators, workItemId]);
+  }, [shouldLoadCollaboratorDetails, workItemId]);
 
-  const closeSheet = React.useCallback(() => {
+  React.useEffect(() => {
+    setOverlayOpen(true);
+  }, []);
+
+  React.useEffect(
+    () => () => {
+      if (closeNavigationTimeoutRef.current) {
+        clearTimeout(closeNavigationTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const navigateToJobs = React.useCallback(() => {
     React.startTransition(() => {
       navigate({ to: "/jobs" });
     });
   }, [navigate]);
+
+  const finishClosedSheet = React.useCallback(() => {
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
+      closeNavigationTimeoutRef.current = null;
+    }
+
+    if (navigateAfterCloseRef.current) {
+      navigateAfterCloseRef.current = false;
+      navigateToJobs();
+    }
+  }, [navigateToJobs]);
+
+  const closeSheet = React.useCallback(() => {
+    navigateAfterCloseRef.current = true;
+    setOverlayOpen(false);
+
+    if (closeNavigationTimeoutRef.current) {
+      clearTimeout(closeNavigationTimeoutRef.current);
+    }
+
+    closeNavigationTimeoutRef.current = setTimeout(
+      finishClosedSheet,
+      DRAWER_CLOSE_FALLBACK_MS,
+    );
+  }, [finishClosedSheet]);
 
   async function handleTransition() {
     if (!selectedStatus) {
@@ -429,7 +505,7 @@ export function JobsDetailSheet({
 
     if (selectedStatus === "blocked" && blockedReason.trim().length === 0) {
       setTransitionError(
-        "Add the blocker so the next person knows what is stuck."
+        "Add the blocker so the next person knows what is stuck.",
       );
       return;
     }
@@ -492,6 +568,7 @@ export function JobsDetailSheet({
             setTransitionError(null);
 
             if (status === "blocked") {
+              setActivePanel("workflow");
               setSelectedStatus("blocked");
               return;
             }
@@ -519,6 +596,22 @@ export function JobsDetailSheet({
   ]);
 
   useRegisterCommandActions(jobDetailCommandActions);
+  useAppHotkey("jobDetailClose", closeSheet);
+  useAppHotkey("jobDetailStatus", () => setActivePanel("workflow"), {
+    enabled: !isExternalViewer,
+  });
+  useAppHotkey("jobDetailSite", () => setActivePanel("site"), {
+    enabled: !isExternalViewer,
+  });
+  useAppHotkey("jobDetailComment", () => setActivePanel("comments"), {
+    enabled: canAddComment,
+  });
+  useAppHotkey("jobDetailCost", () => setActivePanel("costs"), {
+    enabled: !isExternalViewer && canAddCostLine,
+  });
+  useAppHotkey("jobDetailVisit", () => setActivePanel("visits"), {
+    enabled: !isExternalViewer && canAddVisit,
+  });
 
   async function handleUpdateSiteAssignment() {
     if (!canEditJob) {
@@ -545,7 +638,7 @@ export function JobsDetailSheet({
 
     if (Exit.isSuccess(exit)) {
       setSiteAssignmentMessage(
-        nextSiteId === null ? "Site removed." : "Site assignment updated."
+        nextSiteId === null ? "Site removed." : "Site assignment updated.",
       );
     }
   }
@@ -643,7 +736,7 @@ export function JobsDetailSheet({
 
     if (!selectedCollaboratorUserId || roleLabel.length === 0) {
       setCollaboratorsError(
-        "Choose an external collaborator and add a role label."
+        "Choose an external collaborator and add a role label.",
       );
       return;
     }
@@ -682,7 +775,7 @@ export function JobsDetailSheet({
   }
 
   async function handleDetachCollaborator(
-    collaboratorId: JobCollaborator["id"]
+    collaboratorId: JobCollaborator["id"],
   ) {
     setCollaboratorsMutationError(null);
     const exit = await detachCollaborator(collaboratorId);
@@ -825,35 +918,376 @@ export function JobsDetailSheet({
     );
   }
 
+  function renderSiteAssignmentPanel() {
+    if (isExternalViewer) {
+      return null;
+    }
+
+    return (
+      <DetailSection title="Site assignment">
+        <div className="flex flex-col gap-4">
+          {renderMutationError(patchResult)}
+          <FieldGroup>
+            <Field data-invalid={Boolean(siteAssignmentError)}>
+              <FieldLabel htmlFor="job-site-assignment">Site</FieldLabel>
+              <FieldContent>
+                <CommandSelect
+                  id="job-site-assignment"
+                  value={selectedSiteId}
+                  placeholder="Pick site"
+                  emptyText="No sites found."
+                  groups={siteSelectionGroups}
+                  disabled={!canEditJob || patchResult.waiting}
+                  ariaInvalid={siteAssignmentError ? true : undefined}
+                  onValueChange={(nextValue) => {
+                    if (nextValue === NO_SITE_VALUE) {
+                      setSelectedSiteId(NO_SITE_VALUE);
+                    } else {
+                      try {
+                        setSelectedSiteId(decodeSiteId(nextValue));
+                      } catch {
+                        setSelectedSiteId(NO_SITE_VALUE);
+                      }
+                    }
+                    setSiteAssignmentError(null);
+                    setSiteAssignmentMessage(null);
+                  }}
+                />
+                <FieldError>{siteAssignmentError}</FieldError>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          {siteAssignmentMessage ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {siteAssignmentMessage}
+            </p>
+          ) : null}
+          {canEditJob ? (
+            <div className="flex">
+              <Button
+                type="button"
+                className="w-full sm:w-fit"
+                loading={patchResult.waiting}
+                disabled={!selectedSiteChanged}
+                onClick={handleUpdateSiteAssignment}
+              >
+                {patchResult.waiting ? (
+                  "Saving..."
+                ) : (
+                  <>
+                    <HugeiconsIcon
+                      icon={Location01Icon}
+                      strokeWidth={2}
+                      data-icon="inline-start"
+                    />
+                    Save site
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Site assignment is limited to the assignee or organization admins.
+            </p>
+          )}
+        </div>
+      </DetailSection>
+    );
+  }
+
+  function renderCommentsPanel() {
+    return (
+      <DetailSection title="Comments">
+        <div className="flex flex-col gap-5">
+          {renderMutationError(commentResult)}
+          {canAddComment ? (
+            <>
+              <form
+                className="flex flex-col gap-4"
+                method="post"
+                onSubmit={(event) => submitClientForm(event, handleAddComment)}
+              >
+                <FieldGroup>
+                  <Field data-invalid={Boolean(commentError)}>
+                    <FieldLabel htmlFor="job-comment-body">
+                      Add a comment
+                    </FieldLabel>
+                    <FieldContent>
+                      <Textarea
+                        id="job-comment-body"
+                        value={commentBody}
+                        aria-invalid={Boolean(commentError) || undefined}
+                        onChange={(event) => setCommentBody(event.target.value)}
+                      />
+                      <FieldError>{commentError}</FieldError>
+                    </FieldContent>
+                  </Field>
+                </FieldGroup>
+                <div className="flex">
+                  <Button
+                    type="submit"
+                    loading={commentResult.waiting}
+                    className="w-full sm:w-fit"
+                  >
+                    {commentResult.waiting ? (
+                      "Adding..."
+                    ) : (
+                      <>
+                        <HugeiconsIcon
+                          icon={Comment01Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                        Add comment
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+              {hasComments ? <Separator /> : null}
+            </>
+          ) : null}
+
+          {hasComments ? (
+            <JobCommentsList comments={detail.comments} lookup={lookup} />
+          ) : (
+            <DetailEmpty title="No comments yet." />
+          )}
+        </div>
+      </DetailSection>
+    );
+  }
+
+  function renderVisitsPanel() {
+    if (isExternalViewer) {
+      return null;
+    }
+
+    return (
+      <DetailSection title="Visits">
+        <div className="flex flex-col gap-5">
+          {canAddVisit ? (
+            <>
+              {renderMutationError(visitResult)}
+              <form
+                className="flex flex-col gap-4"
+                method="post"
+                onSubmit={(event) => submitClientForm(event, handleAddVisit)}
+              >
+                <FieldGroup>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field
+                      data-invalid={
+                        Boolean(visitError) && visitDate.trim().length === 0
+                      }
+                    >
+                      <FieldLabel htmlFor="job-visit-date">
+                        Visit date
+                      </FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="job-visit-date"
+                          type="date"
+                          value={visitDate}
+                          aria-invalid={
+                            Boolean(visitError) && visitDate.trim().length === 0
+                              ? true
+                              : undefined
+                          }
+                          onChange={(event) => setVisitDate(event.target.value)}
+                        />
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="job-visit-duration">
+                        Duration
+                      </FieldLabel>
+                      <FieldContent>
+                        <CommandSelect
+                          id="job-visit-duration"
+                          value={visitDurationMinutes}
+                          placeholder="Pick duration"
+                          emptyText="No durations found."
+                          groups={VISIT_DURATION_SELECTION_GROUPS}
+                          onValueChange={setVisitDurationMinutes}
+                        />
+                      </FieldContent>
+                    </Field>
+                  </div>
+
+                  <Field
+                    data-invalid={
+                      Boolean(visitError) && visitNote.trim().length === 0
+                    }
+                  >
+                    <FieldLabel htmlFor="job-visit-note">Visit note</FieldLabel>
+                    <FieldContent>
+                      <Textarea
+                        id="job-visit-note"
+                        value={visitNote}
+                        aria-invalid={
+                          Boolean(visitError) && visitNote.trim().length === 0
+                            ? true
+                            : undefined
+                        }
+                        onChange={(event) => setVisitNote(event.target.value)}
+                      />
+                      <FieldError>{visitError}</FieldError>
+                    </FieldContent>
+                  </Field>
+                </FieldGroup>
+
+                <div className="flex">
+                  <Button
+                    type="submit"
+                    loading={visitResult.waiting}
+                    className="w-full sm:w-fit"
+                  >
+                    {visitResult.waiting ? (
+                      "Logging..."
+                    ) : (
+                      <>
+                        <HugeiconsIcon
+                          icon={Time04Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                        Log visit
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <Alert>
+              <HugeiconsIcon icon={Time04Icon} strokeWidth={2} />
+              <AlertTitle>Visit logging is limited here.</AlertTitle>
+              <AlertDescription>
+                Members can only log visits on jobs assigned to them.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {hasVisits ? (
+            <>
+              <Separator />
+              <JobVisitsList visits={detail.visits} lookup={lookup} />
+            </>
+          ) : (
+            <DetailEmpty title="No visits logged yet." />
+          )}
+        </div>
+      </DetailSection>
+    );
+  }
+
+  const activePanelContent =
+    activePanel === "workflow" && !isExternalViewer ? (
+      <DetailSection title="Workflow">
+        <div className="flex flex-col gap-4">{statusActionContent}</div>
+      </DetailSection>
+    ) : activePanel === "site" ? (
+      renderSiteAssignmentPanel()
+    ) : activePanel === "collaborators" && canManageCollaborators ? (
+      <JobCollaboratorsSection
+        collaborators={collaborators}
+        detachCollaborator={handleDetachCollaborator}
+        errorMessage={collaboratorsMutationError ?? collaboratorsError}
+        externalMemberById={externalMemberById}
+        externalMembers={externalMembers}
+        isLoading={
+          refreshCollaboratorsResult.waiting || attachCollaboratorResult.waiting
+        }
+        selectedAccessLevel={collaboratorAccessLevel}
+        selectedRoleLabel={collaboratorRoleLabel}
+        selectedUserId={selectedCollaboratorUserId}
+        updateCollaborator={handleUpdateCollaborator}
+        updatingOrRemoving={
+          updateCollaboratorResult.waiting || detachCollaboratorResult.waiting
+        }
+        onAccessLevelChange={setCollaboratorAccessLevel}
+        onAttach={handleAttachCollaborator}
+        onRoleLabelChange={setCollaboratorRoleLabel}
+        onUserChange={(userId) =>
+          setSelectedCollaboratorUserId(decodeCollaboratorUserId(userId))
+        }
+      />
+    ) : activePanel === "comments" ? (
+      renderCommentsPanel()
+    ) : activePanel === "costs" && !isExternalViewer ? (
+      <JobCostsSection
+        key={workItemId}
+        addJobCostLine={addJobCostLine}
+        canAddCostLine={canAddCostLine}
+        detail={detail}
+        mutationError={renderMutationError(costLineResult)}
+        waiting={costLineResult.waiting}
+      />
+    ) : activePanel === "visits" ? (
+      renderVisitsPanel()
+    ) : null;
+
   return (
     <ResponsiveDrawer
-      open
+      open={overlayOpen}
       onOpenChange={(open) => {
         if (!open) {
           closeSheet();
         }
       }}
+      onAnimationEnd={(open) => {
+        if (!open) {
+          finishClosedSheet();
+        }
+      }}
     >
       <DrawerContent
         aria-describedby={undefined}
-        className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl"
+        className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-[38rem]"
       >
-        <DrawerHeader className="shrink-0 gap-3 border-b">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                detail.job.status === "blocked" ? "outline" : "secondary"
-              }
-            >
-              {STATUS_LABELS[detail.job.status]}
-            </Badge>
-            <Badge
-              variant={detail.job.priority === "none" ? "outline" : "secondary"}
-            >
-              {PRIORITY_LABELS[detail.job.priority]}
-            </Badge>
+        <DrawerHeader className="shrink-0 gap-4 border-b px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-3">
+              <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {detail.job.externalReference ?? "Job"}
+              </div>
+              <DrawerTitle className="text-xl leading-tight">
+                {detail.job.title}
+              </DrawerTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    detail.job.status === "blocked" ? "outline" : "secondary"
+                  }
+                >
+                  {STATUS_LABELS[detail.job.status]}
+                </Badge>
+                <Badge
+                  variant={
+                    detail.job.priority === "none" ? "outline" : "secondary"
+                  }
+                >
+                  {PRIORITY_LABELS[detail.job.priority]}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  Updated {formatDateTime(detail.job.updatedAt)}
+                </span>
+              </div>
+            </div>
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-lg"
+                aria-label="Close job details"
+                className="shrink-0"
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </DrawerClose>
           </div>
-          <DrawerTitle>{detail.job.title}</DrawerTitle>
           <JobDetailLabels
             labels={detail.job.labels}
             availableLabels={availableLabels}
@@ -879,556 +1313,440 @@ export function JobsDetailSheet({
           {renderMutationError(removeLabelResult)}
         </DrawerHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <Tabs
-            defaultValue="details"
-            className="min-h-0 flex-1 flex-col gap-0 overflow-hidden"
-          >
-            <div className="relative z-10 no-scrollbar shrink-0 overflow-x-auto border-b bg-popover px-4 sm:px-6">
-              <TabsList
-                aria-label="Job detail sections"
-                variant="line"
-                className="h-10"
-              >
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="comments">
-                  Comments <TabCount>{detail.comments.length}</TabCount>
-                </TabsTrigger>
-                {isExternalViewer ? null : (
-                  <>
-                    <TabsTrigger value="costs">Costs</TabsTrigger>
-                    <TabsTrigger value="visits">
-                      Visits <TabCount>{detail.visits.length}</TabCount>
-                    </TabsTrigger>
-                    <TabsTrigger value="activity">
-                      Activity <TabCount>{detail.activity.length}</TabCount>
-                    </TabsTrigger>
-                  </>
-                )}
-              </TabsList>
-            </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5">
+          <div className="flex flex-col gap-4 py-4">
+            <JobsDetailLocation site={site} />
 
-            <TabsContent
-              value="details"
-              keepMounted
-              className="min-h-0 flex-1 overflow-y-auto px-6"
-            >
-              <div className="grid gap-x-6 gap-y-3 border-b py-4 sm:grid-cols-2">
-                <HeaderMetaItem
-                  label="Site"
-                  value={site?.name ?? "No site yet"}
-                  supporting={site?.serviceAreaName ?? "No service area yet"}
-                />
-                <HeaderMetaItem
-                  label="Assignee"
-                  value={assignee?.name ?? "Unassigned"}
-                  supporting={
-                    coordinator
-                      ? `Coordinator: ${coordinator.name}`
-                      : "No coordinator"
-                  }
-                />
-                <HeaderMetaItem
-                  label="Contact"
-                  value={contact?.name ?? "No contact yet"}
-                  supporting={
-                    contact?.email ?? contact?.phone ?? "No contact details yet"
-                  }
-                />
-                <HeaderMetaItem
-                  label="Reference"
-                  value={
-                    detail.job.externalReference ?? "No external reference"
-                  }
-                />
-                <HeaderMetaItem
-                  label="Updated"
-                  value={formatDateTime(detail.job.updatedAt)}
-                  supporting={`Created ${formatDate(detail.job.createdAt)}`}
-                />
-              </div>
+            <JobDetailFactsCard
+              assigneeName={assignee?.name}
+              contact={contact}
+              coordinatorName={coordinator?.name}
+              createdAt={detail.job.createdAt}
+              externalReference={detail.job.externalReference}
+              serviceAreaName={site?.serviceAreaName}
+              updatedAt={detail.job.updatedAt}
+            />
 
-              {detail.job.blockedReason ? (
-                <Alert className="my-5">
-                  <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-                  <AlertTitle>Blocked reason</AlertTitle>
-                  <AlertDescription>
-                    {detail.job.blockedReason}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+            {detail.job.blockedReason ? (
+              <Alert>
+                <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+                <AlertTitle>Blocked reason</AlertTitle>
+                <AlertDescription>{detail.job.blockedReason}</AlertDescription>
+              </Alert>
+            ) : null}
 
-              {isExternalViewer ? null : (
-                <DetailSection title="Move forward">
-                  <div className="flex flex-col gap-4">
-                    {statusActionContent}
-                  </div>
-                </DetailSection>
-              )}
+            <JobDetailActionRail
+              activePanel={activePanel}
+              canAddComment={canAddComment}
+              canAddCostLine={!isExternalViewer && canAddCostLine}
+              canAddVisit={!isExternalViewer && canAddVisit}
+              canManageCollaborators={canManageCollaborators}
+              canManageSite={!isExternalViewer}
+              canManageWorkflow={!isExternalViewer}
+              commentsCount={detail.comments.length}
+              collaboratorsCount={!isExternalViewer ? collaborators.length : 0}
+              costLinesCount={
+                !isExternalViewer ? (detail.costs?.lines.length ?? 0) : 0
+              }
+              visitsCount={!isExternalViewer ? detail.visits.length : 0}
+              onPanelChange={setActivePanel}
+            />
 
-              <JobsDetailLocation site={site} />
+            {activePanelContent}
 
-              <DetailSection title="Contact">
-                <JobsDetailContact contact={contact} />
-              </DetailSection>
-
-              {isExternalViewer ? null : (
-                <DetailSection title="Site assignment">
-                  <div className="flex flex-col gap-4">
-                    {renderMutationError(patchResult)}
-                    <FieldGroup>
-                      <Field data-invalid={Boolean(siteAssignmentError)}>
-                        <FieldLabel htmlFor="job-site-assignment">
-                          Site
-                        </FieldLabel>
-                        <FieldContent>
-                          <CommandSelect
-                            id="job-site-assignment"
-                            value={selectedSiteId}
-                            placeholder="Pick site"
-                            emptyText="No sites found."
-                            groups={siteSelectionGroups}
-                            disabled={!canEditJob || patchResult.waiting}
-                            ariaInvalid={siteAssignmentError ? true : undefined}
-                            onValueChange={(nextValue) => {
-                              if (nextValue === NO_SITE_VALUE) {
-                                setSelectedSiteId(NO_SITE_VALUE);
-                              } else {
-                                try {
-                                  setSelectedSiteId(decodeSiteId(nextValue));
-                                } catch {
-                                  setSelectedSiteId(NO_SITE_VALUE);
-                                }
-                              }
-                              setSiteAssignmentError(null);
-                              setSiteAssignmentMessage(null);
-                            }}
-                          />
-                          <FieldError>{siteAssignmentError}</FieldError>
-                        </FieldContent>
-                      </Field>
-                    </FieldGroup>
-                    {siteAssignmentMessage ? (
-                      <p
-                        role="status"
-                        className="text-sm text-muted-foreground"
-                      >
-                        {siteAssignmentMessage}
-                      </p>
-                    ) : null}
-                    {canEditJob ? (
-                      <div className="flex">
-                        <Button
-                          type="button"
-                          className="w-full sm:w-fit"
-                          loading={patchResult.waiting}
-                          disabled={!selectedSiteChanged}
-                          onClick={handleUpdateSiteAssignment}
-                        >
-                          {patchResult.waiting ? (
-                            "Saving..."
-                          ) : (
-                            <>
-                              <HugeiconsIcon
-                                icon={Location01Icon}
-                                strokeWidth={2}
-                                data-icon="inline-start"
-                              />
-                              Save site
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Site assignment is limited to the assignee or
-                        organization admins.
-                      </p>
-                    )}
-                  </div>
-                </DetailSection>
-              )}
-
-              {canManageCollaborators ? (
-                <JobCollaboratorsSection
-                  collaborators={collaborators}
-                  detachCollaborator={handleDetachCollaborator}
-                  errorMessage={
-                    collaboratorsMutationError ?? collaboratorsError
-                  }
-                  externalMembers={externalMembers}
-                  isLoading={
-                    refreshCollaboratorsResult.waiting ||
-                    attachCollaboratorResult.waiting
-                  }
-                  selectedAccessLevel={collaboratorAccessLevel}
-                  selectedRoleLabel={collaboratorRoleLabel}
-                  selectedUserId={selectedCollaboratorUserId}
-                  updateCollaborator={handleUpdateCollaborator}
-                  updatingOrRemoving={
-                    updateCollaboratorResult.waiting ||
-                    detachCollaboratorResult.waiting
-                  }
-                  onAccessLevelChange={setCollaboratorAccessLevel}
-                  onAttach={handleAttachCollaborator}
-                  onRoleLabelChange={setCollaboratorRoleLabel}
-                  onUserChange={(userId) =>
-                    setSelectedCollaboratorUserId(
-                      decodeCollaboratorUserId(userId)
-                    )
-                  }
-                />
-              ) : null}
-            </TabsContent>
-
-            <TabsContent
-              value="comments"
-              keepMounted
-              className="min-h-0 flex-1 overflow-y-auto px-6"
-            >
+            {hasComments && activePanel !== "comments" ? (
               <DetailSection title="Comments">
-                <div className="flex flex-col gap-5">
-                  {renderMutationError(commentResult)}
-                  {canAddComment ? (
-                    <>
-                      <form
-                        className="flex flex-col gap-4"
-                        method="post"
-                        onSubmit={(event) =>
-                          submitClientForm(event, handleAddComment)
-                        }
-                      >
-                        <FieldGroup>
-                          <Field data-invalid={Boolean(commentError)}>
-                            <FieldLabel htmlFor="job-comment-body">
-                              Add a comment
-                            </FieldLabel>
-                            <FieldContent>
-                              <Textarea
-                                id="job-comment-body"
-                                value={commentBody}
-                                aria-invalid={
-                                  Boolean(commentError) || undefined
-                                }
-                                onChange={(event) =>
-                                  setCommentBody(event.target.value)
-                                }
-                              />
-                              <FieldError>{commentError}</FieldError>
-                            </FieldContent>
-                          </Field>
-                        </FieldGroup>
-                        <div className="flex">
-                          <Button
-                            type="submit"
-                            loading={commentResult.waiting}
-                            className="w-full sm:w-fit"
-                          >
-                            {commentResult.waiting ? (
-                              "Adding..."
-                            ) : (
-                              <>
-                                <HugeiconsIcon
-                                  icon={Comment01Icon}
-                                  strokeWidth={2}
-                                  data-icon="inline-start"
-                                />
-                                Add comment
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </form>
-
-                      <Separator />
-                    </>
-                  ) : null}
-
-                  {detail.comments.length === 0 ? (
-                    <DetailEmpty title="No comments yet." />
-                  ) : (
-                    <ul className="flex flex-col gap-3">
-                      {detail.comments.map((comment) => {
-                        const author = lookup.memberById.get(
-                          comment.authorUserId
-                        );
-
-                        return (
-                          <li
-                            key={comment.id}
-                            className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-                          >
-                            <div className="flex flex-col gap-2">
-                              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                <span className="font-medium text-foreground">
-                                  {comment.authorName ??
-                                    author?.name ??
-                                    "Team member"}
-                                </span>
-                                <span>{formatDateTime(comment.createdAt)}</span>
-                              </div>
-                              <p className="text-sm leading-7 whitespace-pre-wrap">
-                                {comment.body}
-                              </p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
+                <JobCommentsList comments={detail.comments} lookup={lookup} />
               </DetailSection>
-            </TabsContent>
+            ) : null}
 
-            {isExternalViewer ? null : (
-              <>
-                <TabsContent
-                  value="costs"
-                  keepMounted
-                  className="min-h-0 flex-1 overflow-y-auto px-6"
-                >
-                  <JobCostsSection
-                    key={workItemId}
-                    addJobCostLine={addJobCostLine}
-                    canAddCostLine={canAddCostLine}
-                    detail={detail}
-                    mutationError={renderMutationError(costLineResult)}
-                    waiting={costLineResult.waiting}
-                  />
-                </TabsContent>
+            {!isExternalViewer &&
+            hasCollaborators &&
+            activePanel !== "collaborators" ? (
+              <DetailSection title="Collaborators">
+                <JobCollaboratorsSummary
+                  collaborators={collaborators}
+                  externalMemberById={externalMemberById}
+                />
+              </DetailSection>
+            ) : null}
 
-                <TabsContent
-                  value="visits"
-                  keepMounted
-                  className="min-h-0 flex-1 overflow-y-auto px-6"
-                >
-                  <DetailSection title="Visits">
-                    <div className="flex flex-col gap-5">
-                      {canAddVisit ? (
-                        <>
-                          {renderMutationError(visitResult)}
-                          <form
-                            className="flex flex-col gap-4"
-                            method="post"
-                            onSubmit={(event) =>
-                              submitClientForm(event, handleAddVisit)
-                            }
-                          >
-                            <FieldGroup>
-                              <div className="grid gap-4 md:grid-cols-2">
-                                <Field
-                                  data-invalid={
-                                    Boolean(visitError) &&
-                                    visitDate.trim().length === 0
-                                  }
-                                >
-                                  <FieldLabel htmlFor="job-visit-date">
-                                    Visit date
-                                  </FieldLabel>
-                                  <FieldContent>
-                                    <Input
-                                      id="job-visit-date"
-                                      type="date"
-                                      value={visitDate}
-                                      aria-invalid={
-                                        Boolean(visitError) &&
-                                        visitDate.trim().length === 0
-                                          ? true
-                                          : undefined
-                                      }
-                                      onChange={(event) =>
-                                        setVisitDate(event.target.value)
-                                      }
-                                    />
-                                  </FieldContent>
-                                </Field>
+            {!isExternalViewer && hasCostLines && activePanel !== "costs" ? (
+              <JobCostSummary costs={detail.costs} />
+            ) : null}
 
-                                <Field>
-                                  <FieldLabel htmlFor="job-visit-duration">
-                                    Duration
-                                  </FieldLabel>
-                                  <FieldContent>
-                                    <CommandSelect
-                                      id="job-visit-duration"
-                                      value={visitDurationMinutes}
-                                      placeholder="Pick duration"
-                                      emptyText="No durations found."
-                                      groups={VISIT_DURATION_SELECTION_GROUPS}
-                                      onValueChange={setVisitDurationMinutes}
-                                    />
-                                  </FieldContent>
-                                </Field>
-                              </div>
+            {!isExternalViewer && hasVisits && activePanel !== "visits" ? (
+              <DetailSection title="Visits">
+                <JobVisitsList visits={detail.visits} lookup={lookup} />
+              </DetailSection>
+            ) : null}
 
-                              <Field
-                                data-invalid={
-                                  Boolean(visitError) &&
-                                  visitNote.trim().length === 0
-                                }
-                              >
-                                <FieldLabel htmlFor="job-visit-note">
-                                  Visit note
-                                </FieldLabel>
-                                <FieldContent>
-                                  <Textarea
-                                    id="job-visit-note"
-                                    value={visitNote}
-                                    aria-invalid={
-                                      Boolean(visitError) &&
-                                      visitNote.trim().length === 0
-                                        ? true
-                                        : undefined
-                                    }
-                                    onChange={(event) =>
-                                      setVisitNote(event.target.value)
-                                    }
-                                  />
-                                  <FieldError>{visitError}</FieldError>
-                                </FieldContent>
-                              </Field>
-                            </FieldGroup>
-
-                            <div className="flex">
-                              <Button
-                                type="submit"
-                                loading={visitResult.waiting}
-                                className="w-full sm:w-fit"
-                              >
-                                {visitResult.waiting ? (
-                                  "Logging..."
-                                ) : (
-                                  <>
-                                    <HugeiconsIcon
-                                      icon={Time04Icon}
-                                      strokeWidth={2}
-                                      data-icon="inline-start"
-                                    />
-                                    Log visit
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </form>
-                        </>
-                      ) : (
-                        <Alert>
-                          <HugeiconsIcon icon={Time04Icon} strokeWidth={2} />
-                          <AlertTitle>
-                            Visit logging is limited here.
-                          </AlertTitle>
-                          <AlertDescription>
-                            Members can only log visits on jobs assigned to
-                            them.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      <Separator />
-
-                      {detail.visits.length === 0 ? (
-                        <DetailEmpty title="No visits logged yet." />
-                      ) : (
-                        <ul className="flex flex-col gap-3">
-                          {detail.visits.map((visit) => {
-                            const author = lookup.memberById.get(
-                              visit.authorUserId
-                            );
-
-                            return (
-                              <li
-                                key={visit.id}
-                                className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-                              >
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                    <span className="font-medium text-foreground">
-                                      {author?.name ?? "Team member"}
-                                    </span>
-                                    <span>{formatDate(visit.visitDate)}</span>
-                                    <span>
-                                      {formatDuration(visit.durationMinutes)}
-                                    </span>
-                                  </div>
-                                  <p className="text-sm leading-7 whitespace-pre-wrap">
-                                    {visit.note}
-                                  </p>
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  </DetailSection>
-                </TabsContent>
-
-                <TabsContent
-                  value="activity"
-                  keepMounted
-                  className="min-h-0 flex-1 overflow-y-auto px-6"
-                >
-                  <DetailSection title="Activity">
-                    <div>
-                      {detail.activity.length === 0 ? (
-                        <DetailEmpty title="No activity yet." />
-                      ) : (
-                        <ul className="flex flex-col gap-3">
-                          {detail.activity.map((event) => {
-                            const actor = event.actorUserId
-                              ? lookup.memberById.get(event.actorUserId)
-                              : undefined;
-
-                            return (
-                              <li
-                                key={event.id}
-                                className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
-                              >
-                                <div className="flex flex-col gap-2">
-                                  <p className="text-sm leading-7">
-                                    {describeJobDetailActivity(
-                                      actor?.name,
-                                      event.payload
-                                    )}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {formatDateTime(event.createdAt)}
-                                  </p>
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  </DetailSection>
-                </TabsContent>
-              </>
-            )}
-          </Tabs>
-
-          <DrawerFooter className="shrink-0 border-t">
-            <Button type="button" variant="ghost" onClick={closeSheet}>
-              Close
-            </Button>
-          </DrawerFooter>
+            {!isExternalViewer ? (
+              <DetailSection title="Activity">
+                <JobActivityList activity={detail.activity} lookup={lookup} />
+              </DetailSection>
+            ) : null}
+          </div>
         </div>
       </DrawerContent>
     </ResponsiveDrawer>
   );
 }
 
-function TabCount({ children }: { readonly children: React.ReactNode }) {
+function JobDetailActionRail({
+  activePanel,
+  canAddComment,
+  canAddCostLine,
+  canAddVisit,
+  canManageCollaborators,
+  canManageSite,
+  canManageWorkflow,
+  collaboratorsCount,
+  commentsCount,
+  costLinesCount,
+  onPanelChange,
+  visitsCount,
+}: {
+  readonly activePanel: JobDetailActionPanel | null;
+  readonly canAddComment: boolean;
+  readonly canAddCostLine: boolean;
+  readonly canAddVisit: boolean;
+  readonly canManageCollaborators: boolean;
+  readonly canManageSite: boolean;
+  readonly canManageWorkflow: boolean;
+  readonly collaboratorsCount: number;
+  readonly commentsCount: number;
+  readonly costLinesCount: number;
+  readonly onPanelChange: (panel: JobDetailActionPanel | null) => void;
+  readonly visitsCount: number;
+}) {
+  const actions = [
+    canManageWorkflow
+      ? { label: "Status", panel: "workflow" as const, value: undefined }
+      : null,
+    canManageSite
+      ? { label: "Site", panel: "site" as const, value: undefined }
+      : null,
+    canAddComment || commentsCount > 0
+      ? { label: "Comment", panel: "comments" as const, value: commentsCount }
+      : null,
+    canAddCostLine || costLinesCount > 0
+      ? { label: "Cost", panel: "costs" as const, value: costLinesCount }
+      : null,
+    canAddVisit || visitsCount > 0
+      ? { label: "Visit", panel: "visits" as const, value: visitsCount }
+      : null,
+    canManageCollaborators || collaboratorsCount > 0
+      ? {
+          label: "Collaborator",
+          panel: "collaborators" as const,
+          value: collaboratorsCount,
+        }
+      : null,
+  ].filter((action): action is NonNullable<typeof action> => Boolean(action));
+
+  if (actions.length === 0) {
+    return null;
+  }
+
   return (
-    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground">
-      {children}
-    </span>
+    <section className="rounded-lg border bg-background p-3">
+      <div className="flex flex-wrap gap-2">
+        {actions.map((action) => {
+          const isActive = activePanel === action.panel;
+
+          return (
+            <Button
+              key={action.panel}
+              type="button"
+              size="sm"
+              aria-label={
+                action.value && action.value > 0
+                  ? `${action.label} ${action.value}`
+                  : action.label
+              }
+              variant={isActive ? "secondary" : "outline"}
+              onClick={() => onPanelChange(isActive ? null : action.panel)}
+            >
+              {action.label}
+              {action.value && action.value > 0 ? (
+                <span className="ml-1 text-xs tabular-nums text-muted-foreground">
+                  {action.value}
+                </span>
+              ) : null}
+            </Button>
+          );
+        })}
+      </div>
+    </section>
   );
+}
+
+function JobCommentsList({
+  comments,
+  lookup,
+}: {
+  readonly comments: JobDetailResponse["comments"];
+  readonly lookup: {
+    readonly memberById: ReadonlyMap<UserIdType, { readonly name: string }>;
+  };
+}) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {comments.map((comment) => {
+        const author = lookup.memberById.get(comment.authorUserId);
+
+        return (
+          <li
+            key={comment.id}
+            className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+          >
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {comment.authorName ?? author?.name ?? "Team member"}
+                </span>
+                <span>{formatDateTime(comment.createdAt)}</span>
+              </div>
+              <p className="text-sm leading-7 whitespace-pre-wrap">
+                {comment.body}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function JobVisitsList({
+  lookup,
+  visits,
+}: {
+  readonly lookup: {
+    readonly memberById: ReadonlyMap<UserIdType, { readonly name: string }>;
+  };
+  readonly visits: JobDetailResponse["visits"];
+}) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {visits.map((visit) => {
+        const author = lookup.memberById.get(visit.authorUserId);
+
+        return (
+          <li
+            key={visit.id}
+            className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+          >
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {author?.name ?? "Team member"}
+                </span>
+                <span>{formatDate(visit.visitDate)}</span>
+                <span>{formatDuration(visit.durationMinutes)}</span>
+              </div>
+              <p className="text-sm leading-7 whitespace-pre-wrap">
+                {visit.note}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function JobActivityList({
+  activity,
+  lookup,
+}: {
+  readonly activity: JobDetailResponse["activity"];
+  readonly lookup: {
+    readonly memberById: ReadonlyMap<UserIdType, { readonly name: string }>;
+  };
+}) {
+  if (activity.length === 0) {
+    return <DetailEmpty title="No activity yet." />;
+  }
+
+  return (
+    <ul className="flex flex-col gap-3">
+      {activity.map((event) => {
+        const actor = event.actorUserId
+          ? lookup.memberById.get(event.actorUserId)
+          : undefined;
+
+        return (
+          <li
+            key={event.id}
+            className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+          >
+            <div className="flex flex-col gap-2">
+              <p className="text-sm leading-7">
+                {describeJobDetailActivity(actor?.name, event.payload)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {formatDateTime(event.createdAt)}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function JobCollaboratorsSummary({
+  collaborators,
+  externalMemberById,
+}: {
+  readonly collaborators: readonly JobCollaborator[];
+  readonly externalMemberById: ReadonlyMap<UserIdType, ExternalMemberOption>;
+}) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {collaborators.map((collaborator) => {
+        const externalMember = collaborator.userId
+          ? externalMemberById.get(collaborator.userId)
+          : undefined;
+
+        return (
+          <li
+            key={collaborator.id}
+            className="flex items-center justify-between gap-3 border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">
+                {externalMember?.name ?? "External collaborator"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {collaborator.roleLabel}
+              </p>
+            </div>
+            <Badge variant="secondary">
+              {COLLABORATOR_ACCESS_LEVEL_LABELS[collaborator.accessLevel]}
+            </Badge>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function JobCostSummary({
+  costs,
+}: {
+  readonly costs: NonNullable<JobDetailResponse["costs"]>;
+}) {
+  return (
+    <DetailSection title="Costs">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3">
+          <span className="text-sm font-medium text-muted-foreground">
+            Cost total
+          </span>
+          <span className="text-lg font-semibold text-foreground">
+            {formatJobMoneyMinor(costs.summary.subtotalMinor)}
+          </span>
+        </div>
+        <ul className="flex flex-col gap-3">
+          {costs.lines.map((costLine) => (
+            <li
+              key={costLine.id}
+              className="border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+            >
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-foreground">
+                    {costLine.description}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatJobMoneyMinor(costLine.lineTotalMinor)}
+                  </span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </DetailSection>
+  );
+}
+
+function JobDetailFactsCard({
+  assigneeName,
+  contact,
+  coordinatorName,
+  createdAt,
+  externalReference,
+  serviceAreaName,
+  updatedAt,
+}: {
+  readonly assigneeName?: string;
+  readonly contact?: JobContactDetail | JobContactOption;
+  readonly coordinatorName?: string;
+  readonly createdAt: string;
+  readonly externalReference?: string;
+  readonly serviceAreaName?: string;
+  readonly updatedAt: string;
+}) {
+  const contactSupporting = getContactSupportingText(contact);
+  const contactNotes =
+    contact && "notes" in contact ? contact.notes : undefined;
+
+  return (
+    <section className="rounded-lg border bg-background">
+      <div className="border-b px-4 py-3">
+        <h3 className="text-sm font-medium text-foreground">Job details</h3>
+      </div>
+      <div className="grid gap-x-6 gap-y-4 p-4 sm:grid-cols-2">
+        <HeaderMetaItem
+          label="Assignee"
+          value={assigneeName ?? "Unassigned"}
+          supporting={coordinatorName ? `Coordinator: ${coordinatorName}` : ""}
+        />
+        <HeaderMetaItem
+          label="Contact"
+          value={contact?.name ?? "No contact yet"}
+          supporting={contactSupporting}
+        />
+        <HeaderMetaItem
+          label="Service area"
+          value={serviceAreaName ?? "No service area yet"}
+        />
+        <HeaderMetaItem
+          label="Reference"
+          value={externalReference ?? "No external reference"}
+        />
+        <HeaderMetaItem label="Created" value={formatDate(createdAt)} />
+        <HeaderMetaItem label="Updated" value={formatDateTime(updatedAt)} />
+        {contactNotes ? (
+          <div className="min-w-0 text-left sm:col-span-2">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase">
+              Contact notes
+            </p>
+            <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">
+              {contactNotes}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function getContactSupportingText(
+  contact: JobContactDetail | JobContactOption | undefined,
+) {
+  return [contact?.email, contact?.phone].filter(Boolean).join(" · ");
 }
 
 function JobCollaboratorsSection({
   collaborators,
   detachCollaborator,
   errorMessage,
+  externalMemberById,
   externalMembers,
   isLoading,
   onAccessLevelChange,
@@ -1443,9 +1761,10 @@ function JobCollaboratorsSection({
 }: {
   readonly collaborators: readonly JobCollaborator[];
   readonly detachCollaborator: (
-    collaboratorId: JobCollaborator["id"]
+    collaboratorId: JobCollaborator["id"],
   ) => Promise<unknown>;
   readonly errorMessage: string | null;
+  readonly externalMemberById: ReadonlyMap<UserIdType, ExternalMemberOption>;
   readonly externalMembers: readonly ExternalMemberOption[];
   readonly isLoading: boolean;
   readonly onAccessLevelChange: (value: JobCollaboratorAccessLevel) => void;
@@ -1468,8 +1787,8 @@ function JobCollaboratorsSection({
     .filter(
       (member) =>
         !collaborators.some(
-          (collaborator) => collaborator.userId === member.userId
-        )
+          (collaborator) => collaborator.userId === member.userId,
+        ),
     )
     .map((member) => ({
       label: member.name,
@@ -1576,9 +1895,11 @@ function JobCollaboratorsSection({
                 key={collaborator.id}
                 collaborator={collaborator}
                 disabled={updatingOrRemoving}
-                externalMember={externalMembers.find(
-                  (member) => member.userId === collaborator.userId
-                )}
+                externalMember={
+                  collaborator.userId
+                    ? externalMemberById.get(collaborator.userId)
+                    : undefined
+                }
                 accessLevelGroups={accessLevelGroups}
                 detachCollaborator={detachCollaborator}
                 updateCollaborator={updateCollaborator}
@@ -1602,7 +1923,7 @@ function JobCollaboratorRow({
   readonly accessLevelGroups: readonly CommandSelectGroup[];
   readonly collaborator: JobCollaborator;
   readonly detachCollaborator: (
-    collaboratorId: JobCollaborator["id"]
+    collaboratorId: JobCollaborator["id"],
   ) => Promise<unknown>;
   readonly disabled: boolean;
   readonly externalMember: ExternalMemberOption | undefined;
@@ -1699,40 +2020,6 @@ function JobCollaboratorRow({
         </div>
       </div>
     </li>
-  );
-}
-
-function JobsDetailContact({
-  contact,
-}: {
-  readonly contact: JobContactDetail | JobContactOption | undefined;
-}) {
-  if (!contact) {
-    return <DetailEmpty title="No contact yet." />;
-  }
-
-  const notes = "notes" in contact ? contact.notes : undefined;
-
-  return (
-    <div className="grid gap-3 text-sm">
-      <HeaderMetaItem label="Name" value={contact.name} />
-      {contact.email ? (
-        <HeaderMetaItem label="Email" value={contact.email} />
-      ) : null}
-      {contact.phone ? (
-        <HeaderMetaItem label="Phone" value={contact.phone} />
-      ) : null}
-      {notes ? (
-        <div className="min-w-0 text-left">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase">
-            Notes
-          </p>
-          <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">
-            {notes}
-          </p>
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -1851,7 +2138,7 @@ function LabelPicker({
   const hasExistingLabelName =
     normalizedCreateName.length > 0 &&
     organizationLabels.some(
-      (label) => normalizeLabelName(label.name) === normalizedCreateName
+      (label) => normalizeLabelName(label.name) === normalizedCreateName,
     );
   const showCreate =
     canCreateLabels && canCreateLabelName && !hasExistingLabelName;
@@ -1874,7 +2161,7 @@ function LabelPicker({
         disabled={disabled}
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
-          "rounded-full bg-background"
+          "rounded-full bg-background",
         )}
       >
         <HugeiconsIcon
@@ -1955,7 +2242,7 @@ function LabelPicker({
 }
 
 function buildTransitionSelectionGroups(
-  transitionOptions: readonly JobStatus[]
+  transitionOptions: readonly JobStatus[],
 ) {
   return [
     {
@@ -1984,10 +2271,10 @@ function getCollaboratorAccessLevelGroups() {
 }
 
 function decodeOptionalJobCollaboratorAccessLevel(
-  input: unknown
+  input: unknown,
 ): JobCollaboratorAccessLevel | undefined {
   const decoded = Schema.decodeUnknownOption(JobCollaboratorAccessLevelSchema)(
-    input
+    input,
   );
 
   return Option.getOrUndefined(decoded);
@@ -2049,7 +2336,7 @@ function toExternalMemberOptions(
     readonly email: string;
     readonly id: UserIdType;
     readonly name: string;
-  }[]
+  }[],
 ): readonly ExternalMemberOption[] {
   let externalMembers: readonly ExternalMemberOption[] = [];
 
@@ -2060,7 +2347,7 @@ function toExternalMemberOptions(
   }))) {
     externalMembers = insertSortedExternalMember(
       externalMembers,
-      externalMember
+      externalMember,
     );
   }
 
@@ -2069,10 +2356,10 @@ function toExternalMemberOptions(
 
 function insertSortedExternalMember(
   members: readonly ExternalMemberOption[],
-  member: ExternalMemberOption
+  member: ExternalMemberOption,
 ) {
   const insertIndex = members.findIndex(
-    (current) => member.name.localeCompare(current.name) < 0
+    (current) => member.name.localeCompare(current.name) < 0,
   );
 
   if (insertIndex === -1) {
@@ -2087,7 +2374,7 @@ function insertSortedExternalMember(
 }
 
 function renderMutationError(
-  result: Result.Result<unknown, { readonly message: string }>
+  result: Result.Result<unknown, { readonly message: string }>,
 ) {
   return Result.builder(result)
     .onError((error) => (
@@ -2141,7 +2428,7 @@ function formatDuration(durationMinutes: number) {
 
 function describeJobDetailActivity(
   actorName: string | undefined,
-  payload: JobDetailResponse["activity"][number]["payload"]
+  payload: JobDetailResponse["activity"][number]["payload"],
 ) {
   const actorPrefix = actorName ? `${actorName} ` : "";
 

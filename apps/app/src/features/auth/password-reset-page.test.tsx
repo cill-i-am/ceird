@@ -29,7 +29,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
 
 vi.mock(import("@tanstack/react-router"), async () => {
   const actual = await vi.importActual<typeof TanStackReactRouter>(
-    "@tanstack/react-router"
+    "@tanstack/react-router",
   );
 
   return {
@@ -82,16 +82,16 @@ describe("password reset page", () => {
     render(
       <PasswordResetPage
         search={{ error: "INVALID_TOKEN", invitation: "inv_123" }}
-      />
+      />,
     );
 
     expect(
       screen.getByRole("heading", {
         name: "Reset link expired",
-      })
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("This password reset link is invalid or has expired.")
+      screen.getByText("This password reset link is invalid or has expired."),
     ).toBeInTheDocument();
 
     const forgotPasswordLink = screen.getByRole("link", {
@@ -99,7 +99,7 @@ describe("password reset page", () => {
     });
     expect(forgotPasswordLink).toHaveAttribute(
       "href",
-      "/forgot-password?invitation=inv_123"
+      "/forgot-password?invitation=inv_123",
     );
     expect(forgotPasswordLink).toHaveAttribute("data-router-link", "true");
 
@@ -114,11 +114,11 @@ describe("password reset page", () => {
     render(
       <PasswordResetPage
         search={{ invitation: "inv_123", token: "reset-token" }}
-      />
+      />,
     );
 
     expect(
-      screen.getByRole("heading", { name: "Reset password" })
+      screen.getByRole("heading", { name: "Reset password" }),
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("New password"), "password123");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
@@ -129,6 +129,17 @@ describe("password reset page", () => {
         newPassword: "password123",
       });
     });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          invitation: "inv_123",
+        },
+        to: "/login",
+        viewTransition: {
+          types: ["auth-card"],
+        },
+      });
+    });
   }, 10_000);
 
   it("navigates to /login after a successful reset", async () => {
@@ -137,7 +148,7 @@ describe("password reset page", () => {
     render(
       <PasswordResetPage
         search={{ invitation: "inv_123", token: "reset-token" }}
-      />
+      />,
     );
 
     await user.type(screen.getByLabelText("New password"), "password123");
@@ -171,7 +182,7 @@ describe("password reset page", () => {
     render(
       <PasswordResetPage
         search={{ invitation: "inv_123", token: "reset-token" }}
-      />
+      />,
     );
 
     await user.type(screen.getByLabelText("New password"), "password123");
@@ -207,7 +218,7 @@ describe("password reset page", () => {
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
-      screen.findByText("We couldn't reset your password. Please try again.")
+      screen.findByText("We couldn't reset your password. Please try again."),
     ).resolves.toBeInTheDocument();
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
@@ -221,7 +232,7 @@ describe("password reset page", () => {
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
-      screen.findByText("Use at least 8 characters.")
+      screen.findByText("Use at least 8 characters."),
     ).resolves.toBeInTheDocument();
     expect(mockedResetPassword).not.toHaveBeenCalled();
     expect(mockedNavigate).not.toHaveBeenCalled();
