@@ -105,6 +105,12 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+	PERFORM 1
+	FROM comments
+	WHERE id = NEW.comment_id
+		AND organization_id = NEW.organization_id
+	FOR UPDATE;
+
 	IF TG_TABLE_NAME = 'work_item_comments' THEN
 		IF EXISTS (
 			SELECT 1
