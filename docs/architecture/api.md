@@ -10,30 +10,42 @@ Worker.
 
 ## Entry Points
 
-| File                                | Purpose                                                                                          |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/index.ts`                      | Node development entrypoint.                                                                     |
-| `src/server.ts`                     | Effect `HttpApi` construction, system endpoints, API layer composition, and web-handler factory. |
-| `src/worker.ts`                     | Cloudflare Worker entrypoint and request handling.                                               |
-| `src/platform/cloudflare/env.ts`    | Cloudflare environment decoding and binding access.                                              |
-| `src/platform/database/database.ts` | Database runtime layer.                                                                          |
-| `src/platform/database/schema.ts`   | Combined Drizzle schema barrel.                                                                  |
+| File                                 | Purpose                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `src/index.ts`                       | Node development entrypoint.                                                                     |
+| `src/server.ts`                      | Effect `HttpApi` construction, system endpoints, API layer composition, and web-handler factory. |
+| `src/worker.ts`                      | Thin Cloudflare Worker module adapter; runs the Effect runtime programs for fetch and queue.     |
+| `src/platform/cloudflare/runtime.ts` | Cloudflare runtime composition for API fetch handling, auth queue delivery, and Worker layers.   |
+| `src/platform/cloudflare/env.ts`     | Cloudflare environment decoding and binding access.                                              |
+| `src/platform/database/database.ts`  | Database runtime layer.                                                                          |
+| `src/platform/database/schema.ts`    | Combined Drizzle schema barrel.                                                                  |
 
 System endpoints are defined in `src/server.ts`:
 
 - `GET /` returns a plain API marker string.
 - `GET /health` returns a stage-aware `HealthPayload`.
 
-The Cloudflare Worker runtime reads Cloudflare bindings from
-`src/platform/cloudflare/env.ts`. That file separates plain configuration vars
-from `ApiWorkerBindingRuntimeEnv`, the runtime binding contract for `DATABASE`,
-`AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`. The infra stack owns the Alchemy binding
-resources in `packages/infra/src/cloudflare-stack.ts` and derives
-`ApiWorkerBindingEnv` with `Cloudflare.InferEnv`. The infra test suite imports
-the API binding contract and asserts the Alchemy-inferred type has the same
-keys and assignable runtime binding types. Keep that bridge green when adding
-Worker resources; the API runtime should not import Alchemy or Effect 4 until
-the Worker entrypoint is migrated to an Alchemy Effect Worker.
+The Cloudflare Worker module in `src/worker.ts` only adapts Cloudflare's
+promise-based `fetch` and `queue` handlers into Effect programs. Runtime
+composition lives in `src/platform/cloudflare/runtime.ts`: it installs the
+Worker config provider, builds the Hyperdrive-backed database layer, wires
+Better Auth background tasks through `context.waitUntil`, uses the Google site
+geocoder layer, and composes auth queue delivery with the Cloudflare email
+binding transport. Keeping this runtime boundary separate makes the current
+Worker compatible with Cloudflare's module handler contract while preserving a
+single Effect-threaded boundary that can move to an Alchemy Effect Worker when
+the API package dependencies allow it.
+
+The runtime reads Cloudflare bindings from `src/platform/cloudflare/env.ts`.
+That file separates plain configuration vars from `ApiWorkerBindingRuntimeEnv`,
+the runtime binding contract for `DATABASE`, `AUTH_EMAIL_QUEUE`, and
+`AUTH_EMAIL`. The infra stack owns the Alchemy binding resources in
+`packages/infra/src/cloudflare-stack.ts` and derives `ApiWorkerBindingEnv` with
+`Cloudflare.InferEnv`. The infra test suite imports the API binding contract
+and asserts the Alchemy-inferred type has the same keys and assignable runtime
+binding types. Keep that bridge green when adding Worker resources; the API
+runtime should not import Alchemy or Effect 4 until the Worker entrypoint is
+migrated to an Alchemy Effect Worker.
 
 `src/server.ts` also intercepts MCP resource-server traffic before falling
 through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or

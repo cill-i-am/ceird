@@ -9,7 +9,11 @@ import type {
 import type { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
 import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
-import worker, { WorkerApiSiteGeocoderLive } from "./worker.js";
+import {
+  WorkerApiSiteGeocoderLive,
+  handleWorkerQueue,
+} from "./platform/cloudflare/runtime.js";
+import worker from "./worker.js";
 
 type TestSendEmail = (
   message: CloudflareEmailBindingMessage
@@ -48,6 +52,13 @@ function makeExecutionContext() {
 }
 
 async function runWorkerQueue(batch: MessageBatch<unknown>, env: ApiWorkerEnv) {
+  await Effect.runPromise(handleWorkerQueue(batch, env));
+}
+
+async function runWorkerQueueAdapter(
+  batch: MessageBatch<unknown>,
+  env: ApiWorkerEnv
+) {
   const queue = worker.queue as (
     batch: MessageBatch<unknown>,
     env: ApiWorkerEnv,
@@ -115,6 +126,17 @@ describe("worker queue auth email delivery", () => {
     const message = makeMessage(makePasswordResetQueueMessage());
 
     await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
+
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(message.ack).toHaveBeenCalledOnce();
+    expect(message.retry).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("exposes queue delivery through the Cloudflare Worker adapter", async () => {
+    const sendEmail = makeSendEmailMock();
+    const message = makeMessage(makePasswordResetQueueMessage());
+
+    await runWorkerQueueAdapter(makeBatch([message]), makeEnv({ sendEmail }));
 
     expect(sendEmail).toHaveBeenCalledOnce();
     expect(message.ack).toHaveBeenCalledOnce();
