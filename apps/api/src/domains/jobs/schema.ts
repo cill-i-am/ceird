@@ -10,7 +10,7 @@ import {
   MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
   RATE_CARD_LINE_KINDS,
 } from "@ceird/jobs-core";
-import { relations, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
@@ -475,21 +475,6 @@ export const workItemVisit = pgTable(
   ]
 );
 
-export const rateCardRelations = relations(rateCard, ({ many, one }) => ({
-  lines: many(rateCardLine),
-  organization: one(organization, {
-    fields: [rateCard.organizationId],
-    references: [organization.id],
-  }),
-}));
-
-export const rateCardLineRelations = relations(rateCardLine, ({ one }) => ({
-  rateCard: one(rateCard, {
-    fields: [rateCardLine.rateCardId],
-    references: [rateCard.id],
-  }),
-}));
-
 export const workItemCostLine = pgTable(
   "work_item_cost_lines",
   {
@@ -543,126 +528,6 @@ export const workItemCostLine = pgTable(
       table.id.desc()
     ),
   ]
-);
-
-export const contactRelations = relations(contact, ({ many, one }) => ({
-  organization: one(organization, {
-    fields: [contact.organizationId],
-    references: [organization.id],
-  }),
-  siteContacts: many(siteContact),
-  workItems: many(workItem),
-}));
-
-export const siteContactRelations = relations(siteContact, ({ one }) => ({
-  site: one(site, {
-    fields: [siteContact.siteId],
-    references: [site.id],
-  }),
-  contact: one(contact, {
-    fields: [siteContact.contactId],
-    references: [contact.id],
-  }),
-}));
-
-export const workItemRelations = relations(workItem, ({ many, one }) => ({
-  activity: many(workItemActivity),
-  workItemCollaborators: many(workItemCollaborator),
-  contact: one(contact, {
-    fields: [workItem.contactId],
-    references: [contact.id],
-  }),
-  costLines: many(workItemCostLine),
-  site: one(site, {
-    fields: [workItem.siteId],
-    references: [site.id],
-  }),
-  labels: many(workItemLabel),
-  visits: many(workItemVisit),
-}));
-
-export const workItemCollaboratorRelations = relations(
-  workItemCollaborator,
-  ({ one }) => ({
-    createdBy: one(user, {
-      fields: [workItemCollaborator.createdByUserId],
-      references: [user.id],
-    }),
-    organization: one(organization, {
-      fields: [workItemCollaborator.organizationId],
-      references: [organization.id],
-    }),
-    user: one(user, {
-      fields: [workItemCollaborator.userId],
-      references: [user.id],
-    }),
-    workItem: one(workItem, {
-      fields: [workItemCollaborator.workItemId],
-      references: [workItem.id],
-    }),
-  })
-);
-
-export const workItemLabelRelations = relations(workItemLabel, ({ one }) => ({
-  label: one(label, {
-    fields: [workItemLabel.labelId],
-    references: [label.id],
-  }),
-  workItem: one(workItem, {
-    fields: [workItemLabel.workItemId],
-    references: [workItem.id],
-  }),
-}));
-
-export const workItemActivityRelations = relations(
-  workItemActivity,
-  ({ one }) => ({
-    actor: one(user, {
-      fields: [workItemActivity.actorUserId],
-      references: [user.id],
-    }),
-    organization: one(organization, {
-      fields: [workItemActivity.organizationId],
-      references: [organization.id],
-    }),
-    workItem: one(workItem, {
-      fields: [workItemActivity.workItemId],
-      references: [workItem.id],
-    }),
-  })
-);
-
-export const workItemVisitRelations = relations(workItemVisit, ({ one }) => ({
-  author: one(user, {
-    fields: [workItemVisit.authorUserId],
-    references: [user.id],
-  }),
-  organization: one(organization, {
-    fields: [workItemVisit.organizationId],
-    references: [organization.id],
-  }),
-  workItem: one(workItem, {
-    fields: [workItemVisit.workItemId],
-    references: [workItem.id],
-  }),
-}));
-
-export const workItemCostLineRelations = relations(
-  workItemCostLine,
-  ({ one }) => ({
-    author: one(user, {
-      fields: [workItemCostLine.authorUserId],
-      references: [user.id],
-    }),
-    organization: one(organization, {
-      fields: [workItemCostLine.organizationId],
-      references: [organization.id],
-    }),
-    workItem: one(workItem, {
-      fields: [workItemCostLine.workItemId],
-      references: [workItem.id],
-    }),
-  })
 );
 
 export const jobsSchema = {

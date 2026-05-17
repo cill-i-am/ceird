@@ -120,7 +120,7 @@ export function maskInvitationEmail(email: string) {
 }
 
 export async function findPublicInvitationPreview(options: {
-  readonly database: NodePgDatabase<typeof authSchema>;
+  readonly database: NodePgDatabase;
   readonly invitationId: string;
   readonly now?: Date;
 }): Promise<PublicInvitationPreview | null> {
@@ -162,9 +162,7 @@ function matchPublicInvitationPreviewPath(pathname: string) {
   return match?.[1];
 }
 
-function makePublicInvitationPreviewHandler(
-  database: NodePgDatabase<typeof authSchema>
-) {
+function makePublicInvitationPreviewHandler(database: NodePgDatabase) {
   return async (request: Request) => {
     if (request.method !== "GET") {
       return new Response(null, { status: 404 });
@@ -258,7 +256,7 @@ export function createAuthentication(options: {
   readonly appOrigin: string;
   readonly backgroundTaskHandler: (task: Promise<unknown>) => void;
   readonly config: AuthenticationConfig;
-  readonly database: NodePgDatabase<typeof authSchema>;
+  readonly database: NodePgDatabase;
   readonly reportPasswordResetEmailFailure: (error: unknown) => void;
   readonly reportEmailChangeConfirmationFailure?: (error: unknown) => void;
   readonly reportOrganizationInvitationEmailFailure?: (error: unknown) => void;
@@ -587,7 +585,7 @@ function appendVaryHeader(headers: Headers, value: string) {
 
 function withAuthenticationAuthorizationGuards(
   handler: (request: Request) => Promise<Response>,
-  database: NodePgDatabase<typeof authSchema>
+  database: NodePgDatabase
 ) {
   return async (request: Request) => {
     if (isAdministrativeOrganizationEndpointRequest(request)) {
@@ -625,7 +623,7 @@ function isAdministrativeOrganizationEndpointRequest(request: Request) {
 }
 
 async function resolveAdministrativeOrganizationEndpointAccess(
-  database: NodePgDatabase<typeof authSchema>,
+  database: NodePgDatabase,
   request: Request
 ): Promise<"administrative" | "nonAdministrative" | "unknown"> {
   const sessionToken = extractBetterAuthSessionToken(
@@ -687,7 +685,7 @@ async function resolveAdministrativeOrganizationEndpointAccess(
 }
 
 async function resolveAdministrativeOrganizationTargetId(
-  database: NodePgDatabase<typeof authSchema>,
+  database: NodePgDatabase,
   request: Request,
   activeOrganizationId: string | null
 ) {

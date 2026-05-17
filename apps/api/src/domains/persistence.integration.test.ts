@@ -856,7 +856,7 @@ describe("domain persistence integration", () => {
     );
 
     await withPool(databaseUrl, async (pool) => {
-      const db = drizzle(pool);
+      const db = drizzle({ client: pool });
 
       await db.insert(workItem).values([
         {
@@ -1025,7 +1025,7 @@ describe("domain persistence integration", () => {
     );
 
     await withPool(databaseUrl, async (pool) => {
-      const db = drizzle(pool);
+      const db = drizzle({ client: pool });
 
       await db.insert(site).values([
         {
@@ -2201,7 +2201,7 @@ describe("domain persistence integration", () => {
     const newestActivityId = "00000000-0000-4000-8000-000000000203";
 
     await withPool(databaseUrl, async (pool) => {
-      const db = drizzle(pool);
+      const db = drizzle({ client: pool });
 
       await db.insert(workItem).values([
         {
@@ -3667,7 +3667,7 @@ async function seedIdentityRecords(databaseUrl: string) {
   const coordinatorUserId = decodeUserId(randomUUID());
 
   await withPool(databaseUrl, async (pool) => {
-    const db = drizzle(pool);
+    const db = drizzle({ client: pool });
 
     await db.insert(organization).values({
       id: organizationId,
@@ -3735,7 +3735,7 @@ async function insertServiceArea(
   const serviceAreaId = decodeServiceAreaId(randomUUID());
 
   await withPool(databaseUrl, async (pool) => {
-    const db = drizzle(pool);
+    const db = drizzle({ client: pool });
 
     await db.insert(serviceArea).values({
       id: serviceAreaId,
@@ -3758,7 +3758,7 @@ async function insertMember(
   const userId = decodeUserId(randomUUID());
 
   await withPool(databaseUrl, async (pool) => {
-    const db = drizzle(pool);
+    const db = drizzle({ client: pool });
 
     await db.insert(user).values({
       email: `${role}-${Date.now()}-${randomUUID()}@example.com`,
@@ -3787,7 +3787,7 @@ async function insertSite(
   const siteId = decodeSiteId(randomUUID());
 
   await withPool(databaseUrl, async (pool) => {
-    const db = drizzle(pool);
+    const db = drizzle({ client: pool });
 
     await db.insert(site).values({
       addressLine1: name,

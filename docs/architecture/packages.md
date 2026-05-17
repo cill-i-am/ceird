@@ -114,7 +114,8 @@ Defines production infrastructure with Alchemy v2:
 
 The stack deploys a Cloudflare Worker API, a Cloudflare Vite app, auth email
 queues and dead-letter queue, Hyperdrive backed by Neon Postgres, and API SQL
-migrations through the native Neon branch resource.
+migrations coordinated by Alchemy `Drizzle.Schema` and applied through the
+native Neon branch resource.
 
 ## Dependency Direction
 

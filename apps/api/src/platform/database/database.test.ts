@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import type { Pool } from "pg";
 
-import { authSchema } from "../../domains/identity/authentication/schema.js";
 import {
   AppDatabase,
   AppEffectSqlLive,
@@ -72,7 +71,7 @@ function makeTestAppDatabaseLayer(pool: Pool) {
   return Layer.succeed(
     AppDatabase,
     AppDatabase.make({
-      authDb: drizzle(pool, { schema: authSchema }),
+      authDb: drizzle({ client: pool }),
       pool,
     })
   );

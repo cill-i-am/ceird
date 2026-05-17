@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   check,
   index,
@@ -59,13 +59,6 @@ export const label = pgTable(
     ),
   ]
 );
-
-export const labelRelations = relations(label, ({ one }) => ({
-  organization: one(organization, {
-    fields: [label.organizationId],
-    references: [organization.id],
-  }),
-}));
 
 export const labelsSchema = {
   label,

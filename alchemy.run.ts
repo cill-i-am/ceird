@@ -1,5 +1,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as DrizzleProviders from "alchemy/Drizzle/Providers";
 import * as Neon from "alchemy/Neon";
 import { Stack } from "alchemy/Stack";
 import type { StackServices } from "alchemy/Stack";
@@ -17,9 +18,11 @@ const stackName = process.env.CEIRD_ALCHEMY_STACK_NAME ?? "ceird";
 
 const providers = (() => {
   const cloudflareProviders = Cloudflare.providers();
-  return Layer.mergeAll(cloudflareProviders, Neon.providers()).pipe(
-    Layer.orDie
-  ) as Layer.Layer<unknown, never, StackServices>;
+  return Layer.mergeAll(
+    cloudflareProviders,
+    DrizzleProviders.providers(),
+    Neon.providers()
+  ).pipe(Layer.orDie) as Layer.Layer<unknown, never, StackServices>;
 })();
 
 export default Alchemy.Stack(

@@ -6,70 +6,44 @@ import { sitesSchema } from "../../domains/sites/schema.js";
 
 export {
   comment,
-  commentRelations,
   commentsSchema,
   siteComment,
-  siteCommentRelations,
   workItemComment,
-  workItemCommentRelations,
 } from "../../domains/comments/schema.js";
 export {
   account,
-  accountRelations,
   authSchema,
   invitation,
-  invitationRelations,
   jwks,
   member,
-  memberRelations,
   oauthAccessToken,
   oauthClient,
   oauthConsent,
   oauthRefreshToken,
   organization,
-  organizationRelations,
   rateLimit,
   session,
-  sessionRelations,
   user,
-  userRelations,
   verification,
 } from "../../domains/identity/authentication/schema.js";
 export {
   contact,
-  contactRelations,
   jobsSchema,
   rateCard,
   rateCardLine,
-  rateCardLineRelations,
-  rateCardRelations,
   siteContact,
-  siteContactRelations,
   workItem,
   workItemActivity,
-  workItemActivityRelations,
   workItemCollaborator,
-  workItemCollaboratorRelations,
   workItemCostLine,
-  workItemCostLineRelations,
   workItemLabel,
-  workItemLabelRelations,
-  workItemRelations,
   workItemVisit,
-  workItemVisitRelations,
 } from "../../domains/jobs/schema.js";
-export {
-  label,
-  labelRelations,
-  labelsSchema,
-} from "../../domains/labels/schema.js";
+export { label, labelsSchema } from "../../domains/labels/schema.js";
 export {
   serviceArea,
-  serviceAreaRelations,
   site,
   siteLabel,
-  siteLabelRelations,
-  siteRelations,
   sitesSchema,
 } from "../../domains/sites/schema.js";
 

@@ -118,9 +118,9 @@ PLAYWRIGHT_API_URL=<alchemy-api-url> \
 pnpm --filter app e2e
 ```
 
-For database changes, generate and inspect a Drizzle migration under
-`apps/api/drizzle`, then run API tests and verify the native Neon branch
-migration path.
+For database changes, generate and inspect the package-local Drizzle migration
+under `apps/api/drizzle`, then update/verify the Alchemy baseline/future
+snapshots under `apps/api/drizzle/alchemy` before running API and infra tests.
 
 ## Repository Conventions
 

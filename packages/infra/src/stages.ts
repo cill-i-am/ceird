@@ -6,7 +6,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-export const apiMigrationsDir = "apps/api/drizzle";
+export const apiDrizzleSchemaPath = "apps/api/src/platform/database/schema.ts";
+export const apiDrizzleMigrationsDir = "apps/api/drizzle";
+export const apiAlchemyDrizzleMigrationsDir = "apps/api/drizzle/alchemy";
 
 export const InfraStage = Schema.NonEmptyString;
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
@@ -43,7 +45,6 @@ export interface InfraStageConfig {
   readonly hyperdriveOriginConnectionLimit: number;
   readonly neonDatabaseName: string;
   readonly neonDefaultBranchName: string;
-  readonly neonMigrationsDir: string;
   readonly neonOrgId: string | undefined;
   readonly neonParentBranchName: string;
   readonly neonParentStage: string;
@@ -181,9 +182,6 @@ export function loadInfraStageConfig(stageInput: string) {
     const neonDefaultBranchName = yield* Config.string(
       "CEIRD_NEON_DEFAULT_BRANCH_NAME"
     ).pipe(Config.withDefault("base"));
-    const neonMigrationsDir = yield* Config.string(
-      "CEIRD_NEON_MIGRATIONS_DIR"
-    ).pipe(Config.withDefault(apiMigrationsDir));
     const neonOrgIdOption = yield* Config.option(
       Config.string("NEON_ORG_ID").pipe(Config.map((value) => value.trim()))
     );
@@ -224,7 +222,6 @@ export function loadInfraStageConfig(stageInput: string) {
       hyperdriveOriginConnectionLimit,
       neonDatabaseName,
       neonDefaultBranchName,
-      neonMigrationsDir,
       neonOrgId,
       neonParentBranchName,
       neonParentStage,

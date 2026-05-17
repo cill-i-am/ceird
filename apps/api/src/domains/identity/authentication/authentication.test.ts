@@ -480,7 +480,7 @@ describe("createAuthentication()", () => {
           secret: "0123456789abcdef0123456789abcdef",
           databaseUrl: DEFAULT_AUTH_DATABASE_URL,
         }),
-        database: drizzle(pool, { schema: authSchema }),
+        database: drizzle({ client: pool }),
         reportEmailChangeConfirmationFailure: () => {},
         reportPasswordResetEmailFailure: () => {},
         reportVerificationEmailFailure: () => {},
@@ -735,7 +735,7 @@ describe("createAuthentication()", () => {
           secret: "0123456789abcdef0123456789abcdef",
           databaseUrl: DEFAULT_AUTH_DATABASE_URL,
         }),
-        database: drizzle(pool, { schema: authSchema }),
+        database: drizzle({ client: pool }),
         reportOrganizationInvitationEmailFailure: (error) => {
           reportedFailures.push(error);
         },
@@ -807,7 +807,7 @@ describe("createAuthentication()", () => {
           secret: "0123456789abcdef0123456789abcdef",
           databaseUrl: DEFAULT_AUTH_DATABASE_URL,
         }),
-        database: drizzle(pool, { schema: authSchema }),
+        database: drizzle({ client: pool }),
         reportOrganizationInvitationEmailFailure: () => {
           throw reporterError;
         },
@@ -876,7 +876,7 @@ describe("createAuthentication()", () => {
           secret: "0123456789abcdef0123456789abcdef",
           databaseUrl: DEFAULT_AUTH_DATABASE_URL,
         }),
-        database: drizzle(pool, { schema: authSchema }),
+        database: drizzle({ client: pool }),
         reportPasswordResetEmailFailure: () => {},
         reportVerificationEmailFailure: () => {},
         sendOrganizationInvitationEmail: async () => {},
@@ -1064,7 +1064,7 @@ function createAuthenticationForPluginInspection() {
       secret: "0123456789abcdef0123456789abcdef",
       databaseUrl: DEFAULT_AUTH_DATABASE_URL,
     }),
-    database: drizzle(pool, { schema: authSchema }),
+    database: drizzle({ client: pool }),
     reportPasswordResetEmailFailure: () => {},
     reportVerificationEmailFailure: () => {},
     sendOrganizationInvitationEmail: async () => {},

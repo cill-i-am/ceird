@@ -90,9 +90,11 @@ Cloudflare observability logs and traces.
 
 The native Neon branch resource applies the configured `NeonMigrationSource`
 before Hyperdrive reads the branch origin and before new API code is uploaded.
-Today that source is the checked-in API SQL migration directory. When the API
-Drizzle and Effect packages move onto the Alchemy-compatible line, this boundary
-is where `Drizzle.Schema` should replace the checked-in SQL source.
+That source is Alchemy `Drizzle.Schema`, which loads the API schema barrel and
+writes migration snapshots under `apps/api/drizzle/alchemy`. The Neon branch
+resource depends on that schema resource, then applies SQL from
+`apps/api/drizzle`, including historical package-local SQL files and future
+Alchemy-generated SQL files under the nested Alchemy directory.
 
 ## Infra Configuration
 
@@ -113,7 +115,6 @@ branch names.
 | `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`             | Soft maximum Hyperdrive origin database connections.       |
 | `CEIRD_NEON_DATABASE_NAME`                 | `ceird`         | Database created in the parent Neon project.               |
 | `CEIRD_NEON_DEFAULT_BRANCH_NAME`           | `base`          | Unmigrated default branch created with the Neon project.   |
-| `CEIRD_NEON_MIGRATIONS_DIR`                | API drizzle dir | SQL migration directory applied by the Neon branch.        |
 | `CEIRD_NEON_PARENT_BRANCH_NAME`            | `main`          | Parent branch used by non-parent stages.                   |
 | `CEIRD_NEON_PARENT_STAGE`                  | `main`          | Stage that owns the shared Neon project and parent branch. |
 | `CEIRD_NEON_PG_VERSION`                    | `17`            | Neon Postgres major version.                               |
@@ -130,8 +131,10 @@ The parent stage creates a shared Neon project with an unmigrated `base`
 default branch and a protected `main` branch. Other stages reference the
 parent-stage project and create their own branch from `main`.
 The branch migration input is modeled in `packages/infra` as
-`NeonMigrationSource`; the current `checked-in-drizzle-sql` source resolves
-`CEIRD_NEON_MIGRATIONS_DIR` into the Alchemy Neon branch `migrationsDir`.
+`NeonMigrationSource`; the `alchemy-drizzle-schema` source points Alchemy
+`Drizzle.Schema` at `apps/api/src/platform/database/schema.ts`, stores
+Drizzle's baseline/future snapshots in `apps/api/drizzle/alchemy`, and passes
+`apps/api/drizzle` through to the native Neon branch `migrationsDir`.
 
 ## Deployment Commands
 

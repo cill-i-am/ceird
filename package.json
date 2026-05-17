@@ -25,6 +25,8 @@
   },
   "devDependencies": {
     "alchemy": "2.0.0-beta.40",
+    "drizzle-kit": "^1.0.0-rc.1",
+    "drizzle-orm": "^1.0.0-rc.1",
     "effect": "4.0.0-beta.66",
     "lefthook": "^2.1.6",
     "opensrc": "^0.6.0",
@@ -47,6 +49,13 @@
       "lefthook",
       "lightningcss"
     ],
+    "packageExtensions": {
+      "drizzle-kit@>=1.0.0-rc.1": {
+        "dependencies": {
+          "drizzle-orm": "^1.0.0-rc.1"
+        }
+      }
+    },
     "supportedArchitectures": {
       "cpu": [
         "current",

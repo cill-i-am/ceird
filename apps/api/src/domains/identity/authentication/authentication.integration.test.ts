@@ -21,7 +21,6 @@ import { makeApiWebHandler } from "../../../server.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication, findPublicInvitationPreview } from "./auth.js";
 import { DEFAULT_AUTH_BASE_PATH, makeAuthenticationConfig } from "./config.js";
-import { authSchema } from "./schema.js";
 
 describe("authentication integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
@@ -142,7 +141,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
@@ -341,7 +340,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
@@ -461,7 +460,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
@@ -558,7 +557,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
@@ -629,7 +628,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: (input) => {
         sentInvitationEmails.push(input);
@@ -800,7 +799,7 @@ describe("authentication integration", () => {
     cleanup.push(() => authPool.end());
 
     const sentInvitationEmails: unknown[] = [];
-    const database = drizzle(authPool, { schema: authSchema });
+    const database = drizzle({ client: authPool });
     const auth = createAuthentication({
       appOrigin: "http://127.0.0.1:4173",
       backgroundTaskHandler: async (task) => {
@@ -971,7 +970,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
@@ -1159,7 +1158,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
@@ -1334,7 +1333,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       sendOrganizationInvitationEmail: async () => {},
       reportVerificationEmailFailure: () => {},
@@ -1583,7 +1582,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: (error) => {
         reportedFailures.push(error);
       },
@@ -1652,7 +1651,7 @@ describe("authentication integration", () => {
         secret: "0123456789abcdef0123456789abcdef",
         databaseUrl,
       }),
-      database: drizzle(authPool, { schema: authSchema }),
+      database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: (error) => {
         reportedFailures.push(error);

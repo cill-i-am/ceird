@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
@@ -159,37 +159,6 @@ export const siteLabel = pgTable(
     ),
   ]
 );
-
-export const serviceAreaRelations = relations(serviceArea, ({ many, one }) => ({
-  organization: one(organization, {
-    fields: [serviceArea.organizationId],
-    references: [organization.id],
-  }),
-  sites: many(site),
-}));
-
-export const siteRelations = relations(site, ({ many, one }) => ({
-  organization: one(organization, {
-    fields: [site.organizationId],
-    references: [organization.id],
-  }),
-  serviceArea: one(serviceArea, {
-    fields: [site.serviceAreaId],
-    references: [serviceArea.id],
-  }),
-  labels: many(siteLabel),
-}));
-
-export const siteLabelRelations = relations(siteLabel, ({ one }) => ({
-  label: one(label, {
-    fields: [siteLabel.labelId],
-    references: [label.id],
-  }),
-  site: one(site, {
-    fields: [siteLabel.siteId],
-    references: [site.id],
-  }),
-}));
 
 export const sitesSchema = {
   serviceArea,

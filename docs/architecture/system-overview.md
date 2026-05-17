@@ -96,9 +96,12 @@ The API exports a combined Drizzle schema from
 - `databaseSchema` merges authentication, comments, labels, sites, and jobs for
   the full database runtime.
 
-Migrations live in `apps/api/drizzle`. The infra package exposes that handoff as
-a `NeonMigrationSource`; the current source resolves the checked-in SQL
-directory into the native Alchemy Neon branch resource for each stage.
+Migrations live in `apps/api/drizzle`. Package-local Drizzle CLI migrations
+remain there for development history, while the Alchemy deploy path uses
+`Drizzle.Schema` to maintain checked-in snapshots under
+`apps/api/drizzle/alchemy`. The native Neon branch resource applies
+`apps/api/drizzle`, so historical SQL and future Alchemy-generated SQL share the
+same deploy-time migration table.
 
 ## Boundary Rules
 

@@ -67,7 +67,8 @@ The workflow:
 - type-checks the app and infra package
 - deploys through `pnpm alchemy deploy`
 - serializes deploys with a GitHub Actions concurrency group
-- lets the native Neon branch resource apply the checked-in API SQL migrations
+- lets Alchemy `Drizzle.Schema` update API migration snapshots before the native
+  Neon branch resource applies `apps/api/drizzle`
 - caps Hyperdrive origin database connections and points Hyperdrive at the typed
   Neon branch origin
 

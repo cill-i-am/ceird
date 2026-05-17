@@ -1,4 +1,3 @@
-import { relations } from "drizzle-orm";
 import {
   foreignKey,
   index,
@@ -99,53 +98,8 @@ export const siteComment = pgTable(
   ]
 );
 
-export const commentRelations = relations(comment, ({ many, one }) => ({
-  author: one(user, {
-    fields: [comment.authorUserId],
-    references: [user.id],
-  }),
-  organization: one(organization, {
-    fields: [comment.organizationId],
-    references: [organization.id],
-  }),
-  siteComments: many(siteComment),
-  updatedBy: one(user, {
-    fields: [comment.updatedByUserId],
-    references: [user.id],
-  }),
-  workItemComments: many(workItemComment),
-}));
-
-export const workItemCommentRelations = relations(
-  workItemComment,
-  ({ one }) => ({
-    comment: one(comment, {
-      fields: [workItemComment.commentId],
-      references: [comment.id],
-    }),
-    workItem: one(workItem, {
-      fields: [workItemComment.workItemId],
-      references: [workItem.id],
-    }),
-  })
-);
-
-export const siteCommentRelations = relations(siteComment, ({ one }) => ({
-  comment: one(comment, {
-    fields: [siteComment.commentId],
-    references: [comment.id],
-  }),
-  site: one(site, {
-    fields: [siteComment.siteId],
-    references: [site.id],
-  }),
-}));
-
 export const commentsSchema = {
   comment,
-  commentRelations,
   siteComment,
-  siteCommentRelations,
   workItemComment,
-  workItemCommentRelations,
 };

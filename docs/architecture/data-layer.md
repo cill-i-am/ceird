@@ -68,8 +68,9 @@ bootstrap Cloudflare credentials plus a Neon API key:
 5. Set `CEIRD_ZONE_NAME`.
 6. Set `AUTH_EMAIL_FROM`.
 7. Run `ALCHEMY_STAGE=main pnpm alchemy deploy` to create or update the Neon
-   project/branch, apply checked-in API SQL migrations, create or update the
-   Hyperdrive config, Workers, queues, runtime email token, and routes.
+   project/branch, refresh Alchemy Drizzle migration snapshots, apply API SQL
+   migrations, create or update the Hyperdrive config, Workers, queues, runtime
+   email token, and routes.
 
 The bootstrap Cloudflare token is not the Worker runtime email token. It is the
 credential Alchemy uses to manage Cloudflare. It needs write access for the
@@ -77,19 +78,21 @@ resources in this POC, including Account API Tokens, Email Sending, Hyperdrive,
 Queues, Workers Scripts, Workers Routes, and DNS for `ceird.app`.
 
 The current stack uses Alchemy v2 native Neon and Cloudflare Hyperdrive
-resources. API runtime code still uses the existing Effect 3 database layer and
-checked-in Drizzle SQL migrations. The infra package models that deploy-time
-handoff as a `NeonMigrationSource` with the current
-`checked-in-drizzle-sql` variant, so the later move to Alchemy `Drizzle.Schema`
-is isolated to the Neon migration source boundary instead of being spread
-through the stack.
+resources. API runtime code still uses the existing Effect 3 database layer;
+deploy-time migration drift is tracked with Alchemy `Drizzle.Schema`. The infra
+package models that handoff as an `alchemy-drizzle-schema`
+`NeonMigrationSource`, pointing at `apps/api/src/platform/database/schema.ts`
+and the checked-in Alchemy migration snapshots under
+`apps/api/drizzle/alchemy`. The native Neon branch still applies the parent
+`apps/api/drizzle` directory so existing package-local SQL migrations remain the
+bootstrap sequence and future Alchemy-generated SQL is applied from the nested
+Alchemy directory.
 
-Migration generation with `Drizzle.Schema` is deferred until the API
-Drizzle/Effect upgrade. Keep the root Alchemy stack on Alchemy's Effect 4 line,
-but keep API/app/shared runtime code on the current Effect 3 package line until
-the Effect platform/sql/rpc packages used by the API have a compatible v4
-migration target. As of this migration pass, `@effect/platform`, `@effect/sql`,
-and `@effect/rpc` still publish the stable APIs this app uses against Effect 3
+Keep the root Alchemy stack on Alchemy's Effect 4 line, but keep API/app/shared
+runtime code on the current Effect 3 package line until the Effect
+platform/sql/rpc packages used by the API have a compatible v4 migration target.
+As of this migration pass, `@effect/platform`, `@effect/sql`, and
+`@effect/rpc` still publish the stable APIs this app uses against Effect 3
 peers, while Alchemy v2 uses Effect 4 unstable modules internally.
 
 The API Worker receives a `DATABASE` Hyperdrive binding and resolves the runtime
@@ -97,9 +100,8 @@ Postgres URL from `env.DATABASE.connectionString`. Package-local Node runtimes
 still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
-resource resolves the configured `NeonMigrationSource` and applies the
-checked-in `apps/api/drizzle/*.sql` files before Hyperdrive and the API Worker
-are reconciled.
+resource depends on `Drizzle.Schema`, then applies SQL files from
+`apps/api/drizzle` before Hyperdrive and the API Worker are reconciled.
 
 ## Deferred Decisions
 

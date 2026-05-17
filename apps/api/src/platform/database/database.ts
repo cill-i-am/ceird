@@ -5,12 +5,11 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer } from "effect";
 import { Pool } from "pg";
 
-import { authSchema } from "../../domains/identity/authentication/schema.js";
 import { nodeDatabaseUrl } from "./database-url.js";
 import { AppDatabaseConnectionError } from "./errors.js";
 
 export interface AppDatabaseService {
-  readonly authDb: NodePgDatabase<typeof authSchema>;
+  readonly authDb: NodePgDatabase;
   readonly pool: Pool;
 }
 
@@ -41,7 +40,7 @@ export class AppDatabase extends Effect.Service<AppDatabase>()(
       });
 
       return {
-        authDb: drizzle(pool, { schema: authSchema }),
+        authDb: drizzle({ client: pool }),
         pool,
       };
     }),

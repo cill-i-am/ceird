@@ -335,11 +335,15 @@ The API uses Drizzle with Postgres.
 | Test database helpers | `src/platform/database/test-database.ts`             |
 | Schema barrel         | `src/platform/database/schema.ts`                    |
 | Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
+| Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
 `databaseSchema` merges authentication, comments, labels, sites, and jobs
 tables. Keep schema changes in the domain that owns the tables, then export
-through the schema barrel.
+through the schema barrel. The Alchemy stack also loads this barrel through
+`Drizzle.Schema`. The native Neon branch applies `apps/api/drizzle`, so the
+historical SQL files remain the bootstrap path and future Alchemy-generated SQL
+under `drizzle/alchemy` is picked up by the same resource.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.
