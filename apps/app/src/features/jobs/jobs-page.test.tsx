@@ -826,7 +826,7 @@ describe("jobs page", () => {
   );
 
   it(
-    "filters by assignee and priority with real atom state",
+    "filters by assignee and priority with route-local filter state",
     {
       timeout: 10_000,
     },

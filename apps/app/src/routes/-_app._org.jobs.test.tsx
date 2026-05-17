@@ -334,7 +334,7 @@ describe("jobs route loader", () => {
   );
 
   it(
-    "renders the jobs queue from loader-seeded atom state on the first paint",
+    "renders the jobs queue from loader-seeded jobs state on the first paint",
     {
       timeout: 10_000,
     },

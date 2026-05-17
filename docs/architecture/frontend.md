@@ -185,7 +185,10 @@ Effect HTTP client for server reads and writes. The current migrated slices are:
   state and organization-switch guards for in-flight mutations.
 
 Existing Effect Atom state in jobs should move to the same pattern as that
-slice is touched, rather than adding new atom surfaces.
+slice is touched, rather than adding new atom surfaces. Jobs route filters are
+already local React state derived through a pure selector; keep new route-local
+UI state out of the remaining jobs atoms while the list/options/detail stores
+are migrated.
 
 ## Hotkeys
 

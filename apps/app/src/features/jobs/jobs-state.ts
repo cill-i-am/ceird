@@ -87,17 +87,11 @@ export const jobsOptionsStateAtom = Atom.make<JobsOptionsState>({
   organizationId: null,
 }).pipe(Atom.keepAlive);
 
-export const jobsListFiltersAtom = Atom.make<JobsListFilters>(
-  defaultJobsListFilters
-).pipe(Atom.keepAlive);
-
 export const jobsNoticeAtom = Atom.make<JobsNotice | null>(null).pipe(
   Atom.keepAlive
 );
 
-export const jobsLookupAtom = Atom.make((get) => {
-  const options = get(jobsOptionsStateAtom).data;
-
+export function buildJobsLookup(options: JobOptionsResponse) {
   return {
     contactById: new Map(
       options.contacts.map((contact) => [contact.id, contact])
@@ -109,26 +103,27 @@ export const jobsLookupAtom = Atom.make((get) => {
     ),
     siteById: new Map(options.sites.map((site) => [site.id, site])),
   };
-}).pipe(Atom.keepAlive);
+}
 
-export const visibleJobsAtom = Atom.make((get) => {
-  const { items } = get(jobsListStateAtom);
-  const filters = get(jobsListFiltersAtom);
-  const { contactById, siteById } = get(jobsLookupAtom);
+export const jobsLookupAtom = Atom.make((get) =>
+  buildJobsLookup(get(jobsOptionsStateAtom).data)
+).pipe(Atom.keepAlive);
+
+export function filterVisibleJobs({
+  filters,
+  items,
+  lookup,
+}: {
+  readonly filters: JobsListFilters;
+  readonly items: readonly JobListItem[];
+  readonly lookup: VisibleJobsLookup;
+}) {
   const normalizedQuery = filters.query.trim().toLowerCase();
 
   return items.filter((item) =>
-    matchesVisibleJob(
-      item,
-      filters,
-      {
-        contactById,
-        siteById,
-      },
-      normalizedQuery
-    )
+    matchesVisibleJob(item, filters, lookup, normalizedQuery)
   );
-}).pipe(Atom.keepAlive);
+}
 
 export const refreshJobsListAtom = Atom.fn<AppApiError, JobListResponse>(
   (_, get) =>
