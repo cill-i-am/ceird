@@ -79,18 +79,18 @@ const SESSION_COOKIE_NAMES = [
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
-type AuthenticationSessionResult = {
+interface AuthenticationSessionResult {
   readonly session: {
     readonly activeOrganizationId?: string | null | undefined;
   } & Record<string, unknown>;
   readonly user: {
     readonly id: string;
   } & Record<string, unknown>;
-};
-type AuthenticationPluginOption = {
+}
+interface AuthenticationPluginOption {
   readonly id: string;
   readonly options?: unknown;
-};
+}
 
 export interface CeirdAuthentication {
   api: {

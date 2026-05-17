@@ -720,6 +720,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(memberCookieJar, memberSignUpResponse);
     expect(memberSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "role-member@example.com");
 
     const acceptInvitationResponse = await auth.handler(
       makeJsonRequest(
@@ -903,6 +904,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(invitedCookieJar, invitedSignUpResponse);
     expect(invitedSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "member@example.com");
 
     const acceptInvitationResponse = await auth.handler(
       makeJsonRequest(
@@ -1062,6 +1064,10 @@ describe("authentication integration", () => {
     );
     updateCookieJar(externalCookieJar, externalSignUpResponse);
     expect(externalSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(
+      adminPool,
+      "external-list-members@example.com"
+    );
 
     const acceptInvitationResponse = await auth.handler(
       makeJsonRequest(
@@ -1786,6 +1792,12 @@ function updateCookieJar(
       cookieJar.set(name, value);
     }
   }
+}
+
+async function verifyUserEmailForTest(pool: Pool, email: string) {
+  await pool.query(`update "user" set email_verified = true where email = $1`, [
+    email,
+  ]);
 }
 
 async function withEnvironment(

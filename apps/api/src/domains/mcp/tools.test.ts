@@ -1,11 +1,17 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Effect } from "effect";
+import { HttpServerRequest } from "@effect/platform";
+import type { Context } from "effect";
+import { Effect, Layer } from "effect";
 
+import { ConfigurationService } from "../jobs/configuration-service.js";
+import { JobsService } from "../jobs/service.js";
+import { LabelsService } from "../labels/service.js";
+import { SitesService } from "../sites/service.js";
 import {
+  CeirdMcpToolkit,
+  CeirdMcpToolkitLayer,
   hasRequiredScope,
   MCP_TOOL_REGISTRATIONS,
-  registerMcpTools,
-  type McpToolRuntime,
+  McpToolRequestRuntime,
 } from "./tools.js";
 
 describe("mcp tools registry metadata", () => {
@@ -41,177 +47,144 @@ describe("mcp tools registry metadata", () => {
       MCP_TOOL_REGISTRATIONS.map((tool) => [tool.name, tool.isAdminTool])
     );
 
-    expect(byName.get("ceird.jobs.activity.list")).toBe(true);
-    expect(byName.get("ceird.rate_cards.list")).toBe(true);
-    expect(byName.get("ceird.jobs.list")).toBe(false);
+    expect(byName.get("ceird.jobs.activity.list")).toBeTruthy();
+    expect(byName.get("ceird.rate_cards.list")).toBeTruthy();
+    expect(byName.get("ceird.jobs.list")).toBeFalsy();
   });
 });
 
 describe("mcp scope enforcement", () => {
   it("allows admin scope for all tools", () => {
-    expect(hasRequiredScope(["ceird:admin"], "ceird:read")).toBe(true);
-    expect(hasRequiredScope(["ceird:admin"], "ceird:write")).toBe(true);
-    expect(hasRequiredScope(["ceird:admin"], "ceird:admin")).toBe(true);
+    expect(hasRequiredScope(["ceird:admin"], "ceird:read")).toBeTruthy();
+    expect(hasRequiredScope(["ceird:admin"], "ceird:write")).toBeTruthy();
+    expect(hasRequiredScope(["ceird:admin"], "ceird:admin")).toBeTruthy();
   });
 
   it("requires read for read tools and write for write tools", () => {
-    expect(hasRequiredScope(["ceird:read"], "ceird:read")).toBe(true);
-    expect(hasRequiredScope(["ceird:write"], "ceird:read")).toBe(false);
-    expect(hasRequiredScope(["ceird:write"], "ceird:write")).toBe(true);
-    expect(hasRequiredScope(["ceird:read"], "ceird:write")).toBe(false);
-    expect(hasRequiredScope(["ceird:read", "ceird:write"], "ceird:write")).toBe(
-      true
-    );
+    expect(hasRequiredScope(["ceird:read"], "ceird:read")).toBeTruthy();
+    expect(hasRequiredScope(["ceird:write"], "ceird:read")).toBeFalsy();
+    expect(hasRequiredScope(["ceird:write"], "ceird:write")).toBeTruthy();
+    expect(hasRequiredScope(["ceird:read"], "ceird:write")).toBeFalsy();
+    expect(
+      hasRequiredScope(["ceird:read", "ceird:write"], "ceird:write")
+    ).toBeTruthy();
   });
 });
 
-describe("mcp tool registration", () => {
-  it("registers tools on a real McpServer instance", () => {
-    const server = new McpServer({
-      name: "test-server",
-      version: "0.0.0",
-    });
-    const runtime: McpToolRuntime = {
-      runWithMcpSession: async <A, _E, _R>(
-        _session: { sessionId: string; userId: string },
-        _effect: Effect.Effect<A, unknown, unknown>
-      ) => ({ ok: true }) as A,
-    };
-
-    expect(() => registerMcpTools(server, runtime)).not.toThrow();
+describe("effect ai mcp toolkit", () => {
+  it("exposes every registered tool through the Effect AI toolkit", () => {
+    expect(Object.keys(CeirdMcpToolkit.tools)).toStrictEqual(
+      MCP_TOOL_REGISTRATIONS.map((tool) => tool.name)
+    );
   });
 
-  it("runs tool with MCP session identity and returns structured content", async () => {
-    const tools = new Map<
-      string,
-      (input: unknown, extra: unknown) => Promise<unknown>
-    >();
-    const runtimeCalls: Array<{ sessionId: string; userId: string }> = [];
-    const runtime: McpToolRuntime = {
-      runWithMcpSession: async <A, _E, _R>(
-        session: { sessionId: string; userId: string },
-        _effect: Effect.Effect<A, unknown, unknown>
-      ) => {
-        runtimeCalls.push(session);
-        return { ok: true } as A;
-      },
-    };
+  it("runs an authorized tool through its typed domain service", async () => {
+    let labelsCalled = false;
 
-    registerMcpTools(
+    const result = await runToolkitTool(
+      "ceird.labels.list",
+      {},
       {
-        registerTool(name, _config, handler) {
-          tools.set(
-            name,
-            handler as (input: unknown, extra: unknown) => Promise<unknown>
-          );
-          return {} as never;
-        },
-      },
-      runtime
-    );
-
-    const handler = tools.get("ceird.labels.list");
-    expect(handler).toBeDefined();
-
-    const result = (await handler?.(undefined, {
-      authInfo: {
-        extra: { sessionId: "session_abc", subject: "user_abc" },
         scopes: ["ceird:read"],
       },
-    })) as {
-      content: Array<{ text: string; type: string }>;
-      structuredContent: unknown;
-      isError?: boolean;
-    };
-
-    expect(runtimeCalls).toHaveLength(1);
-    expect(runtimeCalls[0]).toStrictEqual({
-      sessionId: "session_abc",
-      userId: "user_abc",
-    });
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toBeDefined();
-    expect(result.content[0]?.type).toBe("text");
-  });
-
-  it("returns isError and does not call runtime when scope is insufficient", async () => {
-    const tools = new Map<
-      string,
-      (input: unknown, extra: unknown) => Promise<unknown>
-    >();
-    let runtimeCalled = false;
-    const runtime: McpToolRuntime = {
-      runWithMcpSession: async <A, E, R>(
-        _session: { sessionId: string; userId: string },
-        effect: Effect.Effect<A, E, R>
-      ) => {
-        runtimeCalled = true;
-        return Effect.runPromise(
-          effect as unknown as Effect.Effect<A, E, never>
-        );
-      },
-    };
-
-    registerMcpTools(
-      {
-        registerTool(name, _config, handler) {
-          tools.set(
-            name,
-            handler as (input: unknown, extra: unknown) => Promise<unknown>
-          );
-          return {} as never;
+      makeTestToolServicesLayer({
+        labelsList: () => {
+          labelsCalled = true;
+          return Effect.succeed({ ok: true });
         },
-      },
-      runtime
+      })
     );
 
-    const handler = tools.get("ceird.rate_cards.list");
-    expect(handler).toBeDefined();
-
-    const result = (await handler?.(undefined, {
-      authInfo: {
-        extra: { sessionId: "session_abc", subject: "user_abc" },
-        scopes: ["ceird:read"],
-      },
-    })) as {
-      isError?: boolean;
-    };
-
-    expect(result.isError).toBe(true);
-    expect(runtimeCalled).toBe(false);
+    expect(labelsCalled).toBeTruthy();
+    expect(result.encodedResult).toStrictEqual({ ok: true });
   });
 
-  it("fails closed when auth info is missing", async () => {
-    const tools = new Map<
-      string,
-      (input: unknown, extra: unknown) => Promise<unknown>
-    >();
-    const runtime: McpToolRuntime = {
-      runWithMcpSession: async <A, E, R>(
-        _session: { sessionId: string; userId: string },
-        effect: Effect.Effect<A, E, R>
-      ) => Effect.runPromise(effect as unknown as Effect.Effect<A, E, never>),
-    };
+  it("fails before calling the domain service when scope is insufficient", async () => {
+    let rateCardsCalled = false;
 
-    registerMcpTools(
-      {
-        registerTool(name, _config, handler) {
-          tools.set(
-            name,
-            handler as (input: unknown, extra: unknown) => Promise<unknown>
-          );
-          return {} as never;
+    await expect(
+      runToolkitTool(
+        "ceird.rate_cards.list",
+        {},
+        {
+          scopes: ["ceird:read"],
         },
-      },
-      runtime
-    );
-
-    const handler = tools.get("ceird.labels.list");
-    expect(handler).toBeDefined();
-
-    const result = (await handler?.({}, { authInfo: undefined })) as {
-      isError?: boolean;
-    };
-    expect(result.isError).toBe(true);
+        makeTestToolServicesLayer({
+          listRateCards: () => {
+            rateCardsCalled = true;
+            return Effect.succeed({ items: [] });
+          },
+        })
+      )
+    ).rejects.toThrow("Forbidden: missing ceird:admin scope");
+    expect(rateCardsCalled).toBeFalsy();
   });
 });
+
+function runToolkitTool(
+  name: keyof typeof CeirdMcpToolkit.tools,
+  params: unknown,
+  runtime: ContextRuntime,
+  servicesLayer: Layer.Layer<
+    | ConfigurationService
+    | JobsService
+    | LabelsService
+    | SitesService
+    | HttpServerRequest.HttpServerRequest
+  >
+) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const toolkit = yield* CeirdMcpToolkit;
+      return yield* toolkit.handle(name, params as never);
+    }).pipe(
+      Effect.provide(CeirdMcpToolkitLayer),
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(McpToolRequestRuntime, runtime),
+          servicesLayer
+        )
+      )
+    )
+  );
+}
+
+type ContextRuntime = Context.Tag.Service<McpToolRequestRuntime>;
+
+function makeTestToolServicesLayer(options: {
+  readonly labelsList?: () => Effect.Effect<unknown>;
+  readonly listRateCards?: () => Effect.Effect<unknown>;
+}) {
+  return Layer.mergeAll(
+    Layer.succeed(
+      LabelsService,
+      LabelsService.of({
+        list: options.labelsList ?? notImplementedToolService("Labels.list"),
+      } as unknown as Context.Tag.Service<typeof LabelsService>)
+    ),
+    Layer.succeed(
+      ConfigurationService,
+      ConfigurationService.of({
+        listRateCards:
+          options.listRateCards ??
+          notImplementedToolService("Configuration.listRateCards"),
+      } as unknown as Context.Tag.Service<typeof ConfigurationService>)
+    ),
+    Layer.succeed(
+      JobsService,
+      JobsService.of({} as Context.Tag.Service<typeof JobsService>)
+    ),
+    Layer.succeed(
+      SitesService,
+      SitesService.of({} as Context.Tag.Service<typeof SitesService>)
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
+    )
+  );
+}
+
+function notImplementedToolService(name: string) {
+  return () => Effect.die(new Error(`${name} should not be called`));
+}

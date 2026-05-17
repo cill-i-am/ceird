@@ -8,23 +8,65 @@ export const Route = createFileRoute("/oauth/consent")({
     const normalized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(search)) {
-      normalized[key] =
-        typeof value === "string" || Array.isArray(value) ? value : undefined;
+      normalized[key] = normalizeOAuthConsentSearchValue(value);
     }
 
     return {
       ...normalized,
-      client_id:
-        typeof search.client_id === "string" ? search.client_id : undefined,
-      redirect_uri:
-        typeof search.redirect_uri === "string"
-          ? search.redirect_uri
-          : undefined,
-      scope: typeof search.scope === "string" ? search.scope : undefined,
+      client_id: normalizeOAuthConsentSearchString(search.client_id),
+      redirect_uri: normalizeOAuthConsentSearchString(search.redirect_uri),
+      scope: normalizeOAuthConsentSearchString(search.scope),
     };
   },
   component: OAuthConsentRoute,
 });
+
+export function normalizeOAuthConsentSearchValue(
+  value: unknown
+):
+  | string
+  | number
+  | boolean
+  | readonly (string | number | boolean)[]
+  | undefined {
+  if (Array.isArray(value)) {
+    const values = value.flatMap((item) => {
+      const normalized = normalizeOAuthConsentSearchPrimitive(item);
+
+      return normalized === undefined ? [] : [normalized];
+    });
+
+    return values.length > 0 ? values : undefined;
+  }
+
+  return normalizeOAuthConsentSearchPrimitive(value);
+}
+
+function normalizeOAuthConsentSearchString(value: unknown): string | undefined {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+
+  return undefined;
+}
+
+function normalizeOAuthConsentSearchPrimitive(
+  value: unknown
+): string | number | boolean | undefined {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
 
 function OAuthConsentRoute() {
   const search = Route.useSearch();

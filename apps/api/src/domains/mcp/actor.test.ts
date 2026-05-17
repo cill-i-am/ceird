@@ -7,7 +7,7 @@ import {
   resolveCurrentOrganizationActorFromMcpSession,
 } from "./actor.js";
 
-describe("resolveCurrentOrganizationActorFromMcpSession", () => {
+describe(resolveCurrentOrganizationActorFromMcpSession, () => {
   it("resolves org actor using session id and user id from MCP auth context", async () => {
     const exit = await Effect.runPromiseExit(
       resolveCurrentOrganizationActorFromMcpSession({

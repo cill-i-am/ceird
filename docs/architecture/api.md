@@ -31,10 +31,10 @@ set. Protected-resource metadata is served at
 `/.well-known/oauth-protected-resource` and at the path-specific well-known URL,
 for example `/.well-known/oauth-protected-resource/mcp`.
 
-MCP uses the official `@modelcontextprotocol/sdk` Web Standard Streamable HTTP
-transport in stateless JSON-response mode. Ceird intentionally does not mount
-an `xmcp` generated worker or use the packaged xmcp Better Auth adapter in the
-API runtime.
+MCP HTTP is served through `@effect/ai`'s `McpServer.layerHttpRouter`, adapted
+to the API web-handler boundary after Better Auth OAuth bearer validation. Ceird
+intentionally does not mount an `xmcp` generated worker or use the packaged xmcp
+Better Auth adapter in the API runtime.
 
 ## Observability
 
@@ -96,11 +96,14 @@ against the shared role schema.
 
 ## MCP Resource Server
 
-MCP tools live in `src/domains/mcp` and call the same domain services as the
-HTTP API. Tool execution validates the bearer token through Better Auth's OAuth
-Provider support, resolves the current organization actor from the token's
-Better Auth session id and subject, and then lets the existing labels, sites,
-jobs, and configuration authorization rules decide access.
+MCP tools live in `src/domains/mcp` as Effect AI `Tool` and `Toolkit`
+registrations. They call the same domain services as the HTTP API. The MCP
+resource server validates the bearer token through Better Auth's OAuth Provider
+support before the request reaches the Effect AI router. Tool execution receives
+the verified request identity through an Effect request-runtime context, resolves
+the current organization actor from the token's Better Auth session id and
+subject, and then lets the existing labels, sites, jobs, and configuration
+authorization rules decide access.
 
 Initial MCP tools:
 

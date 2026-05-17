@@ -13,7 +13,8 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Frontend Architecture](architecture/frontend.md) explains the TanStack Start
   app, routes, feature folders, hotkeys, auth bridge, and UI testing approach.
 - [API Architecture](architecture/api.md) explains the Effect API, Better Auth
-  integration, jobs domain, database schema, errors, and Cloudflare Worker.
+  integration, MCP resource server, jobs domain, database schema, errors, and
+  Cloudflare Worker.
 - [Shared Packages](architecture/packages.md) explains each package under
   `packages/` and what code belongs there.
 - [Sandbox And Infrastructure](architecture/sandbox-and-infra.md) explains the
@@ -48,8 +49,8 @@ change:
 
 - Routes, UI architecture, hotkeys, or client/server data loading:
   `architecture/frontend.md`
-- API endpoints, services, repositories, auth behavior, migrations, or runtime
-  configuration: `architecture/api.md`
+- API endpoints, MCP resource server behavior, services, repositories, auth
+  behavior, migrations, or runtime configuration: `architecture/api.md`
 - Shared schemas, DTOs, IDs, errors, or package ownership:
   `architecture/packages.md`
 - Sandbox commands, Docker runtime, env loading, Portless behavior, or deploy

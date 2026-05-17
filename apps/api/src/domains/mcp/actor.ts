@@ -1,9 +1,11 @@
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import type { OrganizationId, UserId } from "@ceird/identity-core";
 import { SqlClient } from "@effect/sql";
 import { Effect, Layer } from "effect";
 
-import { CurrentOrganizationActor } from "../organizations/current-actor.js";
-import { resolveCurrentOrganizationActor } from "../organizations/current-actor.js";
+import {
+  CurrentOrganizationActor,
+  resolveCurrentOrganizationActor,
+} from "../organizations/current-actor.js";
 import { OrganizationActorStorageError } from "../organizations/errors.js";
 
 interface MembershipRoleRow {

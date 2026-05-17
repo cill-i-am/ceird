@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -15,10 +16,29 @@ export interface OAuthConsentSearch {
 }
 
 interface OAuthConsentPageProps {
+  readonly rawSearch?: string | undefined;
   readonly search: OAuthConsentSearch;
 }
 
 type ConsentAction = "allow" | "deny";
+
+interface ConsentErrorNotice {
+  readonly title: string;
+  readonly description: string;
+}
+
+const OAuthConsentClientError = Schema.Struct({
+  code: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+  error_description: Schema.optional(Schema.String),
+  message: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.Number),
+  statusText: Schema.optional(Schema.String),
+});
+type OAuthConsentClientError = Schema.Schema.Type<
+  typeof OAuthConsentClientError
+>;
+const isOAuthConsentClientError = Schema.is(OAuthConsentClientError);
 
 const scopeLabels: Record<string, string> = {
   "ceird:admin": "Administer Ceird data",
@@ -56,19 +76,176 @@ function getRedirectHost(redirectUri: string | undefined): string | undefined {
   }
 }
 
-function getSafeConsentErrorText(action: ConsentAction): string {
-  return action === "allow"
-    ? "We couldn't approve this request. Return to the app or agent and try again."
-    : "We couldn't deny this request. Return to the app or agent and try again.";
+function getDefaultConsentErrorNotice(
+  action: ConsentAction
+): ConsentErrorNotice {
+  return {
+    title: "Authorization failed",
+    description:
+      action === "allow"
+        ? "We couldn't approve this request. Return to the app or agent and try again."
+        : "We couldn't deny this request. Return to the app or agent and try again.",
+  };
 }
 
-export function OAuthConsentPage({ search }: OAuthConsentPageProps) {
+export function getConsentErrorNotice(
+  action: ConsentAction,
+  error: unknown
+): ConsentErrorNotice {
+  const consentError = isOAuthConsentClientError(error) ? error : undefined;
+
+  if (consentError?.status === 429) {
+    return {
+      title: "Too many attempts",
+      description:
+        "Wait a moment before trying this authorization request again.",
+    };
+  }
+
+  if (isEmailVerificationError(consentError)) {
+    return {
+      title: "Verify your email first",
+      description:
+        "Check your inbox and verify your email before approving agent access. Then return to the app or agent and try again.",
+    };
+  }
+
+  if (isMissingSessionError(consentError)) {
+    return {
+      title: "Sign in again",
+      description:
+        "Your session is not available for this authorization request. Sign in, then return to the app or agent.",
+    };
+  }
+
+  if (isExpiredConsentError(consentError)) {
+    return {
+      title: "Consent link expired",
+      description:
+        "This authorization request is no longer valid. Return to the app or agent and start a fresh request.",
+    };
+  }
+
+  if (isInvalidConsentSignatureError(consentError)) {
+    return {
+      title: "Consent link changed",
+      description:
+        "This authorization request could not be verified. Return to the app or agent and start a fresh request.",
+    };
+  }
+
+  return getDefaultConsentErrorNotice(action);
+}
+
+function isEmailVerificationError(
+  error: OAuthConsentClientError | undefined
+): boolean {
+  return matchesConsentError(error, [
+    "EMAIL_NOT_VERIFIED",
+    "email not verified",
+  ]);
+}
+
+function isMissingSessionError(
+  error: OAuthConsentClientError | undefined
+): boolean {
+  return error?.status === 401 || matchesConsentError(error, ["unauthorized"]);
+}
+
+function isExpiredConsentError(
+  error: OAuthConsentClientError | undefined
+): boolean {
+  return matchesConsentError(error, ["missing oauth query", "expired"]);
+}
+
+function isInvalidConsentSignatureError(
+  error: OAuthConsentClientError | undefined
+): boolean {
+  return matchesConsentError(error, ["invalid_signature"]);
+}
+
+function matchesConsentError(
+  error: OAuthConsentClientError | undefined,
+  needles: readonly string[]
+): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const haystack = [
+    error.code,
+    error.error,
+    error.error_description,
+    error.message,
+    error.statusText,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return needles.some((needle) => haystack.includes(needle.toLowerCase()));
+}
+
+function getVerifiedConsentSearch(
+  search: OAuthConsentSearch,
+  rawSearch: string | undefined
+): OAuthConsentSearch {
+  const signedParams = getSignedConsentSearchParams(rawSearch);
+
+  return signedParams
+    ? {
+        client_id: signedParams.get("client_id") ?? undefined,
+        redirect_uri: signedParams.get("redirect_uri") ?? undefined,
+        scope: signedParams.get("scope") ?? undefined,
+      }
+    : search;
+}
+
+function getSignedConsentSearchParams(
+  rawSearch: string | undefined
+): URLSearchParams | undefined {
+  if (!rawSearch) {
+    return undefined;
+  }
+
+  const params = new URLSearchParams(rawSearch);
+  if (!params.has("sig")) {
+    return undefined;
+  }
+
+  const signedParams = new URLSearchParams();
+  for (const [key, value] of params.entries()) {
+    signedParams.append(key, value);
+    if (key === "sig") {
+      break;
+    }
+  }
+
+  return signedParams;
+}
+
+function getOAuthQuery(rawSearch: string | undefined): string | undefined {
+  return getSignedConsentSearchParams(rawSearch)?.toString();
+}
+
+function getBrowserSearch() {
+  return typeof window === "undefined" ? undefined : window.location.search;
+}
+
+export function OAuthConsentPage({ rawSearch, search }: OAuthConsentPageProps) {
   const [submittingAction, setSubmittingAction] =
     useState<ConsentAction | null>(null);
-  const [errorText, setErrorText] = useState<string | null>(null);
-  const clientId = search.client_id?.trim();
-  const scopes = splitScopes(search.scope);
-  const redirectHost = getRedirectHost(search.redirect_uri);
+  const [errorNotice, setErrorNotice] = useState<ConsentErrorNotice | null>(
+    null
+  );
+  const verifiedSearch = getVerifiedConsentSearch(
+    search,
+    rawSearch ?? getBrowserSearch()
+  );
+  const oauthQuery = getOAuthQuery(rawSearch ?? getBrowserSearch());
+  const clientId = verifiedSearch.client_id?.trim();
+  const scopes = splitScopes(verifiedSearch.scope);
+  const redirectHost = getRedirectHost(verifiedSearch.redirect_uri);
 
   if (!clientId) {
     return (
@@ -88,25 +265,26 @@ export function OAuthConsentPage({ search }: OAuthConsentPageProps) {
       return;
     }
 
-    setErrorText(null);
+    setErrorNotice(null);
     setSubmittingAction(action);
 
     try {
       const result = await authClient.oauth2.consent({
         accept: action === "allow",
+        ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
       });
       const redirectUrl = result.data?.url;
 
       if (result.error || !redirectUrl) {
-        setErrorText(getSafeConsentErrorText(action));
+        setErrorNotice(getConsentErrorNotice(action, result.error));
         setSubmittingAction(null);
         return;
       }
 
       window.location.assign(redirectUrl);
       return;
-    } catch {
-      setErrorText(getSafeConsentErrorText(action));
+    } catch (error) {
+      setErrorNotice(getConsentErrorNotice(action, error));
     }
 
     setSubmittingAction(null);
@@ -182,10 +360,10 @@ export function OAuthConsentPage({ search }: OAuthConsentPageProps) {
             )}
           </section>
 
-          {errorText ? (
+          {errorNotice ? (
             <Alert variant="destructive">
-              <AlertTitle>Authorization failed</AlertTitle>
-              <AlertDescription>{errorText}</AlertDescription>
+              <AlertTitle>{errorNotice.title}</AlertTitle>
+              <AlertDescription>{errorNotice.description}</AlertDescription>
             </Alert>
           ) : null}
 

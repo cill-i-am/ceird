@@ -1,3 +1,5 @@
+/* oxlint-disable eslint/max-classes-per-file */
+
 import {
   AddJobCommentInputSchema,
   AssignJobLabelInputSchema,
@@ -6,25 +8,62 @@ import {
   WorkItemId,
 } from "@ceird/jobs-core";
 import { LabelId } from "@ceird/labels-core";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Effect, ParseResult, Schema } from "effect";
-import { z } from "zod/v4";
+import { Tool, Toolkit } from "@effect/ai";
+import { HttpServerRequest } from "@effect/platform";
+import { Context, Effect, ParseResult, Schema } from "effect";
 
 import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsService } from "../labels/service.js";
 import { SitesService } from "../sites/service.js";
-import type { McpSessionIdentity } from "./actor.js";
 
 export type McpToolScope = "ceird:admin" | "ceird:read" | "ceird:write";
 
-interface McpAuthInfo {
-  readonly extra?: {
-    readonly sessionId?: unknown;
-    readonly subject?: unknown;
-  };
-  readonly scopes?: readonly string[] | undefined;
-}
+const McpToolFailureSchema = Schema.Struct({
+  code: Schema.String,
+  message: Schema.String,
+});
+type McpToolFailure = Schema.Schema.Type<typeof McpToolFailureSchema>;
+
+const MCP_TOOL_FORBIDDEN_ERROR_TAG =
+  "@ceird/domains/mcp/McpToolForbiddenError" as const;
+class McpToolForbiddenError extends Schema.TaggedError<McpToolForbiddenError>()(
+  MCP_TOOL_FORBIDDEN_ERROR_TAG,
+  {
+    message: Schema.String,
+    requiredScope: Schema.String,
+    toolName: Schema.String,
+  }
+) {}
+
+const MCP_TOOL_VALIDATION_ERROR_TAG =
+  "@ceird/domains/mcp/McpToolValidationError" as const;
+class McpToolValidationError extends Schema.TaggedError<McpToolValidationError>()(
+  MCP_TOOL_VALIDATION_ERROR_TAG,
+  {
+    details: Schema.String,
+    message: Schema.String,
+    toolName: Schema.String,
+  }
+) {}
+
+const MCP_TOOL_EXECUTION_ERROR_TAG =
+  "@ceird/domains/mcp/McpToolExecutionError" as const;
+class McpToolExecutionError extends Schema.TaggedError<McpToolExecutionError>()(
+  MCP_TOOL_EXECUTION_ERROR_TAG,
+  {
+    cause: Schema.String,
+    message: Schema.String,
+    toolName: Schema.String,
+  }
+) {}
+
+export class McpToolRequestRuntime extends Context.Tag("McpToolRequestRuntime")<
+  McpToolRequestRuntime,
+  {
+    readonly scopes: readonly string[];
+  }
+>() {}
 
 interface McpToolRegistration {
   readonly name: string;
@@ -81,6 +120,251 @@ export const MCP_TOOL_REGISTRATIONS: readonly McpToolRegistration[] = [
   },
 ] as const;
 
+const ToolOutputSchema = Schema.Unknown;
+const OptionalString = Schema.optional(Schema.String);
+const OptionalLimit = Schema.optional(
+  Schema.Union(Schema.Number, Schema.String)
+);
+
+const LabelsListTool = Tool.make("ceird.labels.list", {
+  description: "List labels for the current organization.",
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    LabelsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const SitesOptionsTool = Tool.make("ceird.sites.options", {
+  description: "Get site options for the current organization.",
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    SitesService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const JobsListTool = Tool.make("ceird.jobs.list", {
+  description: "List jobs in the current organization.",
+  parameters: {
+    assigneeId: OptionalString,
+    coordinatorId: OptionalString,
+    cursor: OptionalString,
+    labelId: OptionalString,
+    limit: OptionalLimit,
+    priority: OptionalString,
+    serviceAreaId: OptionalString,
+    siteId: OptionalString,
+    status: OptionalString,
+  },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const JobsDetailTool = Tool.make("ceird.jobs.detail", {
+  description: "Load job detail by work item id.",
+  parameters: { workItemId: WorkItemId },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const JobsOptionsTool = Tool.make("ceird.jobs.options", {
+  description: "Get options for jobs workflows.",
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const JobsActivityListTool = Tool.make("ceird.jobs.activity.list", {
+  description: "List organization job activity.",
+  parameters: {
+    actorUserId: OptionalString,
+    cursor: OptionalString,
+    eventType: OptionalString,
+    fromDate: OptionalString,
+    jobTitle: OptionalString,
+    limit: OptionalLimit,
+    toDate: OptionalString,
+  },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const RateCardsListTool = Tool.make("ceird.rate_cards.list", {
+  description: "List rate cards for jobs configuration.",
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    ConfigurationService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, true);
+
+const JobsAddCommentTool = Tool.make("ceird.jobs.add_comment", {
+  description: "Add a comment to a job.",
+  parameters: {
+    body: Schema.String,
+    workItemId: WorkItemId,
+  },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, false);
+
+const JobsAssignLabelTool = Tool.make("ceird.jobs.assign_label", {
+  description: "Assign a label to a job.",
+  parameters: {
+    labelId: LabelId,
+    workItemId: WorkItemId,
+  },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Readonly, false);
+
+const JobsRemoveLabelTool = Tool.make("ceird.jobs.remove_label", {
+  description: "Remove a label from a job.",
+  parameters: {
+    labelId: LabelId,
+    workItemId: WorkItemId,
+  },
+  failure: McpToolFailureSchema,
+  success: ToolOutputSchema,
+  dependencies: [
+    McpToolRequestRuntime,
+    HttpServerRequest.HttpServerRequest,
+    JobsService,
+  ],
+})
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.Readonly, false);
+
+export const CeirdMcpToolkit = Toolkit.make(
+  LabelsListTool,
+  SitesOptionsTool,
+  JobsListTool,
+  JobsDetailTool,
+  JobsOptionsTool,
+  JobsActivityListTool,
+  RateCardsListTool,
+  JobsAddCommentTool,
+  JobsAssignLabelTool,
+  JobsRemoveLabelTool
+);
+
+export const CeirdMcpToolkitLayer = CeirdMcpToolkit.toLayer({
+  "ceird.labels.list": () =>
+    authorizeAndRun("ceird.labels.list", "ceird:read", () =>
+      LabelsService.list()
+    ),
+  "ceird.sites.options": () =>
+    authorizeAndRun("ceird.sites.options", "ceird:read", () =>
+      SitesService.getOptions()
+    ),
+  "ceird.jobs.list": (input) =>
+    authorizeAndRun("ceird.jobs.list", "ceird:read", () =>
+      decodeWithSchema(
+        "ceird.jobs.list",
+        JobListQuerySchema,
+        normalizeLimit(input)
+      ).pipe(Effect.flatMap((query) => JobsService.list(query)))
+    ),
+  "ceird.jobs.detail": ({ workItemId }) =>
+    authorizeAndRun("ceird.jobs.detail", "ceird:read", () =>
+      JobsService.getDetail(workItemId)
+    ),
+  "ceird.jobs.options": () =>
+    authorizeAndRun("ceird.jobs.options", "ceird:read", () =>
+      JobsService.getOptions()
+    ),
+  "ceird.jobs.activity.list": (input) =>
+    authorizeAndRun("ceird.jobs.activity.list", "ceird:admin", () =>
+      decodeWithSchema(
+        "ceird.jobs.activity.list",
+        OrganizationActivityQuerySchema,
+        normalizeLimit(input)
+      ).pipe(
+        Effect.flatMap((query) => JobsService.listOrganizationActivity(query))
+      )
+    ),
+  "ceird.rate_cards.list": () =>
+    authorizeAndRun("ceird.rate_cards.list", "ceird:admin", () =>
+      ConfigurationService.listRateCards()
+    ),
+  "ceird.jobs.add_comment": ({ body, workItemId }) =>
+    authorizeAndRun("ceird.jobs.add_comment", "ceird:write", () =>
+      decodeWithSchema("ceird.jobs.add_comment", AddJobCommentInputSchema, {
+        body,
+      }).pipe(
+        Effect.flatMap((payload) => JobsService.addComment(workItemId, payload))
+      )
+    ),
+  "ceird.jobs.assign_label": ({ labelId, workItemId }) =>
+    authorizeAndRun("ceird.jobs.assign_label", "ceird:write", () =>
+      decodeWithSchema("ceird.jobs.assign_label", AssignJobLabelInputSchema, {
+        labelId,
+      }).pipe(
+        Effect.flatMap((payload) =>
+          JobsService.assignLabel(workItemId, payload)
+        )
+      )
+    ),
+  "ceird.jobs.remove_label": ({ labelId, workItemId }) =>
+    authorizeAndRun("ceird.jobs.remove_label", "ceird:write", () =>
+      JobsService.removeLabel(workItemId, labelId)
+    ),
+});
+
 export function hasRequiredScope(
   scopes: readonly string[],
   requiredScope: McpToolScope
@@ -100,298 +384,93 @@ export function hasRequiredScope(
   return scopes.includes("ceird:read");
 }
 
-interface RegisterToolLike {
-  registerTool: McpServer["registerTool"];
-}
-
-export interface McpToolRuntime {
-  readonly runWithMcpSession: <A, E, R>(
-    session: McpSessionIdentity,
-    effect: Effect.Effect<A, E, R>
-  ) => Promise<A>;
-}
-
-export function registerMcpTools(
-  server: RegisterToolLike,
-  runtime: McpToolRuntime
-) {
-  server.registerTool(
-    "ceird.labels.list",
-    {
-      annotations: { readOnlyHint: true },
-      description: "List labels for the current organization.",
-    },
-    authorizeAndRun("ceird:read", runtime, () => LabelsService.list())
-  );
-
-  server.registerTool(
-    "ceird.sites.options",
-    {
-      annotations: { readOnlyHint: true },
-      description: "Get site options for the current organization.",
-    },
-    authorizeAndRun("ceird:read", runtime, () => SitesService.getOptions())
-  );
-
-  server.registerTool(
-    "ceird.jobs.list",
-    {
-      annotations: { readOnlyHint: true },
-      description: "List jobs in the current organization.",
-      inputSchema: {
-        assigneeId: z.string().optional(),
-        coordinatorId: z.string().optional(),
-        cursor: z.string().optional(),
-        labelId: z.string().optional(),
-        limit: z
-          .union([z.number().int().positive().max(100), z.string()])
-          .optional(),
-        priority: z.string().optional(),
-        serviceAreaId: z.string().optional(),
-        siteId: z.string().optional(),
-        status: z.string().optional(),
-      },
-    },
-    authorizeAndRun("ceird:read", runtime, (input) =>
-      decodeWithSchema(JobListQuerySchema, input).pipe(
-        Effect.flatMap((query) => JobsService.list(query))
-      )
-    )
-  );
-
-  server.registerTool(
-    "ceird.jobs.detail",
-    {
-      annotations: { readOnlyHint: true },
-      description: "Load job detail by work item id.",
-      inputSchema: { workItemId: z.string().uuid() },
-    },
-    authorizeAndRun("ceird:read", runtime, (input) =>
-      decodeWithSchema(Schema.Struct({ workItemId: WorkItemId }), input).pipe(
-        Effect.flatMap((parsed) => JobsService.getDetail(parsed.workItemId))
-      )
-    )
-  );
-
-  server.registerTool(
-    "ceird.jobs.options",
-    {
-      annotations: { readOnlyHint: true },
-      description: "Get options for jobs workflows.",
-    },
-    authorizeAndRun("ceird:read", runtime, () => JobsService.getOptions())
-  );
-
-  server.registerTool(
-    "ceird.jobs.activity.list",
-    {
-      annotations: { destructiveHint: false, readOnlyHint: true },
-      description: "List organization job activity.",
-      inputSchema: {
-        actorUserId: z.string().optional(),
-        cursor: z.string().optional(),
-        eventType: z.string().optional(),
-        fromDate: z.string().optional(),
-        jobTitle: z.string().optional(),
-        limit: z
-          .union([z.number().int().positive().max(100), z.string()])
-          .optional(),
-        toDate: z.string().optional(),
-      },
-    },
-    authorizeAndRun("ceird:admin", runtime, (input) =>
-      decodeWithSchema(OrganizationActivityQuerySchema, input).pipe(
-        Effect.flatMap((query) => JobsService.listOrganizationActivity(query))
-      )
-    )
-  );
-
-  server.registerTool(
-    "ceird.rate_cards.list",
-    {
-      annotations: { destructiveHint: false, readOnlyHint: true },
-      description: "List rate cards for jobs configuration.",
-    },
-    authorizeAndRun("ceird:admin", runtime, () =>
-      ConfigurationService.listRateCards()
-    )
-  );
-
-  server.registerTool(
-    "ceird.jobs.add_comment",
-    {
-      annotations: { destructiveHint: false, readOnlyHint: false },
-      description: "Add a comment to a job.",
-      inputSchema: {
-        body: z.string().min(1),
-        workItemId: z.string().uuid(),
-      },
-    },
-    authorizeAndRun("ceird:write", runtime, (input) =>
-      decodeWithSchema(
-        Schema.Struct({ body: Schema.String, workItemId: WorkItemId }),
-        input
-      ).pipe(
-        Effect.flatMap(({ workItemId, body }) =>
-          decodeWithSchema(AddJobCommentInputSchema, { body }).pipe(
-            Effect.flatMap((payload) =>
-              JobsService.addComment(workItemId, payload)
-            )
-          )
-        )
-      )
-    )
-  );
-
-  server.registerTool(
-    "ceird.jobs.assign_label",
-    {
-      annotations: { destructiveHint: false, readOnlyHint: false },
-      description: "Assign a label to a job.",
-      inputSchema: {
-        labelId: z.string().uuid(),
-        workItemId: z.string().uuid(),
-      },
-    },
-    authorizeAndRun("ceird:write", runtime, (input) =>
-      decodeWithSchema(
-        Schema.Struct({ labelId: LabelId, workItemId: WorkItemId }),
-        input
-      ).pipe(
-        Effect.flatMap(({ labelId, workItemId }) =>
-          decodeWithSchema(AssignJobLabelInputSchema, { labelId }).pipe(
-            Effect.flatMap((payload) =>
-              JobsService.assignLabel(workItemId, payload)
-            )
-          )
-        )
-      )
-    )
-  );
-
-  server.registerTool(
-    "ceird.jobs.remove_label",
-    {
-      annotations: { destructiveHint: true, readOnlyHint: false },
-      description: "Remove a label from a job.",
-      inputSchema: {
-        labelId: z.string().uuid(),
-        workItemId: z.string().uuid(),
-      },
-    },
-    authorizeAndRun("ceird:write", runtime, (input) =>
-      decodeWithSchema(
-        Schema.Struct({ labelId: LabelId, workItemId: WorkItemId }),
-        input
-      ).pipe(
-        Effect.flatMap(({ labelId, workItemId }) =>
-          JobsService.removeLabel(workItemId, labelId)
-        )
-      )
-    )
-  );
-}
-
-function authorizeAndRun(
+function authorizeAndRun<A, E, R>(
+  toolName: string,
   requiredScope: McpToolScope,
-  runtime: McpToolRuntime,
-  buildEffect: (input: unknown) => Effect.Effect<unknown, unknown, unknown>
+  buildEffect: () => Effect.Effect<A, E, R>
 ) {
-  return async (...args: readonly unknown[]) => {
-    const input = args.length === 2 ? args[0] : undefined;
-    const extra = args.length === 2 ? args[1] : args[0];
-    const authInfo = getAuthInfo(extra);
-    const session = getSessionIdentity(authInfo);
-    const scopes = authInfo?.scopes ?? [];
+  return Effect.gen(function* () {
+    const runtime = yield* McpToolRequestRuntime;
+    yield* Effect.annotateCurrentSpan({
+      "mcp.required_scope": requiredScope,
+      "mcp.scope_count": runtime.scopes.length,
+      "mcp.tool": toolName,
+    });
 
-    if (session === undefined) {
-      return {
-        content: [
-          {
-            text: "Unauthorized: MCP auth session is required",
-            type: "text" as const,
-          },
-        ],
-        isError: true,
-      };
+    if (!hasRequiredScope(runtime.scopes, requiredScope)) {
+      return yield* new McpToolForbiddenError({
+        message: `Forbidden: missing ${requiredScope} scope`,
+        requiredScope,
+        toolName,
+      });
     }
 
-    if (!hasRequiredScope(scopes, requiredScope)) {
-      return {
-        content: [
-          {
-            text: `Forbidden: missing ${requiredScope} scope`,
-            type: "text" as const,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    try {
-      const output = await runtime.runWithMcpSession(
-        session,
-        buildEffect(input)
-      );
-      return toSuccessResult(output);
-    } catch (error) {
-      return {
-        content: [
-          {
-            text: `Tool execution failed: ${formatUnknownError(error)}`,
-            type: "text" as const,
-          },
-        ],
-        isError: true,
-      };
-    }
-  };
-}
-
-function getAuthInfo(extra: unknown): McpAuthInfo | undefined {
-  if (typeof extra !== "object" || extra === null) {
-    return undefined;
-  }
-
-  if (!("authInfo" in extra)) {
-    return undefined;
-  }
-
-  const authInfo = extra.authInfo;
-  return typeof authInfo === "object" && authInfo !== null
-    ? (authInfo as McpAuthInfo)
-    : undefined;
-}
-
-function getSessionIdentity(
-  authInfo: McpAuthInfo | undefined
-): McpSessionIdentity | undefined {
-  const sessionId = authInfo?.extra?.sessionId;
-  const userId = authInfo?.extra?.subject;
-
-  if (typeof sessionId !== "string" || typeof userId !== "string") {
-    return undefined;
-  }
-
-  if (sessionId.length === 0 || userId.length === 0) {
-    return undefined;
-  }
-
-  return { sessionId, userId };
-}
-
-function decodeWithSchema<A, I>(schema: Schema.Schema<A, I>, input: unknown) {
-  return Schema.decodeUnknown(schema)(input).pipe(
-    Effect.mapError((parseError) =>
-      ParseResult.TreeFormatter.formatErrorSync(parseError)
-    )
+    return yield* buildEffect().pipe(
+      Effect.mapError((error) =>
+        isMcpToolInternalError(error)
+          ? error
+          : new McpToolExecutionError({
+              cause: formatUnknownError(error),
+              message: `Tool execution failed: ${formatUnknownError(error)}`,
+              toolName,
+            })
+      )
+    );
+  }).pipe(
+    Effect.mapError(toMcpToolFailure),
+    Effect.withSpan(`McpTool.${toolName}`)
   );
 }
 
-function toSuccessResult(output: unknown) {
+function decodeWithSchema<A, I>(
+  toolName: string,
+  schema: Schema.Schema<A, I>,
+  input: unknown
+) {
+  return Schema.decodeUnknown(schema)(input).pipe(
+    Effect.mapError((parseError) => {
+      const details = ParseResult.TreeFormatter.formatErrorSync(parseError);
+
+      return new McpToolValidationError({
+        details,
+        message: `Tool input validation failed: ${details}`,
+        toolName,
+      });
+    })
+  );
+}
+
+type McpToolInternalError =
+  | McpToolExecutionError
+  | McpToolForbiddenError
+  | McpToolValidationError;
+
+function isMcpToolInternalError(error: unknown): error is McpToolInternalError {
+  return (
+    error instanceof McpToolExecutionError ||
+    error instanceof McpToolForbiddenError ||
+    error instanceof McpToolValidationError
+  );
+}
+
+function toMcpToolFailure(error: McpToolInternalError): McpToolFailure {
+  if (error._tag === MCP_TOOL_FORBIDDEN_ERROR_TAG) {
+    return {
+      code: "FORBIDDEN",
+      message: error.message,
+    };
+  }
+
+  if (error._tag === MCP_TOOL_VALIDATION_ERROR_TAG) {
+    return {
+      code: "VALIDATION_FAILED",
+      message: error.message,
+    };
+  }
+
   return {
-    content: [{ text: JSON.stringify(output), type: "text" as const }],
-    structuredContent: output as Record<string, unknown>,
+    code: "TOOL_EXECUTION_FAILED",
+    message: error.message,
   };
 }
 
@@ -400,5 +479,27 @@ function formatUnknownError(error: unknown) {
     return error.message;
   }
 
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
   return String(error);
+}
+
+function normalizeLimit(input: unknown) {
+  if (typeof input !== "object" || input === null || !("limit" in input)) {
+    return input;
+  }
+
+  const { limit } = input as { readonly limit: unknown };
+  if (typeof limit !== "number") {
+    return input;
+  }
+
+  return { ...input, limit: String(limit) };
 }

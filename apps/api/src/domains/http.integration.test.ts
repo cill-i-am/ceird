@@ -502,13 +502,17 @@ describe("domain http integration", () => {
           cookieJar: ownerCookieJar,
         })
       );
-      expect(removedSiteOptionsResponse.status).not.toBe(200);
-
-      expect(serviceAreas.items).toContainEqual({
+      expect(removedSiteOptionsResponse.status).toBe(200);
+      const siteOptions = ParseResult.decodeUnknownSync(
+        SitesOptionsResponseSchema
+      )(await removedSiteOptionsResponse.json());
+      expect(siteOptions.serviceAreas).toContainEqual({
         id: createdServiceArea.id,
         name: "Dublin",
       });
-      expect(JSON.stringify(serviceAreas.items)).not.toContain("description");
+      expect(JSON.stringify(siteOptions.serviceAreas)).not.toContain(
+        "description"
+      );
 
       const emptySiteCommentsResponse = await api.handler(
         makeRequest(`/sites/${createdSite.id}/comments`, {

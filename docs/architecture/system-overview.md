@@ -23,7 +23,14 @@ apps/app server-side helpers
   -> apps/api Better Auth endpoints
   -> apps/api Jobs API endpoints
 
+MCP clients
+  -> apps/api Better Auth OAuth protected resource
+  -> apps/api @effect/ai MCP router
+  -> apps/api Effect domain services
+  -> Postgres
+
 apps/api Cloudflare Worker
+  -> Effect HTTP API and Effect AI MCP HTTP surfaces
   -> Hyperdrive
   -> PlanetScale Postgres
   -> Cloudflare Queues for auth email
@@ -66,6 +73,13 @@ Authentication requests mostly use Better Auth endpoints under `/api/auth/*`.
 The API owns Better Auth configuration, organization hooks, auth email
 scheduling, CORS, trusted origins, and cookie behavior. The app owns forms,
 redirects, route guards, and server-side session lookups.
+
+MCP clients discover the protected-resource metadata, authorize through Better
+Auth OAuth, and send the resulting bearer token to the configured MCP resource
+URL. The API validates that token before handing the request to the Effect AI MCP
+router. MCP tools are not a separate service or auth system; they run against the
+same Effect domain services, organization actor resolution, and authorization
+rules as the HTTP API.
 
 ## Persistence Model
 

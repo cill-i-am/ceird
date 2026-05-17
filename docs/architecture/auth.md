@@ -126,8 +126,8 @@ The MCP resource server also exposes protected-resource metadata at:
 
 Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
 `xmcp` runtime in `apps/api`. MCP auth uses Ceird's existing Better Auth OAuth
-Provider runtime, and MCP HTTP uses the official `@modelcontextprotocol/sdk`
-web-standard transport inside the API worker.
+Provider runtime, and MCP HTTP uses the `@effect/ai` MCP HTTP router mounted
+inside the API Worker.
 
 ### MCP Bearer Sessions
 
@@ -143,8 +143,9 @@ MCP tool execution does not synthesize cookie headers. It resolves the
 organization actor by loading the Better Auth `session` row from `sid`, checking
 that the row belongs to `sub`, reading the active organization id from that
 session, and then loading the user's `member` role in that organization. The
-same domain authorization services used by the HTTP API decide whether that
-actor can perform each operation.
+Effect AI MCP router receives the verified identity through Effect
+context/layers, and the same domain authorization services used by the HTTP API
+decide whether that actor can perform each operation.
 
 Current Ceird MCP scopes are:
 

@@ -1160,28 +1160,28 @@ describe("domain persistence integration", () => {
     ]);
     expect(secondNorthPage.nextCursor).toBeUndefined();
 
-    await expect(
-      runJobsEffect(
-        databaseUrl,
-        SitesRepository.list(identity.organizationId, {
-          cursor: firstPage.nextCursor,
-          serviceAreaId: northServiceAreaId,
-        })
-      )
-    ).rejects.toMatchObject({
-      _tag: "@ceird/sites-core/SiteListCursorInvalidError",
-    });
+    const mismatchedServiceAreaCursorExit = await runJobsEffectExit(
+      databaseUrl,
+      SitesRepository.list(identity.organizationId, {
+        cursor: firstPage.nextCursor,
+        serviceAreaId: northServiceAreaId,
+      })
+    );
+    expectFailureTag(
+      mismatchedServiceAreaCursorExit,
+      "@ceird/sites-core/SiteListCursorInvalidError"
+    );
 
-    await expect(
-      runJobsEffect(
-        databaseUrl,
-        SitesRepository.list(otherOrganizationId, {
-          cursor: firstPage.nextCursor,
-        })
-      )
-    ).rejects.toMatchObject({
-      _tag: "@ceird/sites-core/SiteListCursorInvalidError",
-    });
+    const mismatchedOrganizationCursorExit = await runJobsEffectExit(
+      databaseUrl,
+      SitesRepository.list(otherOrganizationId, {
+        cursor: firstPage.nextCursor,
+      })
+    );
+    expectFailureTag(
+      mismatchedOrganizationCursorExit,
+      "@ceird/sites-core/SiteListCursorInvalidError"
+    );
   }, 30_000);
 
   it("manages collaborators and scopes external repository access to grants", async (context: {
