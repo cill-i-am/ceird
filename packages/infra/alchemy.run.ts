@@ -14,10 +14,7 @@ import {
   DrizzleMigrations,
   DrizzleMigrationsProvider,
 } from "./src/drizzle-migrations.ts";
-import {
-  LegacyNeonProjectStateProvider,
-  makeNeonPostgresConfig,
-} from "./src/neon.ts";
+import { makeNeonPostgresConfig } from "./src/neon.ts";
 import { loadInfraStageConfig } from "./src/stages.ts";
 
 const stackName = process.env.CEIRD_ALCHEMY_STACK_NAME ?? "ceird";
@@ -29,7 +26,6 @@ const providers = (() => {
   // Keep the cast isolated at the provider assembly boundary.
   return Layer.mergeAll(
     cloudflareProviders,
-    LegacyNeonProjectStateProvider(),
     HyperdriveProvider().pipe(Layer.provide(cloudflareProviders)),
     DrizzleMigrationsProvider()
   ).pipe(Layer.orDie) as Layer.Layer<unknown, never, StackServices>;
