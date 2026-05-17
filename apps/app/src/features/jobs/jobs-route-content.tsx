@@ -11,6 +11,8 @@ import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
 import { JobsDetailSheet } from "#/features/jobs/jobs-detail-sheet";
 import { JobsPage } from "#/features/jobs/jobs-page";
 import {
+  JobsStateAtomBridge,
+  JobsStateProvider,
   jobsListStateAtom,
   jobsOptionsStateAtom,
   seedJobsListState,
@@ -52,14 +54,21 @@ export function JobsRouteContent({
         ],
       ]}
     >
-      <JobsPage
-        listHotkeysEnabled={listHotkeysEnabled}
-        onViewModeChange={onViewModeChange}
-        viewMode={viewMode}
-        viewer={viewer}
+      <JobsStateProvider
+        activeOrganizationId={activeOrganizationId}
+        list={list}
+        options={options}
       >
-        {children}
-      </JobsPage>
+        <JobsStateAtomBridge />
+        <JobsPage
+          listHotkeysEnabled={listHotkeysEnabled}
+          onViewModeChange={onViewModeChange}
+          viewMode={viewMode}
+          viewer={viewer}
+        >
+          {children}
+        </JobsPage>
+      </JobsStateProvider>
     </RegistryProvider>
   );
 }

@@ -7,7 +7,6 @@ import type {
 } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -17,11 +16,9 @@ import type { ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
 import {
-  jobsListStateAtom,
-  jobsNoticeAtom,
-  jobsOptionsStateAtom,
-  seedJobsListState,
-  seedJobsOptionsState,
+  JobsStateProvider,
+  useJobsListState,
+  useJobsNotice,
 } from "./jobs-state";
 
 type EffectClientMock = (...args: unknown[]) => unknown;
@@ -246,6 +243,7 @@ describe("jobs create sheet integration", () => {
               createdAt: createdJob.createdAt,
               id: createdJob.id,
               kind: createdJob.kind,
+              labels: [],
               priority: createdJob.priority,
               status: createdJob.status,
               title: "Canonical queue title",
@@ -339,71 +337,64 @@ describe("jobs create sheet integration", () => {
 
 function renderCreateSheet() {
   return render(
-    <RegistryProvider
-      initialValues={[
-        [
-          jobsListStateAtom,
-          seedJobsListState(organizationId, {
-            items: [
-              {
-                createdAt: "2026-04-23T11:00:00.000Z",
-                id: existingJobId,
-                kind: "job",
-                labels: [],
-                priority: "none",
-                status: "new",
-                title: "Existing queue job",
-                updatedAt: "2026-04-23T12:00:00.000Z",
-              },
-            ],
-            nextCursor: undefined,
-          }),
-        ],
-        [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(organizationId, {
-            contacts: [
-              {
-                email: "pat@example.com",
-                id: depotContactId,
-                name: "Pat Contact",
-                phone: "+353 87 765 4321",
-                siteIds: [depotSiteId],
-              },
-            ],
+    <JobsStateProvider
+      activeOrganizationId={organizationId}
+      list={{
+        items: [
+          {
+            createdAt: "2026-04-23T11:00:00.000Z",
+            id: existingJobId,
+            kind: "job",
             labels: [],
-            members: [],
-            serviceAreas: [],
-            sites: [
-              {
-                addressLine1: "Depot Road",
-                country: "IE",
-                county: "Dublin",
-                eircode: "D01 X2X2",
-                geocodedAt: "2026-04-27T10:00:00.000Z",
-                geocodingProvider: "stub",
-                id: depotSiteId,
-                labels: [],
-                latitude: 53.3498,
-                longitude: -6.2603,
-                name: "Depot",
-                serviceAreaId: undefined,
-                serviceAreaName: undefined,
-              },
-            ],
-          }),
+            priority: "none",
+            status: "new",
+            title: "Existing queue job",
+            updatedAt: "2026-04-23T12:00:00.000Z",
+          },
         ],
-      ]}
+        nextCursor: undefined,
+      }}
+      options={{
+        contacts: [
+          {
+            email: "pat@example.com",
+            id: depotContactId,
+            name: "Pat Contact",
+            phone: "+353 87 765 4321",
+            siteIds: [depotSiteId],
+          },
+        ],
+        labels: [],
+        members: [],
+        serviceAreas: [],
+        sites: [
+          {
+            addressLine1: "Depot Road",
+            country: "IE",
+            county: "Dublin",
+            eircode: "D01 X2X2",
+            geocodedAt: "2026-04-27T10:00:00.000Z",
+            geocodingProvider: "stub",
+            id: depotSiteId,
+            labels: [],
+            latitude: 53.3498,
+            longitude: -6.2603,
+            name: "Depot",
+            serviceAreaId: undefined,
+            serviceAreaName: undefined,
+          },
+        ],
+      }}
     >
       <JobsCreateSheet />
       <JobsStateProbe />
-    </RegistryProvider>
+    </JobsStateProvider>
   );
 }
 
 function JobsStateProbe() {
-  const listState = useAtomValue(jobsListStateAtom);
-  const notice = useAtomValue(jobsNoticeAtom);
+  const listState = useJobsListState();
+  const [notice] = useJobsNotice();
 
   return (
     <div>

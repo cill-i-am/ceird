@@ -6,7 +6,6 @@ import type {
   UserIdType,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
-import { useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
   ArrowRight01Icon,
@@ -89,14 +88,14 @@ import {
 } from "./jobs-saved-views";
 import type { JobSavedView } from "./jobs-saved-views";
 import {
-  buildJobsLookup,
   defaultJobsListFilters,
   filterVisibleJobs,
   isJobsAssigneeFilterEqual,
-  jobsListStateAtom,
-  jobsNoticeAtom,
-  jobsOptionsStateAtom,
-  refreshJobsListAtom,
+  useJobsListState,
+  useJobsLookup,
+  useJobsNotice,
+  useJobsOptions,
+  useRefreshJobsListMutation,
 } from "./jobs-state";
 import type { JobsAssigneeFilter, JobsListFilters } from "./jobs-state";
 import { canUseInternalJobOptions, hasJobsElevatedAccess } from "./jobs-viewer";
@@ -208,13 +207,10 @@ export function JobsPage({
   const [filters, setFilters] = React.useState<JobsListFilters>(
     defaultJobsListFilters
   );
-  const jobsListState = useAtomValue(jobsListStateAtom);
-  const notice = useAtomValue(jobsNoticeAtom);
-  const optionsState = useAtomValue(jobsOptionsStateAtom);
-  const lookup = React.useMemo(
-    () => buildJobsLookup(optionsState.data),
-    [optionsState.data]
-  );
+  const jobsListState = useJobsListState();
+  const [notice, clearNotice] = useJobsNotice();
+  const options = useJobsOptions();
+  const lookup = useJobsLookup();
   const jobs = React.useMemo(
     () =>
       filterVisibleJobs({
@@ -228,8 +224,7 @@ export function JobsPage({
     () => buildJobStatusCounts(jobsListState.items),
     [jobsListState.items]
   );
-  const refreshJobs = useAtomSet(refreshJobsListAtom);
-  const setNotice = useAtomSet(jobsNoticeAtom);
+  const refreshJobs = useRefreshJobsListMutation();
   const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
   const canUseInternalOptions = canUseInternalJobOptions(viewer);
@@ -480,7 +475,7 @@ export function JobsPage({
         <JobsCommandToolbar
           filters={filters}
           hasCustomFilters={hasCustomFilters}
-          optionsState={optionsState.data}
+          optionsState={options}
           onClearFilters={() => setFilters(defaultJobsListFilters)}
           onFiltersChange={patchFilters}
           savedViewsControl={
@@ -520,7 +515,7 @@ export function JobsPage({
               type="button"
               size="xs"
               variant="ghost"
-              onClick={() => setNotice(null)}
+              onClick={clearNotice}
             >
               Dismiss
             </Button>
@@ -1186,15 +1181,6 @@ function buildJobStatusGroups(jobs: readonly JobListItem[]) {
         ]
       : [];
   });
-}
-
-function useJobsLookup() {
-  const optionsState = useAtomValue(jobsOptionsStateAtom);
-
-  return React.useMemo(
-    () => buildJobsLookup(optionsState.data),
-    [optionsState.data]
-  );
 }
 
 function buildJobStatusCounts(jobs: readonly JobListItem[]): JobStatusCounts {

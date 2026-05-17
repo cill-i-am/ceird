@@ -1,4 +1,4 @@
-import type { ContactIdType } from "@ceird/jobs-core";
+import type { ContactIdType, JobOptionsResponse } from "@ceird/jobs-core";
 import {
   SITE_NOT_FOUND_ERROR_TAG,
   SiteGeocodingFailedError,
@@ -12,11 +12,8 @@ import { cloneElement, isValidElement, useEffect } from "react";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { JobsCreateSheet } from "./jobs-create-sheet";
-import { createJobMutationAtom, jobsOptionsStateAtom } from "./jobs-state";
 
 type AsyncMutationMock = (...args: unknown[]) => Promise<unknown>;
-type AtomSetterMock = (atom: unknown) => unknown;
-type AtomValueMock = (atom: unknown) => unknown;
 type NavigateMock = (...args: unknown[]) => unknown;
 
 const depotSiteId = "11111111-1111-4111-8111-111111111111" as SiteIdType;
@@ -25,13 +22,18 @@ const depotContactId = "33333333-3333-4333-8333-333333333333" as ContactIdType;
 const northServiceAreaId =
   "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType;
 
-const { mockedNavigate, mockedUseAtomSet, mockedUseAtomValue } = vi.hoisted(
-  () => ({
+const { mockedNavigate, mockedUseCreateJobMutation, mockedUseJobsOptions } =
+  vi.hoisted(() => ({
     mockedNavigate: vi.fn<NavigateMock>(),
-    mockedUseAtomSet: vi.fn<AtomSetterMock>(),
-    mockedUseAtomValue: vi.fn<AtomValueMock>(),
-  })
-);
+    mockedUseCreateJobMutation:
+      vi.fn<
+        () => readonly [
+          { readonly error: unknown | null; readonly waiting: boolean },
+          AsyncMutationMock,
+        ]
+      >(),
+    mockedUseJobsOptions: vi.fn<() => JobOptionsResponse>(),
+  }));
 
 const mockedCreateJob = vi.fn<AsyncMutationMock>();
 
@@ -39,21 +41,17 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
 }));
 
-vi.mock(import("@effect-atom/atom-react"), async (importActual) => {
+vi.mock(import("./jobs-state"), async (importActual) => {
   const actual = await importActual();
 
   return {
     ...actual,
-    Result: {
-      builder: () => ({
-        onError: () => ({
-          render: () => null,
-        }),
-        render: () => null,
-      }),
-    } as never,
-    useAtomSet: mockedUseAtomSet as never,
-    useAtomValue: mockedUseAtomValue as never,
+    getJobsAsyncErrorMessage: (error: unknown) =>
+      error instanceof Error ? error.message : "Something went wrong.",
+    isJobsAsyncFailure: (result: { readonly error: unknown | null }) =>
+      result.error !== null,
+    useCreateJobMutation: mockedUseCreateJobMutation as never,
+    useJobsOptions: mockedUseJobsOptions as never,
   };
 });
 
@@ -325,80 +323,70 @@ function getResponsiveDrawerForHeading(name: string) {
   return drawer as HTMLElement;
 }
 
+function defaultJobOptions(): JobOptionsResponse {
+  return {
+    contacts: [
+      {
+        id: depotContactId,
+        name: "Pat Contact",
+        siteIds: [depotSiteId],
+      },
+    ],
+    labels: [],
+    members: [],
+    serviceAreas: [
+      {
+        id: northServiceAreaId,
+        name: "North",
+      },
+    ],
+    sites: [
+      {
+        addressLine1: "Depot Road",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D01 X2X2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        id: depotSiteId,
+        labels: [],
+        latitude: 53.3498,
+        longitude: -6.2603,
+        name: "Depot",
+        serviceAreaId: undefined,
+        serviceAreaName: undefined,
+      },
+      {
+        addressLine1: "School Road",
+        country: "IE",
+        county: "Galway",
+        eircode: "H91 X2X2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        id: schoolSiteId,
+        labels: [],
+        latitude: 53.2734,
+        longitude: -9.0511,
+        name: "School",
+        serviceAreaId: undefined,
+        serviceAreaName: undefined,
+      },
+    ],
+  };
+}
+
 describe("jobs create sheet", () => {
   beforeEach(() => {
     mockedNavigate.mockReset();
     mockedCreateJob.mockReset();
-
-    mockedUseAtomSet.mockImplementation((atom: unknown) => {
-      if (atom === createJobMutationAtom) {
-        return mockedCreateJob;
-      }
-
-      return vi.fn<NavigateMock>();
-    });
-
-    mockedUseAtomValue.mockImplementation((atom: unknown) => {
-      if (atom === createJobMutationAtom) {
-        return {
-          waiting: false,
-        };
-      }
-
-      if (atom === jobsOptionsStateAtom) {
-        return {
-          data: {
-            contacts: [
-              {
-                id: depotContactId,
-                name: "Pat Contact",
-                siteIds: [depotSiteId],
-              },
-            ],
-            members: [],
-            serviceAreas: [
-              {
-                id: northServiceAreaId,
-                name: "North",
-              },
-            ],
-            sites: [
-              {
-                addressLine1: "Depot Road",
-                country: "IE",
-                county: "Dublin",
-                eircode: "D01 X2X2",
-                geocodedAt: "2026-04-27T10:00:00.000Z",
-                geocodingProvider: "stub",
-                id: depotSiteId,
-                latitude: 53.3498,
-                longitude: -6.2603,
-                name: "Depot",
-                serviceAreaId: undefined,
-                serviceAreaName: undefined,
-              },
-              {
-                addressLine1: "School Road",
-                country: "IE",
-                county: "Galway",
-                eircode: "H91 X2X2",
-                geocodedAt: "2026-04-27T10:00:00.000Z",
-                geocodingProvider: "stub",
-                id: schoolSiteId,
-                latitude: 53.2734,
-                longitude: -9.0511,
-                name: "School",
-                serviceAreaId: undefined,
-                serviceAreaName: undefined,
-              },
-            ],
-          },
-          organizationId: "org_123",
-        };
-      }
-
-      return null;
-    });
+    mockedUseCreateJobMutation.mockReturnValue([
+      {
+        error: null,
+        waiting: false,
+      },
+      mockedCreateJob,
+    ]);
+    mockedUseJobsOptions.mockReturnValue(defaultJobOptions());
   });
 
   afterEach(() => {
@@ -536,26 +524,12 @@ describe("jobs create sheet", () => {
   );
 
   it("hides empty existing groups and no-contact clearing actions", async () => {
-    mockedUseAtomValue.mockImplementation((atom: unknown) => {
-      if (atom === createJobMutationAtom) {
-        return {
-          waiting: false,
-        };
-      }
-
-      if (atom === jobsOptionsStateAtom) {
-        return {
-          data: {
-            contacts: [],
-            members: [],
-            serviceAreas: [],
-            sites: [],
-          },
-          organizationId: "org_123",
-        };
-      }
-
-      return null;
+    mockedUseJobsOptions.mockReturnValue({
+      contacts: [],
+      labels: [],
+      members: [],
+      serviceAreas: [],
+      sites: [],
     });
 
     const user = userEvent.setup();

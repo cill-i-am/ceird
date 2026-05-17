@@ -14,10 +14,17 @@ import type {
   JobStatus,
   UserIdType,
 } from "@ceird/jobs-core";
+import { JobListItemSchema } from "@ceird/jobs-core";
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
-import { Atom } from "@effect-atom/atom-react";
-import { Effect, Option } from "effect";
+import { Atom, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
+import {
+  createCollection,
+  localOnlyCollectionOptions,
+} from "@tanstack/react-db";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { use } from "react";
+import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
@@ -57,12 +64,87 @@ export interface JobsNotice {
   readonly title: string;
 }
 
+export interface JobsAsyncResult {
+  readonly error: unknown | null;
+  readonly waiting: boolean;
+}
+
+type JobsCollection = ReturnType<typeof makeJobsCollection>;
+
+interface JobsStateStore {
+  readonly jobOrderRef: React.MutableRefObject<readonly JobListItem["id"][]>;
+  readonly jobs: JobsCollection;
+  readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+}
+
+interface JobsProviderState {
+  readonly createJobResult: JobsAsyncResult;
+  readonly nextCursor?: JobListCursorType | undefined;
+  readonly notice: JobsNotice | null;
+  readonly options: JobOptionsResponse;
+}
+
+type JobsProviderStateAction =
+  | {
+      readonly nextCursor?: JobListCursorType | undefined;
+      readonly type: "replace-list-state";
+    }
+  | {
+      readonly options: JobOptionsResponse;
+      readonly type: "replace-options-state";
+    }
+  | {
+      readonly notice: JobsNotice | null;
+      readonly type: "set-notice";
+    }
+  | {
+      readonly result: JobsAsyncResult;
+      readonly type: "set-create-job-result";
+    };
+
+interface JobsStateContextValue {
+  readonly clearNotice: () => void;
+  readonly createJob: (
+    input: CreateJobInput
+  ) => Promise<Exit.Exit<CreateJobResponse, AppApiError>>;
+  readonly createJobResult: JobsAsyncResult;
+  readonly nextCursor?: JobListCursorType | undefined;
+  readonly notice: JobsNotice | null;
+  readonly options: JobOptionsResponse;
+  readonly refreshJobsList: () => Promise<
+    Exit.Exit<JobListResponse, AppApiError>
+  >;
+  readonly replaceJobsListState: (
+    organizationId: OrganizationId,
+    response: JobListResponse
+  ) => Promise<void>;
+  readonly replaceJobsOptionsState: (
+    organizationId: OrganizationId,
+    response: JobOptionsResponse
+  ) => void;
+  readonly store: JobsStateStore;
+}
+
 const emptyJobOptions: JobOptionsResponse = {
   contacts: [],
   labels: [],
   members: [],
   serviceAreas: [],
   sites: [],
+};
+
+const JobsStateContext = React.createContext<JobsStateContextValue | null>(
+  null
+);
+
+const idleJobsAsyncResult: JobsAsyncResult = {
+  error: null,
+  waiting: false,
+};
+
+const waitingJobsAsyncResult: JobsAsyncResult = {
+  error: null,
+  waiting: true,
 };
 
 export const defaultJobsListFilters: JobsListFilters = {
@@ -87,10 +169,6 @@ export const jobsOptionsStateAtom = Atom.make<JobsOptionsState>({
   organizationId: null,
 }).pipe(Atom.keepAlive);
 
-export const jobsNoticeAtom = Atom.make<JobsNotice | null>(null).pipe(
-  Atom.keepAlive
-);
-
 export function buildJobsLookup(options: JobOptionsResponse) {
   return {
     contactById: new Map(
@@ -109,6 +187,328 @@ export const jobsLookupAtom = Atom.make((get) =>
   buildJobsLookup(get(jobsOptionsStateAtom).data)
 ).pipe(Atom.keepAlive);
 
+export function JobsStateProvider({
+  activeOrganizationId,
+  children,
+  list,
+  options,
+}: {
+  readonly activeOrganizationId: OrganizationId;
+  readonly children: React.ReactNode;
+  readonly list: JobListResponse;
+  readonly options: JobOptionsResponse;
+}) {
+  const organizationIdRef = React.useRef(activeOrganizationId);
+  const [store] = React.useState(() =>
+    makeJobsStateStore(organizationIdRef, activeOrganizationId, list.items)
+  );
+  const previousListRef = React.useRef(list);
+  const previousOptionsRef = React.useRef(options);
+  const [state, dispatch] = React.useReducer(jobsProviderStateReducer, {
+    createJobResult: idleJobsAsyncResult,
+    nextCursor: list.nextCursor,
+    notice: null,
+    options,
+  } satisfies JobsProviderState);
+  const { createJobResult, nextCursor, notice } = state;
+
+  React.useEffect(() => {
+    organizationIdRef.current = activeOrganizationId;
+  }, [activeOrganizationId, organizationIdRef]);
+
+  React.useEffect(
+    () => () => {
+      void store.jobs.cleanup();
+    },
+    [store]
+  );
+
+  const replaceJobsListState = React.useCallback(
+    async (organizationId: OrganizationId, response: JobListResponse) => {
+      organizationIdRef.current = organizationId;
+      await replaceJobs(store, response.items);
+      dispatch({
+        nextCursor: response.nextCursor,
+        type: "replace-list-state",
+      });
+    },
+    [organizationIdRef, store]
+  );
+
+  const replaceJobsOptionsState = React.useCallback(
+    (organizationId: OrganizationId, response: JobOptionsResponse) => {
+      organizationIdRef.current = organizationId;
+      dispatch({
+        options: response,
+        type: "replace-options-state",
+      });
+    },
+    [organizationIdRef]
+  );
+
+  React.useEffect(() => {
+    if (previousListRef.current === list) {
+      return;
+    }
+
+    previousListRef.current = list;
+    void replaceJobsListState(activeOrganizationId, list);
+  }, [activeOrganizationId, list, replaceJobsListState]);
+
+  React.useEffect(() => {
+    if (previousOptionsRef.current === options) {
+      return;
+    }
+
+    previousOptionsRef.current = options;
+    void replaceJobsOptionsState(activeOrganizationId, options);
+  }, [activeOrganizationId, options, replaceJobsOptionsState]);
+
+  const refreshJobsList = React.useCallback(async () => {
+    const expectedOrganizationId = organizationIdRef.current;
+    const exit = await Effect.runPromiseExit(listAllBrowserJobs());
+
+    if (
+      Exit.isSuccess(exit) &&
+      organizationIdRef.current === expectedOrganizationId
+    ) {
+      await replaceJobsListState(expectedOrganizationId, exit.value);
+    }
+
+    return exit;
+  }, [organizationIdRef, replaceJobsListState]);
+
+  const createJob = React.useCallback(
+    (input: CreateJobInput) => {
+      const expectedOrganizationId = organizationIdRef.current;
+
+      return runTrackedJobsOperation(
+        withMinimumMutationPendingDurationEffect(createBrowserJob(input)),
+        (result) =>
+          dispatch({
+            result,
+            type: "set-create-job-result",
+          }),
+        async (createdJob) => {
+          const shouldRefreshOptions =
+            input.site?.kind === "create" || input.contact?.kind === "create";
+
+          await refreshJobsListOrUpsertState({
+            currentNextCursor: nextCursor,
+            expectedOrganizationId,
+            job: createdJob,
+            organizationIdRef,
+            replaceJobsListState,
+            store,
+          });
+          await refreshJobOptionsStateWhen({
+            expectedOrganizationId,
+            organizationIdRef,
+            replaceJobsOptionsState,
+            shouldRefresh: shouldRefreshOptions,
+          });
+
+          if (organizationIdRef.current === expectedOrganizationId) {
+            dispatch({
+              notice: {
+                kind: "created",
+                title: createdJob.title,
+              },
+              type: "set-notice",
+            });
+          }
+        }
+      );
+    },
+    [
+      nextCursor,
+      organizationIdRef,
+      replaceJobsListState,
+      replaceJobsOptionsState,
+      store,
+    ]
+  );
+
+  const clearNotice = React.useCallback(() => {
+    dispatch({
+      notice: null,
+      type: "set-notice",
+    });
+  }, []);
+
+  const value = React.useMemo<JobsStateContextValue>(
+    () => ({
+      clearNotice,
+      createJob,
+      createJobResult,
+      nextCursor,
+      notice,
+      options: state.options,
+      refreshJobsList,
+      replaceJobsListState,
+      replaceJobsOptionsState,
+      store,
+    }),
+    [
+      clearNotice,
+      createJob,
+      createJobResult,
+      nextCursor,
+      notice,
+      refreshJobsList,
+      replaceJobsListState,
+      replaceJobsOptionsState,
+      state.options,
+      store,
+    ]
+  );
+
+  return React.createElement(JobsStateContext.Provider, { value }, children);
+}
+
+export function JobsStateAtomBridge() {
+  const atomListState = useAtomValue(jobsListStateAtom);
+  const atomOptionsState = useAtomValue(jobsOptionsStateAtom);
+  const setAtomListState = useAtomSet(jobsListStateAtom);
+  const setAtomOptionsState = useAtomSet(jobsOptionsStateAtom);
+  const providerListState = useJobsListState();
+  const providerOptionsState = useJobsOptionsState();
+  const replaceJobsListState = useReplaceJobsListState();
+  const replaceJobsOptionsState = useReplaceJobsOptionsState();
+  const lastAtomListKeyRef = React.useRef("");
+  const lastProviderListKeyRef = React.useRef("");
+  const lastAtomOptionsKeyRef = React.useRef("");
+  const lastProviderOptionsKeyRef = React.useRef("");
+
+  React.useEffect(() => {
+    const key = jobsListStateKey(providerListState);
+
+    if (lastAtomListKeyRef.current === key) {
+      return;
+    }
+
+    lastProviderListKeyRef.current = key;
+    setAtomListState(providerListState);
+  }, [providerListState, setAtomListState]);
+
+  React.useEffect(() => {
+    const key = jobsOptionsStateKey(providerOptionsState);
+
+    if (lastAtomOptionsKeyRef.current === key) {
+      return;
+    }
+
+    lastProviderOptionsKeyRef.current = key;
+    setAtomOptionsState(providerOptionsState);
+  }, [providerOptionsState, setAtomOptionsState]);
+
+  React.useEffect(() => {
+    if (atomListState.organizationId === null) {
+      return;
+    }
+
+    const key = jobsListStateKey(atomListState);
+
+    if (lastProviderListKeyRef.current === key) {
+      return;
+    }
+
+    lastAtomListKeyRef.current = key;
+    void replaceJobsListState(atomListState.organizationId, {
+      items: atomListState.items,
+      nextCursor: atomListState.nextCursor,
+    });
+  }, [atomListState, replaceJobsListState]);
+
+  React.useEffect(() => {
+    if (atomOptionsState.organizationId === null) {
+      return;
+    }
+
+    const key = jobsOptionsStateKey(atomOptionsState);
+
+    if (lastProviderOptionsKeyRef.current === key) {
+      return;
+    }
+
+    lastAtomOptionsKeyRef.current = key;
+    void replaceJobsOptionsState(
+      atomOptionsState.organizationId,
+      atomOptionsState.data
+    );
+  }, [atomOptionsState, replaceJobsOptionsState]);
+
+  return null;
+}
+
+export function useJobsListState(): JobsListState {
+  const { nextCursor, store } = useJobsStateContext();
+  const items = useJobsCollectionItems(store);
+
+  return React.useMemo(
+    () => ({
+      items,
+      nextCursor,
+      organizationId: store.organizationIdRef.current,
+    }),
+    [items, nextCursor, store.organizationIdRef]
+  );
+}
+
+export function useJobsOptions(): JobOptionsResponse {
+  return useJobsStateContext().options;
+}
+
+export function useJobsOptionsState(): JobsOptionsState {
+  const { options, store } = useJobsStateContext();
+
+  return React.useMemo(
+    () => ({
+      data: options,
+      organizationId: store.organizationIdRef.current,
+    }),
+    [options, store.organizationIdRef]
+  );
+}
+
+export function useJobsLookup() {
+  const options = useJobsOptions();
+
+  return React.useMemo(() => buildJobsLookup(options), [options]);
+}
+
+export function useJobsNotice() {
+  const { clearNotice, notice } = useJobsStateContext();
+
+  return [notice, clearNotice] as const;
+}
+
+export function useRefreshJobsListMutation() {
+  return useJobsStateContext().refreshJobsList;
+}
+
+export function useCreateJobMutation() {
+  const { createJob, createJobResult } = useJobsStateContext();
+
+  return [createJobResult, createJob] as const;
+}
+
+export function useReplaceJobsListState() {
+  return useJobsStateContext().replaceJobsListState;
+}
+
+export function useReplaceJobsOptionsState() {
+  return useJobsStateContext().replaceJobsOptionsState;
+}
+
+export function isJobsAsyncFailure(result: JobsAsyncResult): boolean {
+  return result.error !== null;
+}
+
+export function getJobsAsyncErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function filterVisibleJobs({
   filters,
   items,
@@ -124,48 +524,6 @@ export function filterVisibleJobs({
     matchesVisibleJob(item, filters, lookup, normalizedQuery)
   );
 }
-
-export const refreshJobsListAtom = Atom.fn<AppApiError, JobListResponse>(
-  (_, get) =>
-    listAllBrowserJobs().pipe(
-      Effect.tap((response) =>
-        Effect.sync(() => {
-          const state = get(jobsListStateAtom);
-
-          get.set(jobsListStateAtom, {
-            items: response.items,
-            nextCursor: response.nextCursor,
-            organizationId: state.organizationId,
-          });
-        })
-      )
-    )
-).pipe(Atom.keepAlive);
-
-export const createJobMutationAtom = Atom.fn<
-  AppApiError,
-  CreateJobResponse,
-  CreateJobInput
->((input, get) =>
-  withMinimumMutationPendingDurationEffect(createBrowserJob(input)).pipe(
-    Effect.tap((createdJob) =>
-      Effect.gen(function* () {
-        const shouldRefreshOptions =
-          input.site?.kind === "create" || input.contact?.kind === "create";
-        yield* refreshJobListOrUpsert(get, createdJob);
-        yield* refreshJobOptionsWhen(get, shouldRefreshOptions);
-        yield* Effect.sync(() => {
-          get.set(jobsNoticeAtom, {
-            kind: "created",
-            title: createdJob.title,
-          });
-        });
-
-        return createdJob;
-      })
-    )
-  )
-).pipe(Atom.keepAlive);
 
 export function seedJobsListState(
   organizationId: OrganizationId,
@@ -203,6 +561,159 @@ export function deriveContactsForSite(
     linked: contacts.filter((contact) => contact.siteIds.includes(siteId)),
     others: contacts.filter((contact) => !contact.siteIds.includes(siteId)),
   };
+}
+
+function makeJobsStateStore(
+  organizationIdRef: React.MutableRefObject<OrganizationId>,
+  organizationId: OrganizationId,
+  jobs: readonly JobListItem[]
+): JobsStateStore {
+  return {
+    jobOrderRef: {
+      current: jobs.map((job) => job.id),
+    },
+    jobs: makeJobsCollection(organizationId, jobs),
+    organizationIdRef,
+  };
+}
+
+function makeJobsCollection(
+  organizationId: OrganizationId,
+  jobs: readonly JobListItem[]
+) {
+  return createCollection(
+    localOnlyCollectionOptions({
+      getKey: (job) => job.id,
+      id: `organization:${organizationId}:jobs`,
+      initialData: [...jobs],
+      schema: Schema.standardSchemaV1(JobListItemSchema),
+    })
+  );
+}
+
+function useJobsStateContext() {
+  const context = use(JobsStateContext);
+
+  if (!context) {
+    throw new Error("Jobs state must be used inside JobsStateProvider.");
+  }
+
+  return context;
+}
+
+function jobsProviderStateReducer(
+  state: JobsProviderState,
+  action: JobsProviderStateAction
+): JobsProviderState {
+  switch (action.type) {
+    case "replace-list-state": {
+      return {
+        ...state,
+        nextCursor: action.nextCursor,
+      };
+    }
+
+    case "replace-options-state": {
+      return {
+        ...state,
+        options: action.options,
+      };
+    }
+
+    case "set-create-job-result": {
+      return {
+        ...state,
+        createJobResult: action.result,
+      };
+    }
+
+    case "set-notice": {
+      return {
+        ...state,
+        notice: action.notice,
+      };
+    }
+
+    default: {
+      const exhaustiveAction: never = action;
+      return exhaustiveAction;
+    }
+  }
+}
+
+function useJobsCollectionItems(store: JobsStateStore): readonly JobListItem[] {
+  const [items, setItems] = React.useState(() => jobsFromCollection(store));
+
+  React.useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (active) {
+        setItems(jobsFromCollection(store));
+      }
+    };
+    const subscription = store.jobs.subscribeChanges(refresh);
+
+    refresh();
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [store]);
+
+  return items;
+}
+
+async function replaceJobs(
+  store: JobsStateStore,
+  jobs: readonly JobListItem[]
+) {
+  store.jobOrderRef.current = jobs.map((job) => job.id);
+  const existingKeys = [...store.jobs.keys()];
+
+  if (existingKeys.length > 0) {
+    await store.jobs.delete(existingKeys).isPersisted.promise;
+  }
+
+  if (jobs.length > 0) {
+    await store.jobs.insert([...jobs]).isPersisted.promise;
+  }
+}
+
+function jobsFromCollection(store: JobsStateStore): readonly JobListItem[] {
+  const orderByJobId = new Map(
+    store.jobOrderRef.current.map((jobId, index) => [jobId, index])
+  );
+
+  return store.jobs.toArray
+    .map(withoutVirtualProps)
+    .toSorted(
+      (left, right) =>
+        (orderByJobId.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (orderByJobId.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+    );
+}
+
+async function runTrackedJobsOperation<Success>(
+  effect: Effect.Effect<Success, AppApiError>,
+  setResult: (result: JobsAsyncResult) => void,
+  onSuccess: (value: Success) => Promise<void>
+): Promise<Exit.Exit<Success, AppApiError>> {
+  setResult(waitingJobsAsyncResult);
+  const exit = await Effect.runPromiseExit(effect);
+
+  if (Exit.isSuccess(exit)) {
+    await onSuccess(exit.value);
+    setResult(idleJobsAsyncResult);
+    return exit;
+  }
+
+  setResult({
+    error: failureFromCause(exit.cause),
+    waiting: false,
+  });
+
+  return exit;
 }
 
 function listAllBrowserJobs() {
@@ -245,58 +756,81 @@ function createBrowserJob(input: CreateJobInput) {
   );
 }
 
-function refreshJobListOrUpsert(get: Atom.FnContext, job: CreateJobResponse) {
-  return Effect.gen(function* () {
-    const listResult = yield* listAllBrowserJobs().pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("Jobs list refresh failed; using optimistic job", {
-          error: error.message,
-          jobId: job.id,
-        })
-      ),
-      Effect.option
-    );
-    const currentListState = get(jobsListStateAtom);
+async function refreshJobsListOrUpsertState({
+  currentNextCursor,
+  expectedOrganizationId,
+  job,
+  organizationIdRef,
+  replaceJobsListState,
+  store,
+}: {
+  readonly currentNextCursor?: JobListCursorType | undefined;
+  readonly expectedOrganizationId: OrganizationId;
+  readonly job: CreateJobResponse;
+  readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+  readonly replaceJobsListState: (
+    organizationId: OrganizationId,
+    response: JobListResponse
+  ) => Promise<void>;
+  readonly store: JobsStateStore;
+}) {
+  const listExit = await Effect.runPromiseExit(listAllBrowserJobs());
 
-    const nextListState = Option.match(listResult, {
-      onNone: (): JobsListState => ({
-        items: upsertJobListItem(currentListState.items, job),
-        nextCursor: currentListState.nextCursor,
-        organizationId: currentListState.organizationId,
-      }),
-      onSome: (list): JobsListState => ({
-        items: list.items,
-        nextCursor: list.nextCursor,
-        organizationId: currentListState.organizationId,
-      }),
-    });
+  if (organizationIdRef.current !== expectedOrganizationId) {
+    return;
+  }
 
-    yield* Effect.sync(() => {
-      get.set(jobsListStateAtom, nextListState);
-    });
+  if (Exit.isSuccess(listExit)) {
+    await replaceJobsListState(expectedOrganizationId, listExit.value);
+    return;
+  }
+
+  await Effect.runPromise(
+    Effect.logWarning("Jobs list refresh failed; using optimistic job", {
+      error: getJobsAsyncErrorMessage(failureFromCause(listExit.cause)),
+      jobId: job.id,
+    })
+  );
+  await replaceJobsListState(expectedOrganizationId, {
+    items: upsertJobListItem(jobsFromCollection(store), job),
+    nextCursor: currentNextCursor,
   });
 }
 
-function refreshJobOptionsWhen(get: Atom.FnContext, shouldRefresh: boolean) {
-  return shouldRefresh
-    ? getBrowserJobOptions().pipe(
-        Effect.tap((options) =>
-          Effect.sync(() => {
-            const currentOptionsState = get(jobsOptionsStateAtom);
+async function refreshJobOptionsStateWhen({
+  expectedOrganizationId,
+  organizationIdRef,
+  replaceJobsOptionsState,
+  shouldRefresh,
+}: {
+  readonly expectedOrganizationId: OrganizationId;
+  readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+  readonly replaceJobsOptionsState: (
+    organizationId: OrganizationId,
+    response: JobOptionsResponse
+  ) => void;
+  readonly shouldRefresh: boolean;
+}) {
+  if (!shouldRefresh) {
+    return;
+  }
 
-            get.set(jobsOptionsStateAtom, {
-              data: options,
-              organizationId: currentOptionsState.organizationId,
-            });
-          })
-        ),
-        Effect.catchAll((error) =>
-          Effect.logWarning("Jobs options refresh failed after job create", {
-            error: error.message,
-          })
-        )
-      )
-    : Effect.void;
+  const optionsExit = await Effect.runPromiseExit(getBrowserJobOptions());
+
+  if (organizationIdRef.current !== expectedOrganizationId) {
+    return;
+  }
+
+  if (Exit.isSuccess(optionsExit)) {
+    await replaceJobsOptionsState(expectedOrganizationId, optionsExit.value);
+    return;
+  }
+
+  await Effect.runPromise(
+    Effect.logWarning("Jobs options refresh failed after job create", {
+      error: getJobsAsyncErrorMessage(failureFromCause(optionsExit.cause)),
+    })
+  );
 }
 
 function isActiveStatus(status: JobStatus) {
@@ -486,4 +1020,40 @@ export function upsertJobListItem(
   job: JobListItemSource
 ) {
   return [toJobListItem(job), ...items.filter((item) => item.id !== job.id)];
+}
+
+function jobsListStateKey(state: JobsListState) {
+  return JSON.stringify(state);
+}
+
+function jobsOptionsStateKey(state: JobsOptionsState) {
+  return JSON.stringify(state);
+}
+
+function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {
+  const failure = Cause.failureOption(cause);
+
+  return Option.isSome(failure) ? failure.value : Cause.squash(cause);
+}
+
+function withoutVirtualProps<Item extends object>(item: Item): Item {
+  const {
+    $collectionId: _collectionId,
+    $key: _key,
+    $origin: _origin,
+    $synced: _synced,
+    ...data
+  } = item as Item & {
+    readonly $collectionId?: unknown;
+    readonly $key?: unknown;
+    readonly $origin?: unknown;
+    readonly $synced?: unknown;
+  };
+
+  void _collectionId;
+  void _key;
+  void _origin;
+  void _synced;
+
+  return data as Item;
 }

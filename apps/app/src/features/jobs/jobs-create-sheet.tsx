@@ -21,7 +21,6 @@ import type {
   SiteIdType,
   SiteOption,
 } from "@ceird/sites-core";
-import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   Add01Icon,
   AlertSquareIcon,
@@ -93,9 +92,11 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
 import {
-  createJobMutationAtom,
   deriveContactsForSite,
-  jobsOptionsStateAtom,
+  getJobsAsyncErrorMessage,
+  isJobsAsyncFailure,
+  useCreateJobMutation,
+  useJobsOptions,
 } from "./jobs-state";
 
 const INLINE_CREATE_VALUE = "__create__";
@@ -176,11 +177,8 @@ const defaultFormState: JobsCreateFormState = {
 // react-doctor-disable-next-line
 export function JobsCreateSheet() {
   const navigate = useNavigate({ from: "/jobs/new" });
-  const options = useAtomValue(jobsOptionsStateAtom).data;
-  const createJob = useAtomSet(createJobMutationAtom, {
-    mode: "promiseExit",
-  });
-  const createResult = useAtomValue(createJobMutationAtom);
+  const options = useJobsOptions();
+  const [createResult, createJob] = useCreateJobMutation();
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
     {}
   );
@@ -379,17 +377,16 @@ export function JobsCreateSheet() {
         onSubmit={(event) => submitClientForm(event, handleSubmit)}
       >
         <div className="flex flex-1 flex-col overflow-y-auto px-5 py-2 sm:px-6">
-          {Result.builder(createResult)
-            .onError((error) =>
-              isHandledCreateJobError(error) ? null : (
-                <Alert variant="destructive">
-                  <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-                  <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              )
-            )
-            .render()}
+          {isJobsAsyncFailure(createResult) &&
+          !isHandledCreateJobError(createResult.error) ? (
+            <Alert variant="destructive">
+              <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+              <AlertTitle>We couldn&apos;t create that job.</AlertTitle>
+              <AlertDescription>
+                {getJobsAsyncErrorMessage(createResult.error)}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           <CreateFormSection title="Job details">
             <FieldGroup className="gap-3">

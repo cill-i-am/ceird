@@ -183,12 +183,20 @@ Effect HTTP client for server reads and writes. The current migrated slices are:
 - `features/sites/sites-state.ts`, which keeps route-loaded site options and
   per-site comments in scoped local collections, including optimistic comment
   state and organization-switch guards for in-flight mutations.
+- `features/jobs/jobs-state.ts`, which now owns the jobs route list, options,
+  create mutation state, and create notice through a route-scoped TanStack DB
+  provider. The provider preserves loader first-paint data, refreshes the
+  collection after creates, falls back to an optimistic list item if that
+  refresh fails, and validates collection writes with `JobListItemSchema`.
 
 Existing Effect Atom state in jobs should move to the same pattern as that
 slice is touched, rather than adding new atom surfaces. Jobs route filters are
-already local React state derived through a pure selector; keep new route-local
-UI state out of the remaining jobs atoms while the list/options/detail stores
-are migrated.
+local React state derived through a pure selector, and the jobs page/create
+flow reads the provider API rather than atom values. The remaining jobs atom
+surface is a temporary detail-sheet compatibility island: route content seeds
+the legacy list/options atoms and `JobsStateAtomBridge` keeps provider-owned
+list/options state synchronized with detail atom mutations until detail state
+is migrated too.
 
 ## Hotkeys
 

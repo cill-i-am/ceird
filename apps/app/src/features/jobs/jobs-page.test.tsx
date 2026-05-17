@@ -8,7 +8,6 @@ import type {
 } from "@ceird/jobs-core";
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
-import { RegistryProvider } from "@effect-atom/atom-react";
 import {
   fireEvent,
   render,
@@ -23,12 +22,7 @@ import type { ComponentProps } from "react";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { JobsPage } from "./jobs-page";
-import {
-  jobsListStateAtom,
-  jobsOptionsStateAtom,
-  seedJobsListState,
-  seedJobsOptionsState,
-} from "./jobs-state";
+import { JobsStateProvider } from "./jobs-state";
 import type { JobsViewer } from "./jobs-viewer";
 
 const memberOneId = "11111111-1111-4111-8111-111111111111" as UserIdType;
@@ -1032,17 +1026,10 @@ function renderJobsPage(options?: {
 }) {
   setViewportWidth(options?.viewportWidth ?? 1440);
   const page = (
-    <RegistryProvider
-      initialValues={[
-        [
-          jobsListStateAtom,
-          seedJobsListState(organizationId, options?.list ?? initialList),
-        ],
-        [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(organizationId, initialOptions),
-        ],
-      ]}
+    <JobsStateProvider
+      activeOrganizationId={organizationId}
+      list={options?.list ?? initialList}
+      options={initialOptions}
     >
       <JobsPage
         viewer={
@@ -1052,7 +1039,7 @@ function renderJobsPage(options?: {
           }
         }
       />
-    </RegistryProvider>
+    </JobsStateProvider>
   );
 
   return render(
