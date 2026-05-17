@@ -28,7 +28,6 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Data Layer Architecture](architecture/data-layer.md)
 - [Jobs V1 Spec](architecture/jobs-v1-spec.md)
 - [Organization Next Steps](architecture/organization-next-steps.md)
-- [Agent MCP API](architecture/agent-mcp-api.md)
 - [Cloudflare Alchemy Mainline CI](architecture/cloudflare-ci.md)
 - [Legacy MVP Field Audit](architecture/legacy-mvp-field-audit.md)
 
