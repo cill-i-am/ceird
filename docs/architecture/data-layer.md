@@ -78,22 +78,28 @@ Queues, Workers Scripts, Workers Routes, and DNS for `ceird.app`.
 
 The current stack uses Alchemy v2 native Neon and Cloudflare Hyperdrive
 resources. API runtime code still uses the existing Effect 3 database layer and
-checked-in Drizzle SQL migrations; migration generation with `Drizzle.Schema`
-is deferred until the API Drizzle/Effect upgrade. Keep the root Alchemy stack on
-Alchemy's Effect 4 line, but keep API/app/shared runtime code on the current
-Effect 3 package line until the Effect platform/sql/rpc packages used by the
-API have a compatible v4 migration target. As of this migration pass,
-`@effect/platform`, `@effect/sql`, and `@effect/rpc` still publish the stable
-APIs this app uses against Effect 3 peers, while Alchemy v2 uses Effect 4
-unstable modules internally.
+checked-in Drizzle SQL migrations. The infra package models that deploy-time
+handoff as a `NeonMigrationSource` with the current
+`checked-in-drizzle-sql` variant, so the later move to Alchemy `Drizzle.Schema`
+is isolated to the Neon migration source boundary instead of being spread
+through the stack.
+
+Migration generation with `Drizzle.Schema` is deferred until the API
+Drizzle/Effect upgrade. Keep the root Alchemy stack on Alchemy's Effect 4 line,
+but keep API/app/shared runtime code on the current Effect 3 package line until
+the Effect platform/sql/rpc packages used by the API have a compatible v4
+migration target. As of this migration pass, `@effect/platform`, `@effect/sql`,
+and `@effect/rpc` still publish the stable APIs this app uses against Effect 3
+peers, while Alchemy v2 uses Effect 4 unstable modules internally.
 
 The API Worker receives a `DATABASE` Hyperdrive binding and resolves the runtime
 Postgres URL from `env.DATABASE.connectionString`. Package-local Node runtimes
 still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
-resource applies the checked-in `apps/api/drizzle/*.sql` files before
-Hyperdrive and the API Worker are reconciled.
+resource resolves the configured `NeonMigrationSource` and applies the
+checked-in `apps/api/drizzle/*.sql` files before Hyperdrive and the API Worker
+are reconciled.
 
 ## Deferred Decisions
 

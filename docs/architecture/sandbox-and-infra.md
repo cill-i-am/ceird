@@ -88,8 +88,11 @@ geocoding credentials, observability logs, and traces.
 The app is configured with app/API origins, Cloudflare-specific Vite flags, and
 Cloudflare observability logs and traces.
 
-The native Neon branch resource applies the checked-in API SQL migrations before
-Hyperdrive reads the branch origin and before new API code is uploaded.
+The native Neon branch resource applies the configured `NeonMigrationSource`
+before Hyperdrive reads the branch origin and before new API code is uploaded.
+Today that source is the checked-in API SQL migration directory. When the API
+Drizzle and Effect packages move onto the Alchemy-compatible line, this boundary
+is where `Drizzle.Schema` should replace the checked-in SQL source.
 
 ## Infra Configuration
 
@@ -126,6 +129,9 @@ suffixes when needed.
 The parent stage creates a shared Neon project with an unmigrated `base`
 default branch and a protected `main` branch. Other stages reference the
 parent-stage project and create their own branch from `main`.
+The branch migration input is modeled in `packages/infra` as
+`NeonMigrationSource`; the current `checked-in-drizzle-sql` source resolves
+`CEIRD_NEON_MIGRATIONS_DIR` into the Alchemy Neon branch `migrationsDir`.
 
 ## Deployment Commands
 

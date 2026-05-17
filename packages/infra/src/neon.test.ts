@@ -13,7 +13,10 @@ describe("Neon Postgres layout", () => {
 
     expect(layout).toStrictEqual({
       branch: {
-        migrationsDir: apiMigrationsDir,
+        migrationSource: {
+          kind: "checked-in-drizzle-sql",
+          migrationsDir: apiMigrationsDir,
+        },
         name: "main",
         parentBranchName: undefined,
         protected: true,
@@ -39,7 +42,10 @@ describe("Neon Postgres layout", () => {
 
     expect(layout).toStrictEqual({
       branch: {
-        migrationsDir: apiMigrationsDir,
+        migrationSource: {
+          kind: "checked-in-drizzle-sql",
+          migrationsDir: apiMigrationsDir,
+        },
         name: "dev-cillian",
         parentBranchName: "main",
         protected: false,

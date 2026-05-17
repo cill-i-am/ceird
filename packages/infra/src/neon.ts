@@ -6,9 +6,16 @@ import * as Effect from "effect/Effect";
 import type { InfraStageConfig } from "./stages.ts";
 import { makeAlchemyStageIdentity, resourceName } from "./stages.ts";
 
+export interface CheckedInDrizzleSqlMigrationSource {
+  readonly kind: "checked-in-drizzle-sql";
+  readonly migrationsDir: string;
+}
+
+export type NeonMigrationSource = CheckedInDrizzleSqlMigrationSource;
+
 export interface NeonPostgresLayout {
   readonly branch: {
-    readonly migrationsDir: string;
+    readonly migrationSource: NeonMigrationSource;
     readonly name: string;
     readonly parentBranchName: string | undefined;
     readonly protected: boolean;
@@ -48,7 +55,10 @@ export function makeNeonPostgresLayout(
 
   return {
     branch: {
-      migrationsDir: config.neonMigrationsDir,
+      migrationSource: {
+        kind: "checked-in-drizzle-sql",
+        migrationsDir: config.neonMigrationsDir,
+      },
       name: identity.neonBranchName,
       parentBranchName: identity.isProduction
         ? undefined
@@ -92,7 +102,9 @@ export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
           });
 
     const branch = yield* Neon.Branch("PostgresBranch", {
-      migrationsDir: layout.branch.migrationsDir,
+      migrationsDir: resolveNeonMigrationSourceDir(
+        layout.branch.migrationSource
+      ),
       name: layout.branch.name,
       parentBranch:
         layout.branch.parentBranchName === undefined
@@ -110,3 +122,7 @@ export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
     } satisfies NeonPostgresResources;
   }
 );
+
+function resolveNeonMigrationSourceDir(source: NeonMigrationSource) {
+  return source.migrationsDir;
+}
