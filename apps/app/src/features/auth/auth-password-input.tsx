@@ -23,7 +23,7 @@ export function AuthPasswordInput({
   const label = isVisible ? "Hide password" : "Show password";
 
   return (
-    <InputGroup className="h-10 rounded-3xl bg-input/55">
+    <InputGroup className="h-10">
       <InputGroupInput
         type={isVisible ? "text" : "password"}
         className={cn("h-full", className)}
@@ -36,7 +36,7 @@ export function AuthPasswordInput({
           size="icon-sm"
           aria-label={label}
           aria-pressed={isVisible}
-          className="size-7 rounded-full text-muted-foreground hover:bg-background/70 hover:text-foreground"
+          className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsVisible((current) => !current)}
         >

@@ -59,13 +59,13 @@ components:
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.lg}"
     height: "36px"
     padding: "0 12px"
   button-secondary:
     backgroundColor: "{colors.secondary}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.lg}"
     height: "36px"
     padding: "0 12px"
   row-list:
@@ -187,7 +187,7 @@ Components should feel familiar, precise, and keyboard-capable. Use the existing
 
 ### Buttons
 
-- **Shape:** Pill-like, using `rounded-4xl` for primary command buttons and icon buttons.
+- **Shape:** Rectangular and precise, using 8px corners for standard command buttons and tighter 6px corners for icon-only controls. Use pill shapes only for badges, avatars, compact counters, and intentionally chip-like filters.
 - **Primary:** Work Blue background with light tinted foreground, compact heights from 32px to 40px.
 - **Hover / Focus:** Subtle background shift, visible border/ring focus treatment, and active press movement limited to `translate-y-px`.
 - **Secondary / Ghost / Outline:** Quiet tonal fills and transparent variants for toolbars, row actions, and menus.
@@ -207,7 +207,7 @@ Components should feel familiar, precise, and keyboard-capable. Use the existing
 
 ### Inputs / Fields
 
-- **Style:** 36px default height, tinted background, Hairline Steel border, 8px radius, compact text.
+- **Style:** 36px default height, background surface fill, Hairline Steel or input border, 8px radius, compact text. Native inputs, selects, command-select triggers, and field buttons should share this same geometry.
 - **Focus:** Border shifts to ring color with an accessible ring treatment. Focus must be obvious for keyboard workflows.
 - **Error / Disabled:** Error states use Fault Orange with text or icon context. Disabled states reduce opacity and remove pointer interaction.
 
@@ -217,7 +217,7 @@ Sidebar and top-header navigation should be predictable, compact, and role-aware
 
 ### Signature Component: Command Surface
 
-Command-K and route actions are product identity. Command rows should be fast to scan, grouped by scope, and paired with keycap hints where shortcuts exist. The command surface should feel like part of the workspace, not an add-on.
+Command-K and route actions are product identity. Command rows should be fast to scan, grouped by scope, and paired with keycap hints where shortcuts exist. Command menus should use compact 8px row corners inside a slightly larger overlay shell so they feel Linear-sharp rather than soft or decorative.
 
 ## 7. Do's and Don'ts
 

@@ -16,6 +16,7 @@ import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button } from "#/components/ui/button";
 import { FieldError } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { Select } from "#/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -399,10 +400,10 @@ function RateCardLineRow({
         htmlFor={kindId}
       >
         Kind
-        <select
+        <Select
           id={kindId}
           aria-label={`Kind for line ${lineNumber}`}
-          className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          className="text-sm"
           value={line.kind}
           onChange={(event) => {
             const kind = resolveRateCardLineKind(event.target.value);
@@ -422,7 +423,7 @@ function RateCardLineRow({
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label
         className="flex min-w-0 flex-col gap-1.5 text-sm font-medium"

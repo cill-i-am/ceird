@@ -268,8 +268,8 @@ function CommandSelectTrigger({
       ref={ref}
       type="button"
       className={cn(
-        buttonVariants({ variant: "outline" }),
-        "w-full justify-between font-normal",
+        buttonVariants({ variant: "field" }),
+        "w-full font-normal",
         className
       )}
       {...props}
@@ -422,7 +422,7 @@ function StaticCommandSelectOptions({
     return (
       <div
         className={cn(
-          "rounded-4xl bg-popover py-6 text-center text-sm text-muted-foreground",
+          "rounded-xl bg-popover py-6 text-center text-sm text-muted-foreground",
           className
         )}
       >
@@ -432,7 +432,7 @@ function StaticCommandSelectOptions({
   }
 
   return (
-    <div className={cn("rounded-4xl bg-popover", className)}>
+    <div className={cn("rounded-xl bg-popover", className)}>
       <div
         aria-label="Suggestions"
         className={cn(
@@ -462,7 +462,7 @@ function StaticCommandSelectOptions({
                     }
                     aria-selected={isSelected}
                     className={cn(
-                      "flex w-full cursor-default items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm font-medium outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
+                      "flex w-full cursor-default items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
                       isSelected
                         ? "bg-muted text-foreground"
                         : "text-foreground"

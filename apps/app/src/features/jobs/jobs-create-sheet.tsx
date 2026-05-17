@@ -100,8 +100,6 @@ import {
 
 const INLINE_CREATE_VALUE = "__create__";
 const NONE_VALUE = "__none__";
-const CREATE_JOB_FIELD_TRIGGER_CLASS_NAME =
-  "h-9 w-full rounded-3xl border-transparent bg-input/50 px-3 shadow-none hover:bg-input/60 aria-expanded:bg-input/60";
 
 const PRIORITY_OPTIONS: readonly {
   readonly icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
@@ -747,7 +745,6 @@ function LinearMetadataSelect({
         groups={groups}
         ariaLabel={label}
         ariaInvalid={errorText ? true : undefined}
-        className={CREATE_JOB_FIELD_TRIGGER_CLASS_NAME}
         prefix={<HugeiconsIcon icon={triggerIcon} strokeWidth={2} />}
         searchPlaceholder={searchPlaceholder}
         showGroupHeadings={showGroupHeadings}
@@ -818,9 +815,8 @@ function LinearContactSelect({
           aria-label="Contact"
           aria-invalid={errorText ? true : undefined}
           className={cn(
-            buttonVariants({ variant: "outline" }),
-            CREATE_JOB_FIELD_TRIGGER_CLASS_NAME,
-            "justify-between font-normal"
+            buttonVariants({ variant: "field" }),
+            "w-full font-normal"
           )}
         >
           <span className="flex min-w-0 items-center gap-1.5">
