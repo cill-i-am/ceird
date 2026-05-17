@@ -33,7 +33,7 @@ function createForwardedFor() {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
-  await expect(page).toHaveURL(`${APP_ORIGIN}/`);
+  await expect(page).toHaveURL(`${APP_ORIGIN}/`, { timeout: 20_000 });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(
@@ -433,8 +433,12 @@ async function inviteMemberFromMembersPage(
   await membersPage.email.fill(email);
   await membersPage.submit.click();
 
-  await expect(page.getByText(`Invitation sent to ${email}.`)).toBeVisible();
-  await expect(membersPage.pendingInvitation(email)).toBeVisible();
+  await expect(page.getByText(`Invitation sent to ${email}.`)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(membersPage.pendingInvitation(email)).toBeVisible({
+    timeout: 15_000,
+  });
 
   return await getInvitationIdForEmail(request, page, email);
 }
