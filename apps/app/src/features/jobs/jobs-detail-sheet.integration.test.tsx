@@ -12,7 +12,6 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { RegistryProvider, useAtomValue } from "@effect-atom/atom-react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -23,10 +22,9 @@ import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { JobsDetailSheet } from "./jobs-detail-sheet";
 import {
-  jobsListStateAtom,
-  jobsOptionsStateAtom,
-  seedJobsListState,
-  seedJobsOptionsState,
+  JobsStateProvider,
+  useJobsListState,
+  useJobsOptionsState,
 } from "./jobs-state";
 
 type EffectClientMock = (...args: unknown[]) => unknown;
@@ -692,78 +690,71 @@ function renderDetailSheet(
   } = {}
 ) {
   const content = (
-    <RegistryProvider
-      initialValues={[
-        [
-          jobsListStateAtom,
-          seedJobsListState(organizationId, {
-            items: [
-              {
-                assigneeId: actorUserId,
-                contactId,
-                createdAt: "2026-04-23T10:00:00.000Z",
-                externalReference: "PO-4471",
-                id: workItemId,
-                kind: "job",
-                labels: detail.job.labels,
-                priority: "medium",
-                siteId,
-                status: "in_progress",
-                title: "Inspect boiler",
-                updatedAt: "2026-04-23T12:00:00.000Z",
-              },
-            ],
-            nextCursor: undefined,
-          }),
+    <JobsStateProvider
+      activeOrganizationId={organizationId}
+      list={{
+        items: [
+          {
+            assigneeId: actorUserId,
+            contactId,
+            createdAt: "2026-04-23T10:00:00.000Z",
+            externalReference: "PO-4471",
+            id: workItemId,
+            kind: "job",
+            labels: detail.job.labels,
+            priority: "medium",
+            siteId,
+            status: "in_progress",
+            title: "Inspect boiler",
+            updatedAt: "2026-04-23T12:00:00.000Z",
+          },
         ],
-        [
-          jobsOptionsStateAtom,
-          seedJobsOptionsState(organizationId, {
-            contacts: [
-              {
-                email: "pat@example.com",
-                id: contactId,
-                name: "Pat Contact",
-                phone: "+353 87 765 4321",
-                siteIds: [siteId],
-              },
-            ],
-            labels: [buildLabel(urgentLabelId, "Urgent")],
-            members: [
-              {
-                id: actorUserId,
-                name: "Taylor Owner",
-              },
-            ],
-            serviceAreas: [
-              {
-                id: serviceAreaId,
-                name: "North",
-              },
-            ],
-            sites: [
-              {
-                accessNotes: "Use reception and the south gate.",
-                addressLine1: "1 Custom House Quay",
-                addressLine2: "North Dock",
-                county: "Dublin",
-                country: "IE",
-                eircode: "D01 X2X2",
-                geocodedAt: "2026-04-27T10:00:00.000Z",
-                geocodingProvider: "stub",
-                latitude: 53.3498,
-                id: siteId,
-                labels: [],
-                name: "Depot",
-                longitude: -6.2603,
-                serviceAreaId,
-                serviceAreaName: "North",
-                town: "Dublin",
-              },
-            ],
-          }),
+        nextCursor: undefined,
+      }}
+      options={{
+        contacts: [
+          {
+            email: "pat@example.com",
+            id: contactId,
+            name: "Pat Contact",
+            phone: "+353 87 765 4321",
+            siteIds: [siteId],
+          },
         ],
-      ]}
+        labels: [buildLabel(urgentLabelId, "Urgent")],
+        members: [
+          {
+            id: actorUserId,
+            name: "Taylor Owner",
+          },
+        ],
+        serviceAreas: [
+          {
+            id: serviceAreaId,
+            name: "North",
+          },
+        ],
+        sites: [
+          {
+            accessNotes: "Use reception and the south gate.",
+            addressLine1: "1 Custom House Quay",
+            addressLine2: "North Dock",
+            county: "Dublin",
+            country: "IE",
+            eircode: "D01 X2X2",
+            geocodedAt: "2026-04-27T10:00:00.000Z",
+            geocodingProvider: "stub",
+            latitude: 53.3498,
+            id: siteId,
+            labels: [],
+            name: "Depot",
+            longitude: -6.2603,
+            serviceAreaId,
+            serviceAreaName: "North",
+            town: "Dublin",
+          },
+        ],
+      }}
     >
       <JobsDetailSheet
         initialDetail={detail}
@@ -776,7 +767,7 @@ function renderDetailSheet(
       />
       <JobsListProbe />
       <JobsOptionsProbe />
-    </RegistryProvider>
+    </JobsStateProvider>
   );
 
   return render(
@@ -796,7 +787,7 @@ async function openJobDetailPanel(
 }
 
 function JobsListProbe() {
-  const listState = useAtomValue(jobsListStateAtom);
+  const listState = useJobsListState();
 
   return (
     <>
@@ -813,7 +804,7 @@ function JobsListProbe() {
 }
 
 function JobsOptionsProbe() {
-  const optionsState = useAtomValue(jobsOptionsStateAtom);
+  const optionsState = useJobsOptionsState();
 
   return (
     <output data-testid="option-labels">

@@ -15,9 +15,8 @@ import type {
   UserIdType,
 } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
-import type { LabelIdType } from "@ceird/labels-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
-import { Atom, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import {
   createCollection,
   localOnlyCollectionOptions,
@@ -28,6 +27,7 @@ import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
+import { upsertOrganizationLabel } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 type JobsStatusFilter = "active" | "all" | JobStatus;
@@ -123,15 +123,9 @@ interface JobsStateContextValue {
     response: JobOptionsResponse
   ) => void;
   readonly store: JobsStateStore;
+  readonly upsertJobOptionLabel: (label: Label) => void;
+  readonly upsertJobsListItem: (job: JobListItemSource) => Promise<void>;
 }
-
-const emptyJobOptions: JobOptionsResponse = {
-  contacts: [],
-  labels: [],
-  members: [],
-  serviceAreas: [],
-  sites: [],
-};
 
 const JobsStateContext = React.createContext<JobsStateContextValue | null>(
   null
@@ -158,17 +152,6 @@ export const defaultJobsListFilters: JobsListFilters = {
   status: "active",
 };
 
-export const jobsListStateAtom = Atom.make<JobsListState>({
-  items: [],
-  nextCursor: undefined,
-  organizationId: null,
-}).pipe(Atom.keepAlive);
-
-export const jobsOptionsStateAtom = Atom.make<JobsOptionsState>({
-  data: emptyJobOptions,
-  organizationId: null,
-}).pipe(Atom.keepAlive);
-
 export function buildJobsLookup(options: JobOptionsResponse) {
   return {
     contactById: new Map(
@@ -182,10 +165,6 @@ export function buildJobsLookup(options: JobOptionsResponse) {
     siteById: new Map(options.sites.map((site) => [site.id, site])),
   };
 }
-
-export const jobsLookupAtom = Atom.make((get) =>
-  buildJobsLookup(get(jobsOptionsStateAtom).data)
-).pipe(Atom.keepAlive);
 
 export function JobsStateProvider({
   activeOrganizationId,
@@ -336,6 +315,33 @@ export function JobsStateProvider({
     });
   }, []);
 
+  const upsertJobsListItem = React.useCallback(
+    async (job: JobListItemSource) => {
+      await replaceJobs(
+        store,
+        upsertJobListItem(jobsFromCollection(store), job)
+      );
+      dispatch({
+        nextCursor,
+        type: "replace-list-state",
+      });
+    },
+    [nextCursor, store]
+  );
+
+  const upsertJobOptionLabel = React.useCallback(
+    (label: Label) => {
+      dispatch({
+        options: {
+          ...state.options,
+          labels: upsertOrganizationLabel(state.options.labels, label),
+        },
+        type: "replace-options-state",
+      });
+    },
+    [state.options]
+  );
+
   const value = React.useMemo<JobsStateContextValue>(
     () => ({
       clearNotice,
@@ -348,6 +354,8 @@ export function JobsStateProvider({
       replaceJobsListState,
       replaceJobsOptionsState,
       store,
+      upsertJobOptionLabel,
+      upsertJobsListItem,
     }),
     [
       clearNotice,
@@ -360,85 +368,12 @@ export function JobsStateProvider({
       replaceJobsOptionsState,
       state.options,
       store,
+      upsertJobOptionLabel,
+      upsertJobsListItem,
     ]
   );
 
   return React.createElement(JobsStateContext.Provider, { value }, children);
-}
-
-export function JobsStateAtomBridge() {
-  const atomListState = useAtomValue(jobsListStateAtom);
-  const atomOptionsState = useAtomValue(jobsOptionsStateAtom);
-  const setAtomListState = useAtomSet(jobsListStateAtom);
-  const setAtomOptionsState = useAtomSet(jobsOptionsStateAtom);
-  const providerListState = useJobsListState();
-  const providerOptionsState = useJobsOptionsState();
-  const replaceJobsListState = useReplaceJobsListState();
-  const replaceJobsOptionsState = useReplaceJobsOptionsState();
-  const lastAtomListKeyRef = React.useRef("");
-  const lastProviderListKeyRef = React.useRef("");
-  const lastAtomOptionsKeyRef = React.useRef("");
-  const lastProviderOptionsKeyRef = React.useRef("");
-
-  React.useEffect(() => {
-    const key = jobsListStateKey(providerListState);
-
-    if (lastAtomListKeyRef.current === key) {
-      return;
-    }
-
-    lastProviderListKeyRef.current = key;
-    setAtomListState(providerListState);
-  }, [providerListState, setAtomListState]);
-
-  React.useEffect(() => {
-    const key = jobsOptionsStateKey(providerOptionsState);
-
-    if (lastAtomOptionsKeyRef.current === key) {
-      return;
-    }
-
-    lastProviderOptionsKeyRef.current = key;
-    setAtomOptionsState(providerOptionsState);
-  }, [providerOptionsState, setAtomOptionsState]);
-
-  React.useEffect(() => {
-    if (atomListState.organizationId === null) {
-      return;
-    }
-
-    const key = jobsListStateKey(atomListState);
-
-    if (lastProviderListKeyRef.current === key) {
-      return;
-    }
-
-    lastAtomListKeyRef.current = key;
-    void replaceJobsListState(atomListState.organizationId, {
-      items: atomListState.items,
-      nextCursor: atomListState.nextCursor,
-    });
-  }, [atomListState, replaceJobsListState]);
-
-  React.useEffect(() => {
-    if (atomOptionsState.organizationId === null) {
-      return;
-    }
-
-    const key = jobsOptionsStateKey(atomOptionsState);
-
-    if (lastProviderOptionsKeyRef.current === key) {
-      return;
-    }
-
-    lastAtomOptionsKeyRef.current = key;
-    void replaceJobsOptionsState(
-      atomOptionsState.organizationId,
-      atomOptionsState.data
-    );
-  }, [atomOptionsState, replaceJobsOptionsState]);
-
-  return null;
 }
 
 export function useJobsListState(): JobsListState {
@@ -501,6 +436,14 @@ export function useReplaceJobsOptionsState() {
   return useJobsStateContext().replaceJobsOptionsState;
 }
 
+export function useUpsertJobsListItem() {
+  return useJobsStateContext().upsertJobsListItem;
+}
+
+export function useUpsertJobOptionLabel() {
+  return useJobsStateContext().upsertJobOptionLabel;
+}
+
 export function isJobsAsyncFailure(result: JobsAsyncResult): boolean {
   return result.error !== null;
 }
@@ -523,27 +466,6 @@ export function filterVisibleJobs({
   return items.filter((item) =>
     matchesVisibleJob(item, filters, lookup, normalizedQuery)
   );
-}
-
-export function seedJobsListState(
-  organizationId: OrganizationId,
-  response: JobListResponse
-): JobsListState {
-  return {
-    items: response.items,
-    nextCursor: response.nextCursor,
-    organizationId,
-  };
-}
-
-export function seedJobsOptionsState(
-  organizationId: OrganizationId,
-  response: JobOptionsResponse
-): JobsOptionsState {
-  return {
-    data: response,
-    organizationId,
-  };
 }
 
 export function deriveContactsForSite(
@@ -822,7 +744,7 @@ async function refreshJobOptionsStateWhen({
   }
 
   if (Exit.isSuccess(optionsExit)) {
-    await replaceJobsOptionsState(expectedOrganizationId, optionsExit.value);
+    replaceJobsOptionsState(expectedOrganizationId, optionsExit.value);
     return;
   }
 
@@ -1020,14 +942,6 @@ export function upsertJobListItem(
   job: JobListItemSource
 ) {
   return [toJobListItem(job), ...items.filter((item) => item.id !== job.id)];
-}
-
-function jobsListStateKey(state: JobsListState) {
-  return JSON.stringify(state);
-}
-
-function jobsOptionsStateKey(state: JobsOptionsState) {
-  return JSON.stringify(state);
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {

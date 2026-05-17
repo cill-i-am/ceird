@@ -279,7 +279,7 @@ describe("jobs create sheet integration", () => {
   );
 
   it(
-    "renders the mutation error banner from the real atom result state",
+    "renders the mutation error banner from the real provider result state",
     {
       timeout: 10_000,
     },

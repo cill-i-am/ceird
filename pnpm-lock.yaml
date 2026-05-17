@@ -148,9 +148,6 @@ importers:
       '@ceird/sites-core':
         specifier: workspace:*
         version: link:../../packages/sites-core
-      '@effect-atom/atom-react':
-        specifier: ^0.5.0
-        version: 0.5.0(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)(react@19.2.5)(scheduler@0.27.0)
       '@effect/platform':
         specifier: ^0.96.1
         version: 0.96.1(effect@3.21.2)
@@ -1076,21 +1073,6 @@ packages:
     engines: {bun: '>=1', deno: '>=2.7.10', node: '>=16'}
     peerDependencies:
       '@noble/ciphers': ^1.0.0
-
-  '@effect-atom/atom-react@0.5.0':
-    resolution: {integrity: sha512-aFfjWi4rEJCqfM12Oi36/EKaDm/W6n4/N6yM5vL0t/QozKhJhK05rQL/GY4XMxlH2eqkQ4ih8jBQa3Yyp0Fiqw==}
-    peerDependencies:
-      effect: ^3.19
-      react: '>=18 <20'
-      scheduler: '*'
-
-  '@effect-atom/atom@0.5.3':
-    resolution: {integrity: sha512-TRZv/i+YT3TtnN0oFORJqXdxSs1fc7lrJlH+1xZvDFyjC9hgoVnrcKbeZsDFmr6r0wYRqVo7U3IftxiQNjpNZA==}
-    peerDependencies:
-      '@effect/experimental': ^0.58.0
-      '@effect/platform': ^0.94.2
-      '@effect/rpc': ^0.73.0
-      effect: ^3.19.15
 
   '@effect/ai@0.35.0':
     resolution: {integrity: sha512-VOYFBN/TpHC0sB5AhUGOEJzOTEnuo2bbDtQcDDsU7ffHaE8ZbqZj1CuSHgifbmqMaY9+xofsKMazQZ3jlZfPSw==}
@@ -7861,24 +7843,6 @@ snapshots:
   '@ecies/ciphers@0.2.6(@noble/ciphers@1.3.0)':
     dependencies:
       '@noble/ciphers': 1.3.0
-
-  '@effect-atom/atom-react@0.5.0(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)(react@19.2.5)(scheduler@0.27.0)':
-    dependencies:
-      '@effect-atom/atom': 0.5.3(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)
-      effect: 3.21.2
-      react: 19.2.5
-      scheduler: 0.27.0
-    transitivePeerDependencies:
-      - '@effect/experimental'
-      - '@effect/platform'
-      - '@effect/rpc'
-
-  '@effect-atom/atom@0.5.3(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)':
-    dependencies:
-      '@effect/experimental': 0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1)
-      '@effect/platform': 0.96.1(effect@3.21.2)
-      '@effect/rpc': 0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)
-      effect: 3.21.2
 
   '@effect/ai@0.35.0(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)(ioredis@5.10.1))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)':
     dependencies:

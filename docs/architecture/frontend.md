@@ -183,20 +183,21 @@ Effect HTTP client for server reads and writes. The current migrated slices are:
 - `features/sites/sites-state.ts`, which keeps route-loaded site options and
   per-site comments in scoped local collections, including optimistic comment
   state and organization-switch guards for in-flight mutations.
-- `features/jobs/jobs-state.ts`, which now owns the jobs route list, options,
-  create mutation state, and create notice through a route-scoped TanStack DB
-  provider. The provider preserves loader first-paint data, refreshes the
-  collection after creates, falls back to an optimistic list item if that
-  refresh fails, and validates collection writes with `JobListItemSchema`.
+- `features/jobs/jobs-state.ts`, which owns the jobs route list, options,
+  create mutation state, create notice, and list-item synchronization through a
+  route-scoped TanStack DB provider. The provider preserves loader first-paint
+  data, refreshes the collection after creates, falls back to an optimistic
+  list item if that refresh fails, and validates collection writes with
+  `JobListItemSchema`.
+- `features/jobs/jobs-detail-state.ts`, which owns detail-sheet aggregate state
+  and mutation feedback through a route-scoped React provider while continuing
+  to call the typed Effect HTTP client at the browser API boundary.
 
-Existing Effect Atom state in jobs should move to the same pattern as that
-slice is touched, rather than adding new atom surfaces. Jobs route filters are
-local React state derived through a pure selector, and the jobs page/create
-flow reads the provider API rather than atom values. The remaining jobs atom
-surface is a temporary detail-sheet compatibility island: route content seeds
-the legacy list/options atoms and `JobsStateAtomBridge` keeps provider-owned
-list/options state synchronized with detail atom mutations until detail state
-is migrated too.
+Jobs route filters are local React state derived through a pure selector, and
+the jobs page, create flow, and detail sheet read the provider APIs directly.
+Do not add new Effect Atom state in app feature code; new API-backed state
+should follow the TanStack DB/provider pattern unless a feature has a more
+specific architecture note.
 
 ## Hotkeys
 

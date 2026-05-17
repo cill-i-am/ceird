@@ -19,12 +19,6 @@ import { SiteId } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 /* oxlint-disable complexity */
 import {
-  Result,
-  useAtomInitialValues,
-  useAtomSet,
-  useAtomValue,
-} from "@effect-atom/atom-react";
-import {
   Add01Icon,
   ArrowDown01Icon,
   Briefcase01Icon,
@@ -97,24 +91,16 @@ import {
 import { JobsDetailLocation } from "./jobs-detail-location";
 import { DetailEmpty, DetailSection } from "./jobs-detail-section";
 import {
-  addJobCostLineMutationAtomFamily,
-  addJobCommentMutationAtomFamily,
-  addJobVisitMutationAtomFamily,
-  attachJobCollaboratorMutationAtomFamily,
-  assignJobLabelMutationAtomFamily,
-  createAndAssignJobLabelMutationAtomFamily,
-  detachJobCollaboratorMutationAtomFamily,
-  jobCollaboratorsStateAtomFamily,
-  jobDetailStateAtomFamily,
-  patchJobMutationAtomFamily,
-  refreshJobCollaboratorsAtomFamily,
-  removeJobLabelMutationAtomFamily,
-  reopenJobMutationAtomFamily,
-  transitionJobMutationAtomFamily,
-  updateJobCollaboratorMutationAtomFamily,
+  JobsDetailStateProvider,
+  useJobsDetailState,
 } from "./jobs-detail-state";
 import { getCurrentServerJobExternalMemberOptions } from "./jobs-server";
-import { jobsLookupAtom } from "./jobs-state";
+import {
+  getJobsAsyncErrorMessage,
+  isJobsAsyncFailure,
+  useJobsLookup,
+} from "./jobs-state";
+import type { JobsAsyncResult } from "./jobs-state";
 import {
   getAvailableJobTransitions,
   hasAssignedJobAccess,
@@ -167,121 +153,51 @@ export function JobsDetailSheet({
   initialDetail,
   viewer,
 }: JobsDetailSheetProps) {
+  return (
+    <JobsDetailStateProvider
+      key={initialDetail.job.id}
+      initialDetail={initialDetail}
+    >
+      <JobsDetailSheetContent viewer={viewer} />
+    </JobsDetailStateProvider>
+  );
+}
+
+function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   const navigate = useNavigate({ from: "/jobs/$jobId" });
-  const workItemId = initialDetail.job.id;
-
-  useAtomInitialValues([
-    [jobDetailStateAtomFamily(workItemId), initialDetail] as const,
-  ]);
-
-  const detailState = useAtomValue(jobDetailStateAtomFamily(workItemId));
-  const detail = detailState ?? initialDetail;
-  const collaborators = useAtomValue(
-    jobCollaboratorsStateAtomFamily(workItemId)
-  );
-  const lookup = useAtomValue(jobsLookupAtom);
-  const refreshCollaboratorsResult = useAtomValue(
-    refreshJobCollaboratorsAtomFamily(workItemId)
-  );
-  const attachCollaboratorResult = useAtomValue(
-    attachJobCollaboratorMutationAtomFamily(workItemId)
-  );
-  const updateCollaboratorResult = useAtomValue(
-    updateJobCollaboratorMutationAtomFamily(workItemId)
-  );
-  const detachCollaboratorResult = useAtomValue(
-    detachJobCollaboratorMutationAtomFamily(workItemId)
-  );
-  const transitionResult = useAtomValue(
-    transitionJobMutationAtomFamily(workItemId)
-  );
-  const reopenResult = useAtomValue(reopenJobMutationAtomFamily(workItemId));
-  const patchResult = useAtomValue(patchJobMutationAtomFamily(workItemId));
-  const commentResult = useAtomValue(
-    addJobCommentMutationAtomFamily(workItemId)
-  );
-  const visitResult = useAtomValue(addJobVisitMutationAtomFamily(workItemId));
-  const assignLabelResult = useAtomValue(
-    assignJobLabelMutationAtomFamily(workItemId)
-  );
-  const createAndAssignLabelResult = useAtomValue(
-    createAndAssignJobLabelMutationAtomFamily(workItemId)
-  );
-  const removeLabelResult = useAtomValue(
-    removeJobLabelMutationAtomFamily(workItemId)
-  );
-  const costLineResult = useAtomValue(
-    addJobCostLineMutationAtomFamily(workItemId)
-  );
-  const transitionJob = useAtomSet(
-    transitionJobMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const reopenJob = useAtomSet(reopenJobMutationAtomFamily(workItemId), {
-    mode: "promiseExit",
-  });
-  const patchJob = useAtomSet(patchJobMutationAtomFamily(workItemId), {
-    mode: "promiseExit",
-  });
-  const addJobComment = useAtomSet(
-    addJobCommentMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const addJobVisit = useAtomSet(addJobVisitMutationAtomFamily(workItemId), {
-    mode: "promiseExit",
-  });
-  const assignJobLabel = useAtomSet(
-    assignJobLabelMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const createAndAssignJobLabel = useAtomSet(
-    createAndAssignJobLabelMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const removeJobLabel = useAtomSet(
-    removeJobLabelMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const addJobCostLine = useAtomSet(
-    addJobCostLineMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const refreshCollaborators = useAtomSet(
-    refreshJobCollaboratorsAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const attachCollaborator = useAtomSet(
-    attachJobCollaboratorMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const updateCollaborator = useAtomSet(
-    updateJobCollaboratorMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
-  const detachCollaborator = useAtomSet(
-    detachJobCollaboratorMutationAtomFamily(workItemId),
-    {
-      mode: "promiseExit",
-    }
-  );
+  const {
+    addJobComment,
+    addJobCostLine,
+    addJobVisit,
+    assignJobLabel,
+    attachCollaborator,
+    collaborators,
+    createAndAssignJobLabel,
+    detachCollaborator,
+    detail,
+    patchJob,
+    refreshCollaborators,
+    removeJobLabel,
+    reopenJob,
+    results,
+    transitionJob,
+    updateCollaborator,
+  } = useJobsDetailState();
+  const workItemId = detail.job.id;
+  const lookup = useJobsLookup();
+  const refreshCollaboratorsResult = results.refreshCollaborators;
+  const attachCollaboratorResult = results.attachCollaborator;
+  const updateCollaboratorResult = results.updateCollaborator;
+  const detachCollaboratorResult = results.detachCollaborator;
+  const transitionResult = results.transition;
+  const reopenResult = results.reopen;
+  const patchResult = results.patch;
+  const commentResult = results.addComment;
+  const visitResult = results.addVisit;
+  const assignLabelResult = results.assignLabel;
+  const createAndAssignLabelResult = results.createAndAssignLabel;
+  const removeLabelResult = results.removeLabel;
+  const costLineResult = results.addCostLine;
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
     detail.job.assigneeId
@@ -2408,18 +2324,16 @@ function insertSortedExternalMember(
   ];
 }
 
-function renderMutationError(
-  result: Result.Result<unknown, { readonly message: string }>
-) {
-  return Result.builder(result)
-    .onError((error) => (
-      <Alert variant="destructive">
-        <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
-        <AlertTitle>That update didn&apos;t land.</AlertTitle>
-        <AlertDescription>{error.message}</AlertDescription>
-      </Alert>
-    ))
-    .render();
+function renderMutationError(result: JobsAsyncResult) {
+  return isJobsAsyncFailure(result) ? (
+    <Alert variant="destructive">
+      <HugeiconsIcon icon={Briefcase01Icon} strokeWidth={2} />
+      <AlertTitle>That update didn&apos;t land.</AlertTitle>
+      <AlertDescription>
+        {getJobsAsyncErrorMessage(result.error)}
+      </AlertDescription>
+    </Alert>
+  ) : null;
 }
 
 function getExitErrorMessage(exit: Exit.Exit<unknown, unknown>) {

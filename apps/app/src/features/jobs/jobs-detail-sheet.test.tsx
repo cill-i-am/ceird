@@ -2,6 +2,7 @@ import type {
   ActivityIdType,
   CommentIdType,
   ContactIdType,
+  JobCollaborator,
   JobCollaboratorIdType,
   JobDetailResponse,
   UserIdType,
@@ -25,12 +26,10 @@ import type { ComponentProps, ReactNode } from "react";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { JobsDetailSheet } from "./jobs-detail-sheet";
+import type { JobsAsyncResult } from "./jobs-state";
 import type { JobsViewer } from "./jobs-viewer";
 
 type AsyncMutationMock = (...args: unknown[]) => Promise<unknown>;
-type AtomSetterMock = (atom: unknown) => unknown;
-type AtomValueMock = (atom: unknown) => unknown;
-type InitialValuesMock = (values: (readonly [unknown, unknown])[]) => void;
 type NavigateMock = (...args: unknown[]) => unknown;
 type AppHotkeyMock = (...args: unknown[]) => void;
 
@@ -51,17 +50,13 @@ const {
   mockedGetExternalMemberOptions,
   mockedNavigate,
   mockedUseAppHotkey,
-  mockedUseAtomInitialValues,
-  mockedUseAtomSet,
-  mockedUseAtomValue,
+  mockedUseJobsDetailState,
   responsiveDrawerPropsRef,
 } = vi.hoisted(() => ({
   mockedGetExternalMemberOptions: vi.fn<() => Promise<unknown>>(),
   mockedNavigate: vi.fn<NavigateMock>(),
   mockedUseAppHotkey: vi.fn<AppHotkeyMock>(),
-  mockedUseAtomInitialValues: vi.fn<InitialValuesMock>(),
-  mockedUseAtomSet: vi.fn<AtomSetterMock>(),
-  mockedUseAtomValue: vi.fn<AtomValueMock>(),
+  mockedUseJobsDetailState: vi.fn<() => unknown>(),
   responsiveDrawerPropsRef: {
     current: null as null | {
       onAnimationEnd?: (open: boolean) => void;
@@ -69,10 +64,6 @@ const {
       open?: boolean;
     },
   },
-}));
-
-const { jobsLookupAtomToken } = vi.hoisted(() => ({
-  jobsLookupAtomToken: "jobsLookupAtom",
 }));
 
 const mockedTransitionJob = vi.fn<AsyncMutationMock>();
@@ -89,30 +80,11 @@ const mockedRefreshCollaborators = vi.fn<AsyncMutationMock>();
 const mockedAddCostLine = vi.fn<AsyncMutationMock>();
 const mockedUpdateCollaborator = vi.fn<AsyncMutationMock>();
 let lookupSiteById: Map<SiteIdType, SiteOption>;
-let collaboratorState: readonly ReturnType<typeof buildCollaborator>[];
+let collaboratorState: readonly JobCollaborator[];
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockedNavigate,
 }));
-
-vi.mock(import("@effect-atom/atom-react"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    Result: {
-      builder: () => ({
-        onError: () => ({
-          render: () => null,
-        }),
-        render: () => null,
-      }),
-    } as never,
-    useAtomInitialValues: mockedUseAtomInitialValues as never,
-    useAtomSet: mockedUseAtomSet as never,
-    useAtomValue: mockedUseAtomValue as never,
-  };
-});
 
 vi.mock("@hugeicons/react", () => ({
   HugeiconsIcon: (({ icon }: { icon?: unknown }) => (
@@ -338,30 +310,53 @@ vi.mock("./jobs-server", () => ({
 }));
 
 vi.mock("./jobs-detail-state", () => ({
-  addJobCostLineMutationAtomFamily: (id: string) => `cost:${id}`,
-  addJobCommentMutationAtomFamily: (id: string) => `comment:${id}`,
-  addJobVisitMutationAtomFamily: (id: string) => `visit:${id}`,
-  attachJobCollaboratorMutationAtomFamily: (id: string) =>
-    `attach-collaborator:${id}`,
-  assignJobLabelMutationAtomFamily: (id: string) => `assign-label:${id}`,
-  createAndAssignJobLabelMutationAtomFamily: (id: string) =>
-    `create-assign-label:${id}`,
-  detachJobCollaboratorMutationAtomFamily: (id: string) =>
-    `detach-collaborator:${id}`,
-  jobCollaboratorsStateAtomFamily: (id: string) => `collaborators:${id}`,
-  jobDetailStateAtomFamily: (id: string) => `detail:${id}`,
-  patchJobMutationAtomFamily: (id: string) => `patch:${id}`,
-  refreshJobCollaboratorsAtomFamily: (id: string) =>
-    `refresh-collaborators:${id}`,
-  removeJobLabelMutationAtomFamily: (id: string) => `remove-label:${id}`,
-  reopenJobMutationAtomFamily: (id: string) => `reopen:${id}`,
-  transitionJobMutationAtomFamily: (id: string) => `transition:${id}`,
-  updateJobCollaboratorMutationAtomFamily: (id: string) =>
-    `update-collaborator:${id}`,
+  JobsDetailStateProvider: ({
+    children,
+  }: {
+    readonly children?: ReactNode;
+  }) => <>{children}</>,
+  useJobsDetailState: mockedUseJobsDetailState,
 }));
 
 vi.mock("./jobs-state", () => ({
-  jobsLookupAtom: jobsLookupAtomToken,
+  getJobsAsyncErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : "Something went wrong.",
+  isJobsAsyncFailure: (result: JobsAsyncResult) => result.error !== null,
+  useJobsLookup: () => ({
+    contactById: new Map(),
+    labelById: new Map([
+      [
+        urgentLabelId,
+        {
+          createdAt: "2026-04-23T09:00:00.000Z",
+          id: urgentLabelId,
+          name: "Urgent callout",
+          updatedAt: "2026-04-23T09:00:00.000Z",
+        },
+      ],
+      [
+        accessLabelId,
+        {
+          createdAt: "2026-04-23T09:05:00.000Z",
+          id: accessLabelId,
+          name: "Access",
+          updatedAt: "2026-04-23T09:05:00.000Z",
+        },
+      ],
+      [
+        waitingLabelId,
+        {
+          createdAt: "2026-04-23T09:10:00.000Z",
+          id: waitingLabelId,
+          name: "Waiting on PO",
+          updatedAt: "2026-04-23T09:10:00.000Z",
+        },
+      ],
+    ]),
+    memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
+    serviceAreaById: new Map(),
+    siteById: lookupSiteById,
+  }),
 }));
 
 vi.mock("#/features/sites/site-location-map-preview-canvas", () => ({
@@ -377,7 +372,7 @@ describe("jobs detail sheet", () => {
     responsiveDrawerPropsRef.current = null;
 
     mockedNavigate.mockReset();
-    mockedUseAtomInitialValues.mockReset();
+    mockedUseJobsDetailState.mockReset();
     mockedAttachCollaborator.mockReset();
     mockedTransitionJob.mockReset();
     mockedDetachCollaborator.mockReset();
@@ -406,160 +401,6 @@ describe("jobs detail sheet", () => {
           name: "Job Requester",
         },
       ],
-    });
-
-    mockedUseAtomValue.mockImplementation((atom: unknown) => {
-      if (atom === `detail:${workItemId}`) {
-        return null;
-      }
-
-      if (atom === `collaborators:${workItemId}`) {
-        return collaboratorState;
-      }
-
-      if (atom === `refresh-collaborators:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `attach-collaborator:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `update-collaborator:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `detach-collaborator:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `transition:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `reopen:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `comment:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `visit:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `cost:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === `patch:${workItemId}`) {
-        return { waiting: false };
-      }
-      if (atom === `assign-label:${workItemId}`) {
-        return { waiting: false };
-      }
-      if (atom === `create-assign-label:${workItemId}`) {
-        return { waiting: false };
-      }
-      if (atom === `remove-label:${workItemId}`) {
-        return { waiting: false };
-      }
-
-      if (atom === jobsLookupAtomToken) {
-        return {
-          contactById: new Map(),
-          labelById: new Map([
-            [
-              urgentLabelId,
-              {
-                createdAt: "2026-04-23T09:00:00.000Z",
-                id: urgentLabelId,
-                name: "Urgent callout",
-                updatedAt: "2026-04-23T09:00:00.000Z",
-              },
-            ],
-            [
-              accessLabelId,
-              {
-                createdAt: "2026-04-23T09:05:00.000Z",
-                id: accessLabelId,
-                name: "Access",
-                updatedAt: "2026-04-23T09:05:00.000Z",
-              },
-            ],
-            [
-              waitingLabelId,
-              {
-                createdAt: "2026-04-23T09:10:00.000Z",
-                id: waitingLabelId,
-                name: "Waiting on PO",
-                updatedAt: "2026-04-23T09:10:00.000Z",
-              },
-            ],
-          ]),
-          memberById: new Map([[actorUserId, { name: "Taylor Owner" }]]),
-          serviceAreaById: new Map(),
-          siteById: lookupSiteById,
-        };
-      }
-
-      return null;
-    });
-
-    mockedUseAtomSet.mockImplementation((atom: unknown) => {
-      if (atom === `refresh-collaborators:${workItemId}`) {
-        return mockedRefreshCollaborators;
-      }
-
-      if (atom === `attach-collaborator:${workItemId}`) {
-        return mockedAttachCollaborator;
-      }
-
-      if (atom === `update-collaborator:${workItemId}`) {
-        return mockedUpdateCollaborator;
-      }
-
-      if (atom === `detach-collaborator:${workItemId}`) {
-        return mockedDetachCollaborator;
-      }
-
-      if (atom === `transition:${workItemId}`) {
-        return mockedTransitionJob;
-      }
-
-      if (atom === `reopen:${workItemId}`) {
-        return mockedReopenJob;
-      }
-
-      if (atom === `patch:${workItemId}`) {
-        return mockedPatchJob;
-      }
-
-      if (atom === `comment:${workItemId}`) {
-        return mockedAddComment;
-      }
-
-      if (atom === `visit:${workItemId}`) {
-        return mockedAddVisit;
-      }
-      if (atom === `assign-label:${workItemId}`) {
-        return mockedAssignLabel;
-      }
-
-      if (atom === `create-assign-label:${workItemId}`) {
-        return mockedCreateAndAssignLabel;
-      }
-
-      if (atom === `remove-label:${workItemId}`) {
-        return mockedRemoveLabel;
-      }
-
-      if (atom === `cost:${workItemId}`) {
-        return mockedAddCostLine;
-      }
-
-      return vi.fn<NavigateMock>();
     });
   });
 
@@ -717,9 +558,6 @@ describe("jobs detail sheet", () => {
         "href",
         "https://www.google.com/maps/search/?api=1&query=53.3498%2C-6.2603"
       );
-      expect(mockedUseAtomInitialValues).toHaveBeenCalledWith([
-        [`detail:${workItemId}`, buildDetail()],
-      ]);
     }
   );
 
@@ -1701,11 +1539,57 @@ function buildLabel(id: LabelIdType, name: string) {
   };
 }
 
+function buildIdleMutationResults() {
+  const idleResult = {
+    error: null,
+    waiting: false,
+  } satisfies JobsAsyncResult;
+
+  return {
+    addComment: idleResult,
+    addCostLine: idleResult,
+    addVisit: idleResult,
+    assignLabel: idleResult,
+    attachCollaborator: idleResult,
+    createAndAssignLabel: idleResult,
+    detachCollaborator: idleResult,
+    patch: idleResult,
+    refreshCollaborators: idleResult,
+    removeLabel: idleResult,
+    reopen: idleResult,
+    transition: idleResult,
+    updateCollaborator: idleResult,
+  };
+}
+
+function buildJobsDetailState(detail: JobDetailResponse) {
+  return {
+    addJobComment: mockedAddComment,
+    addJobCostLine: mockedAddCostLine,
+    addJobVisit: mockedAddVisit,
+    assignJobLabel: mockedAssignLabel,
+    attachCollaborator: mockedAttachCollaborator,
+    collaborators: collaboratorState,
+    createAndAssignJobLabel: mockedCreateAndAssignLabel,
+    detachCollaborator: mockedDetachCollaborator,
+    detail,
+    patchJob: mockedPatchJob,
+    refreshCollaborators: mockedRefreshCollaborators,
+    removeJobLabel: mockedRemoveLabel,
+    reopenJob: mockedReopenJob,
+    results: buildIdleMutationResults(),
+    transitionJob: mockedTransitionJob,
+    updateCollaborator: mockedUpdateCollaborator,
+  };
+}
+
 function renderDetailSheet(
   initialDetail: ReturnType<typeof buildDetail>,
   viewer?: JobsViewer,
   options?: { readonly withCommandBar?: boolean }
 ) {
+  mockedUseJobsDetailState.mockReturnValue(buildJobsDetailState(initialDetail));
+
   const sheet = (
     <JobsDetailSheet
       initialDetail={initialDetail}

@@ -1,5 +1,4 @@
 "use client";
-import type { OrganizationId } from "@ceird/identity-core";
 import type {
   AddJobCommentInput,
   AddJobCommentResponse,
@@ -20,258 +19,627 @@ import type {
   UpdateJobCollaboratorInput,
   WorkItemIdType,
 } from "@ceird/jobs-core";
-import type { CreateLabelInput, Label, LabelIdType } from "@ceird/labels-core";
+import type { CreateLabelInput, LabelIdType } from "@ceird/labels-core";
 /* oxlint-disable unicorn/no-array-sort */
-import { Atom } from "@effect-atom/atom-react";
-import { Effect, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
+import { use } from "react";
+import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
-import {
-  createBrowserLabel,
-  upsertOrganizationLabel,
-} from "#/features/labels/labels-state";
+import { createBrowserLabel } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 import {
-  jobsListStateAtom,
-  jobsOptionsStateAtom,
-  upsertJobListItem,
+  getJobsAsyncErrorMessage,
+  useUpsertJobOptionLabel,
+  useUpsertJobsListItem,
 } from "./jobs-state";
+import type { JobsAsyncResult } from "./jobs-state";
 
-export const jobDetailStateAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) => {
-    void workItemId;
+type JobsDetailMutationKey =
+  | "addCostLine"
+  | "addComment"
+  | "addVisit"
+  | "assignLabel"
+  | "attachCollaborator"
+  | "createAndAssignLabel"
+  | "detachCollaborator"
+  | "patch"
+  | "refreshCollaborators"
+  | "removeLabel"
+  | "reopen"
+  | "transition"
+  | "updateCollaborator";
 
-    return Atom.make<JobDetailResponse | null>(null);
-  }
-);
+type JobsDetailMutationResults = Readonly<
+  Record<JobsDetailMutationKey, JobsAsyncResult>
+>;
 
-export const jobCollaboratorsStateAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) => {
-    void workItemId;
+interface JobsDetailState {
+  readonly collaborators: readonly JobCollaborator[];
+  readonly detail: JobDetailResponse;
+  readonly results: JobsDetailMutationResults;
+}
 
-    return Atom.make<readonly JobCollaborator[]>([]);
-  }
-);
+type JobsDetailStateAction =
+  | {
+      readonly detail: JobDetailResponse;
+      readonly type: "set-detail";
+    }
+  | {
+      readonly job: Job;
+      readonly type: "set-detail-job";
+    }
+  | {
+      readonly collaborator: JobCollaborator;
+      readonly type: "upsert-collaborator";
+    }
+  | {
+      readonly collaboratorId: JobCollaboratorIdType;
+      readonly type: "remove-collaborator";
+    }
+  | {
+      readonly collaborators: readonly JobCollaborator[];
+      readonly type: "set-collaborators";
+    }
+  | {
+      readonly comment: AddJobCommentResponse;
+      readonly type: "append-comment";
+    }
+  | {
+      readonly type: "insert-visit";
+      readonly visit: AddJobVisitResponse;
+    }
+  | {
+      readonly costLine: AddJobCostLineResponse;
+      readonly type: "insert-cost-line";
+    }
+  | {
+      readonly key: JobsDetailMutationKey;
+      readonly result: JobsAsyncResult;
+      readonly type: "set-result";
+    };
 
-export const refreshJobCollaboratorsAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, readonly JobCollaborator[]>((_, get) =>
-      listBrowserJobCollaborators(workItemId).pipe(
-        Effect.tap((response) =>
-          Effect.sync(() => {
-            get.set(
-              jobCollaboratorsStateAtomFamily(workItemId),
-              response.collaborators
-            );
-          })
+export interface JobsDetailStateContextValue {
+  readonly addJobComment: (
+    input: AddJobCommentInput
+  ) => Promise<Exit.Exit<AddJobCommentResponse, AppApiError>>;
+  readonly addJobCostLine: (
+    input: AddJobCostLineInput
+  ) => Promise<Exit.Exit<AddJobCostLineResponse, AppApiError>>;
+  readonly addJobVisit: (
+    input: AddJobVisitInput
+  ) => Promise<Exit.Exit<AddJobVisitResponse, AppApiError>>;
+  readonly assignJobLabel: (
+    input: AssignJobLabelInput
+  ) => Promise<Exit.Exit<JobDetailResponse, AppApiError>>;
+  readonly attachCollaborator: (
+    input: AttachJobCollaboratorInput
+  ) => Promise<Exit.Exit<JobCollaborator, AppApiError>>;
+  readonly collaborators: readonly JobCollaborator[];
+  readonly createAndAssignJobLabel: (
+    input: CreateLabelInput
+  ) => Promise<Exit.Exit<JobDetailResponse, AppApiError>>;
+  readonly detachCollaborator: (
+    collaboratorId: JobCollaboratorIdType
+  ) => Promise<Exit.Exit<JobCollaborator, AppApiError>>;
+  readonly detail: JobDetailResponse;
+  readonly patchJob: (
+    input: PatchJobInput
+  ) => Promise<Exit.Exit<PatchJobResponse, AppApiError>>;
+  readonly refreshCollaborators: () => Promise<
+    Exit.Exit<readonly JobCollaborator[], AppApiError>
+  >;
+  readonly removeJobLabel: (
+    labelId: LabelIdType
+  ) => Promise<Exit.Exit<JobDetailResponse, AppApiError>>;
+  readonly reopenJob: () => Promise<
+    Exit.Exit<JobDetailResponse["job"], AppApiError>
+  >;
+  readonly results: JobsDetailMutationResults;
+  readonly transitionJob: (
+    input: TransitionJobInput
+  ) => Promise<Exit.Exit<TransitionJobResponse, AppApiError>>;
+  readonly updateCollaborator: (input: {
+    readonly collaboratorId: JobCollaboratorIdType;
+    readonly input: UpdateJobCollaboratorInput;
+  }) => Promise<Exit.Exit<JobCollaborator, AppApiError>>;
+}
+
+const JobsDetailStateContext =
+  React.createContext<JobsDetailStateContextValue | null>(null);
+
+const idleJobsDetailAsyncResult: JobsAsyncResult = {
+  error: null,
+  waiting: false,
+};
+
+const waitingJobsDetailAsyncResult: JobsAsyncResult = {
+  error: null,
+  waiting: true,
+};
+
+const initialJobsDetailMutationResults: JobsDetailMutationResults = {
+  addComment: idleJobsDetailAsyncResult,
+  addCostLine: idleJobsDetailAsyncResult,
+  addVisit: idleJobsDetailAsyncResult,
+  assignLabel: idleJobsDetailAsyncResult,
+  attachCollaborator: idleJobsDetailAsyncResult,
+  createAndAssignLabel: idleJobsDetailAsyncResult,
+  detachCollaborator: idleJobsDetailAsyncResult,
+  patch: idleJobsDetailAsyncResult,
+  refreshCollaborators: idleJobsDetailAsyncResult,
+  removeLabel: idleJobsDetailAsyncResult,
+  reopen: idleJobsDetailAsyncResult,
+  transition: idleJobsDetailAsyncResult,
+  updateCollaborator: idleJobsDetailAsyncResult,
+};
+
+export function JobsDetailStateProvider({
+  children,
+  initialDetail,
+}: {
+  readonly children: React.ReactNode;
+  readonly initialDetail: JobDetailResponse;
+}) {
+  const workItemId = initialDetail.job.id;
+  const upsertJobsListItem = useUpsertJobsListItem();
+  const upsertJobOptionLabel = useUpsertJobOptionLabel();
+  const [state, dispatch] = React.useReducer(jobsDetailStateReducer, {
+    collaborators: [],
+    detail: initialDetail,
+    results: initialJobsDetailMutationResults,
+  } satisfies JobsDetailState);
+  const detailRef = React.useRef(state.detail);
+
+  React.useEffect(() => {
+    detailRef.current = state.detail;
+  }, [state.detail]);
+
+  React.useEffect(() => {
+    dispatch({
+      detail: initialDetail,
+      type: "set-detail",
+    });
+  }, [initialDetail]);
+
+  const refreshDetailIfPossible = React.useCallback(async () => {
+    const exit = await Effect.runPromiseExit(getBrowserJobDetail(workItemId));
+
+    if (Exit.isSuccess(exit)) {
+      detailRef.current = exit.value;
+      dispatch({
+        detail: exit.value,
+        type: "set-detail",
+      });
+      return;
+    }
+
+    await Effect.runPromise(
+      Effect.logWarning("Job detail refresh failed; keeping optimistic state", {
+        error: getJobsAsyncErrorMessage(failureFromCause(exit.cause)),
+        workItemId,
+      })
+    );
+  }, [workItemId]);
+
+  const syncChangedJob = React.useCallback(
+    async (job: Job) => {
+      detailRef.current = updateJobDetailJob(detailRef.current, job);
+      dispatch({
+        job,
+        type: "set-detail-job",
+      });
+      await upsertJobsListItem(job);
+      await refreshDetailIfPossible();
+    },
+    [refreshDetailIfPossible, upsertJobsListItem]
+  );
+
+  const syncChangedJobDetail = React.useCallback(
+    async (detail: JobDetailResponse) => {
+      detailRef.current = detail;
+      dispatch({
+        detail,
+        type: "set-detail",
+      });
+      await upsertJobsListItem(detail.job);
+    },
+    [upsertJobsListItem]
+  );
+
+  const runMutation = React.useCallback(
+    <Success>(
+      key: JobsDetailMutationKey,
+      effect: Effect.Effect<Success, AppApiError>,
+      onSuccess: (value: Success) => Promise<void> | void
+    ) =>
+      runTrackedJobsDetailOperation(
+        effect,
+        (result) =>
+          dispatch({
+            key,
+            result,
+            type: "set-result",
+          }),
+        onSuccess
+      ),
+    []
+  );
+
+  const refreshCollaborators = React.useCallback(
+    () =>
+      runMutation(
+        "refreshCollaborators",
+        listBrowserJobCollaborators(workItemId).pipe(
+          Effect.map((response) => response.collaborators)
         ),
-        Effect.map((response) => response.collaborators)
-      )
-    )
-);
+        (collaborators) => {
+          dispatch({
+            collaborators,
+            type: "set-collaborators",
+          });
+        }
+      ),
+    [runMutation, workItemId]
+  );
 
-export const transitionJobMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, TransitionJobResponse, TransitionJobInput>(
-      (input, get) =>
+  const transitionJob = React.useCallback(
+    (input: TransitionJobInput) =>
+      runMutation(
+        "transition",
         withMinimumMutationPendingDurationEffect(
           transitionBrowserJob(workItemId, input)
-        ).pipe(Effect.tap((job) => syncChangedJob(get, workItemId, job)))
-    )
-);
+        ),
+        syncChangedJob
+      ),
+    [runMutation, syncChangedJob, workItemId]
+  );
 
-export const reopenJobMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse["job"]>((_, get) =>
-      withMinimumMutationPendingDurationEffect(
-        reopenBrowserJob(workItemId)
-      ).pipe(Effect.tap((job) => syncChangedJob(get, workItemId, job)))
-    )
-);
+  const reopenJob = React.useCallback(
+    () =>
+      runMutation(
+        "reopen",
+        withMinimumMutationPendingDurationEffect(reopenBrowserJob(workItemId)),
+        syncChangedJob
+      ),
+    [runMutation, syncChangedJob, workItemId]
+  );
 
-export const patchJobMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, PatchJobResponse, PatchJobInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
-        patchBrowserJob(workItemId, input)
-      ).pipe(Effect.tap((job) => syncChangedJob(get, workItemId, job)))
-    )
-);
+  const patchJob = React.useCallback(
+    (input: PatchJobInput) =>
+      runMutation(
+        "patch",
+        withMinimumMutationPendingDurationEffect(
+          patchBrowserJob(workItemId, input)
+        ),
+        syncChangedJob
+      ),
+    [runMutation, syncChangedJob, workItemId]
+  );
 
-export const addJobCommentMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, AddJobCommentResponse, AddJobCommentInput>(
-      (input, get) =>
+  const addJobComment = React.useCallback(
+    (input: AddJobCommentInput) =>
+      runMutation(
+        "addComment",
         withMinimumMutationPendingDurationEffect(
           addBrowserJobComment(workItemId, input)
-        ).pipe(
-          Effect.tap((comment) =>
-            Effect.gen(function* () {
-              yield* Effect.sync(() => {
-                appendJobComment(get, workItemId, comment);
-              });
+        ),
+        async (comment) => {
+          detailRef.current = appendJobComment(detailRef.current, comment);
+          dispatch({
+            comment,
+            type: "append-comment",
+          });
+          await refreshDetailIfPossible();
+        }
+      ),
+    [refreshDetailIfPossible, runMutation, workItemId]
+  );
 
-              yield* refreshJobDetailIfPossible(get, workItemId);
-            })
-          )
-        )
-    )
-);
+  const addJobVisit = React.useCallback(
+    (input: AddJobVisitInput) =>
+      runMutation(
+        "addVisit",
+        withMinimumMutationPendingDurationEffect(
+          addBrowserJobVisit(workItemId, input)
+        ),
+        async (visit) => {
+          detailRef.current = insertJobVisit(detailRef.current, visit);
+          dispatch({
+            type: "insert-visit",
+            visit,
+          });
+          await refreshDetailIfPossible();
+        }
+      ),
+    [refreshDetailIfPossible, runMutation, workItemId]
+  );
 
-export const addJobVisitMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, AddJobVisitResponse, AddJobVisitInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
-        addBrowserJobVisit(workItemId, input)
-      ).pipe(
-        Effect.tap((visit) =>
-          Effect.gen(function* () {
-            yield* Effect.sync(() => {
-              insertJobVisit(get, workItemId, visit);
-            });
-
-            yield* refreshJobDetailIfPossible(get, workItemId);
-          })
-        )
-      )
-    )
-);
-
-export const assignJobLabelMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse, AssignJobLabelInput>((input, get) =>
-      withMinimumMutationPendingDurationEffect(
-        assignBrowserJobLabel(workItemId, input)
-      ).pipe(
-        Effect.tap((detail) =>
-          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
-        )
-      )
-    )
-);
-
-export const addJobCostLineMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, AddJobCostLineResponse, AddJobCostLineInput>(
-      (input, get) =>
+  const addJobCostLine = React.useCallback(
+    (input: AddJobCostLineInput) =>
+      runMutation(
+        "addCostLine",
         withMinimumMutationPendingDurationEffect(
           addBrowserJobCostLine(workItemId, input)
-        ).pipe(
-          Effect.tap((costLine) =>
-            Effect.gen(function* () {
-              yield* Effect.sync(() => {
-                insertJobCostLine(get, workItemId, costLine);
-              });
+        ),
+        async (costLine) => {
+          detailRef.current = insertJobCostLine(detailRef.current, costLine);
+          dispatch({
+            costLine,
+            type: "insert-cost-line",
+          });
+          await refreshDetailIfPossible();
+        }
+      ),
+    [refreshDetailIfPossible, runMutation, workItemId]
+  );
 
-              yield* refreshJobDetailIfPossible(get, workItemId);
-            })
-          )
-        )
-    )
-);
-
-export const attachJobCollaboratorMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobCollaborator, AttachJobCollaboratorInput>(
-      (input, get) =>
+  const assignJobLabel = React.useCallback(
+    (input: AssignJobLabelInput) =>
+      runMutation(
+        "assignLabel",
         withMinimumMutationPendingDurationEffect(
-          attachBrowserJobCollaborator(workItemId, input)
-        ).pipe(
-          Effect.tap((collaborator) =>
-            Effect.sync(() =>
-              upsertJobCollaborator(get, workItemId, collaborator)
+          assignBrowserJobLabel(workItemId, input)
+        ),
+        syncChangedJobDetail
+      ),
+    [runMutation, syncChangedJobDetail, workItemId]
+  );
+
+  const createAndAssignJobLabel = React.useCallback(
+    (input: CreateLabelInput) =>
+      runMutation(
+        "createAndAssignLabel",
+        withMinimumMutationPendingDurationEffect(
+          createBrowserLabel(input).pipe(
+            Effect.tap((label) =>
+              Effect.sync(() => {
+                upsertJobOptionLabel(label);
+              })
+            ),
+            Effect.flatMap((label) =>
+              assignBrowserJobLabel(workItemId, { labelId: label.id })
             )
           )
-        )
-    )
-);
+        ),
+        syncChangedJobDetail
+      ),
+    [runMutation, syncChangedJobDetail, upsertJobOptionLabel, workItemId]
+  );
 
-export const updateJobCollaboratorMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<
-      AppApiError,
-      JobCollaborator,
-      {
-        readonly collaboratorId: JobCollaboratorIdType;
-        readonly input: UpdateJobCollaboratorInput;
-      }
-    >(({ collaboratorId, input }, get) =>
-      withMinimumMutationPendingDurationEffect(
-        updateBrowserJobCollaborator(workItemId, collaboratorId, input)
-      ).pipe(
-        Effect.tap((collaborator) =>
-          Effect.sync(() =>
-            upsertJobCollaborator(get, workItemId, collaborator)
-          )
-        )
-      )
-    )
-);
+  const removeJobLabel = React.useCallback(
+    (labelId: LabelIdType) =>
+      runMutation(
+        "removeLabel",
+        withMinimumMutationPendingDurationEffect(
+          removeBrowserJobLabel(workItemId, labelId)
+        ),
+        syncChangedJobDetail
+      ),
+    [runMutation, syncChangedJobDetail, workItemId]
+  );
 
-export const detachJobCollaboratorMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobCollaborator, JobCollaboratorIdType>(
-      (collaboratorId, get) =>
+  const attachCollaborator = React.useCallback(
+    (input: AttachJobCollaboratorInput) =>
+      runMutation(
+        "attachCollaborator",
+        withMinimumMutationPendingDurationEffect(
+          attachBrowserJobCollaborator(workItemId, input)
+        ),
+        (collaborator) => {
+          dispatch({
+            collaborator,
+            type: "upsert-collaborator",
+          });
+        }
+      ),
+    [runMutation, workItemId]
+  );
+
+  const updateCollaborator = React.useCallback(
+    ({
+      collaboratorId,
+      input,
+    }: {
+      readonly collaboratorId: JobCollaboratorIdType;
+      readonly input: UpdateJobCollaboratorInput;
+    }) =>
+      runMutation(
+        "updateCollaborator",
+        withMinimumMutationPendingDurationEffect(
+          updateBrowserJobCollaborator(workItemId, collaboratorId, input)
+        ),
+        (collaborator) => {
+          dispatch({
+            collaborator,
+            type: "upsert-collaborator",
+          });
+        }
+      ),
+    [runMutation, workItemId]
+  );
+
+  const detachCollaborator = React.useCallback(
+    (collaboratorId: JobCollaboratorIdType) =>
+      runMutation(
+        "detachCollaborator",
         withMinimumMutationPendingDurationEffect(
           detachBrowserJobCollaborator(workItemId, collaboratorId)
-        ).pipe(
-          Effect.tap((collaborator) =>
-            Effect.sync(() => {
-              const current = get(jobCollaboratorsStateAtomFamily(workItemId));
+        ),
+        (collaborator) => {
+          dispatch({
+            collaboratorId: collaborator.id,
+            type: "remove-collaborator",
+          });
+        }
+      ),
+    [runMutation, workItemId]
+  );
 
-              get.set(
-                jobCollaboratorsStateAtomFamily(workItemId),
-                current.filter((item) => item.id !== collaborator.id)
-              );
-            })
-          )
-        )
-    )
-);
+  const value = React.useMemo<JobsDetailStateContextValue>(
+    () => ({
+      addJobComment,
+      addJobCostLine,
+      addJobVisit,
+      assignJobLabel,
+      attachCollaborator,
+      collaborators: state.collaborators,
+      createAndAssignJobLabel,
+      detachCollaborator,
+      detail: state.detail,
+      patchJob,
+      refreshCollaborators,
+      removeJobLabel,
+      reopenJob,
+      results: state.results,
+      transitionJob,
+      updateCollaborator,
+    }),
+    [
+      addJobComment,
+      addJobCostLine,
+      addJobVisit,
+      assignJobLabel,
+      attachCollaborator,
+      createAndAssignJobLabel,
+      detachCollaborator,
+      patchJob,
+      refreshCollaborators,
+      removeJobLabel,
+      reopenJob,
+      state.collaborators,
+      state.detail,
+      state.results,
+      transitionJob,
+      updateCollaborator,
+    ]
+  );
 
-export const createAndAssignJobLabelMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse, CreateLabelInput>((input, get) => {
-      const expectedJobsOptionsOrganizationId =
-        get(jobsOptionsStateAtom).organizationId;
+  return React.createElement(
+    JobsDetailStateContext.Provider,
+    { value },
+    children
+  );
+}
 
-      return withMinimumMutationPendingDurationEffect(
-        createBrowserLabel(input).pipe(
-          Effect.tap((label) =>
-            Effect.sync(() => {
-              upsertJobOptionLabel(
-                get,
-                label,
-                expectedJobsOptionsOrganizationId
-              );
-            })
-          ),
-          Effect.flatMap((label) =>
-            assignBrowserJobLabel(workItemId, { labelId: label.id })
-          )
-        )
-      ).pipe(
-        Effect.tap((detail) =>
-          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
-        )
-      );
-    })
-);
+export function useJobsDetailState() {
+  const context = use(JobsDetailStateContext);
 
-export const removeJobLabelMutationAtomFamily = Atom.family(
-  (workItemId: WorkItemIdType) =>
-    Atom.fn<AppApiError, JobDetailResponse, LabelIdType>((labelId, get) =>
-      withMinimumMutationPendingDurationEffect(
-        removeBrowserJobLabel(workItemId, labelId)
-      ).pipe(
-        Effect.tap((detail) =>
-          Effect.sync(() => syncChangedJobDetail(get, workItemId, detail))
-        )
-      )
-    )
-);
+  if (!context) {
+    throw new Error(
+      "Jobs detail state must be used inside JobsDetailStateProvider."
+    );
+  }
+
+  return context;
+}
+
+function jobsDetailStateReducer(
+  state: JobsDetailState,
+  action: JobsDetailStateAction
+): JobsDetailState {
+  switch (action.type) {
+    case "set-detail": {
+      return {
+        ...state,
+        detail: action.detail,
+      };
+    }
+
+    case "set-detail-job": {
+      return {
+        ...state,
+        detail: updateJobDetailJob(state.detail, action.job),
+      };
+    }
+
+    case "set-collaborators": {
+      return {
+        ...state,
+        collaborators: action.collaborators,
+      };
+    }
+
+    case "upsert-collaborator": {
+      return {
+        ...state,
+        collaborators: upsertJobCollaborator(
+          state.collaborators,
+          action.collaborator
+        ),
+      };
+    }
+
+    case "remove-collaborator": {
+      return {
+        ...state,
+        collaborators: state.collaborators.filter(
+          (collaborator) => collaborator.id !== action.collaboratorId
+        ),
+      };
+    }
+
+    case "append-comment": {
+      return {
+        ...state,
+        detail: appendJobComment(state.detail, action.comment),
+      };
+    }
+
+    case "insert-visit": {
+      return {
+        ...state,
+        detail: insertJobVisit(state.detail, action.visit),
+      };
+    }
+
+    case "insert-cost-line": {
+      return {
+        ...state,
+        detail: insertJobCostLine(state.detail, action.costLine),
+      };
+    }
+
+    case "set-result": {
+      return {
+        ...state,
+        results: {
+          ...state.results,
+          [action.key]: action.result,
+        },
+      };
+    }
+
+    default: {
+      const exhaustiveAction: never = action;
+      return exhaustiveAction;
+    }
+  }
+}
+
+async function runTrackedJobsDetailOperation<Success>(
+  effect: Effect.Effect<Success, AppApiError>,
+  setResult: (result: JobsAsyncResult) => void,
+  onSuccess: (value: Success) => Promise<void> | void
+): Promise<Exit.Exit<Success, AppApiError>> {
+  setResult(waitingJobsDetailAsyncResult);
+  const exit = await Effect.runPromiseExit(effect);
+
+  if (Exit.isSuccess(exit)) {
+    await onSuccess(exit.value);
+    setResult(idleJobsDetailAsyncResult);
+    return exit;
+  }
+
+  setResult({
+    error: failureFromCause(exit.cause),
+    waiting: false,
+  });
+
+  return exit;
+}
 
 function getBrowserJobDetail(workItemId: WorkItemIdType) {
   return runBrowserAppApiRequest("JobsBrowser.getJobDetail", (client) =>
@@ -419,158 +787,40 @@ function removeBrowserJobLabel(
   );
 }
 
-function syncChangedJob(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
-  job: Job
-) {
-  return Effect.gen(function* () {
-    yield* Effect.sync(() => {
-      updateJobDetailJob(get, workItemId, job);
-      updateJobsListJob(get, job);
-    });
-
-    yield* refreshJobDetailIfPossible(get, workItemId);
-  });
-}
-
 function updateJobDetailJob(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
+  currentDetail: JobDetailResponse,
   job: Job
-) {
-  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
-
-  if (currentDetail === null) {
-    return;
-  }
-
+): JobDetailResponse {
   const { contact, site, ...detailWithoutContactAndSite } = currentDetail;
   const matchingContact = contact?.id === job.contactId ? { contact } : {};
   const matchingSite = site?.id === job.siteId ? { site } : {};
 
-  get.set(jobDetailStateAtomFamily(workItemId), {
+  return {
     ...detailWithoutContactAndSite,
     ...matchingContact,
     ...matchingSite,
     job,
-  });
-}
-
-function updateJobsListJob(get: Atom.FnContext, job: Job) {
-  const currentListState = get(jobsListStateAtom);
-
-  get.set(jobsListStateAtom, {
-    items: upsertJobListItem(currentListState.items, job),
-    nextCursor: currentListState.nextCursor,
-    organizationId: currentListState.organizationId,
-  });
-}
-
-function syncChangedJobDetail(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
-  detail: JobDetailResponse
-) {
-  get.set(jobDetailStateAtomFamily(workItemId), detail);
-  updateJobsListJob(get, detail.job);
-}
-
-function upsertJobOptionLabel(
-  get: Atom.FnContext,
-  label: Label,
-  expectedOrganizationId?: OrganizationId | null
-) {
-  const currentOptionsState = get(jobsOptionsStateAtom);
-
-  if (
-    expectedOrganizationId !== undefined &&
-    currentOptionsState.organizationId !== expectedOrganizationId
-  ) {
-    return;
-  }
-
-  get.set(jobsOptionsStateAtom, {
-    data: {
-      ...currentOptionsState.data,
-      labels: upsertOrganizationLabel(currentOptionsState.data.labels, label),
-    },
-    organizationId: currentOptionsState.organizationId,
-  });
-}
-
-function upsertJobCollaborator(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
-  collaborator: JobCollaborator
-) {
-  const current = get(jobCollaboratorsStateAtomFamily(workItemId));
-
-  get.set(
-    jobCollaboratorsStateAtomFamily(workItemId),
-    [
-      collaborator,
-      ...current.filter((item) => item.id !== collaborator.id),
-    ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel))
-  );
-}
-
-function refreshJobDetailIfPossible(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType
-) {
-  return getBrowserJobDetail(workItemId).pipe(
-    Effect.tapError((error) =>
-      Effect.logWarning("Job detail refresh failed; keeping optimistic state", {
-        error: error.message,
-        workItemId,
-      })
-    ),
-    Effect.option,
-    Effect.tap((detail) =>
-      Option.match(detail, {
-        onNone: () => Effect.void,
-        onSome: (freshDetail) =>
-          Effect.sync(() => {
-            get.set(jobDetailStateAtomFamily(workItemId), freshDetail);
-          }),
-      })
-    )
-  );
+  };
 }
 
 function appendJobComment(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
+  currentDetail: JobDetailResponse,
   comment: AddJobCommentResponse
-) {
-  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
-
-  if (currentDetail === null) {
-    return;
-  }
-
-  get.set(jobDetailStateAtomFamily(workItemId), {
+): JobDetailResponse {
+  return {
     ...currentDetail,
     comments: [
       ...currentDetail.comments.filter((current) => current.id !== comment.id),
       comment,
     ],
-  });
+  };
 }
 
 function insertJobVisit(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
+  currentDetail: JobDetailResponse,
   visit: AddJobVisitResponse
-) {
-  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
-
-  if (currentDetail === null) {
-    return;
-  }
-
-  get.set(jobDetailStateAtomFamily(workItemId), {
+): JobDetailResponse {
+  return {
     ...currentDetail,
     visits: [
       visit,
@@ -582,20 +832,13 @@ function insertJobVisit(
         ? String(right.id).localeCompare(String(left.id))
         : dateOrder;
     }),
-  });
+  };
 }
 
 function insertJobCostLine(
-  get: Atom.FnContext,
-  workItemId: WorkItemIdType,
+  currentDetail: JobDetailResponse,
   costLine: AddJobCostLineResponse
-) {
-  const currentDetail = get(jobDetailStateAtomFamily(workItemId));
-
-  if (currentDetail === null) {
-    return;
-  }
-
+): JobDetailResponse {
   const currentCostLines = currentDetail.costs?.lines ?? [];
   const costLines = [
     costLine,
@@ -608,7 +851,7 @@ function insertJobCostLine(
       : createdAtOrder;
   });
 
-  get.set(jobDetailStateAtomFamily(workItemId), {
+  return {
     ...currentDetail,
     costs: {
       lines: costLines,
@@ -619,5 +862,21 @@ function insertJobCostLine(
         ),
       },
     },
-  });
+  };
+}
+
+function upsertJobCollaborator(
+  collaborators: readonly JobCollaborator[],
+  collaborator: JobCollaborator
+) {
+  return [
+    collaborator,
+    ...collaborators.filter((item) => item.id !== collaborator.id),
+  ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel));
+}
+
+function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {
+  const failure = Cause.failureOption(cause);
+
+  return Option.isSome(failure) ? failure.value : Cause.squash(cause);
 }

@@ -251,7 +251,7 @@ Recommended structure:
 - `apps/app/src/features/jobs`
   - typed app client service
   - route loaders / server-only query helpers
-  - effect-atom query and mutation atoms
+  - route-scoped TanStack DB/provider state
   - list/detail/create components
 
 This follows the current split already visible in `packages/identity-core`,
@@ -744,9 +744,9 @@ This should follow the same shape already used by the auth-related
 
 - server-only helpers forward the request cookie and resolve the API origin
 - route loaders call those helpers for first paint
-- browser-side atoms and mutations reuse the same typed contract
+- browser-side state modules and mutations reuse the same typed contract
 
-### SSR + Effect Atom Strategy
+### SSR + Client State Strategy
 
 TanStack Start loaders and `createServerOnlyFn` helpers remain the first source
 of truth for initial load.
@@ -756,48 +756,41 @@ Recommended pattern:
 1. Route loader runs on the server for the initial request.
 2. Loader calls a server-only helper that uses the typed jobs client.
 3. Loader returns decoded DTOs from the shared jobs schemas.
-4. The route component seeds slice-local effect-atom state from that loader
-   data.
-5. effect-atom then owns reactive list/detail state and mutations on the
-   client.
+4. The route component seeds route-scoped jobs providers from that loader data.
+5. TanStack DB local collections own reactive list state, while focused React
+   providers own aggregate detail/create mutation feedback and keep list state
+   synchronized after writes.
 
 This gives:
 
 - fast SSR first load
 - one canonical typed boundary
 - no duplicate client/server DTO definitions
-- no second fetching library required for the first slice
+- no second fetching library required for jobs app state
 
-### Atoms
+### Client State Modules
 
-Keep the initial atom surface small.
+Keep the client state surface small and route-scoped.
 
-Recommended atom set:
+Current recommended state modules:
 
-- `jobListStateAtom`
-- `jobDetailStateAtomFamily(jobId)`
-- `jobIntakeOptionsAtom`
-- `createJobMutationAtom`
-- `updateJobMutationAtom`
-- `transitionJobMutationAtom`
-- `reopenJobMutationAtom`
-- `addJobCommentMutationAtom`
-- `addJobVisitMutationAtom`
+- `jobs-state.ts`
+- `jobs-detail-state.ts`
 
 Notes:
 
-- `jobListStateAtom` is loader-seeded list state plus filters and refresh
-- `jobDetailStateAtomFamily(jobId)` is loader-seeded aggregate detail state,
-  including comments, activity, and visits
+- `jobs-state.ts` is loader-seeded list/options state plus create mutation,
+  refresh, and list-item synchronization
+- `jobs-detail-state.ts` is loader-seeded aggregate detail state, including
+  comments, activity, visits, collaborators, and detail mutations
 - separate query families for comments, activity, and visits are not required
   in v1 because detail returns one aggregate payload
-- define atoms outside components
-- prefer `Atom.keepAlive` for shared query state that should survive route
-  changes inside the org shell
-- prefer `Result.builder` for consistent loading and tagged-error rendering
-- prefer mutation `result.waiting` over local loading state
-- prefer shared reactivity-key invalidation so list/detail state stays coherent
-  after mutations
+- keep providers focused and colocated with the feature surface they serve
+- prefer provider-owned mutation result objects for consistent loading and
+  tagged-error rendering
+- prefer mutation `result.waiting` over scattered local loading state
+- keep list/detail state coherent after mutations by updating provider state
+  and refreshing the typed API payload when possible
 
 ### Initial Screens
 
@@ -962,7 +955,7 @@ Deliver:
 - sidebar `Jobs` entry
 - `/_app/_org/jobs` route
 - SSR loader for list page
-- effect-atom list/query state
+- TanStack DB/provider list and create state
 - create job flow
 - list/create UI tests
 
@@ -976,7 +969,7 @@ Why separate:
 Deliver:
 
 - `/_app/_org/jobs/$jobId` route
-- detail loader and atoms
+- detail loader and provider state
 - comment composer
 - activity rendering
 - visit logging
@@ -1007,6 +1000,6 @@ If there is pressure to simplify further, keep these defaults:
 - create a shared `jobs-core` package before writing handlers
 - use Effect-native services and repositories in the jobs domain
 - keep Drizzle responsible for schema and migrations
-- use TanStack Start loaders for first paint and effect-atom for ongoing query
-  and mutation state
+- use TanStack Start loaders for first paint and TanStack DB/provider state for
+  ongoing query and mutation state
 - ship intake first, then detail/execution, then polish
