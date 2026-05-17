@@ -11,6 +11,8 @@ and Alchemy infrastructure for Cloudflare and Neon.
 
 ## Quick Start
 
+Use Node.js 22 or newer, matching Alchemy v2's supported Node runtime.
+
 Install dependencies:
 
 ```bash

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 18 or newer.
+- Node.js 22 or newer.
 - pnpm 9.15.9, as declared by `packageManager` in `package.json`.
 - Cloudflare and Neon credentials for Alchemy-managed stages.
 

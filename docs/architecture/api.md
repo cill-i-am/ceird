@@ -24,6 +24,15 @@ System endpoints are defined in `src/server.ts`:
 - `GET /` returns a plain API marker string.
 - `GET /health` returns a stage-aware `HealthPayload`.
 
+The Cloudflare Worker runtime reads Cloudflare bindings from
+`src/platform/cloudflare/env.ts`. The API package owns the concrete runtime
+shape for `DATABASE`, `AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`, while
+`packages/infra/src/cloudflare-stack.ts` owns the Alchemy binding resources and
+derives its stack-side binding type with `Cloudflare.InferEnv`. Keep those
+binding names aligned when adding Worker resources; the API runtime should not
+import Alchemy or Effect 4 until the Worker entrypoint is migrated to an
+Alchemy Effect Worker.
+
 `src/server.ts` also intercepts MCP resource-server traffic before falling
 through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or
 to the path component of `MCP_RESOURCE_URL` when that environment variable is

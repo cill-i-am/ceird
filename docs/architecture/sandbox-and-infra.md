@@ -73,9 +73,16 @@ The stack provisions:
 The API Worker and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
 on Node.js compatibility APIs run consistently across both deployable surfaces.
-The API Worker is also configured with Better Auth env vars, database
-Hyperdrive binding, auth email queue binding, Google Maps geocoding credentials,
-observability logs, and traces.
+The API Worker declares its Cloudflare runtime resources through the
+`Cloudflare.Worker` `bindings` prop in `packages/infra/src/cloudflare-stack.ts`.
+`DATABASE` is the native Hyperdrive resource, `AUTH_EMAIL_QUEUE` is the native
+Queue resource, and `AUTH_EMAIL` is the Cloudflare Email Worker binding
+descriptor. The infra package derives `ApiWorkerBindingEnv` with
+`Cloudflare.InferEnv`, while the API runtime keeps its local Worker `env` shape
+in `apps/api/src/platform/cloudflare/env.ts` so Alchemy and Effect 4 stay inside
+the infra package until the Worker runtime itself is migrated.
+The API Worker is also configured with Better Auth env vars, Google Maps
+geocoding credentials, observability logs, and traces.
 The app is configured with app/API origins, Cloudflare-specific Vite flags, and
 Cloudflare observability logs and traces.
 

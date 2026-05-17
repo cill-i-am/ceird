@@ -38,7 +38,7 @@
     "@rollup/rollup-linux-x64-gnu": "4.60.1"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "packageManager": "pnpm@9.15.9",
   "pnpm": {

@@ -19,6 +19,37 @@ export interface CloudflareStackInput {
   readonly hyperdrive: Cloudflare.Hyperdrive;
 }
 
+// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
+export type ApiWorkerBindings = {
+  readonly AUTH_EMAIL: Cloudflare.SendEmail;
+  readonly AUTH_EMAIL_QUEUE: Cloudflare.Queue;
+  readonly DATABASE: Cloudflare.Hyperdrive;
+};
+
+export type ApiWorkerBindingEnv = Cloudflare.InferEnv<
+  Cloudflare.Worker<ApiWorkerBindings>
+>;
+
+type ApiWorkerBindingProps = {
+  readonly [BindingName in keyof ApiWorkerBindings]:
+    | ApiWorkerBindings[BindingName]
+    | Effect.Effect<ApiWorkerBindings[BindingName], never, never>;
+};
+
+export function makeApiWorkerBindings(input: {
+  readonly authEmailQueue: Cloudflare.Queue;
+  readonly config: InfraStageConfig;
+  readonly hyperdrive: Cloudflare.Hyperdrive;
+}) {
+  return {
+    AUTH_EMAIL: Cloudflare.SendEmail("AuthEmailBinding", {
+      allowedSenderAddresses: [Redacted.value(input.config.authEmailFrom)],
+    }),
+    AUTH_EMAIL_QUEUE: input.authEmailQueue,
+    DATABASE: input.hyperdrive,
+  } satisfies ApiWorkerBindingProps;
+}
+
 export function makeCloudflareHyperdrive(input: {
   readonly config: InfraStageConfig;
   readonly database: NeonPostgresResources;
@@ -61,9 +92,11 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     name: resourceName(input.config, "api"),
     main: "apps/api/src/worker.ts",
     compatibility: workerCompatibility,
-    bindings: {
-      AUTH_EMAIL_QUEUE: authEmailQueue,
-    },
+    bindings: makeApiWorkerBindings({
+      authEmailQueue,
+      config: input.config,
+      hyperdrive: input.hyperdrive,
+    }),
     env: {
       ALCHEMY_STAGE: input.config.stage,
       AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
@@ -86,26 +119,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       },
     },
     url: true,
-  });
-
-  yield* api.bind`PostgresHyperdrive`({
-    bindings: [
-      {
-        type: "hyperdrive",
-        name: "DATABASE",
-        id: input.hyperdrive.hyperdriveId,
-      },
-    ],
-  });
-
-  yield* api.bind`AuthEmailBinding`({
-    bindings: [
-      {
-        type: "send_email",
-        name: "AUTH_EMAIL",
-        allowedSenderAddresses: [Redacted.value(input.config.authEmailFrom)],
-      },
-    ],
   });
 
   yield* Cloudflare.QueueConsumer("AuthEmailConsumer", {
