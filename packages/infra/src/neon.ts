@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import type { Resource as AlchemyResource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -31,6 +34,26 @@ export interface NeonPostgresResources {
   readonly hyperdriveOriginCredentialFingerprint: string;
   readonly migrationRole: NeonPostgresConnectionRole;
 }
+
+type LegacyNeonProject = AlchemyResource<
+  "Neon.Project",
+  Record<string, unknown>,
+  Record<string, unknown>
+>;
+
+const LegacyNeonProject = Resource<LegacyNeonProject>("Neon.Project");
+
+export const LegacyNeonProjectStateProvider = () =>
+  Provider.succeed(LegacyNeonProject, {
+    create: ({ output }) => Effect.succeed(output ?? {}),
+    update: ({ output }) => Effect.succeed(output ?? {}),
+    delete: ({ session }) =>
+      Effect.sync(() => {
+        session.note(
+          "Removed legacy Neon.Project from Alchemy state without deleting the external Neon project."
+        );
+      }),
+  });
 
 export interface NeonPostgresConfigInput {
   readonly appDatabaseUrl: Redacted.Redacted<NeonDirectDatabaseUrl>;
