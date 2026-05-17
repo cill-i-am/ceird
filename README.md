@@ -7,7 +7,7 @@ generic project-management workflow.
 
 The codebase is a TypeScript monorepo built with pnpm and Turborepo. It contains
 a TanStack Start web app, an Effect HTTP API, shared runtime schema packages, a
-local sandbox CLI, and Alchemy infrastructure for Cloudflare and PlanetScale.
+local sandbox CLI, and Alchemy infrastructure for Cloudflare and Neon.
 
 ## Quick Start
 
@@ -48,7 +48,7 @@ pass `--name`.
 | `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                                 |
 | `packages/sandbox-core`  | Pure sandbox identity, naming, URL, runtime-spec, and registry/environment primitives.                                                     |
 | `packages/sandbox-cli`   | Effect CLI that boots, stops, inspects, and logs per-worktree Docker sandboxes.                                                            |
-| `packages/infra`         | Alchemy v2 infrastructure for Cloudflare Workers/Vite, Queues, Hyperdrive, and PlanetScale Postgres.                                       |
+| `packages/infra`         | Alchemy v2 infrastructure for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                                              |
 | `scripts`                | Root dev helpers, Portless/Vite wrappers, opensrc sync, and local environment scripts.                                                     |
 | `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                               |
 | `opensrc`                | Gitignored dependency source cache for local agent context.                                                                                |
@@ -109,7 +109,7 @@ API domains, services, repositories, schemas, and `HttpApi` contracts.
 
 Local multi-service development is handled by the sandbox packages. Production
 infrastructure is described in Alchemy and deploys Cloudflare Workers/Vite,
-Cloudflare Queues, Hyperdrive, and PlanetScale Postgres.
+Cloudflare Queues, Hyperdrive, and Neon Postgres.
 
 ## Quality Gates
 

@@ -25,6 +25,7 @@ export interface HyperdriveOrigin {
 export interface HyperdriveProps {
   readonly name: string;
   readonly origin: HyperdriveOrigin;
+  readonly originCredentialFingerprint: string;
   readonly originConnectionLimit?: number;
   readonly caching?: { readonly disabled: true };
   readonly delete?: boolean;

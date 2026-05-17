@@ -1,15 +1,16 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+
+import { NeonDirectDatabaseUrl } from "./neon.ts";
 
 export const InfraStage = Schema.Literals(["preview", "production"]);
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
 
 const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const planetScaleRegionSlugPattern = /^[a-z0-9-]+$/;
-const planetScaleClusterSizePattern = /^PS-(5|10|20|40|80|160|320)$/;
 
 export const DomainName = Schema.NonEmptyString.check(
   Schema.isPattern(domainNamePattern, {
@@ -36,26 +37,13 @@ export interface InfraStageConfig {
   readonly authEmailFromName: string;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveOriginConnectionLimit: number;
-  readonly planetScaleOrganization: string;
-  readonly planetScaleDatabaseName: string;
-  readonly planetScaleDefaultBranch: string;
-  readonly planetScaleRegionSlug: string;
-  readonly planetScaleClusterSize: string;
+  readonly neonDatabaseUrl: Redacted.Redacted<NeonDirectDatabaseUrl>;
+  readonly neonMigrationDatabaseUrl:
+    | Redacted.Redacted<NeonDirectDatabaseUrl>
+    | undefined;
   readonly applyMigrations: boolean;
 }
 
-const PlanetScaleRegionSlug = Schema.String.check(
-  Schema.isPattern(planetScaleRegionSlugPattern, {
-    message:
-      "CEIRD_PLANETSCALE_REGION must be a PlanetScale region slug such as eu-west or gcp-europe-west1",
-  })
-);
-const PlanetScaleClusterSize = Schema.String.check(
-  Schema.isPattern(planetScaleClusterSizePattern, {
-    message:
-      "CEIRD_PLANETSCALE_CLUSTER_SIZE must be a PlanetScale cluster size such as PS-5",
-  })
-);
 const AuthEmailFromAddress = Schema.String.check(
   Schema.isPattern(emailAddressPattern, {
     message: "AUTH_EMAIL_FROM must be a plain email address",
@@ -83,26 +71,6 @@ function decodeDomainName(value: string) {
   );
 }
 
-function normalizePlanetScaleRegionSlug(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizePlanetScaleClusterSize(value: string) {
-  return value.trim().replaceAll("_", "-").toUpperCase();
-}
-
-function decodePlanetScaleRegionSlug(value: string) {
-  return Schema.decodeUnknownEffect(PlanetScaleRegionSlug)(
-    normalizePlanetScaleRegionSlug(value)
-  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
-}
-
-function decodePlanetScaleClusterSize(value: string) {
-  return Schema.decodeUnknownEffect(PlanetScaleClusterSize)(
-    normalizePlanetScaleClusterSize(value)
-  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
-}
-
 function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
   return Schema.decodeUnknownEffect(AuthEmailFromAddress)(
     Redacted.value(value)
@@ -121,10 +89,23 @@ function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
   );
 }
 
+function trimRedactedConfigString(value: Redacted.Redacted<string>) {
+  return Redacted.make(Redacted.value(value).trim());
+}
+
 function decodeHyperdriveOriginConnectionLimit(value: number) {
   return Schema.decodeUnknownEffect(HyperdriveOriginConnectionLimit)(
     value
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeNeonDirectDatabaseUrl(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(NeonDirectDatabaseUrl)(
+    Redacted.value(value)
+  ).pipe(
+    Effect.map((neonDatabaseUrl) => Redacted.make(neonDatabaseUrl)),
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
 }
 
 export const loadInfraStageConfig = Effect.gen(function* () {
@@ -158,27 +139,27 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     Config.withDefault(5),
     Config.mapOrFail(decodeHyperdriveOriginConnectionLimit)
   );
-  const planetScaleOrganization = yield* Config.string(
-    "PLANETSCALE_ORGANIZATION"
+  const neonDatabaseUrl = yield* Config.redacted("NEON_DATABASE_URL").pipe(
+    Config.map(trimRedactedConfigString),
+    Config.mapOrFail(decodeNeonDirectDatabaseUrl)
   );
-  const planetScaleDatabaseName = yield* Config.string(
-    "CEIRD_PLANETSCALE_DATABASE_NAME"
-  ).pipe(Config.withDefault(`ceird-${stage}`));
-  const planetScaleDefaultBranch = yield* Config.string(
-    "CEIRD_PLANETSCALE_DEFAULT_BRANCH"
-  ).pipe(Config.withDefault("main"));
-  const planetScaleRegionSlug = yield* Config.string(
-    "CEIRD_PLANETSCALE_REGION"
-  ).pipe(
-    Config.withDefault("eu-west"),
-    Config.mapOrFail(decodePlanetScaleRegionSlug)
+  const neonMigrationDatabaseUrlOption = yield* Config.option(
+    Config.redacted("NEON_MIGRATION_DATABASE_URL").pipe(
+      Config.map(trimRedactedConfigString)
+    )
   );
-  const planetScaleClusterSize = yield* Config.string(
-    "CEIRD_PLANETSCALE_CLUSTER_SIZE"
-  ).pipe(
-    Config.withDefault("PS-5"),
-    Config.mapOrFail(decodePlanetScaleClusterSize)
-  );
+  const neonMigrationDatabaseUrl:
+    | Redacted.Redacted<NeonDirectDatabaseUrl>
+    | undefined = yield* Option.match(neonMigrationDatabaseUrlOption, {
+    onNone: () =>
+      Effect.succeed(Option.none<Redacted.Redacted<NeonDirectDatabaseUrl>>()),
+    onSome: (value) =>
+      Redacted.value(value).length > 0
+        ? decodeNeonDirectDatabaseUrl(value).pipe(Effect.map(Option.some))
+        : Effect.succeed(
+            Option.none<Redacted.Redacted<NeonDirectDatabaseUrl>>()
+          ),
+  }).pipe(Effect.map(Option.getOrUndefined));
   const applyMigrations = yield* Config.boolean("CEIRD_APPLY_MIGRATIONS").pipe(
     Config.withDefault(false)
   );
@@ -193,11 +174,8 @@ export const loadInfraStageConfig = Effect.gen(function* () {
     authEmailFromName,
     googleMapsApiKey,
     hyperdriveOriginConnectionLimit,
-    planetScaleOrganization,
-    planetScaleDatabaseName,
-    planetScaleDefaultBranch,
-    planetScaleRegionSlug,
-    planetScaleClusterSize,
+    neonDatabaseUrl,
+    neonMigrationDatabaseUrl,
     applyMigrations,
   } satisfies InfraStageConfig;
 });

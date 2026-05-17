@@ -32,13 +32,13 @@ MCP clients
 apps/api Cloudflare Worker
   -> Effect HTTP API and Effect AI MCP HTTP surfaces
   -> Hyperdrive
-  -> PlanetScale Postgres
+  -> Neon Postgres
   -> Cloudflare Queues for auth email
 ```
 
 Local sandbox development runs the app, API, and Postgres through Docker
 Compose. Production deployment uses Alchemy to provision Cloudflare and
-PlanetScale resources.
+connect to Neon Postgres.
 
 ## Monorepo Ownership
 

@@ -118,7 +118,7 @@ blank, the API uses deterministic development geocoding.
 
 The stack provisions:
 
-- PlanetScale Postgres database, roles, and connection URLs
+- Neon Postgres connectivity from deploy-time connection URL secrets
 - Cloudflare Hyperdrive for Postgres connectivity
 - Cloudflare Worker API from `apps/api/src/worker.ts`
 - Cloudflare Vite app from `apps/app`
@@ -143,26 +143,29 @@ budget is applied and before new API code is uploaded.
 
 ## Infra Configuration
 
-`packages/infra/src/stages.ts` loads deployment config from `CEIRD_*` names.
+`packages/infra/src/stages.ts` loads deployment config from environment
+variables.
 
-| Variable                                   | Default         | Purpose                                              |
-| ------------------------------------------ | --------------- | ---------------------------------------------------- |
-| `CEIRD_INFRA_STAGE`                        | `production`    | `preview` or `production`.                           |
-| `CEIRD_ZONE_NAME`                          | required        | Cloudflare zone.                                     |
-| `CEIRD_APP_HOSTNAME`                       | `app.<zone>`    | App hostname.                                        |
-| `CEIRD_API_HOSTNAME`                       | `api.<zone>`    | API hostname.                                        |
-| `AUTH_EMAIL_FROM`                          | required        | Sender email address.                                |
-| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`         | Sender display name.                                 |
-| `GOOGLE_MAPS_API_KEY`                      | required        | Google Maps Geocoding API key for deployed API.      |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`             | Soft maximum Hyperdrive origin database connections. |
-| `PLANETSCALE_ORGANIZATION`                 | required        | PlanetScale organization.                            |
-| `CEIRD_PLANETSCALE_DATABASE_NAME`          | `ceird-<stage>` | PlanetScale database name.                           |
-| `CEIRD_PLANETSCALE_DEFAULT_BRANCH`         | `main`          | PlanetScale branch.                                  |
-| `CEIRD_PLANETSCALE_REGION`                 | `eu-west`       | PlanetScale region slug.                             |
-| `CEIRD_PLANETSCALE_CLUSTER_SIZE`           | `PS-5`          | PlanetScale cluster size.                            |
-| `CEIRD_APPLY_MIGRATIONS`                   | `false`         | Run API Drizzle migrations during deploy.            |
+| Variable                                   | Default      | Purpose                                                |
+| ------------------------------------------ | ------------ | ------------------------------------------------------ |
+| `CEIRD_INFRA_STAGE`                        | `production` | `preview` or `production`.                             |
+| `CEIRD_ZONE_NAME`                          | required     | Cloudflare zone.                                       |
+| `CEIRD_APP_HOSTNAME`                       | `app.<zone>` | App hostname.                                          |
+| `CEIRD_API_HOSTNAME`                       | `api.<zone>` | API hostname.                                          |
+| `AUTH_EMAIL_FROM`                          | required     | Sender email address.                                  |
+| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`      | Sender display name.                                   |
+| `GOOGLE_MAPS_API_KEY`                      | required     | Google Maps Geocoding API key for deployed API.        |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`          | Soft maximum Hyperdrive origin database connections.   |
+| `NEON_DATABASE_URL`                        | required     | Direct Neon app database URL used by Hyperdrive.       |
+| `NEON_MIGRATION_DATABASE_URL`              | migrations   | Direct Neon database URL for a migration-capable role. |
+| `CEIRD_APPLY_MIGRATIONS`                   | `false`      | Run API Drizzle migrations during deploy.              |
 
 Resource names use `ceird-<stage>-<suffix>`.
+
+`NEON_MIGRATION_DATABASE_URL` is required when
+`CEIRD_APPLY_MIGRATIONS=true`. Both Neon URLs must be direct non-pooler URLs for
+the same Neon host and database and must include `sslmode=require` or
+`sslmode=verify-full`.
 
 ## Deployment Commands
 

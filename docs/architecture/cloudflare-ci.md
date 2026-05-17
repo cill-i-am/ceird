@@ -40,13 +40,13 @@ Secrets:
 - `AUTH_EMAIL_FROM`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
-- `PLANETSCALE_API_TOKEN`
-- `PLANETSCALE_API_TOKEN_ID`
+- `GOOGLE_MAPS_API_KEY`
+- `NEON_DATABASE_URL`
+- `NEON_MIGRATION_DATABASE_URL`
 
 Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
-- `PLANETSCALE_ORGANIZATION`
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
 store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
@@ -75,12 +75,22 @@ The workflow:
 Use the manual `apply_migrations=false` input only when intentionally testing a
 deploy that must not touch the database schema.
 
+`NEON_DATABASE_URL` is the least-privilege app role used by Hyperdrive.
+`NEON_MIGRATION_DATABASE_URL` must be a direct Neon URL for a migration-capable
+role on the same host and database whenever migrations are enabled. Mainline CI
+enables migrations by default, so the GitHub `main` environment should always
+define both Neon URL secrets.
+
+This branch removes the PlanetScale provider dependency. If the shared Alchemy
+state still contains old `PlanetScale.*` resources, clean them up or reset the
+state before the first Neon deploy; otherwise Alchemy may be unable to plan
+deletions for resource types whose provider is no longer installed.
+
 `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` defaults to `5`, Cloudflare
-Hyperdrive's minimum. Keep it below the PlanetScale branch connection ceiling so
-there is room for the direct migration role and provider control-plane checks.
-The migration resource retries transient PostgreSQL slot exhaustion, including
-PlanetScale's `remaining connection slots are reserved` error, but unrelated SQL
-or schema failures still fail immediately.
+Hyperdrive's minimum. Keep it below the Neon connection budget so there is room
+for direct migration connections and provider control-plane checks. The
+migration resource retries transient PostgreSQL slot exhaustion, but unrelated
+SQL or schema failures still fail immediately.
 
 The infra package currently pins `alchemy@2.0.0-beta.28` with a pnpm patch that
 adds missing `.js` extensions to the package's published CLI imports. Without

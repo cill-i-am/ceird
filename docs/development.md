@@ -217,7 +217,7 @@ pnpm infra:deploy
 pnpm infra:destroy
 ```
 
-The Alchemy stack provisions PlanetScale Postgres, Cloudflare Hyperdrive,
+The Alchemy stack provisions Cloudflare Hyperdrive backed by Neon Postgres,
 Cloudflare Workers/Vite, and auth email queues. Set
 `CEIRD_APPLY_MIGRATIONS=true` when the deploy should run Drizzle
 migrations through the infra stack.

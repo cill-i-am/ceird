@@ -11,7 +11,7 @@ and API workspaces.
 | `labels-core`   | Shared organization label IDs, schemas, DTOs, API group, and typed public errors.       |
 | `sandbox-core`  | Pure sandbox naming, identity, URL, environment, runtime-spec, and registry primitives. |
 | `sandbox-cli`   | Effect CLI for per-worktree app/API/Postgres sandboxes.                                 |
-| `infra`         | Alchemy infrastructure for Cloudflare, Hyperdrive, Queues, and PlanetScale.             |
+| `infra`         | Alchemy infrastructure for Cloudflare, Hyperdrive, Queues, and Neon Postgres.           |
 
 Package contracts are documented in
 [../docs/architecture/packages.md](../docs/architecture/packages.md).
