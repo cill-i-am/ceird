@@ -324,6 +324,52 @@ describe("accept invitation page", () => {
     ).toBeLessThan(mockedNavigate.mock.invocationCallOrder[0]);
   }, 10_000);
 
+  it("accepts with the public preview when authenticated invitation details are temporarily unavailable", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_123",
+        },
+        user: {
+          email: "member@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetInvitation.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Invitation lookup unavailable",
+        status: 500,
+        statusText: "Internal Server Error",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<AcceptInvitationPage invitationId="inv_123" />);
+
+    await expect(
+      screen.findByRole("heading", { name: "Join Acme Field Ops" })
+    ).resolves.toBeInTheDocument();
+    expect(mockedGetPublicInvitationPreview).toHaveBeenCalledWith("inv_123");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Accept invitation" })
+    );
+
+    await waitFor(() => {
+      expect(mockedAcceptInvitation).toHaveBeenCalledWith({
+        invitationId: "inv_123",
+      });
+    });
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+  }, 10_000);
+
   it("keeps the invitation details visible when acceptance fails", async () => {
     mockedGetSession.mockResolvedValue({
       data: {

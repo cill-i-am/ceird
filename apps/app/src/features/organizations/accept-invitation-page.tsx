@@ -33,6 +33,8 @@ interface InvitationDetails extends InvitationPreviewDetails {
   readonly inviterEmail: string;
 }
 
+type InvitationDisplayDetails = InvitationPreviewDetails | InvitationDetails;
+
 type InvitationPageState =
   | {
       readonly status: "loading";
@@ -42,18 +44,18 @@ type InvitationPageState =
       readonly status: "signed-out";
     }
   | {
-      readonly invitation: InvitationDetails;
+      readonly invitation: InvitationDisplayDetails;
       readonly status: "ready";
     }
   | {
-      readonly invitation: InvitationDetails;
+      readonly invitation: InvitationDisplayDetails;
       readonly status: "submitting";
     }
   | {
       readonly canSwitchAccount?: boolean;
       readonly message: string;
       readonly status: "error";
-      readonly invitation?: InvitationDetails;
+      readonly invitation?: InvitationDisplayDetails;
     }
   | {
       readonly message: string;
@@ -135,7 +137,7 @@ function getInvitationCardCopy(
 function InvitationContextContent({
   invitation,
 }: {
-  readonly invitation?: InvitationPreviewDetails | InvitationDetails;
+  readonly invitation?: InvitationDisplayDetails;
 }) {
   if (!invitation) {
     return (
@@ -218,7 +220,7 @@ interface AcceptInvitationPageModel {
   readonly cardCopy: ReturnType<typeof getInvitationCardCopy>;
   readonly handleAcceptInvitation: () => Promise<void>;
   readonly handleSwitchAccount: () => Promise<void>;
-  readonly invitation?: InvitationPreviewDetails | InvitationDetails;
+  readonly invitation?: InvitationDisplayDetails;
   readonly isAcceptingInvitation: boolean;
   readonly isSwitchingAccount: boolean;
   readonly shellCopy: ReturnType<typeof getInvitationShellCopy>;
@@ -239,6 +241,14 @@ function useAcceptInvitationPageModel(
   React.useEffect(() => {
     let cancelled = false;
 
+    async function loadPublicPreview() {
+      try {
+        return await getPublicInvitationPreview(invitationId);
+      } catch {
+        return null;
+      }
+    }
+
     async function loadInvitation() {
       if (cancelled) {
         return;
@@ -255,13 +265,7 @@ function useAcceptInvitationPageModel(
       const isSignedOut = Boolean(session.error || !session.data);
 
       if (isSignedOut) {
-        let preview: InvitationPreviewDetails | null = null;
-
-        try {
-          preview = await getPublicInvitationPreview(invitationId);
-        } catch {
-          preview = null;
-        }
+        const preview = await loadPublicPreview();
 
         if (cancelled) {
           return;
@@ -286,17 +290,38 @@ function useAcceptInvitationPageModel(
 
       // Signed-in invitation lookup is skipped when the effect has been cancelled.
       // react-doctor-disable-next-line
-      const invitation = await authClient.organization.getInvitation({
-        query: {
-          id: invitationId,
-        },
-      });
+      const invitation = await authClient.organization
+        .getInvitation({
+          query: {
+            id: invitationId,
+          },
+        })
+        .catch(() => ({
+          data: null,
+          error: null,
+        }));
 
       if (cancelled) {
         return;
       }
 
       if (invitation.error || !invitation.data) {
+        if (invitation.error?.status !== 403) {
+          const preview = await loadPublicPreview();
+
+          if (cancelled) {
+            return;
+          }
+
+          if (preview) {
+            setState({
+              status: "ready",
+              invitation: preview,
+            });
+            return;
+          }
+        }
+
         setState({
           status: "error",
           canSwitchAccount: true,
