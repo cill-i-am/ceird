@@ -46,10 +46,19 @@ export function getAuthSuccessNavigationTarget(invitationId?: string) {
   };
 }
 
+function getInvitationAcceptanceHref(invitationId: string) {
+  return `/accept-invitation/${encodeURIComponent(invitationId)}`;
+}
+
 export function useAuthSuccessNavigation(invitationId?: string) {
   const navigate = useNavigate({ from: "/" });
 
   return async () => {
+    if (invitationId && typeof window !== "undefined") {
+      window.location.assign(getInvitationAcceptanceHref(invitationId));
+      return;
+    }
+
     await navigate(getAuthSuccessNavigationTarget(invitationId));
   };
 }
