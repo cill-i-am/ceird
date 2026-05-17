@@ -16,7 +16,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   hyperdriveOriginConnectionLimit: 5,
   neonDatabaseName: "ceird",
   neonDefaultBranchName: "base",
-  neonMigrationsDir: "../../apps/api/drizzle",
+  neonMigrationsDir: "apps/api/drizzle",
   neonOrgId: undefined,
   neonParentBranchName: "main",
   neonParentStage: "main",

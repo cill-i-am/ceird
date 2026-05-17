@@ -9,9 +9,9 @@ import * as Layer from "effect/Layer";
 import {
   makeCloudflareHyperdrive,
   makeCloudflareStack,
-} from "./src/cloudflare-stack.ts";
-import { makeNeonPostgresResources } from "./src/neon.ts";
-import { loadInfraStageConfig } from "./src/stages.ts";
+} from "./packages/infra/src/cloudflare-stack.ts";
+import { makeNeonPostgresResources } from "./packages/infra/src/neon.ts";
+import { loadInfraStageConfig } from "./packages/infra/src/stages.ts";
 
 const stackName = process.env.CEIRD_ALCHEMY_STACK_NAME ?? "ceird";
 

@@ -7,6 +7,9 @@
 From the repo root:
 
 ```bash
+pnpm alchemy dev
+pnpm alchemy deploy
+pnpm alchemy destroy
 pnpm infra:check-types
 pnpm infra:deploy
 pnpm infra:destroy
@@ -26,7 +29,7 @@ pnpm --filter @ceird/infra dev
 
 | Path                      | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
-| `alchemy.run.ts`          | Alchemy stack entrypoint.                                                           |
+| `../../alchemy.run.ts`    | Root Alchemy stack entrypoint.                                                      |
 | `src/stages.ts`           | Deployment stage config, environment decoding, and resource naming.                 |
 | `src/cloudflare-stack.ts` | Cloudflare app, API, queues, email bindings, Hyperdrive binding, and observability. |
 | `src/neon.ts`             | Native Neon project/branch layout and resource creation.                            |

@@ -59,7 +59,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
 
   const api = yield* Cloudflare.Worker("Api", {
     name: resourceName(input.config, "api"),
-    main: "../../apps/api/src/worker.ts",
+    main: "apps/api/src/worker.ts",
     compatibility: workerCompatibility,
     bindings: {
       AUTH_EMAIL_QUEUE: authEmailQueue,
@@ -121,7 +121,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
 
   const app = yield* Cloudflare.Vite("App", {
     name: resourceName(input.config, "app"),
-    rootDir: "../../apps/app",
+    rootDir: "apps/app",
     compatibility: workerCompatibility,
     env: {
       API_ORIGIN: `https://${input.config.apiHostname}`,

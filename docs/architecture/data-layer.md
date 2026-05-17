@@ -63,7 +63,7 @@ bootstrap Cloudflare credentials plus a Neon API key:
 4. Export `NEON_API_KEY`.
 5. Set `CEIRD_ZONE_NAME`.
 6. Set `AUTH_EMAIL_FROM`.
-7. Run `ALCHEMY_STAGE=main pnpm infra:deploy` to create or update the Neon
+7. Run `ALCHEMY_STAGE=main pnpm alchemy deploy` to create or update the Neon
    project/branch, apply checked-in API SQL migrations, create or update the
    Hyperdrive config, Workers, queues, runtime email token, and routes.
 

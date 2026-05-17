@@ -113,8 +113,8 @@ blank, the API uses deterministic development geocoding.
 
 ## Production Infrastructure
 
-`packages/infra` defines infrastructure with Alchemy v2. The stack entrypoint is
-`packages/infra/alchemy.run.ts`.
+The repo root defines infrastructure with Alchemy v2. The stack entrypoint is
+`alchemy.run.ts`, with implementation helpers in `packages/infra/src`.
 
 The stack provisions:
 
@@ -179,6 +179,9 @@ parent-stage project and create their own branch from `main`.
 From the repo root:
 
 ```bash
+pnpm alchemy dev
+pnpm alchemy deploy
+pnpm alchemy destroy
 pnpm infra:check-types
 pnpm infra:deploy
 pnpm infra:destroy
@@ -188,9 +191,9 @@ From the infra package:
 
 ```bash
 pnpm --filter @ceird/infra check-types
+pnpm --filter @ceird/infra dev
 pnpm --filter @ceird/infra deploy
 pnpm --filter @ceird/infra destroy
-pnpm --filter @ceird/infra dev
 ```
 
 Use the Stripe Projects CLI guidance in `AGENTS.md` when managing third-party

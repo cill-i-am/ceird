@@ -155,7 +155,7 @@ Defines production infrastructure with Alchemy v2:
 - native Neon project and per-stage branch resources in `src/neon.ts`
 - native Alchemy Cloudflare Hyperdrive resources
 - Cloudflare app/API/queue stack in `src/cloudflare-stack.ts`
-- stack entrypoint in `alchemy.run.ts`
+- root stack entrypoint in `/alchemy.run.ts`
 
 The stack deploys a Cloudflare Worker API, a Cloudflare Vite app, auth email
 queues and dead-letter queue, Hyperdrive backed by Neon Postgres, and API SQL

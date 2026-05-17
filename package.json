@@ -2,6 +2,7 @@
   "name": "ceird",
   "private": true,
   "scripts": {
+    "alchemy": "node packages/infra/scripts/alchemy-env.mjs",
     "api:test:with-sandbox": "node scripts/test-with-sandbox.mjs --api",
     "build": "turbo run build",
     "check": "ultracite check .",
@@ -10,11 +11,11 @@
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
-    "infra:bootstrap:cloudflare": "pnpm --filter @ceird/infra run bootstrap:cloudflare",
+    "infra:bootstrap:cloudflare": "pnpm alchemy bootstrap cloudflare",
     "infra:check-types": "pnpm --filter @ceird/infra check-types",
-    "infra:deploy": "pnpm --filter @ceird/infra run deploy",
-    "infra:destroy": "pnpm --filter @ceird/infra run destroy",
-    "infra:dev": "pnpm --filter @ceird/infra run dev",
+    "infra:deploy": "pnpm alchemy deploy",
+    "infra:destroy": "pnpm alchemy destroy",
+    "infra:dev": "pnpm alchemy dev",
     "lint": "oxlint --config .oxlintrc.mjs . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
@@ -31,6 +32,8 @@
     "test:with-sandbox": "node scripts/test-with-sandbox.mjs"
   },
   "devDependencies": {
+    "alchemy": "2.0.0-beta.40",
+    "effect": "4.0.0-beta.66",
     "lefthook": "^2.1.6",
     "opensrc": "^0.6.0",
     "oxfmt": "^0.43.0",

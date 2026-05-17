@@ -9,6 +9,15 @@ const repoRoot = resolve(currentDir, "../../..");
 const envFile = resolve(repoRoot, ".env.local");
 const [command = "deploy", ...args] = process.argv.slice(2);
 const stageAwareCommands = new Set(["deploy", "destroy", "dev", "plan"]);
+const profileAwareCommands = new Set([
+  "bootstrap",
+  "deploy",
+  "destroy",
+  "dev",
+  "logs",
+  "plan",
+  "tail",
+]);
 const promptlessCommands = new Set(["deploy", "destroy"]);
 
 if (existsSync(envFile)) {
@@ -48,9 +57,12 @@ const resolvedAlchemyProfile =
   process.env.ALCHEMY_PROFILE ?? process.env.CEIRD_ALCHEMY_PROFILE;
 const resolvedAlchemyStage =
   process.env.ALCHEMY_STAGE ?? process.env.CEIRD_ALCHEMY_STAGE;
+const defaultAlchemyProfile = "ceird-bootstrap";
 const profileArgs =
-  resolvedAlchemyProfile || process.env.CI !== "true"
-    ? ["--profile", resolvedAlchemyProfile ?? "ceird-bootstrap"]
+  profileAwareCommands.has(command) &&
+  !hasFlag("--profile") &&
+  (resolvedAlchemyProfile || process.env.CI !== "true")
+    ? ["--profile", resolvedAlchemyProfile ?? defaultAlchemyProfile]
     : [];
 const stageArgs =
   stageAwareCommands.has(command) && !hasFlag("--stage") && resolvedAlchemyStage
@@ -74,7 +86,10 @@ if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
   const alchemyProfiles = resolve(homedir(), ".alchemy/profiles.json");
   if (existsSync(alchemyProfiles)) {
     const profiles = JSON.parse(readFileSync(alchemyProfiles, "utf8"));
-    const accountId = profiles.profiles?.default?.Cloudflare?.accountId;
+    const profileName = resolvedAlchemyProfile ?? defaultAlchemyProfile;
+    const accountId =
+      profiles.profiles?.[profileName]?.Cloudflare?.accountId ??
+      profiles.profiles?.default?.Cloudflare?.accountId;
     if (typeof accountId === "string" && accountId.length > 0) {
       process.env.CLOUDFLARE_ACCOUNT_ID = accountId;
     }
@@ -82,12 +97,12 @@ if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
 }
 
 const child = spawn("alchemy", alchemyArgs, {
-  cwd: resolve(repoRoot, "packages/infra"),
+  cwd: repoRoot,
   env: {
     ...process.env,
     ...(resolvedAlchemyProfile || process.env.CI !== "true"
       ? {
-          ALCHEMY_PROFILE: resolvedAlchemyProfile ?? "ceird-bootstrap",
+          ALCHEMY_PROFILE: resolvedAlchemyProfile ?? defaultAlchemyProfile,
         }
       : {}),
     CI: process.env.CI ?? "false",

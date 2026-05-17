@@ -7,7 +7,7 @@
     "check-types": "tsc --noEmit -p tsconfig.json",
     "deploy": "node scripts/alchemy-env.mjs deploy",
     "destroy": "node scripts/alchemy-env.mjs destroy",
-    "dev": "alchemy dev",
+    "dev": "node scripts/alchemy-env.mjs dev",
     "test": "vitest run"
   },
   "dependencies": {

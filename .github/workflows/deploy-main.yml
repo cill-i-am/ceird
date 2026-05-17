@@ -64,13 +64,13 @@ jobs:
         run: pnpm infra:check-types
 
       - name: Bootstrap Alchemy state store
-        run: pnpm infra:bootstrap:cloudflare
+        run: pnpm alchemy bootstrap cloudflare
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Deploy
-        run: pnpm infra:deploy
+        run: pnpm alchemy deploy
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}

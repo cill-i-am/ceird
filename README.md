@@ -74,7 +74,8 @@ pass `--name`.
 | `pnpm --filter app e2e`              | Runs Playwright E2E tests for the web app. Use this with `pnpm sandbox:up`.           |
 | `pnpm --filter api db:generate`      | Generates Drizzle migrations for API schema changes.                                  |
 | `pnpm --filter api db:migrate`       | Applies API migrations to the configured database.                                    |
-| `pnpm infra:deploy`                  | Deploys infrastructure through the infra package wrapper.                             |
+| `pnpm alchemy dev`                   | Runs the root Alchemy stack for a cloud-backed development stage.                     |
+| `pnpm alchemy deploy`                | Deploys the root Alchemy stack.                                                       |
 
 ## Documentation
 

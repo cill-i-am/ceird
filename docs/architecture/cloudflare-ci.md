@@ -20,7 +20,7 @@ For the mainline deployment:
 - `ALCHEMY_STAGE=main`
 - `CEIRD_ALCHEMY_STAGE=main`
 
-The `packages/infra/scripts/alchemy-env.mjs` wrapper injects `--stage` from
+The root `pnpm alchemy ...` wrapper injects `--stage` from
 those environment variables when the caller does not pass one explicitly. This
 prevents accidental per-runner state namespaces.
 
@@ -65,7 +65,7 @@ The workflow:
 
 - installs dependencies with pnpm
 - type-checks the app and infra package
-- deploys through `pnpm infra:deploy`
+- deploys through `pnpm alchemy deploy`
 - serializes deploys with a GitHub Actions concurrency group
 - lets the native Neon branch resource apply the checked-in API SQL migrations
 - caps Hyperdrive origin database connections and points Hyperdrive at the typed
@@ -96,7 +96,7 @@ The Alchemy v2 CI guide recommends:
 
 - using `state: Cloudflare.state()` for Cloudflare-backed state
 - using GitHub Actions secrets/variables for CI credentials
-- setting an explicit stage with `alchemy deploy --stage <stage>`
+- setting an explicit stage with `pnpm alchemy deploy -- --stage <stage>`
 - optionally using `--adopt` when importing existing cloud resources into a
   fresh state store
 
