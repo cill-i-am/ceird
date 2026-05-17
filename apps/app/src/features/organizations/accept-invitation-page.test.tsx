@@ -10,7 +10,6 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import type * as SignOutModule from "../auth/sign-out";
 import { AcceptInvitationPage } from "./accept-invitation-page";
-import { recordInvitationSignupHandoff } from "./invitation-continuation";
 
 const {
   mockedAcceptInvitation,
@@ -194,7 +193,6 @@ describe("accept invitation page", () => {
   });
 
   afterEach(() => {
-    window.sessionStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -370,56 +368,6 @@ describe("accept invitation page", () => {
         to: "/",
       });
     });
-  }, 10_000);
-
-  it("accepts with the public preview after an invitation signup handoff", async () => {
-    mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
-      error: null,
-    });
-    mockedGetInvitation.mockResolvedValue({
-      data: null,
-      error: {
-        message: "Forbidden",
-        status: 403,
-        statusText: "Forbidden",
-      },
-    });
-    recordInvitationSignupHandoff("inv_123");
-
-    const user = userEvent.setup();
-
-    render(<AcceptInvitationPage invitationId="inv_123" />);
-
-    await expect(
-      screen.findByRole("heading", { name: "Join Acme Field Ops" })
-    ).resolves.toBeInTheDocument();
-    expect(mockedGetPublicInvitationPreview).toHaveBeenCalledWith("inv_123");
-
-    await user.click(
-      await screen.findByRole("button", { name: "Accept invitation" })
-    );
-
-    await waitFor(() => {
-      expect(mockedAcceptInvitation).toHaveBeenCalledWith({
-        invitationId: "inv_123",
-      });
-    });
-    await waitFor(() => {
-      expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
-      });
-    });
-    expect(
-      window.sessionStorage.getItem("ceird.invitation-signup.inv_123")
-    ).toBeNull();
   }, 10_000);
 
   it("keeps the invitation details visible when acceptance fails", async () => {

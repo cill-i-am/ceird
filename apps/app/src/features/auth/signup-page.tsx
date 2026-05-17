@@ -14,7 +14,6 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
-import { recordInvitationSignupHandoff } from "../organizations/invitation-continuation";
 import {
   getAuthFailureMessage,
   getErrorText,
@@ -87,8 +86,6 @@ export function SignupPage({
 
           return;
         }
-
-        recordInvitationSignupHandoff(search.invitation);
       }
 
       await mutationFeedback.waitForSuccess();

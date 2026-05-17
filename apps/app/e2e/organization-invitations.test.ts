@@ -266,6 +266,35 @@ async function sendAuthRequest(
   return response;
 }
 
+async function authenticatePageContext(
+  request: APIRequestContext,
+  page: Page,
+  input: {
+    readonly email: string;
+    readonly password: string;
+  }
+) {
+  const cookieJar = new Map<string, string>();
+
+  await sendAuthRequest(request, "/sign-in/email", {
+    body: {
+      email: input.email,
+      password: input.password,
+    },
+    cookieJar,
+    forwardedFor: createForwardedFor(),
+  });
+
+  await page.context().clearCookies();
+  await page.context().addCookies(
+    [...cookieJar.entries()].map(([name, value]) => ({
+      name,
+      url: APP_ORIGIN,
+      value,
+    }))
+  );
+}
+
 async function seedUser(
   request: APIRequestContext,
   input: {
@@ -495,6 +524,12 @@ test.describe("organization invitations", () => {
       await expect(invitedPage).toHaveURL(
         `${APP_ORIGIN}/accept-invitation/${invitationId}`
       );
+      await authenticatePageContext(request, invitedPage, {
+        email: invitedEmail,
+        password: "password123",
+      });
+      await invitedPage.goto(`/accept-invitation/${invitationId}`);
+
       const acceptInvitationButton = await ensureInvitationAcceptAction(
         invitedPage,
         invitationId,

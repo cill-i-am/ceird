@@ -20,10 +20,6 @@ import {
 } from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
-import {
-  clearInvitationSignupHandoff,
-  hasInvitationSignupHandoff,
-} from "./invitation-continuation";
 import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
 interface InvitationPreviewDetails {
@@ -310,11 +306,7 @@ function useAcceptInvitationPageModel(
       }
 
       if (invitation.error || !invitation.data) {
-        const hasSignupHandoff = hasInvitationSignupHandoff(invitationId);
-        const canUsePreviewFallback =
-          invitation.error?.status !== 403 || hasSignupHandoff;
-
-        if (canUsePreviewFallback) {
+        if (invitation.error?.status !== 403) {
           const preview = await loadPublicPreview();
 
           if (cancelled) {
@@ -400,14 +392,12 @@ function useAcceptInvitationPageModel(
     }
 
     await mutationFeedback.waitForSuccess();
-    clearInvitationSignupHandoff(invitationId);
     await navigate({
       to: "/",
     });
   }
 
   async function handleSwitchAccount() {
-    clearInvitationSignupHandoff(invitationId);
     setState({
       status: "switching-account",
       message: "Signing out so you can continue with the invited account...",

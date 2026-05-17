@@ -1,17 +1,10 @@
 import {
   buildInvitationContinuationSearch,
-  clearInvitationSignupHandoff,
   getInvitationAcceptanceNavigationTarget,
-  hasInvitationSignupHandoff,
-  recordInvitationSignupHandoff,
   validateInvitationContinuationSearch,
 } from "./invitation-continuation";
 
 describe("invitation continuation", () => {
-  afterEach(() => {
-    window.sessionStorage.clear();
-  });
-
   it("reads the invitation id from route search", () => {
     expect(
       validateInvitationContinuationSearch({
@@ -45,18 +38,5 @@ describe("invitation continuation", () => {
       },
       to: "/accept-invitation/$invitationId",
     });
-  }, 10_000);
-
-  it("tracks invitation signup handoff in session storage", () => {
-    expect(hasInvitationSignupHandoff("inv_123")).toBeFalsy();
-
-    recordInvitationSignupHandoff("inv_123");
-
-    expect(hasInvitationSignupHandoff("inv_123")).toBeTruthy();
-    expect(hasInvitationSignupHandoff("other_invitation")).toBeFalsy();
-
-    clearInvitationSignupHandoff("inv_123");
-
-    expect(hasInvitationSignupHandoff("inv_123")).toBeFalsy();
   }, 10_000);
 });

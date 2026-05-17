@@ -147,7 +147,6 @@ describe("signup page", () => {
   });
 
   afterEach(() => {
-    window.sessionStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -198,9 +197,6 @@ describe("signup page", () => {
         to: "/",
       });
     });
-    expect(
-      window.sessionStorage.getItem("ceird.invitation-signup.inv_123")
-    ).toBe("1");
   }, 10_000);
 
   it("shows a safe server error when sign-up fails", async () => {
