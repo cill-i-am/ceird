@@ -46,18 +46,18 @@ async function expectVisibleWithPageSnapshot(
   page: Page,
   locator: Locator,
   description: string,
-  timeout = 5_000
+  timeout = 5000
 ) {
   try {
     await expect(locator).toBeVisible({ timeout });
   } catch (error) {
     const bodyText = await page
       .locator("body")
-      .innerText({ timeout: 1_000 })
+      .textContent({ timeout: 1000 })
       .catch(() => "[body text unavailable]");
 
     throw new Error(
-      `${description} was not visible at ${page.url()}. Page text: ${bodyText.slice(0, 1_500)}`,
+      `${description} was not visible at ${page.url()}. Page text: ${(bodyText ?? "[body text unavailable]").slice(0, 1500)}`,
       { cause: error }
     );
   }
