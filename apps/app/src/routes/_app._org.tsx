@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_app/_org")({
   component: OrganizationRouteComponent,
 });
 
-export async function loadOrganizationRoute(context: {
+async function loadOrganizationRoute(context: {
   readonly currentOrganizationRole?: OrganizationRole | undefined;
 }) {
   return await observeAppRouteOperation(

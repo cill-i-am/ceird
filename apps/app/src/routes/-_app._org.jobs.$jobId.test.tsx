@@ -105,9 +105,9 @@ describe("job detail route", () => {
       const { loadJobDetailRouteData } =
         await import("#/features/jobs/jobs-detail-route-loader");
 
-      expect(() =>
+      await expect(
         loadJobDetailRouteData("not-a-job-id" as WorkItemIdType)
-      ).toThrow(/Universally Unique Identifier/);
+      ).rejects.toThrow(/Universally Unique Identifier/);
       expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
     }
   );

@@ -26,7 +26,7 @@ export interface ServerAppApiClientOptions extends AppApiClientOriginOptions {
   readonly onResponseStatus?: ((status: number) => void) | undefined;
 }
 
-export function makeServerAppApiClient(options: ServerAppApiClientOptions) {
+function makeServerAppApiClient(options: ServerAppApiClientOptions) {
   return makeAppApiClient({
     apiOrigin: options.apiOrigin,
     requestOrigin: options.requestOrigin,
@@ -48,7 +48,7 @@ export function makeServerAppApiClient(options: ServerAppApiClientOptions) {
   });
 }
 
-export function makeServerAppApiRequest<Response, RequestError>(
+function makeServerAppApiRequest<Response, RequestError>(
   options: ServerAppApiClientOptions,
   operation: string,
   execute: (client: AppApiClient) => Effect.Effect<Response, RequestError>
