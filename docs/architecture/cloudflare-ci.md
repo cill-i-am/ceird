@@ -100,6 +100,11 @@ deploy, `.github/workflows/preview.yml` reads the preview stage's
 `add-mask` command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to
 `GITHUB_ENV`.
 
+Preview stages named `pr-<number>` deploy the API Worker with
+`AUTH_RATE_LIMIT_ENABLED=false`. This keeps repeated same-PR E2E runs from
+locking themselves out against a persistent preview database while preserving
+auth rate limiting for `main` and ordinary non-PR stages by default.
+
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` is the JSON body from
 `~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a
 GitHub environment secret. Preview CI writes it back to Alchemy's expected

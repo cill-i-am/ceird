@@ -19,6 +19,7 @@ describe("Alchemy stage identity", () => {
     expect(identity).toStrictEqual({
       appName: "ceird",
       isProduction: true,
+      isPullRequestPreview: false,
       neonBranchName: "main",
       stage: "main",
       stageSlug: "main",
@@ -34,6 +35,7 @@ describe("Alchemy stage identity", () => {
 
     expect(identity).toMatchObject({
       isProduction: false,
+      isPullRequestPreview: false,
       neonBranchName: "codex-alchemy-v2-native-migration",
       stage: "codex/Alchemy V2 Native Migration!",
       stageSlug: "codex-alchemy-v2-native-migration",
@@ -89,6 +91,7 @@ describe("Alchemy stage identity", () => {
     expect(config.stage).toBe("dev_cillian");
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
+    expect(config.authRateLimitEnabled).toBe(true);
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
     expect(config.neonDatabaseName).toBe("ceird");
     expect(config.neonDefaultBranchName).toBe("base");
@@ -148,6 +151,37 @@ describe("Alchemy stage identity", () => {
     expect(config.hyperdriveName).toBe("ceird-production-postgres");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
     expect(config.neonParentBranchProtected).toBe(false);
+  });
+
+  it("disables auth rate limits by default for PR preview stages", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(ConfigProvider.layer(makeConfigProvider()))
+      )
+    );
+
+    expect(config.authRateLimitEnabled).toBe(false);
+  });
+
+  it("allows PR preview auth rate limits to be enabled explicitly", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                AUTH_RATE_LIMIT_ENABLED: "true",
+                CEIRD_ZONE_NAME: "example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.authRateLimitEnabled).toBe(true);
   });
 
   it("allows provider-normalized Hyperdrive and Neon retention settings to be overridden", () => {

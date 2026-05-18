@@ -10,6 +10,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   appHostname: "app.example.com",
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",
+  authRateLimitEnabled: true,
   googleMapsApiKey: Redacted.make(
     Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-key")
   ),

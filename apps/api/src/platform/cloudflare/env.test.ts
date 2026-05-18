@@ -11,6 +11,7 @@ function makeWorkerEnv(): ApiWorkerEnv {
     },
     AUTH_EMAIL_FROM: "auth@example.com",
     AUTH_EMAIL_FROM_NAME: "Ceird",
+    AUTH_RATE_LIMIT_ENABLED: "false",
     AUTH_EMAIL_QUEUE: {
       send: () => Promise.resolve(),
     } as unknown as Queue<unknown>,
@@ -42,6 +43,12 @@ describe("Cloudflare Worker environment config", () => {
     const config = apiWorkerEnvConfigMap(makeWorkerEnv());
 
     expect(config.get("GOOGLE_MAPS_API_KEY")).toBe("google-key");
+  });
+
+  it("exposes the auth rate-limit flag to Effect config", () => {
+    const config = apiWorkerEnvConfigMap(makeWorkerEnv());
+
+    expect(config.get("AUTH_RATE_LIMIT_ENABLED")).toBe("false");
   });
 
   it("propagates optional OAuth MCP URL overrides", () => {

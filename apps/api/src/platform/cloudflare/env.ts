@@ -12,6 +12,7 @@ export interface ApiWorkerConfigEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
+  readonly AUTH_RATE_LIMIT_ENABLED?: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
   readonly GOOGLE_MAPS_API_KEY: string;
@@ -30,6 +31,7 @@ export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
       AUTH_APP_ORIGIN: env.AUTH_APP_ORIGIN,
       AUTH_EMAIL_FROM: env.AUTH_EMAIL_FROM,
       AUTH_EMAIL_FROM_NAME: env.AUTH_EMAIL_FROM_NAME,
+      AUTH_RATE_LIMIT_ENABLED: env.AUTH_RATE_LIMIT_ENABLED,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
