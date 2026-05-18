@@ -108,13 +108,13 @@ As of this migration pass, `@effect/platform`, `@effect/sql`, and
 `@effect/rpc` still publish the stable APIs this app uses against Effect 3
 peers, while Alchemy v2 uses Effect 4 unstable modules internally.
 
-The API Worker receives a `DATABASE` Hyperdrive binding and resolves the runtime
-Postgres URL from `env.DATABASE.connectionString`. Package-local Node runtimes
-still read `DATABASE_URL`.
+The API and MCP Workers receive a `DATABASE` Hyperdrive binding and resolve the
+runtime Postgres URL from `env.DATABASE.connectionString`. Package-local Node
+runtimes still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from
-`apps/api/drizzle` before Hyperdrive and the API Worker are reconciled.
+`apps/api/drizzle` before Hyperdrive and the API/MCP Workers are reconciled.
 
 ## Deferred Decisions
 

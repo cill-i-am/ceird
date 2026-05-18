@@ -1,22 +1,20 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { decodePublicInvitationPreview } from "@ceird/identity-core";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Deferred, Effect } from "effect";
-import { Pool } from "pg";
-
 import {
   AppDatabase,
   AppDatabaseLive,
-} from "../../../platform/database/database.js";
-import {
   applyAllMigrations,
   applyMigration,
   canConnect,
   createTestDatabase as createPlatformTestDatabase,
   withPool,
-} from "../../../platform/database/test-database.js";
+} from "@ceird/backend-core/database";
+import { decodePublicInvitationPreview } from "@ceird/identity-core";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Deferred, Effect } from "effect";
+import { Pool } from "pg";
+
 import { makeApiWebHandler } from "../../../server.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication, findPublicInvitationPreview } from "./auth.js";

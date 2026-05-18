@@ -20,17 +20,17 @@ dependency source cache under `opensrc/`.
 
 ### Root Dev
 
-Use root dev for normal app/API development:
+Use root dev for normal app/API/MCP development:
 
 ```bash
 pnpm dev
 ```
 
 Root dev delegates to `alchemy dev --env-file .env.local`. Alchemy creates or
-updates the selected stage's Cloudflare Workers/Vite app, Hyperdrive config,
-queues, routes, and Neon branch. By default Alchemy chooses its normal dev
-stage. For linked worktrees and agent tasks, pass an explicit stage through the
-Alchemy CLI:
+updates the selected stage's Cloudflare Workers/Vite app, MCP Worker,
+Hyperdrive config, queues, routes, and Neon branch. By default Alchemy chooses
+its normal dev stage. For linked worktrees and agent tasks, pass an explicit
+stage through the Alchemy CLI:
 
 ```bash
 pnpm dev -- --stage codex-my-task
@@ -133,7 +133,7 @@ The API owns the Drizzle schema and migrations:
 
 - Schema barrel: `apps/api/src/platform/database/schema.ts`
 - Auth tables: `apps/api/src/domains/identity/authentication/schema.ts`
-- Jobs tables: `apps/api/src/domains/jobs/schema.ts`
+- Shared domain tables: `packages/backend-core/src/domains/*/schema.ts`
 - Migrations: `apps/api/drizzle`
 - Drizzle config: `apps/api/drizzle.config.ts`
 
@@ -152,33 +152,35 @@ pnpm --filter api db:migrate
 ```
 
 The native Alchemy Neon branch resource applies checked-in API SQL migrations
-for each stage before Hyperdrive and the API Worker are reconciled. Verify
-schema changes with API tests, then use an explicit non-production Alchemy stage
-to validate the migration path when needed.
+for each stage before Hyperdrive and the API/MCP Workers are reconciled. Verify
+schema changes with focused backend tests, then use an explicit non-production
+Alchemy stage to validate the migration path when needed.
 
 ## Environment Variables
 
 High-signal runtime variables:
 
-| Variable                  | Used by                 | Purpose                                                          |
-| ------------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `DATABASE_URL`            | API                     | App database connection string for package-local Node runs.      |
-| `API_TEST_DATABASE_URL`   | API tests               | Base Postgres URL for API integration tests.                     |
-| `TEST_DATABASE_URL`       | test helpers            | Shared fallback base Postgres URL for integration tests.         |
-| `BETTER_AUTH_BASE_URL`    | API, app server helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.    |
-| `BETTER_AUTH_SECRET`      | API                     | Better Auth signing secret.                                      |
-| `AUTH_APP_ORIGIN`         | API                     | Browser-visible app origin for redirects and auth email links.   |
-| `AUTH_EMAIL_FROM`         | API, infra              | Sender email address for auth emails.                            |
-| `AUTH_EMAIL_FROM_NAME`    | API, infra              | Sender display name.                                             |
-| `AUTH_RATE_LIMIT_ENABLED` | API                     | Enables or disables Better Auth database-backed rate limits.     |
-| `API_ORIGIN`              | app                     | Server-side API origin.                                          |
-| `VITE_API_ORIGIN`         | app                     | Browser-exposed API origin.                                      |
-| `PLAYWRIGHT_BASE_URL`     | E2E                     | Existing Alchemy app stage URL for Playwright tests.             |
-| `PLAYWRIGHT_API_URL`      | E2E                     | Existing Alchemy API stage URL for Playwright API requests.      |
-| `PLAYWRIGHT_DATABASE_URL` | E2E                     | Direct stage database URL for auth token handoff tests.          |
-| `ALCHEMY_STACK_NAME`      | app, API                | Alchemy-injected runtime stack name for Worker metadata.         |
-| `ALCHEMY_STAGE`           | app, API                | Alchemy-injected runtime stage for health checks and app config. |
-| `GOOGLE_MAPS_API_KEY`     | API, infra              | Optional locally for live geocoding; required by deployed API.   |
+| Variable                  | Used by                      | Purpose                                                                    |
+| ------------------------- | ---------------------------- | -------------------------------------------------------------------------- |
+| `DATABASE_URL`            | API                          | App database connection string for package-local Node runs.                |
+| `API_TEST_DATABASE_URL`   | API tests                    | Base Postgres URL for API integration tests.                               |
+| `TEST_DATABASE_URL`       | test helpers                 | Shared fallback base Postgres URL for integration tests.                   |
+| `BETTER_AUTH_BASE_URL`    | API, app server helpers, MCP | Absolute Better Auth base URL, usually ending in `/api/auth`.              |
+| `BETTER_AUTH_SECRET`      | API                          | Better Auth signing secret.                                                |
+| `AUTH_APP_ORIGIN`         | API                          | Browser-visible app origin for redirects and auth email links.             |
+| `AUTH_EMAIL_FROM`         | API, infra                   | Sender email address for auth emails.                                      |
+| `AUTH_EMAIL_FROM_NAME`    | API, infra                   | Sender display name.                                                       |
+| `AUTH_RATE_LIMIT_ENABLED` | API                          | Enables or disables Better Auth database-backed rate limits.               |
+| `API_ORIGIN`              | app                          | Server-side API origin.                                                    |
+| `VITE_API_ORIGIN`         | app                          | Browser-exposed API origin.                                                |
+| `PLAYWRIGHT_BASE_URL`     | E2E                          | Existing Alchemy app stage URL for Playwright tests.                       |
+| `PLAYWRIGHT_API_URL`      | E2E                          | Existing Alchemy API stage URL for Playwright API requests.                |
+| `PLAYWRIGHT_DATABASE_URL` | E2E                          | Direct stage database URL for auth token handoff tests.                    |
+| `ALCHEMY_STACK_NAME`      | app, API, MCP                | Alchemy-injected runtime stack name for Worker metadata.                   |
+| `ALCHEMY_STAGE`           | app, API, MCP                | Alchemy-injected runtime stage for health checks and app config.           |
+| `GOOGLE_MAPS_API_KEY`     | API, MCP, infra              | Optional locally for live geocoding; required by deployed backend Workers. |
+| `MCP_RESOURCE_URL`        | API, MCP                     | Absolute MCP resource URL used as the OAuth token audience.                |
+| `OAUTH_ISSUER_URL`        | API, MCP                     | OAuth issuer URL used for MCP bearer-token validation.                     |
 
 Infrastructure deployment variables are documented in
 [Local Development And Infrastructure](architecture/local-development-and-infra.md).
@@ -206,5 +208,5 @@ pnpm run test:infra
 ```
 
 The Alchemy stack provisions Cloudflare Hyperdrive backed by Neon Postgres,
-Cloudflare Workers/Vite, auth email queues, and native Neon branches that apply
-checked-in API SQL migrations.
+Cloudflare Workers/Vite, the standalone MCP Worker, auth email queues, and
+native Neon branches that apply checked-in API SQL migrations.

@@ -17,6 +17,11 @@ export const OrganizationId = Schema.NonEmptyString.pipe(
 );
 export type OrganizationId = Schema.Schema.Type<typeof OrganizationId>;
 
+export const SessionId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/SessionId")
+);
+export type SessionId = Schema.Schema.Type<typeof SessionId>;
+
 export const UserId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/UserId")
 );
@@ -187,6 +192,14 @@ export function decodePublicInvitationPreview(
 
 export function decodeOrganizationId(input: unknown): OrganizationId {
   return ParseResult.decodeUnknownSync(OrganizationId)(input);
+}
+
+export function decodeSessionId(input: unknown): SessionId {
+  return ParseResult.decodeUnknownSync(SessionId)(input);
+}
+
+export function decodeUserId(input: unknown): UserId {
+  return ParseResult.decodeUnknownSync(UserId)(input);
 }
 
 export function decodeOrganizationRole(input: unknown): OrganizationRole {

@@ -19,7 +19,7 @@ The `db:*` commands are the package-local database workflow. Stage deploys and
 cloud-backed local development apply migrations through the root Alchemy stack's
 native Neon branch resource.
 
-For full cloud-backed app/API/Postgres development, prefer the root Alchemy
+For full cloud-backed app/API/MCP/Postgres development, prefer the root Alchemy
 stage:
 
 ```bash
@@ -28,17 +28,17 @@ pnpm dev -- --stage codex-my-task
 
 ## Important Paths
 
-| Path                                  | Purpose                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`                        | Node development entrypoint.                                                                                             |
-| `src/server.ts`                       | Effect API construction, system routes, API layer composition, and web handler factory.                                  |
-| `src/worker.ts`                       | Cloudflare Worker entrypoint.                                                                                            |
-| `src/platform/database`               | Database config, runtime, schema barrel, errors, and test database helpers.                                              |
-| `src/platform/cloudflare`             | Cloudflare environment and binding helpers.                                                                              |
-| `src/domains/identity/authentication` | Better Auth, organization hooks, auth schemas, email delivery, and auth runtime config.                                  |
-| `src/domains/jobs`                    | Jobs HTTP handlers, services, repositories, authorization, actor access, activity recording, geocoding, and jobs schema. |
-| `drizzle`                             | SQL migrations and Drizzle metadata.                                                                                     |
-| `drizzle.config.ts`                   | Drizzle CLI config.                                                                                                      |
+| Path                                  | Purpose                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/index.ts`                        | Node development entrypoint.                                                               |
+| `src/server.ts`                       | Effect API construction, system routes, API layer composition, and web handler factory.    |
+| `src/worker.ts`                       | Cloudflare Worker entrypoint.                                                              |
+| `src/platform/database/schema.ts`     | API migration schema barrel composed from auth and backend-core domain schemas.            |
+| `src/platform/cloudflare`             | Cloudflare environment and binding helpers.                                                |
+| `src/domains/identity/authentication` | Better Auth, organization hooks, auth schemas, email delivery, and auth runtime config.    |
+| `src/domains/jobs`                    | Jobs HTTP handlers that bind shared backend-core services to the public jobs API contract. |
+| `drizzle`                             | SQL migrations and Drizzle metadata.                                                       |
+| `drizzle.config.ts`                   | Drizzle CLI config.                                                                        |
 
 ## Runtime Responsibilities
 
@@ -50,8 +50,12 @@ The API owns:
 - Jobs, sites, labels, cost lines, collaborators, activity, service areas, and
   rate-card endpoints defined by `@ceird/jobs-core`.
 - Database schema and migrations.
-- Authorization and business invariants for app-domain mutations.
+- Shared backend-core authorization and business invariants exposed over HTTP.
 - Auth email scheduling and transport integration.
+
+The API no longer serves MCP traffic. The standalone `apps/mcp` Worker serves
+the MCP resource, while the API remains the OAuth/OIDC authorization server for
+MCP clients.
 
 ## Architecture
 

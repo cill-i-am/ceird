@@ -3,8 +3,8 @@ import { SqlClient } from "@effect/sql";
 import { Effect, Layer } from "effect";
 import { beforeEach, expect, vi } from "vitest";
 
-import { makeAuthenticationConfig } from "../identity/authentication/config.js";
 import { SiteGeocoder } from "../sites/geocoder.js";
+import { makeMcpResourceAuthConfig } from "./config.js";
 import { makeMcpWebHandler } from "./http.js";
 
 type BetterAuthMcpHandler = typeof betterAuthMcpHandler;
@@ -26,11 +26,8 @@ describe("mcp http handler", () => {
   });
 
   it("serves protected resource metadata at both well-known paths", async () => {
-    const authConfig = makeAuthenticationConfig({
-      appOrigin: "https://app.ceird.example",
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "https://api.ceird.example/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({
       authConfig,
@@ -63,10 +60,8 @@ describe("mcp http handler", () => {
   }, 10_000);
 
   it("returns 401 with resource metadata hint when bearer auth is missing", async () => {
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({ authConfig });
 
@@ -81,10 +76,8 @@ describe("mcp http handler", () => {
   }, 10_000);
 
   it("falls back when the path is not owned by mcp", async () => {
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({
       authConfig,
@@ -99,11 +92,9 @@ describe("mcp http handler", () => {
   }, 10_000);
 
   it("derives MCP and well-known metadata paths from a custom resource URL path", async () => {
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "https://api.ceird.example/api/auth",
       mcpResourceUrl: "https://api.ceird.example/agent/mcp",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({ authConfig });
 
@@ -133,12 +124,10 @@ describe("mcp http handler", () => {
   }, 10_000);
 
   it("wires OAuth token verification with configured issuer and audience", () => {
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "https://api.ceird.example/api/auth",
       mcpResourceUrl: "https://api.ceird.example/agent/mcp",
       oauthIssuerUrl: "https://auth.ceird.example/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
     makeMcpWebHandler({ authConfig });
@@ -175,10 +164,8 @@ describe("mcp http handler", () => {
         )
     );
 
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({
       authConfig,
@@ -238,10 +225,8 @@ describe("mcp http handler", () => {
         )
     );
 
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({
       authConfig,
@@ -314,10 +299,8 @@ describe("mcp http handler", () => {
       withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
     });
 
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({
       authConfig,
@@ -374,6 +357,41 @@ describe("mcp http handler", () => {
     ]);
   }, 10_000);
 
+  it("rejects oversized authorized JSON bodies before normalization", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeMcpResourceAuthConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+    });
+    const handler = makeMcpWebHandler({ authConfig });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer token_123",
+          accept: "application/json, text/event-stream",
+          "content-length": String(1024 * 1024 + 1),
+          "content-type": "application/json",
+        },
+        body: "{}",
+      })
+    );
+
+    expect(response?.status).toBe(413);
+  }, 10_000);
+
   it("rejects verified bearer tokens that do not carry a Better Auth session", async () => {
     mcpHandlerMock.mockImplementation(
       (_verifyOptions, handler) => (request: Request) =>
@@ -387,10 +405,8 @@ describe("mcp http handler", () => {
         )
     );
 
-    const authConfig = makeAuthenticationConfig({
+    const authConfig = makeMcpResourceAuthConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
-      secret: "0123456789abcdef0123456789abcdef",
-      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
     const handler = makeMcpWebHandler({ authConfig });
 

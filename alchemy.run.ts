@@ -39,6 +39,7 @@ export default Alchemy.Stack(
     yield* Effect.annotateCurrentSpan("stage", config.stage);
     yield* Effect.annotateCurrentSpan("appHostname", config.appHostname);
     yield* Effect.annotateCurrentSpan("apiHostname", config.apiHostname);
+    yield* Effect.annotateCurrentSpan("mcpHostname", config.mcpHostname);
     yield* Effect.annotateCurrentSpan(
       "neonParentStage",
       config.neonParentStage
@@ -64,6 +65,7 @@ export default Alchemy.Stack(
       authEmailQueue: cloudflareStack.authEmailQueue.queueName,
       branch: database.branch.branchName,
       hyperdrive: cloudflareStack.database.name,
+      mcp: cloudflareStack.mcpOrigin,
       neonDatabase: database.databaseName,
     } as const;
   }).pipe(

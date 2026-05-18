@@ -25,10 +25,10 @@ function runCurrentOrganizationActor(options?: {
     resolveCurrentOrganizationActor({
       getSession: () => {
         if (options?.sessionError) {
-          return Promise.reject(options.sessionError);
+          return Effect.fail(options.sessionError);
         }
 
-        return Promise.resolve(
+        return Effect.succeed(
           options !== undefined && "session" in options ? options.session : null
         );
       },

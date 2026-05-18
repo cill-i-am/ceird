@@ -5,13 +5,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 
 const domainsDir = path.dirname(fileURLToPath(import.meta.url));
-const apiSrcDir = path.resolve(domainsDir, "..");
+const backendCoreSrcDir = path.resolve(domainsDir, "..");
 
-describe("api domain boundaries", () => {
+describe("backend domain boundaries", () => {
   it("keeps sites implementation in the sites domain", async () => {
     const domains = await listDomainSourceFiles();
 
-    expect(domains).toContain("sites/http.ts");
     expect(domains).toContain("sites/service.ts");
     expect(domains).toContain("sites/repositories.ts");
     expect(domains).toContain("sites/schema.ts");
@@ -24,7 +23,6 @@ describe("api domain boundaries", () => {
   it("keeps labels implementation in the labels domain", async () => {
     const domains = await listDomainSourceFiles();
 
-    expect(domains).toContain("labels/http.ts");
     expect(domains).toContain("labels/service.ts");
     expect(domains).toContain("labels/repositories.ts");
     expect(domains).toContain("labels/schema.ts");
@@ -74,7 +72,7 @@ describe("api domain boundaries", () => {
   });
 
   it("uses organization-level label table names", async () => {
-    const source = await readApiSources();
+    const source = await readBackendSources();
 
     expect(source).toContain('"labels"');
     expect(source).toContain('"site_labels"');
@@ -97,8 +95,8 @@ async function readDomainSources(domain: string): Promise<string> {
   return contents.join("\n");
 }
 
-async function readApiSources(): Promise<string> {
-  const files = await listSourceFiles(apiSrcDir);
+async function readBackendSources(): Promise<string> {
+  const files = await listSourceFiles(backendCoreSrcDir);
   const contents = await Promise.all(
     files.map((file) => readFile(file, "utf8"))
   );

@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
 
+import { SiteGeocoder } from "@ceird/backend-core";
+import { AppDatabaseRuntimeLive } from "@ceird/backend-core/database";
+import type { AppDatabase } from "@ceird/backend-core/database";
 import {
   HttpApp,
   HttpApiBuilder,
@@ -11,18 +14,16 @@ import {
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 
+import type { Authentication } from "./domains/identity/authentication/auth.js";
 import {
   AuthenticationHttpLive,
   AuthenticationLive,
+  makeAuthenticationOrganizationSessionResolverLive,
 } from "./domains/identity/authentication/auth.js";
-import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
-import { makeMcpWebHandler } from "./domains/mcp/http.js";
-import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { AppApi } from "./http-api.js";
-import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 import { makeHealthPayload } from "./system/health.js";
 
 const RuntimeConfig = Config.all({
@@ -54,7 +55,7 @@ const makeApiHandlersLive = () =>
   );
 
 type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
-type ApiAuthenticationLive = typeof AuthenticationLive;
+type ApiAuthenticationLive = Layer.Layer<Authentication, unknown, AppDatabase>;
 type ApiBaseLive = Layer.Layer<never, never, never>;
 type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
 
@@ -62,16 +63,24 @@ export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
   siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local
-) =>
-  makeApiHandlersLive().pipe(
+) => {
+  const apiAuthenticationLive = authenticationLive.pipe(
+    Layer.provide(databaseRuntimeLive)
+  );
+  const organizationSessionResolverLive =
+    makeAuthenticationOrganizationSessionResolverLive(apiAuthenticationLive);
+
+  return makeApiHandlersLive().pipe(
     Layer.provide(
       Layer.mergeAll(
         databaseRuntimeLive,
-        authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
+        apiAuthenticationLive,
+        organizationSessionResolverLive,
         siteGeocoderLive
       )
     )
   );
+};
 
 export const ApiLive = makeApiLive(AppDatabaseRuntimeLive, AuthenticationLive);
 
@@ -156,31 +165,17 @@ export const makeApiWebHandler = (
   siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local,
   baseLive: ApiBaseLive = Layer.empty
 ) => {
-  const authConfig = Effect.runSync(
-    loadAuthenticationConfig.pipe(Effect.provide(baseLive))
-  );
-  const runtimeLive = Layer.mergeAll(
-    databaseRuntimeLive,
-    authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
-    siteGeocoderLive
-  );
-  const mcpWebHandler = makeMcpWebHandler({
-    authConfig,
-    baseLive,
-    runtimeLive,
-  });
   const apiLayer = Layer.mergeAll(
     makeApiLive(databaseRuntimeLive, authenticationLive, siteGeocoderLive),
     NodeHttpServer.layerContext
-  ).pipe(Layer.provide(baseLive));
+  ).pipe(Layer.provide(baseLive), Layer.orDie);
   const handler = HttpApiBuilder.toWebHandler(apiLayer, {
     middleware: apiRequestLogger,
   });
 
   return {
     dispose: handler.dispose,
-    handler: async (request: Request) =>
-      (await mcpWebHandler(request)) ?? handler.handler(request),
+    handler: handler.handler,
   };
 };
 

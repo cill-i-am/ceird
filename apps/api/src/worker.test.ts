@@ -1,3 +1,4 @@
+import type { SiteGeocoder } from "@ceird/backend-core";
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Layer } from "effect";
 
@@ -7,7 +8,6 @@ import type {
   CloudflareEmailBindingMessage,
   CloudflareEmailBindingSendResult,
 } from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
-import type { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
 import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {

@@ -15,7 +15,6 @@ import { HttpServerRequest } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
 import { Effect, ParseResult, Schema } from "effect";
 
-import { Authentication } from "../identity/authentication/auth.js";
 import {
   OrganizationActiveOrganizationRequiredError,
   OrganizationActorMembershipNotFoundError,
@@ -24,18 +23,11 @@ import {
   OrganizationSessionIdentityInvalidError,
   OrganizationSessionRequiredError,
 } from "./errors.js";
+import type { CurrentOrganizationActorSession } from "./session-resolver.js";
+import { CurrentOrganizationSessionResolver } from "./session-resolver.js";
 
 interface MembershipRoleRow {
   readonly role: string;
-}
-
-interface CurrentOrganizationActorSession {
-  readonly session: {
-    readonly activeOrganizationId?: string | null | undefined;
-  };
-  readonly user: {
-    readonly id: string;
-  };
 }
 
 export type OrganizationActorRole =
@@ -56,7 +48,10 @@ export const resolveCurrentOrganizationActor = Effect.fn(
   readonly headers: Headers;
   readonly getSession: (
     headers: Headers
-  ) => Promise<CurrentOrganizationActorSession | null | undefined>;
+  ) => Effect.Effect<
+    CurrentOrganizationActorSession | null | undefined,
+    unknown
+  >;
   readonly loadMembershipRoles: (
     organizationId: OrganizationIdType,
     userId: UserIdType
@@ -65,14 +60,15 @@ export const resolveCurrentOrganizationActor = Effect.fn(
     OrganizationActorStorageError
   >;
 }) {
-  const session = yield* Effect.tryPromise({
-    try: () => options.getSession(options.headers),
-    catch: (cause) =>
-      new OrganizationActorStorageError({
-        cause: formatUnknownError(cause),
-        message: "Organization actor session lookup failed",
-      }),
-  });
+  const session = yield* options.getSession(options.headers).pipe(
+    Effect.mapError(
+      (cause) =>
+        new OrganizationActorStorageError({
+          cause: formatUnknownError(cause),
+          message: "Organization actor session lookup failed",
+        })
+    )
+  );
 
   if (session === null || session === undefined) {
     return yield* Effect.fail(
@@ -133,16 +129,15 @@ export class CurrentOrganizationActor extends Effect.Service<CurrentOrganization
   "@ceird/domains/organizations/CurrentOrganizationActor",
   {
     accessors: true,
-    dependencies: [Authentication.Default],
     effect: Effect.gen(function* CurrentOrganizationActorLive() {
-      const auth = yield* Authentication;
+      const sessionResolver = yield* CurrentOrganizationSessionResolver;
       const sql = yield* SqlClient.SqlClient;
 
       const get = Effect.fn("CurrentOrganizationActor.get")(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
 
         return yield* resolveCurrentOrganizationActor({
-          getSession: (headers) => auth.api.getSession({ headers }),
+          getSession: sessionResolver.getSession,
           headers: new Headers(request.headers),
           loadMembershipRoles: (organizationId, userId) =>
             sql<MembershipRoleRow>`

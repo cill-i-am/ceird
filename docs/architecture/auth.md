@@ -7,6 +7,8 @@ the codebase across:
 
 - `apps/api`, which owns the authoritative auth runtime
 - `apps/app`, which owns auth UI, route gating, and session-aware navigation
+- `apps/mcp`, which consumes OAuth Provider bearer tokens as the standalone MCP
+  resource server
 
 It describes the current implementation, not a hypothetical target state.
 
@@ -25,7 +27,8 @@ Authentication currently supports only:
 - redirecting authenticated users away from guest-only auth pages
 - OAuth/OIDC authorization-server configuration for MCP clients
 - app-owned OAuth consent UI for Better Auth authorization requests
-- MCP resource-server bearer-token validation and tool authorization
+- MCP resource-server bearer-token validation and tool authorization in
+  `apps/mcp`
 
 Authentication explicitly does not currently support:
 
@@ -39,7 +42,7 @@ Authentication explicitly does not currently support:
 
 ## Architectural Summary
 
-The system is intentionally split into two layers:
+The system is intentionally split into three layers:
 
 1. `apps/api` owns Better Auth configuration, persistence, cookies, rate
    limiting, trusted-origin policy, and the `/api/auth/*` HTTP surface.
@@ -50,6 +53,9 @@ The system is intentionally split into two layers:
    - authenticated shell rendering
    - sign-out UX
    - OAuth consent review and approve/deny actions
+3. `apps/mcp` owns the MCP resource-server HTTP surface, protected-resource
+   metadata, bearer-token validation, and MCP tool routing against shared
+   backend services.
 
 The core rule is:
 
@@ -106,8 +112,10 @@ Current config decisions:
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
-- `MCP_RESOURCE_URL` is optional; when omitted the valid MCP resource audience
-  defaults to the API origin plus `/mcp`
+- `MCP_RESOURCE_URL` is optional for package-local config; when omitted the
+  valid MCP resource audience defaults to the configured auth origin plus
+  `/mcp`; deployed Alchemy stages set it explicitly from `mcpHostname`, with
+  production using `https://mcp.ceird.app/mcp`
 - `OAUTH_ISSUER_URL` is optional; when omitted OAuth/OIDC issuer metadata
   defaults to `BETTER_AUTH_BASE_URL`; explicit issuer URLs are canonicalized to
   match Better Auth discovery metadata before token signing uses them
@@ -126,20 +134,20 @@ base path:
 - `/api/auth/.well-known/oauth-authorization-server`
 - `/api/auth/.well-known/openid-configuration`
 
-The MCP resource server also exposes protected-resource metadata at:
+The standalone MCP resource server exposes protected-resource metadata at:
 
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-protected-resource/<mcp-resource-path>`
 
 Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
 `xmcp` runtime in `apps/api`. MCP auth uses Ceird's existing Better Auth OAuth
-Provider runtime, and MCP HTTP uses the `@effect/ai` MCP HTTP router mounted
-inside the API Worker.
+Provider runtime from the API, while MCP HTTP uses the `@effect/ai` MCP HTTP
+router in the `apps/mcp` Worker through `@ceird/backend-core/mcp`.
 
 ### MCP Bearer Sessions
 
-The MCP endpoint validates OAuth Provider access tokens as JWT bearer tokens.
-Token verification requires:
+The `apps/mcp` endpoint validates OAuth Provider access tokens as JWT bearer
+tokens. Token verification requires:
 
 - issuer equal to the configured OAuth issuer
 - audience equal to `MCP_RESOURCE_URL`
@@ -151,8 +159,9 @@ organization actor by loading the Better Auth `session` row from `sid`, checking
 that the row belongs to `sub`, reading the active organization id from that
 session, and then loading the user's `member` role in that organization. The
 Effect AI MCP router receives the verified identity through Effect
-context/layers, and the same domain authorization services used by the HTTP API
-decide whether that actor can perform each operation.
+context/layers, and the same `@ceird/backend-core` domain authorization
+services used by the HTTP API decide whether that actor can perform each
+operation.
 
 Current Ceird MCP scopes are:
 
@@ -258,8 +267,8 @@ Current defaults by entry point:
 
 - package-local development injects `http://127.0.0.1:3001`
 - Playwright's package-local fallback injects `http://127.0.0.1:3001`
-- Alchemy stages inject one explicit auth origin into both sides through
-  `BETTER_AUTH_BASE_URL` for the API and app/API origin env for the app
+- Alchemy stages inject one explicit auth origin into the API and MCP through
+  `BETTER_AUTH_BASE_URL`, and inject app/API origin env for the app
 - local dev and Playwright launchers inject `AUTH_EMAIL_FROM` and
   `AUTH_EMAIL_FROM_NAME`
 - local dev uses the deterministic development transport
@@ -321,15 +330,16 @@ The API does not maintain a parallel app-specific session store.
 
 ### Database Wiring
 
-`apps/api/src/platform/database/database.ts` owns Postgres access for the API,
-including the auth slice.
+`packages/backend-core/src/platform/database/database.ts` owns shared Postgres
+runtime wiring. The API composes that runtime for HTTP/auth work, while the MCP
+Worker composes it for MCP tool execution.
 
 Responsibilities:
 
 - create the `pg` connection pool
 - validate connectivity on startup
-- expose a Drizzle database for Better Auth
-- expose Effect SQL / Drizzle layers for future backend composition
+- expose a Drizzle database for Better Auth through the API auth runtime
+- expose Effect SQL / Drizzle layers for API and MCP backend composition
 
 Current architectural decision:
 
@@ -753,9 +763,13 @@ These are the important current rules we are following.
   Implements the deployed auth email transport adapter for the Cloudflare Email
   Worker binding.
 - `apps/api/src/domains/identity/authentication/schema.ts`
-  Defines auth persistence tables.
+  Re-exports the shared auth persistence tables for API-local imports.
 - `apps/api/src/platform/database/schema.ts`
   Re-exports the auth schema into the shared Drizzle database schema.
+- `apps/mcp/src/platform/cloudflare/runtime.ts`
+  Composes the standalone MCP Worker runtime with Hyperdrive-backed database
+  access, Google geocoding, OAuth resource configuration, and the shared MCP
+  handler.
 
 ### Frontend
 

@@ -1,7 +1,6 @@
+import { appDatabaseUrlConfig } from "@ceird/backend-core/database";
 import { defineConfig } from "drizzle-kit";
 import { Effect } from "effect";
-
-import { appDatabaseUrlConfig } from "./src/platform/database/config";
 
 const databaseUrl = Effect.runSync(appDatabaseUrlConfig);
 

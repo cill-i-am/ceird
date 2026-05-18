@@ -2,11 +2,17 @@
 
 ## Scope
 
-`apps/api` is the backend service. It exposes Effect HTTP APIs for system,
-jobs, sites, comments-backed collaboration, labels, and organization
-configuration routes, mounts Better Auth under `/api/auth/*`, owns database
-schema and migrations, and can run as either a Node dev server or a Cloudflare
-Worker.
+`apps/api` is the Ceird HTTP API and auth service. It exposes Effect HTTP APIs
+for system, jobs, sites, comments-backed collaboration, labels, and
+organization configuration routes, mounts Better Auth under `/api/auth/*`, owns
+the API migration entrypoint, and can run as either a Node dev server or a
+Cloudflare Worker.
+
+Shared backend services, SQL repositories, database runtime helpers, and MCP
+resource-server runtime live in `@ceird/backend-core`. The API imports that
+package for implementation layers and keeps API-specific HTTP adapters,
+authentication, CORS, request logging, queues, and migration wiring in
+`apps/api`.
 
 ## Entry Points
 
@@ -17,8 +23,7 @@ Worker.
 | `src/worker.ts`                      | Thin Cloudflare Worker module adapter; runs the Effect runtime programs for fetch and queue.     |
 | `src/platform/cloudflare/runtime.ts` | Cloudflare runtime composition for API fetch handling, auth queue delivery, and Worker layers.   |
 | `src/platform/cloudflare/env.ts`     | Cloudflare environment decoding and binding access.                                              |
-| `src/platform/database/database.ts`  | Database runtime layer.                                                                          |
-| `src/platform/database/schema.ts`    | Combined Drizzle schema barrel.                                                                  |
+| `src/platform/database/schema.ts`    | API migration schema barrel composed from auth and shared backend schemas.                       |
 
 System endpoints are defined in `src/server.ts`:
 
@@ -56,17 +61,11 @@ resources or config vars. The API runtime intentionally stays on its Effect 3
 application dependencies and does not import Alchemy or Effect 4; the root
 infra helpers own those deploy-time dependencies and binding types.
 
-`src/server.ts` also intercepts MCP resource-server traffic before falling
-through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or
-to the path component of `MCP_RESOURCE_URL` when that environment variable is
-set. Protected-resource metadata is served at
-`/.well-known/oauth-protected-resource` and at the path-specific well-known URL,
-for example `/.well-known/oauth-protected-resource/mcp`.
-
-MCP HTTP is served through `@effect/ai`'s `McpServer.layerHttpRouter`, adapted
-to the API web-handler boundary after Better Auth OAuth bearer validation. Ceird
-intentionally does not mount an `xmcp` generated worker or use the packaged xmcp
-Better Auth adapter in the API runtime.
+`src/server.ts` does not serve MCP traffic. Requests for `/mcp` or MCP
+protected-resource metadata fall through to the Effect `HttpApi` handler and
+return the normal API 404 response. The standalone MCP resource is served by
+`apps/mcp`, while `apps/api` remains the OAuth/OIDC authorization server through
+Better Auth.
 
 ## Observability
 
@@ -124,56 +123,40 @@ decoders from `@ceird/identity-core`. Only organization name can be
 updated through the supported update path, and writable roles are decoded
 against the shared role schema.
 
-## MCP Resource Server
+## MCP OAuth Boundary
 
-MCP tools live in `src/domains/mcp` as Effect AI `Tool` and `Toolkit`
-registrations. They call the same domain services as the HTTP API. The MCP
-resource server validates the bearer token through Better Auth's OAuth Provider
-support before the request reaches the Effect AI router. Tool execution receives
-the verified request identity through an Effect request-runtime context, resolves
-the current organization actor from the token's Better Auth session id and
-subject, and then lets the existing labels, sites, jobs, and configuration
-authorization rules decide access.
+The API configures Better Auth's OAuth Provider for Ceird MCP clients and
+advertises the MCP resource URL as a valid token audience. In deployed
+production, that resource is `https://mcp.ceird.app/mcp`; stage and local
+Alchemy runs derive it from the configured `mcpHostname`.
 
-Initial MCP tools:
-
-| Tool                       | Domain service method                  | Scope         |
-| -------------------------- | -------------------------------------- | ------------- |
-| `ceird.labels.list`        | `LabelsService.list`                   | `ceird:read`  |
-| `ceird.sites.options`      | `SitesService.getOptions`              | `ceird:read`  |
-| `ceird.jobs.list`          | `JobsService.list`                     | `ceird:read`  |
-| `ceird.jobs.detail`        | `JobsService.getDetail`                | `ceird:read`  |
-| `ceird.jobs.options`       | `JobsService.getOptions`               | `ceird:read`  |
-| `ceird.jobs.activity.list` | `JobsService.listOrganizationActivity` | `ceird:admin` |
-| `ceird.rate_cards.list`    | `ConfigurationService.listRateCards`   | `ceird:admin` |
-| `ceird.jobs.add_comment`   | `JobsService.addComment`               | `ceird:write` |
-| `ceird.jobs.assign_label`  | `JobsService.assignLabel`              | `ceird:write` |
-| `ceird.jobs.remove_label`  | `JobsService.removeLabel`              | `ceird:write` |
-
-`ceird:admin` satisfies all MCP tool scope checks. `ceird:write` does not imply
-read access, and `ceird:read` does not imply write access. All tools fail closed
-when the bearer token lacks a Better Auth session id, lacks a subject, or lacks
-the required Ceird scope.
+The API does not validate MCP bearer tokens or run MCP tools. The `apps/mcp`
+Worker validates OAuth Provider JWT bearer tokens against the configured issuer
+and MCP audience, then delegates tool execution to the shared
+`@ceird/backend-core/mcp` handler and domain services.
 
 ## Jobs Domain
 
-Jobs live in `src/domains/jobs` and are exposed through `@ceird/jobs-core`.
-Jobs may reference sites and organization labels, but site definitions and
-label definitions are owned by their own API domains.
+Jobs HTTP endpoints live in `apps/api/src/domains/jobs/http.ts` and are exposed
+through `@ceird/jobs-core`. Jobs services, repositories, authorization, activity
+recording, ID generation, and schema live in
+`packages/backend-core/src/domains/jobs`. Jobs may reference sites and
+organization labels, but site definitions and label definitions are owned by
+their own domains.
 
 Core files:
 
-| File                       | Responsibility                                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `http.ts`                  | Binds jobs and rate-card contract endpoints to Effect services and configures CORS.                                                      |
-| `service.ts`               | Main jobs use cases: list, create, patch, transition, reopen, comments, visits, job-label assignment, collaborators, costs, and options. |
-| `configuration-service.ts` | Rate-card configuration.                                                                                                                 |
-| `repositories.ts`          | SQL repository layer for jobs, contacts, rate cards, activity, members, and job-label assignment rows.                                   |
-| `authorization.ts`         | Role and access checks for jobs operations.                                                                                              |
-| `actor-access.ts`          | Actor resolution error mapping.                                                                                                          |
-| `activity-recorder.ts`     | Work item activity events.                                                                                                               |
-| `schema.ts`                | Jobs-owned Drizzle tables and relations, including job-label assignment rows. Job comments are stored through the comments domain.       |
-| `errors.ts`                | API-domain error helpers where needed.                                                                                                   |
+| File                       | Responsibility                                                                                                                                        |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http.ts`                  | Binds jobs and rate-card contract endpoints to Effect services and configures CORS.                                                                   |
+| `service.ts`               | Backend-core main jobs use cases: list, create, patch, transition, reopen, comments, visits, job-label assignment, collaborators, costs, and options. |
+| `configuration-service.ts` | Backend-core rate-card configuration.                                                                                                                 |
+| `repositories.ts`          | Backend-core SQL repository layer for jobs, contacts, rate cards, activity, members, and job-label assignment rows.                                   |
+| `authorization.ts`         | Backend-core role and access checks for jobs operations.                                                                                              |
+| `actor-access.ts`          | Backend-core actor resolution error mapping.                                                                                                          |
+| `activity-recorder.ts`     | Backend-core work item activity events.                                                                                                               |
+| `schema.ts`                | Backend-core jobs-owned Drizzle tables and relations, including job-label assignment rows. Job comments are stored through the comments domain.       |
+| `errors.ts`                | Backend-core domain error helpers where needed.                                                                                                       |
 
 The jobs service flow is:
 
@@ -184,10 +167,12 @@ The jobs service flow is:
 5. Record activity for auditable changes.
 6. Return DTOs defined in the owning shared core package.
 
-Current actor resolution lives in `src/domains/organizations` because sites,
-labels, and jobs all need the same organization actor boundary. Better Auth
-session data is treated as untrusted: session user and active organization IDs
-are decoded into branded IDs, malformed identity data fails with a typed
+Current actor resolution lives in
+`packages/backend-core/src/domains/organizations` because sites, labels, jobs,
+and MCP all need the same organization actor boundary. The API provides a
+Better Auth-backed session resolver layer for HTTP requests. Better Auth session
+data is treated as untrusted: session user and active organization IDs are
+decoded into branded IDs, malformed identity data fails with a typed
 actor-resolution error, and session lookup failures remain typed storage
 failures instead of defects.
 
@@ -197,9 +182,10 @@ as labels, service areas, sites, and rate cards through the owning domain.
 
 ## Comments Domain
 
-Reusable comments persistence lives in `src/domains/comments` and shared DTO
-primitives live in `@ceird/comments-core`. The API stores comment content in a
-single `comments` table and keeps target ownership in separate join tables:
+Reusable comments persistence lives in
+`packages/backend-core/src/domains/comments` and shared DTO primitives live in
+`@ceird/comments-core`. Ceird stores comment content in a single `comments`
+table and keeps target ownership in separate join tables:
 
 - `work_item_comments` links comments to jobs.
 - `site_comments` links comments to sites.
@@ -248,51 +234,55 @@ live in `apps/api/src/domains/jobs/http.ts`.
 
 ## Labels Domain
 
-Labels live in `src/domains/labels` and are exposed through
-`@ceird/labels-core`. Labels are organization-level definitions; jobs and sites
-assign those labels through join tables and assignment behavior owned by the
-jobs and sites domains.
+Labels HTTP endpoints live in `apps/api/src/domains/labels/http.ts` and are
+exposed through `@ceird/labels-core`. Labels service, repository, ID generation,
+and schema live in `packages/backend-core/src/domains/labels`. Labels are
+organization-level definitions; jobs and sites assign those labels through join
+tables and assignment behavior owned by the jobs and sites domains.
 
 Core files:
 
-| File               | Responsibility                                                            |
-| ------------------ | ------------------------------------------------------------------------- |
-| `http.ts`          | Binds label contract endpoints to `LabelsService` and configures CORS.    |
-| `service.ts`       | Label list, create, update, and archive use cases with organization auth. |
-| `repositories.ts`  | SQL repository layer for the organization-owned `labels` table.           |
-| `schema.ts`        | Labels Drizzle table and relations.                                       |
-| `id-generation.ts` | Label ID generation.                                                      |
+| File               | Responsibility                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `http.ts`          | Binds label contract endpoints to `LabelsService` and configures CORS.                 |
+| `service.ts`       | Backend-core label list, create, update, and archive use cases with organization auth. |
+| `repositories.ts`  | Backend-core SQL repository layer for the organization-owned `labels` table.           |
+| `schema.ts`        | Backend-core labels Drizzle table and relations.                                       |
+| `id-generation.ts` | Backend-core label ID generation.                                                      |
 
 ## Sites Domain
 
-Sites live in `src/domains/sites` and are exposed through
-`@ceird/sites-core`. Sites and service areas are independent organization data
-that jobs can reference. Sites can also have internal comments through the
-comments domain. Site access notes remain a single structured field on the site
-itself for operational access instructions.
+Sites HTTP endpoints live in `apps/api/src/domains/sites/http.ts` and are
+exposed through `@ceird/sites-core`. Sites services, repositories, geocoding, ID
+generation, and schema live in `packages/backend-core/src/domains/sites`. Sites
+and service areas are independent organization data that jobs can reference.
+Sites can also have internal comments through the comments domain. Site access
+notes remain a single structured field on the site itself for operational
+access instructions.
 
 Core files:
 
-| File                       | Responsibility                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS.     |
-| `service.ts`               | Site list, create, update, options, internal comments, and site-label assignment use cases. |
-| `service-areas-service.ts` | Service-area list, create, and update use cases.                                            |
-| `repositories.ts`          | SQL repository layer for sites, service areas, and site-label assignment methods.           |
-| `schema.ts`                | Sites, service-area, and site-label assignment rows and relations.                          |
-| `geocoder.ts`              | Site geocoding capability plus development and Google provider layers.                      |
-| `id-generation.ts`         | Site and service-area ID generation.                                                        |
+| File                       | Responsibility                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS.                  |
+| `service.ts`               | Backend-core site list, create, update, options, internal comments, and site-label assignment use cases. |
+| `service-areas-service.ts` | Backend-core service-area list, create, and update use cases.                                            |
+| `repositories.ts`          | Backend-core SQL repository layer for sites, service areas, and site-label assignment methods.           |
+| `schema.ts`                | Backend-core sites, service-area, and site-label assignment rows and relations.                          |
+| `geocoder.ts`              | Backend-core site geocoding capability plus development and Google provider layers.                      |
+| `id-generation.ts`         | Backend-core site and service-area ID generation.                                                        |
 
 Site and job services depend on the `SiteGeocoder` capability, not on a
 provider-specific implementation. Runtime entrypoints choose the provider layer:
 package-local Node composition uses `SiteGeocoder.Local`, which selects Google
 when `GOOGLE_MAPS_API_KEY` is present and falls back to deterministic
 development coordinates when it is absent. The Cloudflare Worker composition
-uses `SiteGeocoder.Google`, so deployed API startup fails fast without the
-Google Maps key. Environment variables configure provider credentials; they do
-not select provider topology. Address-level misses return the user-correctable
-geocoding failure contract, while upstream Google/configuration failures return
-the provider failure contract so deployed misconfiguration fails visibly.
+uses `SiteGeocoder.Google`, so deployed API and MCP startup fail fast without
+the Google Maps key. Environment variables configure provider credentials; they
+do not select provider topology. Address-level misses return the
+user-correctable geocoding failure contract, while upstream
+Google/configuration failures return the provider failure contract so deployed
+misconfiguration fails visibly.
 
 ## Labels API Endpoints
 
@@ -335,23 +325,26 @@ areas and sites together.
 
 The API uses Drizzle with Postgres.
 
-| Area                  | Files                                                |
-| --------------------- | ---------------------------------------------------- |
-| Database config       | `src/platform/database/config.ts`, `database-url.ts` |
-| Database runtime      | `src/platform/database/database.ts`                  |
-| Test database helpers | `src/platform/database/test-database.ts`             |
-| Schema barrel         | `src/platform/database/schema.ts`                    |
-| Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
-| Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
-| Drizzle CLI config    | `drizzle.config.ts`                                  |
+| Area                  | Files                                                                      |
+| --------------------- | -------------------------------------------------------------------------- |
+| Database config       | `packages/backend-core/src/platform/database/config.ts`, `database-url.ts` |
+| Database runtime      | `packages/backend-core/src/platform/database/database.ts`                  |
+| Test database helpers | `packages/backend-core/src/platform/database/test-database.ts`             |
+| API schema barrel     | `src/platform/database/schema.ts`                                          |
+| Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`                                     |
+| Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`                          |
+| Drizzle CLI config    | `drizzle.config.ts`                                                        |
 
-`databaseSchema` merges authentication, comments, labels, sites, and jobs
-tables. Keep schema changes in the domain that owns the tables, then export
-through the schema barrel. The Alchemy stack also loads this barrel through
-`Drizzle.Schema`. The native Neon branch applies `apps/api/drizzle`, so the
-historical SQL files remain the bootstrap path and future Alchemy-generated SQL
-under `drizzle/alchemy` is picked up by the same resource. In infra this is
-modeled as separate generated and applied migration directories.
+The API `databaseSchema` merges authentication, comments, labels, sites, and
+jobs tables. Shared domain table definitions live in `@ceird/backend-core`; the
+API schema barrel composes them with the Better Auth tables for migration
+generation. Keep schema changes in the domain that owns the tables, then export
+through the relevant package/API barrel. The Alchemy stack also loads the API
+barrel through `Drizzle.Schema`. The native Neon branch applies
+`apps/api/drizzle`, so the historical SQL files remain the bootstrap path and
+future Alchemy-generated SQL under `drizzle/alchemy` is picked up by the same
+resource. In infra this is modeled as separate generated and applied migration
+directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.

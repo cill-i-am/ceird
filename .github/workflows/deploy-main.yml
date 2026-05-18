@@ -21,6 +21,7 @@ env:
   CEIRD_API_HOSTNAME: api.ceird.app
   CEIRD_APP_HOSTNAME: app.ceird.app
   CEIRD_CLOUDFLARE: "1"
+  CEIRD_MCP_HOSTNAME: mcp.ceird.app
   CEIRD_ZONE_NAME: ceird.app
   PNPM_CONFIG_OPTIONAL: "true"
 
@@ -60,6 +61,9 @@ jobs:
 
       - name: Type check API
         run: pnpm --filter api check-types
+
+      - name: Type check MCP
+        run: pnpm --filter mcp check-types
 
       - name: Type check infra
         run: pnpm run check-types:infra

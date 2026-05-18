@@ -89,6 +89,7 @@ describe("Alchemy stage identity", () => {
     expect(config.stage).toBe("dev_cillian");
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
+    expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
     expect(config.neonDatabaseName).toBe("ceird");
     expect(config.neonDefaultBranchName).toBe("base");
@@ -101,7 +102,7 @@ describe("Alchemy stage identity", () => {
     expect(resourceName(config, "api")).toBe("ceird-dev-cillian-api");
   });
 
-  it("defaults the Ceird zone and stage-scoped app/API hostnames for local Alchemy runs", () => {
+  it("defaults the Ceird zone and stage-scoped app/API/MCP hostnames for local Alchemy runs", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("codex-alchemy-v2-native-migration").pipe(
         Effect.provide(
@@ -124,9 +125,12 @@ describe("Alchemy stage identity", () => {
     expect(config.apiHostname).toBe(
       "api.codex-alchemy-v2-native-migration.ceird.app"
     );
+    expect(config.mcpHostname).toBe(
+      "mcp.codex-alchemy-v2-native-migration.ceird.app"
+    );
   });
 
-  it("defaults the parent stage to stage-scoped app/API hostnames", () => {
+  it("defaults the parent stage to stage-scoped app/API/MCP hostnames", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("main").pipe(
         Effect.provide(
@@ -145,6 +149,7 @@ describe("Alchemy stage identity", () => {
     expect(config.zoneName).toBe("ceird.app");
     expect(config.appHostname).toBe("app.main.ceird.app");
     expect(config.apiHostname).toBe("api.main.ceird.app");
+    expect(config.mcpHostname).toBe("mcp.main.ceird.app");
     expect(config.hyperdriveName).toBe("ceird-production-postgres");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
     expect(config.neonParentBranchProtected).toBe(false);
@@ -170,6 +175,30 @@ describe("Alchemy stage identity", () => {
 
     expect(config.hyperdriveName).toBe("ceird-main-postgres");
     expect(config.neonHistoryRetentionSeconds).toBe(86_400);
+  });
+
+  it("allows main app, API, and MCP hostnames to be overridden for production", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_API_HOSTNAME: "api.ceird.app",
+                CEIRD_APP_HOSTNAME: "app.ceird.app",
+                CEIRD_MCP_HOSTNAME: "mcp.ceird.app",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.appHostname).toBe("app.ceird.app");
+    expect(config.apiHostname).toBe("api.ceird.app");
+    expect(config.mcpHostname).toBe("mcp.ceird.app");
   });
 
   it("allows parent Neon branch protection to be enabled explicitly", () => {

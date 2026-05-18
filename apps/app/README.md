@@ -15,7 +15,8 @@ pnpm --filter app build
 pnpm --filter app build:cloudflare
 ```
 
-For full cloud-backed app/API/Postgres testing, start an Alchemy stage first:
+For full cloud-backed app/API/MCP/Postgres testing, start an Alchemy stage
+first:
 
 ```bash
 pnpm dev -- --stage codex-my-task

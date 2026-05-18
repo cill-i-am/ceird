@@ -6,8 +6,8 @@ sites, members, activity, and organization configuration without adopting a
 generic project-management workflow.
 
 The codebase is a TypeScript monorepo built with pnpm workspaces. It contains
-a TanStack Start web app, an Effect HTTP API, shared runtime schema packages,
-and Alchemy infrastructure for Cloudflare and Neon.
+a TanStack Start web app, an Effect HTTP API, a Cloudflare MCP Worker, shared
+runtime schema packages, and Alchemy infrastructure for Cloudflare and Neon.
 
 ## Quick Start
 
@@ -46,18 +46,20 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 ## Workspace Map
 
-| Path                     | Purpose                                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                              |
-| `apps/api`               | Effect HTTP API, Better Auth integration, jobs/sites/labels domain services, Drizzle schema, migrations, and Cloudflare Worker entrypoint. |
-| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                                    |
-| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                              |
-| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                                  |
-| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                                 |
-| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                                 |
-| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                                     |
-| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                               |
-| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                                |
+| Path                     | Purpose                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                        |
+| `apps/api`               | Effect HTTP API, Better Auth integration, HTTP route adapters, Drizzle schema, migrations, auth email queues, and Worker entrypoint. |
+| `apps/mcp`               | Cloudflare Worker serving the Ceird MCP resource at `/mcp` using shared backend services.                                            |
+| `packages/backend-core`  | Shared server-side database runtime, repositories, domain services, MCP handler, and auth table schema used by backend Workers.      |
+| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                              |
+| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                        |
+| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                            |
+| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                           |
+| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                           |
+| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                               |
+| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                         |
+| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                          |
 
 ## Common Commands
 
@@ -71,6 +73,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `pnpm format`                   | Checks formatting with oxfmt.                                                                                         |
 | `pnpm format:write`             | Writes formatting changes with oxfmt.                                                                                 |
 | `pnpm --filter app e2e`         | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                 |
+| `pnpm --filter mcp test`        | Runs the MCP Worker tests.                                                                                            |
 | `pnpm --filter api db:generate` | Generates package-local Drizzle SQL for API schema changes.                                                           |
 | `pnpm --filter api db:migrate`  | Applies package-local API migrations outside the Alchemy stage workflow.                                              |
 | `pnpm alchemy dev`              | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`. |

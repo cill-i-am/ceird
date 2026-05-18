@@ -60,10 +60,10 @@ before deployment.
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
 store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
-Cloudflare Email Service to the API Worker. Alchemy's CI guide specifically calls out that
-`Cloudflare.state()` needs Cloudflare Secrets Store Write in CI because Alchemy
-reads the state-store token back through an ephemeral edge-preview Worker with a
-secret binding.
+Cloudflare Email Service to the API Worker. Alchemy's CI guide specifically
+calls out that `Cloudflare.state()` needs Cloudflare Secrets Store Write in CI
+because Alchemy reads the state-store token back through an ephemeral
+edge-preview Worker with a secret binding.
 
 ## Workflow
 
@@ -75,7 +75,7 @@ secret binding.
 The workflow:
 
 - installs dependencies with pnpm
-- type-checks the app, API, and root infra helpers
+- type-checks the app, API, MCP Worker, and root infra helpers
 - bootstraps Cloudflare state through `pnpm alchemy cloudflare bootstrap`
 - deploys through `pnpm alchemy deploy --stage main --yes`
 - serializes deploys with a GitHub Actions concurrency group
@@ -92,10 +92,11 @@ Neon plan can create another protected branch. `CEIRD_NEON_HISTORY_RETENTION_SEC
 defaults to `21600` so the workflow declares the provider-reported Neon
 retention window instead of re-planning it on every deploy.
 
-The main deploy workflow sets `CEIRD_APP_HOSTNAME=app.ceird.app` and
-`CEIRD_API_HOSTNAME=api.ceird.app` so the production stage keeps the canonical
-app/API routes. Other stages use stage-scoped hostnames such as
-`app.<stage>.ceird.app` and `api.<stage>.ceird.app` unless explicitly
+The main deploy workflow sets `CEIRD_APP_HOSTNAME=app.ceird.app`,
+`CEIRD_API_HOSTNAME=api.ceird.app`, and `CEIRD_MCP_HOSTNAME=mcp.ceird.app` so
+the production stage keeps the canonical app/API/MCP routes. Other stages use
+stage-scoped hostnames such as `app.<stage>.ceird.app`,
+`api.<stage>.ceird.app`, and `mcp.<stage>.ceird.app` unless explicitly
 overridden.
 
 `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` defaults to `5`, Cloudflare

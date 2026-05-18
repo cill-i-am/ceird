@@ -3,7 +3,9 @@ import {
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
+  decodeSessionId,
   decodeUpdateOrganizationInput,
+  decodeUserId,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
   ORGANIZATION_SLUG_PATTERN,
@@ -120,5 +122,17 @@ describe("organization role boundary", () => {
         isExternalOrganizationRole(role)
       )
     ).toStrictEqual([false, false, false, true]);
+  }, 1000);
+});
+
+describe("identity id boundaries", () => {
+  it("decodes non-empty user and session ids", () => {
+    expect(decodeUserId("user_123")).toBe("user_123");
+    expect(decodeSessionId("session_123")).toBe("session_123");
+  }, 1000);
+
+  it("rejects empty user and session ids", () => {
+    expect(() => decodeUserId("")).toThrow(/Expected/);
+    expect(() => decodeSessionId("")).toThrow(/Expected/);
   }, 1000);
 });

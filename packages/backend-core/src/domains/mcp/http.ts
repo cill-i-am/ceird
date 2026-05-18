@@ -1,11 +1,11 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
+import { SessionId, UserId } from "@ceird/identity-core";
 import { McpServer } from "@effect/ai";
 import { HttpLayerRouter } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
-import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { ConfigurationService } from "../jobs/configuration-service.js";
@@ -21,15 +21,19 @@ import {
   SitesRepository,
 } from "../sites/repositories.js";
 import { SitesService } from "../sites/service.js";
+import {
+  CurrentOrganizationActorFromMcpSessionLive,
+  McpSessionContext,
+} from "./actor.js";
 import type { McpSessionIdentity } from "./actor.js";
-import { makeCurrentOrganizationActorFromMcpSessionLayer } from "./actor.js";
+import type { McpResourceAuthConfig } from "./config.js";
+import { DEFAULT_MCP_RESOURCE_PATH } from "./config.js";
 import {
   CeirdMcpToolkit,
   CeirdMcpToolkitLayer,
   McpToolRequestRuntime,
 } from "./tools.js";
 
-const MCP_PATH = "/mcp";
 const OAUTH_PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 type McpPath = `/${string}`;
 
@@ -37,21 +41,34 @@ type McpBaseLayer = Layer.Layer<never, never, never>;
 type McpRuntimeServices = SqlClient.SqlClient | SiteGeocoder;
 interface McpLayerOptions<ERuntime> {
   readonly baseLive?: McpBaseLayer | undefined;
+  readonly memoMap?: Layer.MemoMap | undefined;
   readonly runtimeLive?:
     | Layer.Layer<McpRuntimeServices, ERuntime, never>
     | undefined;
 }
+type McpRequestContext = McpSessionContext | McpToolRequestRuntime;
+
+export interface McpWebHandler {
+  (request: Request): Response | Promise<Response | null> | null;
+  readonly dispose: () => Promise<void>;
+}
 
 export function makeMcpWebHandler<ERuntime>(
   options: {
-    readonly authConfig: AuthenticationConfig;
+    readonly authConfig: McpResourceAuthConfig;
   } & McpLayerOptions<ERuntime>
-) {
+): McpWebHandler {
   const baseLive = options.baseLive ?? Layer.empty;
   const runtimeLive = options.runtimeLive ?? MissingMcpRuntimeLive;
   const mcpPath = getMcpPathname(options.authConfig.mcpResourceUrl);
   const mcpProtectedResourcePath =
     makeMcpProtectedResourceMetadataPathname(mcpPath);
+  const authorizedMcpRequestHandler = makeAuthorizedMcpRequestHandler({
+    baseLive,
+    mcpPath,
+    memoMap: options.memoMap,
+    runtimeLive,
+  });
 
   const authorizedMcpHandler = mcpHandler(
     {
@@ -62,11 +79,7 @@ export function makeMcpWebHandler<ERuntime>(
       },
     },
     (request, jwt) =>
-      handleAuthorizedMcpRequest(request, jwt, {
-        baseLive,
-        mcpPath,
-        runtimeLive,
-      }),
+      handleAuthorizedMcpRequest(request, jwt, authorizedMcpRequestHandler),
     {
       resourceMetadataMappings: {
         [options.authConfig.mcpResourceUrl]: mcpProtectedResourcePath,
@@ -74,7 +87,9 @@ export function makeMcpWebHandler<ERuntime>(
     }
   );
 
-  return (request: Request): Response | Promise<Response | null> | null => {
+  const handler = (
+    request: Request
+  ): Response | Promise<Response | null> | null => {
     const url = new URL(request.url);
 
     if (url.pathname === OAUTH_PROTECTED_RESOURCE_PATH) {
@@ -113,6 +128,10 @@ export function makeMcpWebHandler<ERuntime>(
 
     return authorizedMcpHandler(request);
   };
+
+  return Object.assign(handler, {
+    dispose: authorizedMcpRequestHandler.dispose,
+  });
 }
 
 function makeProtectedResourceMetadata(
@@ -128,7 +147,9 @@ function makeProtectedResourceMetadata(
 
 function getMcpPathname(resourceUrl: string): McpPath {
   const pathname = new URL(resourceUrl).pathname.replace(/\/+$/, "");
-  return (pathname.length > 0 ? pathname : MCP_PATH) as McpPath;
+  return (
+    pathname.length > 0 ? pathname : DEFAULT_MCP_RESOURCE_PATH
+  ) as McpPath;
 }
 
 function makeMcpProtectedResourceMetadataPathname(mcpPathname: string) {
@@ -150,19 +171,15 @@ const TokenPayloadSchema = Schema.Struct({
   client_id: Schema.optional(Schema.String),
   exp: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.Unknown),
-  sid: Schema.optional(Schema.String),
-  sub: Schema.optional(Schema.String),
+  sid: Schema.optional(SessionId),
+  sub: Schema.optional(UserId),
 });
 type TokenPayload = Schema.Schema.Type<typeof TokenPayloadSchema>;
 
-async function handleAuthorizedMcpRequest<ERuntime>(
+function handleAuthorizedMcpRequest(
   request: Request,
   jwt: unknown,
-  runtime: {
-    readonly baseLive: McpBaseLayer;
-    readonly mcpPath: McpPath;
-    readonly runtimeLive: Layer.Layer<McpRuntimeServices, ERuntime, never>;
-  }
+  requestHandler: AuthorizedMcpRequestHandler
 ) {
   const tokenPayload = Schema.decodeUnknownOption(TokenPayloadSchema)(jwt);
   const tokenPayloadValue = Option.getOrUndefined(tokenPayload);
@@ -171,54 +188,73 @@ async function handleAuthorizedMcpRequest<ERuntime>(
       ? undefined
       : toMcpSessionIdentity(tokenPayloadValue);
 
-  if (session === undefined) {
+  if (tokenPayloadValue === undefined || session === undefined) {
     return new Response(null, {
       headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
       status: 401,
     });
   }
 
-  const appLayer = createMcpAppLayer({
-    baseLive: runtime.baseLive,
-    mcpPath: runtime.mcpPath,
-    runtimeLive: runtime.runtimeLive,
-    scopes:
-      tokenPayloadValue === undefined
-        ? []
-        : decodeScopes(tokenPayloadValue.scope),
+  const requestContext = makeMcpRequestContext({
+    scopes: decodeScopes(tokenPayloadValue.scope),
     session,
+  });
+
+  return Effect.runPromise(
+    normalizeMcpRequest(request).pipe(
+      Effect.flatMap((normalizedRequest) =>
+        normalizedRequest instanceof Response
+          ? Effect.succeed(normalizedRequest)
+          : Effect.promise(() =>
+              requestHandler.handle(normalizedRequest, requestContext)
+            )
+      )
+    )
+  );
+}
+
+interface AuthorizedMcpRequestHandler {
+  readonly dispose: () => Promise<void>;
+  readonly handle: (
+    request: Request,
+    context: Context.Context<McpRequestContext>
+  ) => Promise<Response>;
+}
+
+function makeAuthorizedMcpRequestHandler<ERuntime>(options: {
+  readonly baseLive: McpBaseLayer;
+  readonly mcpPath: McpPath;
+  readonly memoMap?: Layer.MemoMap | undefined;
+  readonly runtimeLive: Layer.Layer<McpRuntimeServices, ERuntime, never>;
+}): AuthorizedMcpRequestHandler {
+  const appLayer = createMcpAppLayer({
+    baseLive: options.baseLive,
+    mcpPath: options.mcpPath,
+    runtimeLive: options.runtimeLive,
   });
   const { dispose, handler } = HttpLayerRouter.toWebHandler(appLayer, {
     disableLogger: true,
+    memoMap: options.memoMap,
   });
 
-  try {
-    return await handler(await normalizeMcpRequest(request));
-  } finally {
-    await dispose();
-  }
+  return {
+    dispose,
+    handle: handler,
+  };
 }
 
 function createMcpAppLayer<ERuntime>(options: {
   readonly baseLive: McpBaseLayer;
   readonly mcpPath: McpPath;
   readonly runtimeLive: Layer.Layer<McpRuntimeServices, ERuntime, never>;
-  readonly scopes: readonly string[];
-  readonly session: McpSessionIdentity;
 }) {
-  const toolLive = makeMcpToolLayer(options.session, options.runtimeLive).pipe(
+  const toolLive = makeMcpToolLayer(options.runtimeLive).pipe(
     Layer.provide(options.baseLive)
-  );
-  const requestRuntimeLayer = Layer.succeed(
-    McpToolRequestRuntime,
-    McpToolRequestRuntime.of({
-      scopes: options.scopes,
-    })
   );
 
   return Layer.effectDiscard(McpServer.registerToolkit(CeirdMcpToolkit)).pipe(
     Layer.provide(CeirdMcpToolkitLayer),
-    Layer.provide(Layer.mergeAll(requestRuntimeLayer, toolLive)),
+    Layer.provide(toolLive),
     Layer.provide(
       McpServer.layerHttpRouter({
         name: "ceird-api",
@@ -229,27 +265,37 @@ function createMcpAppLayer<ERuntime>(options: {
   );
 }
 
-async function normalizeMcpRequest(request: Request) {
+const MCP_REQUEST_BODY_MAX_BYTES = 1024 * 1024;
+const McpRequestBodyTooLarge = Symbol("McpRequestBodyTooLarge");
+
+function normalizeMcpRequest(request: Request) {
   if (
     request.method !== "POST" ||
     !request.headers.get("content-type")?.includes("application/json")
   ) {
-    return request;
+    return Effect.succeed(request);
   }
 
-  const rawBody = await request.text();
-  if (rawBody.length === 0) {
-    return makeMcpRequestWithBody(request, rawBody);
-  }
+  return readRequestTextWithinLimit(request, MCP_REQUEST_BODY_MAX_BYTES).pipe(
+    Effect.map((rawBody) => {
+      if (rawBody === McpRequestBodyTooLarge) {
+        return new Response(null, { status: 413 });
+      }
 
-  try {
-    return makeMcpRequestWithBody(
-      request,
-      JSON.stringify(normalizeMcpPayload(JSON.parse(rawBody)))
-    );
-  } catch {
-    return makeMcpRequestWithBody(request, rawBody);
-  }
+      if (rawBody.length === 0) {
+        return makeMcpRequestWithBody(request, rawBody);
+      }
+
+      try {
+        return makeMcpRequestWithBody(
+          request,
+          JSON.stringify(normalizeMcpPayload(JSON.parse(rawBody)))
+        );
+      } catch {
+        return makeMcpRequestWithBody(request, rawBody);
+      }
+    })
+  );
 }
 
 function normalizeMcpPayload(payload: unknown): unknown {
@@ -297,12 +343,7 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 function toMcpSessionIdentity(
   jwt: TokenPayload
 ): McpSessionIdentity | undefined {
-  if (
-    typeof jwt.sid !== "string" ||
-    typeof jwt.sub !== "string" ||
-    jwt.sid.length === 0 ||
-    jwt.sub.length === 0
-  ) {
+  if (jwt.sid === undefined || jwt.sub === undefined) {
     return undefined;
   }
 
@@ -324,7 +365,6 @@ function decodeScopes(scope: unknown): string[] {
 }
 
 function makeMcpToolLayer<ERuntime>(
-  session: McpSessionIdentity,
   runtimeLive: Layer.Layer<McpRuntimeServices, ERuntime, never>
 ) {
   const domainServiceLayer = Layer.mergeAll(
@@ -344,12 +384,76 @@ function makeMcpToolLayer<ERuntime>(
         ServiceAreasRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
-        makeCurrentOrganizationActorFromMcpSessionLayer(session)
+        CurrentOrganizationActorFromMcpSessionLive
       )
     )
   );
 
   return domainServiceLayer.pipe(Layer.provide(runtimeLive));
+}
+
+function makeMcpRequestContext(options: {
+  readonly scopes: readonly string[];
+  readonly session: McpSessionIdentity;
+}) {
+  return Context.add(
+    Context.make(McpSessionContext, options.session),
+    McpToolRequestRuntime,
+    McpToolRequestRuntime.of({
+      scopes: options.scopes,
+    })
+  );
+}
+
+function readRequestTextWithinLimit(request: Request, maxBytes: number) {
+  if (contentLengthExceedsLimit(request.headers, maxBytes)) {
+    return Effect.succeed(McpRequestBodyTooLarge);
+  }
+
+  if (request.body === null) {
+    return Effect.succeed("");
+  }
+
+  return Effect.promise(async () => {
+    const reader = request.body?.getReader();
+
+    if (reader === undefined) {
+      return "";
+    }
+
+    const decoder = new TextDecoder();
+    let bytesRead = 0;
+    let body = "";
+
+    while (true) {
+      const chunk = await reader.read();
+
+      if (chunk.done) {
+        return `${body}${decoder.decode()}`;
+      }
+
+      bytesRead += chunk.value.byteLength;
+
+      if (bytesRead > maxBytes) {
+        await reader.cancel();
+        return McpRequestBodyTooLarge;
+      }
+
+      body += decoder.decode(chunk.value, { stream: true });
+    }
+  });
+}
+
+function contentLengthExceedsLimit(headers: Headers, maxBytes: number) {
+  const rawContentLength = headers.get("content-length");
+
+  if (rawContentLength === null) {
+    return false;
+  }
+
+  const contentLength = Number(rawContentLength);
+
+  return Number.isSafeInteger(contentLength) && contentLength > maxBytes;
 }
 
 const MissingMcpRuntimeLive = Layer.mergeAll(

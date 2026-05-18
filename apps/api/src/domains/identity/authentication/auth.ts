@@ -2,7 +2,11 @@
 import { createHash } from "node:crypto";
 
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { CurrentOrganizationSessionResolver } from "@ceird/backend-core";
+import { AppDatabase } from "@ceird/backend-core/database";
 import {
+  OrganizationId,
+  UserId,
   isAdministrativeOrganizationRole,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
@@ -28,9 +32,8 @@ import {
 } from "better-auth/plugins/organization/access";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Layer, Runtime } from "effect";
+import { Context, Effect, Layer, Option, Runtime, Schema } from "effect";
 
-import { AppDatabase } from "../../../platform/database/database.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthenticationEmailScheduler,
@@ -652,6 +655,12 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     return "unknown";
   }
 
+  const userId = decodeUserIdOption(session.userId);
+
+  if (userId === undefined) {
+    return "nonAdministrative";
+  }
+
   const organizationId = await resolveAdministrativeOrganizationTargetId(
     database,
     request,
@@ -670,7 +679,7 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     .where(
       and(
         eq(memberTable.organizationId, organizationId),
-        eq(memberTable.userId, session.userId)
+        eq(memberTable.userId, userId)
       )
     )
     .limit(1);
@@ -688,7 +697,7 @@ async function resolveAdministrativeOrganizationTargetId(
   database: NodePgDatabase,
   request: Request,
   activeOrganizationId: string | null
-) {
+): Promise<Schema.Schema.Type<typeof OrganizationId> | null> {
   const { searchParams } = new URL(request.url);
   const organizationSlug = searchParams.get("organizationSlug");
 
@@ -701,10 +710,23 @@ async function resolveAdministrativeOrganizationTargetId(
       .where(eq(organizationTable.slug, organizationSlug))
       .limit(1);
 
-    return organizationRow?.id ?? null;
+    return decodeOrganizationIdOption(organizationRow?.id);
   }
 
-  return searchParams.get("organizationId") ?? activeOrganizationId;
+  return decodeOrganizationIdOption(
+    searchParams.get("organizationId") ?? activeOrganizationId
+  );
+}
+
+function decodeOrganizationIdOption(input: unknown) {
+  return (
+    Option.getOrUndefined(Schema.decodeUnknownOption(OrganizationId)(input)) ??
+    null
+  );
+}
+
+function decodeUserIdOption(input: unknown) {
+  return Option.getOrUndefined(Schema.decodeUnknownOption(UserId)(input));
 }
 
 function extractBetterAuthSessionToken(cookieHeader: string | null) {
@@ -897,3 +919,24 @@ export const makeAuthenticationLive = (
   );
 
 export const AuthenticationLive = makeAuthenticationLive();
+
+export const makeAuthenticationOrganizationSessionResolverLive = <
+  Error,
+  Requirements,
+>(
+  authenticationLive: Layer.Layer<Authentication, Error, Requirements>
+) =>
+  Layer.effect(
+    CurrentOrganizationSessionResolver,
+    Effect.gen(function* AuthenticationOrganizationSessionResolverLive() {
+      const auth = yield* Authentication;
+
+      return CurrentOrganizationSessionResolver.of({
+        getSession: (headers) =>
+          Effect.tryPromise({
+            try: () => auth.api.getSession({ headers }),
+            catch: (cause) => cause,
+          }),
+      });
+    })
+  ).pipe(Layer.provide(authenticationLive));

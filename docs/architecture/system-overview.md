@@ -25,16 +25,21 @@ apps/app server-side helpers
   -> apps/api Jobs API endpoints
 
 MCP clients
-  -> apps/api Better Auth OAuth protected resource
-  -> apps/api @effect/ai MCP router
-  -> apps/api Effect domain services
+  -> apps/api Better Auth OAuth/OIDC authorization server
+  -> apps/mcp @effect/ai MCP resource server
+  -> @ceird/backend-core Effect domain services
   -> Postgres
 
 apps/api Cloudflare Worker
-  -> Effect HTTP API and Effect AI MCP HTTP surfaces
+  -> Effect HTTP API and Better Auth routes
   -> Hyperdrive
   -> Neon Postgres
   -> Cloudflare Queues for auth email
+
+apps/mcp Cloudflare Worker
+  -> Effect AI MCP HTTP surface
+  -> Hyperdrive
+  -> Neon Postgres
 ```
 
 Local development and production deployment both use the root Alchemy stack.
@@ -45,14 +50,16 @@ to the stage that produced it.
 
 ## Monorepo Ownership
 
-| Area                     | Owns                                                                                                                   | Should not own                                               |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.            | Database schema, API business rules, shared DTO definitions. |
-| `apps/api`               | HTTP handlers, Better Auth wiring, Effect services, repositories, migrations, Worker entrypoint, and database runtime. | Browser UI, app-specific layout concerns.                    |
-| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                              | Target ownership, authorization, repositories, or UI state.  |
-| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                 | Better Auth adapter setup or persistence.                    |
-| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                       | Repository SQL or React state.                               |
-| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.            | App/API domain behavior.                                     |
+| Area                     | Owns                                                                                                                 | Should not own                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.          | Database schema, API business rules, shared DTO definitions. |
+| `apps/api`               | HTTP handlers, Better Auth wiring, auth email queues, migrations, and API Worker entrypoint.                         | Browser UI, MCP serving, shared repositories.                |
+| `apps/mcp`               | MCP Worker entrypoint, MCP env contract, protected-resource metadata, and bearer-token resource-server runtime.      | OAuth authorization-server routes, browser UI.               |
+| `packages/backend-core`  | Shared database runtime, SQL repositories, domain services, authorization, backend schemas, and MCP handler modules. | API CORS/auth mounting, app UI, deploy resources.            |
+| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                            | Target ownership, authorization, repositories, or UI state.  |
+| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                               | Better Auth adapter setup or persistence.                    |
+| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                     | Repository SQL or React state.                               |
+| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.          | App/API domain behavior.                                     |
 
 ## Request And Data Flow
 
@@ -60,13 +67,14 @@ Jobs requests use a shared contract:
 
 1. `packages/jobs-core/src/http-api.ts` defines endpoint names, paths, payload
    schemas, response schemas, and typed errors.
-2. `apps/api/src/domains/jobs/http.ts` binds that contract to `JobsService`,
-   `SitesService`, and `ConfigurationService`.
+2. `apps/api/src/domains/jobs/http.ts` binds that contract to
+   `@ceird/backend-core` services such as `JobsService`, `SitesService`, and
+   `ConfigurationService`.
 3. `apps/app/src/features/jobs/jobs-client.ts` creates an Effect
    `HttpApiClient` from the same `JobsApi` contract.
 4. Browser-side jobs state calls the client directly. Server-side route loading
    uses TanStack Start helpers that forward cookies and trusted proxy headers.
-5. API services resolve the current actor, authorize the action, call
+5. Backend-core services resolve the current actor, authorize the action, call
    repositories, record activity where needed, and return DTOs from the shared
    package.
 
@@ -75,17 +83,19 @@ The API owns Better Auth configuration, organization hooks, auth email
 scheduling, CORS, trusted origins, and cookie behavior. The app owns forms,
 redirects, route guards, and server-side session lookups.
 
-MCP clients discover the protected-resource metadata, authorize through Better
-Auth OAuth, and send the resulting bearer token to the configured MCP resource
-URL. The API validates that token before handing the request to the Effect AI MCP
-router. MCP tools are not a separate service or auth system; they run against the
-same Effect domain services, organization actor resolution, and authorization
-rules as the HTTP API.
+MCP clients discover protected-resource metadata from `apps/mcp`, authorize
+through Better Auth OAuth on `apps/api`, and send the resulting bearer token to
+the configured MCP resource URL. The MCP Worker validates that token before
+handing the request to the Effect AI MCP router. MCP tools are a separate
+deployed resource, but not a separate auth system or business layer; they run
+against the same backend-core domain services, organization actor resolution,
+and authorization rules as the HTTP API.
 
 ## Persistence Model
 
-The API exports a combined Drizzle schema from
-`apps/api/src/platform/database/schema.ts`:
+The API exports the migration schema from
+`apps/api/src/platform/database/schema.ts`, composed from API auth tables and
+shared backend-core domain tables:
 
 - `authSchema` contains Better Auth users, sessions, accounts,
   verifications, rate limits, organizations, members, and invitations.
@@ -96,7 +106,8 @@ The API exports a combined Drizzle schema from
 - `sitesSchema` contains sites and service areas. Site access notes remain on
   the site record; site comments are separate internal collaboration records.
 - `databaseSchema` merges authentication, comments, labels, sites, and jobs for
-  the full database runtime.
+  the full API migration runtime. `@ceird/backend-core/database` exports the
+  shared domain/runtime schema pieces used by both API and MCP Workers.
 
 Migrations live in `apps/api/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
@@ -114,8 +125,10 @@ share the same deploy-time migration table.
   consume them.
 - Keep internal TypeScript-only types inside implementation modules when they
   do not cross a runtime boundary.
-- Let the API own business invariants and authorization. The app can mirror
-  constraints for UX but must not be the only enforcement point.
+- Let backend-core own business invariants and authorization. API and MCP
+  adapters can expose those capabilities through different protocols, and the
+  app can mirror constraints for UX, but UI must not be the only enforcement
+  point.
 
 ## Source Of Truth Documents
 

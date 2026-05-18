@@ -4,8 +4,8 @@
 
 Local development uses the same root Alchemy stack as deployment. Root
 `pnpm dev` delegates to `alchemy dev --env-file .env.local`, which creates or
-updates a cloud-backed stage with Cloudflare Workers/Vite, Hyperdrive, queues,
-routes, and a Neon branch.
+updates a cloud-backed stage with Cloudflare Workers/Vite, the standalone MCP
+Worker, Hyperdrive, queues, routes, and a Neon branch.
 
 Authenticate Cloudflare locally through the Alchemy profile before the first
 cloud-backed run:
@@ -37,15 +37,16 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 The Alchemy stack and stage are the identities for state, resource names,
 Worker health payloads, and Neon branches. Use the `--stage` CLI flag to choose
-the stage; `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` are injected into app/API
-runtimes after Alchemy resolves the stack and stage. Both health endpoints
-return those values as `stackName` and `stage`, falling back to `local` in
-package-local Node runs. The root stack outputs `app` and `api` as stage HTTPS
-origins derived from the reconciled Cloudflare Worker domains, with the
-configured hostnames as pre-resolution fallbacks. Canonical domain cutover is an
-explicit `CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` override so a parent-stage
-deploy cannot accidentally take over a hostname owned by another Worker. Use the
-Alchemy CLI directly for explicit deploy and destroy operations:
+the stage; `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` are injected into app, API,
+and MCP runtimes after Alchemy resolves the stack and stage. The app and API
+health endpoints return those values as `stackName` and `stage`, falling back to
+`local` in package-local Node runs. The root stack outputs `app`, `api`, and
+`mcp` as stage HTTPS origins derived from the reconciled Cloudflare Worker
+domains, with the configured hostnames as pre-resolution fallbacks. Canonical
+domain cutover is an explicit `CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` /
+`CEIRD_MCP_HOSTNAME` override so a parent-stage deploy cannot accidentally take
+over a hostname owned by another Worker. Use the Alchemy CLI directly for
+explicit deploy and destroy operations:
 
 ```bash
 CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage codex-my-task
@@ -65,18 +66,20 @@ file exists, setup stops with a clear error.
 
 Common local and Alchemy variables include:
 
-| Variable                  | Purpose                                                   |
-| ------------------------- | --------------------------------------------------------- |
-| `ALCHEMY_STACK_NAME`      | Alchemy-injected runtime stack name for Worker metadata.  |
-| `ALCHEMY_STAGE`           | Alchemy-injected runtime stage for app/API health checks. |
-| `AUTH_APP_ORIGIN`         | Browser app origin used by auth redirects and emails.     |
-| `AUTH_EMAIL_FROM`         | Sender address for auth emails.                           |
-| `AUTH_EMAIL_FROM_NAME`    | Sender display name.                                      |
-| `AUTH_RATE_LIMIT_ENABLED` | Disabled during automation to avoid local auth lockouts.  |
-| `BETTER_AUTH_BASE_URL`    | API auth URL.                                             |
-| `BETTER_AUTH_SECRET`      | Stable local auth secret for package-local API runs.      |
-| `DATABASE_URL`            | Package-local API database URL.                           |
-| `GOOGLE_MAPS_API_KEY`     | Optional local Google geocoding key for site creation.    |
+| Variable                  | Purpose                                                  |
+| ------------------------- | -------------------------------------------------------- |
+| `ALCHEMY_STACK_NAME`      | Alchemy-injected runtime stack name for Worker metadata. |
+| `ALCHEMY_STAGE`           | Alchemy-injected runtime stage for Worker metadata.      |
+| `AUTH_APP_ORIGIN`         | Browser app origin used by auth redirects and emails.    |
+| `AUTH_EMAIL_FROM`         | Sender address for auth emails.                          |
+| `AUTH_EMAIL_FROM_NAME`    | Sender display name.                                     |
+| `AUTH_RATE_LIMIT_ENABLED` | Disabled during automation to avoid local auth lockouts. |
+| `BETTER_AUTH_BASE_URL`    | API auth URL.                                            |
+| `BETTER_AUTH_SECRET`      | Stable local auth secret for package-local API runs.     |
+| `DATABASE_URL`            | Package-local API database URL.                          |
+| `GOOGLE_MAPS_API_KEY`     | Optional local Google geocoding key for site creation.   |
+| `MCP_RESOURCE_URL`        | Absolute MCP resource URL, usually ending in `/mcp`.     |
+| `OAUTH_ISSUER_URL`        | OAuth issuer URL for MCP bearer-token verification.      |
 
 Package-local API runs use deterministic development auth email delivery. That
 local transport is separate from deployed Worker email delivery, which uses the
@@ -94,14 +97,15 @@ The stack provisions:
 - native Alchemy Neon project and per-stage branch
 - native Alchemy Cloudflare Hyperdrive for Postgres connectivity
 - Cloudflare Worker API from `apps/api/src/worker.ts`
+- Cloudflare Worker MCP resource server from `apps/mcp/src/worker.ts`
 - Cloudflare Vite app from `apps/app`
 - Cloudflare Queue for auth email
 - Cloudflare dead-letter queue for auth email failures
 - Cloudflare Email Worker binding for deployed auth email delivery
 
-The API Worker and Cloudflare Vite app share the same typed Worker
+The API Worker, MCP Worker, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
-on Node.js compatibility APIs run consistently across both deployable surfaces.
+on Node.js compatibility APIs run consistently across deployable surfaces.
 The API Worker declares its Cloudflare runtime resources through the
 `Cloudflare.Worker` `bindings` prop in `infra/cloudflare-stack.ts`.
 `DATABASE` is the native Hyperdrive resource, `AUTH_EMAIL_QUEUE` is the native
@@ -116,27 +120,34 @@ single Effect-threaded Worker runtime boundary lives in
 queue scheduling, email binding delivery, and site geocoding are composed from
 Cloudflare bindings without making the API runtime import Alchemy.
 The API Worker is also configured with Better Auth env vars, Google Maps
-geocoding credentials, observability logs, and traces. Its configured env helper
-has an explicit `ApiWorkerConfiguredEnv` type, and infra tests compare the
-stack-provided config keys with the API runtime's `ApiWorkerConfigEnv` while
-allowing redacted Alchemy inputs to resolve to strings at runtime.
+geocoding credentials, MCP OAuth audience/issuer vars, observability logs, and
+traces. Its configured env helper has an explicit `ApiWorkerConfiguredEnv` type,
+and infra tests compare the stack-provided config keys with the API runtime's
+`ApiWorkerConfigEnv` while allowing redacted Alchemy inputs to resolve to
+strings at runtime.
+The MCP Worker declares its own `DATABASE` Hyperdrive binding and configured
+env contract in `apps/mcp/src/platform/cloudflare/env.ts`. The infra stack sets
+`BETTER_AUTH_BASE_URL` and `OAUTH_ISSUER_URL` to the API auth base URL, sets
+`MCP_RESOURCE_URL` from the configured MCP hostname, and enables Cloudflare
+observability logs and traces for the Worker.
 Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
 origins for deployed Alchemy stages. Every stage, including `main`, defaults to
 `app.<stage>.<zone>` and `api.<stage>.<zone>`, so each stage can share auth
 cookies only within its own `<stage>.<zone>` parent without relying on local
 sandbox host aliases. Canonical
-`app.<zone>` and `api.<zone>` hostnames require explicit
-`CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` overrides after any existing Worker
-routes have been cut over intentionally; `.github/workflows/deploy-main.yml`
-sets those overrides for Ceird's production `main` stage.
+`app.<zone>`, `api.<zone>`, and `mcp.<zone>` hostnames require explicit
+`CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` / `CEIRD_MCP_HOSTNAME` overrides
+after any existing Worker routes have been cut over intentionally;
+`.github/workflows/deploy-main.yml` sets those overrides for Ceird's production
+`main` stage, including `mcp.ceird.app`.
 The app is configured with app/API origins, Cloudflare-specific Vite flags, and
 Cloudflare observability logs and traces. Its API origin is derived from the API
 Worker's reconciled Cloudflare domain output, with the configured API hostname
 used as the fallback before the domain list is available, so the app Worker
 tracks the API resource rather than reconstructing that origin independently.
 The root Alchemy stack returns the same domain-derived origins as its operator
-outputs for `app` and `api`; workers.dev URLs remain underlying Cloudflare
-resource attributes rather than the primary deployment endpoints. It also
+outputs for `app`, `api`, and `mcp`; workers.dev URLs remain underlying
+Cloudflare resource attributes rather than the primary deployment endpoints. It also
 returns the Neon branch name, Hyperdrive name, Neon database name, and the
 `authEmailQueue` and `authEmailDeadLetterQueue` names so operators and tests can
 inspect the runtime resources without reconstructing stage-specific names.
@@ -176,6 +187,7 @@ branch names.
 | `CEIRD_ZONE_NAME`                          | `ceird.app`     | Cloudflare zone.                                                                                     |
 | `CEIRD_APP_HOSTNAME`                       | stage-scoped    | App hostname override.                                                                               |
 | `CEIRD_API_HOSTNAME`                       | stage-scoped    | API hostname override.                                                                               |
+| `CEIRD_MCP_HOSTNAME`                       | stage-scoped    | MCP hostname override.                                                                               |
 | `AUTH_EMAIL_FROM`                          | required        | Sender email address.                                                                                |
 | `AUTH_EMAIL_FROM_NAME`                     | `Ceird`         | Sender display name.                                                                                 |
 | `GOOGLE_MAPS_API_KEY`                      | required        | Google Maps Geocoding API key for deployed API.                                                      |

@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  applyAllMigrations,
+  canConnect,
+  createTestDatabase,
+  withPool,
+} from "@ceird/backend-core/database";
+import {
   CreateJobResponseSchema,
   CreateRateCardResponseSchema,
   JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
@@ -34,12 +40,6 @@ import {
 import { ParseResult } from "effect";
 import type { Pool } from "pg";
 
-import {
-  applyAllMigrations,
-  canConnect,
-  createTestDatabase,
-  withPool,
-} from "../platform/database/test-database.js";
 import { makeApiWebHandler } from "../server.js";
 
 describe("domain http integration", () => {

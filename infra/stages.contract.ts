@@ -25,6 +25,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   neonPgVersion: 17,
   neonRegion: "aws-eu-west-2",
   neonRoleName: "ceird",
+  mcpHostname: "mcp.example.com",
   stage: "main",
   zoneName: "example.com",
 } satisfies InfraStageConfig;

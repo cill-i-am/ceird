@@ -123,6 +123,7 @@ test("root Alchemy stack exposes operator outputs for owned runtime resources", 
     "authEmailQueue",
     "branch",
     "hyperdrive",
+    "mcp",
     "neonDatabase",
   ]) {
     assert.match(
@@ -200,6 +201,63 @@ test("package overview describes infrastructure without Docker-era process bound
   assert.doesNotMatch(packagesReadme, /Docker process\s+execution/);
 });
 
+test("backend-core package is available as a shared backend runtime", () => {
+  const backendCorePackage = readJson("packages/backend-core/package.json");
+
+  assert.equal(backendCorePackage.name, "@ceird/backend-core");
+  assert.equal(backendCorePackage.private, true);
+  assert.equal(backendCorePackage.type, "module");
+  assert.equal(backendCorePackage.exports["."], "./src/index.ts");
+  assert.equal(backendCorePackage.scripts.test, "vitest run --globals");
+  assert.equal(
+    backendCorePackage.scripts["check-types"],
+    "tsc --noEmit -p tsconfig.json"
+  );
+});
+
+test("backend-core owns shared backend runtime files consumed by the API", () => {
+  const apiPackage = readJson("apps/api/package.json");
+
+  for (const relativePath of [
+    "packages/backend-core/src/platform/database/index.ts",
+    "packages/backend-core/src/platform/database/schema.ts",
+    "packages/backend-core/src/domains/comments/repository.ts",
+    "packages/backend-core/src/domains/jobs/service.ts",
+    "packages/backend-core/src/domains/labels/service.ts",
+    "packages/backend-core/src/domains/organizations/current-actor.ts",
+    "packages/backend-core/src/domains/sites/service.ts",
+    "packages/backend-core/src/domains/json-cursor.ts",
+  ]) {
+    assert.equal(
+      existsSync(path.join(repoRoot, relativePath)),
+      true,
+      `${relativePath} should live in backend-core`
+    );
+  }
+
+  assert.equal(apiPackage.dependencies["@ceird/backend-core"], "workspace:*");
+});
+
+test("mcp app is available as its own worker workspace", () => {
+  const mcpPackage = readJson("apps/mcp/package.json");
+
+  assert.equal(mcpPackage.name, "mcp");
+  assert.equal(mcpPackage.private, true);
+  assert.equal(mcpPackage.type, "module");
+  assert.equal(mcpPackage.scripts.test, "vitest run");
+  assert.equal(
+    mcpPackage.scripts["check-types"],
+    "tsc --noEmit -p tsconfig.json"
+  );
+  assert.equal(existsSync(path.join(repoRoot, "apps/mcp/src/worker.ts")), true);
+  assert.equal(
+    existsSync(
+      path.join(repoRoot, "apps/mcp/src/platform/cloudflare/runtime.ts")
+    ),
+    true
+  );
+});
+
 test("root ignore rules do not preserve removed Turborepo artifacts", () => {
   const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
 
@@ -237,10 +295,12 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.match(deployWorkflow, /CEIRD_CLOUDFLARE:\s+"1"/);
   assert.match(deployWorkflow, /CEIRD_APP_HOSTNAME:\s+app\.ceird\.app/);
   assert.match(deployWorkflow, /CEIRD_API_HOSTNAME:\s+api\.ceird\.app/);
+  assert.match(deployWorkflow, /CEIRD_MCP_HOSTNAME:\s+mcp\.ceird\.app/);
   assert.doesNotMatch(deployWorkflow, /ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /CEIRD_ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /AUTH_EMAIL_TRANSPORT:/);
   assert.match(deployWorkflow, /run: pnpm --filter api check-types\b/);
+  assert.match(deployWorkflow, /run: pnpm --filter mcp check-types\b/);
   assert.match(deployWorkflow, /run: pnpm alchemy cloudflare bootstrap\b/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
 });

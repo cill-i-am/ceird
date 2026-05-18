@@ -1,10 +1,10 @@
+import { LabelsService } from "@ceird/backend-core";
 import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
 import { DomainCorsLive } from "../http-cors.js";
-import { LabelsService } from "./service.js";
 
 const observeLabelsOperation = (operation: string) =>
   observeApiOperation({

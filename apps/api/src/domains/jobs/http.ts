@@ -1,11 +1,10 @@
+import { ConfigurationService, JobsService } from "@ceird/backend-core";
 import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
 import { DomainCorsLive } from "../http-cors.js";
-import { ConfigurationService } from "./configuration-service.js";
-import { JobsService } from "./service.js";
 
 const observeJobsOperation = (operation: string) =>
   observeApiOperation({

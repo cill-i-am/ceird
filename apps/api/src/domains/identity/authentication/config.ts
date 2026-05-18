@@ -1,13 +1,12 @@
-import { Config, Effect, Option, Schema, pipe } from "effect";
-
 import {
   DEFAULT_APP_DATABASE_URL,
   appDatabaseUrlConfig,
-} from "../../../platform/database/config.js";
+} from "@ceird/backend-core/database";
+import { makeMcpResourceAuthConfig } from "@ceird/backend-core/mcp";
+import { Config, Effect, Option, Schema, pipe } from "effect";
 
 export const DEFAULT_AUTH_BASE_PATH = "/api/auth" as const;
 export const DEFAULT_AUTH_DATABASE_URL = DEFAULT_APP_DATABASE_URL;
-export const DEFAULT_MCP_RESOURCE_PATH = "/mcp" as const;
 export const DEFAULT_OAUTH_CONSENT_PATH = "/oauth/consent" as const;
 export const CEIRD_OAUTH_SCOPES = [
   "openid",
@@ -111,19 +110,6 @@ function isLoopbackHostname(hostname: string) {
     hostname === "[::1]" ||
     hostname.startsWith("127.")
   );
-}
-
-function normalizeOAuthIssuerUrl(value: string) {
-  const url = new URL(value);
-
-  if (url.protocol !== "https:" && !isLoopbackHostname(url.hostname)) {
-    url.protocol = "https:";
-  }
-
-  url.search = "";
-  url.hash = "";
-
-  return url.toString().replace(/\/$/, "");
 }
 
 export interface AuthenticationEnvironment {
@@ -305,23 +291,12 @@ export function makeAuthenticationTrustedOrigins(
   return [...trustedOrigins];
 }
 
-function makeDefaultMcpResourceUrl(
-  environment: Pick<AuthenticationEnvironment, "baseUrl">
-) {
-  const url = new URL(environment.baseUrl);
-  return new URL(DEFAULT_MCP_RESOURCE_PATH, url.origin).toString();
-}
-
 export function makeAuthenticationConfig(
   environment: AuthenticationEnvironment
 ): AuthenticationConfig {
   const crossSubDomainCookieDomain =
     resolveCrossSubDomainCookieDomain(environment);
-  const mcpResourceUrl =
-    environment.mcpResourceUrl ?? makeDefaultMcpResourceUrl(environment);
-  const oauthIssuerUrl = normalizeOAuthIssuerUrl(
-    environment.oauthIssuerUrl ?? environment.baseUrl
-  );
+  const mcpResourceAuthConfig = makeMcpResourceAuthConfig(environment);
 
   return {
     appName: "Ceird",
@@ -382,8 +357,8 @@ export function makeAuthenticationConfig(
         enabled: true,
       },
     },
-    mcpResourceUrl,
-    oauthIssuerUrl,
+    mcpResourceUrl: mcpResourceAuthConfig.mcpResourceUrl,
+    oauthIssuerUrl: mcpResourceAuthConfig.oauthIssuerUrl,
     oauthConsentPath: DEFAULT_OAUTH_CONSENT_PATH,
     oauthScopes: CEIRD_OAUTH_SCOPES,
     oauthClientRegistrationDefaultScopes:

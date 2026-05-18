@@ -1,3 +1,4 @@
+import { decodeSessionId, decodeUserId } from "@ceird/identity-core";
 import { SqlClient } from "@effect/sql";
 import { Effect, Exit, Layer } from "effect";
 
@@ -12,8 +13,8 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
     const exit = await Effect.runPromiseExit(
       resolveCurrentOrganizationActorFromMcpSession({
         session: {
-          sessionId: "session_123",
-          userId: "user_123",
+          sessionId: decodeSessionId("session_123"),
+          userId: decodeUserId("user_123"),
         },
         loadMembershipRoles: () => Effect.succeed([{ role: "member" }]),
         loadSessionById: () =>
@@ -38,8 +39,8 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
     const exit = await Effect.runPromiseExit(
       resolveCurrentOrganizationActorFromMcpSession({
         session: {
-          sessionId: "session_123",
-          userId: "user_123",
+          sessionId: decodeSessionId("session_123"),
+          userId: decodeUserId("user_123"),
         },
         loadMembershipRoles: () => Effect.succeed([{ role: "member" }]),
         loadSessionById: () =>
@@ -58,8 +59,8 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
     const exit = await Effect.runPromiseExit(
       resolveCurrentOrganizationActorFromMcpSession({
         session: {
-          sessionId: "session_123",
-          userId: "user_123",
+          sessionId: decodeSessionId("session_123"),
+          userId: decodeUserId("user_123"),
         },
         loadMembershipRoles: () => Effect.succeed([{ role: "member" }]),
         loadSessionById: () =>
@@ -109,8 +110,8 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
       }).pipe(
         Effect.provide(
           makeCurrentOrganizationActorFromMcpSessionLayer({
-            sessionId: "session_123",
-            userId: "user_123",
+            sessionId: decodeSessionId("session_123"),
+            userId: decodeUserId("user_123"),
           })
         ),
         Effect.provide(

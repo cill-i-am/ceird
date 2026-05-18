@@ -1,15 +1,35 @@
-import { commentsSchema } from "../../domains/comments/schema.js";
+import {
+  commentsSchema,
+  jobsSchema,
+  labelsSchema,
+  sitesSchema,
+} from "@ceird/backend-core/database";
+
 import { authSchema } from "../../domains/identity/authentication/schema.js";
-import { jobsSchema } from "../../domains/jobs/schema.js";
-import { labelsSchema } from "../../domains/labels/schema.js";
-import { sitesSchema } from "../../domains/sites/schema.js";
 
 export {
   comment,
   commentsSchema,
+  contact,
+  jobsSchema,
+  label,
+  labelsSchema,
+  rateCard,
+  rateCardLine,
+  serviceArea,
+  site,
   siteComment,
+  siteContact,
+  siteLabel,
+  sitesSchema,
+  workItem,
+  workItemActivity,
+  workItemCollaborator,
   workItemComment,
-} from "../../domains/comments/schema.js";
+  workItemCostLine,
+  workItemLabel,
+  workItemVisit,
+} from "@ceird/backend-core/database";
 export {
   account,
   authSchema,
@@ -26,26 +46,6 @@ export {
   user,
   verification,
 } from "../../domains/identity/authentication/schema.js";
-export {
-  contact,
-  jobsSchema,
-  rateCard,
-  rateCardLine,
-  siteContact,
-  workItem,
-  workItemActivity,
-  workItemCollaborator,
-  workItemCostLine,
-  workItemLabel,
-  workItemVisit,
-} from "../../domains/jobs/schema.js";
-export { label, labelsSchema } from "../../domains/labels/schema.js";
-export {
-  serviceArea,
-  site,
-  siteLabel,
-  sitesSchema,
-} from "../../domains/sites/schema.js";
 
 export const databaseSchema = {
   ...authSchema,

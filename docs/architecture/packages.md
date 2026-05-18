@@ -40,7 +40,24 @@ Exports shared identity and organization primitives:
 
 Use this package when app and API code need the same organization or membership
 contract. Do not put Better Auth adapter configuration or database queries here;
-those belong in `apps/api`.
+those belong in `apps/api` and `@ceird/backend-core`.
+
+## `@ceird/backend-core`
+
+Path: `packages/backend-core`
+
+Exports shared backend runtime used by `apps/api` and `apps/mcp`:
+
+- database runtime wiring and server-side schema exports
+- SQL repositories and domain services for jobs, labels, organizations, sites,
+  comments, and shared pagination helpers
+- MCP resource-server configuration, authorization helpers, tools, and HTTP
+  handler construction
+
+This package is server-only. It may depend on Drizzle, Effect Platform, and
+backend domain contracts, but it must not own Better Auth adapter setup,
+API-specific HTTP adapters, CORS, request logging, React state, or Alchemy
+deployment resources.
 
 ## `@ceird/jobs-core`
 
@@ -82,7 +99,8 @@ Exports the shared sites and service-area contract:
 - `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
 
 Sites are independent shared organization data. Keep geocoding, SQL
-repositories, authorization, and React state in the API or app.
+repositories, and authorization in `@ceird/backend-core`; keep React state in
+the app.
 
 ## `@ceird/labels-core`
 
@@ -112,11 +130,14 @@ apps/app
   -> @ceird/labels-core
 
 apps/api
-  -> @ceird/comments-core
+  -> @ceird/backend-core
   -> @ceird/identity-core
   -> @ceird/jobs-core
   -> @ceird/sites-core
   -> @ceird/labels-core
+
+apps/mcp
+  -> @ceird/backend-core
 
 packages/jobs-core
   -> @ceird/comments-core
@@ -134,14 +155,21 @@ packages/comments-core
 
 packages/labels-core
   -> @ceird/identity-core
+
+packages/backend-core
+  -> @ceird/comments-core
+  -> @ceird/identity-core
+  -> @ceird/jobs-core
+  -> @ceird/sites-core
+  -> @ceird/labels-core
 ```
 
 Core packages should not depend on `apps/*`.
 
 Root infrastructure lives outside the package workspace in `infra`, with the
-deploy stack entrypoint at `alchemy.run.ts`. It may point at app/API deploy
-entrypoints and API migrations by path, but shared packages should not import
-root infra code.
+deploy stack entrypoint at `alchemy.run.ts`. It may point at app, API, and MCP
+deploy entrypoints plus API migrations by path, but shared packages should not
+import root infra code.
 
 ## Testing
 
@@ -150,6 +178,7 @@ applicable:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/backend-core test
 pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test

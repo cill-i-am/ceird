@@ -116,9 +116,10 @@ export async function applyMigration(
   migrationFileName: string
 ): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
+  const migrationDirectory = await resolveMigrationDirectory();
 
   try {
-    await applyMigrationWithPool(pool, migrationFileName);
+    await applyMigrationWithPool(pool, migrationDirectory, migrationFileName);
   } finally {
     await pool.end();
   }
@@ -126,23 +127,23 @@ export async function applyMigration(
 
 export async function applyAllMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
+  const migrationDirectory = await resolveMigrationDirectory();
 
   try {
-    for (const migrationFileName of await readMigrationFileNames()) {
-      await applyMigrationWithPool(pool, migrationFileName);
+    for (const migrationFileName of await readMigrationFileNames(
+      migrationDirectory
+    )) {
+      await applyMigrationWithPool(pool, migrationDirectory, migrationFileName);
     }
   } finally {
     await pool.end();
   }
 }
 
-async function readMigrationFileNames(): Promise<readonly string[]> {
-  const journalPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    "meta",
-    "_journal.json"
-  );
+async function readMigrationFileNames(
+  migrationDirectory: string
+): Promise<readonly string[]> {
+  const journalPath = path.join(migrationDirectory, "meta", "_journal.json");
   const journal = JSON.parse(
     await fs.readFile(journalPath, "utf8")
   ) as DrizzleJournal;
@@ -152,13 +153,10 @@ async function readMigrationFileNames(): Promise<readonly string[]> {
 
 async function applyMigrationWithPool(
   pool: Pool,
+  migrationDirectory: string,
   migrationFileName: string
 ): Promise<void> {
-  const migrationPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    migrationFileName
-  );
+  const migrationPath = path.join(migrationDirectory, migrationFileName);
   const migrationSql = await fs.readFile(migrationPath, "utf8");
   const statements = migrationSql
     .split("--> statement-breakpoint")
@@ -167,5 +165,40 @@ async function applyMigrationWithPool(
 
   for (const statement of statements) {
     await pool.query(statement);
+  }
+}
+
+async function resolveMigrationDirectory(): Promise<string> {
+  const localDrizzleDirectory = path.resolve(process.cwd(), "drizzle");
+
+  if (await isMigrationDirectory(localDrizzleDirectory)) {
+    return localDrizzleDirectory;
+  }
+
+  let currentDirectory = process.cwd();
+
+  while (true) {
+    const candidate = path.join(currentDirectory, "apps", "api", "drizzle");
+
+    if (await isMigrationDirectory(candidate)) {
+      return candidate;
+    }
+
+    const parentDirectory = path.dirname(currentDirectory);
+
+    if (parentDirectory === currentDirectory) {
+      return localDrizzleDirectory;
+    }
+
+    currentDirectory = parentDirectory;
+  }
+}
+
+async function isMigrationDirectory(directory: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(directory, "meta", "_journal.json"));
+    return true;
+  } catch {
+    return false;
   }
 }
