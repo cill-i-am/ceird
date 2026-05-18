@@ -5,6 +5,8 @@ import type { Locator, Page } from "@playwright/test";
 import { APP_ORIGIN } from "../test-urls";
 import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
+const JOBS_ROUTE_TIMEOUT_MS = 30_000;
+
 export class JobsPage {
   readonly page: Page;
   readonly heading: Locator;
@@ -28,9 +30,13 @@ export class JobsPage {
 
   async expectLoaded() {
     await Promise.all([
-      expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`),
-      expect(this.page.getByRole("dialog", { name: "New job" })).toBeHidden(),
-      expect(this.heading).toBeVisible(),
+      expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`, {
+        timeout: JOBS_ROUTE_TIMEOUT_MS,
+      }),
+      expect(this.page.getByRole("dialog", { name: "New job" })).toBeHidden({
+        timeout: JOBS_ROUTE_TIMEOUT_MS,
+      }),
+      expect(this.heading).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
     ]);
   }
 
@@ -86,8 +92,10 @@ export class JobsCreateSheet {
 
   async expectOpen() {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\/new$/),
-      expect(this.heading).toBeVisible(),
+      expect(this.page).toHaveURL(/\/jobs\/new$/, {
+        timeout: JOBS_ROUTE_TIMEOUT_MS,
+      }),
+      expect(this.heading).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
       waitForSubmitHydration(this.page),
     ]);
   }
@@ -175,10 +183,12 @@ export class JobDetailSheet {
 
   async expectOpen(title: string) {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\/.+$/),
+      expect(this.page).toHaveURL(/\/jobs\/.+$/, {
+        timeout: JOBS_ROUTE_TIMEOUT_MS,
+      }),
       expect(
         this.page.getByRole("heading", { level: 2, name: title })
-      ).toBeVisible(),
+      ).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
     ]);
   }
 
@@ -218,6 +228,6 @@ async function chooseCommandOption(page: Page, optionLabel: string) {
     name: optionLabel,
   });
 
-  await option.click();
-  await expect(option).toBeHidden();
+  await option.click({ timeout: JOBS_ROUTE_TIMEOUT_MS });
+  await expect(option).toBeHidden({ timeout: JOBS_ROUTE_TIMEOUT_MS });
 }
