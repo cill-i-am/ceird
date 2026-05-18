@@ -542,7 +542,8 @@ test.describe("organization invitations", () => {
       await invitedSignupPage.submit.click();
 
       await expect(invitedPage).toHaveURL(
-        `${APP_ORIGIN}/accept-invitation/${invitationId}`
+        `${APP_ORIGIN}/accept-invitation/${invitationId}`,
+        { timeout: INVITATION_UI_TIMEOUT_MS }
       );
       await markUserEmailVerified(invitedEmail);
       await signInInvitationContext(
