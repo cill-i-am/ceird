@@ -12,22 +12,13 @@ function toURL(input: string): URL | undefined {
 function mapAppOriginToApiOrigin(url: URL): URL | undefined {
   const mapped = new URL(url.toString());
 
-  if (mapped.hostname.includes(".app.ceird.localhost")) {
-    mapped.hostname = mapped.hostname.replace(
-      ".app.ceird.localhost",
-      ".api.ceird.localhost"
-    );
-    return mapped;
-  }
-
-  if (mapped.hostname === "app.ceird.localhost") {
-    mapped.hostname = "api.ceird.localhost";
-    return mapped;
-  }
-
   if (mapped.hostname === "app.localhost") {
     mapped.hostname = "api.localhost";
     return mapped;
+  }
+
+  if (mapped.hostname.endsWith(".localhost")) {
+    return undefined;
   }
 
   if (

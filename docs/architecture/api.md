@@ -23,7 +23,7 @@ Worker.
 System endpoints are defined in `src/server.ts`:
 
 - `GET /` returns a plain API marker string.
-- `GET /health` returns a stage-aware `HealthPayload`.
+- `GET /health` returns a stack- and stage-aware `HealthPayload`.
 
 The Cloudflare Worker module in `src/worker.ts` only adapts Cloudflare's
 promise-based `fetch` and `queue` handlers into Effect programs. Runtime
@@ -32,20 +32,29 @@ Worker config provider, builds the Hyperdrive-backed database layer, wires
 Better Auth background tasks through `context.waitUntil`, uses the Google site
 geocoder layer, and composes auth queue delivery with the Cloudflare email
 binding transport. Keeping this runtime boundary separate makes the current
-Worker compatible with Cloudflare's module handler contract while preserving a
-single Effect-threaded boundary that can move to an Alchemy Effect Worker when
-the API package dependencies allow it.
+Worker compatible with Cloudflare's module handler contract while preserving
+the single Effect-threaded Worker runtime in
+`src/platform/cloudflare/runtime.ts`.
+The health handler reads `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` through the
+same Effect config path and includes both values in its response, falling back
+to `local` for package-local Node runs.
 
 The runtime reads Cloudflare bindings from `src/platform/cloudflare/env.ts`.
 That file separates plain configuration vars from `ApiWorkerBindingRuntimeEnv`,
 the runtime binding contract for `DATABASE`, `AUTH_EMAIL_QUEUE`, and
-`AUTH_EMAIL`. The infra stack owns the Alchemy binding resources in
-`packages/infra/src/cloudflare-stack.ts` and derives `ApiWorkerBindingEnv` with
-`Cloudflare.InferEnv`. The infra test suite imports the API binding contract
-and asserts the Alchemy-inferred type has the same keys and assignable runtime
-binding types. Keep that bridge green when adding Worker resources; the API
-runtime should not import Alchemy or Effect 4 until the Worker entrypoint is
-migrated to an Alchemy Effect Worker.
+`AUTH_EMAIL`, while forwarding Alchemy's injected `ALCHEMY_STACK_NAME` and
+`ALCHEMY_STAGE` metadata into Effect config. The root infra stack owns the
+Alchemy binding resources in `infra/cloudflare-stack.ts` and derives
+`ApiWorkerBindingEnv` with `Cloudflare.InferEnv`. The infra test suite imports
+the API binding contract and asserts the Alchemy-inferred type has the same
+keys and assignable runtime binding types. The same infra tests also compare
+the stack-provided API Worker config keys against `ApiWorkerConfigEnv`. Secret
+and credential values stay typed as Alchemy deploy-time redacted inputs in
+`infra`, while the API runtime sees resolved strings through
+Cloudflare's Worker environment. Keep those bridges green when adding Worker
+resources or config vars. The API runtime intentionally stays on its Effect 3
+application dependencies and does not import Alchemy or Effect 4; the root
+infra helpers own those deploy-time dependencies and binding types.
 
 `src/server.ts` also intercepts MCP resource-server traffic before falling
 through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or
@@ -91,11 +100,10 @@ Core files:
 | `config.ts`                                        | Better Auth runtime config, trusted origins, cookie-domain logic, and rate-limit config.                                 |
 | `schema.ts`                                        | Better Auth Drizzle tables and relations.                                                                                |
 | `auth-email.ts`                                    | Auth email payloads and send orchestration.                                                                              |
-| `auth-email-config.ts`                             | Auth email sender config and Cloudflare credential loading.                                                              |
-| `auth-email-transport.ts`                          | Auth email transport capability plus development, local, Cloudflare API, and Cloudflare binding provider layers.         |
+| `auth-email-config.ts`                             | Auth email sender config loaded from runtime configuration.                                                              |
+| `auth-email-transport.ts`                          | Auth email transport capability plus deterministic local/development and deployed Cloudflare binding provider layers.    |
 | `auth-email-queue.ts`                              | Queue payload handling.                                                                                                  |
 | `auth-email-scheduler.ts`                          | Background scheduling boundary for auth emails.                                                                          |
-| `cloudflare-auth-email-transport.ts`               | Cloudflare API email transport.                                                                                          |
 | `cloudflare-email-binding-auth-email-transport.ts` | Cloudflare Email Worker binding transport.                                                                               |
 
 Better Auth owns standard auth routes under `/api/auth/*`. The API also exposes
@@ -105,9 +113,8 @@ organization name, and role for pending non-expired invitations.
 
 Auth email senders depend on the `AuthEmailTransport` capability rather than a
 specific provider. Package-local Node composition uses
-`AuthEmailTransport.Local`, which selects the Cloudflare API provider only when
-both Cloudflare credentials are present and otherwise falls back to deterministic
-development delivery. The deployed Worker queue composes
+`AuthEmailTransport.Local`, which always uses deterministic development
+delivery. The deployed Worker queue composes
 `AuthEmailTransport.CloudflareBinding` directly, so missing Worker bindings or
 invalid sender config fail through the Effect layer/config boundary instead of
 being selected by an environment variable.
@@ -343,7 +350,8 @@ tables. Keep schema changes in the domain that owns the tables, then export
 through the schema barrel. The Alchemy stack also loads this barrel through
 `Drizzle.Schema`. The native Neon branch applies `apps/api/drizzle`, so the
 historical SQL files remain the bootstrap path and future Alchemy-generated SQL
-under `drizzle/alchemy` is picked up by the same resource.
+under `drizzle/alchemy` is picked up by the same resource. In infra this is
+modeled as separate generated and applied migration directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.

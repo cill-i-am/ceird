@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
@@ -11,9 +12,46 @@ import {
   apiDrizzleSchemaPath,
 } from "./stages.ts";
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const repoRoot = fileURLToPath(new URL("../", import.meta.url));
+
+function loadConfiguredSchemaWithPlainNode() {
+  const schemaUrl = pathToFileURL(
+    realpathSync(resolve(repoRoot, apiDrizzleSchemaPath))
+  ).href;
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `const schemaModule = await import(${JSON.stringify(schemaUrl)});
+console.log(JSON.stringify({
+  exportNames: Object.keys(schemaModule).sort(),
+  tableCount: Object.keys(schemaModule.databaseSchema ?? {}).length
+}));`,
+    ],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+
+  return JSON.parse(output.trim()) as {
+    readonly exportNames: readonly string[];
+    readonly tableCount: number;
+  };
+}
 
 describe("Alchemy Drizzle integration", () => {
+  it("can load the configured schema entry with plain Node like Alchemy Drizzle.Schema", () => {
+    const schemaModule = loadConfiguredSchemaWithPlainNode();
+
+    expect(schemaModule.exportNames).toEqual(
+      expect.arrayContaining(["comment", "databaseSchema", "workItem"])
+    );
+    expect(schemaModule.tableCount).toBeGreaterThan(0);
+  });
+
   it("can load and inspect the API schema with the Drizzle Kit API used by Drizzle.Schema", async () => {
     const requireFromAlchemySchema = createRequire(
       realpathSync("node_modules/alchemy/lib/Drizzle/Schema.js")

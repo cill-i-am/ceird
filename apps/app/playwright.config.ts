@@ -1,10 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { DEFAULT_API_ORIGIN, DEFAULT_APP_ORIGIN } from "./e2e/test-urls";
+import { API_ORIGIN, APP_ORIGIN } from "./e2e/test-origins";
 
-const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? DEFAULT_APP_ORIGIN;
-const playwrightApiUrl = process.env.PLAYWRIGHT_API_URL ?? DEFAULT_API_ORIGIN;
-const useExternalServer = process.env.PLAYWRIGHT_USE_EXTERNAL_SERVER === "1";
+const playwrightBaseUrl = APP_ORIGIN;
+const playwrightApiUrl = API_ORIGIN;
+const usePackageLocalServer =
+  process.env.PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER === "1";
 const playwrightAuthEmailFrom =
   process.env.AUTH_EMAIL_FROM ?? "auth@ceird.localhost";
 const playwrightAuthEmailFromName = process.env.AUTH_EMAIL_FROM_NAME ?? "Ceird";
@@ -17,9 +18,8 @@ export default defineConfig({
     ignoreHTTPSErrors: playwrightBaseUrl.startsWith("https://"),
     trace: "on-first-retry",
   },
-  webServer: useExternalServer
-    ? undefined
-    : {
+  webServer: usePackageLocalServer
+    ? {
         command: `sh -c '
           set -eu
           pnpm --filter api db:migrate
@@ -49,7 +49,8 @@ export default defineConfig({
         port: 4173,
         reuseExistingServer: false,
         timeout: 120_000,
-      },
+      }
+    : undefined,
   projects: [
     {
       name: "chromium",

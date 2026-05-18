@@ -13,16 +13,19 @@ export const configWithoutCloudflareBootstrapSecrets = {
   googleMapsApiKey: Redacted.make(
     Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-key")
   ),
+  hyperdriveName: "ceird-production-postgres",
   hyperdriveOriginConnectionLimit: 5,
   neonDatabaseName: "ceird",
   neonDefaultBranchName: "base",
+  neonHistoryRetentionSeconds: 21_600,
   neonOrgId: undefined,
+  neonParentBranchProtected: false,
   neonParentBranchName: "main",
   neonParentStage: "main",
   neonPgVersion: 17,
   neonRegion: "aws-eu-west-2",
   neonRoleName: "ceird",
-  stage: "production",
+  stage: "main",
   zoneName: "example.com",
 } satisfies InfraStageConfig;
 

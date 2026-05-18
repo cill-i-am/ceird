@@ -244,9 +244,9 @@ test("organization settings service areas and rate cards feed sites and job filt
   await page.getByLabel("Site name").fill(siteName);
   await page.getByLabel("Service area").click();
   await chooseCommandOption(page, updatedServiceAreaName);
-  await page.getByLabel("Address line 1").fill("42 North Road");
+  await page.getByLabel("Address line 1").fill("1 Custom House Quay");
   await page.getByLabel("County").fill("Dublin");
-  await page.getByLabel("Eircode").fill("D01 F5P2");
+  await page.getByLabel("Eircode").fill("D01 W2R1");
   await page.getByRole("button", { name: "Create site" }).click();
   await expect(page).toHaveURL(/\/sites$/);
   await expect(page.getByRole("status")).toContainText(siteName);

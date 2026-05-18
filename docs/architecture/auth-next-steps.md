@@ -158,8 +158,8 @@ It fits like this today:
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
 - `apps/api` owns email delivery policy through the narrow `AuthEmailSender`
   boundary
-- `CloudflareAuthEmailTransport` is the current provider adapter behind that
-  boundary
+- deployed Alchemy stages deliver through the Cloudflare Workers Email Service
+  binding behind the auth email queue consumer
 - public reset-request and reset-complete routes in `apps/app`
 - the same form architecture already used across the guest auth surface
 - generic reset-request responses that do not enumerate accounts
@@ -207,18 +207,24 @@ Rules:
 Auth email is shared infrastructure, not a screen-level detail.
 
 Password reset already established the first version of this boundary in
-`apps/api` with `AuthEmailSender` plus `CloudflareAuthEmailTransport`.
+`apps/api` with `AuthEmailSender`, a provider-neutral `AuthEmailTransport`,
+and the Cloudflare Workers Email Service binding adapter for deployed queue
+consumers.
 
-That boundary now contributes runtime config at auth startup:
+That boundary now contributes runtime config and Worker bindings at auth
+startup:
 
 - `AUTH_EMAIL_FROM`
 - `AUTH_EMAIL_FROM_NAME`, which defaults to `"Ceird"`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
+- `AUTH_EMAIL`, the deployed Worker send-email binding
+- `AUTH_EMAIL_QUEUE`, the queue used by Better Auth callbacks to schedule
+  transactional mail
 
 Because `AuthenticationLive` composes the auth email layer at boot, auth
 startup now depends on valid email-boundary config as well as the core Better
-Auth config.
+Auth config. Deployed mail is scheduled through the queue and delivered by the
+Worker binding consumer; package-local development can still use deterministic
+delivery without changing the app-owned auth boundary.
 
 Future auth mail such as email verification and organization invitations
 should extend that same boundary, not create parallel delivery paths. The

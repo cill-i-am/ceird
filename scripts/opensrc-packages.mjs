@@ -7,7 +7,6 @@ const INCLUDED_PACKAGE_NAMES = new Set([
   "drizzle-orm",
   "effect",
   "pg",
-  "portless",
   "react-dom",
   "tailwindcss",
 ]);
@@ -24,7 +23,7 @@ export function shouldIncludeOpensrcPackage(packageName) {
 }
 
 export function buildOpensrcSourceList(workspacePackageJsons) {
-  const packages = new Set(["portless"]);
+  const packages = new Set();
 
   for (const packageJson of workspacePackageJsons) {
     for (const dependency of Object.keys(packageJson.dependencies ?? {})) {

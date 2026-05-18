@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { Plugin, UserConfig } from "vite";
 
-import config from "../vite.config";
+import config, { appRouteFileIgnorePattern } from "../vite.config";
 
 describe("app vite config", () => {
   it("keeps TanStack Devtools from injecting DOM source attributes", () => {
@@ -9,6 +9,22 @@ describe("app vite config", () => {
 
     expect(plugin).toBeDefined();
     expect(doesPluginApplyInDevelopment(plugin)).toBeFalsy();
+  });
+
+  it("excludes route test files from TanStack route generation", () => {
+    const ignorePattern = new RegExp(appRouteFileIgnorePattern);
+
+    expect("health.test.ts").toMatch(ignorePattern);
+    expect("oauth.consent.test.tsx").toMatch(ignorePattern);
+    expect("__root.tsx").not.toMatch(ignorePattern);
+    expect("_app._org.jobs.tsx").not.toMatch(ignorePattern);
+  });
+
+  it("lets Vite and Alchemy own API origin env injection", () => {
+    expect(config.define ?? {}).not.toHaveProperty("__SERVER_API_ORIGIN__");
+    expect(config.define ?? {}).not.toHaveProperty(
+      "import.meta.env.VITE_API_ORIGIN"
+    );
   });
 });
 

@@ -87,7 +87,7 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -95,7 +95,7 @@ describe("server session lookup", () => {
 
     await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("get-session", "http://ceird-sbx-api:4301/api/auth/"),
+      new URL("get-session", "https://api.example.com/api/auth/"),
       {
         headers: {
           accept: "application/json",
@@ -112,7 +112,11 @@ describe("server session lookup", () => {
       }
 
       if (name === "host") {
-        return "linear-ui-refresh.app.ceird.localhost:1355";
+        return "127.0.0.1:4300";
+      }
+
+      if (name === "x-forwarded-host") {
+        return "app.ceird.example.com";
       }
 
       if (name === "x-forwarded-proto") {
@@ -133,8 +137,8 @@ describe("server session lookup", () => {
           accept: "application/json",
           cookie:
             "__Secure-better-auth.session_token=session-token; better-auth.session_token=session-token",
-          origin: "https://linear-ui-refresh.app.ceird.localhost:1355",
-          "x-forwarded-host": "linear-ui-refresh.api.ceird.localhost:1355",
+          origin: "https://app.ceird.example.com",
+          "x-forwarded-host": "api.ceird.example.com",
           "x-forwarded-proto": "https",
         },
       }
@@ -145,7 +149,7 @@ describe("server session lookup", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({

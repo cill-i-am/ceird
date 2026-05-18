@@ -120,7 +120,7 @@ describe("app API client", () => {
     await expect(
       runAppApiClient(
         {
-          requestOrigin: "https://agent-one.app.ceird.localhost:1355",
+          requestOrigin: "https://app.ceird.example.com",
           cookie: "better-auth.session_token=session-token",
         },
         "JobsServer.test.listJobs",
@@ -130,7 +130,7 @@ describe("app API client", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("https://agent-one.api.ceird.localhost:1355/jobs");
+    expect(String(url)).toBe("https://api.ceird.example.com/jobs");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
@@ -145,11 +145,11 @@ describe("app API client", () => {
     await expect(
       runAppApiClient(
         {
-          apiOrigin: "http://ceird-sbx-api:4301",
+          apiOrigin: "https://api.example.com",
           cookie: "better-auth.session_token=session-token",
           forwardedHeaders: {
-            origin: "https://agent-one.app.ceird.localhost:1355",
-            "x-forwarded-host": "agent-one.api.ceird.localhost:1355",
+            origin: "https://app.ceird.example.com",
+            "x-forwarded-host": "api.ceird.example.com",
             "x-forwarded-proto": "https",
           },
         },
@@ -160,11 +160,11 @@ describe("app API client", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/jobs");
+    expect(String(url)).toBe("https://api.example.com/jobs");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
-      origin: "https://agent-one.app.ceird.localhost:1355",
-      "x-forwarded-host": "agent-one.api.ceird.localhost:1355",
+      origin: "https://app.ceird.example.com",
+      "x-forwarded-host": "api.ceird.example.com",
       "x-forwarded-proto": "https",
     });
   }, 1000);

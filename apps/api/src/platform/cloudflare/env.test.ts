@@ -25,6 +25,19 @@ function makeWorkerEnv(): ApiWorkerEnv {
 }
 
 describe("Cloudflare Worker environment config", () => {
+  it("exposes the Alchemy runtime stage to Effect config", () => {
+    const config = apiWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      ALCHEMY_STACK_NAME: "ceird",
+      ALCHEMY_STAGE: "codex-alchemy-v2-native-migration",
+    });
+
+    expect(config.get("ALCHEMY_STACK_NAME")).toBe("ceird");
+    expect(config.get("ALCHEMY_STAGE")).toBe(
+      "codex-alchemy-v2-native-migration"
+    );
+  });
+
   it("exposes the Google Maps API key to Effect config", () => {
     const config = apiWorkerEnvConfigMap(makeWorkerEnv());
 

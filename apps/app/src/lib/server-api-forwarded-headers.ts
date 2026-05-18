@@ -45,8 +45,6 @@ function readCurrentRequestOrigin(input: {
     (forwardedProto === "http" || forwardedProto === "https")
   ) {
     protocol = forwardedProto;
-  } else if (host.includes("ceird.localhost")) {
-    protocol = "https";
   }
 
   return `${protocol}://${host}`;

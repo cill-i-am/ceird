@@ -39,7 +39,9 @@ apps/api Cloudflare Worker
 
 Local development and production deployment both use the root Alchemy stack.
 Alchemy provisions Cloudflare Workers/Vite, Hyperdrive, queues, routes, and
-stage-scoped Neon branches.
+stage-scoped Neon branches. The app and API health endpoints expose the
+resolved Alchemy stack and stage identity so a running Worker can be tied back
+to the stage that produced it.
 
 ## Monorepo Ownership
 
@@ -50,7 +52,7 @@ stage-scoped Neon branches.
 | `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                              | Target ownership, authorization, repositories, or UI state.  |
 | `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                 | Better Auth adapter setup or persistence.                    |
 | `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                       | Repository SQL or React state.                               |
-| `packages/infra`         | Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                 | App/API domain behavior.                                     |
+| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.            | App/API domain behavior.                                     |
 
 ## Request And Data Flow
 
@@ -98,10 +100,10 @@ The API exports a combined Drizzle schema from
 
 Migrations live in `apps/api/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
-`Drizzle.Schema` to maintain checked-in snapshots under
-`apps/api/drizzle/alchemy`. The native Neon branch resource applies
-`apps/api/drizzle`, so historical SQL and future Alchemy-generated SQL share the
-same deploy-time migration table.
+`Drizzle.Schema` through `infra/api-drizzle-schema.ts` to maintain checked-in
+snapshots under `apps/api/drizzle/alchemy`. The native Neon branch resource
+applies `apps/api/drizzle`, so historical SQL and future Alchemy-generated SQL
+share the same deploy-time migration table.
 
 ## Boundary Rules
 
@@ -120,4 +122,5 @@ same deploy-time migration table.
 - Authentication details: [auth.md](auth.md)
 - Jobs product and API detail: [jobs-v1-spec.md](jobs-v1-spec.md)
 - Data-layer rationale: [data-layer.md](data-layer.md)
-- Local and deployed runtime: [sandbox-and-infra.md](sandbox-and-infra.md)
+- Local and deployed runtime:
+  [local-development-and-infra.md](local-development-and-infra.md)

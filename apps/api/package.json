@@ -8,7 +8,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "dev": "portless run --name api.ceird tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -26,7 +26,6 @@
     "@effect/sql": "0.51.0",
     "@effect/sql-pg": "0.52.1",
     "better-auth": "1.6.11",
-    "cloudflare": "6.0.0-beta.2",
     "drizzle-orm": "1.0.0-rc.2",
     "effect": "^3.21.2",
     "pg": "8.20.0",

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Effect, Layer } from "effect";
 
 import type { AuthEmailQueueMessage } from "./domains/identity/authentication/auth-email-queue.js";
+import { AuthenticationBackgroundTaskHandler } from "./domains/identity/authentication/auth.js";
 import type {
   CloudflareEmailBindingMessage,
   CloudflareEmailBindingSendResult,
@@ -12,6 +13,8 @@ import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
   WorkerApiSiteGeocoderLive,
   handleWorkerQueue,
+  makeWorkerApiRuntimeLayers,
+  makeWorkerAuthenticationBackgroundTaskHandlerLive,
 } from "./platform/cloudflare/runtime.js";
 import worker from "./worker.js";
 
@@ -105,6 +108,52 @@ function makeEnv(
 }
 
 describe("worker queue auth email delivery", () => {
+  it("assembles request runtime layers from Cloudflare Worker bindings", async () => {
+    const env = makeEnv();
+    const runtimeLayers = makeWorkerApiRuntimeLayers(
+      env,
+      makeExecutionContext()
+    );
+
+    const baseUrl = await Effect.runPromise(
+      Config.string("BETTER_AUTH_BASE_URL").pipe(
+        Effect.provide(runtimeLayers.baseLive)
+      )
+    );
+    const geocoderRuntime = await Effect.runPromise(
+      Effect.runtime<SiteGeocoder>().pipe(
+        Effect.provide(runtimeLayers.siteGeocoderLive),
+        Effect.provide(runtimeLayers.baseLive),
+        Effect.either
+      )
+    );
+
+    expect(baseUrl).toBe(env.BETTER_AUTH_BASE_URL);
+    expect(geocoderRuntime._tag).toBe("Right");
+    expect(runtimeLayers.authenticationLive).toBeDefined();
+    expect(runtimeLayers.databaseRuntimeLive).toBeDefined();
+  }, 10_000);
+
+  it("routes authentication background tasks through Worker waitUntil", async () => {
+    const context = makeExecutionContext();
+    const task = Promise.resolve("done");
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scheduleBackgroundTask =
+          yield* AuthenticationBackgroundTaskHandler;
+
+        scheduleBackgroundTask(task);
+      }).pipe(
+        Effect.provide(
+          makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
+        )
+      )
+    );
+
+    expect(context.waitUntil).toHaveBeenCalledWith(task);
+  });
+
   it("uses the Google geocoder layer with Worker environment config", async () => {
     const result = await Effect.runPromise(
       Effect.runtime<SiteGeocoder>().pipe(

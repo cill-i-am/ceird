@@ -7,13 +7,13 @@ export interface ApiWorkerBindingRuntimeEnv {
 }
 
 export interface ApiWorkerConfigEnv {
+  readonly ALCHEMY_STACK_NAME?: string;
+  readonly ALCHEMY_STAGE?: string;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
-  readonly CLOUDFLARE_ACCOUNT_ID?: string;
-  readonly CLOUDFLARE_API_TOKEN?: string;
   readonly GOOGLE_MAPS_API_KEY: string;
   readonly MCP_RESOURCE_URL?: string;
   readonly NODE_ENV?: string;
@@ -25,13 +25,13 @@ export type ApiWorkerEnv = ApiWorkerBindingRuntimeEnv & ApiWorkerConfigEnv;
 export function apiWorkerEnvConfigMap(env: ApiWorkerEnv) {
   return new Map(
     Object.entries({
+      ALCHEMY_STACK_NAME: env.ALCHEMY_STACK_NAME,
+      ALCHEMY_STAGE: env.ALCHEMY_STAGE,
       AUTH_APP_ORIGIN: env.AUTH_APP_ORIGIN,
       AUTH_EMAIL_FROM: env.AUTH_EMAIL_FROM,
       AUTH_EMAIL_FROM_NAME: env.AUTH_EMAIL_FROM_NAME,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
-      CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
-      CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
       MCP_RESOURCE_URL: env.MCP_RESOURCE_URL,
       NODE_ENV: env.NODE_ENV,

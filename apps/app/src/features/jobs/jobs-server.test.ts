@@ -114,7 +114,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -128,7 +128,7 @@ describe("server jobs helpers", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/jobs?limit=10");
+    expect(String(url)).toBe("https://api.example.com/jobs?limit=10");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
@@ -139,7 +139,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
     const [firstItem] = listResponse.items;
 
     if (!firstItem) {
@@ -177,13 +177,13 @@ describe("server jobs helpers", () => {
     });
 
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "http://ceird-sbx-api:4301/jobs"
+      "https://api.example.com/jobs"
     );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: "GET",
     });
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-      "http://ceird-sbx-api:4301/jobs?cursor=cursor_123"
+      "https://api.example.com/jobs?cursor=cursor_123"
     );
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
       method: "GET",
@@ -227,7 +227,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -239,7 +239,7 @@ describe("server jobs helpers", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/jobs/options");
+    expect(String(url)).toBe("https://api.example.com/jobs/options");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
@@ -250,7 +250,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -262,7 +262,7 @@ describe("server jobs helpers", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/jobs/member-options");
+    expect(String(url)).toBe("https://api.example.com/jobs/member-options");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",
@@ -273,7 +273,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -286,7 +286,7 @@ describe("server jobs helpers", () => {
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe(
-      "http://ceird-sbx-api:4301/jobs/external-member-options"
+      "https://api.example.com/jobs/external-member-options"
     );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
@@ -298,7 +298,7 @@ describe("server jobs helpers", () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -312,7 +312,7 @@ describe("server jobs helpers", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://ceird-sbx-api:4301/activity?limit=10");
+    expect(String(url)).toBe("https://api.example.com/activity?limit=10");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",

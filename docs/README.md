@@ -17,7 +17,7 @@ describe how the major systems fit together; `superpowers/specs` and
   Cloudflare Worker.
 - [Shared Packages](architecture/packages.md) explains each package under
   `packages/` and what code belongs there.
-- [Local Development And Infrastructure](architecture/sandbox-and-infra.md)
+- [Local Development And Infrastructure](architecture/local-development-and-infra.md)
   explains Alchemy stages, local environment setup, the root Alchemy stack, and
   production infrastructure.
 
@@ -54,7 +54,7 @@ change:
 - Shared schemas, DTOs, IDs, errors, or package ownership:
   `architecture/packages.md`
 - Alchemy stages, local environment setup, or deploy infrastructure:
-  `architecture/sandbox-and-infra.md`
+  `architecture/local-development-and-infra.md`
 - Cross-system behavior or workspace layout: `architecture/system-overview.md`
 
 Prefer short, source-backed updates over broad rewrite notes. Link to exact code

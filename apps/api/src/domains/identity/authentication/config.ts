@@ -58,18 +58,6 @@ export function matchesTrustedOrigin(
   });
 }
 
-export const DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN = makeTrustedOriginPattern(
-  "http://*.app.ceird.localhost:1355"
-);
-export const DEFAULT_SANDBOX_APP_ORIGIN_HTTPS_PATTERN =
-  makeTrustedOriginPattern("https://*.app.ceird.localhost:1355");
-export const DEFAULT_PORTLESS_APP_ORIGIN_HTTP = makeTrustedOriginPattern(
-  "http://app.ceird.localhost:1355"
-);
-export const DEFAULT_PORTLESS_APP_ORIGIN_HTTPS = makeTrustedOriginPattern(
-  "https://app.ceird.localhost:1355"
-);
-
 const DEFAULT_LOCAL_APP_ORIGIN_STRINGS = [
   "http://127.0.0.1:3000",
   "http://localhost:3000",
@@ -143,7 +131,6 @@ export interface AuthenticationEnvironment {
   readonly baseUrl: string;
   readonly mcpResourceUrl?: string | undefined;
   readonly oauthIssuerUrl?: string | undefined;
-  readonly portlessUrl?: string | undefined;
   readonly secret: string;
   readonly databaseUrl: string;
   readonly rateLimitEnabled?: boolean | undefined;
@@ -220,69 +207,82 @@ export class AuthenticationConfigService extends Effect.Service<AuthenticationCo
   }
 ) {}
 
-const CEIRD_LOCALHOST_SUFFIX = ".ceird.localhost";
-const CEIRD_LOCALHOST_COOKIE_DOMAIN = "ceird.localhost";
+interface OriginParts {
+  readonly hostname: string;
+  readonly protocol: string;
+}
 
-function readHostname(value: string | undefined): string | undefined {
+function readOriginParts(value: string | undefined): OriginParts | undefined {
   if (!value) {
     return undefined;
   }
 
   try {
-    return new URL(value).hostname;
+    const url = new URL(value);
+    return {
+      hostname: url.hostname,
+      protocol: url.protocol,
+    };
   } catch {
     return undefined;
   }
 }
 
-export function resolveCrossSubDomainCookieDomain(
-  environment: Pick<
-    AuthenticationEnvironment,
-    "appOrigin" | "baseUrl" | "portlessUrl"
-  >
-): string | undefined {
-  const hostnames = [
-    readHostname(environment.baseUrl),
-    readHostname(environment.portlessUrl),
-    readHostname(environment.appOrigin),
-  ];
+function isLocalhostDomain(hostname: string) {
+  return hostname === "localhost" || hostname.endsWith(".localhost");
+}
 
-  return hostnames.some(
-    (hostname) =>
-      hostname === CEIRD_LOCALHOST_COOKIE_DOMAIN ||
-      hostname?.endsWith(CEIRD_LOCALHOST_SUFFIX) === true
-  )
-    ? CEIRD_LOCALHOST_COOKIE_DOMAIN
-    : undefined;
+function findSharedDomain(firstHostname: string, secondHostname: string) {
+  if (firstHostname === secondHostname) {
+    return;
+  }
+
+  const firstLabels = firstHostname.split(".").filter(Boolean);
+  const secondLabels = secondHostname.split(".").filter(Boolean);
+  const sharedLabels: string[] = [];
+
+  while (firstLabels.length > 0 && secondLabels.length > 0) {
+    const firstLabel = firstLabels.pop();
+    const secondLabel = secondLabels.pop();
+
+    if (firstLabel !== secondLabel || firstLabel === undefined) {
+      break;
+    }
+
+    sharedLabels.unshift(firstLabel);
+  }
+
+  return sharedLabels.length >= 2 ? sharedLabels.join(".") : undefined;
+}
+
+export function resolveCrossSubDomainCookieDomain(
+  environment: Pick<AuthenticationEnvironment, "appOrigin" | "baseUrl">
+): string | undefined {
+  const base = readOriginParts(environment.baseUrl);
+  const app = readOriginParts(environment.appOrigin);
+
+  if (
+    !base ||
+    !app ||
+    base.protocol !== "https:" ||
+    app.protocol !== "https:" ||
+    isLoopbackHostname(base.hostname) ||
+    isLoopbackHostname(app.hostname) ||
+    isLocalhostDomain(base.hostname) ||
+    isLocalhostDomain(app.hostname)
+  ) {
+    return undefined;
+  }
+
+  return findSharedDomain(base.hostname, app.hostname);
 }
 
 export function makeAuthenticationTrustedOrigins(
-  environment: Pick<AuthenticationEnvironment, "appOrigin" | "portlessUrl">
+  environment: Pick<AuthenticationEnvironment, "appOrigin">
 ): TrustedOriginPattern[] {
-  const trustedOrigins = new Set<TrustedOriginPattern>([
-    ...DEFAULT_LOCAL_APP_ORIGINS,
-    DEFAULT_SANDBOX_APP_ORIGIN_HTTP_PATTERN,
-    DEFAULT_SANDBOX_APP_ORIGIN_HTTPS_PATTERN,
-    DEFAULT_PORTLESS_APP_ORIGIN_HTTP,
-    DEFAULT_PORTLESS_APP_ORIGIN_HTTPS,
-  ]);
-
-  if (environment.portlessUrl) {
-    try {
-      const appUrl = new URL(environment.portlessUrl);
-      if (appUrl.hostname.includes(".api.ceird.localhost")) {
-        appUrl.hostname = appUrl.hostname.replace(
-          ".api.ceird.localhost",
-          ".app.ceird.localhost"
-        );
-      } else if (appUrl.hostname === "api.ceird.localhost") {
-        appUrl.hostname = "app.ceird.localhost";
-      }
-      trustedOrigins.add(makeTrustedOriginPattern(appUrl.origin));
-    } catch {
-      // Ignore malformed PORTLESS_URL values and keep the default trusted origins.
-    }
-  }
+  const trustedOrigins = new Set<TrustedOriginPattern>(
+    DEFAULT_LOCAL_APP_ORIGINS
+  );
 
   if (environment.appOrigin) {
     try {
@@ -298,12 +298,9 @@ export function makeAuthenticationTrustedOrigins(
 }
 
 function makeDefaultMcpResourceUrl(
-  environment: Pick<
-    AuthenticationEnvironment,
-    "appOrigin" | "baseUrl" | "portlessUrl"
-  >
+  environment: Pick<AuthenticationEnvironment, "baseUrl">
 ) {
-  const url = new URL(environment.portlessUrl ?? environment.baseUrl);
+  const url = new URL(environment.baseUrl);
   return new URL(DEFAULT_MCP_RESOURCE_PATH, url.origin).toString();
 }
 
@@ -389,10 +386,6 @@ export function makeAuthenticationConfig(
 export const loadAuthenticationConfig = Effect.gen(
   function* loadAuthenticationConfig() {
     const baseUrl = yield* authenticationBaseUrlConfig;
-    const portlessUrl = yield* pipe(
-      Config.string("PORTLESS_URL"),
-      Config.option
-    );
     const appOrigin = yield* pipe(
       Config.string("AUTH_APP_ORIGIN"),
       Config.option
@@ -415,7 +408,6 @@ export const loadAuthenticationConfig = Effect.gen(
       baseUrl,
       mcpResourceUrl: Option.getOrUndefined(mcpResourceUrl),
       oauthIssuerUrl: Option.getOrUndefined(oauthIssuerUrl),
-      portlessUrl: Option.getOrUndefined(portlessUrl),
       secret,
       databaseUrl,
       rateLimitEnabled,

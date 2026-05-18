@@ -24,10 +24,10 @@ describe("api origin resolution", () => {
     ).toBe("http://127.0.0.1:4301");
   }, 1000);
 
-  it("maps the app portless origin to the API origin", () => {
-    expect(resolveApiOrigin("https://agent-one.app.ceird.localhost:1355")).toBe(
-      "https://agent-one.api.ceird.localhost:1355"
-    );
+  it("does not infer API origins from removed sandbox worktree aliases", () => {
+    expect(
+      resolveApiOrigin("https://agent-one.app.ceird.localhost:1355")
+    ).toBeUndefined();
   }, 1000);
 
   it("maps the raw local app dev origin to the local API origin", () => {
@@ -51,12 +51,9 @@ describe("api origin resolution", () => {
   }, 1000);
 
   it("falls back to host-based mapping when the injected API origin is invalid", () => {
-    expect(
-      resolveApiOrigin(
-        "https://agent-one.app.ceird.localhost:1355",
-        "not-a-url"
-      )
-    ).toBe("https://agent-one.api.ceird.localhost:1355");
+    expect(resolveApiOrigin("https://app.ceird.example.com", "not-a-url")).toBe(
+      "https://api.ceird.example.com"
+    );
   }, 1000);
 
   it("maps conventional app subdomains to matching API subdomains", () => {
@@ -72,9 +69,19 @@ describe("api origin resolution", () => {
   }, 1000);
 
   it("reads the injected server API origin", () => {
-    process.env.API_ORIGIN = "http://ceird-sbx-api:4301";
+    process.env.API_ORIGIN = "https://api.example.com";
 
-    expect(readConfiguredServerApiOrigin()).toBe("http://ceird-sbx-api:4301");
+    expect(readConfiguredServerApiOrigin()).toBe("https://api.example.com");
+  }, 1000);
+
+  it("prefers the Cloudflare Worker env binding for server API origin", () => {
+    process.env.API_ORIGIN = "https://api.process.example.com";
+
+    expect(
+      readConfiguredServerApiOrigin({
+        API_ORIGIN: "https://api.worker.example.com",
+      })
+    ).toBe("https://api.worker.example.com");
   }, 1000);
 
   it("returns undefined when no server API origin is injected", () => {

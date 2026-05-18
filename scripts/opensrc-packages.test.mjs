@@ -37,7 +37,6 @@ test("includes runtime and framework packages in the opensrc source list", () =>
     "effect",
     "github:facebook/react",
     "pg",
-    "portless",
     "react-dom",
     "tailwindcss",
   ]);
@@ -63,7 +62,7 @@ test("excludes assets, lightweight helpers, build tooling, and workspace package
     },
   ]);
 
-  assert.deepEqual(sourceList, ["github:facebook/react", "portless"]);
+  assert.deepEqual(sourceList, ["github:facebook/react"]);
 });
 
 test("matches allowed packages by exact name or approved scope prefix", () => {

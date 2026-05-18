@@ -9,7 +9,7 @@ import {
 } from "./stages.ts";
 
 describe("Neon Postgres layout", () => {
-  it("creates the shared project and protected branch for the parent stage", () => {
+  it("creates the shared project and unprotected branch for the parent stage by default", () => {
     const layout = makeNeonPostgresLayout({
       ...configWithoutCloudflareBootstrapSecrets,
       stage: "main",
@@ -18,26 +18,41 @@ describe("Neon Postgres layout", () => {
     expect(layout).toStrictEqual({
       branch: {
         migrationSource: {
+          appliedMigrationsDir: apiDrizzleMigrationsDir,
           dialect: "postgres",
+          generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
           kind: "alchemy-drizzle-schema",
-          migrationsDir: apiDrizzleMigrationsDir,
-          out: apiAlchemyDrizzleMigrationsDir,
           schema: apiDrizzleSchemaPath,
         },
         name: "main",
         parentBranchName: undefined,
-        protected: true,
+        protected: false,
       },
       project: {
         databaseName: "ceird",
         defaultBranchName: "base",
         kind: "create",
         name: "ceird-main-postgres",
+        historyRetentionSeconds: 21_600,
         orgId: undefined,
         pgVersion: 17,
         region: "aws-eu-west-2",
         roleName: "ceird",
       },
+    });
+  });
+
+  it("protects the parent stage branch only when explicitly configured", () => {
+    const layout = makeNeonPostgresLayout({
+      ...configWithoutCloudflareBootstrapSecrets,
+      neonParentBranchProtected: true,
+      stage: "main",
+    });
+
+    expect(layout.branch).toMatchObject({
+      name: "main",
+      parentBranchName: undefined,
+      protected: true,
     });
   });
 
@@ -50,10 +65,10 @@ describe("Neon Postgres layout", () => {
     expect(layout).toStrictEqual({
       branch: {
         migrationSource: {
+          appliedMigrationsDir: apiDrizzleMigrationsDir,
           dialect: "postgres",
+          generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
           kind: "alchemy-drizzle-schema",
-          migrationsDir: apiDrizzleMigrationsDir,
-          out: apiAlchemyDrizzleMigrationsDir,
           schema: apiDrizzleSchemaPath,
         },
         name: "dev-cillian",

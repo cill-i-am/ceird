@@ -14,27 +14,27 @@ layout and organization context without adding URL segments.
 
 Current visible routes:
 
-| URL                                | Route file                            | Purpose                                                       |
-| ---------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| `/`                                | `_app._org.index.tsx`                 | Authenticated organization home.                              |
-| `/login`                           | `login.tsx`                           | Sign in.                                                      |
-| `/signup`                          | `signup.tsx`                          | Create account.                                               |
-| `/forgot-password`                 | `forgot-password.tsx`                 | Request password reset.                                       |
-| `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                      |
-| `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                               |
-| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                               |
-| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.          |
-| `/settings`                        | `_app.settings.tsx`                   | User settings.                                                |
-| `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                   |
-| `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                    |
-| `/jobs/new`                        | `_app._org.jobs.new.tsx`              | New job flow.                                                 |
-| `/jobs/$jobId`                     | `_app._org.jobs.$jobId.tsx`           | Job detail route.                                             |
-| `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                         |
-| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings, service areas, rate cards, and labels. |
-| `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                   |
-| `/sites/new`                       | `_app._org.sites.new.tsx`             | New site flow.                                                |
-| `/sites/$siteId`                   | `_app._org.sites.$siteId.tsx`         | Site detail route.                                            |
-| `/health`                          | `health.ts`                           | App health response for Alchemy and Worker checks.            |
+| URL                                | Route file                            | Purpose                                                        |
+| ---------------------------------- | ------------------------------------- | -------------------------------------------------------------- |
+| `/`                                | `_app._org.index.tsx`                 | Authenticated organization home.                               |
+| `/login`                           | `login.tsx`                           | Sign in.                                                       |
+| `/signup`                          | `signup.tsx`                          | Create account.                                                |
+| `/forgot-password`                 | `forgot-password.tsx`                 | Request password reset.                                        |
+| `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                       |
+| `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                |
+| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                |
+| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.           |
+| `/settings`                        | `_app.settings.tsx`                   | User settings.                                                 |
+| `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                    |
+| `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                     |
+| `/jobs/new`                        | `_app._org.jobs.new.tsx`              | New job flow.                                                  |
+| `/jobs/$jobId`                     | `_app._org.jobs.$jobId.tsx`           | Job detail route.                                              |
+| `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                          |
+| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings, service areas, rate cards, and labels.  |
+| `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                    |
+| `/sites/new`                       | `_app._org.sites.new.tsx`             | New site flow.                                                 |
+| `/sites/$siteId`                   | `_app._org.sites.$siteId.tsx`         | Site detail route.                                             |
+| `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks. |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, and
 typed route registration. Breadcrumb labels are declared through route
@@ -89,6 +89,22 @@ Authenticated layout and navigation live under:
 Server-side app requests use the explicit TanStack Start server entry at
 `apps/app/src/server.ts`. Deployed app Workers rely on Cloudflare observability
 logs and traces configured by the infra stack.
+The app's Cloudflare runtime env declaration lives in
+`apps/app/src/cloudflare-env.d.ts`; it includes the app/API origins plus
+Alchemy's injected stack and stage bindings, and the infra tests compare that
+contract against the Vite Worker env declared by
+`infra/cloudflare-stack.ts`. The deployed app's `API_ORIGIN` and
+`VITE_API_ORIGIN` are wired from the API Worker's Cloudflare domain output,
+with the configured API hostname used only as the pre-resolution fallback. The
+app Vite config does not manually define `VITE_API_ORIGIN`; the standard Vite
+env flow and Alchemy's Cloudflare Vite resource own client-side env injection.
+Server-side app helpers read the runtime `API_ORIGIN` from the
+`cloudflare:workers` env binding, with `process.env` only as the package-local
+Node fallback. Non-Cloudflare Vite and Vitest runs alias that module to a local
+empty binding stub.
+The `/health` server route reads Alchemy metadata from the same Worker env
+binding and returns both `stackName` and `stage`, using `process.env` only as
+the package-local fallback and `local` when no Alchemy metadata is available.
 
 ## Feature Folders
 
@@ -236,9 +252,20 @@ workflow-specific layouts over decorative landing-page patterns.
 - Playwright config lives in `playwright.config.ts`.
 - E2E tests live in `apps/app/e2e`.
 - Page objects for E2E tests live in `apps/app/e2e/pages`.
+- Playwright targets an existing Alchemy stage by default through
+  `PLAYWRIGHT_BASE_URL` and `PLAYWRIGHT_API_URL`; set
+  `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1` only when intentionally using the
+  package-local server fallback.
 - Auth E2E tests may read Better Auth verification tokens directly from a test
   database using `PLAYWRIGHT_DATABASE_URL` so password-reset browser flows can
   cover the email-token handoff without depending on a mailbox.
+  Use `DATABASE_URL` only with `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1`; existing
+  Alchemy-stage E2E runs should set the explicit stage database URL through
+  `PLAYWRIGHT_DATABASE_URL`.
+- Local operators can inspect the deployed stage database URL with
+  `CEIRD_CLOUDFLARE=1 pnpm alchemy state get ceird <stage> PostgresBranch --env-file .env.local --stage <stage> | jq -r '.attr.connectionUri.__redacted__ // .attr.connectionUri'`.
+  Keep that connection URI out of root stack outputs because deploy outputs are
+  printed into logs.
 
 Run app tests:
 

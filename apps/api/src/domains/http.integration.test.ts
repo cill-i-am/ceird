@@ -2090,10 +2090,7 @@ async function withJobsEnvironment<Result>(
     AUTH_EMAIL_FROM_NAME: process.env.AUTH_EMAIL_FROM_NAME,
     BETTER_AUTH_BASE_URL: process.env.BETTER_AUTH_BASE_URL,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
-    CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
     DATABASE_URL: process.env.DATABASE_URL,
-    PORTLESS_URL: process.env.PORTLESS_URL,
   };
 
   process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
@@ -2101,10 +2098,7 @@ async function withJobsEnvironment<Result>(
   process.env.AUTH_EMAIL_FROM_NAME = "Ceird Test";
   process.env.BETTER_AUTH_BASE_URL = "http://127.0.0.1:3000";
   process.env.BETTER_AUTH_SECRET = "0123456789abcdef0123456789abcdef";
-  delete process.env.CLOUDFLARE_ACCOUNT_ID;
-  delete process.env.CLOUDFLARE_API_TOKEN;
   process.env.DATABASE_URL = databaseUrl;
-  delete process.env.PORTLESS_URL;
 
   try {
     return await operation();
@@ -2139,28 +2133,10 @@ async function withJobsEnvironment<Result>(
       process.env.BETTER_AUTH_SECRET = previous.BETTER_AUTH_SECRET;
     }
 
-    if (previous.CLOUDFLARE_ACCOUNT_ID === undefined) {
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-    } else {
-      process.env.CLOUDFLARE_ACCOUNT_ID = previous.CLOUDFLARE_ACCOUNT_ID;
-    }
-
-    if (previous.CLOUDFLARE_API_TOKEN === undefined) {
-      delete process.env.CLOUDFLARE_API_TOKEN;
-    } else {
-      process.env.CLOUDFLARE_API_TOKEN = previous.CLOUDFLARE_API_TOKEN;
-    }
-
     if (previous.DATABASE_URL === undefined) {
       delete process.env.DATABASE_URL;
     } else {
       process.env.DATABASE_URL = previous.DATABASE_URL;
-    }
-
-    if (previous.PORTLESS_URL === undefined) {
-      delete process.env.PORTLESS_URL;
-    } else {
-      process.env.PORTLESS_URL = previous.PORTLESS_URL;
     }
   }
 }

@@ -69,8 +69,6 @@ describe("makeAuthenticationConfig()", () => {
         "http://localhost:3000",
         "http://127.0.0.1:4173",
         "http://localhost:4173",
-        "http://*.app.ceird.localhost:1355",
-        "https://*.app.ceird.localhost:1355",
       ]),
       secret: "super-secret-value",
       databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
@@ -244,27 +242,24 @@ describe("makeAuthenticationConfig()", () => {
     });
   }, 10_000);
 
-  it("adds the matching app origin for a portless API URL", () => {
-    expect(
-      makeAuthenticationTrustedOrigins({
-        portlessUrl: "https://ceird.api.ceird.localhost:1355",
-      })
-    ).toContain("https://ceird.app.ceird.localhost:1355");
+  it("does not trust removed sandbox app aliases by default", () => {
+    expect(makeAuthenticationTrustedOrigins({})).not.toStrictEqual(
+      expect.arrayContaining([
+        "https://*.app.ceird.localhost:1355",
+        "https://app.ceird.localhost:1355",
+      ])
+    );
   }, 10_000);
 
-  it("shares auth cookies across ceird.localhost subdomains", () => {
+  it("does not share auth cookies across removed ceird.localhost aliases", () => {
     const config = makeAuthenticationConfig({
       appOrigin: "https://linear-ui-refresh.app.ceird.localhost:1355",
       baseUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
-      portlessUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
       secret: "super-secret-value",
       databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
     });
 
-    expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
-      enabled: true,
-      domain: "ceird.localhost",
-    });
+    expect(config.advanced?.crossSubDomainCookies).toBeUndefined();
     if (config.advanced?.trustedProxyHeaders !== true) {
       throw new Error("Expected trusted proxy headers to be enabled.");
     }
@@ -296,7 +291,6 @@ describe("makeAuthenticationConfig()", () => {
       {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
-        PORTLESS_URL: "https://ceird.api.ceird.localhost:1355",
       },
       async () => {
         const result = Effect.runPromise(loadAuthenticationConfig);
@@ -313,13 +307,12 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_BASE_URL: "https://api.ceird.localhost:1355",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
-        PORTLESS_URL: "https://api.ceird.localhost:1355",
       },
       async () => {
         const config = await Effect.runPromise(loadAuthenticationConfig);
 
         expect(config.baseURL).toBe("https://api.ceird.localhost:1355");
-        expect(config.trustedOrigins).toContain(
+        expect(config.trustedOrigins).not.toContain(
           "https://app.ceird.localhost:1355"
         );
         expect(config.trustedOrigins).toContain("http://127.0.0.1:4304");
@@ -327,14 +320,13 @@ describe("makeAuthenticationConfig()", () => {
     );
   }, 10_000);
 
-  it("derives the shared cookie domain from ceird.localhost hosts", () => {
+  it("does not derive shared cookie domains from localhost aliases", () => {
     expect(
       resolveCrossSubDomainCookieDomain({
         appOrigin: "https://linear-ui-refresh.app.ceird.localhost:1355",
         baseUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
-        portlessUrl: "https://linear-ui-refresh.api.ceird.localhost:1355",
       })
-    ).toBe("ceird.localhost");
+    ).toBeUndefined();
 
     expect(
       resolveCrossSubDomainCookieDomain({
@@ -342,6 +334,26 @@ describe("makeAuthenticationConfig()", () => {
         baseUrl: "http://127.0.0.1:3001",
       })
     ).toBeUndefined();
+  }, 10_000);
+
+  it("shares auth cookies across configured Alchemy app and API domains", () => {
+    const config = makeAuthenticationConfig({
+      appOrigin: "https://app.ceird.app",
+      baseUrl: "https://api.ceird.app/api/auth",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+
+    expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
+      enabled: true,
+      domain: "ceird.app",
+    });
+    expect(
+      resolveCrossSubDomainCookieDomain({
+        appOrigin: "https://app.ceird.example.com",
+        baseUrl: "https://api.ceird.example.com/api/auth",
+      })
+    ).toBe("ceird.example.com");
   }, 10_000);
 });
 
@@ -1031,16 +1043,14 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
-  it("matches wildcard trusted origins for local aliases", () => {
+  it("matches explicit wildcard trusted origins", () => {
     expect({
-      api: matchesTrustedOrigin(
-        "https://organization-invitations.api.ceird.localhost:1355",
-        ["https://*.app.ceird.localhost:1355"]
-      ),
-      app: matchesTrustedOrigin(
-        "https://organization-invitations.app.ceird.localhost:1355",
-        ["https://*.app.ceird.localhost:1355"]
-      ),
+      api: matchesTrustedOrigin("https://preview.api.ceird.example.com", [
+        "https://*.app.ceird.example.com",
+      ]),
+      app: matchesTrustedOrigin("https://preview.app.ceird.example.com", [
+        "https://*.app.ceird.example.com",
+      ]),
     }).toStrictEqual({
       api: false,
       app: true,
@@ -1133,7 +1143,6 @@ async function withEnvironment(
   delete process.env.DATABASE_URL;
   delete process.env.MCP_RESOURCE_URL;
   delete process.env.OAUTH_ISSUER_URL;
-  delete process.env.PORTLESS_URL;
 
   Object.assign(process.env, nextEnvironment);
 

@@ -34,22 +34,47 @@ export function makeWorkerBaseLive(env: ApiWorkerEnv) {
 
 export const WorkerApiSiteGeocoderLive = SiteGeocoder.Google;
 
-function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
+export function makeWorkerAuthenticationBackgroundTaskHandlerLive(
+  context: ExecutionContext
+) {
+  return Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
+    context.waitUntil(task);
+  });
+}
+
+export function makeWorkerApiRuntimeLayers(
+  env: ApiWorkerEnv,
+  context: ExecutionContext
+) {
   const baseLive = makeWorkerBaseLive(env);
   const databaseRuntimeLive = makeAppDatabaseRuntimeLive(
     makeAppDatabaseLive(env.DATABASE.connectionString)
   );
   const authenticationLive = makeAuthenticationLive(
     makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE),
-    Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
-      context.waitUntil(task);
-    })
+    makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
   );
+
+  return {
+    authenticationLive,
+    baseLive,
+    databaseRuntimeLive,
+    siteGeocoderLive: WorkerApiSiteGeocoderLive,
+  };
+}
+
+function makeWorkerApiHandler(env: ApiWorkerEnv, context: ExecutionContext) {
+  const {
+    authenticationLive,
+    baseLive,
+    databaseRuntimeLive,
+    siteGeocoderLive,
+  } = makeWorkerApiRuntimeLayers(env, context);
 
   return makeApiWebHandler(
     databaseRuntimeLive,
     authenticationLive,
-    WorkerApiSiteGeocoderLive,
+    siteGeocoderLive,
     baseLive
   );
 }

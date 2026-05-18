@@ -169,7 +169,18 @@ test("teardown is a no-op for Alchemy-native local environments", async (t) => {
   const result = runScript(teardownScript, fixture);
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /No local Docker teardown is required/);
+  assert.match(result.stdout, /No local teardown is required/);
+  assert.match(result.stdout, /Alchemy stages are managed explicitly/);
+  assert.match(
+    result.stdout,
+    /CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file \.env\.local --stage <stage>/
+  );
+  assert.doesNotMatch(
+    result.stdout,
+    /(?<!CEIRD_CLOUDFLARE=1 )pnpm alchemy destroy --env-file \.env\.local --stage <stage>/
+  );
+  assert.doesNotMatch(result.stdout, /pnpm alchemy destroy\.$/m);
+  assert.doesNotMatch(result.stdout, /Docker/);
   assert.equal(await readFile(fixture.callLog, "utf8"), "");
 });
 

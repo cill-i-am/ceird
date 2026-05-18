@@ -25,9 +25,24 @@ Run the normal local development stack through a cloud-backed Alchemy stage:
 pnpm dev
 ```
 
-Set `ALCHEMY_STAGE=<stage>` when you want an explicit stage name for a linked
-worktree or agent task. Alchemy creates or updates the stage-scoped Cloudflare
-Workers, app, Hyperdrive, Neon branch, queues, and routes.
+Pass `--stage <stage>` when you want an explicit stage name for a linked
+worktree or agent task:
+
+```bash
+pnpm dev -- --stage codex-my-task
+```
+
+Alchemy creates or updates the stage-scoped Cloudflare Workers, app,
+Hyperdrive, Neon branch, queues, and routes.
+
+Non-parent stages depend on the parent `main` stage because they fork Neon
+branches from its shared project. If a worktree stage reports a missing
+`PostgresProject` reference, plan or deploy `main` first:
+
+```bash
+CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage main
+CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
+```
 
 ## Workspace Map
 
@@ -39,27 +54,27 @@ Workers, app, Hyperdrive, Neon branch, queues, and routes.
 | `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                              |
 | `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                                  |
 | `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                                 |
-| `packages/infra`         | Alchemy v2 infrastructure for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                                              |
-| `scripts`                | Root dev helpers, Portless/Vite wrappers, opensrc sync, and local environment scripts.                                                     |
+| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                                 |
+| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                                     |
 | `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                               |
 | `opensrc`                | Gitignored dependency source cache for local agent context.                                                                                |
 
 ## Common Commands
 
-| Command                         | What it does                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------- |
-| `pnpm dev`                      | Runs `pnpm alchemy dev` for the selected cloud-backed stage.                          |
-| `pnpm test`                     | Runs workspace package tests and root script tests.                                   |
-| `pnpm check-types`              | Runs TypeScript checks for all workspaces with a `check-types` task.                  |
-| `pnpm lint`                     | Runs oxlint over the workspace.                                                       |
-| `pnpm check`                    | Runs the Ultracite quality check.                                                     |
-| `pnpm format`                   | Checks formatting with oxfmt.                                                         |
-| `pnpm format:write`             | Writes formatting changes with oxfmt.                                                 |
-| `pnpm --filter app e2e`         | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed. |
-| `pnpm --filter api db:generate` | Generates Drizzle migrations for API schema changes.                                  |
-| `pnpm --filter api db:migrate`  | Applies API migrations to the configured database.                                    |
-| `pnpm alchemy dev`              | Runs the root Alchemy stack for a cloud-backed development stage.                     |
-| `pnpm alchemy deploy`           | Deploys the root Alchemy stack.                                                       |
+| Command                         | What it does                                                                                                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                      | Runs `alchemy dev --env-file .env.local` for the default cloud-backed stage.                                          |
+| `pnpm test`                     | Runs workspace package tests, root infra tests, and root script tests.                                                |
+| `pnpm check-types`              | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                        |
+| `pnpm lint`                     | Runs oxlint over the workspace.                                                                                       |
+| `pnpm check`                    | Runs the Ultracite quality check.                                                                                     |
+| `pnpm format`                   | Checks formatting with oxfmt.                                                                                         |
+| `pnpm format:write`             | Writes formatting changes with oxfmt.                                                                                 |
+| `pnpm --filter app e2e`         | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                 |
+| `pnpm --filter api db:generate` | Generates package-local Drizzle SQL for API schema changes.                                                           |
+| `pnpm --filter api db:migrate`  | Applies package-local API migrations outside the Alchemy stage workflow.                                              |
+| `pnpm alchemy dev`              | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`. |
+| `pnpm alchemy deploy`           | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                               |
 
 ## Documentation
 
@@ -71,7 +86,7 @@ The highest-signal guides are:
 - [Frontend Architecture](docs/architecture/frontend.md)
 - [API Architecture](docs/architecture/api.md)
 - [Shared Packages](docs/architecture/packages.md)
-- [Local Development And Infrastructure](docs/architecture/sandbox-and-infra.md)
+- [Local Development And Infrastructure](docs/architecture/local-development-and-infra.md)
 - [Authentication Architecture](docs/architecture/auth.md)
 - [Jobs V1 Spec](docs/architecture/jobs-v1-spec.md)
 - [Data Layer Architecture](docs/architecture/data-layer.md)
@@ -111,16 +126,20 @@ For UI workflows that need real auth cookies or API calls, run the affected
 Playwright tests against an explicit Alchemy stage:
 
 ```bash
-ALCHEMY_STAGE=codex-my-task pnpm dev
-PLAYWRIGHT_USE_EXTERNAL_SERVER=1 \
+pnpm dev -- --stage codex-my-task
 PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
 PLAYWRIGHT_API_URL=<alchemy-api-url> \
+PLAYWRIGHT_DATABASE_URL=<alchemy-database-url> \
 pnpm --filter app e2e
 ```
 
+For local runs, read `<alchemy-database-url>` from the selected stage's
+`PostgresBranch` Alchemy state rather than from stack outputs, since deploy
+outputs are logged.
+
 For database changes, generate and inspect the package-local Drizzle migration
-under `apps/api/drizzle`, then update/verify the Alchemy baseline/future
-snapshots under `apps/api/drizzle/alchemy` before running API and infra tests.
+under `apps/api/drizzle`, then update/verify the Alchemy-generated migration
+state under `apps/api/drizzle/alchemy` before running API and infra tests.
 
 ## Repository Conventions
 

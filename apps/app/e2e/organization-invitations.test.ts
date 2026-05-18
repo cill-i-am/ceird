@@ -7,7 +7,7 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { LoginPage } from "./pages/login-page";
 import { MembersPage } from "./pages/members-page";
 import { SignupPage } from "./pages/signup-page";
-import { API_ORIGIN, APP_ORIGIN, DATABASE_URL } from "./test-urls";
+import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
 
 type CookieJar = Map<string, string>;
 
@@ -188,7 +188,9 @@ async function signInInvitationContext(
 }
 
 async function markUserEmailVerified(email: string) {
-  const client = new PgClient({ connectionString: DATABASE_URL });
+  const client = new PgClient({
+    connectionString: readPlaywrightDatabaseUrl(),
+  });
 
   await client.connect();
 

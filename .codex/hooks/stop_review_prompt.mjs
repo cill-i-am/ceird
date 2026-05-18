@@ -135,10 +135,10 @@ function isSharedCore(file) {
 
 function isBackendFile(file) {
   return (
+    file === "alchemy.run.ts" ||
+    file === "tsconfig.infra.json" ||
     file.startsWith("apps/api/") ||
-    file.startsWith("packages/infra/") ||
-    file.startsWith("packages/sandbox-core/") ||
-    file.startsWith("packages/sandbox-cli/") ||
+    file.startsWith("infra/") ||
     isSharedCore(file)
   );
 }

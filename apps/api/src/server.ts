@@ -26,6 +26,9 @@ import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 import { makeHealthPayload } from "./system/health.js";
 
 const RuntimeConfig = Config.all({
+  stackName: Config.string("ALCHEMY_STACK_NAME").pipe(
+    Config.withDefault("local")
+  ),
   stage: Config.string("ALCHEMY_STAGE").pipe(Config.withDefault("local")),
 }).pipe(Effect.orDie);
 
@@ -33,7 +36,7 @@ const SystemLive = HttpApiBuilder.group(AppApi, "system", (handlers) =>
   handlers
     .handle("root", () => Effect.succeed("ceird api"))
     .handle("health", () =>
-      RuntimeConfig.pipe(Effect.map(({ stage }) => makeHealthPayload(stage)))
+      RuntimeConfig.pipe(Effect.map((config) => makeHealthPayload(config)))
     )
 );
 

@@ -54,9 +54,9 @@ describe("auth client", () => {
   }, 1000);
 
   it("uses the same app-to-api origin mapping for public endpoints", () => {
-    expect(
-      resolveApiBaseURL("https://agent-one.app.ceird.localhost:1355")
-    ).toBe("https://agent-one.api.ceird.localhost:1355/api");
+    expect(resolveApiBaseURL("https://app.ceird.example.com")).toBe(
+      "https://api.ceird.example.com/api"
+    );
   }, 1000);
 
   it("builds the email change callback URL for the settings page", () => {

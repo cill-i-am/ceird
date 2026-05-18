@@ -1,10 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer, Redacted } from "effect";
+import { ConfigProvider, Effect, Layer } from "effect";
 
-import {
-  loadAuthEmailConfig,
-  loadCloudflareAuthEmailConfig,
-} from "./auth-email-config.js";
+import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthEmailConfigurationError,
   AuthEmailRejectedError,
@@ -628,31 +625,6 @@ describe("auth email config loading", () => {
     });
   }, 10_000);
 
-  it("loads Cloudflare auth email config with Cloudflare credentials", async () => {
-    const config = await Effect.runPromise(
-      loadCloudflareAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([
-              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
-              ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
-              ["CLOUDFLARE_API_TOKEN", "token_123"],
-            ])
-          )
-        )
-      )
-    );
-
-    expect(config).toMatchObject({
-      appOrigin: "https://app.ceird.localhost",
-      from: "auth@ceird.localhost",
-      fromName: "Ceird",
-      cloudflareAccountId: "account_123",
-    });
-    expect(Redacted.value(config.cloudflareApiToken)).toBe("token_123");
-  }, 10_000);
-
   it("requires AUTH_APP_ORIGIN in auth email config", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
@@ -674,33 +646,6 @@ describe("auth email config loading", () => {
     expect(result.left.cause).toMatch(/AUTH_APP_ORIGIN/);
   }, 10_000);
 
-  it("maps missing Cloudflare API config into AuthEmailConfigurationError", async () => {
-    const result = await Effect.runPromise(
-      loadCloudflareAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([
-              ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
-              ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
-            ])
-          )
-        ),
-        Effect.either
-      )
-    );
-
-    expect(result._tag).toBe("Left");
-    if (result._tag !== "Left") {
-      return;
-    }
-
-    expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
-    expect(result.left.message).toBe("Invalid auth email configuration");
-    expect(result.left.cause).toMatch(
-      /CLOUDFLARE_ACCOUNT_ID|CLOUDFLARE_API_TOKEN/
-    );
-  }, 10_000);
-
   it("rejects invalid auth email sender addresses", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
@@ -709,8 +654,6 @@ describe("auth email config loading", () => {
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "not-an-email"],
-              ["CLOUDFLARE_ACCOUNT_ID", "account_123"],
-              ["CLOUDFLARE_API_TOKEN", "token_123"],
             ])
           )
         ),

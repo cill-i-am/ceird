@@ -1213,8 +1213,6 @@ describe("authentication integration", () => {
       AUTH_EMAIL_FROM: "no-reply@example.com",
       BETTER_AUTH_BASE_URL: "http://127.0.0.1:3000",
       BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-      CLOUDFLARE_ACCOUNT_ID: "test-account-id",
-      CLOUDFLARE_API_TOKEN: "test-api-token",
       DATABASE_URL: databaseUrl,
     } as const;
 
@@ -1809,7 +1807,6 @@ async function withEnvironment(
   delete process.env.BETTER_AUTH_BASE_URL;
   delete process.env.BETTER_AUTH_SECRET;
   delete process.env.DATABASE_URL;
-  delete process.env.PORTLESS_URL;
 
   Object.assign(process.env, nextEnvironment);
 

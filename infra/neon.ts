@@ -15,10 +15,10 @@ import {
 } from "./stages.ts";
 
 export interface AlchemyDrizzleSchemaMigrationSource {
+  readonly appliedMigrationsDir: string;
   readonly dialect: "postgres";
+  readonly generatedMigrationsDir: string;
   readonly kind: "alchemy-drizzle-schema";
-  readonly migrationsDir: string;
-  readonly out: string;
   readonly schema: string;
 }
 
@@ -36,6 +36,7 @@ export interface NeonPostgresLayout {
         readonly kind: "create";
         readonly databaseName: string;
         readonly defaultBranchName: string;
+        readonly historyRetentionSeconds: number;
         readonly name: string;
         readonly orgId: string | undefined;
         readonly pgVersion: Neon.NeonPgVersion;
@@ -68,23 +69,24 @@ export function makeNeonPostgresLayout(
   return {
     branch: {
       migrationSource: {
+        appliedMigrationsDir: apiDrizzleMigrationsDir,
         dialect: "postgres",
+        generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
         kind: "alchemy-drizzle-schema",
-        migrationsDir: apiDrizzleMigrationsDir,
-        out: apiAlchemyDrizzleMigrationsDir,
         schema: apiDrizzleSchemaPath,
       },
       name: identity.neonBranchName,
       parentBranchName: identity.isProduction
         ? undefined
         : config.neonParentBranchName,
-      protected: identity.isProduction,
+      protected: identity.isProduction && config.neonParentBranchProtected,
     },
     project: identity.isProduction
       ? {
           kind: "create",
           databaseName: config.neonDatabaseName,
           defaultBranchName: config.neonDefaultBranchName,
+          historyRetentionSeconds: config.neonHistoryRetentionSeconds,
           name: resourceName(config, "postgres"),
           orgId: config.neonOrgId,
           pgVersion: config.neonPgVersion,
@@ -98,6 +100,15 @@ export function makeNeonPostgresLayout(
   };
 }
 
+function makeAppliedMigrationsDir(
+  migrationSchema: DrizzleSchema.Schema,
+  migrationSource: NeonMigrationSource
+) {
+  return migrationSchema.out.pipe(
+    Output.map(() => migrationSource.appliedMigrationsDir)
+  );
+}
+
 export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
   function* (config: InfraStageConfig) {
     const layout = makeNeonPostgresLayout(config);
@@ -106,6 +117,7 @@ export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
         ? yield* Neon.Project("PostgresProject", {
             databaseName: layout.project.databaseName,
             defaultBranchName: layout.project.defaultBranchName,
+            historyRetentionSeconds: layout.project.historyRetentionSeconds,
             name: layout.project.name,
             orgId: layout.project.orgId,
             pgVersion: layout.project.pgVersion,
@@ -117,13 +129,14 @@ export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
           });
     const migrationSchema = yield* DrizzleSchema.Schema("DatabaseSchema", {
       dialect: layout.branch.migrationSource.dialect,
-      out: layout.branch.migrationSource.out,
+      out: layout.branch.migrationSource.generatedMigrationsDir,
       schema: layout.branch.migrationSource.schema,
     });
 
     const branch = yield* Neon.Branch("PostgresBranch", {
-      migrationsDir: migrationSchema.out.pipe(
-        Output.map(() => layout.branch.migrationSource.migrationsDir)
+      migrationsDir: makeAppliedMigrationsDir(
+        migrationSchema,
+        layout.branch.migrationSource
       ),
       name: layout.branch.name,
       parentBranch:

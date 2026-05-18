@@ -10,17 +10,19 @@ import * as Layer from "effect/Layer";
 import {
   makeCloudflareHyperdrive,
   makeCloudflareStack,
-} from "./packages/infra/src/cloudflare-stack.ts";
-import { makeNeonPostgresResources } from "./packages/infra/src/neon.ts";
-import { loadInfraStageConfig } from "./packages/infra/src/stages.ts";
+} from "./infra/cloudflare-stack.ts";
+import { legacyDrizzleMigrationsProvider } from "./infra/legacy-alchemy.ts";
+import { makeNeonPostgresResources } from "./infra/neon.ts";
+import { loadInfraStageConfig } from "./infra/stages.ts";
 
-const stackName = process.env.CEIRD_ALCHEMY_STACK_NAME ?? "ceird";
+const stackName = "ceird";
 
 const providers = (() => {
   const cloudflareProviders = Cloudflare.providers();
   return Layer.mergeAll(
     cloudflareProviders,
     DrizzleProviders.providers(),
+    legacyDrizzleMigrationsProvider,
     Neon.providers()
   ).pipe(Layer.orDie) as Layer.Layer<unknown, never, StackServices>;
 })();
@@ -55,8 +57,11 @@ export default Alchemy.Stack(
     });
 
     return {
-      api: cloudflareStack.api.url,
-      app: cloudflareStack.app.url,
+      api: cloudflareStack.apiOrigin,
+      app: cloudflareStack.appOrigin,
+      authEmailDeadLetterQueue:
+        cloudflareStack.authEmailDeadLetterQueue.queueName,
+      authEmailQueue: cloudflareStack.authEmailQueue.queueName,
       branch: database.branch.branchName,
       hyperdrive: cloudflareStack.database.name,
       neonDatabase: database.databaseName,

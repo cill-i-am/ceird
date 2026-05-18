@@ -1,14 +1,10 @@
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Layer } from "effect";
 
-import {
-  AuthEmailConfigService,
-  loadOptionalCloudflareAuthEmailConfig,
-} from "./auth-email-config.js";
+import { AuthEmailConfigService } from "./auth-email-config.js";
 import type {
   AuthEmailRejectedError,
   AuthEmailRequestError,
 } from "./auth-email-errors.js";
-import { makeCloudflareAuthEmailTransport } from "./cloudflare-auth-email-transport.js";
 import { makeCloudflareEmailBindingAuthEmailTransport } from "./cloudflare-email-binding-auth-email-transport.js";
 
 export interface TransportMessage {
@@ -40,19 +36,8 @@ export function makeDevelopmentAuthEmailTransport(): AuthEmailTransportImplement
   return { send };
 }
 
-export function makeLocalAuthEmailTransport(
-  options?: Parameters<typeof makeCloudflareAuthEmailTransport>[0]
-) {
-  return loadOptionalCloudflareAuthEmailConfig.pipe(
-    Effect.flatMap((config) =>
-      Option.isNone(config)
-        ? Effect.succeed(makeDevelopmentAuthEmailTransport())
-        : makeCloudflareAuthEmailTransport({
-            ...options,
-            config: config.value,
-          })
-    )
-  );
+export function makeLocalAuthEmailTransport() {
+  return Effect.succeed(makeDevelopmentAuthEmailTransport());
 }
 
 export class AuthEmailTransport extends Context.Tag(
@@ -68,11 +53,6 @@ export class AuthEmailTransport extends Context.Tag(
   static readonly Development = Layer.succeed(
     AuthEmailTransport,
     makeDevelopmentAuthEmailTransport()
-  );
-
-  static readonly CloudflareApi = Layer.effect(
-    AuthEmailTransport,
-    makeCloudflareAuthEmailTransport()
   );
 
   static readonly CloudflareBinding = Layer.effect(

@@ -523,15 +523,15 @@ types from it, move those types to a neutral package before deletion.
 
 Keep a small typed config surface:
 
-| Variable                                   | Purpose                                 |
-| ------------------------------------------ | --------------------------------------- |
-| `CEIRD_ZONE_NAME`                          | Cloudflare zone for production domains. |
-| `CEIRD_APP_HOSTNAME`                       | Optional app hostname override.         |
-| `CEIRD_API_HOSTNAME`                       | Optional API hostname override.         |
-| `AUTH_EMAIL_FROM`                          | Sender address for deployed auth email. |
-| `AUTH_EMAIL_FROM_NAME`                     | Sender display name.                    |
-| `GOOGLE_MAPS_API_KEY`                      | Production Google geocoding key.        |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | Optional Hyperdrive connection limit.   |
+| Variable                                   | Purpose                                                                          |
+| ------------------------------------------ | -------------------------------------------------------------------------------- |
+| `CEIRD_ZONE_NAME`                          | Cloudflare zone for production domains, defaulting to `ceird.app`.               |
+| `CEIRD_APP_HOSTNAME`                       | Optional app hostname override; defaults to parent or stage-scoped app hostname. |
+| `CEIRD_API_HOSTNAME`                       | Optional API hostname override; defaults to parent or stage-scoped API hostname. |
+| `AUTH_EMAIL_FROM`                          | Sender address for deployed auth email.                                          |
+| `AUTH_EMAIL_FROM_NAME`                     | Sender display name.                                                             |
+| `GOOGLE_MAPS_API_KEY`                      | Production Google geocoding key.                                                 |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | Optional Hyperdrive connection limit.                                            |
 
 Remove or stop using:
 

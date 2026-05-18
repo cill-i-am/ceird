@@ -105,8 +105,8 @@ describe("site geocoder", () => {
   it("local layer uses Google geocoding when a Google key is configured", async () => {
     const previousFetch = globalThis.fetch;
     let requestedUrl: URL | undefined;
-    globalThis.fetch = ((url: URL) => {
-      requestedUrl = url;
+    globalThis.fetch = ((url) => {
+      requestedUrl = new URL(String(url));
 
       return Promise.resolve(
         responseWithJson({
@@ -223,8 +223,8 @@ describe("site geocoder", () => {
 
   it("successful Google response maps to latitude/longitude/provider/geocodedAt", async () => {
     let requestedUrl: URL | undefined;
-    const fetchImplementation = ((url: URL) => {
-      requestedUrl = url;
+    const fetchImplementation = ((url: string) => {
+      requestedUrl = new URL(url);
 
       return Promise.resolve(
         responseWithJson({
@@ -273,8 +273,8 @@ describe("site geocoder", () => {
 
   it("google request maps GB to uk region bias and United Kingdom address", async () => {
     let requestedUrl: URL | undefined;
-    const fetchImplementation = ((url: URL) => {
-      requestedUrl = url;
+    const fetchImplementation = ((url: string) => {
+      requestedUrl = new URL(url);
 
       return Promise.resolve(
         responseWithJson({
@@ -308,6 +308,75 @@ describe("site geocoder", () => {
       "10 Downing Street, London, Greater London, United Kingdom"
     );
     expect(requestedUrl.searchParams.get("region")).toBe("uk");
+  }, 10_000);
+
+  it("passes a string URL to fetch for Worker runtime compatibility", async () => {
+    const fetchImplementation = ((url) => {
+      expect(typeof url).toBe("string");
+
+      return Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 53.3498,
+                  lng: -6.2603,
+                },
+              },
+            },
+          ],
+          status: "OK",
+        })
+      );
+    }) satisfies TestGoogleFetch;
+
+    await Effect.runPromise(
+      makeGoogleTestGeocoder(fetchImplementation).pipe(
+        Effect.flatMap((geocoder) => geocoder.geocode(siteInput))
+      )
+    );
+  }, 10_000);
+
+  it("calls the default global fetch with its Worker runtime receiver", async () => {
+    const previousFetch = globalThis.fetch;
+    let fetchCalled = false;
+    globalThis.fetch = function (
+      this: typeof globalThis,
+      _url: RequestInfo | URL
+    ) {
+      fetchCalled = true;
+      expect(this).toBe(globalThis);
+
+      return Promise.resolve(
+        responseWithJson({
+          results: [
+            {
+              geometry: {
+                location: {
+                  lat: 53.3498,
+                  lng: -6.2603,
+                },
+              },
+            },
+          ],
+          status: "OK",
+        })
+      );
+    } as typeof globalThis.fetch;
+
+    try {
+      await runWithConfig(
+        SiteGeocoder.geocode(siteInput).pipe(
+          Effect.provide(SiteGeocoder.Google)
+        ),
+        new Map([["GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_API_KEY]])
+      );
+
+      expect(fetchCalled).toBe(true);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   }, 10_000);
 
   it("successful google response ignores malformed later results", async () => {
@@ -509,7 +578,7 @@ describe("site geocoder", () => {
   it("times out stalled google requests and aborts the fetch", async () => {
     let abortSignal: AbortSignal | undefined;
     let aborted = false;
-    const fetchImplementation = ((_url: URL, init?: RequestInit) => {
+    const fetchImplementation = ((_url: string, init?: RequestInit) => {
       abortSignal = init?.signal ?? undefined;
       init?.signal?.addEventListener("abort", () => {
         aborted = true;

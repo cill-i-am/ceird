@@ -1,7 +1,8 @@
 # Packages
 
-`packages` contains shared libraries and infrastructure tooling used by the app
-and API workspaces.
+`packages` contains shared libraries used by the app and API workspaces. Root
+infrastructure lives in `../infra` with the Alchemy stack entrypoint at
+`../alchemy.run.ts`.
 
 | Workspace       | Purpose                                                                                 |
 | --------------- | --------------------------------------------------------------------------------------- |
@@ -9,7 +10,6 @@ and API workspaces.
 | `jobs-core`     | Shared job-owned IDs, domain schemas, DTOs, Effect HTTP API contract, and typed errors. |
 | `sites-core`    | Shared site/service-area IDs, schemas, DTOs, API groups, and typed public errors.       |
 | `labels-core`   | Shared organization label IDs, schemas, DTOs, API group, and typed public errors.       |
-| `infra`         | Alchemy infrastructure for Cloudflare, Hyperdrive, Queues, and Neon Postgres.           |
 
 Package contracts are documented in
 [../docs/architecture/packages.md](../docs/architecture/packages.md).
@@ -21,10 +21,10 @@ pnpm --filter @ceird/identity-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test
-pnpm --filter @ceird/infra check-types
+pnpm run check-types:infra
 ```
 
 Keep shared packages free of app-only concerns. If code needs React state,
-TanStack Router, Better Auth adapter wiring, Drizzle SQL, Docker process
-execution, or deployment secrets, it usually belongs in an app, the API, the
-infrastructure package rather than a core package.
+TanStack Router, Better Auth adapter wiring, Drizzle SQL, or Alchemy deployment
+secrets, it usually belongs in an app, the API, or root `infra` rather than a
+core package.

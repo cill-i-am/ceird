@@ -198,9 +198,12 @@ function logAndFailSiteGeocodingProvider(
 }
 
 type PortableFetch = (
-  input: URL,
+  input: string,
   init?: Pick<RequestInit, "signal">
 ) => Promise<Response>;
+
+const defaultPortableFetch: PortableFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 type GoogleGeocodingRequestFailure =
   | {
@@ -257,7 +260,7 @@ function fetchGoogleGeocodingPayload(options: {
       Effect.gen(function* fetchGoogleGeocodingPayloadEffect() {
         const response = yield* Effect.tryPromise({
           try: () =>
-            options.fetchImplementation(options.url, {
+            options.fetchImplementation(options.url.toString(), {
               signal: controller.signal,
             }),
           catch: (cause) =>
@@ -416,7 +419,7 @@ export function makeGoogleSiteGeocoder(options: {
   readonly requestTimeout?: Duration.Duration;
 }) {
   return Effect.gen(function* makeGoogleSiteGeocoderEffect() {
-    const { fetch: fetchImplementation = globalThis.fetch } = options;
+    const fetchImplementation = options.fetch ?? defaultPortableFetch;
     const { googleMapsApiKey, requestTimeout } =
       yield* decodeGoogleSiteGeocoderConfig(options);
 

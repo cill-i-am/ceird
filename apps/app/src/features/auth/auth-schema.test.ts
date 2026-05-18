@@ -92,9 +92,9 @@ describe("auth schemas", () => {
 
 describe("auth base URL resolution", () => {
   it("resolves the api base URL from the same origin mapping rules", () => {
-    expect(
-      resolveApiBaseURL("https://agent-one.app.ceird.localhost:1355")
-    ).toBe("https://agent-one.api.ceird.localhost:1355/api");
+    expect(resolveApiBaseURL("https://app.ceird.example.com")).toBe(
+      "https://api.ceird.example.com/api"
+    );
   }, 1000);
 
   it("prefers an injected auth origin when one is provided", () => {
@@ -103,10 +103,10 @@ describe("auth base URL resolution", () => {
     ).toBe("http://127.0.0.1:4301/api/auth");
   }, 1000);
 
-  it("maps the app portless origin to the API origin", () => {
-    expect(
-      resolveAuthBaseURL("https://agent-one.app.ceird.localhost:1355")
-    ).toBe("https://agent-one.api.ceird.localhost:1355/api/auth");
+  it("maps conventional app domains to the API origin", () => {
+    expect(resolveAuthBaseURL("https://app.ceird.example.com")).toBe(
+      "https://api.ceird.example.com/api/auth"
+    );
   }, 1000);
 
   it("maps the raw local app dev origin to the local API origin", () => {
@@ -131,11 +131,8 @@ describe("auth base URL resolution", () => {
 
   it("falls back to host-based mapping when the injected auth origin is invalid", () => {
     expect(
-      resolveAuthBaseURL(
-        "https://agent-one.app.ceird.localhost:1355",
-        "not-a-url"
-      )
-    ).toBe("https://agent-one.api.ceird.localhost:1355/api/auth");
+      resolveAuthBaseURL("https://app.ceird.example.com", "not-a-url")
+    ).toBe("https://api.ceird.example.com/api/auth");
   }, 1000);
 
   it("maps conventional app subdomains for browser auth clients", () => {

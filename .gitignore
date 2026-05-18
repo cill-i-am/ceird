@@ -14,8 +14,6 @@ node_modules
 # Testing
 coverage
 
-# Turbo
-.turbo
 opensrc/
 
 # Vercel
@@ -41,7 +39,7 @@ node-compile-cache/
 
 .projects/cache
 .projects/vault
-packages/infra/.alchemy/
+.alchemy/
 .env
 .env.local
 .auto-research/

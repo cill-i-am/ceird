@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-export const apiDrizzleSchemaPath = "apps/api/src/platform/database/schema.ts";
+export const apiDrizzleSchemaPath = "infra/api-drizzle-schema.ts";
 export const apiDrizzleMigrationsDir = "apps/api/drizzle";
 export const apiAlchemyDrizzleMigrationsDir = "apps/api/drizzle/alchemy";
 
@@ -17,6 +17,7 @@ const maxStageSlugLength = 40;
 
 const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const providerResourceNamePattern = /^[a-z0-9-]+$/;
 
 export const DomainName = Schema.NonEmptyString.check(
   Schema.isPattern(domainNamePattern, {
@@ -26,8 +27,18 @@ export const DomainName = Schema.NonEmptyString.check(
 );
 export type DomainName = Schema.Schema.Type<typeof DomainName>;
 
+export const ProviderResourceName = Schema.NonEmptyString.check(
+  Schema.isPattern(providerResourceNamePattern, {
+    message:
+      "Provider resource names may only contain lowercase letters, digits, and hyphens",
+  })
+);
+export type ProviderResourceName = Schema.Schema.Type<
+  typeof ProviderResourceName
+>;
+
 export const InfraGoogleMapsApiKey = Schema.NonEmptyString.pipe(
-  Schema.brand("@ceird/infra/GoogleMapsApiKey")
+  Schema.brand("@ceird/root-infra/GoogleMapsApiKey")
 );
 export type InfraGoogleMapsApiKey = Schema.Schema.Type<
   typeof InfraGoogleMapsApiKey
@@ -42,10 +53,13 @@ export interface InfraStageConfig {
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
+  readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly neonDatabaseName: string;
   readonly neonDefaultBranchName: string;
+  readonly neonHistoryRetentionSeconds: number;
   readonly neonOrgId: string | undefined;
+  readonly neonParentBranchProtected: boolean;
   readonly neonParentBranchName: string;
   readonly neonParentStage: string;
   readonly neonPgVersion: NeonPgVersion;
@@ -81,6 +95,12 @@ const HyperdriveOriginConnectionLimit = Schema.Int.check(
     }
   )
 );
+const NeonHistoryRetentionSeconds = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0, {
+    message:
+      "CEIRD_NEON_HISTORY_RETENTION_SECONDS must be a non-negative integer",
+  })
+);
 export const NeonRegion = Schema.Literals([
   "aws-us-east-1",
   "aws-us-east-2",
@@ -111,6 +131,12 @@ function decodeDomainName(value: string) {
   );
 }
 
+function decodeProviderResourceName(value: string) {
+  return Schema.decodeUnknownEffect(ProviderResourceName)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
   return Schema.decodeUnknownEffect(AuthEmailFromAddress)(
     Redacted.value(value)
@@ -135,6 +161,12 @@ function decodeHyperdriveOriginConnectionLimit(value: number) {
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 }
 
+function decodeNeonHistoryRetentionSeconds(value: number) {
+  return Schema.decodeUnknownEffect(NeonHistoryRetentionSeconds)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeNeonRegion(value: string) {
   return Schema.decodeUnknownEffect(NeonRegion)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
@@ -151,14 +183,28 @@ export function loadInfraStageConfig(stageInput: string) {
   return Effect.gen(function* () {
     const stage = yield* decodeAlchemyStage(stageInput);
     const zoneName = yield* Config.string("CEIRD_ZONE_NAME").pipe(
+      Config.withDefault("ceird.app"),
       Config.mapOrFail(decodeDomainName)
     );
+    const neonParentStage = yield* Config.string(
+      "CEIRD_NEON_PARENT_STAGE"
+    ).pipe(Config.withDefault("main"));
+    const identity = makeAlchemyStageIdentity({
+      appName: "ceird",
+      productionStage: neonParentStage,
+      stage,
+    });
+    const defaultAppHostname = `app-${identity.stageSlug}.${zoneName}`;
+    const defaultApiHostname = `api-${identity.stageSlug}.${zoneName}`;
+    const defaultHyperdriveName = identity.isProduction
+      ? `${identity.appName}-production-postgres`
+      : stageResourceName(identity, "postgres");
     const appHostname = yield* Config.string("CEIRD_APP_HOSTNAME").pipe(
-      Config.withDefault(`app.${zoneName}`),
+      Config.withDefault(defaultAppHostname),
       Config.mapOrFail(decodeDomainName)
     );
     const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
-      Config.withDefault(`api.${zoneName}`),
+      Config.withDefault(defaultApiHostname),
       Config.mapOrFail(decodeDomainName)
     );
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
@@ -169,6 +215,10 @@ export function loadInfraStageConfig(stageInput: string) {
     );
     const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
       Config.mapOrFail(decodeGoogleMapsApiKey)
+    );
+    const hyperdriveName = yield* Config.string("CEIRD_HYPERDRIVE_NAME").pipe(
+      Config.withDefault(defaultHyperdriveName),
+      Config.mapOrFail(decodeProviderResourceName)
     );
     const hyperdriveOriginConnectionLimit = yield* Config.number(
       "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT"
@@ -182,6 +232,12 @@ export function loadInfraStageConfig(stageInput: string) {
     const neonDefaultBranchName = yield* Config.string(
       "CEIRD_NEON_DEFAULT_BRANCH_NAME"
     ).pipe(Config.withDefault("base"));
+    const neonHistoryRetentionSeconds = yield* Config.number(
+      "CEIRD_NEON_HISTORY_RETENTION_SECONDS"
+    ).pipe(
+      Config.withDefault(21_600),
+      Config.mapOrFail(decodeNeonHistoryRetentionSeconds)
+    );
     const neonOrgIdOption = yield* Config.option(
       Config.string("NEON_ORG_ID").pipe(Config.map((value) => value.trim()))
     );
@@ -192,11 +248,11 @@ export function loadInfraStageConfig(stageInput: string) {
           ? Effect.succeed(Option.some(value))
           : Effect.succeed(Option.none<string>()),
     }).pipe(Effect.map(Option.getOrUndefined));
+    const neonParentBranchProtected = yield* Config.boolean(
+      "CEIRD_NEON_PARENT_BRANCH_PROTECTED"
+    ).pipe(Config.withDefault(false));
     const neonParentBranchName = yield* Config.string(
       "CEIRD_NEON_PARENT_BRANCH_NAME"
-    ).pipe(Config.withDefault("main"));
-    const neonParentStage = yield* Config.string(
-      "CEIRD_NEON_PARENT_STAGE"
     ).pipe(Config.withDefault("main"));
     const neonPgVersion = yield* Config.number("CEIRD_NEON_PG_VERSION").pipe(
       Config.withDefault(17),
@@ -219,10 +275,13 @@ export function loadInfraStageConfig(stageInput: string) {
       authEmailFrom,
       authEmailFromName,
       googleMapsApiKey,
+      hyperdriveName,
       hyperdriveOriginConnectionLimit,
       neonDatabaseName,
       neonDefaultBranchName,
+      neonHistoryRetentionSeconds,
       neonOrgId,
+      neonParentBranchProtected,
       neonParentBranchName,
       neonParentStage,
       neonPgVersion,
@@ -236,7 +295,6 @@ export function resourceName(config: InfraStageConfig, suffix: string) {
   return stageResourceName(
     makeAlchemyStageIdentity({
       appName: config.appName,
-      productionStage: "production",
       stage: config.stage,
     }),
     suffix

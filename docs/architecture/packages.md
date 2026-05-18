@@ -100,23 +100,6 @@ Labels are organization-level labels. Jobs and sites may assign labels through
 their owning-domain assignment endpoints, but the label definitions themselves
 are not job- or site-owned.
 
-## `@ceird/infra`
-
-Path: `packages/infra`
-
-Defines production infrastructure with Alchemy v2:
-
-- stage config and resource naming in `src/stages.ts`
-- native Neon project and per-stage branch resources in `src/neon.ts`
-- native Alchemy Cloudflare Hyperdrive resources
-- Cloudflare app/API/queue stack in `src/cloudflare-stack.ts`
-- root stack entrypoint in `/alchemy.run.ts`
-
-The stack deploys a Cloudflare Worker API, a Cloudflare Vite app, auth email
-queues and dead-letter queue, Hyperdrive backed by Neon Postgres, and API SQL
-migrations coordinated by Alchemy `Drizzle.Schema` and applied through the
-native Neon branch resource.
-
 ## Dependency Direction
 
 Current intended dependency direction:
@@ -151,12 +134,14 @@ packages/comments-core
 
 packages/labels-core
   -> @ceird/identity-core
-
-packages/infra
-  -> apps/api migrations and worker/app entrypoints by path
 ```
 
 Core packages should not depend on `apps/*`.
+
+Root infrastructure lives outside the package workspace in `infra`, with the
+deploy stack entrypoint at `alchemy.run.ts`. It may point at app/API deploy
+entrypoints and API migrations by path, but shared packages should not import
+root infra code.
 
 ## Testing
 
@@ -169,7 +154,7 @@ pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test
-pnpm --filter @ceird/infra check-types
+pnpm run check-types:infra
 ```
 
 When changing a package contract, test both the package and the consuming app or

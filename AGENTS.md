@@ -36,18 +36,22 @@ historical plans as decision context only.
 ## Worktrees And Alchemy Stages
 
 Local development is Alchemy-native. Root `pnpm dev` delegates to
-`pnpm alchemy dev`, which creates or updates the selected Cloudflare/Neon stage.
+`alchemy dev --env-file .env.local`, which creates or updates the selected
+Cloudflare/Neon stage.
 
 - Before starting an Alchemy dev stage from a linked worktree, check the current
   branch. If the worktree is detached, create or switch to a descriptive
-  `codex/<task-slug>` branch, or set an explicit `ALCHEMY_STAGE`.
+  `codex/<task-slug>` branch, or pass an explicit `--stage`.
 - Stages should have intentional, task-specific names. Prefer branch-derived
   names such as `codex-my-task`; avoid generic names like `dev` unless that is
   explicitly requested.
-- Use `ALCHEMY_STAGE=<stage> pnpm dev` for local cloud-backed development, or
-  `ALCHEMY_STAGE=<stage> pnpm alchemy dev` when being explicit.
-- Use `pnpm alchemy deploy` for non-dev reconciliation and
-  `pnpm alchemy destroy` only when intentionally deleting a stage's resources.
+- Use `pnpm dev -- --stage <stage>` for local cloud-backed development, or
+  `CEIRD_CLOUDFLARE=1 pnpm alchemy dev --env-file .env.local --stage <stage>`
+  when calling the Alchemy CLI directly.
+- Use `CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage <stage>`
+  for non-dev reconciliation and
+  `CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file .env.local --stage <stage>`
+  only when intentionally deleting a stage's resources.
 - Do not run provider-mutating Alchemy commands (`dev`, `deploy`, or `destroy`)
   without confirming the target stage and credentials are appropriate.
 - For browser workflows that depend on auth cookies, API calls, or database

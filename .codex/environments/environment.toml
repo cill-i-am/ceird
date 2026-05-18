@@ -1,5 +1,5 @@
 version = 1
-name = "Ceird sandbox"
+name = "Ceird Alchemy"
 
 [setup]
 script = "bash scripts/setup-local-environment.sh"
@@ -8,27 +8,37 @@ script = "bash scripts/setup-local-environment.sh"
 script = "bash scripts/teardown-local-environment.sh"
 
 [[actions]]
-name = "Start sandbox"
+name = "Start Alchemy dev"
 icon = "run"
-command = "pnpm sandbox:up"
+command = "pnpm dev -- --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
-name = "Sandbox URLs"
+name = "Alchemy plan"
 icon = "tool"
-command = "pnpm sandbox:url"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
-name = "Sandbox status"
+name = "Plan parent Alchemy stage"
+icon = "tool"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage main"
+
+[[actions]]
+name = "Inspect parent Alchemy state"
 icon = "debug"
-command = "pnpm sandbox:status"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file .env.local --stage main"
 
 [[actions]]
-name = "Sandbox logs"
+name = "Alchemy state tree"
 icon = "debug"
-command = "pnpm sandbox:logs"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file .env.local --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
-name = "Stop sandbox"
+name = "Alchemy logs"
+icon = "debug"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --env-file .env.local --stage codex-alchemy-v2-native-migration"
+
+[[actions]]
+name = "Local env cleanup"
 icon = "tool"
 command = "bash scripts/teardown-local-environment.sh"
 
@@ -40,12 +50,12 @@ command = "pnpm check-types"
 [[actions]]
 name = "Run tests"
 icon = "test"
-command = "pnpm test:with-sandbox"
+command = "pnpm test"
 
 [[actions]]
-name = "Run API tests with sandbox"
+name = "Run API tests"
 icon = "test"
-command = "pnpm api:test:with-sandbox"
+command = "pnpm --filter api test"
 
 [[actions]]
 name = "Check all"

@@ -8,7 +8,7 @@ import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
 import { waitForSubmitHydration } from "./pages/wait-for-submit-hydration";
-import { API_ORIGIN, DATABASE_URL } from "./test-urls";
+import { API_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
 
 const apiRequire = createRequire(
   new URL("../../api/package.json", import.meta.url)
@@ -54,7 +54,9 @@ async function expectAuthenticatedHome(page: Page) {
 }
 
 async function findPasswordResetToken(email: string): Promise<string | null> {
-  const client = new PgClient({ connectionString: DATABASE_URL });
+  const client = new PgClient({
+    connectionString: readPlaywrightDatabaseUrl(),
+  });
 
   await client.connect();
 
