@@ -5,6 +5,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readlink,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -29,6 +31,7 @@ test("setup copies .env.local from LOCAL_ENV_SOURCE", async (t) => {
   t.after(fixture.cleanup);
   const sourceFile = path.join(fixture.tempDir, "source.env.local");
   await writeFile(sourceFile, "AUTH_EMAIL_FROM=auth@example.com\n", "utf8");
+  await writeOpensrcCache(fixture.tempDir, "local-env-source");
 
   const result = runScript(setupScript, fixture, {
     LOCAL_ENV_SOURCE: sourceFile,
@@ -41,8 +44,22 @@ test("setup copies .env.local from LOCAL_ENV_SOURCE", async (t) => {
   );
   assert.equal(await fileMode(path.join(fixture.repoDir, ".env.local")), 0o600);
   assert.equal(
+    await readFile(path.join(fixture.repoDir, "opensrc/sources.json"), "utf8"),
+    "local-env-source\n"
+  );
+  assert.equal(
+    await realpath(await readlink(path.join(fixture.repoDir, "opensrc"))),
+    await realpath(path.join(fixture.tempDir, "opensrc"))
+  );
+  assert.equal(
     await readFile(fixture.callLog, "utf8"),
-    "corepack enable\npnpm install --frozen-lockfile\n"
+    [
+      "corepack enable",
+      "env present before install: AUTH_EMAIL_FROM=auth@example.com",
+      "opensrc present before install: local-env-source",
+      "pnpm install --frozen-lockfile CI=true",
+      "",
+    ].join("\n")
   );
 });
 
@@ -80,6 +97,7 @@ test("setup copies .env.local from the primary git worktree", async (t) => {
     "AUTH_EMAIL_FROM=primary@example.com\n",
     "utf8"
   );
+  await writeOpensrcCache(fixture.repoDir, "primary-worktree");
   run("git", ["worktree", "add", "--detach", targetWorktree], {
     cwd: fixture.repoDir,
   });
@@ -93,8 +111,73 @@ test("setup copies .env.local from the primary git worktree", async (t) => {
   );
   assert.equal(await fileMode(path.join(targetWorktree, ".env.local")), 0o600);
   assert.equal(
+    await readFile(path.join(targetWorktree, "opensrc/sources.json"), "utf8"),
+    "primary-worktree\n"
+  );
+  assert.equal(
+    await realpath(await readlink(path.join(targetWorktree, "opensrc"))),
+    await realpath(path.join(fixture.repoDir, "opensrc"))
+  );
+  assert.equal(
     await pathExists(path.join(fixture.repoDir, ".env.local")),
     true
+  );
+});
+
+test("setup allows pnpm to refresh opensrc when no cache source exists", async (t) => {
+  const fixture = await createFixture();
+  t.after(fixture.cleanup);
+  await writeFile(
+    path.join(fixture.repoDir, ".env.local"),
+    "AUTH_EMAIL_FROM=existing@example.com\n",
+    "utf8"
+  );
+
+  const result = runScript(setupScript, fixture);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    await readFile(fixture.callLog, "utf8"),
+    [
+      "corepack enable",
+      "env present before install: AUTH_EMAIL_FROM=existing@example.com",
+      "opensrc missing before install",
+      "pnpm install --frozen-lockfile CI=",
+      "",
+    ].join("\n")
+  );
+});
+
+test("setup replaces a partial opensrc directory with a cache link", async (t) => {
+  const fixture = await createFixture();
+  t.after(fixture.cleanup);
+  const sourceDir = path.join(fixture.tempDir, "source");
+  await mkdir(sourceDir);
+  await writeFile(
+    path.join(sourceDir, ".env.local"),
+    "AUTH_EMAIL_FROM=source@example.com\n",
+    "utf8"
+  );
+  await writeOpensrcCache(sourceDir, "source-cache");
+  await mkdir(path.join(fixture.repoDir, "opensrc"), { recursive: true });
+  await writeFile(
+    path.join(fixture.repoDir, "opensrc/partial.txt"),
+    "left by interrupted setup\n",
+    "utf8"
+  );
+
+  const result = runScript(setupScript, fixture, {
+    LOCAL_ENV_SOURCE: sourceDir,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    await realpath(await readlink(path.join(fixture.repoDir, "opensrc"))),
+    await realpath(path.join(sourceDir, "opensrc"))
+  );
+  assert.equal(
+    await readFile(path.join(fixture.repoDir, "opensrc/sources.json"), "utf8"),
+    "source-cache\n"
   );
 });
 
@@ -123,6 +206,7 @@ test("setup fails when no existing .env.local or LOCAL_ENV_SOURCE is available",
     await pathExists(path.join(fixture.repoDir, ".env.local")),
     false
   );
+  assert.equal(await readFile(fixture.callLog, "utf8"), "");
 });
 
 test("setup fails when no env source exists", async (t) => {
@@ -139,6 +223,32 @@ test("setup fails when no env source exists", async (t) => {
   assert.equal(
     await pathExists(path.join(fixture.repoDir, ".env.local")),
     false
+  );
+  assert.equal(await readFile(fixture.callLog, "utf8"), "");
+});
+
+test("setup preserves .env.local before installing dependencies", async (t) => {
+  const fixture = await createFixture();
+  t.after(fixture.cleanup);
+  await writeFile(
+    path.join(fixture.repoDir, ".env.local"),
+    "AUTH_EMAIL_FROM=existing@example.com\n",
+    "utf8"
+  );
+  await writeOpensrcCache(fixture.repoDir, "existing-cache");
+
+  const result = runScript(setupScript, fixture);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    await readFile(fixture.callLog, "utf8"),
+    [
+      "corepack enable",
+      "env present before install: AUTH_EMAIL_FROM=existing@example.com",
+      "opensrc present before install: existing-cache",
+      "pnpm install --frozen-lockfile CI=true",
+      "",
+    ].join("\n")
   );
 });
 
@@ -211,7 +321,17 @@ async function createFixture() {
     path.join(binDir, "pnpm"),
     [
       "#!/usr/bin/env bash",
-      'printf "pnpm %s\\n" "$*" >> "$LOCAL_ENV_CALL_LOG"',
+      'if [[ ! -f .env.local ]]; then',
+      '  printf "env missing before install\\n" >> "$LOCAL_ENV_CALL_LOG"',
+      "else",
+      '  printf "env present before install: %s\\n" "$(sed -n "1p" .env.local)" >> "$LOCAL_ENV_CALL_LOG"',
+      "fi",
+      'if [[ ! -f opensrc/sources.json ]]; then',
+      '  printf "opensrc missing before install\\n" >> "$LOCAL_ENV_CALL_LOG"',
+      "else",
+      '  printf "opensrc present before install: %s\\n" "$(sed -n "1p" opensrc/sources.json)" >> "$LOCAL_ENV_CALL_LOG"',
+      "fi",
+      'printf "pnpm %s CI=%s\\n" "$*" "${CI:-}" >> "$LOCAL_ENV_CALL_LOG"',
       "",
     ].join("\n")
   );
@@ -245,6 +365,17 @@ function run(command, args, options) {
       ...options.env,
     },
   });
+}
+
+async function writeOpensrcCache(rootDir, label) {
+  const opensrcDir = path.join(rootDir, "opensrc");
+  await mkdir(path.join(opensrcDir, "repos/example"), { recursive: true });
+  await writeFile(path.join(opensrcDir, "sources.json"), `${label}\n`, "utf8");
+  await writeFile(
+    path.join(opensrcDir, "repos/example/source.ts"),
+    `export const source = ${JSON.stringify(label)};\n`,
+    "utf8"
+  );
 }
 
 async function writeExecutable(filePath, content) {

@@ -56,10 +56,16 @@ Destroy is intentionally explicit because it deletes cloud resources for that
 stage.
 
 Codex/local worktree setup runs `scripts/setup-local-environment.sh` before
-development actions. The script preserves an existing `.env.local`, copies one
-from `LOCAL_ENV_SOURCE` when supplied, and otherwise copies the `.env.local`
-from the primary Git worktree for linked worktrees. If no source exists, setup
-fails so missing credentials are explicit.
+development actions. The script prepares `.env.local` before dependency
+installation, preserving an existing file, copying one from `LOCAL_ENV_SOURCE`
+when supplied, and otherwise copying the `.env.local` from the primary Git
+worktree for linked worktrees. If no source exists, setup fails before running
+dependency installation so missing credentials are explicit. The script also
+links `opensrc/` from the same source directory or primary worktree when an
+existing dependency-source cache is available. In that linked-cache path,
+dependency installation runs with `CI=true` so the root `postinstall` does not
+repeat a network-backed `opensrc` sync during worktree creation. If no cache is
+available, setup lets `pnpm install` run the normal `opensrc` refresh.
 
 ## Testing
 

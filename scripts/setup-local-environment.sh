@@ -6,6 +6,87 @@ cd "$repo_root"
 
 echo "Preparing local environment in $repo_root"
 
+env_target="$repo_root/.env.local"
+opensrc_target="$repo_root/opensrc"
+env_source=""
+local_env_source_root=""
+primary_worktree=""
+skip_opensrc_sync="false"
+
+git_common_dir="$(git rev-parse --git-common-dir)"
+if [[ "$git_common_dir" = /* ]]; then
+  absolute_git_common_dir="$git_common_dir"
+else
+  absolute_git_common_dir="$repo_root/$git_common_dir"
+fi
+
+if [[ "$(basename "$absolute_git_common_dir")" == ".git" ]]; then
+  primary_worktree="$(dirname "$absolute_git_common_dir")"
+fi
+
+if [[ -f "$env_target" ]]; then
+  echo "Preserving existing .env.local"
+else
+  if [[ -n "${LOCAL_ENV_SOURCE:-}" ]]; then
+    if [[ -f "$LOCAL_ENV_SOURCE" ]]; then
+      env_source="$LOCAL_ENV_SOURCE"
+      local_env_source_root="$(dirname "$LOCAL_ENV_SOURCE")"
+    elif [[ -d "$LOCAL_ENV_SOURCE" && -f "$LOCAL_ENV_SOURCE/.env.local" ]]; then
+      env_source="$LOCAL_ENV_SOURCE/.env.local"
+      local_env_source_root="$LOCAL_ENV_SOURCE"
+    else
+      echo "LOCAL_ENV_SOURCE did not point to an env file: $LOCAL_ENV_SOURCE" >&2
+    fi
+  fi
+
+  if [[ -z "$env_source" && -n "$primary_worktree" ]]; then
+    if [[ "$primary_worktree" != "$repo_root" && -f "$primary_worktree/.env.local" ]]; then
+      env_source="$primary_worktree/.env.local"
+    fi
+  fi
+
+  if [[ -z "$env_source" ]]; then
+    echo "Missing .env.local. Create one at the repo root or set LOCAL_ENV_SOURCE to an env file or directory containing .env.local." >&2
+    exit 1
+  fi
+
+  env_temp="$(mktemp "$repo_root/.env.local.tmp.XXXXXX")"
+  cleanup_env_temp() {
+    rm -f "$env_temp"
+  }
+  trap cleanup_env_temp EXIT
+
+  cp "$env_source" "$env_temp"
+  chmod 600 "$env_temp"
+  mv "$env_temp" "$env_target"
+  trap - EXIT
+  echo "Copied .env.local from $env_source"
+fi
+
+if [[ -f "$opensrc_target/sources.json" ]]; then
+  echo "Preserving existing opensrc cache"
+  skip_opensrc_sync="true"
+else
+  opensrc_source=""
+
+  if [[ -n "$local_env_source_root" && -f "$local_env_source_root/opensrc/sources.json" ]]; then
+    opensrc_source="$local_env_source_root/opensrc"
+  elif [[ -n "$primary_worktree" && "$primary_worktree" != "$repo_root" && -f "$primary_worktree/opensrc/sources.json" ]]; then
+    opensrc_source="$primary_worktree/opensrc"
+  fi
+
+  if [[ -n "$opensrc_source" ]]; then
+    if [[ -e "$opensrc_target" || -L "$opensrc_target" ]]; then
+      rm -rf "$opensrc_target"
+    fi
+    ln -s "$opensrc_source" "$opensrc_target"
+    echo "Linked opensrc cache from $opensrc_source"
+    skip_opensrc_sync="true"
+  else
+    echo "No opensrc cache source found; pnpm install will refresh opensrc"
+  fi
+fi
+
 if command -v corepack >/dev/null 2>&1; then
   corepack enable
 elif command -v pnpm >/dev/null 2>&1; then
@@ -15,57 +96,8 @@ else
   exit 1
 fi
 
-pnpm install --frozen-lockfile
-
-env_target="$repo_root/.env.local"
-
-if [[ -f "$env_target" ]]; then
-  echo "Preserving existing .env.local"
-  exit 0
+if [[ "$skip_opensrc_sync" == "true" ]]; then
+  CI=true pnpm install --frozen-lockfile
+else
+  pnpm install --frozen-lockfile
 fi
-
-env_temp="$(mktemp "$repo_root/.env.local.tmp.XXXXXX")"
-cleanup_env_temp() {
-  rm -f "$env_temp"
-}
-trap cleanup_env_temp EXIT
-
-env_source=""
-
-if [[ -n "${LOCAL_ENV_SOURCE:-}" ]]; then
-  if [[ -f "$LOCAL_ENV_SOURCE" ]]; then
-    env_source="$LOCAL_ENV_SOURCE"
-  elif [[ -d "$LOCAL_ENV_SOURCE" && -f "$LOCAL_ENV_SOURCE/.env.local" ]]; then
-    env_source="$LOCAL_ENV_SOURCE/.env.local"
-  else
-    echo "LOCAL_ENV_SOURCE did not point to an env file: $LOCAL_ENV_SOURCE" >&2
-  fi
-fi
-
-if [[ -z "$env_source" ]]; then
-  git_common_dir="$(git rev-parse --git-common-dir)"
-  if [[ "$git_common_dir" = /* ]]; then
-    absolute_git_common_dir="$git_common_dir"
-  else
-    absolute_git_common_dir="$repo_root/$git_common_dir"
-  fi
-
-  if [[ "$(basename "$absolute_git_common_dir")" == ".git" ]]; then
-    primary_worktree="$(dirname "$absolute_git_common_dir")"
-    if [[ "$primary_worktree" != "$repo_root" && -f "$primary_worktree/.env.local" ]]; then
-      env_source="$primary_worktree/.env.local"
-    fi
-  fi
-fi
-
-if [[ -n "$env_source" ]]; then
-  cp "$env_source" "$env_temp"
-  chmod 600 "$env_temp"
-  mv "$env_temp" "$env_target"
-  trap - EXIT
-  echo "Copied .env.local from $env_source"
-  exit 0
-fi
-
-echo "Missing .env.local. Create one at the repo root or set LOCAL_ENV_SOURCE to an env file or directory containing .env.local." >&2
-exit 1

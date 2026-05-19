@@ -1,4 +1,5 @@
 const INCLUDED_PACKAGE_NAMES = new Set([
+  "@tanstack/db",
   "@tanstack/react-form",
   "@tanstack/react-router",
   "@tanstack/react-router-ssr-query",
