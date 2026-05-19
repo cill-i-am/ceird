@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { Cause, ConfigProvider, Effect, Layer, Schema } from "effect";
 
 import { AuthEmailConfigurationError } from "../../domains/identity/authentication/auth-email-errors.js";
@@ -44,6 +46,7 @@ interface CachedDomainWorkerHandler {
 }
 
 let cachedDomainWorkerHandler: CachedDomainWorkerHandler | undefined;
+const domainWorkerExecutionContext = new AsyncLocalStorage<ExecutionContext>();
 
 export function makeWorkerBaseLive(env: DomainWorkerEnv) {
   return Layer.setConfigProvider(
@@ -53,35 +56,38 @@ export function makeWorkerBaseLive(env: DomainWorkerEnv) {
 
 export const DomainWorkerSiteGeocoderLive = SiteGeocoder.Google;
 
-export function makeWorkerAuthenticationBackgroundTaskHandlerLive(
-  context: ExecutionContext
-) {
+export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
   return Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
-    context.waitUntil(
-      (async () => {
-        try {
-          await task;
-        } catch (error) {
-          console.error("Authentication background task failed", {
-            cause: serializeFailureCause(error),
-          });
-        }
-      })()
-    );
+    const backgroundTask = (async () => {
+      try {
+        await task;
+      } catch (error) {
+        console.error("Authentication background task failed", {
+          cause: serializeFailureCause(error),
+        });
+      }
+    })();
+    const context = domainWorkerExecutionContext.getStore();
+
+    if (context === undefined) {
+      queueMicrotask(() => {
+        void backgroundTask;
+      });
+      return;
+    }
+
+    context.waitUntil(backgroundTask);
   });
 }
 
-export function makeDomainWorkerRuntimeLayers(
-  env: DomainWorkerEnv,
-  context: ExecutionContext
-) {
+export function makeDomainWorkerRuntimeLayers(env: DomainWorkerEnv) {
   const baseLive = makeWorkerBaseLive(env);
   const databaseRuntimeLive = makeAppDatabaseRuntimeLive(
     makeAppDatabaseLive(env.DATABASE.connectionString)
   );
   const authenticationLive = makeAuthenticationLive(
     makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE),
-    makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
+    makeWorkerAuthenticationBackgroundTaskHandlerLive()
   );
 
   return {
@@ -92,16 +98,13 @@ export function makeDomainWorkerRuntimeLayers(
   };
 }
 
-function makeDomainWorkerHandler(
-  env: DomainWorkerEnv,
-  context: ExecutionContext
-) {
+function makeDomainWorkerHandler(env: DomainWorkerEnv) {
   const {
     authenticationLive,
     baseLive,
     databaseRuntimeLive,
     siteGeocoderLive,
-  } = makeDomainWorkerRuntimeLayers(env, context);
+  } = makeDomainWorkerRuntimeLayers(env);
 
   return makeApiWebHandler(
     databaseRuntimeLive,
@@ -141,10 +144,7 @@ function domainWorkerHandlerCacheKey(env: DomainWorkerEnv) {
   ].join("\0");
 }
 
-function getDomainWorkerHandler(
-  env: DomainWorkerEnv,
-  context: ExecutionContext
-) {
+function getDomainWorkerHandler(env: DomainWorkerEnv) {
   const key = domainWorkerHandlerCacheKey(env);
 
   if (cachedDomainWorkerHandler?.key === key) {
@@ -166,7 +166,7 @@ function getDomainWorkerHandler(
           method: "GET",
           path: "/",
         }),
-      try: () => makeDomainWorkerHandler(env, context),
+      try: () => makeDomainWorkerHandler(env),
     });
 
     cachedDomainWorkerHandler = { key, webHandler };
@@ -175,13 +175,20 @@ function getDomainWorkerHandler(
   });
 }
 
+export function runWithDomainWorkerExecutionContext<T>(
+  context: ExecutionContext,
+  evaluate: () => T
+) {
+  return domainWorkerExecutionContext.run(context, evaluate);
+}
+
 export function handleWorkerFetch(
   request: Request,
   env: DomainWorkerEnv,
   context: ExecutionContext
 ) {
   return Effect.gen(function* CloudflareWorkerFetchRuntime() {
-    const webHandler = yield* getDomainWorkerHandler(env, context).pipe(
+    const webHandler = yield* getDomainWorkerHandler(env).pipe(
       Effect.mapError(
         (failure) =>
           new DomainWorkerFetchError({
@@ -201,7 +208,10 @@ export function handleWorkerFetch(
           method: request.method,
           path: requestPathname(request.url),
         }),
-      try: () => webHandler.handler(request),
+      try: () =>
+        runWithDomainWorkerExecutionContext(context, () =>
+          webHandler.handler(request)
+        ),
     });
   }).pipe(
     Effect.catchTag("@ceird/domain/WorkerFetchError", (failure) =>

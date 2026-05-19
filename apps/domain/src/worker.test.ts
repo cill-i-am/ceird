@@ -17,6 +17,7 @@ import {
   makeDomainWorkerRuntimeLayers,
   makeWorkerAuthenticationBackgroundTaskHandlerLive,
   resetDomainWorkerHandlerCacheForTest,
+  runWithDomainWorkerExecutionContext,
 } from "./platform/cloudflare/runtime.js";
 import worker from "./worker.js";
 
@@ -119,10 +120,7 @@ describe("worker queue auth email delivery", () => {
 
   it("assembles request runtime layers from Cloudflare Worker bindings", async () => {
     const env = makeEnv();
-    const runtimeLayers = makeDomainWorkerRuntimeLayers(
-      env,
-      makeExecutionContext()
-    );
+    const runtimeLayers = makeDomainWorkerRuntimeLayers(env);
 
     const baseUrl = await Effect.runPromise(
       Config.string("BETTER_AUTH_BASE_URL").pipe(
@@ -153,11 +151,11 @@ describe("worker queue auth email delivery", () => {
         const scheduleBackgroundTask =
           yield* AuthenticationBackgroundTaskHandler;
 
-        scheduleBackgroundTask(task);
+        runWithDomainWorkerExecutionContext(context, () => {
+          scheduleBackgroundTask(task);
+        });
       }).pipe(
-        Effect.provide(
-          makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
-        )
+        Effect.provide(makeWorkerAuthenticationBackgroundTaskHandlerLive())
       )
     );
 
@@ -179,11 +177,11 @@ describe("worker queue auth email delivery", () => {
           const scheduleBackgroundTask =
             yield* AuthenticationBackgroundTaskHandler;
 
-          scheduleBackgroundTask(task);
+          runWithDomainWorkerExecutionContext(context, () => {
+            scheduleBackgroundTask(task);
+          });
         }).pipe(
-          Effect.provide(
-            makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
-          )
+          Effect.provide(makeWorkerAuthenticationBackgroundTaskHandlerLive())
         )
       );
 
@@ -196,6 +194,36 @@ describe("worker queue auth email delivery", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it("uses the active request context when a cached handler schedules background tasks", async () => {
+    const firstContext = makeExecutionContext();
+    const secondContext = makeExecutionContext();
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scheduleBackgroundTask =
+          yield* AuthenticationBackgroundTaskHandler;
+
+        runWithDomainWorkerExecutionContext(firstContext, () => {
+          scheduleBackgroundTask(Promise.resolve("first"));
+        });
+        runWithDomainWorkerExecutionContext(secondContext, () => {
+          scheduleBackgroundTask(Promise.resolve("second"));
+        });
+      }).pipe(
+        Effect.provide(makeWorkerAuthenticationBackgroundTaskHandlerLive())
+      )
+    );
+
+    expect(firstContext.waitUntil).toHaveBeenCalledOnce();
+    expect(secondContext.waitUntil).toHaveBeenCalledOnce();
+    await expect(
+      vi.mocked(firstContext.waitUntil).mock.calls[0]?.[0]
+    ).resolves.toBeUndefined();
+    await expect(
+      vi.mocked(secondContext.waitUntil).mock.calls[0]?.[0]
+    ).resolves.toBeUndefined();
   });
 
   it("uses the Google geocoder layer with Worker environment config", async () => {
