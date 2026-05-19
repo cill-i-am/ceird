@@ -83,10 +83,24 @@ type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
 interface AuthenticationSessionResult {
   readonly session: {
+    readonly createdAt: Date | string;
+    readonly expiresAt: Date | string;
+    readonly id: string;
+    readonly ipAddress?: string | null | undefined;
+    readonly token: string;
+    readonly updatedAt: Date | string;
     readonly activeOrganizationId?: string | null | undefined;
+    readonly userAgent?: string | null | undefined;
+    readonly userId: string;
   } & Record<string, unknown>;
   readonly user: {
+    readonly createdAt: Date | string;
+    readonly email: string;
+    readonly emailVerified: boolean;
     readonly id: string;
+    readonly image?: string | null | undefined;
+    readonly name: string;
+    readonly updatedAt: Date | string;
   } & Record<string, unknown>;
 }
 interface AuthenticationPluginOption {
@@ -785,12 +799,45 @@ export function makeAuthenticationWebHandler(auth: CeirdAuthentication) {
       return auth.handler(request);
     }
 
-    return Response.json(
-      await auth.api.getSession({
-        headers: request.headers,
-      })
-    );
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    return Response.json(serializeAuthenticationSessionResult(session));
   };
+}
+
+function serializeAuthenticationSessionResult(
+  result: AuthenticationSessionResult | null
+) {
+  if (result === null) {
+    return null;
+  }
+
+  return {
+    session: {
+      activeOrganizationId: result.session.activeOrganizationId ?? null,
+      createdAt: serializeAuthenticationDate(result.session.createdAt),
+      expiresAt: serializeAuthenticationDate(result.session.expiresAt),
+      id: result.session.id,
+      token: result.session.token,
+      updatedAt: serializeAuthenticationDate(result.session.updatedAt),
+      userId: result.session.userId,
+    },
+    user: {
+      createdAt: serializeAuthenticationDate(result.user.createdAt),
+      email: result.user.email,
+      emailVerified: result.user.emailVerified,
+      id: result.user.id,
+      image: result.user.image ?? null,
+      name: result.user.name,
+      updatedAt: serializeAuthenticationDate(result.user.updatedAt),
+    },
+  };
+}
+
+function serializeAuthenticationDate(value: Date | string) {
+  return value instanceof Date ? value.toISOString() : value;
 }
 
 function withAuthenticationCors(

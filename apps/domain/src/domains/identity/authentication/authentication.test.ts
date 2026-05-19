@@ -504,11 +504,24 @@ describe("createAuthentication()", () => {
     const sessionPayload = {
       session: {
         activeOrganizationId: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        expiresAt: new Date("2026-01-08T00:00:00.000Z"),
         id: "session-1",
+        ipAddress: "127.0.0.1",
+        token: "session-token-1",
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        userId: "user-1",
       },
       user: {
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
         email: "owner@example.com",
+        emailVerified: false,
         id: "user-1",
+        image: null,
+        name: "Owner Example",
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
       },
     };
     const auth = {
@@ -538,7 +551,26 @@ describe("createAuthentication()", () => {
     const sessionBody = await sessionResponse.json();
 
     expect(sessionResponse.status).toBe(200);
-    expect(sessionBody).toStrictEqual(sessionPayload);
+    expect(sessionBody).toStrictEqual({
+      session: {
+        activeOrganizationId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-01-08T00:00:00.000Z",
+        id: "session-1",
+        token: "session-token-1",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        userId: "user-1",
+      },
+      user: {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        email: "owner@example.com",
+        emailVerified: false,
+        id: "user-1",
+        image: null,
+        name: "Owner Example",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
     expect(sessionHeaders?.get("cookie")).toBe(sessionCookie);
     expect(delegatedUrl).toBeUndefined();
 
