@@ -108,8 +108,8 @@ deploy outputs are printed into local and CI logs. Main-stage CI E2E receives
 preview CI E2E reads the `pr-<number>` stage's `PostgresBranch` state, masks the
 connection URI, and exports it only for the Playwright job.
 
-For a package-local fallback that starts the app, API, and migration step from
-Playwright instead of targeting an existing Alchemy stage:
+For a package-local fallback that starts the app, API, domain, and migration
+step from Playwright instead of targeting an existing Alchemy stage:
 
 ```bash
 PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 pnpm --filter app e2e
@@ -131,56 +131,56 @@ fixes. `pnpm format:write` writes oxfmt formatting changes.
 
 ## Database Workflow
 
-The API owns the Drizzle schema and migrations:
+The private domain Worker owns the Drizzle schema and migrations:
 
-- Schema barrel: `apps/api/src/platform/database/schema.ts`
-- Auth tables: `apps/api/src/domains/identity/authentication/schema.ts`
-- Jobs tables: `apps/api/src/domains/jobs/schema.ts`
-- Migrations: `apps/api/drizzle`
-- Drizzle config: `apps/api/drizzle.config.ts`
+- Schema barrel: `apps/domain/src/platform/database/schema.ts`
+- Auth tables: `apps/domain/src/domains/identity/authentication/schema.ts`
+- Jobs tables: `apps/domain/src/domains/jobs/schema.ts`
+- Migrations: `apps/domain/drizzle`
+- Drizzle config: `apps/domain/drizzle.config.ts`
 
 Use the package-local Drizzle CLI fallback when you intentionally need to create
 or apply SQL outside the Alchemy stage workflow. Generate a package-local
 migration after schema changes:
 
 ```bash
-pnpm --filter api db:generate
+pnpm --filter domain db:generate
 ```
 
 Apply package-local migrations to `DATABASE_URL`:
 
 ```bash
-pnpm --filter api db:migrate
+pnpm --filter domain db:migrate
 ```
 
-The native Alchemy Neon branch resource applies checked-in API SQL migrations
-for each stage before Hyperdrive and the API Worker are reconciled. Verify
-schema changes with API tests, then use an explicit non-production Alchemy stage
+The native Alchemy Neon branch resource applies checked-in domain SQL migrations
+for each stage before Hyperdrive and the domain Worker are reconciled. Verify
+schema changes with domain tests, then use an explicit non-production Alchemy stage
 to validate the migration path when needed.
 
 ## Environment Variables
 
 High-signal runtime variables:
 
-| Variable                  | Used by                 | Purpose                                                          |
-| ------------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `DATABASE_URL`            | API                     | App database connection string for package-local Node runs.      |
-| `API_TEST_DATABASE_URL`   | API tests               | Base Postgres URL for API integration tests.                     |
-| `TEST_DATABASE_URL`       | test helpers            | Shared fallback base Postgres URL for integration tests.         |
-| `BETTER_AUTH_BASE_URL`    | API, app server helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.    |
-| `BETTER_AUTH_SECRET`      | API                     | Better Auth signing secret.                                      |
-| `AUTH_APP_ORIGIN`         | API                     | Browser-visible app origin for redirects and auth email links.   |
-| `AUTH_EMAIL_FROM`         | API, infra              | Sender email address for auth emails.                            |
-| `AUTH_EMAIL_FROM_NAME`    | API, infra              | Sender display name.                                             |
-| `AUTH_RATE_LIMIT_ENABLED` | API                     | Enables or disables Better Auth database-backed rate limits.     |
-| `API_ORIGIN`              | app                     | Server-side API origin.                                          |
-| `VITE_API_ORIGIN`         | app                     | Browser-exposed API origin.                                      |
-| `PLAYWRIGHT_BASE_URL`     | E2E                     | Existing Alchemy app stage URL for Playwright tests.             |
-| `PLAYWRIGHT_API_URL`      | E2E                     | Existing Alchemy API stage URL for Playwright API requests.      |
-| `PLAYWRIGHT_DATABASE_URL` | E2E                     | Direct stage database URL for auth token handoff tests.          |
-| `ALCHEMY_STACK_NAME`      | app, API                | Alchemy-injected runtime stack name for Worker metadata.         |
-| `ALCHEMY_STAGE`           | app, API                | Alchemy-injected runtime stage for health checks and app config. |
-| `GOOGLE_MAPS_API_KEY`     | API, infra              | Optional locally for live geocoding; required by deployed API.   |
+| Variable                  | Used by             | Purpose                                                           |
+| ------------------------- | ------------------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`            | domain              | App database connection string for package-local Node runs.       |
+| `API_TEST_DATABASE_URL`   | domain tests        | Base Postgres URL for domain integration tests.                   |
+| `TEST_DATABASE_URL`       | test helpers        | Shared fallback base Postgres URL for integration tests.          |
+| `BETTER_AUTH_BASE_URL`    | domain, app helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.     |
+| `BETTER_AUTH_SECRET`      | domain              | Better Auth signing secret.                                       |
+| `AUTH_APP_ORIGIN`         | domain              | Browser-visible app origin for redirects and auth email links.    |
+| `AUTH_EMAIL_FROM`         | domain, infra       | Sender email address for auth emails.                             |
+| `AUTH_EMAIL_FROM_NAME`    | domain, infra       | Sender display name.                                              |
+| `AUTH_RATE_LIMIT_ENABLED` | domain              | Enables or disables Better Auth database-backed rate limits.      |
+| `API_ORIGIN`              | app                 | Server-side API origin.                                           |
+| `VITE_API_ORIGIN`         | app                 | Browser-exposed API origin.                                       |
+| `PLAYWRIGHT_BASE_URL`     | E2E                 | Existing Alchemy app stage URL for Playwright tests.              |
+| `PLAYWRIGHT_API_URL`      | E2E                 | Existing Alchemy API stage URL for Playwright API requests.       |
+| `PLAYWRIGHT_DATABASE_URL` | E2E                 | Direct stage database URL for auth token handoff tests.           |
+| `ALCHEMY_STACK_NAME`      | app, API            | Alchemy-injected runtime stack name for Worker metadata.          |
+| `ALCHEMY_STAGE`           | app, API            | Alchemy-injected runtime stage for health checks and app config.  |
+| `GOOGLE_MAPS_API_KEY`     | domain, infra       | Optional locally for live geocoding; required by deployed domain. |
 
 Infrastructure deployment variables are documented in
 [Local Development And Infrastructure](architecture/local-development-and-infra.md).
@@ -188,11 +188,11 @@ Local Alchemy provider auth uses `pnpm alchemy login`; CI supplies
 `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and preview state-store
 credentials as GitHub secrets.
 
-When running API database integration tests against a specific database, set
+When running domain database integration tests against a specific database, set
 `API_TEST_DATABASE_URL`:
 
 ```bash
-API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5443/ceird pnpm --filter api test -- src/domains/jobs/http.integration.test.ts
+API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5443/ceird pnpm --filter domain test -- src/domains/jobs/http.integration.test.ts
 ```
 
 ## Deployment
@@ -210,4 +210,4 @@ pnpm run test:infra
 
 The Alchemy stack provisions Cloudflare Hyperdrive backed by Neon Postgres,
 Cloudflare Workers/Vite, auth email queues, and native Neon branches that apply
-checked-in API SQL migrations.
+checked-in domain SQL migrations.

@@ -7,16 +7,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 
 import {
-  apiAlchemyDrizzleMigrationsDir,
-  apiDrizzleMigrationsDir,
-  apiDrizzleSchemaPath,
+  domainAlchemyDrizzleMigrationsDir,
+  domainDrizzleMigrationsDir,
+  domainDrizzleSchemaPath,
 } from "./stages.ts";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
 function loadConfiguredSchemaWithPlainNode() {
   const schemaUrl = pathToFileURL(
-    realpathSync(resolve(repoRoot, apiDrizzleSchemaPath))
+    realpathSync(resolve(repoRoot, domainDrizzleSchemaPath))
   ).href;
   const output = execFileSync(
     process.execPath,
@@ -61,12 +61,13 @@ describe("Alchemy Drizzle integration", () => {
     );
     const drizzleKitApi = await import(pathToFileURL(drizzleKitApiPath).href);
     const schemaModule = await import(
-      pathToFileURL(realpathSync(resolve(repoRoot, apiDrizzleSchemaPath))).href
+      pathToFileURL(realpathSync(resolve(repoRoot, domainDrizzleSchemaPath)))
+        .href
     );
     const snapshot = await drizzleKitApi.generateDrizzleJson(schemaModule);
     const migrationDir = resolve(
       repoRoot,
-      apiAlchemyDrizzleMigrationsDir,
+      domainAlchemyDrizzleMigrationsDir,
       "00000000000000_baseline"
     );
     const committedSnapshot = JSON.parse(
@@ -77,7 +78,7 @@ describe("Alchemy Drizzle integration", () => {
       snapshot
     );
     const trgmMigrationSql = readFileSync(
-      resolve(repoRoot, apiDrizzleMigrationsDir, "0012_chunky_mercury.sql"),
+      resolve(repoRoot, domainDrizzleMigrationsDir, "0012_chunky_mercury.sql"),
       "utf8"
     );
 

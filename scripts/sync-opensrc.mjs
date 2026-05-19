@@ -9,7 +9,12 @@ if (process.env.CI === "true") {
   process.exit(0);
 }
 
-const workspacePackages = ["apps/api/package.json", "apps/app/package.json"];
+const workspacePackages = [
+  "apps/api/package.json",
+  "apps/app/package.json",
+  "apps/domain/package.json",
+  "apps/mcp/package.json",
+];
 const workspacePackageJsons = [];
 
 for (const packagePath of workspacePackages) {

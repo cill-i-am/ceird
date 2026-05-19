@@ -22,12 +22,15 @@ export default defineConfig({
     ? {
         command: `sh -c '
           set -eu
-          pnpm --filter api db:migrate
-          pnpm --filter api exec tsx src/index.ts &
+          pnpm --filter domain db:migrate
+          PORT=3002 pnpm --filter domain exec tsx src/index.ts &
+          domain_pid=$!
+          PORT=3001 DOMAIN_ORIGIN=http://127.0.0.1:3002 pnpm --filter api exec tsx src/index.ts &
           api_pid=$!
-          trap "kill $api_pid 2>/dev/null || true" EXIT
+          trap "kill $api_pid $domain_pid 2>/dev/null || true" EXIT
           until curl --silent --max-time 1 http://127.0.0.1:3001/api/auth/get-session >/dev/null 2>&1; do
-            if ! kill -0 "$api_pid" 2>/dev/null; then
+            if ! kill -0 "$api_pid" 2>/dev/null || ! kill -0 "$domain_pid" 2>/dev/null; then
+              wait "$domain_pid" 2>/dev/null || true
               wait "$api_pid"
               exit 1
             fi
@@ -44,6 +47,7 @@ export default defineConfig({
           AUTH_RATE_LIMIT_ENABLED: "false",
           BETTER_AUTH_BASE_URL: playwrightApiUrl,
           BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+          DOMAIN_ORIGIN: "http://127.0.0.1:3002",
           PORT: "3001",
         },
         port: 4173,

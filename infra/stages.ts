@@ -6,9 +6,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-export const apiDrizzleSchemaPath = "infra/api-drizzle-schema.ts";
-export const apiDrizzleMigrationsDir = "apps/api/drizzle";
-export const apiAlchemyDrizzleMigrationsDir = "apps/api/drizzle/alchemy";
+export const domainDrizzleSchemaPath = "infra/domain-drizzle-schema.ts";
+export const domainDrizzleMigrationsDir = "apps/domain/drizzle";
+export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle/alchemy";
 
 export const InfraStage = Schema.NonEmptyString;
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
@@ -50,6 +50,7 @@ export interface InfraStageConfig {
   readonly zoneName: DomainName;
   readonly appHostname: DomainName;
   readonly apiHostname: DomainName;
+  readonly mcpHostname: DomainName;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authRateLimitEnabled: boolean;
@@ -198,6 +199,7 @@ export function loadInfraStageConfig(stageInput: string) {
     });
     const defaultAppHostname = `app.${identity.stageSlug}.${zoneName}`;
     const defaultApiHostname = `api.${identity.stageSlug}.${zoneName}`;
+    const defaultMcpHostname = `mcp.${identity.stageSlug}.${zoneName}`;
     const defaultHyperdriveName = identity.isProduction
       ? `${identity.appName}-production-postgres`
       : stageResourceName(identity, "postgres");
@@ -207,6 +209,10 @@ export function loadInfraStageConfig(stageInput: string) {
     );
     const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
       Config.withDefault(defaultApiHostname),
+      Config.mapOrFail(decodeDomainName)
+    );
+    const mcpHostname = yield* Config.string("CEIRD_MCP_HOSTNAME").pipe(
+      Config.withDefault(defaultMcpHostname),
       Config.mapOrFail(decodeDomainName)
     );
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
@@ -277,6 +283,7 @@ export function loadInfraStageConfig(stageInput: string) {
       zoneName,
       appHostname,
       apiHostname,
+      mcpHostname,
       authEmailFrom,
       authEmailFromName,
       authRateLimitEnabled,

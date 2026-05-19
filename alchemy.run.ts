@@ -64,6 +64,7 @@ export default Alchemy.Stack(
       authEmailQueue: cloudflareStack.authEmailQueue.queueName,
       branch: database.branch.branchName,
       hyperdrive: cloudflareStack.database.name,
+      mcp: cloudflareStack.mcpOrigin,
       neonDatabase: database.databaseName,
     } as const;
   }).pipe(

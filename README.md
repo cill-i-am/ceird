@@ -46,35 +46,37 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 ## Workspace Map
 
-| Path                     | Purpose                                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                              |
-| `apps/api`               | Effect HTTP API, Better Auth integration, jobs/sites/labels domain services, Drizzle schema, migrations, and Cloudflare Worker entrypoint. |
-| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                                    |
-| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                              |
-| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                                  |
-| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                                 |
-| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                                 |
-| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                                     |
-| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                               |
-| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                                |
+| Path                     | Purpose                                                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                      |
+| `apps/api`               | Public HTTP adapter Worker that keeps root/health routes and forwards domain traffic through the private `DOMAIN` service binding. |
+| `apps/domain`            | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
+| `apps/mcp`               | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
+| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                            |
+| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                      |
+| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                          |
+| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                         |
+| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                         |
+| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                             |
+| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                       |
+| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                        |
 
 ## Common Commands
 
-| Command                         | What it does                                                                                                          |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                      | Runs `alchemy dev --env-file .env.local` for the default cloud-backed stage.                                          |
-| `pnpm test`                     | Runs workspace package tests, root infra tests, and root script tests.                                                |
-| `pnpm check-types`              | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                        |
-| `pnpm lint`                     | Runs oxlint over the workspace.                                                                                       |
-| `pnpm check`                    | Runs the Ultracite quality check.                                                                                     |
-| `pnpm format`                   | Checks formatting with oxfmt.                                                                                         |
-| `pnpm format:write`             | Writes formatting changes with oxfmt.                                                                                 |
-| `pnpm --filter app e2e`         | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                 |
-| `pnpm --filter api db:generate` | Generates package-local Drizzle SQL for API schema changes.                                                           |
-| `pnpm --filter api db:migrate`  | Applies package-local API migrations outside the Alchemy stage workflow.                                              |
-| `pnpm alchemy dev`              | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`. |
-| `pnpm alchemy deploy`           | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                               |
+| Command                            | What it does                                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                         | Runs `alchemy dev --env-file .env.local` for the default cloud-backed stage.                                          |
+| `pnpm test`                        | Runs workspace package tests, root infra tests, and root script tests.                                                |
+| `pnpm check-types`                 | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                        |
+| `pnpm lint`                        | Runs oxlint over the workspace.                                                                                       |
+| `pnpm check`                       | Runs the Ultracite quality check.                                                                                     |
+| `pnpm format`                      | Checks formatting with oxfmt.                                                                                         |
+| `pnpm format:write`                | Writes formatting changes with oxfmt.                                                                                 |
+| `pnpm --filter app e2e`            | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                 |
+| `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes.                                                        |
+| `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow.                                           |
+| `pnpm alchemy dev`                 | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`. |
+| `pnpm alchemy deploy`              | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                               |
 
 ## Documentation
 
@@ -94,18 +96,21 @@ The highest-signal guides are:
 ## Architecture Summary
 
 The browser app uses TanStack Router file routes and TanStack Start server-only
-helpers. Authentication is owned by the API through Better Auth, while the app
-forwards cookies and proxy headers during server-side lookups. Jobs data moves
+helpers. Authentication is owned by the private domain Worker through Better
+Auth, while the public API Worker forwards app traffic through the `DOMAIN`
+service binding after normalizing proxy headers. Jobs data moves
 through Effect `HttpApi` contracts exported by `@ceird/jobs-core`,
-`@ceird/sites-core`, and `@ceird/labels-core`, so frontend clients, API
-handlers, DTOs, and HTTP error responses share the same runtime schema
-boundaries.
+`@ceird/sites-core`, and `@ceird/labels-core`, so frontend clients, domain
+handlers, public adapters, DTOs, and HTTP error responses share the same
+runtime schema boundaries.
 
-The API keeps domain behavior in Effect services. The identity domain wires
-Better Auth, organization membership, invitation preview, and auth email
-delivery. The jobs domain owns job workflows, rate cards, job-label assignment,
-contacts, and activity recording. Sites and organization labels have their own
-API domains, services, repositories, schemas, and `HttpApi` contracts.
+The private domain Worker keeps domain behavior in Effect services. The
+identity domain wires Better Auth, organization membership, invitation preview,
+and auth email delivery. The jobs domain owns job workflows, rate cards,
+job-label assignment, contacts, and activity recording. Sites and organization
+labels have their own domain services, repositories, schemas, and `HttpApi`
+contracts. The public API and MCP Workers are protocol adapters over that shared
+capability surface.
 
 Local multi-service development and production infrastructure are both described
 in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Queues,
@@ -138,8 +143,8 @@ For local runs, read `<alchemy-database-url>` from the selected stage's
 outputs are logged.
 
 For database changes, generate and inspect the package-local Drizzle migration
-under `apps/api/drizzle`, then update/verify the Alchemy-generated migration
-state under `apps/api/drizzle/alchemy` before running API and infra tests.
+under `apps/domain/drizzle`, then update/verify the Alchemy-generated migration
+state under `apps/domain/drizzle/alchemy` before running domain and infra tests.
 
 ## Repository Conventions
 

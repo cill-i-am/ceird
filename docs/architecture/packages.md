@@ -38,9 +38,26 @@ Exports shared identity and organization primitives:
 - public invitation preview schema
 - decode helpers for untrusted payloads
 
-Use this package when app and API code need the same organization or membership
+Use this package when app, API adapter, MCP adapter, and domain code need the same organization or membership
 contract. Do not put Better Auth adapter configuration or database queries here;
-those belong in `apps/api`.
+those belong in `apps/domain`.
+
+## `@ceird/domain-core`
+
+Path: `packages/domain-core`
+
+Exports the shared contract for calling the private domain Worker:
+
+- `DomainServiceBinding`, the typed Cloudflare service binding shape exposed to
+  protocol adapters
+- `DomainHttpClient`, the minimal request/response client surface used by
+  adapters and future clients
+- `makeDomainServiceClient`, the production service-binding client
+- `makeDomainOriginClient`, the package-local development origin client
+
+Keep product repositories, Drizzle schema, authorization, action execution, and
+audit behavior out of this package. Those are owned by `apps/domain`; this
+package only describes how clients call that boundary.
 
 ## `@ceird/jobs-core`
 
@@ -82,7 +99,7 @@ Exports the shared sites and service-area contract:
 - `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
 
 Sites are independent shared organization data. Keep geocoding, SQL
-repositories, authorization, and React state in the API or app.
+repositories, authorization, and React state in the domain Worker or app.
 
 ## `@ceird/labels-core`
 
@@ -111,12 +128,20 @@ apps/app
   -> @ceird/sites-core
   -> @ceird/labels-core
 
-apps/api
+apps/domain
   -> @ceird/comments-core
   -> @ceird/identity-core
   -> @ceird/jobs-core
   -> @ceird/sites-core
   -> @ceird/labels-core
+
+apps/api
+  -> @ceird/domain-core
+  -> apps/domain through the private service binding
+
+apps/mcp
+  -> @ceird/domain-core
+  -> apps/domain through the private service binding
 
 packages/jobs-core
   -> @ceird/comments-core
@@ -139,9 +164,9 @@ packages/labels-core
 Core packages should not depend on `apps/*`.
 
 Root infrastructure lives outside the package workspace in `infra`, with the
-deploy stack entrypoint at `alchemy.run.ts`. It may point at app/API deploy
-entrypoints and API migrations by path, but shared packages should not import
-root infra code.
+deploy stack entrypoint at `alchemy.run.ts`. It may point at app/API/MCP/domain
+deploy entrypoints and domain migrations by path, but shared packages should
+not import root infra code.
 
 ## Testing
 
@@ -151,6 +176,7 @@ applicable:
 ```bash
 pnpm --filter @ceird/identity-core test
 pnpm --filter @ceird/comments-core test
+pnpm --filter @ceird/domain-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test

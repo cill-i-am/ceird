@@ -3,9 +3,9 @@ import { describe, expect, it } from "@effect/vitest";
 import { makeNeonPostgresLayout } from "./neon.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 import {
-  apiAlchemyDrizzleMigrationsDir,
-  apiDrizzleMigrationsDir,
-  apiDrizzleSchemaPath,
+  domainAlchemyDrizzleMigrationsDir,
+  domainDrizzleMigrationsDir,
+  domainDrizzleSchemaPath,
 } from "./stages.ts";
 
 describe("Neon Postgres layout", () => {
@@ -18,11 +18,11 @@ describe("Neon Postgres layout", () => {
     expect(layout).toStrictEqual({
       branch: {
         migrationSource: {
-          appliedMigrationsDir: apiDrizzleMigrationsDir,
+          appliedMigrationsDir: domainDrizzleMigrationsDir,
           dialect: "postgres",
-          generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
+          generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
           kind: "alchemy-drizzle-schema",
-          schema: apiDrizzleSchemaPath,
+          schema: domainDrizzleSchemaPath,
         },
         name: "main",
         parentBranchName: undefined,
@@ -65,11 +65,11 @@ describe("Neon Postgres layout", () => {
     expect(layout).toStrictEqual({
       branch: {
         migrationSource: {
-          appliedMigrationsDir: apiDrizzleMigrationsDir,
+          appliedMigrationsDir: domainDrizzleMigrationsDir,
           dialect: "postgres",
-          generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
+          generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
           kind: "alchemy-drizzle-schema",
-          schema: apiDrizzleSchemaPath,
+          schema: domainDrizzleSchemaPath,
         },
         name: "dev-cillian",
         parentBranchName: "main",

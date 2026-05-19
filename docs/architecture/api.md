@@ -2,80 +2,88 @@
 
 ## Scope
 
-`apps/api` is the backend service. It exposes Effect HTTP APIs for system,
-jobs, sites, comments-backed collaboration, labels, and organization
-configuration routes, mounts Better Auth under `/api/auth/*`, owns database
-schema and migrations, and can run as either a Node dev server or a Cloudflare
-Worker.
+`apps/api` is the public HTTP adapter. It keeps public root and health
+responses local, then forwards all product, auth, and MCP-compatible HTTP
+traffic to the private `apps/domain` Worker through a Cloudflare `DOMAIN`
+service binding.
+
+`apps/domain` is the backend/domain service. It exposes the Effect HTTP API for
+jobs, sites, comments-backed collaboration, labels, organization configuration,
+Better Auth under `/api/auth/*`, and MCP tool execution. It owns database
+schema and migrations, authorization, repositories, action execution, audit, and
+the Hyperdrive/Postgres binding.
+
+`apps/mcp` is the standalone MCP adapter. It forwards MCP traffic to
+`apps/domain` through the same `DOMAIN` service binding so MCP, public HTTP,
+and future agent/bot surfaces share the same capability surface.
 
 ## Entry Points
 
-| File                                 | Purpose                                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `src/index.ts`                       | Node development entrypoint.                                                                     |
-| `src/server.ts`                      | Effect `HttpApi` construction, system endpoints, API layer composition, and web-handler factory. |
-| `src/worker.ts`                      | Thin Cloudflare Worker module adapter; runs the Effect runtime programs for fetch and queue.     |
-| `src/platform/cloudflare/runtime.ts` | Cloudflare runtime composition for API fetch handling, auth queue delivery, and Worker layers.   |
-| `src/platform/cloudflare/env.ts`     | Cloudflare environment decoding and binding access.                                              |
-| `src/platform/database/database.ts`  | Database runtime layer.                                                                          |
-| `src/platform/database/schema.ts`    | Combined Drizzle schema barrel.                                                                  |
+| Workspace     | File/path                        | Purpose                                                                                  |
+| ------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/api`    | `src/index.ts`                   | Node development entrypoint for the public adapter.                                      |
+| `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.              |
+| `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                    |
+| `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                |
+| `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.        |
+| `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                  |
+| `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, geocoder, and runtime layer composition. |
+| `apps/domain` | `src/platform/database`          | Database runtime, schema barrel, config, errors, and test helpers.                       |
+| `apps/mcp`    | `src/worker.ts`                  | Public MCP adapter Worker at `mcp.<stage>.ceird.app` that forwards to `DOMAIN`.          |
 
-System endpoints are defined in `src/server.ts`:
+Public system endpoints are defined in `apps/api/src/server.ts`:
 
 - `GET /` returns a plain API marker string.
 - `GET /health` returns a stack- and stage-aware `HealthPayload`.
 
-The Cloudflare Worker module in `src/worker.ts` only adapts Cloudflare's
-promise-based `fetch` and `queue` handlers into Effect programs. Runtime
-composition lives in `src/platform/cloudflare/runtime.ts`: it installs the
-Worker config provider, builds the Hyperdrive-backed database layer, wires
-Better Auth background tasks through `context.waitUntil`, uses the Google site
-geocoder layer, and composes auth queue delivery with the Cloudflare email
-binding transport. Keeping this runtime boundary separate makes the current
-Worker compatible with Cloudflare's module handler contract while preserving
-the single Effect-threaded Worker runtime in
-`src/platform/cloudflare/runtime.ts`.
+The API Worker module adapts Cloudflare's promise-based `fetch` handler to
+service-binding forwarding and public root/health responses. The MCP Worker is
+also a forwarding adapter, but its fetch path is Effect-threaded so MCP traffic
+gets structured forwarding logs, log spans, and a controlled `502` response when
+the private domain service binding is unavailable. The single Effect-threaded domain runtime
+boundary for product behavior lives in
+`apps/domain/src/platform/cloudflare/runtime.ts`: it installs the Worker config
+provider, builds the Hyperdrive-backed database layer, wires Better Auth
+background tasks through `context.waitUntil`, uses the Google site geocoder
+layer, and composes auth queue delivery with the Cloudflare email binding
+transport. Keeping this runtime boundary private lets multiple clients share the
+same domain execution and audit path.
 The health handler reads `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` through the
 same Effect config path and includes both values in its response, falling back
 to `local` for package-local Node runs.
 
-The runtime reads Cloudflare bindings from `src/platform/cloudflare/env.ts`.
-That file separates plain configuration vars from `ApiWorkerBindingRuntimeEnv`,
-the runtime binding contract for `DATABASE`, `AUTH_EMAIL_QUEUE`, and
-`AUTH_EMAIL`, while forwarding Alchemy's injected `ALCHEMY_STACK_NAME` and
-`ALCHEMY_STAGE` metadata into Effect config. The root infra stack owns the
-Alchemy binding resources in `infra/cloudflare-stack.ts` and derives
-`ApiWorkerBindingEnv` with `Cloudflare.InferEnv`. The infra test suite imports
-the API binding contract and asserts the Alchemy-inferred type has the same
-keys and assignable runtime binding types. The same infra tests also compare
-the stack-provided API Worker config keys against `ApiWorkerConfigEnv`. Secret
+The API and MCP runtimes read only the `DOMAIN` service binding. The domain
+runtime reads `DATABASE`, `AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`, plus resolved
+configuration for Better Auth, MCP resource metadata, Google Maps, and auth
+email delivery. The root infra stack owns those Alchemy binding resources in
+`infra/cloudflare-stack.ts`; infra tests compare the stack-provided binding and
+config keys with the runtime contracts for API, MCP, and domain Workers. Secret
 and credential values stay typed as Alchemy deploy-time redacted inputs in
-`infra`, while the API runtime sees resolved strings through
-Cloudflare's Worker environment. Keep those bridges green when adding Worker
-resources or config vars. The API runtime intentionally stays on its Effect 3
-application dependencies and does not import Alchemy or Effect 4; the root
-infra helpers own those deploy-time dependencies and binding types.
+`infra`, while runtime apps see resolved strings through Cloudflare Worker
+environment values. Runtime apps intentionally stay on their Effect 3
+application dependencies and do not import Alchemy or Effect 4.
 
-`src/server.ts` also intercepts MCP resource-server traffic before falling
-through to the Effect `HttpApi` handler. The MCP route defaults to `/mcp`, or
-to the path component of `MCP_RESOURCE_URL` when that environment variable is
-set. Protected-resource metadata is served at
+`apps/domain/src/server.ts` also intercepts MCP resource-server traffic before
+falling through to the Effect `HttpApi` handler. The MCP route defaults to
+`/mcp`, or to the path component of `MCP_RESOURCE_URL` when that environment
+variable is set. Protected-resource metadata is served at
 `/.well-known/oauth-protected-resource` and at the path-specific well-known URL,
 for example `/.well-known/oauth-protected-resource/mcp`.
 
 MCP HTTP is served through `@effect/ai`'s `McpServer.layerHttpRouter`, adapted
-to the API web-handler boundary after Better Auth OAuth bearer validation. Ceird
-intentionally does not mount an `xmcp` generated worker or use the packaged xmcp
-Better Auth adapter in the API runtime.
+to the domain web-handler boundary after Better Auth OAuth bearer validation.
+The standalone MCP Worker remains a forwarding adapter so generated/action UI,
+future Agents SDK Workers, and bot surfaces can call the same domain surface.
 
 ## Observability
 
-The API enables a custom Effect HTTP request logger for both the Node server and
-the Cloudflare/web-handler path. It records method, status, and redacted path
-only; query strings are not logged, and `/health` is skipped to keep probe noise
-out of operational logs. Typed domain HTTP handlers also wrap service calls with
-`observeApiOperation`, which adds an operation log span and emits structured
-fields when a jobs, rate-card, labels, sites, or service-area operation fails.
+The API enables a custom Effect HTTP request logger for the Node server and
+structured forwarding logs in the Cloudflare Worker adapter. Both paths record
+method, status, and redacted path only; query strings are not logged, and
+`/health` is skipped to keep probe noise out of operational logs. Typed domain
+HTTP handlers also wrap service calls with `observeApiOperation`, which adds an
+operation log span and emits structured fields when a jobs, rate-card, labels,
+sites, or service-area operation fails.
 Storage failures and defects log at warning level, while expected typed domain
 failures log at info level. Those fields include the API domain, service,
 operation, failure tag, failure message, safe entity identifiers when present,
@@ -87,10 +95,13 @@ invitation delivery failures are reported through the authentication failure
 reporters. Cloudflare queue delivery failures log the email kind, delivery key,
 source tag, and source cause before retrying. Deployed Workers rely on
 Cloudflare observability logs and traces configured by the infra stack.
+The standalone MCP Worker emits its own forwarding log for each domain call
+with method, status, and path-only URL metadata, then relies on the domain
+Worker for OAuth, tool execution, authorization, and domain audit logs.
 
 ## Authentication Domain
 
-Authentication lives in `src/domains/identity/authentication`.
+Authentication lives in `apps/domain/src/domains/identity/authentication`.
 
 Core files:
 
@@ -106,8 +117,8 @@ Core files:
 | `auth-email-scheduler.ts`                          | Background scheduling boundary for auth emails.                                                                          |
 | `cloudflare-email-binding-auth-email-transport.ts` | Cloudflare Email Worker binding transport.                                                                               |
 
-Better Auth owns standard auth routes under `/api/auth/*`. The API also exposes
-a public invitation preview route matched by
+Better Auth owns standard auth routes under `/api/auth/*`. The domain Worker
+also exposes a public invitation preview route matched by
 `/api/public/invitations/:invitationId/preview`, returning a masked email,
 organization name, and role for pending non-expired invitations.
 
@@ -126,8 +137,9 @@ against the shared role schema.
 
 ## MCP Resource Server
 
-MCP tools live in `src/domains/mcp` as Effect AI `Tool` and `Toolkit`
-registrations. They call the same domain services as the HTTP API. The MCP
+MCP tools live in `apps/domain/src/domains/mcp` as Effect AI `Tool` and
+`Toolkit` registrations. They call the same domain services as the HTTP API.
+The MCP
 resource server validates the bearer token through Better Auth's OAuth Provider
 support before the request reaches the Effect AI router. Tool execution receives
 the verified request identity through an Effect request-runtime context, resolves
@@ -157,7 +169,8 @@ the required Ceird scope.
 
 ## Jobs Domain
 
-Jobs live in `src/domains/jobs` and are exposed through `@ceird/jobs-core`.
+Jobs live in `apps/domain/src/domains/jobs` and are exposed through
+`@ceird/jobs-core`.
 Jobs may reference sites and organization labels, but site definitions and
 label definitions are owned by their own API domains.
 
@@ -184,7 +197,8 @@ The jobs service flow is:
 5. Record activity for auditable changes.
 6. Return DTOs defined in the owning shared core package.
 
-Current actor resolution lives in `src/domains/organizations` because sites,
+Current actor resolution lives in `apps/domain/src/domains/organizations`
+because sites,
 labels, and jobs all need the same organization actor boundary. Better Auth
 session data is treated as untrusted: session user and active organization IDs
 are decoded into branded IDs, malformed identity data fails with a typed
@@ -197,7 +211,7 @@ as labels, service areas, sites, and rate cards through the owning domain.
 
 ## Comments Domain
 
-Reusable comments persistence lives in `src/domains/comments` and shared DTO
+Reusable comments persistence lives in `apps/domain/src/domains/comments` and shared DTO
 primitives live in `@ceird/comments-core`. The API stores comment content in a
 single `comments` table and keeps target ownership in separate join tables:
 
@@ -219,7 +233,7 @@ comments API.
 ## Jobs API Endpoints
 
 Endpoint definitions live in `packages/jobs-core/src/http-api.ts`; API handlers
-live in `apps/api/src/domains/jobs/http.ts`.
+live in `apps/domain/src/domains/jobs/http.ts`.
 
 | Method   | Path                                              | Handler name                  |
 | -------- | ------------------------------------------------- | ----------------------------- |
@@ -248,7 +262,7 @@ live in `apps/api/src/domains/jobs/http.ts`.
 
 ## Labels Domain
 
-Labels live in `src/domains/labels` and are exposed through
+Labels live in `apps/domain/src/domains/labels` and are exposed through
 `@ceird/labels-core`. Labels are organization-level definitions; jobs and sites
 assign those labels through join tables and assignment behavior owned by the
 jobs and sites domains.
@@ -265,7 +279,7 @@ Core files:
 
 ## Sites Domain
 
-Sites live in `src/domains/sites` and are exposed through
+Sites live in `apps/domain/src/domains/sites` and are exposed through
 `@ceird/sites-core`. Sites and service areas are independent organization data
 that jobs can reference. Sites can also have internal comments through the
 comments domain. Site access notes remain a single structured field on the site
@@ -288,7 +302,7 @@ provider-specific implementation. Runtime entrypoints choose the provider layer:
 package-local Node composition uses `SiteGeocoder.Local`, which selects Google
 when `GOOGLE_MAPS_API_KEY` is present and falls back to deterministic
 development coordinates when it is absent. The Cloudflare Worker composition
-uses `SiteGeocoder.Google`, so deployed API startup fails fast without the
+uses `SiteGeocoder.Google`, so deployed domain startup fails fast without the
 Google Maps key. Environment variables configure provider credentials; they do
 not select provider topology. Address-level misses return the user-correctable
 geocoding failure contract, while upstream Google/configuration failures return
@@ -297,7 +311,7 @@ the provider failure contract so deployed misconfiguration fails visibly.
 ## Labels API Endpoints
 
 Endpoint definitions live in `packages/labels-core/src/http-api.ts`; API
-handlers live in `apps/api/src/domains/labels/http.ts`.
+handlers live in `apps/domain/src/domains/labels/http.ts`.
 
 | Method   | Path               | Handler name  |
 | -------- | ------------------ | ------------- |
@@ -309,7 +323,7 @@ handlers live in `apps/api/src/domains/labels/http.ts`.
 ## Sites API Endpoints
 
 Endpoint definitions live in `packages/sites-core/src/http-api.ts`; API
-handlers live in `apps/api/src/domains/sites/http.ts`.
+handlers live in `apps/domain/src/domains/sites/http.ts`.
 
 | Method   | Path                             | Handler name        |
 | -------- | -------------------------------- | ------------------- |
@@ -333,7 +347,7 @@ areas and sites together.
 
 ## Database
 
-The API uses Drizzle with Postgres.
+The domain Worker uses Drizzle with Postgres.
 
 | Area                  | Files                                                |
 | --------------------- | ---------------------------------------------------- |
@@ -345,10 +359,10 @@ The API uses Drizzle with Postgres.
 | Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
-`databaseSchema` merges authentication, comments, labels, sites, and jobs
+`databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
 tables. Keep schema changes in the domain that owns the tables, then export
 through the schema barrel. The Alchemy stack also loads this barrel through
-`Drizzle.Schema`. The native Neon branch applies `apps/api/drizzle`, so the
+`Drizzle.Schema`. The native Neon branch applies `apps/domain/drizzle`, so the
 historical SQL files remain the bootstrap path and future Alchemy-generated SQL
 under `drizzle/alchemy` is picked up by the same resource. In infra this is
 modeled as separate generated and applied migration directories.
@@ -360,7 +374,7 @@ same organization on both sides through composite organization foreign keys.
 
 Public API errors live in the package that owns the contract:
 `packages/jobs-core/src/errors.ts`, `packages/sites-core/src/errors.ts`, and
-`packages/labels-core/src/errors.ts`. API code should return those shared
+`packages/labels-core/src/errors.ts`. Domain code should return those shared
 errors when a frontend client needs typed behavior.
 
 Use Effect `Config` for environment loading and Effect `Schema` for external

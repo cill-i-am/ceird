@@ -27,9 +27,11 @@ Future auth work should preserve the current shape unless there is a strong
 reason to change it:
 
 1. Better Auth remains the source of truth for auth behavior.
-2. `apps/api` continues to own auth runtime, persistence, and HTTP contract.
+2. `apps/domain` continues to own auth runtime, persistence, and HTTP
+   contract.
 3. `apps/app` continues to own UI, routing, and session-aware UX.
-4. App-specific wrappers should be added only when they remove real friction
+4. `apps/api` stays a public forwarding adapter over the private domain Worker.
+5. App-specific wrappers should be added only when they remove real friction
    that the native Better Auth shape cannot reasonably handle on its own.
 
 The default move is to extend the existing auth slice, not to invent a parallel
@@ -77,7 +79,7 @@ We should avoid:
 
 ### Keep Auth Boundary Ownership Clear
 
-Backend auth concerns belong in `apps/api`:
+Backend auth concerns belong in `apps/domain`:
 
 - provider configuration
 - session behavior
@@ -86,6 +88,11 @@ Backend auth concerns belong in `apps/api`:
 - transactional auth policy
 - auth-oriented rate limiting
 - trusted origins and cross-origin rules
+
+`apps/api` should not grow Better Auth runtime logic, auth repositories, cookie
+policy, or auth email delivery code. It forwards public auth traffic through
+the `DOMAIN` service binding and keeps adapter concerns such as health checks,
+logging, and proxy-header normalization at the edge.
 
 Frontend auth concerns belong in `apps/app`:
 
@@ -156,8 +163,8 @@ It fits like this today:
 
 - Better Auth retains native ownership of
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
-- `apps/api` owns email delivery policy through the narrow `AuthEmailSender`
-  boundary
+- `apps/domain` owns email delivery policy through the narrow
+  `AuthEmailSender` boundary
 - deployed Alchemy stages deliver through the Cloudflare Workers Email Service
   binding behind the auth email queue consumer
 - public reset-request and reset-complete routes in `apps/app`
@@ -207,7 +214,7 @@ Rules:
 Auth email is shared infrastructure, not a screen-level detail.
 
 Password reset already established the first version of this boundary in
-`apps/api` with `AuthEmailSender`, a provider-neutral `AuthEmailTransport`,
+`apps/domain` with `AuthEmailSender`, a provider-neutral `AuthEmailTransport`,
 and the Cloudflare Workers Email Service binding adapter for deployed queue
 consumers.
 
@@ -224,7 +231,7 @@ Because `AuthenticationLive` composes the auth email layer at boot, auth
 startup now depends on valid email-boundary config as well as the core Better
 Auth config. Deployed mail is scheduled through the queue and delivered by the
 Worker binding consumer; package-local development can still use deterministic
-delivery without changing the app-owned auth boundary.
+delivery without changing the domain-owned auth boundary.
 
 Future auth mail such as email verification and organization invitations
 should extend that same boundary, not create parallel delivery paths. The

@@ -8,7 +8,7 @@ import { JobDetailSheet, JobsCreateSheet, JobsPage } from "./pages/jobs-page";
 import { SignupPage } from "./pages/signup-page";
 import { APP_ORIGIN } from "./test-urls";
 
-const JOBS_FLOW_TIMEOUT_MS = 120_000;
+const JOBS_FLOW_TIMEOUT_MS = 240_000;
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
 function createTestEmail(prefix: string): string {

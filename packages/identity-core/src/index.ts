@@ -22,6 +22,16 @@ export const UserId = Schema.NonEmptyString.pipe(
 );
 export type UserId = Schema.Schema.Type<typeof UserId>;
 
+export const SessionId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/SessionId")
+);
+export type SessionId = Schema.Schema.Type<typeof SessionId>;
+
+export const InvitationId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/InvitationId")
+);
+export type InvitationId = Schema.Schema.Type<typeof InvitationId>;
+
 export const IsoDateTimeString = Schema.String.pipe(
   Schema.filter((value) => isIsoDateTimeString(value)),
   Schema.annotations({
@@ -187,6 +197,18 @@ export function decodePublicInvitationPreview(
 
 export function decodeOrganizationId(input: unknown): OrganizationId {
   return ParseResult.decodeUnknownSync(OrganizationId)(input);
+}
+
+export function decodeUserId(input: unknown): UserId {
+  return ParseResult.decodeUnknownSync(UserId)(input);
+}
+
+export function decodeSessionId(input: unknown): SessionId {
+  return ParseResult.decodeUnknownSync(SessionId)(input);
+}
+
+export function decodeInvitationId(input: unknown): InvitationId {
+  return ParseResult.decodeUnknownSync(InvitationId)(input);
 }
 
 export function decodeOrganizationRole(input: unknown): OrganizationRole {

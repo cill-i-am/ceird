@@ -11,16 +11,35 @@ import type {
 } from "../apps/api/src/platform/cloudflare/env.ts";
 import type { AppCloudflareEnv } from "../apps/app/src/cloudflare-env.d.ts";
 import type {
+  DomainWorkerBindingRuntimeEnv,
+  DomainWorkerConfigEnv,
+} from "../apps/domain/src/platform/cloudflare/env.ts";
+import type {
+  McpWorkerBindingRuntimeEnv,
+  McpWorkerConfigEnv,
+} from "../apps/mcp/src/platform/cloudflare/env.ts";
+import type {
   ApiWorkerBindingEnv,
   ApiWorkerConfiguredEnv,
+  DomainWorkerBindingEnv,
+  DomainWorkerBindings,
+  DomainWorkerConfiguredEnv,
+  McpWorkerBindingEnv,
+  McpWorkerConfiguredEnv,
   makeCloudflareStack,
 } from "./cloudflare-stack.ts";
 import {
+  makeDomainWorkerBindings,
+  makeDomainWorkerEnv,
   makeApiWorkerBindings,
   makeApiWorkerEnv,
   makeAppWorkerEnv,
   makeCloudflareHyperdriveProps,
   makeCloudflareWorkerOrigin,
+  makeMcpWorkerBindings,
+  makeMcpWorkerEnv,
+  makeMcpWorkerProps,
+  makeDomainWorkerProps,
 } from "./cloudflare-stack.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 
@@ -41,11 +60,27 @@ type AllPropertyValuesExtend<Type, Value> =
     ? true
     : false;
 
-const apiWorkerBindingKeys = [
+const domainWorkerBindingKeys = [
   "AUTH_EMAIL",
   "AUTH_EMAIL_QUEUE",
   "DATABASE",
+] as const satisfies readonly (keyof DomainWorkerBindingEnv)[];
+const apiWorkerBindingKeys = [
+  "DOMAIN",
 ] as const satisfies readonly (keyof ApiWorkerBindingEnv)[];
+const mcpWorkerBindingKeys = [
+  "DOMAIN",
+] as const satisfies readonly (keyof McpWorkerBindingEnv)[];
+
+const domainWorkerBindingKeysMatchRuntimeContract: AssertTrue<
+  HasSameKeys<DomainWorkerBindingEnv, DomainWorkerBindingRuntimeEnv>
+> = true;
+const domainWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+  DomainWorkerBindingEnv extends DomainWorkerBindingRuntimeEnv ? true : false
+> = true;
+const domainWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+  DomainWorkerBindingRuntimeEnv extends DomainWorkerBindingEnv ? true : false
+> = true;
 
 const apiWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<ApiWorkerBindingEnv, ApiWorkerBindingRuntimeEnv>
@@ -56,13 +91,25 @@ const apiWorkerBindingsSatisfyRuntimeContract: AssertTrue<
 const apiWorkerRuntimeContractSatisfiesBindings: AssertTrue<
   ApiWorkerBindingRuntimeEnv extends ApiWorkerBindingEnv ? true : false
 > = true;
+const mcpWorkerBindingKeysMatchRuntimeContract: AssertTrue<
+  HasSameKeys<McpWorkerBindingEnv, McpWorkerBindingRuntimeEnv>
+> = true;
+const mcpWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+  McpWorkerBindingEnv extends McpWorkerBindingRuntimeEnv ? true : false
+> = true;
+const mcpWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+  McpWorkerBindingRuntimeEnv extends McpWorkerBindingEnv ? true : false
+> = true;
 interface AlchemyInjectedWorkerEnv {
   readonly ALCHEMY_STACK_NAME: string;
   readonly ALCHEMY_STAGE: string;
 }
 type ApiWorkerStackRuntimeConfigEnv = Required<
+  Pick<ApiWorkerConfigEnv, "ALCHEMY_STACK_NAME" | "ALCHEMY_STAGE" | "NODE_ENV">
+>;
+type DomainWorkerStackRuntimeConfigEnv = Required<
   Pick<
-    ApiWorkerConfigEnv,
+    DomainWorkerConfigEnv,
     | "ALCHEMY_STACK_NAME"
     | "ALCHEMY_STAGE"
     | "AUTH_APP_ORIGIN"
@@ -72,26 +119,40 @@ type ApiWorkerStackRuntimeConfigEnv = Required<
     | "BETTER_AUTH_BASE_URL"
     | "BETTER_AUTH_SECRET"
     | "GOOGLE_MAPS_API_KEY"
+    | "MCP_RESOURCE_URL"
     | "NODE_ENV"
+    | "OAUTH_ISSUER_URL"
   >
 >;
+type McpWorkerStackRuntimeConfigEnv = Required<
+  Pick<McpWorkerConfigEnv, "ALCHEMY_STACK_NAME" | "ALCHEMY_STAGE" | "NODE_ENV">
+>;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
+type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
+  AlchemyInjectedWorkerEnv;
+type McpWorkerStackEnv = McpWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type ApiWorkerRuntimeStringValueKeys = Exclude<
-  keyof ApiWorkerStackRuntimeConfigEnv,
+  keyof DomainWorkerStackRuntimeConfigEnv,
   "AUTH_EMAIL_FROM" | "BETTER_AUTH_SECRET" | "GOOGLE_MAPS_API_KEY"
 >;
 type ApiWorkerRuntimeStringValueEnv = Pick<
-  ApiWorkerStackRuntimeConfigEnv,
+  DomainWorkerStackRuntimeConfigEnv,
   ApiWorkerRuntimeStringValueKeys
 >;
 type ApiWorkerStackStringValueEnv = Pick<
-  ApiWorkerStackEnv,
+  DomainWorkerStackEnv,
   ApiWorkerRuntimeStringValueKeys
 >;
 type WorkerEnvValue = NonNullable<WorkerProps["env"]>[string];
 type WorkerConfiguredEnvValue = Input<WorkerEnvValue>;
 const apiWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
   HasSameKeys<ApiWorkerStackEnv, ApiWorkerStackRuntimeConfigEnv>
+> = true;
+const domainWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
+  HasSameKeys<DomainWorkerStackEnv, DomainWorkerStackRuntimeConfigEnv>
+> = true;
+const mcpWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
+  HasSameKeys<McpWorkerStackEnv, McpWorkerStackRuntimeConfigEnv>
 > = true;
 const apiWorkerConfiguredStringValuesSatisfyRuntimeConfig: AssertTrue<
   ApiWorkerStackStringValueEnv extends ApiWorkerRuntimeStringValueEnv
@@ -100,6 +161,12 @@ const apiWorkerConfiguredStringValuesSatisfyRuntimeConfig: AssertTrue<
 > = true;
 const apiWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
   AllPropertyValuesExtend<ApiWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+> = true;
+const domainWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
+  AllPropertyValuesExtend<DomainWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+> = true;
+const mcpWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
+  AllPropertyValuesExtend<McpWorkerConfiguredEnv, WorkerConfiguredEnvValue>
 > = true;
 
 type AppWorkerStackEnv = ReturnType<typeof makeAppWorkerEnv> &
@@ -129,6 +196,7 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
   CloudflareStackResources extends {
     readonly apiOrigin: Input<string>;
     readonly appOrigin: Input<string>;
+    readonly mcpOrigin: Input<string>;
   }
     ? true
     : false
@@ -137,24 +205,32 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
 describe("Cloudflare stack", () => {
   it("lets Alchemy own runtime stage injection for Worker env vars", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
-    const apiEnv = makeApiWorkerEnv({
+    const apiEnv = makeApiWorkerEnv();
+    const domainEnv = makeDomainWorkerEnv({
       betterAuthSecret,
       config: configWithoutCloudflareBootstrapSecrets,
     });
+    const mcpEnv = makeMcpWorkerEnv();
     const appEnv = makeAppWorkerEnv({
       apiOrigin: "https://api.example.com",
     });
 
     expect(apiEnv).not.toHaveProperty("ALCHEMY_STAGE");
+    expect(domainEnv).not.toHaveProperty("ALCHEMY_STAGE");
+    expect(mcpEnv).not.toHaveProperty("ALCHEMY_STAGE");
     expect(appEnv).not.toHaveProperty("ALCHEMY_STAGE");
-    expect(apiEnv).toMatchObject({
+    expect(apiEnv).toStrictEqual({ NODE_ENV: "production" });
+    expect(domainEnv).toMatchObject({
       AUTH_APP_ORIGIN: "https://app.example.com",
       AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_RATE_LIMIT_ENABLED: "true",
       BETTER_AUTH_BASE_URL: "https://api.example.com/api/auth",
+      MCP_RESOURCE_URL: "https://mcp.example.com/mcp",
       NODE_ENV: "production",
+      OAUTH_ISSUER_URL: "https://api.example.com/api/auth",
     });
-    expect(apiEnv.BETTER_AUTH_SECRET).toBe(betterAuthSecret);
+    expect(domainEnv.BETTER_AUTH_SECRET).toBe(betterAuthSecret);
+    expect(mcpEnv).toStrictEqual({ NODE_ENV: "production" });
     expect(appEnv).toStrictEqual({
       API_ORIGIN: "https://api.example.com",
       CEIRD_CLOUDFLARE: "1",
@@ -162,11 +238,11 @@ describe("Cloudflare stack", () => {
     });
   });
 
-  it("passes disabled auth rate limits through to preview API Workers", () => {
+  it("passes disabled auth rate limits through to preview domain Workers", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
 
     expect(
-      makeApiWorkerEnv({
+      makeDomainWorkerEnv({
         betterAuthSecret,
         config: {
           ...configWithoutCloudflareBootstrapSecrets,
@@ -210,7 +286,7 @@ describe("Cloudflare stack", () => {
     });
   });
 
-  it("declares the API Worker cloud resources as typed Alchemy bindings", () => {
+  it("declares private domain and public adapter Worker bindings", () => {
     const authEmailQueue = {
       accountId: "account-id",
       queueId: "queue-id",
@@ -221,25 +297,80 @@ describe("Cloudflare stack", () => {
       hyperdriveId: "hyperdrive-id",
       name: "ceird-test-postgres",
     } as unknown as Cloudflare.Hyperdrive;
+    const domain = {
+      workerName: "ceird-test-domain",
+    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
 
-    const bindings = makeApiWorkerBindings({
+    const domainBindings = makeDomainWorkerBindings({
       authEmailQueue,
       config: configWithoutCloudflareBootstrapSecrets,
       hyperdrive,
     });
-    const authEmail = Effect.runSync(bindings.AUTH_EMAIL);
+    const domainWorkerProps = makeDomainWorkerProps({
+      authEmailQueue,
+      betterAuthSecret: Redacted.make("better-auth-secret"),
+      config: configWithoutCloudflareBootstrapSecrets,
+      hyperdrive,
+    });
+    const apiBindings = makeApiWorkerBindings({ domain });
+    const mcpBindings = makeMcpWorkerBindings({ domain });
+    const authEmail = Effect.runSync(domainBindings.AUTH_EMAIL);
 
-    expect(Object.keys(bindings)).toStrictEqual([...apiWorkerBindingKeys]);
+    expect(Object.keys(domainBindings)).toStrictEqual([
+      ...domainWorkerBindingKeys,
+    ]);
+    expect(Object.keys(apiBindings)).toStrictEqual([...apiWorkerBindingKeys]);
+    expect(Object.keys(mcpBindings)).toStrictEqual([...mcpWorkerBindingKeys]);
+    expect(domainWorkerBindingKeysMatchRuntimeContract).toBe(true);
+    expect(domainWorkerBindingsSatisfyRuntimeContract).toBe(true);
+    expect(domainWorkerRuntimeContractSatisfiesBindings).toBe(true);
     expect(apiWorkerBindingKeysMatchRuntimeContract).toBe(true);
     expect(apiWorkerBindingsSatisfyRuntimeContract).toBe(true);
     expect(apiWorkerRuntimeContractSatisfiesBindings).toBe(true);
-    expect(bindings.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
-    expect(bindings.DATABASE).toBe(hyperdrive);
+    expect(mcpWorkerBindingKeysMatchRuntimeContract).toBe(true);
+    expect(mcpWorkerBindingsSatisfyRuntimeContract).toBe(true);
+    expect(mcpWorkerRuntimeContractSatisfiesBindings).toBe(true);
+    expect(domainBindings.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
+    expect(domainBindings.DATABASE).toBe(hyperdrive);
+    expect(apiBindings.DOMAIN).toBe(domain);
+    expect(mcpBindings.DOMAIN).toBe(domain);
+    expect(domainWorkerProps).not.toHaveProperty("domain");
+    expect(domainWorkerProps.url).toBe(false);
     expect(Cloudflare.isSendEmail(authEmail)).toBe(true);
     expect(authEmail).toMatchObject({
       allowedSenderAddresses: ["no-reply@example.com"],
       name: "AuthEmailBinding",
     });
+  });
+
+  it("declares the MCP Worker as a public observed adapter over the domain service", () => {
+    const domain = {
+      workerName: "ceird-test-domain",
+    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+
+    const mcpWorkerProps = makeMcpWorkerProps({
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+    });
+
+    expect(mcpWorkerProps).toMatchObject({
+      domain: "mcp.example.com",
+      env: { NODE_ENV: "production" },
+      main: "apps/mcp/src/worker.ts",
+      name: "ceird-main-mcp",
+      observability: {
+        enabled: true,
+        logs: {
+          enabled: true,
+          invocationLogs: true,
+        },
+        traces: {
+          enabled: true,
+        },
+      },
+      url: false,
+    });
+    expect(mcpWorkerProps.bindings.DOMAIN).toBe(domain);
   });
 
   it("uses the configured Hyperdrive name instead of deriving a fresh provider name", () => {
@@ -263,8 +394,12 @@ describe("Cloudflare stack", () => {
 
   it("keeps configured Worker env declarations aligned with runtime contracts", () => {
     expect(apiWorkerConfiguredEnvKeysMatchRuntimeConfig).toBe(true);
+    expect(domainWorkerConfiguredEnvKeysMatchRuntimeConfig).toBe(true);
+    expect(mcpWorkerConfiguredEnvKeysMatchRuntimeConfig).toBe(true);
     expect(apiWorkerConfiguredStringValuesSatisfyRuntimeConfig).toBe(true);
     expect(apiWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBe(true);
+    expect(domainWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBe(true);
+    expect(mcpWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBe(true);
     expect(appWorkerEnvKeysMatchAppContract).toBe(true);
     expect(appWorkerRuntimeEnvSatisfiesAppContract).toBe(true);
     expect(appContractSatisfiesStackEnv).toBe(true);

@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
@@ -22,20 +24,53 @@ export interface CloudflareStackInput {
 }
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
-export type ApiWorkerBindings = {
+export type DomainWorkerBindings = {
   readonly AUTH_EMAIL: Cloudflare.SendEmail;
   readonly AUTH_EMAIL_QUEUE: Cloudflare.Queue;
   readonly DATABASE: Cloudflare.Hyperdrive;
 };
 
-export type ApiWorkerBindingEnv = Cloudflare.InferEnv<
-  Cloudflare.Worker<ApiWorkerBindings>
+export type DomainWorkerBindingEnv = Cloudflare.InferEnv<
+  Cloudflare.Worker<DomainWorkerBindings>
 >;
+
+type DomainWorkerResource = Cloudflare.Worker<DomainWorkerBindings>;
+export type WorkerServiceBinding = Service;
+
+// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
+export type ApiWorkerBindings = {
+  readonly DOMAIN: DomainWorkerResource;
+};
+
+export type ApiWorkerBindingEnv = {
+  readonly [BindingName in keyof ApiWorkerBindings]: WorkerServiceBinding;
+};
+
+// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
+export type McpWorkerBindings = {
+  readonly DOMAIN: DomainWorkerResource;
+};
+
+export type McpWorkerBindingEnv = {
+  readonly [BindingName in keyof McpWorkerBindings]: WorkerServiceBinding;
+};
 
 type ApiWorkerBindingProps = {
   readonly [BindingName in keyof ApiWorkerBindings]:
     | ApiWorkerBindings[BindingName]
     | Effect.Effect<ApiWorkerBindings[BindingName], never, never>;
+};
+
+type DomainWorkerBindingProps = {
+  readonly [BindingName in keyof DomainWorkerBindings]:
+    | DomainWorkerBindings[BindingName]
+    | Effect.Effect<DomainWorkerBindings[BindingName], never, never>;
+};
+
+type McpWorkerBindingProps = {
+  readonly [BindingName in keyof McpWorkerBindings]:
+    | McpWorkerBindings[BindingName]
+    | Effect.Effect<McpWorkerBindings[BindingName], never, never>;
 };
 
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
@@ -48,6 +83,10 @@ export interface AppWorkerConfiguredEnv {
 }
 
 export interface ApiWorkerConfiguredEnv {
+  readonly NODE_ENV: "production";
+}
+
+export interface DomainWorkerConfiguredEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
@@ -55,10 +94,16 @@ export interface ApiWorkerConfiguredEnv {
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<InfraGoogleMapsApiKey>;
+  readonly MCP_RESOURCE_URL: string;
+  readonly NODE_ENV: "production";
+  readonly OAUTH_ISSUER_URL: string;
+}
+
+export interface McpWorkerConfiguredEnv {
   readonly NODE_ENV: "production";
 }
 
-export function makeApiWorkerBindings(input: {
+export function makeDomainWorkerBindings(input: {
   readonly authEmailQueue: Cloudflare.Queue;
   readonly config: InfraStageConfig;
   readonly hyperdrive: Cloudflare.Hyperdrive;
@@ -69,13 +114,31 @@ export function makeApiWorkerBindings(input: {
     }),
     AUTH_EMAIL_QUEUE: input.authEmailQueue,
     DATABASE: input.hyperdrive,
+  } satisfies DomainWorkerBindingProps;
+}
+
+export function makeApiWorkerBindings(input: {
+  readonly domain: DomainWorkerResource;
+}) {
+  return {
+    DOMAIN: input.domain,
   } satisfies ApiWorkerBindingProps;
 }
 
-export function makeApiWorkerEnv(input: {
+export function makeMcpWorkerBindings(input: {
+  readonly domain: DomainWorkerResource;
+}) {
+  return {
+    DOMAIN: input.domain,
+  } satisfies McpWorkerBindingProps;
+}
+
+export function makeDomainWorkerEnv(input: {
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: InfraStageConfig;
-}): ApiWorkerConfiguredEnv {
+}): DomainWorkerConfiguredEnv {
+  const betterAuthBaseUrl = `https://${input.config.apiHostname}/api/auth`;
+
   return {
     AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
@@ -83,11 +146,50 @@ export function makeApiWorkerEnv(input: {
     AUTH_RATE_LIMIT_ENABLED: input.config.authRateLimitEnabled
       ? "true"
       : "false",
-    BETTER_AUTH_BASE_URL: `https://${input.config.apiHostname}/api/auth`,
+    BETTER_AUTH_BASE_URL: betterAuthBaseUrl,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
+    MCP_RESOURCE_URL: `https://${input.config.mcpHostname}/mcp`,
+    NODE_ENV: "production",
+    OAUTH_ISSUER_URL: betterAuthBaseUrl,
+  } satisfies DomainWorkerConfiguredEnv & WorkerConfiguredEnv;
+}
+
+export function makeApiWorkerEnv(): ApiWorkerConfiguredEnv {
+  return {
     NODE_ENV: "production",
   } satisfies ApiWorkerConfiguredEnv & WorkerConfiguredEnv;
+}
+
+export function makeMcpWorkerEnv(): McpWorkerConfiguredEnv {
+  return {
+    NODE_ENV: "production",
+  } satisfies McpWorkerConfiguredEnv & WorkerConfiguredEnv;
+}
+
+export function makeMcpWorkerProps(input: {
+  readonly config: InfraStageConfig;
+  readonly domain: DomainWorkerResource;
+}) {
+  return {
+    name: resourceName(input.config, "mcp"),
+    main: "apps/mcp/src/worker.ts",
+    compatibility: workerCompatibility,
+    bindings: makeMcpWorkerBindings({ domain: input.domain }),
+    env: { ...makeMcpWorkerEnv() },
+    domain: input.config.mcpHostname,
+    observability: {
+      enabled: true,
+      logs: {
+        enabled: true,
+        invocationLogs: true,
+      },
+      traces: {
+        enabled: true,
+      },
+    },
+    url: false,
+  } satisfies InputProps<WorkerProps<McpWorkerBindingProps>>;
 }
 
 export function makeCloudflareWorkerOrigin(input: {
@@ -136,12 +238,48 @@ export function makeCloudflareHyperdriveProps(input: {
   } satisfies InputProps<Cloudflare.HyperdriveProps>;
 }
 
+export function makeDomainWorkerProps(input: {
+  readonly authEmailQueue: Cloudflare.Queue;
+  readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
+  readonly config: InfraStageConfig;
+  readonly hyperdrive: Cloudflare.Hyperdrive;
+}) {
+  return {
+    name: resourceName(input.config, "domain"),
+    main: "apps/domain/src/worker.ts",
+    compatibility: workerCompatibility,
+    bindings: makeDomainWorkerBindings({
+      authEmailQueue: input.authEmailQueue,
+      config: input.config,
+      hyperdrive: input.hyperdrive,
+    }),
+    env: {
+      ...makeDomainWorkerEnv({
+        betterAuthSecret: input.betterAuthSecret,
+        config: input.config,
+      }),
+    },
+    observability: {
+      enabled: true,
+      logs: {
+        enabled: true,
+        invocationLogs: true,
+      },
+      traces: {
+        enabled: true,
+      },
+    },
+    url: false,
+  } satisfies InputProps<WorkerProps<DomainWorkerBindingProps>>;
+}
+
 export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   input: CloudflareStackInput
 ) {
   yield* Effect.annotateCurrentSpan("stage", input.config.stage);
   yield* Effect.annotateCurrentSpan("appHostname", input.config.appHostname);
   yield* Effect.annotateCurrentSpan("apiHostname", input.config.apiHostname);
+  yield* Effect.annotateCurrentSpan("mcpHostname", input.config.mcpHostname);
   yield* Effect.annotateCurrentSpan(
     "hyperdriveId",
     input.hyperdrive.hyperdriveId
@@ -162,21 +300,22 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     name: resourceName(input.config, "auth-email"),
   });
 
+  const domain = yield* Cloudflare.Worker(
+    "Domain",
+    makeDomainWorkerProps({
+      authEmailQueue,
+      betterAuthSecret: betterAuthSecret.text,
+      config: input.config,
+      hyperdrive: input.hyperdrive,
+    })
+  );
+
   const api = yield* Cloudflare.Worker("Api", {
     name: resourceName(input.config, "api"),
     main: "apps/api/src/worker.ts",
     compatibility: workerCompatibility,
-    bindings: makeApiWorkerBindings({
-      authEmailQueue,
-      config: input.config,
-      hyperdrive: input.hyperdrive,
-    }),
-    env: {
-      ...makeApiWorkerEnv({
-        betterAuthSecret: betterAuthSecret.text,
-        config: input.config,
-      }),
-    },
+    bindings: makeApiWorkerBindings({ domain }),
+    env: { ...makeApiWorkerEnv() },
     domain: input.config.apiHostname,
     observability: {
       enabled: true,
@@ -193,7 +332,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
 
   yield* Cloudflare.QueueConsumer("AuthEmailConsumer", {
     queueId: authEmailQueue.queueId,
-    scriptName: api.workerName,
+    scriptName: domain.workerName,
     deadLetterQueue: authEmailDeadLetterQueue.queueName,
     settings: {
       batchSize: 10,
@@ -208,6 +347,23 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.apiHostname,
+      })
+    )
+  );
+
+  const mcp = yield* Cloudflare.Worker(
+    "Mcp",
+    makeMcpWorkerProps({
+      config: input.config,
+      domain,
+    })
+  );
+
+  const mcpOrigin = mcp.domains.pipe(
+    Output.map((domains) =>
+      makeCloudflareWorkerOrigin({
+        domains,
+        fallbackHostname: input.config.mcpHostname,
       })
     )
   );
@@ -248,5 +404,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     authEmailDeadLetterQueue,
     authEmailQueue,
     database: input.hyperdrive,
+    domain,
+    mcp,
+    mcpOrigin,
   } as const;
 });

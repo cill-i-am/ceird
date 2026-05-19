@@ -100,7 +100,7 @@ deploy, `.github/workflows/preview.yml` reads the preview stage's
 `add-mask` command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to
 `GITHUB_ENV`.
 
-Preview stages named `pr-<number>` deploy the API Worker with
+Preview stages named `pr-<number>` deploy the domain Worker with
 `AUTH_RATE_LIMIT_ENABLED=false`. This keeps repeated same-PR E2E runs from
 locking themselves out against a persistent preview database while preserving
 auth rate limiting for `main` and ordinary non-PR stages by default.
@@ -116,7 +116,10 @@ it has a Durable Object binding.
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
 store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
-Cloudflare Email Service to the API Worker.
+Cloudflare Email Service to the domain Worker. Alchemy's CI guide specifically calls out that
+`Cloudflare.state()` needs Cloudflare Secrets Store Write in CI because Alchemy
+reads the state-store token back through an ephemeral edge-preview Worker with a
+secret binding.
 
 ## Preview Workflow
 
@@ -153,7 +156,10 @@ For same-repository PR updates, the workflow:
   `https://api.pr-${PR_NUMBER}.ceird.app`
 - reads and masks `PLAYWRIGHT_DATABASE_URL` from the preview
   `PostgresBranch` state
-- waits for the preview app and API `/health` endpoints to respond
+- waits for the preview app and API `/health` endpoints to respond, then probes
+  the API's domain-forwarded auth session endpoint, allowing a longer
+  Cloudflare route, TLS, and service-binding propagation window for freshly
+  created preview hostnames
 - creates or updates a single PR comment containing the preview app/API URLs
 - runs `pnpm --filter app e2e`
 
@@ -191,12 +197,12 @@ PRs are open at once.
 The workflow:
 
 - installs dependencies with pnpm
-- type-checks the app, API, and root infra helpers
+- type-checks the app, API, domain, MCP, and root infra helpers
 - bootstraps Cloudflare state through `pnpm alchemy cloudflare bootstrap`
 - deploys through `pnpm alchemy deploy --stage main --yes`
 - serializes deploys with a GitHub Actions concurrency group
-- lets Alchemy `Drizzle.Schema` update API migration snapshots before the native
-  Neon branch resource applies `apps/api/drizzle`
+- lets Alchemy `Drizzle.Schema` update domain migration snapshots before the native
+  Neon branch resource applies `apps/domain/drizzle`
 - caps Hyperdrive origin database connections and points Hyperdrive at the typed
   Neon branch origin
 

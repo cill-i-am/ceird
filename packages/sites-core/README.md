@@ -1,7 +1,7 @@
 # Sites Core
 
 `@ceird/sites-core` is the shared sites and service-area contract package. It
-is consumed by the API handlers, the app's typed Effect HTTP client, and jobs
+is consumed by the domain HTTP handlers, the app's typed Effect HTTP client, and jobs
 contracts that need site IDs or site option DTOs.
 
 ## Important Files
@@ -27,4 +27,4 @@ pnpm --filter @ceird/sites-core build
 
 Put site-owned runtime schemas, DTOs, branded IDs, HTTP contract pieces, and
 public typed errors here. Keep geocoding, SQL repositories, authorization, and
-React state in `apps/api` or `apps/app`.
+React state in `apps/domain` or `apps/app`.

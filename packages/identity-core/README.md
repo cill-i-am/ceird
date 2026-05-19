@@ -1,7 +1,7 @@
 # Identity Core
 
 `@ceird/identity-core` contains shared identity and organization
-contracts used by the app, API, and jobs core package.
+contracts used by the app, domain Worker, API adapter, and jobs core package.
 
 ## Exports
 
@@ -27,4 +27,4 @@ pnpm --filter @ceird/identity-core build
 
 Put shared identity DTOs and runtime schemas here when both frontend and
 backend need the same contract. Keep Better Auth configuration, Drizzle schema,
-and persistence logic in `apps/api`.
+and persistence logic in `apps/domain`.

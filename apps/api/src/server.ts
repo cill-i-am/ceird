@@ -1,8 +1,9 @@
 import { createServer } from "node:http";
 
+import { makeDomainOriginClient } from "@ceird/domain-core";
+import type { DomainHttpClient } from "@ceird/domain-core";
 import {
   HttpApp,
-  HttpApiBuilder,
   HttpMiddleware,
   HttpServer,
   HttpServerError,
@@ -11,19 +12,12 @@ import {
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 
-import {
-  AuthenticationHttpLive,
-  AuthenticationLive,
-} from "./domains/identity/authentication/auth.js";
-import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
-import { JobsHttpLive } from "./domains/jobs/http.js";
-import { LabelsHttpLive } from "./domains/labels/http.js";
-import { makeMcpWebHandler } from "./domains/mcp/http.js";
-import { SiteGeocoder } from "./domains/sites/geocoder.js";
-import { SitesHttpLive } from "./domains/sites/http.js";
-import { AppApi } from "./http-api.js";
-import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 import { makeHealthPayload } from "./system/health.js";
+
+export interface ApiRuntimeConfigOverrides {
+  readonly stackName?: string | undefined;
+  readonly stage?: string | undefined;
+}
 
 const RuntimeConfig = Config.all({
   stackName: Config.string("ALCHEMY_STACK_NAME").pipe(
@@ -32,66 +26,23 @@ const RuntimeConfig = Config.all({
   stage: Config.string("ALCHEMY_STAGE").pipe(Config.withDefault("local")),
 }).pipe(Effect.orDie);
 
-const SystemLive = HttpApiBuilder.group(AppApi, "system", (handlers) =>
-  handlers
-    .handle("root", () => Effect.succeed("ceird api"))
-    .handle("health", () =>
-      RuntimeConfig.pipe(Effect.map((config) => makeHealthPayload(config)))
-    )
+const DomainOriginConfig = Config.string("DOMAIN_ORIGIN").pipe(
+  Config.withDefault("http://127.0.0.1:3002")
 );
-
-const makeApiHandlersLive = () =>
-  HttpApiBuilder.api(AppApi).pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        SystemLive,
-        AuthenticationHttpLive,
-        JobsHttpLive,
-        LabelsHttpLive,
-        SitesHttpLive
-      )
-    )
-  );
-
-type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
-type ApiAuthenticationLive = typeof AuthenticationLive;
-type ApiBaseLive = Layer.Layer<never, never, never>;
-type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
-
-export const makeApiLive = (
-  databaseRuntimeLive: ApiDatabaseRuntimeLive,
-  authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local
-) =>
-  makeApiHandlersLive().pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        databaseRuntimeLive,
-        authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
-        siteGeocoderLive
-      )
-    )
-  );
-
-export const ApiLive = makeApiLive(AppDatabaseRuntimeLive, AuthenticationLive);
 
 export const ServerConfig = Config.all({
   host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
-  port: Config.port("PORT").pipe(Config.withDefault(3000)),
+  port: Config.port("PORT").pipe(Config.withDefault(3001)),
 });
 
 export const apiRequestLogger: typeof HttpMiddleware.logger =
-  HttpMiddleware.make((httpApp) => {
-    let counter = 0;
-
-    return Effect.withFiberRuntime((fiber) => {
+  HttpMiddleware.make((httpApp) =>
+    Effect.withFiberRuntime((fiber) => {
       const request = Context.unsafeGet(
         fiber.currentContext,
         HttpServerRequest.HttpServerRequest
       );
       const path = requestPathname(request.url);
-
-      counter += 1;
 
       return Effect.withLogSpan(
         Effect.flatMap(Effect.exit(httpApp), (exit) => {
@@ -122,10 +73,57 @@ export const apiRequestLogger: typeof HttpMiddleware.logger =
             exit
           );
         }),
-        `http.request.${counter}`
+        "http.request"
       );
-    });
-  });
+    })
+  );
+
+export function makeApiWebHandler(
+  domain: DomainHttpClient = makeDomainOriginClient(
+    Effect.runSync(DomainOriginConfig)
+  ),
+  runtimeConfig?: ApiRuntimeConfigOverrides | undefined
+) {
+  return {
+    dispose: () => Promise.resolve(),
+    handler: (request: Request) =>
+      Promise.resolve(handleApiRequest(request, domain, runtimeConfig)),
+  };
+}
+
+function handleApiRequest(
+  request: Request,
+  domain: DomainHttpClient,
+  runtimeConfig?: ApiRuntimeConfigOverrides | undefined
+): Response | Promise<Response> {
+  const url = new URL(request.url);
+
+  if (request.method === "GET" && url.pathname === "/") {
+    return new Response("ceird api");
+  }
+
+  if (request.method === "GET" && url.pathname === "/health") {
+    return Response.json(makeHealthPayload(readRuntimeConfig(runtimeConfig)));
+  }
+
+  return domain.request(request);
+}
+
+function readRuntimeConfig(overrides?: ApiRuntimeConfigOverrides | undefined) {
+  if (overrides?.stackName !== undefined && overrides.stage !== undefined) {
+    return {
+      stackName: overrides.stackName,
+      stage: overrides.stage,
+    };
+  }
+
+  const config = Effect.runSync(RuntimeConfig);
+
+  return {
+    stackName: overrides?.stackName ?? config.stackName,
+    stage: overrides?.stage ?? config.stage,
+  };
+}
 
 function requestPathname(url: string) {
   const queryIndex = url.indexOf("?");
@@ -150,49 +148,12 @@ function shouldSkipRequestLog(path: string) {
   return path === "/health";
 }
 
-export const makeApiWebHandler = (
-  databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
-  authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local,
-  baseLive: ApiBaseLive = Layer.empty
-) => {
-  const authConfig = Effect.runSync(
-    loadAuthenticationConfig.pipe(Effect.provide(baseLive))
-  );
-  const runtimeLive = Layer.mergeAll(
-    databaseRuntimeLive,
-    authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
-    siteGeocoderLive
-  );
-  const mcpWebHandler = makeMcpWebHandler({
-    authConfig,
-    baseLive,
-    runtimeLive,
-  });
-  const apiLayer = Layer.mergeAll(
-    makeApiLive(databaseRuntimeLive, authenticationLive, siteGeocoderLive),
-    NodeHttpServer.layerContext
-  ).pipe(Layer.provide(baseLive));
-  const handler = HttpApiBuilder.toWebHandler(apiLayer, {
-    middleware: apiRequestLogger,
-  });
-
-  return {
-    dispose: handler.dispose,
-    handler: async (request: Request) =>
-      (await mcpWebHandler(request)) ?? handler.handler(request),
-  };
-};
-
 export const ServerLive = Layer.scopedDiscard(
   Effect.gen(function* runNodeServer() {
-    const webHandler = yield* Effect.acquireRelease(
-      Effect.sync(() => makeApiWebHandler()),
-      ({ dispose }) => Effect.promise(() => dispose()).pipe(Effect.orDie)
-    );
+    const webHandler = makeApiWebHandler();
 
     yield* HttpApp.fromWebHandler(webHandler.handler).pipe(
-      HttpServer.serveEffect()
+      HttpServer.serveEffect(apiRequestLogger)
     );
   })
 ).pipe(Layer.provide(NodeHttpServer.layerConfig(createServer, ServerConfig)));

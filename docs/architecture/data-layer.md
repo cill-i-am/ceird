@@ -5,7 +5,7 @@
 The authentication slice uses two closely related database paths:
 
 - regular Drizzle for Better Auth's adapter
-- Effect SQL for app-owned repository code
+- Effect SQL for domain-owned repository code
 
 Both target the same Postgres database, but they serve different jobs.
 
@@ -32,7 +32,7 @@ The auth slice exposes:
 That gives repository slices an Effect-compatible way to access the same
 Postgres backend without forcing Better Auth itself through a custom
 abstraction. We intentionally do not keep an `@effect/sql-drizzle` runtime
-layer: app-owned repositories already use Effect SQL directly, and the v4
+layer: domain-owned repositories already use Effect SQL directly, and the v4
 Effect migration path does not have a matching SQL-Drizzle package to carry
 forward.
 
@@ -77,53 +77,54 @@ provider through an Alchemy profile:
 3. Run
    `CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main`
    to create or update the Neon project/branch, refresh Alchemy Drizzle
-   migration snapshots, apply API SQL migrations, create or update the
+   migration snapshots, apply domain SQL migrations, create or update the
    Hyperdrive config, Workers, queues, Email Worker binding, and routes.
 
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are still used for
 non-interactive CI provider auth through GitHub secrets. They are deployment
 automation inputs, not normal local setup. The Worker runtime email delivery
-path uses the deployed Cloudflare Email Worker binding; package-local API runs
+path uses the deployed Cloudflare Email Worker binding; package-local domain runs
 use deterministic development email delivery.
 
 The current stack uses Alchemy v2 native Neon and Cloudflare Hyperdrive
-resources. API runtime code still uses the existing Effect 3 database layer;
+resources. Domain runtime code still uses the existing Effect 3 database layer;
 deploy-time migration drift is tracked with Alchemy `Drizzle.Schema`. The root `infra`
 directory models that handoff as an `alchemy-drizzle-schema`
-`NeonMigrationSource`, pointing at the `infra/api-drizzle-schema.ts` wrapper.
-That wrapper loads the API schema barrel at
-`apps/api/src/platform/database/schema.ts` through the TypeScript resolver
+`NeonMigrationSource`, pointing at the `infra/domain-drizzle-schema.ts` wrapper.
+That wrapper loads the domain schema barrel at
+`apps/domain/src/platform/database/schema.ts` through the TypeScript resolver
 Alchemy needs at deploy time. The checked-in Alchemy migration snapshots live
-under `apps/api/drizzle/alchemy`. The native Neon branch still applies the
-parent `apps/api/drizzle` directory so existing package-local SQL migrations
+under `apps/domain/drizzle/alchemy`. The native Neon branch still applies the
+parent `apps/domain/drizzle` directory so existing package-local SQL migrations
 remain the bootstrap sequence and future Alchemy-generated SQL is applied from
 the nested Alchemy directory. The infra contract names those paths separately as
 `generatedMigrationsDir` and `appliedMigrationsDir` so the dependency on
 `Drizzle.Schema` is explicit without losing historical migration coverage.
 
-Keep the root Alchemy stack on Alchemy's Effect 4 line, but keep API/app/shared
+Keep the root Alchemy stack on Alchemy's Effect 4 line, but keep domain/API/app/shared
 runtime code on the current Effect 3 package line until the Effect
-platform/sql/rpc packages used by the API have a compatible v4 migration target.
+platform/sql/rpc packages used by the domain Worker have a compatible v4 migration target.
 As of this migration pass, `@effect/platform`, `@effect/sql`, and
 `@effect/rpc` still publish the stable APIs this app uses against Effect 3
 peers, while Alchemy v2 uses Effect 4 unstable modules internally.
 
-The API Worker receives a `DATABASE` Hyperdrive binding and resolves the runtime
-Postgres URL from `env.DATABASE.connectionString`. Package-local Node runtimes
+The private domain Worker receives a `DATABASE` Hyperdrive binding and resolves
+the runtime Postgres URL from `env.DATABASE.connectionString`. Public API and
+MCP Workers receive only the `DOMAIN` service binding. Package-local Node runtimes
 still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from
-`apps/api/drizzle` before Hyperdrive and the API Worker are reconciled.
+`apps/domain/drizzle` before Hyperdrive and the domain Worker are reconciled.
 
 ## Deferred Decisions
 
 The following are intentionally left for later:
 
-- shared application-level repositories
+- shared application-level repositories outside the domain Worker
 - broader domain data services
 - auth-specific Effect wrappers
 - app-facing typed auth endpoints
-- full API/app/shared Effect 4 migration
+- full domain/API/app/shared Effect 4 migration
 
 That keeps the current implementation simple while still leaving a clean path toward a more Effect-native backend as the project grows.

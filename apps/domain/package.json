@@ -1,0 +1,44 @@
+{
+  "name": "domain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "1.6.11",
+    "@ceird/comments-core": "workspace:*",
+    "@ceird/identity-core": "workspace:*",
+    "@ceird/jobs-core": "workspace:*",
+    "@ceird/labels-core": "workspace:*",
+    "@ceird/sites-core": "workspace:*",
+    "@effect/ai": "0.35.0",
+    "@effect/experimental": "0.60.0",
+    "@effect/platform": "^0.96.1",
+    "@effect/platform-node": "^0.106.0",
+    "@effect/rpc": "0.75.1",
+    "@effect/sql": "0.51.0",
+    "@effect/sql-pg": "0.52.1",
+    "better-auth": "1.6.11",
+    "drizzle-orm": "1.0.0-rc.2",
+    "effect": "^3.21.2",
+    "pg": "8.20.0",
+    "uuid": "11.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260501.1",
+    "@effect/language-service": "^0.84.3",
+    "@effect/vitest": "0.29.0",
+    "@types/node": "^25.6.0",
+    "@types/pg": "8.15.6",
+    "drizzle-kit": "1.0.0-rc.2-e38a2ba",
+    "tsx": "^4.21.0",
+    "vitest": "3.2.4"
+  }
+}
