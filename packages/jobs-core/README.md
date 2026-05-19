@@ -1,7 +1,7 @@
 # Jobs Core
 
 `@ceird/jobs-core` is the shared jobs contract package. It is consumed by
-the API handlers and the app's typed Effect HTTP client.
+the domain HTTP handlers and the app's typed Effect HTTP client.
 
 ## Important Files
 
@@ -25,7 +25,7 @@ pnpm --filter @ceird/jobs-core build
 ## Boundary
 
 Put runtime schemas, DTOs, branded IDs, cost helpers, and public typed errors
-here when they are job-owned and cross the app/API boundary. Site primitives
+here when they are job-owned and cross the app/domain boundary. Site primitives
 belong in `@ceird/sites-core`; organization label definitions belong in
-`@ceird/labels-core`. Keep SQL repositories in `apps/api` and React state in
+`@ceird/labels-core`. Keep SQL repositories in `apps/domain` and React state in
 `apps/app`.

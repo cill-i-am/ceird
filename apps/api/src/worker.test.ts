@@ -1,50 +1,21 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Layer } from "effect";
+import { Effect, HashMap, LogLevel, Logger } from "effect";
 
-import type { AuthEmailQueueMessage } from "./domains/identity/authentication/auth-email-queue.js";
-import { AuthenticationBackgroundTaskHandler } from "./domains/identity/authentication/auth.js";
-import type {
-  CloudflareEmailBindingMessage,
-  CloudflareEmailBindingSendResult,
-} from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
-import type { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
-import { apiWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
-import {
-  WorkerApiSiteGeocoderLive,
-  handleWorkerQueue,
-  makeWorkerApiRuntimeLayers,
-  makeWorkerAuthenticationBackgroundTaskHandlerLive,
-} from "./platform/cloudflare/runtime.js";
+import { handleWorkerFetch } from "./platform/cloudflare/runtime.js";
 import worker from "./worker.js";
 
-type TestSendEmail = (
-  message: CloudflareEmailBindingMessage
-) => Promise<CloudflareEmailBindingSendResult>;
+function captureLogs() {
+  const logs: unknown[] = [];
+  const logger = Logger.make((input) => {
+    logs.push({
+      annotations: Object.fromEntries(HashMap.toEntries(input.annotations)),
+      level: input.logLevel.label,
+      message: input.message,
+    });
+  });
 
-function makePasswordResetQueueMessage(): AuthEmailQueueMessage {
-  return {
-    kind: "password-reset",
-    payload: {
-      deliveryKey:
-        "password-reset/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      recipientEmail: "alice@example.com",
-      recipientName: "Alice",
-      resetUrl: "https://app.example.com/reset-password?token=abc",
-    },
-  };
-}
-
-function makeMessage(body: unknown) {
-  return {
-    body,
-    ack: vi.fn<() => void>(),
-    retry: vi.fn<(options?: { readonly delaySeconds?: number }) => void>(),
-  };
-}
-
-function makeBatch(messages: ReturnType<typeof makeMessage>[]) {
-  return { messages } as unknown as MessageBatch<unknown>;
+  return { logger, logs };
 }
 
 function makeExecutionContext() {
@@ -54,202 +25,162 @@ function makeExecutionContext() {
   } as unknown as ExecutionContext;
 }
 
-async function runWorkerQueue(batch: MessageBatch<unknown>, env: ApiWorkerEnv) {
-  await Effect.runPromise(handleWorkerQueue(batch, env));
-}
-
-async function runWorkerQueueAdapter(
-  batch: MessageBatch<unknown>,
-  env: ApiWorkerEnv
-) {
-  const queue = worker.queue as (
-    batch: MessageBatch<unknown>,
-    env: ApiWorkerEnv,
-    context: ExecutionContext
-  ) => Promise<void>;
-
-  await queue(batch, env, makeExecutionContext());
-}
-
-function makeSendEmailMock(
-  send: TestSendEmail = () => Promise.resolve({ messageId: "email_123" })
-) {
-  return vi.fn<TestSendEmail>(send);
-}
-
-function makeEnv(
-  overrides?: Partial<ApiWorkerEnv> & {
-    readonly sendEmail?: TestSendEmail;
-  }
-): ApiWorkerEnv {
-  const { sendEmail: overrideSendEmail, ...envOverrides } = overrides ?? {};
-  const sendEmail =
-    overrideSendEmail ?? (() => Promise.resolve({ messageId: "email_123" }));
-
+function makeDomainService(fetch: Service["fetch"]): Service {
   return {
-    AUTH_APP_ORIGIN: "https://app.example.com",
-    AUTH_EMAIL: {
-      send: sendEmail as SendEmail["send"],
+    connect: () => {
+      throw new Error("Service binding connect is not used by the API adapter");
     },
-    AUTH_EMAIL_FROM: "auth@example.com",
-    AUTH_EMAIL_FROM_NAME: "Ceird",
-    AUTH_EMAIL_QUEUE: {
-      send: () => Promise.resolve(),
-    } as unknown as Queue<unknown>,
-    BETTER_AUTH_BASE_URL: "https://api.example.com/api/auth",
-    BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
-    DATABASE: {
-      connectionString: "postgresql://postgres:postgres@localhost:5432/app",
-    } as Hyperdrive,
-    GOOGLE_MAPS_API_KEY: "google-key",
-    NODE_ENV: "test",
-    ...envOverrides,
+    fetch,
   };
 }
 
-describe("worker queue auth email delivery", () => {
-  it("assembles request runtime layers from Cloudflare Worker bindings", async () => {
-    const env = makeEnv();
-    const runtimeLayers = makeWorkerApiRuntimeLayers(
+describe("API Worker adapter", () => {
+  it("forwards public domain requests to the private domain Worker binding", async () => {
+    const forwardedRequests: Request[] = [];
+    const env = {
+      DOMAIN: makeDomainService((request: Request) => {
+        forwardedRequests.push(request);
+        return Promise.resolve(Response.json({ jobs: [] }));
+      }),
+    } satisfies ApiWorkerEnv;
+
+    const response = await worker.fetch(
+      new Request("https://api.example.com/jobs?limit=10", {
+        body: JSON.stringify({ title: "Install boiler" }),
+        headers: {
+          authorization: "Bearer public-token",
+          "cf-connecting-ip": "203.0.113.10",
+          "content-type": "application/json",
+          "x-forwarded-host": "evil.example",
+          "x-forwarded-proto": "http",
+        },
+        method: "POST",
+      }),
       env,
       makeExecutionContext()
     );
 
-    const baseUrl = await Effect.runPromise(
-      Config.string("BETTER_AUTH_BASE_URL").pipe(
-        Effect.provide(runtimeLayers.baseLive)
-      )
+    await expect(response.json()).resolves.toStrictEqual({ jobs: [] });
+    expect(forwardedRequests).toHaveLength(1);
+    expect(new URL(forwardedRequests[0].url).pathname).toBe("/jobs");
+    expect(new URL(forwardedRequests[0].url).search).toBe("?limit=10");
+    expect(forwardedRequests[0].method).toBe("POST");
+    expect(forwardedRequests[0].headers.get("authorization")).toBe(
+      "Bearer public-token"
     );
-    const geocoderRuntime = await Effect.runPromise(
-      Effect.runtime<SiteGeocoder>().pipe(
-        Effect.provide(runtimeLayers.siteGeocoderLive),
-        Effect.provide(runtimeLayers.baseLive),
-        Effect.either
-      )
+    expect(forwardedRequests[0].headers.get("content-type")).toBe(
+      "application/json"
     );
-
-    expect(baseUrl).toBe(env.BETTER_AUTH_BASE_URL);
-    expect(geocoderRuntime._tag).toBe("Right");
-    expect(runtimeLayers.authenticationLive).toBeDefined();
-    expect(runtimeLayers.databaseRuntimeLive).toBeDefined();
-  }, 10_000);
-
-  it("routes authentication background tasks through Worker waitUntil", async () => {
-    const context = makeExecutionContext();
-    const task = Promise.resolve("done");
-
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const scheduleBackgroundTask =
-          yield* AuthenticationBackgroundTaskHandler;
-
-        scheduleBackgroundTask(task);
-      }).pipe(
-        Effect.provide(
-          makeWorkerAuthenticationBackgroundTaskHandlerLive(context)
-        )
-      )
+    expect(forwardedRequests[0].headers.get("x-forwarded-for")).toBe(
+      "203.0.113.10"
     );
-
-    expect(context.waitUntil).toHaveBeenCalledWith(task);
+    expect(forwardedRequests[0].headers.get("x-forwarded-host")).toBe(
+      "api.example.com"
+    );
+    expect(forwardedRequests[0].headers.get("x-forwarded-proto")).toBe("https");
+    await expect(forwardedRequests[0].text()).resolves.toBe(
+      JSON.stringify({ title: "Install boiler" })
+    );
   });
 
-  it("uses the Google geocoder layer with Worker environment config", async () => {
-    const result = await Effect.runPromise(
-      Effect.runtime<SiteGeocoder>().pipe(
-        Effect.provide(WorkerApiSiteGeocoderLive),
-        Effect.provide(
-          Layer.setConfigProvider(
-            ConfigProvider.fromMap(apiWorkerEnvConfigMap(makeEnv()))
-          )
-        ),
-        Effect.either
-      )
+  it("logs forwarded API request outcomes without query strings", async () => {
+    const { logger, logs } = captureLogs();
+    const env = {
+      ALCHEMY_STACK_NAME: "ceird",
+      ALCHEMY_STAGE: "codex-domain-worker-boundary-split",
+      DOMAIN: makeDomainService(() =>
+        Promise.resolve(new Response(null, { status: 202 }))
+      ),
+    } satisfies ApiWorkerEnv;
+
+    const response = await handleWorkerFetch(
+      new Request("https://api.example.com/jobs?token=secret"),
+      env,
+      makeExecutionContext()
+    ).pipe(
+      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
+      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.runPromise
     );
 
-    expect(result._tag).toBe("Right");
-  }, 10_000);
+    expect(response.status).toBe(202);
+    expect(logs).toStrictEqual([
+      {
+        annotations: {
+          "alchemy.stackName": "ceird",
+          "alchemy.stage": "codex-domain-worker-boundary-split",
+          "ceird.adapter": "api",
+          "ceird.domainBinding": "DOMAIN",
+          "http.method": "GET",
+          "http.path": "/jobs",
+          "http.status": 202,
+        },
+        level: "INFO",
+        message: ["Handled API Worker request"],
+      },
+    ]);
+  });
 
-  it("acks messages after sending through the configured email binding", async () => {
-    const sendEmail = makeSendEmailMock();
-    const message = makeMessage(makePasswordResetQueueMessage());
+  it("returns an observable bad gateway response when domain forwarding fails", async () => {
+    const { logger, logs } = captureLogs();
+    const env = {
+      DOMAIN: makeDomainService(() =>
+        Promise.reject(new Error("domain unavailable"))
+      ),
+    } satisfies ApiWorkerEnv;
 
-    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
-
-    expect(sendEmail).toHaveBeenCalledOnce();
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
-  }, 10_000);
-
-  it("exposes queue delivery through the Cloudflare Worker adapter", async () => {
-    const sendEmail = makeSendEmailMock();
-    const message = makeMessage(makePasswordResetQueueMessage());
-
-    await runWorkerQueueAdapter(makeBatch([message]), makeEnv({ sendEmail }));
-
-    expect(sendEmail).toHaveBeenCalledOnce();
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
-  }, 10_000);
-
-  it("retries messages when email binding delivery fails", async () => {
-    const sendEmail = makeSendEmailMock(() =>
-      Promise.reject(new Error("binding down"))
+    const response = await handleWorkerFetch(
+      new Request("https://api.example.com/jobs"),
+      env,
+      makeExecutionContext()
+    ).pipe(
+      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
+      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.runPromise
     );
-    const message = makeMessage(makePasswordResetQueueMessage());
 
-    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "domain_forwarding_failed",
+    });
+    expect(response.status).toBe(502);
+    expect(logs).toStrictEqual([
+      {
+        annotations: {
+          "api.failure": "domain_forwarding_failed",
+          "api.failureBinding": "DOMAIN",
+          "api.failureTag": "@ceird/api/DomainForwardingError",
+          "ceird.adapter": "api",
+          "ceird.domainBinding": "DOMAIN",
+          "http.method": "GET",
+          "http.path": "/jobs",
+          "http.status": 502,
+        },
+        level: "WARN",
+        message: ["API domain forwarding failed"],
+      },
+    ]);
+  });
 
-    expect(message.ack).not.toHaveBeenCalled();
-    expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
-  }, 10_000);
+  it("keeps public health checks in the API adapter", async () => {
+    const domain = makeDomainService(vi.fn<() => Promise<Response>>());
+    const env = {
+      ALCHEMY_STACK_NAME: "ceird",
+      ALCHEMY_STAGE: "codex-domain-worker-boundary-split",
+      DOMAIN: domain,
+    } satisfies ApiWorkerEnv;
 
-  it("acks malformed queue messages without calling the email binding", async () => {
-    const sendEmail = makeSendEmailMock();
-    const message = makeMessage({ kind: "password-reset", payload: {} });
+    const response = await worker.fetch(
+      new Request("https://api.example.com/health"),
+      env,
+      makeExecutionContext()
+    );
 
-    await runWorkerQueue(makeBatch([message]), makeEnv({ sendEmail }));
-
-    expect(sendEmail).not.toHaveBeenCalled();
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
-  }, 10_000);
-
-  it("fails fast when the Worker email binding is missing", async () => {
-    const sendEmail = makeSendEmailMock();
-    const message = makeMessage(makePasswordResetQueueMessage());
-
-    await expect(
-      runWorkerQueue(
-        makeBatch([message]),
-        makeEnv({
-          AUTH_EMAIL: undefined as unknown as SendEmail,
-          sendEmail,
-        })
-      )
-    ).rejects.toThrow(/AUTH_EMAIL Worker binding/);
-
-    expect(sendEmail).not.toHaveBeenCalled();
-    expect(message.ack).not.toHaveBeenCalled();
-    expect(message.retry).not.toHaveBeenCalled();
-  }, 10_000);
-
-  it("fails fast when deployed auth email sender config is invalid", async () => {
-    const sendEmail = makeSendEmailMock();
-    const message = makeMessage(makePasswordResetQueueMessage());
-
-    await expect(
-      runWorkerQueue(
-        makeBatch([message]),
-        makeEnv({
-          AUTH_EMAIL_FROM: "not-an-email",
-          sendEmail,
-        })
-      )
-    ).rejects.toThrow(/Invalid auth email configuration/);
-
-    expect(sendEmail).not.toHaveBeenCalled();
-    expect(message.ack).not.toHaveBeenCalled();
-    expect(message.retry).not.toHaveBeenCalled();
-  }, 10_000);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      service: "api",
+      stackName: "ceird",
+      stage: "codex-domain-worker-boundary-split",
+    });
+    expect(domain.fetch).not.toHaveBeenCalled();
+  });
 });

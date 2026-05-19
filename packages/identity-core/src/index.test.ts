@@ -2,8 +2,11 @@ import {
   createOrganizationSlugFromName,
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
+  decodeInvitationId,
   decodeOrganizationRole,
+  decodeSessionId,
   decodeUpdateOrganizationInput,
+  decodeUserId,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
   ORGANIZATION_SLUG_PATTERN,
@@ -120,5 +123,19 @@ describe("organization role boundary", () => {
         isExternalOrganizationRole(role)
       )
     ).toStrictEqual([false, false, false, true]);
+  }, 1000);
+});
+
+describe("identity id boundaries", () => {
+  it("brands user, session, and invitation ids", () => {
+    expect(decodeUserId("user_123")).toBe("user_123");
+    expect(decodeSessionId("session_123")).toBe("session_123");
+    expect(decodeInvitationId("invitation_123")).toBe("invitation_123");
+  }, 1000);
+
+  it("rejects empty identity ids", () => {
+    expect(() => decodeUserId("")).toThrow(/Expected/);
+    expect(() => decodeSessionId("")).toThrow(/Expected/);
+    expect(() => decodeInvitationId("")).toThrow(/Expected/);
   }, 1000);
 });

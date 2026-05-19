@@ -6,6 +6,8 @@ infrastructure lives in `../infra` with the Alchemy stack entrypoint at
 
 | Workspace       | Purpose                                                                                 |
 | --------------- | --------------------------------------------------------------------------------------- |
+| `comments-core` | Shared comment IDs and DTO schemas used by job and site comments.                       |
+| `domain-core`   | Shared private Domain Worker service-binding contract and client helpers.               |
 | `identity-core` | Shared organization IDs, role schemas, organization DTO schemas, and decoders.          |
 | `jobs-core`     | Shared job-owned IDs, domain schemas, DTOs, Effect HTTP API contract, and typed errors. |
 | `sites-core`    | Shared site/service-area IDs, schemas, DTOs, API groups, and typed public errors.       |
@@ -18,6 +20,7 @@ Run focused package checks with filters:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/domain-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test
@@ -26,5 +29,5 @@ pnpm run check-types:infra
 
 Keep shared packages free of app-only concerns. If code needs React state,
 TanStack Router, Better Auth adapter wiring, Drizzle SQL, or Alchemy deployment
-secrets, it usually belongs in an app, the API, or root `infra` rather than a
-core package.
+secrets, it usually belongs in an app, the private domain Worker, or root
+`infra` rather than a core package.

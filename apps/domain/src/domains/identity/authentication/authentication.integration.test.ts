@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { decodePublicInvitationPreview } from "@ceird/identity-core";
+import {
+  decodeInvitationId,
+  decodePublicInvitationPreview,
+} from "@ceird/identity-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Deferred, Effect } from "effect";
 import { Pool } from "pg";
@@ -885,7 +888,7 @@ describe("authentication integration", () => {
     await expect(
       findPublicInvitationPreview({
         database,
-        invitationId: invitation.id,
+        invitationId: decodeInvitationId(invitation.id),
       })
     ).resolves.toStrictEqual({
       email: "m***@e***.com",
@@ -934,7 +937,7 @@ describe("authentication integration", () => {
     await expect(
       findPublicInvitationPreview({
         database,
-        invitationId: invitation.id,
+        invitationId: decodeInvitationId(invitation.id),
       })
     ).resolves.toBeNull();
   }, 30_000);

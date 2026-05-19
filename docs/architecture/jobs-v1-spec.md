@@ -7,7 +7,7 @@ It turns the decisions captured in
 spec that fits the current codebase:
 
 - organization-scoped app shell already exists
-- `apps/api` already uses Effect `HttpApi`
+- `apps/domain` owns the Effect `HttpApi` handler surface
 - auth remains Better Auth + regular Drizzle
 - new product slices should prefer Effect-native services and data access
 
@@ -196,7 +196,8 @@ Jobs v1 should not introduce `@effect/rpc` yet.
 
 Reasoning:
 
-- `apps/api` already exposes an Effect `HttpApi` server contract
+- `apps/domain` exposes the Effect `HttpApi` server contract behind the public
+  API adapter
 - the app needs an HTTP-facing browser/server client anyway
 - adding RPC now would create a second transport style in the same codebase
   before the first domain slice exists
@@ -210,20 +211,21 @@ surface than the app-facing HTTP API warrants.
 The v1 default should be:
 
 - shared Jobs boundary types and HTTP contract
-- `HttpApi` handlers in `apps/api`
+- `HttpApi` handlers in `apps/domain`
 - a typed `HttpApiClient` wrapper service in `apps/app`
 
 ### Shared App Database Layer
 
-Before shipping Jobs persistence, extract the auth-local database setup into a
-shared app database layer in `apps/api`.
+Jobs persistence now runs behind the private domain Worker. The shared database
+runtime lives under `apps/domain/src/platform/database`, where Better Auth and
+product repositories use the same Postgres/Hyperdrive ownership boundary.
 
 That layer should provide:
 
 - one shared `pg` pool
 - one regular Drizzle database for Better Auth's adapter path
-- one Effect SQL Postgres layer for app-owned slices
-- one Effect Drizzle layer for app-owned slices
+- one Effect SQL Postgres layer for domain-owned slices
+- one Effect Drizzle layer for domain-owned slices
 
 Better Auth should keep using regular Drizzle directly.
 
@@ -240,7 +242,7 @@ Recommended structure:
   - filter/input/output DTOs
   - status / priority / kind schemas
   - jobs `HttpApi` group definition
-- `apps/api/src/domains/jobs`
+- `apps/domain/src/domains/jobs`
   - Drizzle schema
   - migrations
   - repositories
@@ -255,7 +257,7 @@ Recommended structure:
   - list/detail/create components
 
 This follows the current split already visible in `packages/identity-core`,
-`apps/api`, and `apps/app`.
+`apps/domain`, `apps/api`, and `apps/app`.
 
 ## Effect-First Backend Rules
 
@@ -357,7 +359,7 @@ It should fail closed when:
 
 ### General Rules
 
-- migrations live in `apps/api`
+- migrations live in `apps/domain/drizzle`
 - Drizzle owns schema definitions and migration generation
 - jobs repositories should use Effect-native database access through
   `@effect/sql-pg` and `@effect/sql-drizzle`
@@ -879,11 +881,11 @@ tasks. Each task should go through:
 
 Deliver:
 
-- shared app database module in `apps/api`
+- shared app database module in `apps/domain`
 - one shared `pg` pool
 - one regular Drizzle database for Better Auth
-- one Effect SQL Postgres layer for app-owned slices
-- one Effect Drizzle layer for app-owned slices
+- one Effect SQL Postgres layer for domain-owned slices
+- one Effect Drizzle layer for domain-owned slices
 - tests proving auth still boots correctly on the shared database runtime
 
 Why first:

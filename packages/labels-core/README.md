@@ -1,7 +1,7 @@
 # Labels Core
 
 `@ceird/labels-core` is the shared organization-label contract package. It is
-consumed by the API handlers, the app's typed Effect HTTP client, and jobs
+consumed by the domain HTTP handlers, the app's typed Effect HTTP client, and jobs
 contracts that assign organization labels to jobs.
 
 ## Important Files
@@ -28,4 +28,4 @@ pnpm --filter @ceird/labels-core build
 Put organization-label runtime schemas, DTOs, branded IDs, HTTP contract
 pieces, and public typed errors here. Job-label assignment remains job-owned,
 but label definitions are independent organization data. Keep SQL repositories,
-authorization, and React state in `apps/api` or `apps/app`.
+authorization, and React state in `apps/domain` or `apps/app`.

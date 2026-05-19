@@ -5,7 +5,8 @@
 This document is the source of truth for how authentication currently works in
 the codebase across:
 
-- `apps/api`, which owns the authoritative auth runtime
+- `apps/domain`, which owns the authoritative auth runtime
+- `apps/api` and `apps/mcp`, which forward protocol traffic through the private domain Worker
 - `apps/app`, which owns auth UI, route gating, and session-aware navigation
 
 It describes the current implementation, not a hypothetical target state.
@@ -41,7 +42,7 @@ Authentication explicitly does not currently support:
 
 The system is intentionally split into two layers:
 
-1. `apps/api` owns Better Auth configuration, persistence, cookies, rate
+1. `apps/domain` owns Better Auth configuration, persistence, cookies, rate
    limiting, trusted-origin policy, and the `/api/auth/*` HTTP surface.
 2. `apps/app` uses Better Auth's native client against that server contract and
    adds only the minimum app-specific behavior needed for:
@@ -58,10 +59,11 @@ The core rule is:
 
 ## Backend Ownership
 
-### API Entry Point
+### Domain Entry Point
 
-The API server mounts the auth slice through
-`apps/api/src/server.ts` and `apps/api/src/domains/identity/authentication/auth.ts`.
+The domain server mounts the auth slice through
+`apps/domain/src/server.ts` and `apps/domain/src/domains/identity/authentication/auth.ts`.
+The API and MCP Workers reach that surface through the `DOMAIN` service binding.
 
 Responsibilities:
 
@@ -80,7 +82,7 @@ Important implementation detail:
 ### Better Auth Configuration
 
 The canonical config lives in
-`apps/api/src/domains/identity/authentication/config.ts`.
+`apps/domain/src/domains/identity/authentication/config.ts`.
 
 Current config decisions:
 
@@ -106,7 +108,8 @@ Current config decisions:
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
-- `MCP_RESOURCE_URL` is optional; when omitted the valid MCP resource audience
+- `MCP_RESOURCE_URL` is configured from the stage MCP hostname for deployed
+  Workers; when omitted in package-local runs the valid MCP resource audience
   defaults to the API origin plus `/mcp`
 - `OAUTH_ISSUER_URL` is optional; when omitted OAuth/OIDC issuer metadata
   defaults to `BETTER_AUTH_BASE_URL`; explicit issuer URLs are canonicalized to
@@ -132,9 +135,9 @@ The MCP resource server also exposes protected-resource metadata at:
 - `/.well-known/oauth-protected-resource/<mcp-resource-path>`
 
 Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
-`xmcp` runtime in `apps/api`. MCP auth uses Ceird's existing Better Auth OAuth
+`xmcp` runtime in `apps/api` or `apps/mcp`. MCP auth uses Ceird's existing Better Auth OAuth
 Provider runtime, and MCP HTTP uses the `@effect/ai` MCP HTTP router mounted
-inside the API Worker.
+inside the private domain Worker.
 
 ### MCP Bearer Sessions
 
@@ -176,7 +179,7 @@ Current note:
 ### Auth Email Runtime Configuration
 
 The auth email boundary adds runtime config in
-`apps/api/src/domains/identity/authentication/auth-email-config.ts`.
+`apps/domain/src/domains/identity/authentication/auth-email-config.ts`.
 
 Required values:
 
@@ -195,18 +198,18 @@ deterministic development delivery. The Cloudflare Worker composes
 
 ### Auth Email Delivery Boundary
 
-Password reset and email verification delivery now cross one narrow app-owned
-boundary in `apps/api`:
+Password reset and email verification delivery now cross one narrow domain-owned
+boundary in `apps/domain`:
 
-- `apps/api/src/domains/identity/authentication/auth-email.ts` defines
+- `apps/domain/src/domains/identity/authentication/auth-email.ts` defines
   `AuthEmailSender`, an auth-domain Effect service for sending password reset,
   verification, and organization invitation mail
-- `apps/api/src/domains/identity/authentication/auth-email-transport.ts`
+- `apps/domain/src/domains/identity/authentication/auth-email-transport.ts`
   defines the provider-neutral `AuthEmailTransport` capability and its
   `Development`, `CloudflareBinding`, and `Local` layers
 - `AuthEmailSender` validates each payload, renders the auth email content,
   and keeps the transport contract provider-neutral through `deliveryKey`
-- `apps/api/src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.ts`
+- `apps/domain/src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.ts`
   provides the Cloudflare Workers Email Service binding adapter for deployed
   queue consumers
 
@@ -235,7 +238,7 @@ Rule:
 In the Cloudflare Worker runtime, auth email delivery is scheduled through
 Cloudflare Queues instead of `queueMicrotask`.
 
-The API Worker enqueues validated auth email messages during Better Auth hooks.
+The domain Worker enqueues validated auth email messages during Better Auth hooks.
 The same Worker consumes the queue and sends through the existing
 `AuthEmailSender` and Cloudflare transport boundary. Queue retries and the
 dead-letter queue own durable failure handling.
@@ -292,7 +295,7 @@ This is a deliberate allowlist model, not a broad dev-only wildcard.
 ### Persistence Model
 
 The backend auth schema lives in
-`apps/api/src/domains/identity/authentication/schema.ts`.
+`apps/domain/src/domains/identity/authentication/schema.ts`.
 
 Current tables:
 
@@ -317,12 +320,12 @@ The database is the source of truth for:
 - JWT signing keys for OAuth/OIDC token issuance
 - OAuth client registrations, tokens, and consent records
 
-The API does not maintain a parallel app-specific session store.
+Ceird does not maintain a parallel app-specific session store.
 
 ### Database Wiring
 
-`apps/api/src/platform/database/database.ts` owns Postgres access for the API,
-including the auth slice.
+`apps/domain/src/platform/database/database.ts` owns Postgres access, including
+the auth slice.
 
 Responsibilities:
 
@@ -738,23 +741,23 @@ These are the important current rules we are following.
 
 ### Backend
 
-- `apps/api/src/domains/identity/authentication/auth.ts`
+- `apps/domain/src/domains/identity/authentication/auth.ts`
   Creates and mounts Better Auth, applies auth CORS, preserves `/api/auth`
   prefixing, and delegates password reset and verification delivery through
   `AuthEmailSender`.
-- `apps/api/src/domains/identity/authentication/config.ts`
+- `apps/domain/src/domains/identity/authentication/config.ts`
   Defines auth scope, base URL behavior, trusted origins, and rate limits.
-- `apps/api/src/domains/identity/authentication/auth-email-config.ts`
+- `apps/domain/src/domains/identity/authentication/auth-email-config.ts`
   Defines required auth email runtime config and defaults.
-- `apps/api/src/domains/identity/authentication/auth-email.ts`
+- `apps/domain/src/domains/identity/authentication/auth-email.ts`
   Defines the auth email boundary for password reset, verification, and
   organization invitation delivery.
-- `apps/api/src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.ts`
+- `apps/domain/src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.ts`
   Implements the deployed auth email transport adapter for the Cloudflare Email
   Worker binding.
-- `apps/api/src/domains/identity/authentication/schema.ts`
+- `apps/domain/src/domains/identity/authentication/schema.ts`
   Defines auth persistence tables.
-- `apps/api/src/platform/database/schema.ts`
+- `apps/domain/src/platform/database/schema.ts`
   Re-exports the auth schema into the shared Drizzle database schema.
 
 ### Frontend

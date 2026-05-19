@@ -17,24 +17,28 @@ preserving legacy shapes.
 ```text
 browser
   -> apps/app TanStack Start UI
-  -> apps/api Effect HTTP API
-  -> Postgres
+  -> apps/api public HTTP adapter
+  -> apps/domain private capability surface
+  -> Postgres via Hyperdrive
 
 apps/app server-side helpers
-  -> apps/api Better Auth endpoints
-  -> apps/api Jobs API endpoints
+  -> apps/api public HTTP adapter
+  -> apps/domain Better Auth and product endpoints
 
 MCP clients
-  -> apps/api Better Auth OAuth protected resource
-  -> apps/api @effect/ai MCP router
-  -> apps/api Effect domain services
-  -> Postgres
+  -> apps/mcp standalone Effect MCP adapter at mcp.<stage>.ceird.app
+  -> apps/domain OAuth/MCP router and tool execution
+  -> Postgres via Hyperdrive
 
-apps/api Cloudflare Worker
-  -> Effect HTTP API and Effect AI MCP HTTP surfaces
-  -> Hyperdrive
+apps/domain Cloudflare Worker
+  -> Effect HTTP API, Better Auth, and Effect AI MCP surfaces
+  -> repositories, authorization, action execution, and audit
+  -> Hyperdrive private binding
   -> Neon Postgres
   -> Cloudflare Queues for auth email
+
+apps/api and apps/mcp Cloudflare Workers
+  -> DOMAIN service binding
 ```
 
 Local development and production deployment both use the root Alchemy stack.
@@ -45,14 +49,16 @@ to the stage that produced it.
 
 ## Monorepo Ownership
 
-| Area                     | Owns                                                                                                                   | Should not own                                               |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.            | Database schema, API business rules, shared DTO definitions. |
-| `apps/api`               | HTTP handlers, Better Auth wiring, Effect services, repositories, migrations, Worker entrypoint, and database runtime. | Browser UI, app-specific layout concerns.                    |
-| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                              | Target ownership, authorization, repositories, or UI state.  |
-| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                 | Better Auth adapter setup or persistence.                    |
-| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                       | Repository SQL or React state.                               |
-| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.            | App/API domain behavior.                                     |
+| Area                     | Owns                                                                                                                            | Should not own                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions. |
+| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database. |
+| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                        |
+| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.  |
+| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.  |
+| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                    |
+| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                               |
+| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                     | App/API domain behavior.                                     |
 
 ## Request And Data Flow
 
@@ -60,32 +66,33 @@ Jobs requests use a shared contract:
 
 1. `packages/jobs-core/src/http-api.ts` defines endpoint names, paths, payload
    schemas, response schemas, and typed errors.
-2. `apps/api/src/domains/jobs/http.ts` binds that contract to `JobsService`,
+2. `apps/domain/src/domains/jobs/http.ts` binds that contract to `JobsService`,
    `SitesService`, and `ConfigurationService`.
 3. `apps/app/src/features/jobs/jobs-client.ts` creates an Effect
    `HttpApiClient` from the same `JobsApi` contract.
 4. Browser-side jobs state calls the client directly. Server-side route loading
    uses TanStack Start helpers that forward cookies and trusted proxy headers.
-5. API services resolve the current actor, authorize the action, call
+5. Domain services resolve the current actor, authorize the action, call
    repositories, record activity where needed, and return DTOs from the shared
    package.
 
 Authentication requests mostly use Better Auth endpoints under `/api/auth/*`.
-The API owns Better Auth configuration, organization hooks, auth email
-scheduling, CORS, trusted origins, and cookie behavior. The app owns forms,
-redirects, route guards, and server-side session lookups.
+The domain Worker owns Better Auth configuration, organization hooks, auth email
+scheduling, CORS, trusted origins, and cookie behavior. The API Worker forwards
+public HTTP traffic to that private surface. The app owns forms, redirects,
+route guards, and server-side session lookups.
 
 MCP clients discover the protected-resource metadata, authorize through Better
 Auth OAuth, and send the resulting bearer token to the configured MCP resource
-URL. The API validates that token before handing the request to the Effect AI MCP
-router. MCP tools are not a separate service or auth system; they run against the
-same Effect domain services, organization actor resolution, and authorization
-rules as the HTTP API.
+URL. The standalone MCP Worker is a protocol adapter over the domain Worker,
+where OAuth verification, the Effect AI MCP router, tool execution, organization
+actor resolution, and authorization rules run against the same services as the
+HTTP API.
 
 ## Persistence Model
 
-The API exports a combined Drizzle schema from
-`apps/api/src/platform/database/schema.ts`:
+The domain Worker exports a combined Drizzle schema from
+`apps/domain/src/platform/database/schema.ts`:
 
 - `authSchema` contains Better Auth users, sessions, accounts,
   verifications, rate limits, organizations, members, and invitations.
@@ -98,11 +105,11 @@ The API exports a combined Drizzle schema from
 - `databaseSchema` merges authentication, comments, labels, sites, and jobs for
   the full database runtime.
 
-Migrations live in `apps/api/drizzle`. Package-local Drizzle CLI migrations
+Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
-`Drizzle.Schema` through `infra/api-drizzle-schema.ts` to maintain checked-in
-snapshots under `apps/api/drizzle/alchemy`. The native Neon branch resource
-applies `apps/api/drizzle`, so historical SQL and future Alchemy-generated SQL
+`Drizzle.Schema` through `infra/domain-drizzle-schema.ts` to maintain checked-in
+snapshots under `apps/domain/drizzle/alchemy`. The native Neon branch resource
+applies `apps/domain/drizzle`, so historical SQL and future Alchemy-generated SQL
 share the same deploy-time migration table.
 
 ## Boundary Rules
@@ -114,8 +121,9 @@ share the same deploy-time migration table.
   consume them.
 - Keep internal TypeScript-only types inside implementation modules when they
   do not cross a runtime boundary.
-- Let the API own business invariants and authorization. The app can mirror
-  constraints for UX but must not be the only enforcement point.
+- Let the domain Worker own business invariants and authorization. Public
+  adapters and the app can mirror constraints for UX but must not be the only
+  enforcement point.
 
 ## Source Of Truth Documents
 

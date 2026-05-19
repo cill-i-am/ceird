@@ -1,4 +1,5 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
+import { SessionId, UserId } from "@ceird/identity-core";
 import { McpServer } from "@effect/ai";
 import { HttpLayerRouter } from "@effect/platform";
 import { SqlClient } from "@effect/sql";
@@ -306,10 +307,13 @@ function toMcpSessionIdentity(
     return undefined;
   }
 
-  return {
-    sessionId: jwt.sid,
-    userId: jwt.sub,
-  };
+  const sessionId = Schema.decodeUnknownOption(SessionId)(jwt.sid);
+  const userId = Schema.decodeUnknownOption(UserId)(jwt.sub);
+
+  return Option.all({
+    sessionId,
+    userId,
+  }).pipe(Option.getOrUndefined);
 }
 
 function decodeScopes(scope: unknown): string[] {

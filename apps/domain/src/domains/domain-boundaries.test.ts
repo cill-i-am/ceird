@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 
 const domainsDir = path.dirname(fileURLToPath(import.meta.url));
-const apiSrcDir = path.resolve(domainsDir, "..");
+const domainSrcDir = path.resolve(domainsDir, "..");
 
-describe("api domain boundaries", () => {
+describe("domain Worker boundaries", () => {
   it("keeps sites implementation in the sites domain", async () => {
     const domains = await listDomainSourceFiles();
 
@@ -98,7 +98,7 @@ async function readDomainSources(domain: string): Promise<string> {
 }
 
 async function readApiSources(): Promise<string> {
-  const files = await listSourceFiles(apiSrcDir);
+  const files = await listSourceFiles(domainSrcDir);
   const contents = await Promise.all(
     files.map((file) => readFile(file, "utf8"))
   );

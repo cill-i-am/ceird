@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import type { ApiWorkerEnv } from "./env.js";
-import { apiWorkerEnvConfigMap } from "./env.js";
+import type { DomainWorkerEnv } from "./env.js";
+import { domainWorkerEnvConfigMap } from "./env.js";
 
-function makeWorkerEnv(): ApiWorkerEnv {
+function makeWorkerEnv(): DomainWorkerEnv {
   return {
     AUTH_APP_ORIGIN: "https://app.example.com",
     AUTH_EMAIL: {
@@ -11,7 +11,6 @@ function makeWorkerEnv(): ApiWorkerEnv {
     },
     AUTH_EMAIL_FROM: "auth@example.com",
     AUTH_EMAIL_FROM_NAME: "Ceird",
-    AUTH_RATE_LIMIT_ENABLED: "false",
     AUTH_EMAIL_QUEUE: {
       send: () => Promise.resolve(),
     } as unknown as Queue<unknown>,
@@ -27,7 +26,7 @@ function makeWorkerEnv(): ApiWorkerEnv {
 
 describe("Cloudflare Worker environment config", () => {
   it("exposes the Alchemy runtime stage to Effect config", () => {
-    const config = apiWorkerEnvConfigMap({
+    const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),
       ALCHEMY_STACK_NAME: "ceird",
       ALCHEMY_STAGE: "codex-alchemy-v2-native-migration",
@@ -40,19 +39,22 @@ describe("Cloudflare Worker environment config", () => {
   });
 
   it("exposes the Google Maps API key to Effect config", () => {
-    const config = apiWorkerEnvConfigMap(makeWorkerEnv());
+    const config = domainWorkerEnvConfigMap(makeWorkerEnv());
 
     expect(config.get("GOOGLE_MAPS_API_KEY")).toBe("google-key");
   });
 
-  it("exposes the auth rate-limit flag to Effect config", () => {
-    const config = apiWorkerEnvConfigMap(makeWorkerEnv());
+  it("propagates the auth rate limit override when Alchemy provides one", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      AUTH_RATE_LIMIT_ENABLED: "false",
+    });
 
     expect(config.get("AUTH_RATE_LIMIT_ENABLED")).toBe("false");
   });
 
   it("propagates optional OAuth MCP URL overrides", () => {
-    const config = apiWorkerEnvConfigMap({
+    const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),
       MCP_RESOURCE_URL: "https://mcp.example.com/mcp",
       OAUTH_ISSUER_URL: "https://auth.example.com/api/auth",

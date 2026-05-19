@@ -40,21 +40,21 @@ const schemaExportNames = [
 ] as const;
 
 type SchemaExportName = (typeof schemaExportNames)[number];
-type ApiDatabaseSchemaModule = Partial<Record<SchemaExportName, unknown>>;
+type DomainDatabaseSchemaModule = Partial<Record<SchemaExportName, unknown>>;
 
-const apiSchemaModule = (await tsImport(
-  "../apps/api/src/platform/database/schema.ts",
+const domainSchemaModule = (await tsImport(
+  "../apps/domain/src/platform/database/schema.ts",
   {
     parentURL: import.meta.url,
-    tsconfig: "./apps/api/tsconfig.json",
+    tsconfig: "./apps/domain/tsconfig.json",
   }
-)) as ApiDatabaseSchemaModule;
+)) as DomainDatabaseSchemaModule;
 
 function requireSchemaExport(name: SchemaExportName) {
-  const value = apiSchemaModule[name];
+  const value = domainSchemaModule[name];
 
   if (value === undefined) {
-    throw new Error(`API database schema export '${name}' is missing`);
+    throw new Error(`Domain database schema export '${name}' is missing`);
   }
 
   return value;

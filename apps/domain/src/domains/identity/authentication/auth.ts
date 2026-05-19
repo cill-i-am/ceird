@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import { oauthProvider } from "@better-auth/oauth-provider";
 import {
+  decodeInvitationId,
   isAdministrativeOrganizationRole,
   decodeCreateOrganizationInput,
   decodeOrganizationRole,
@@ -10,6 +11,7 @@ import {
   decodeUpdateOrganizationInput,
 } from "@ceird/identity-core";
 import type {
+  InvitationId,
   OrganizationRole,
   PublicInvitationPreview,
 } from "@ceird/identity-core";
@@ -121,7 +123,7 @@ export function maskInvitationEmail(email: string) {
 
 export async function findPublicInvitationPreview(options: {
   readonly database: NodePgDatabase;
-  readonly invitationId: string;
+  readonly invitationId: InvitationId;
   readonly now?: Date;
 }): Promise<PublicInvitationPreview | null> {
   const rows = await options.database
@@ -176,13 +178,29 @@ function makePublicInvitationPreviewHandler(database: NodePgDatabase) {
       return new Response(null, { status: 404 });
     }
 
+    const decodedInvitationId = decodePublicInvitationPathId(invitationId);
+
+    if (decodedInvitationId === undefined) {
+      return new Response(null, { status: 404 });
+    }
+
     const preview = await findPublicInvitationPreview({
       database,
-      invitationId: decodeURIComponent(invitationId),
+      invitationId: decodedInvitationId,
     });
 
     return Response.json(preview);
   };
+}
+
+function decodePublicInvitationPathId(
+  invitationId: string
+): InvitationId | undefined {
+  try {
+    return decodeInvitationId(decodeURIComponent(invitationId));
+  } catch {
+    return undefined;
+  }
 }
 
 function throwInvalidOrganizationInput(message: string): never {
@@ -818,6 +836,7 @@ export class Authentication extends Effect.Service<Authentication>()(
       const { authDb } = yield* AppDatabase;
       const authEmailScheduler = yield* AuthenticationEmailScheduler;
       const runtime = yield* Effect.runtime<never>();
+      const runPromise = Runtime.runPromise(runtime);
       const backgroundTaskHandler = yield* AuthenticationBackgroundTaskHandler;
       const reportPasswordResetEmailFailure = makeEmailFailureReporter(
         runtime,
@@ -844,11 +863,13 @@ export class Authentication extends Effect.Service<Authentication>()(
         reportEmailChangeConfirmationFailure,
         reportOrganizationInvitationEmailFailure,
         reportPasswordResetEmailFailure,
-        sendOrganizationInvitationEmail:
-          authEmailScheduler.sendOrganizationInvitationEmail,
+        sendOrganizationInvitationEmail: (input) =>
+          runPromise(authEmailScheduler.sendOrganizationInvitationEmail(input)),
         reportVerificationEmailFailure,
-        sendPasswordResetEmail: authEmailScheduler.sendPasswordResetEmail,
-        sendVerificationEmail: authEmailScheduler.sendVerificationEmail,
+        sendPasswordResetEmail: (input) =>
+          runPromise(authEmailScheduler.sendPasswordResetEmail(input)),
+        sendVerificationEmail: (input) =>
+          runPromise(authEmailScheduler.sendVerificationEmail(input)),
       });
     }),
   }

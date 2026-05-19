@@ -123,6 +123,7 @@ test("root Alchemy stack exposes operator outputs for owned runtime resources", 
     "authEmailQueue",
     "branch",
     "hyperdrive",
+    "mcp",
     "neonDatabase",
   ]) {
     assert.match(
@@ -218,7 +219,7 @@ test("runtime configuration no longer reads Portless-specific environment", () =
   const authConfig = readFileSync(
     path.join(
       repoRoot,
-      "apps/api/src/domains/identity/authentication/config.ts"
+      "apps/domain/src/domains/identity/authentication/config.ts"
     ),
     "utf8"
   );
@@ -237,10 +238,13 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.match(deployWorkflow, /CEIRD_CLOUDFLARE:\s+"1"/);
   assert.match(deployWorkflow, /CEIRD_APP_HOSTNAME:\s+app\.ceird\.app/);
   assert.match(deployWorkflow, /CEIRD_API_HOSTNAME:\s+api\.ceird\.app/);
+  assert.match(deployWorkflow, /CEIRD_MCP_HOSTNAME:\s+mcp\.ceird\.app/);
   assert.doesNotMatch(deployWorkflow, /ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /CEIRD_ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /AUTH_EMAIL_TRANSPORT:/);
   assert.match(deployWorkflow, /run: pnpm --filter api check-types\b/);
+  assert.match(deployWorkflow, /run: pnpm --filter domain check-types\b/);
+  assert.match(deployWorkflow, /run: pnpm --filter mcp check-types\b/);
   assert.match(deployWorkflow, /run: pnpm alchemy cloudflare bootstrap\b/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
 });
@@ -453,8 +457,8 @@ test("manual Drizzle commands are documented as package-local fallbacks", () => 
     path.join(repoRoot, "docs/development.md"),
     "utf8"
   );
-  const apiReadme = readFileSync(
-    path.join(repoRoot, "apps/api/README.md"),
+  const domainReadme = readFileSync(
+    path.join(repoRoot, "apps/domain/README.md"),
     "utf8"
   );
   const dataLayerGuide = readFileSync(
@@ -465,7 +469,7 @@ test("manual Drizzle commands are documented as package-local fallbacks", () => 
   for (const [name, contents] of [
     ["README.md", readme],
     ["docs/development.md", developmentGuide],
-    ["apps/api/README.md", apiReadme],
+    ["apps/domain/README.md", domainReadme],
   ]) {
     assert.doesNotMatch(
       contents,
@@ -478,7 +482,7 @@ test("manual Drizzle commands are documented as package-local fallbacks", () => 
   assert.doesNotMatch(readme, /baseline\/future snapshots/);
   assert.match(readme, /Alchemy-generated migration\s+state/);
   assert.match(developmentGuide, /package-local Drizzle CLI fallback/);
-  assert.match(apiReadme, /package-local database workflow/);
+  assert.match(domainReadme, /package-local database workflow/);
   assert.match(developmentGuide, /Alchemy Neon branch resource applies/);
   assert.match(dataLayerGuide, /root `infra`/);
   assert.doesNotMatch(dataLayerGuide, /infra\s+package/);
@@ -507,7 +511,7 @@ test("Playwright E2E defaults to an existing Alchemy stage", () => {
   assert.doesNotMatch(playwrightConfig, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.doesNotMatch(
     buildWorkflow,
-    /services:\n\s+postgres:|postgres:16|pnpm --filter api db:migrate/
+    /services:\n\s+postgres:|postgres:16|pnpm --filter (?:api|domain) db:migrate/
   );
   assert.match(buildWorkflow, /e2e:\n(?: {4}.*\n)* {4}environment: main/);
   assert.match(
@@ -716,7 +720,7 @@ test("app server runtime reads Cloudflare Worker env bindings", () => {
   assert.match(appHealthRoute, /ALCHEMY_STAGE/);
 });
 
-test("infra docs describe the API Worker as Effect-threaded", () => {
+test("infra docs describe the domain Worker as Effect-threaded", () => {
   const localInfraGuide = readFileSync(
     path.join(repoRoot, "docs/architecture/local-development-and-infra.md"),
     "utf8"
@@ -730,7 +734,7 @@ test("infra docs describe the API Worker as Effect-threaded", () => {
     ["docs/architecture/local-development-and-infra.md", localInfraGuide],
     ["docs/architecture/api.md", apiGuide],
   ]) {
-    assert.match(contents, /single Effect-threaded Worker runtime/);
+    assert.match(contents, /single Effect-threaded domain runtime\s+boundary/);
     assert.match(contents, /src\/platform\/cloudflare\/runtime\.ts/);
     assert.doesNotMatch(
       contents,
@@ -758,32 +762,32 @@ test("auth extension docs describe the deployed Worker email binding path", () =
 });
 
 test("auth email delivery does not keep a parallel Cloudflare REST SDK path", () => {
-  const apiPackage = readJson("apps/api/package.json");
+  const domainPackage = readJson("apps/domain/package.json");
   const authEmailConfig = readFileSync(
     path.join(
       repoRoot,
-      "apps/api/src/domains/identity/authentication/auth-email-config.ts"
+      "apps/domain/src/domains/identity/authentication/auth-email-config.ts"
     ),
     "utf8"
   );
   const authEmailTransport = readFileSync(
     path.join(
       repoRoot,
-      "apps/api/src/domains/identity/authentication/auth-email-transport.ts"
+      "apps/domain/src/domains/identity/authentication/auth-email-transport.ts"
     ),
     "utf8"
   );
-  const apiWorkerEnv = readFileSync(
-    path.join(repoRoot, "apps/api/src/platform/cloudflare/env.ts"),
+  const domainWorkerEnv = readFileSync(
+    path.join(repoRoot, "apps/domain/src/platform/cloudflare/env.ts"),
     "utf8"
   );
 
-  assert.equal(apiPackage.dependencies.cloudflare, undefined);
+  assert.equal(domainPackage.dependencies.cloudflare, undefined);
   assert.equal(
     existsSync(
       path.join(
         repoRoot,
-        "apps/api/src/domains/identity/authentication/cloudflare-auth-email-transport.ts"
+        "apps/domain/src/domains/identity/authentication/cloudflare-auth-email-transport.ts"
       )
     ),
     false
@@ -792,7 +796,7 @@ test("auth email delivery does not keep a parallel Cloudflare REST SDK path", ()
   for (const [name, contents] of [
     ["auth-email-config.ts", authEmailConfig],
     ["auth-email-transport.ts", authEmailTransport],
-    ["platform/cloudflare/env.ts", apiWorkerEnv],
+    ["platform/cloudflare/env.ts", domainWorkerEnv],
   ]) {
     assert.doesNotMatch(
       contents,
@@ -812,7 +816,7 @@ test("auth email delivery does not keep a parallel Cloudflare REST SDK path", ()
 
     assert.doesNotMatch(
       contents,
-      /Cloudflare (?:REST )?API|Cloudflare email API|package-local Cloudflare email|manual email testing/i,
+      /Cloudflare (?:REST )?API email|Cloudflare email API|package-local Cloudflare email|manual email testing/i,
       `${relativePath} should describe binding-backed deployed email and deterministic local delivery`
     );
   }

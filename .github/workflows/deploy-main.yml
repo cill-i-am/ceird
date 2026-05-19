@@ -21,6 +21,7 @@ env:
   CEIRD_API_HOSTNAME: api.ceird.app
   CEIRD_APP_HOSTNAME: app.ceird.app
   CEIRD_CLOUDFLARE: "1"
+  CEIRD_MCP_HOSTNAME: mcp.ceird.app
   CEIRD_ZONE_NAME: ceird.app
   PNPM_CONFIG_OPTIONAL: "true"
 
@@ -58,11 +59,38 @@ jobs:
       - name: Type check app
         run: pnpm --filter app check-types
 
+      - name: Type check domain core
+        run: pnpm --filter @ceird/domain-core check-types
+
       - name: Type check API
         run: pnpm --filter api check-types
 
+      - name: Type check domain
+        run: pnpm --filter domain check-types
+
+      - name: Type check MCP
+        run: pnpm --filter mcp check-types
+
       - name: Type check infra
         run: pnpm run check-types:infra
+
+      - name: Test domain core
+        run: pnpm --filter @ceird/domain-core test
+
+      - name: Test API adapter boundary
+        run: pnpm --filter api test -- src/domain-adapter-boundaries.test.ts src/server.test.ts src/worker.test.ts
+
+      - name: Test domain boundary
+        run: pnpm --filter domain test -- src/domains/domain-boundaries.test.ts src/platform/cloudflare/env.test.ts src/worker.test.ts
+
+      - name: Test MCP adapter boundary
+        run: pnpm --filter mcp test
+
+      - name: Test infrastructure contracts
+        run: pnpm run test:infra
+
+      - name: Test repository workflow contracts
+        run: pnpm run test:scripts
 
       - name: Bootstrap Alchemy state store
         run: pnpm alchemy cloudflare bootstrap

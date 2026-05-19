@@ -1,7 +1,8 @@
 # API Workspace
 
-`apps/api` is the backend service for Ceird. It runs as a Node development
-server locally and as a Cloudflare Worker in deployed environments.
+`apps/api` is Ceird's public HTTP adapter. It owns the public API Worker
+entrypoint, local root and health responses, request logging, and the Cloudflare
+service binding to the private domain Worker.
 
 ## Commands
 
@@ -10,58 +11,42 @@ pnpm --filter api dev
 pnpm --filter api test
 pnpm --filter api check-types
 pnpm --filter api build
-pnpm --filter api db:generate
-pnpm --filter api db:migrate
-pnpm --filter api db:studio
 ```
 
-The `db:*` commands are the package-local database workflow. Stage deploys and
-cloud-backed local development apply migrations through the root Alchemy stack's
-native Neon branch resource.
-
-For full cloud-backed app/API/Postgres development, prefer the root Alchemy
-stage:
+For full cloud-backed app/API/MCP/domain/Postgres development, prefer the root
+Alchemy stage:
 
 ```bash
 pnpm dev -- --stage codex-my-task
 ```
 
+For package-local Node development, the API adapter listens on port `3001` by
+default and forwards to `DOMAIN_ORIGIN`, which defaults to
+`http://127.0.0.1:3002`.
+
 ## Important Paths
 
-| Path                                  | Purpose                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`                        | Node development entrypoint.                                                                                             |
-| `src/server.ts`                       | Effect API construction, system routes, API layer composition, and web handler factory.                                  |
-| `src/worker.ts`                       | Cloudflare Worker entrypoint.                                                                                            |
-| `src/platform/database`               | Database config, runtime, schema barrel, errors, and test database helpers.                                              |
-| `src/platform/cloudflare`             | Cloudflare environment and binding helpers.                                                                              |
-| `src/domains/identity/authentication` | Better Auth, organization hooks, auth schemas, email delivery, and auth runtime config.                                  |
-| `src/domains/jobs`                    | Jobs HTTP handlers, services, repositories, authorization, actor access, activity recording, geocoding, and jobs schema. |
-| `drizzle`                             | SQL migrations and Drizzle metadata.                                                                                     |
-| `drizzle.config.ts`                   | Drizzle CLI config.                                                                                                      |
+| Path                      | Purpose                                                      |
+| ------------------------- | ------------------------------------------------------------ |
+| `src/index.ts`            | Node development entrypoint.                                 |
+| `src/server.ts`           | Public adapter web handler, root/health routes, and logging. |
+| `src/worker.ts`           | Cloudflare Worker entrypoint.                                |
+| `src/platform/cloudflare` | API Worker env contract for the private `DOMAIN` service.    |
 
 ## Runtime Responsibilities
 
 The API owns:
 
-- Better Auth routes under `/api/auth/*`.
-- Public invitation preview under `/api/public/invitations/:invitationId/preview`.
-- System routes `GET /` and `GET /health`.
-- Jobs, sites, labels, cost lines, collaborators, activity, service areas, and
-  rate-card endpoints defined by `@ceird/jobs-core`.
-- Database schema and migrations.
-- Authorization and business invariants for app-domain mutations.
-- Auth email scheduling and transport integration.
+- Public `GET /` and `GET /health` responses.
+- Public HTTP routing as an adapter over the private domain Worker.
+- The `DOMAIN` service binding adapter using `@ceird/domain-core`.
+
+Product repositories, Better Auth runtime behavior, authorization, action
+execution, audit/activity recording, Drizzle schema, migrations, and Postgres
+access live in `apps/domain`.
 
 ## Architecture
 
 See [../../docs/architecture/api.md](../../docs/architecture/api.md) for the
-endpoint map, service boundaries, database model, error strategy, and testing
-guidance.
-
-Related docs:
-
-- [../../docs/architecture/auth.md](../../docs/architecture/auth.md)
-- [../../docs/architecture/jobs-v1-spec.md](../../docs/architecture/jobs-v1-spec.md)
-- [../../docs/architecture/data-layer.md](../../docs/architecture/data-layer.md)
-- [../../docs/architecture/local-development-and-infra.md](../../docs/architecture/local-development-and-infra.md)
+public adapter map and [../../docs/architecture/data-layer.md](../../docs/architecture/data-layer.md)
+for persistence ownership.

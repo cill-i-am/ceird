@@ -100,7 +100,8 @@ touches shared behavior.
   state, use an explicit Alchemy stage and run the affected Playwright tests
   against that stage's app/API URLs.
 - For database schema changes, generate and inspect the Drizzle migration under
-  `apps/api/drizzle`, then verify the API and native Neon branch migration path.
+  `apps/domain/drizzle`, then verify the domain and native Neon branch migration
+  path.
 
 <!-- stripe-projects-cli managed:agents-md:start -->
 

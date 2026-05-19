@@ -1,13 +1,21 @@
 /* eslint-disable max-classes-per-file */
 import { Effect, Layer, Match, ParseResult, Schema } from "effect";
 
-import { AuthenticationEmailScheduler } from "./auth-email-scheduler.js";
+import {
+  AuthenticationEmailScheduler,
+  AuthenticationEmailSchedulingError,
+} from "./auth-email-scheduler.js";
 import { serializeUnknownError } from "./auth-email-transport-helpers.js";
 import {
   AuthEmailSender,
   EmailVerificationEmailInput,
   OrganizationInvitationEmailInput,
   PasswordResetEmailInput,
+} from "./auth-email.js";
+import type {
+  EmailVerificationEmailError,
+  OrganizationInvitationEmailError,
+  PasswordResetEmailError,
 } from "./auth-email.js";
 
 export class InvalidAuthEmailQueueMessageError extends Schema.TaggedError<InvalidAuthEmailQueueMessageError>()(
@@ -53,14 +61,31 @@ const decodeAuthEmailQueueMessage = Schema.decodeUnknown(AuthEmailQueueMessage);
 
 export function decodeAuthEmailQueueMessageEffect(input: unknown) {
   return decodeAuthEmailQueueMessage(input).pipe(
-    Effect.mapError(
-      (parseError) =>
+    Effect.catchTag("ParseError", (parseError) =>
+      Effect.fail(
         new InvalidAuthEmailQueueMessageError({
           cause: formatParseError(parseError),
           message: "Invalid auth email queue message",
         })
+      )
     )
   );
+}
+
+function scheduleAuthEmailQueueMessage(
+  queue: Queue<unknown>,
+  message: AuthEmailQueueMessage
+) {
+  return Effect.tryPromise({
+    catch: (cause) =>
+      new AuthenticationEmailSchedulingError({
+        cause: serializeUnknownError(cause),
+        deliveryKey: message.payload.deliveryKey,
+        emailKind: message.kind,
+        message: "Failed to schedule auth email queue message",
+      }),
+    try: () => queue.send(message),
+  });
 }
 
 export function decodeAuthEmailQueueMessageStrict(input: unknown) {
@@ -71,15 +96,18 @@ export function makeCloudflareAuthenticationEmailSchedulerLive(
   queue: Queue<unknown>
 ) {
   return Layer.succeed(AuthenticationEmailScheduler, {
-    sendPasswordResetEmail: async (payload) => {
-      await queue.send({ kind: "password-reset", payload });
-    },
-    sendVerificationEmail: async (payload) => {
-      await queue.send({ kind: "email-verification", payload });
-    },
-    sendOrganizationInvitationEmail: async (payload) => {
-      await queue.send({ kind: "organization-invitation", payload });
-    },
+    sendPasswordResetEmail: (payload) =>
+      scheduleAuthEmailQueueMessage(queue, { kind: "password-reset", payload }),
+    sendVerificationEmail: (payload) =>
+      scheduleAuthEmailQueueMessage(queue, {
+        kind: "email-verification",
+        payload,
+      }),
+    sendOrganizationInvitationEmail: (payload) =>
+      scheduleAuthEmailQueueMessage(queue, {
+        kind: "organization-invitation",
+        payload,
+      }),
   });
 }
 
@@ -119,13 +147,18 @@ function formatParseError(parseError: ParseResult.ParseError) {
   return ParseResult.TreeFormatter.formatErrorSync(parseError);
 }
 
+type AuthEmailQueueDeliverySourceError =
+  | EmailVerificationEmailError
+  | OrganizationInvitationEmailError
+  | PasswordResetEmailError;
+
 function mapAuthEmailQueueDelivery(
   message: AuthEmailQueueMessage,
-  send: Effect.Effect<void, unknown, never>
+  send: Effect.Effect<void, AuthEmailQueueDeliverySourceError, never>
 ) {
   return send.pipe(
-    Effect.mapError(
-      (error) =>
+    Effect.catchAll((error) =>
+      Effect.fail(
         new AuthEmailQueueDeliveryError({
           cause: serializeUnknownError(error),
           deliveryKey: message.payload.deliveryKey,
@@ -134,6 +167,7 @@ function mapAuthEmailQueueDelivery(
           sourceCause: extractUnknownErrorCause(error),
           sourceTag: extractUnknownErrorTag(error),
         })
+      )
     )
   );
 }

@@ -1,4 +1,4 @@
-import type { OrganizationId, UserId } from "@ceird/identity-core";
+import type { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
 import { SqlClient } from "@effect/sql";
 import { Effect, Layer } from "effect";
 
@@ -19,8 +19,8 @@ interface SessionRow {
 }
 
 export interface McpSessionIdentity {
-  readonly sessionId: string;
-  readonly userId: string;
+  readonly sessionId: SessionId;
+  readonly userId: UserId;
 }
 
 export const makeCurrentOrganizationActorFromMcpSessionLayer = (
@@ -74,7 +74,7 @@ export const resolveCurrentOrganizationActorFromMcpSession = Effect.fn(
 )(function* (options: {
   readonly session: McpSessionIdentity;
   readonly loadSessionById: (
-    sessionId: string
+    sessionId: SessionId
   ) => Effect.Effect<SessionRow | null, OrganizationActorStorageError>;
   readonly loadMembershipRoles: (
     organizationId: OrganizationId,

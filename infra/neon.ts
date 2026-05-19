@@ -7,9 +7,9 @@ import * as Effect from "effect/Effect";
 
 import type { InfraStageConfig } from "./stages.ts";
 import {
-  apiAlchemyDrizzleMigrationsDir,
-  apiDrizzleMigrationsDir,
-  apiDrizzleSchemaPath,
+  domainAlchemyDrizzleMigrationsDir,
+  domainDrizzleMigrationsDir,
+  domainDrizzleSchemaPath,
   makeAlchemyStageIdentity,
   resourceName,
 } from "./stages.ts";
@@ -69,11 +69,11 @@ export function makeNeonPostgresLayout(
   return {
     branch: {
       migrationSource: {
-        appliedMigrationsDir: apiDrizzleMigrationsDir,
+        appliedMigrationsDir: domainDrizzleMigrationsDir,
         dialect: "postgres",
-        generatedMigrationsDir: apiAlchemyDrizzleMigrationsDir,
+        generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
         kind: "alchemy-drizzle-schema",
-        schema: apiDrizzleSchemaPath,
+        schema: domainDrizzleSchemaPath,
       },
       name: identity.neonBranchName,
       parentBranchName: identity.isProduction
