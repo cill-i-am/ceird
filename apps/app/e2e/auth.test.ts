@@ -55,6 +55,23 @@ async function expectAuthenticatedHome(page: Page) {
   ).toBeVisible();
 }
 
+function waitForAuthPostResponse(page: Page, pathname: string) {
+  return page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+
+      return (
+        url.origin === API_ORIGIN &&
+        url.pathname === pathname &&
+        response.request().method() === "POST"
+      );
+    },
+    {
+      timeout: AUTH_ACTION_TIMEOUT_MS,
+    }
+  );
+}
+
 async function findPasswordResetToken(email: string): Promise<string | null> {
   const client = new PgClient({
     connectionString: readPlaywrightDatabaseUrl(),
@@ -373,9 +390,18 @@ test.describe("auth pages", () => {
 
     await loginPage.email.fill(email);
     await loginPage.password.fill(oldPassword);
+    const oldPasswordSignInResponsePromise = waitForAuthPostResponse(
+      page,
+      "/api/auth/sign-in/email"
+    );
     await loginPage.submit.click();
+    const oldPasswordSignInResponse = await oldPasswordSignInResponsePromise;
+    expect(oldPasswordSignInResponse.status()).toBe(401);
     await expect(loginPage.alerts).toContainText(
-      "We couldn't sign you in. Check your email and password and try again."
+      "We couldn't sign you in. Check your email and password and try again.",
+      {
+        timeout: AUTH_ACTION_TIMEOUT_MS,
+      }
     );
 
     await loginPage.email.fill(email);
