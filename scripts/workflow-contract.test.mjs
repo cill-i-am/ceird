@@ -587,6 +587,11 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     /node scripts\/export-playwright-database-url\.mjs/
   );
   assert.match(previewWorkflow, /Wait for preview health/);
+  assert.match(previewWorkflow, /for attempt in \{1\.\.120\}/);
+  assert.match(
+    previewWorkflow,
+    /waiting for preview route and TLS propagation/
+  );
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_API_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
   assert.match(previewWorkflow, /actions\/github-script@v/);

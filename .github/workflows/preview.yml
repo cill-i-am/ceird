@@ -133,17 +133,18 @@ jobs:
             local url="$1"
             local label="$2"
 
-            for attempt in {1..30}; do
+            for attempt in {1..120}; do
               if curl --fail --silent --show-error --max-time 10 "$url" >/dev/null; then
                 echo "$label is healthy"
                 return 0
               fi
 
-              if [[ "$attempt" == "30" ]]; then
+              if [[ "$attempt" == "120" ]]; then
                 echo "$label did not become healthy at $url"
                 return 1
               fi
 
+              echo "$label health check attempt $attempt failed; waiting for preview route and TLS propagation"
               sleep 5
             done
           }

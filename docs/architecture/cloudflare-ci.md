@@ -156,7 +156,9 @@ For same-repository PR updates, the workflow:
   `https://api.pr-${PR_NUMBER}.ceird.app`
 - reads and masks `PLAYWRIGHT_DATABASE_URL` from the preview
   `PostgresBranch` state
-- waits for the preview app and API `/health` endpoints to respond
+- waits for the preview app and API `/health` endpoints to respond, allowing a
+  longer Cloudflare route and TLS propagation window for freshly created
+  preview hostnames
 - creates or updates a single PR comment containing the preview app/API URLs
 - runs `pnpm --filter app e2e`
 

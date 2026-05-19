@@ -248,11 +248,12 @@ branch forked from the parent `main` branch through the existing
 URI from Alchemy `PostgresBranch` state for `PLAYWRIGHT_DATABASE_URL`; the value
 is masked before it is exported to the Playwright step and is still omitted from
 root stack outputs. After deploy, CI waits for both preview `/health` endpoints
-before starting Playwright to avoid transient route or domain propagation
-failures. The domain Worker disables auth rate limiting by default only for
-`pr-<number>` stages so repeated E2E runs against the persistent preview
-database do not accumulate lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true`
-explicitly if a preview needs to exercise production rate-limit behavior.
+before starting Playwright to avoid transient route, domain, or TLS propagation
+failures on freshly created preview hostnames. The domain Worker disables auth
+rate limiting by default only for `pr-<number>` stages so repeated E2E runs
+against the persistent preview database do not accumulate lockout counters; set
+`AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to exercise
+production rate-limit behavior.
 
 Fork pull requests do not run the secret-bearing preview jobs. They continue to
 run the non-deploying build, lint, format, and typecheck jobs without
