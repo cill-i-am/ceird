@@ -197,10 +197,54 @@ jobs:
             done
           }
 
+          wait_for_app_authenticated_navigation() {
+            local label="App authenticated navigation"
+
+            for attempt in {1..120}; do
+              local suffix
+              local cookie_jar
+              local signup_payload
+              local headers_file
+
+              suffix="$(date +%s)-$RANDOM-$attempt"
+              cookie_jar="$(mktemp)"
+              headers_file="$(mktemp)"
+              signup_payload=$(printf '{"email":"preview-app-health-%s@example.com","password":"password123","name":"Preview App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+
+              if curl --fail --silent --show-error --max-time 10 \
+                -c "$cookie_jar" \
+                -H "origin: $PLAYWRIGHT_BASE_URL" \
+                -H "content-type: application/json" \
+                --data "$signup_payload" \
+                "$PLAYWRIGHT_API_URL/api/auth/sign-up/email" >/dev/null \
+                && curl --silent --show-error --max-time 10 \
+                  -b "$cookie_jar" \
+                  -D "$headers_file" \
+                  -o /dev/null \
+                  "$PLAYWRIGHT_BASE_URL/" \
+                && grep -qi '^location: /create-organization' "$headers_file"; then
+                rm -f "$cookie_jar" "$headers_file"
+                echo "$label is healthy"
+                return 0
+              fi
+
+              rm -f "$cookie_jar" "$headers_file"
+
+              if [[ "$attempt" == "120" ]]; then
+                echo "$label did not become healthy"
+                return 1
+              fi
+
+              echo "$label check attempt $attempt failed; waiting for app/auth propagation"
+              sleep 5
+            done
+          }
+
           wait_for_health "$PLAYWRIGHT_API_URL/health" "API"
           wait_for_health "$PLAYWRIGHT_API_URL/api/auth/get-session" "API domain forwarding"
           wait_for_auth_domain_forwarding
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
+          wait_for_app_authenticated_navigation
 
       - name: Comment preview URLs
         uses: actions/github-script@v8

@@ -605,6 +605,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(previewWorkflow, /waiting for service binding propagation/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
+  assert.match(previewWorkflow, /wait_for_app_authenticated_navigation/);
+  assert.match(previewWorkflow, /preview-app-health-%s@example\.com/);
+  assert.match(previewWorkflow, /\^location: \/create-organization/);
+  assert.match(previewWorkflow, /waiting for app\/auth propagation/);
   assert.match(previewWorkflow, /actions\/github-script@v/);
   assert.match(previewWorkflow, /ceird-preview-environment/);
   assert.match(previewWorkflow, /Preview environment is ready/);
