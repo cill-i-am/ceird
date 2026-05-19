@@ -150,6 +150,7 @@ jobs:
           }
 
           wait_for_health "$PLAYWRIGHT_API_URL/health" "API"
+          wait_for_health "$PLAYWRIGHT_API_URL/api/auth/get-session" "API domain forwarding"
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
 
       - name: Comment preview URLs
