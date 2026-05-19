@@ -40,12 +40,6 @@ export class DomainWorkerFetchError extends Schema.TaggedError<DomainWorkerFetch
   }
 ) {}
 
-interface CachedDomainWorkerHandler {
-  readonly key: string;
-  readonly webHandler: ReturnType<typeof makeApiWebHandler>;
-}
-
-let cachedDomainWorkerHandler: CachedDomainWorkerHandler | undefined;
 const domainWorkerExecutionContext = new AsyncLocalStorage<ExecutionContext>();
 
 export function makeWorkerBaseLive(env: DomainWorkerEnv) {
@@ -128,50 +122,16 @@ function disposeDomainWorkerHandler(
   );
 }
 
-function domainWorkerHandlerCacheKey(env: DomainWorkerEnv) {
-  return [
-    env.AUTH_APP_ORIGIN,
-    env.AUTH_EMAIL_FROM,
-    env.AUTH_EMAIL_FROM_NAME ?? "",
-    env.AUTH_RATE_LIMIT_ENABLED ?? "",
-    env.BETTER_AUTH_BASE_URL,
-    env.BETTER_AUTH_SECRET,
-    env.DATABASE.connectionString,
-    env.GOOGLE_MAPS_API_KEY,
-    env.MCP_RESOURCE_URL ?? "",
-    env.NODE_ENV ?? "",
-    env.OAUTH_ISSUER_URL ?? "",
-  ].join("\0");
-}
-
-function getDomainWorkerHandler(env: DomainWorkerEnv) {
-  const key = domainWorkerHandlerCacheKey(env);
-
-  if (cachedDomainWorkerHandler?.key === key) {
-    return Effect.succeed(cachedDomainWorkerHandler.webHandler);
-  }
-
-  const previousHandler = cachedDomainWorkerHandler?.webHandler;
-
-  return Effect.gen(function* getDomainWorkerHandlerEffect() {
-    if (previousHandler !== undefined) {
-      yield* disposeDomainWorkerHandler(previousHandler);
-    }
-
-    const webHandler = yield* Effect.try({
-      catch: (cause) =>
-        new DomainWorkerFetchError({
-          cause: serializeFailureCause(cause),
-          message: "Failed to create domain Worker web handler",
-          method: "GET",
-          path: "/",
-        }),
-      try: () => makeDomainWorkerHandler(env),
-    });
-
-    cachedDomainWorkerHandler = { key, webHandler };
-
-    return webHandler;
+function makeDomainWorkerHandlerEffect(request: Request, env: DomainWorkerEnv) {
+  return Effect.try({
+    catch: (cause) =>
+      new DomainWorkerFetchError({
+        cause: serializeFailureCause(cause),
+        message: "Failed to create domain Worker web handler",
+        method: request.method,
+        path: requestPathname(request.url),
+      }),
+    try: () => makeDomainWorkerHandler(env),
   });
 }
 
@@ -187,33 +147,24 @@ export function handleWorkerFetch(
   env: DomainWorkerEnv,
   context: ExecutionContext
 ) {
-  return Effect.gen(function* CloudflareWorkerFetchRuntime() {
-    const webHandler = yield* getDomainWorkerHandler(env).pipe(
-      Effect.mapError(
-        (failure) =>
+  return Effect.acquireUseRelease(
+    makeDomainWorkerHandlerEffect(request, env),
+    (webHandler) =>
+      Effect.tryPromise({
+        catch: (cause) =>
           new DomainWorkerFetchError({
-            cause: failure.cause,
-            message: failure.message,
+            cause: serializeFailureCause(cause),
+            message: "Domain Worker request handling failed",
             method: request.method,
             path: requestPathname(request.url),
-          })
-      )
-    );
-
-    return yield* Effect.tryPromise({
-      catch: (cause) =>
-        new DomainWorkerFetchError({
-          cause: serializeFailureCause(cause),
-          message: "Domain Worker request handling failed",
-          method: request.method,
-          path: requestPathname(request.url),
-        }),
-      try: () =>
-        runWithDomainWorkerExecutionContext(context, () =>
-          webHandler.handler(request)
-        ),
-    });
-  }).pipe(
+          }),
+        try: () =>
+          runWithDomainWorkerExecutionContext(context, () =>
+            webHandler.handler(request)
+          ),
+      }),
+    disposeDomainWorkerHandler
+  ).pipe(
     Effect.catchTag("@ceird/domain/WorkerFetchError", (failure) =>
       logDomainWorkerFetchFailure(env, failure).pipe(
         Effect.as(
@@ -237,15 +188,6 @@ export function handleWorkerFetch(
       attributes: makeDomainWorkerFetchAnnotations(request, env),
     })
   );
-}
-
-export function resetDomainWorkerHandlerCacheForTest() {
-  const previousHandler = cachedDomainWorkerHandler?.webHandler;
-  cachedDomainWorkerHandler = undefined;
-
-  return previousHandler === undefined
-    ? Effect.void
-    : disposeDomainWorkerHandler(previousHandler);
 }
 
 function logDomainWorkerFetchOutcome(

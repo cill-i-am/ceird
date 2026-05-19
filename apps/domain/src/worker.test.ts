@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it, vi } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Layer } from "effect";
 
 import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
@@ -16,7 +16,6 @@ import {
   handleWorkerQueue,
   makeDomainWorkerRuntimeLayers,
   makeWorkerAuthenticationBackgroundTaskHandlerLive,
-  resetDomainWorkerHandlerCacheForTest,
   runWithDomainWorkerExecutionContext,
 } from "./platform/cloudflare/runtime.js";
 import worker from "./worker.js";
@@ -114,10 +113,6 @@ function makeEnv(
 }
 
 describe("worker queue auth email delivery", () => {
-  afterEach(async () => {
-    await Effect.runPromise(resetDomainWorkerHandlerCacheForTest());
-  });
-
   it("assembles request runtime layers from Cloudflare Worker bindings", async () => {
     const env = makeEnv();
     const runtimeLayers = makeDomainWorkerRuntimeLayers(env);
@@ -196,7 +191,7 @@ describe("worker queue auth email delivery", () => {
     }
   });
 
-  it("uses the active request context when a cached handler schedules background tasks", async () => {
+  it("uses the active request context when scheduling background tasks", async () => {
     const firstContext = makeExecutionContext();
     const secondContext = makeExecutionContext();
 

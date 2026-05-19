@@ -117,7 +117,10 @@ The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
 queue scheduling, email binding delivery, and site geocoding are composed from
-Cloudflare bindings without making runtime apps import Alchemy.
+Cloudflare bindings without making runtime apps import Alchemy. The fetch path
+acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
+connections stay request-scoped; queues compose their email sender runtime per
+batch.
 The domain Worker is also configured with Better Auth env vars, MCP resource
 metadata, Google Maps geocoding credentials, observability logs, and traces.
 Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
