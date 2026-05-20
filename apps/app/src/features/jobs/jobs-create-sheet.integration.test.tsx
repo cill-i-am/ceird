@@ -385,6 +385,10 @@ function renderCreateSheet() {
           },
         ],
       }}
+      viewer={{
+        role: "owner",
+        userId: "user_123" as UserIdType,
+      }}
     >
       <JobsCreateSheet />
       <JobsStateProbe />

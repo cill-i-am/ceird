@@ -331,7 +331,7 @@ async function createFixture() {
       "else",
       '  printf "opensrc present before install: %s\\n" "$(sed -n "1p" opensrc/sources.json)" >> "$LOCAL_ENV_CALL_LOG"',
       "fi",
-      'printf "pnpm %s CI=%s\\n" "$*" "$CI" >> "$LOCAL_ENV_CALL_LOG"',
+      `printf "pnpm %s CI=%s\\n" "$*" "\${CI:-}" >> "$LOCAL_ENV_CALL_LOG"`,
       "",
     ].join("\n")
   );

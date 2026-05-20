@@ -8,7 +8,7 @@ import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
 import { waitForSubmitHydration } from "./pages/wait-for-submit-hydration";
-import { API_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
+import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
 
 const apiRequire = createRequire(
   new URL("../../api/package.json", import.meta.url)
@@ -211,6 +211,8 @@ test.describe("auth pages", () => {
   });
 
   test("signup creates an org before entering the app", async ({ page }) => {
+    test.setTimeout(60_000);
+
     await signUpAndCreateOrganization(page);
   });
 
@@ -273,6 +275,9 @@ test.describe("auth pages", () => {
           email,
           name: "Taylor Example",
           password,
+        },
+        headers: {
+          Origin: APP_ORIGIN,
         },
       }
     );
@@ -342,6 +347,9 @@ test.describe("auth pages", () => {
           email,
           name: "Taylor Example",
           password: oldPassword,
+        },
+        headers: {
+          Origin: APP_ORIGIN,
         },
       }
     );

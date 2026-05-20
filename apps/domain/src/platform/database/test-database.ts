@@ -128,38 +128,51 @@ export async function applyAllMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
 
   try {
-    for (const migrationFileName of await readMigrationFileNames()) {
-      await applyMigrationWithPool(pool, migrationFileName);
+    for (const migrationIdentifier of await readMigrationIdentifiers()) {
+      await applyMigrationWithPool(pool, migrationIdentifier);
     }
   } finally {
     await pool.end();
   }
 }
 
-async function readMigrationFileNames(): Promise<readonly string[]> {
+export async function readMigrationSql(
+  migrationIdentifier: string
+): Promise<string> {
+  return await fs.readFile(
+    await resolveMigrationPath(migrationIdentifier),
+    "utf8"
+  );
+}
+
+async function readMigrationIdentifiers(): Promise<readonly string[]> {
   const journalPath = path.resolve(
     process.cwd(),
     "drizzle",
     "meta",
     "_journal.json"
   );
-  const journal = JSON.parse(
-    await fs.readFile(journalPath, "utf8")
-  ) as DrizzleJournal;
 
-  return journal.entries.map((entry) => `${entry.tag}.sql`);
+  try {
+    const journal = JSON.parse(
+      await fs.readFile(journalPath, "utf8")
+    ) as DrizzleJournal;
+
+    return journal.entries.map((entry) => `${entry.tag}.sql`);
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+  }
+
+  return await readMigrationDirectoryNames();
 }
 
 async function applyMigrationWithPool(
   pool: Pool,
-  migrationFileName: string
+  migrationIdentifier: string
 ): Promise<void> {
-  const migrationPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    migrationFileName
-  );
-  const migrationSql = await fs.readFile(migrationPath, "utf8");
+  const migrationSql = await readMigrationSql(migrationIdentifier);
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
@@ -168,4 +181,79 @@ async function applyMigrationWithPool(
   for (const statement of statements) {
     await pool.query(statement);
   }
+}
+
+async function resolveMigrationPath(
+  migrationIdentifier: string
+): Promise<string> {
+  const migrationsDirectory = path.resolve(process.cwd(), "drizzle");
+  const directPath = path.resolve(migrationsDirectory, migrationIdentifier);
+
+  if (await isFile(directPath)) {
+    return directPath;
+  }
+
+  const directDirectoryMigrationPath = path.join(directPath, "migration.sql");
+  if (await isFile(directDirectoryMigrationPath)) {
+    return directDirectoryMigrationPath;
+  }
+
+  const legacyTag = migrationIdentifier.replace(/\.sql$/u, "");
+  const migrationSlug = legacyTag.replace(/^\d+_/u, "");
+  const migrationDirectoryNames = await readMigrationDirectoryNames();
+  const matches = migrationDirectoryNames.filter(
+    (directoryName) =>
+      directoryName === legacyTag || directoryName.endsWith(`_${migrationSlug}`)
+  );
+  const [match] = matches;
+
+  if (matches.length === 1 && match !== undefined) {
+    return path.join(migrationsDirectory, match, "migration.sql");
+  }
+
+  throw new Error(
+    `Unable to resolve migration "${migrationIdentifier}" from ${migrationsDirectory}`
+  );
+}
+
+async function readMigrationDirectoryNames(): Promise<readonly string[]> {
+  const migrationsDirectory = path.resolve(process.cwd(), "drizzle");
+  const entries = await fs.readdir(migrationsDirectory, {
+    withFileTypes: true,
+  });
+  const directoryNames = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const migrationPath = path.join(
+          migrationsDirectory,
+          entry.name,
+          "migration.sql"
+        );
+
+        return (await isFile(migrationPath)) ? entry.name : null;
+      })
+  );
+
+  return directoryNames
+    .filter((name): name is string => name !== null)
+    .toSorted();
+}
+
+async function isFile(filePath: string): Promise<boolean> {
+  try {
+    const stats = await fs.stat(filePath);
+
+    return stats.isFile();
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

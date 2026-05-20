@@ -366,10 +366,11 @@ The domain Worker uses Drizzle with Postgres.
 `databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
 tables. Keep schema changes in the domain that owns the tables, then export
 through the schema barrel. The Alchemy stack also loads this barrel through
-`Drizzle.Schema`. The native Neon branch applies `apps/domain/drizzle`, so the
-historical SQL files remain the bootstrap path and future Alchemy-generated SQL
-under `drizzle/alchemy` is picked up by the same resource. In infra this is
-modeled as separate generated and applied migration directories.
+`Drizzle.Schema`. The parent native Neon branch applies `apps/domain/drizzle`, so
+historical SQL files remain the bootstrap path. Forked local and preview branches
+apply `drizzle/alchemy` only, so Alchemy-generated deltas can run after the fork
+without replaying the bootstrap tree. In infra this is modeled as separate
+generated and applied migration directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.

@@ -65,7 +65,7 @@ describe("Neon Postgres layout", () => {
     expect(layout).toStrictEqual({
       branch: {
         migrationSource: {
-          appliedMigrationsDir: domainDrizzleMigrationsDir,
+          appliedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
           dialect: "postgres",
           generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
           kind: "alchemy-drizzle-schema",
@@ -79,6 +79,19 @@ describe("Neon Postgres layout", () => {
         kind: "reference",
         stage: "main",
       },
+    });
+  });
+
+  it("does not replay historical bootstrap migrations on child branches", () => {
+    const layout = makeNeonPostgresLayout({
+      ...configWithoutCloudflareBootstrapSecrets,
+      stage: "pr-107",
+    });
+
+    expect(layout.branch.parentBranchName).toBe("main");
+    expect(layout.branch.migrationSource).toMatchObject({
+      appliedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
+      generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
     });
   });
 

@@ -7,6 +7,7 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+import { QueryClient } from "@tanstack/query-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -114,6 +115,67 @@ describe("jobs route loader", () => {
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
       expect(mockedListAllCurrentServerJobs).toHaveBeenCalledWith({});
       expect(mockedGetCurrentServerJobOptions).toHaveBeenCalledOnce();
+    }
+  );
+
+  it(
+    "seeds the router query client with the scoped jobs collection key",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const queryClient = new QueryClient();
+      const list = {
+        items: [
+          {
+            createdAt: "2026-04-23T11:00:00.000Z",
+            id: workItemId,
+            kind: "job" as const,
+            labels: [],
+            priority: "none" as const,
+            status: "new" as const,
+            title: "Seeded queue job",
+            updatedAt: "2026-04-23T12:00:00.000Z",
+          },
+        ],
+        nextCursor: undefined,
+      };
+      const options = {
+        contacts: [],
+        labels: [],
+        members: [],
+        serviceAreas: [],
+        sites: [],
+      };
+
+      mockedListAllCurrentServerJobs.mockResolvedValue(list);
+      mockedGetCurrentServerJobOptions.mockResolvedValue(options);
+      const [{ organizationJobsQueryKey }, { loadJobsRouteData }] =
+        await Promise.all([
+          import("#/features/jobs/jobs-query-keys"),
+          import("#/features/jobs/jobs-route-loader"),
+        ]);
+
+      await loadJobsRouteData({
+        activeOrganizationId: organizationId,
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: organizationId,
+        },
+        currentOrganizationRole: "owner",
+        currentUserId: userId,
+        queryClient,
+      });
+
+      expect(
+        queryClient.getQueryData(
+          organizationJobsQueryKey({
+            organizationId,
+            role: "owner",
+            userId,
+          })
+        )
+      ).toStrictEqual(list.items);
     }
   );
 

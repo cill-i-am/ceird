@@ -1,5 +1,6 @@
 import { normalizeLabelName } from "@ceird/labels-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
+import type { QueryClient } from "@tanstack/query-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Schema } from "effect";
@@ -44,6 +45,7 @@ import { cn } from "#/lib/utils";
 
 import type { OrganizationSummary } from "./organization-access";
 import { OrganizationConfigurationProvider } from "./organization-configuration-state";
+import type { OrganizationQueryScope } from "./organization-query-scope";
 import { OrganizationRateCardSection } from "./organization-rate-card-section";
 import {
   decodeUpdateOrganizationInput,
@@ -68,9 +70,13 @@ const EMPTY_ORGANIZATION_LABELS: readonly Label[] = [];
 export function OrganizationSettingsPage({
   organizationLabels = EMPTY_ORGANIZATION_LABELS,
   organization,
+  queryScope,
+  queryClient,
 }: {
   readonly organizationLabels?: readonly Label[];
   readonly organization: OrganizationSummary;
+  readonly queryScope?: OrganizationQueryScope | undefined;
+  readonly queryClient?: QueryClient | undefined;
   // Label editing state and the organization form are intentionally independent.
   // react-doctor-disable-next-line
 }) {
@@ -439,6 +445,8 @@ export function OrganizationSettingsPage({
     <OrganizationConfigurationProvider
       key={organization.id}
       organizationId={organization.id}
+      queryScope={queryScope}
+      queryClient={queryClient}
     >
       <div
         ref={settingsRootRef}

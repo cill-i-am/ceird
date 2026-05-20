@@ -755,6 +755,12 @@ function renderDetailSheet(
           },
         ],
       }}
+      viewer={
+        options.viewer ?? {
+          role: "owner",
+          userId: actorUserId,
+        }
+      }
     >
       <JobsDetailSheet
         initialDetail={detail}

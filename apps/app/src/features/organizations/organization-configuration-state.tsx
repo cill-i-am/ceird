@@ -5,6 +5,7 @@ import type {
   CreateRateCardResponse,
   RateCard,
   RateCardIdType,
+  RateCardLineIdType,
   RateCardListResponse,
   UpdateRateCardInput,
   UpdateRateCardResponse,
@@ -20,20 +21,38 @@ import type {
   UpdateServiceAreaResponse,
 } from "@ceird/sites-core";
 import { ServiceAreaSchema } from "@ceird/sites-core";
-import {
-  createCollection,
-  localOnlyCollectionOptions,
-} from "@tanstack/react-db";
+import { QueryClient } from "@tanstack/query-core";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import { createCollection, createOptimisticAction } from "@tanstack/react-db";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { use } from "react";
 import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import { normalizeAppApiError } from "#/features/api/app-api-errors";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
+import {
+  ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+  markTanStackDbCollectionWrite,
+  reconcileQueryCollectionDataAfterConcurrentWrite,
+  stripTanStackDbCollectionData,
+  withoutTanStackDbVirtualProps,
+} from "#/lib/tanstack-db-collection";
+import type {
+  TanStackDbCollectionSnapshot,
+  TanStackDbCollectionWriteVersionRef,
+} from "#/lib/tanstack-db-collection";
+import { useHydratedCollectionItems } from "#/lib/tanstack-db-react";
+
+import type { OrganizationQueryScope } from "./organization-query-scope";
+import { organizationScopedQueryKey } from "./organization-query-scope";
 
 type ServiceAreasCollection = ReturnType<typeof makeServiceAreasCollection>;
 type RateCardsCollection = ReturnType<typeof makeRateCardsCollection>;
+
+const EMPTY_SERVICE_AREAS: readonly ServiceArea[] = [];
+const EMPTY_RATE_CARDS: readonly RateCard[] = [];
 
 export interface OrganizationAsyncResult {
   readonly error: unknown | null;
@@ -42,8 +61,12 @@ export interface OrganizationAsyncResult {
 
 interface OrganizationConfigurationStore {
   readonly organizationId: OrganizationId;
+  readonly queryScope: OrganizationQueryScope;
+  readonly queryClient: QueryClient;
   readonly rateCards: RateCardsCollection;
+  readonly rateCardsWriteVersionRef: TanStackDbCollectionWriteVersionRef;
   readonly serviceAreas: ServiceAreasCollection;
+  readonly serviceAreasWriteVersionRef: TanStackDbCollectionWriteVersionRef;
 }
 
 interface OrganizationConfigurationContextValue {
@@ -147,17 +170,38 @@ const initialOrganizationConfigurationAsyncState: OrganizationConfigurationAsync
 export function OrganizationConfigurationProvider({
   children,
   organizationId,
+  queryClient: providedQueryClient,
+  queryScope: providedQueryScope,
 }: {
   readonly children: React.ReactNode;
   readonly organizationId: OrganizationId;
+  readonly queryClient?: QueryClient | undefined;
+  readonly queryScope?: OrganizationQueryScope | undefined;
 }) {
-  const store = React.useMemo(
-    () => makeOrganizationConfigurationStore(organizationId),
-    [organizationId]
+  const [fallbackQueryClient] = React.useState(() => new QueryClient());
+  const queryClient = providedQueryClient ?? fallbackQueryClient;
+  const queryScope = React.useMemo(
+    () =>
+      providedQueryScope ?? {
+        organizationId,
+      },
+    [organizationId, providedQueryScope]
   );
-  const [asyncState, dispatchAsyncState] = React.useReducer(
+  const store = React.useMemo(
+    () =>
+      makeOrganizationConfigurationStore(
+        organizationId,
+        queryScope,
+        queryClient
+      ),
+    [organizationId, queryClient, queryScope]
+  );
+  const [asyncState, unsafeDispatchAsyncState] = React.useReducer(
     organizationConfigurationAsyncReducer,
     initialOrganizationConfigurationAsyncState
+  );
+  const dispatchAsyncState = useMountedOrganizationAsyncStateDispatch(
+    unsafeDispatchAsyncState
   );
   const {
     createRateCardResult,
@@ -168,60 +212,39 @@ export function OrganizationConfigurationProvider({
     updateServiceAreaResults,
   } = asyncState;
 
-  React.useEffect(
-    () => () => {
-      void store.serviceAreas.cleanup();
-      void store.rateCards.cleanup();
-    },
-    [store]
-  );
-
   const loadServiceAreas = React.useCallback(
     () =>
       runOrganizationOperation(
-        listBrowserServiceAreas(),
+        refetchServiceAreas(store.serviceAreas),
         (result) =>
           dispatchAsyncState({
             result,
             type: "set-list-service-areas-result",
-          }),
-        async (response) => {
-          const current = serviceAreasFromCollection(store.serviceAreas);
-          await replaceServiceAreas(
-            store.serviceAreas,
-            mergeServiceAreaList(response, { items: current }).items
-          );
-        }
+          })
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const createServiceArea = React.useCallback(
     (input: CreateServiceAreaInput) =>
       runOrganizationOperation(
         withMinimumMutationPendingDurationEffect(
-          createBrowserServiceArea(input)
+          persistCreateServiceArea(store, input)
         ),
         (result) =>
           dispatchAsyncState({
             result,
             type: "set-create-service-area-result",
-          }),
-        async (serviceArea) => {
-          await upsertServiceAreaCollectionItem(
-            store.serviceAreas,
-            serviceArea
-          );
-        }
+          })
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const updateServiceArea = React.useCallback(
     (serviceAreaId: ServiceAreaIdType, input: UpdateServiceAreaInput) =>
       runOrganizationOperation(
         withMinimumMutationPendingDurationEffect(
-          updateBrowserServiceArea(serviceAreaId, input)
+          persistUpdateServiceArea(store, serviceAreaId, input)
         ),
         (result) => {
           dispatchAsyncState({
@@ -229,58 +252,42 @@ export function OrganizationConfigurationProvider({
             serviceAreaId,
             type: "set-update-service-area-result",
           });
-        },
-        async (serviceArea) => {
-          await upsertServiceAreaCollectionItem(
-            store.serviceAreas,
-            serviceArea
-          );
         }
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const loadRateCards = React.useCallback(
     () =>
-      runOrganizationOperation(
-        listBrowserRateCards(),
-        (result) =>
-          dispatchAsyncState({
-            result,
-            type: "set-list-rate-cards-result",
-          }),
-        async (response) => {
-          const current = rateCardsFromCollection(store.rateCards);
-          await replaceRateCards(
-            store.rateCards,
-            mergeRateCardList(response, { items: current }).items
-          );
-        }
+      runOrganizationOperation(refetchRateCards(store.rateCards), (result) =>
+        dispatchAsyncState({
+          result,
+          type: "set-list-rate-cards-result",
+        })
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const createRateCard = React.useCallback(
     (input: CreateRateCardInput) =>
       runOrganizationOperation(
-        withMinimumMutationPendingDurationEffect(createBrowserRateCard(input)),
+        withMinimumMutationPendingDurationEffect(
+          persistCreateRateCard(store, input)
+        ),
         (result) =>
           dispatchAsyncState({
             result,
             type: "set-create-rate-card-result",
-          }),
-        async (rateCard) => {
-          await upsertRateCardCollectionItem(store.rateCards, rateCard);
-        }
+          })
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const updateRateCard = React.useCallback(
     (rateCardId: RateCardIdType, input: UpdateRateCardInput) =>
       runOrganizationOperation(
         withMinimumMutationPendingDurationEffect(
-          updateBrowserRateCard(rateCardId, input)
+          persistUpdateRateCard(store, rateCardId, input)
         ),
         (result) => {
           dispatchAsyncState({
@@ -288,12 +295,9 @@ export function OrganizationConfigurationProvider({
             result,
             type: "set-update-rate-card-result",
           });
-        },
-        async (rateCard) => {
-          await upsertRateCardCollectionItem(store.rateCards, rateCard);
         }
       ),
-    [store]
+    [dispatchAsyncState, store]
   );
 
   const value = React.useMemo<OrganizationConfigurationContextValue>(
@@ -412,32 +416,128 @@ export function isOrganizationAsyncFailure(
 }
 
 function makeOrganizationConfigurationStore(
-  organizationId: OrganizationId
+  organizationId: OrganizationId,
+  queryScope: OrganizationQueryScope,
+  queryClient: QueryClient
 ): OrganizationConfigurationStore {
+  const rateCardsWriteVersionRef = { current: 0 };
+  const serviceAreasWriteVersionRef = { current: 0 };
+
   return {
     organizationId,
-    rateCards: makeRateCardsCollection(organizationId),
-    serviceAreas: makeServiceAreasCollection(organizationId),
+    queryScope,
+    queryClient,
+    rateCards: makeRateCardsCollection(
+      queryScope,
+      queryClient,
+      rateCardsWriteVersionRef
+    ),
+    rateCardsWriteVersionRef,
+    serviceAreas: makeServiceAreasCollection(
+      queryScope,
+      queryClient,
+      serviceAreasWriteVersionRef
+    ),
+    serviceAreasWriteVersionRef,
   };
 }
 
-function makeServiceAreasCollection(organizationId: OrganizationId) {
-  return createCollection(
-    localOnlyCollectionOptions({
-      id: `organization:${organizationId}:service-areas`,
+function makeServiceAreasCollection(
+  queryScope: OrganizationQueryScope,
+  queryClient: QueryClient,
+  writeVersionRef: TanStackDbCollectionWriteVersionRef
+) {
+  const collection: {
+    current?: TanStackDbCollectionSnapshot<ServiceArea>;
+  } = {};
+  const createdCollection = createCollection(
+    queryCollectionOptions({
+      enabled: false,
+      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:service-areas`,
+      queryClient,
+      queryKey: organizationServiceAreasQueryKey(queryScope),
+      queryFn: async () => {
+        const requestWriteVersion = writeVersionRef.current;
+        const response = await Effect.runPromise(listBrowserServiceAreas());
+
+        return reconcileQueryCollectionDataAfterConcurrentWrite({
+          collection: collection.current,
+          incomingItems: response.items,
+          requestWriteVersion,
+          writeVersionRef,
+        });
+      },
       getKey: (serviceArea) => serviceArea.id,
       schema: Schema.toStandardSchemaV1(ServiceAreaSchema),
     })
   );
+  collection.current = createdCollection;
+  return createdCollection;
 }
 
-function makeRateCardsCollection(organizationId: OrganizationId) {
-  return createCollection(
-    localOnlyCollectionOptions({
-      id: `organization:${organizationId}:rate-cards`,
+function makeRateCardsCollection(
+  queryScope: OrganizationQueryScope,
+  queryClient: QueryClient,
+  writeVersionRef: TanStackDbCollectionWriteVersionRef
+) {
+  const collection: {
+    current?: TanStackDbCollectionSnapshot<RateCard>;
+  } = {};
+  const createdCollection = createCollection(
+    queryCollectionOptions({
+      enabled: false,
+      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:rate-cards`,
+      queryClient,
+      queryKey: organizationRateCardsQueryKey(queryScope),
+      queryFn: async () => {
+        const requestWriteVersion = writeVersionRef.current;
+        const response = await Effect.runPromise(listBrowserRateCards());
+
+        return reconcileQueryCollectionDataAfterConcurrentWrite({
+          collection: collection.current,
+          incomingItems: response.items,
+          requestWriteVersion,
+          writeVersionRef,
+        });
+      },
       getKey: (rateCard) => rateCard.id,
       schema: Schema.toStandardSchemaV1(RateCardSchema),
     })
+  );
+  collection.current = createdCollection;
+  return createdCollection;
+}
+
+function organizationServiceAreasQueryKey(scope: OrganizationQueryScope) {
+  return organizationScopedQueryKey("service-areas", scope);
+}
+
+function organizationRateCardsQueryKey(scope: OrganizationQueryScope) {
+  return organizationScopedQueryKey("rate-cards", scope);
+}
+
+function useMountedOrganizationAsyncStateDispatch(
+  dispatch: React.Dispatch<OrganizationConfigurationAsyncAction>
+) {
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  return React.useCallback(
+    (action: OrganizationConfigurationAsyncAction) => {
+      if (isMountedRef.current) {
+        dispatch(action);
+      }
+    },
+    [dispatch]
   );
 }
 
@@ -516,85 +616,25 @@ function organizationConfigurationAsyncReducer(
 function useServiceAreaCollectionItems(
   collection: ServiceAreasCollection
 ): readonly ServiceArea[] {
-  const [items, setItems] = React.useState(() =>
-    serviceAreasFromCollection(collection)
-  );
-
-  React.useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      if (active) {
-        setItems(serviceAreasFromCollection(collection));
-      }
-    };
-    const subscription = collection.subscribeChanges(refresh);
-
-    refresh();
-    void (async () => {
-      try {
-        await collection.preload();
-      } catch (error) {
-        void error;
-      } finally {
-        refresh();
-      }
-    })();
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [collection]);
-
-  return items;
+  return useHydratedCollectionItems(collection, EMPTY_SERVICE_AREAS);
 }
 
 function useRateCardCollectionItems(
   collection: RateCardsCollection
 ): readonly RateCard[] {
-  const [items, setItems] = React.useState(() =>
-    rateCardsFromCollection(collection)
-  );
-
-  React.useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      if (active) {
-        setItems(rateCardsFromCollection(collection));
-      }
-    };
-    const subscription = collection.subscribeChanges(refresh);
-
-    refresh();
-    void (async () => {
-      try {
-        await collection.preload();
-      } catch (error) {
-        void error;
-      } finally {
-        refresh();
-      }
-    })();
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [collection]);
-
-  return items;
+  return useHydratedCollectionItems(collection, EMPTY_RATE_CARDS);
 }
 
 async function runOrganizationOperation<Success>(
   effect: Effect.Effect<Success, AppApiError>,
   setResult: (result: OrganizationAsyncResult) => void,
-  onSuccess: (value: Success) => Promise<void>
+  onSuccess?: (value: Success) => Promise<void>
 ): Promise<Exit.Exit<Success, AppApiError>> {
   setResult(waitingOrganizationAsyncResult);
   const exit = await Effect.runPromiseExit(effect);
 
   if (Exit.isSuccess(exit)) {
-    await onSuccess(exit.value);
+    await onSuccess?.(exit.value);
     setResult(idleOrganizationAsyncResult);
     return exit;
   }
@@ -669,114 +709,289 @@ function updateBrowserRateCard(
   );
 }
 
-async function replaceServiceAreas(
-  collection: ServiceAreasCollection,
-  serviceAreas: readonly ServiceArea[]
-) {
-  const existingKeys = [...collection.keys()];
-
-  if (existingKeys.length > 0) {
-    await collection.delete(existingKeys).isPersisted.promise;
-  }
-
-  if (serviceAreas.length > 0) {
-    await collection.insert([...serviceAreas]).isPersisted.promise;
-  }
+function refetchServiceAreas(
+  collection: ServiceAreasCollection
+): Effect.Effect<ServiceAreaListResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      await collection.utils.refetch({ throwOnError: true });
+      return {
+        items: serviceAreasFromCollection(collection),
+      } satisfies ServiceAreaListResponse;
+    },
+    catch: normalizeAppApiError,
+  });
 }
 
-async function replaceRateCards(
-  collection: RateCardsCollection,
-  rateCards: readonly RateCard[]
-) {
-  const existingKeys = [...collection.keys()];
-
-  if (existingKeys.length > 0) {
-    await collection.delete(existingKeys).isPersisted.promise;
-  }
-
-  if (rateCards.length > 0) {
-    await collection.insert([...rateCards]).isPersisted.promise;
-  }
+function refetchRateCards(
+  collection: RateCardsCollection
+): Effect.Effect<RateCardListResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      await collection.utils.refetch({ throwOnError: true });
+      return {
+        items: rateCardsFromCollection(collection),
+      } satisfies RateCardListResponse;
+    },
+    catch: normalizeAppApiError,
+  });
 }
 
-async function upsertServiceAreaCollectionItem(
-  collection: ServiceAreasCollection,
-  serviceArea: ServiceArea
-) {
-  if (collection.has(serviceArea.id)) {
-    await collection.update(serviceArea.id, (draft) => {
-      draft.description = serviceArea.description;
-      draft.name = serviceArea.name;
-    }).isPersisted.promise;
-    return;
-  }
-
-  await collection.insert(serviceArea).isPersisted.promise;
+function persistCreateServiceArea(
+  store: OrganizationConfigurationStore,
+  input: CreateServiceAreaInput
+): Effect.Effect<CreateServiceAreaResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      let result: CreateServiceAreaResponse | undefined;
+      const action = createOptimisticAction<CreateServiceAreaInput>({
+        onMutate: (variables) => {
+          markTanStackDbCollectionWrite(store.serviceAreasWriteVersionRef);
+          store.serviceAreas.insert({
+            description: variables.description,
+            id: crypto.randomUUID() as ServiceAreaIdType,
+            name: variables.name,
+          });
+        },
+        mutationFn: async (variables) => {
+          const serviceArea = await Effect.runPromise(
+            createBrowserServiceArea(variables)
+          );
+          markTanStackDbCollectionWrite(store.serviceAreasWriteVersionRef);
+          store.serviceAreas.utils.writeUpsert(serviceArea);
+          result = serviceArea;
+          return serviceArea;
+        },
+      });
+      const transaction = action(input);
+      await transaction.isPersisted.promise;
+      return requireActionResult(result);
+    },
+    catch: normalizeAppApiError,
+  });
 }
 
-async function upsertRateCardCollectionItem(
-  collection: RateCardsCollection,
-  rateCard: RateCard
-) {
-  if (collection.has(rateCard.id)) {
-    await collection.update(rateCard.id, (draft) => {
-      draft.createdAt = rateCard.createdAt;
-      draft.lines = [...rateCard.lines];
-      draft.name = rateCard.name;
-      draft.updatedAt = rateCard.updatedAt;
-    }).isPersisted.promise;
-    return;
+function persistUpdateServiceArea(
+  store: OrganizationConfigurationStore,
+  serviceAreaId: ServiceAreaIdType,
+  input: UpdateServiceAreaInput
+): Effect.Effect<UpdateServiceAreaResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      const existingServiceArea = store.serviceAreas.get(serviceAreaId);
+
+      if (existingServiceArea === undefined) {
+        const serviceArea = await Effect.runPromise(
+          updateBrowserServiceArea(serviceAreaId, input)
+        );
+        markTanStackDbCollectionWrite(store.serviceAreasWriteVersionRef);
+        store.serviceAreas.utils.writeUpsert(serviceArea);
+        return serviceArea;
+      }
+
+      const currentServiceArea =
+        withoutTanStackDbVirtualProps(existingServiceArea);
+
+      if (isServiceAreaUpdateNoop(currentServiceArea, input)) {
+        return currentServiceArea;
+      }
+
+      let result: UpdateServiceAreaResponse | undefined;
+      const action = createOptimisticAction<UpdateServiceAreaInput>({
+        onMutate: (variables) => {
+          markTanStackDbCollectionWrite(store.serviceAreasWriteVersionRef);
+          store.serviceAreas.update(serviceAreaId, (draft) => {
+            if (variables.description !== undefined) {
+              draft.description = variables.description ?? undefined;
+            }
+
+            if (variables.name !== undefined) {
+              draft.name = variables.name;
+            }
+          });
+        },
+        mutationFn: async (variables) => {
+          const serviceArea = await Effect.runPromise(
+            updateBrowserServiceArea(serviceAreaId, variables)
+          );
+          markTanStackDbCollectionWrite(store.serviceAreasWriteVersionRef);
+          store.serviceAreas.utils.writeUpsert(serviceArea);
+          result = serviceArea;
+          return serviceArea;
+        },
+      });
+      const transaction = action(input);
+      await transaction.isPersisted.promise;
+      return requireActionResult(result);
+    },
+    catch: normalizeAppApiError,
+  });
+}
+
+function persistCreateRateCard(
+  store: OrganizationConfigurationStore,
+  input: CreateRateCardInput
+): Effect.Effect<CreateRateCardResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      let result: CreateRateCardResponse | undefined;
+      const action = createOptimisticAction<CreateRateCardInput>({
+        onMutate: (variables) => {
+          markTanStackDbCollectionWrite(store.rateCardsWriteVersionRef);
+          const temporaryRateCardId = crypto.randomUUID() as RateCardIdType;
+          const now = new Date().toISOString();
+
+          store.rateCards.insert({
+            createdAt: now,
+            id: temporaryRateCardId,
+            lines: variables.lines.map((line) => ({
+              ...line,
+              id: crypto.randomUUID() as RateCardLineIdType,
+              rateCardId: temporaryRateCardId,
+            })),
+            name: variables.name,
+            updatedAt: now,
+          });
+        },
+        mutationFn: async (variables) => {
+          const rateCard = await Effect.runPromise(
+            createBrowserRateCard(variables)
+          );
+          markTanStackDbCollectionWrite(store.rateCardsWriteVersionRef);
+          store.rateCards.utils.writeUpsert(rateCard);
+          result = rateCard;
+          return rateCard;
+        },
+      });
+      const transaction = action(input);
+      await transaction.isPersisted.promise;
+      return requireActionResult(result);
+    },
+    catch: normalizeAppApiError,
+  });
+}
+
+function persistUpdateRateCard(
+  store: OrganizationConfigurationStore,
+  rateCardId: RateCardIdType,
+  input: UpdateRateCardInput
+): Effect.Effect<UpdateRateCardResponse, AppApiError> {
+  return Effect.tryPromise({
+    try: async () => {
+      const existingRateCard = store.rateCards.get(rateCardId);
+
+      if (existingRateCard === undefined) {
+        const rateCard = await Effect.runPromise(
+          updateBrowserRateCard(rateCardId, input)
+        );
+        markTanStackDbCollectionWrite(store.rateCardsWriteVersionRef);
+        store.rateCards.utils.writeUpsert(rateCard);
+        return rateCard;
+      }
+
+      const currentRateCard = withoutTanStackDbVirtualProps(existingRateCard);
+
+      if (isRateCardUpdateNoop(currentRateCard, input)) {
+        return currentRateCard;
+      }
+
+      let result: UpdateRateCardResponse | undefined;
+      const action = createOptimisticAction<UpdateRateCardInput>({
+        onMutate: (variables) => {
+          markTanStackDbCollectionWrite(store.rateCardsWriteVersionRef);
+          store.rateCards.update(rateCardId, (draft) => {
+            if (variables.lines !== undefined) {
+              draft.lines = variables.lines.map((line) => ({
+                ...line,
+                id:
+                  "id" in line && typeof line.id === "string"
+                    ? line.id
+                    : crypto.randomUUID(),
+                rateCardId,
+              }));
+            }
+
+            if (variables.name !== undefined) {
+              draft.name = variables.name;
+            }
+          });
+        },
+        mutationFn: async (variables) => {
+          const rateCard = await Effect.runPromise(
+            updateBrowserRateCard(rateCardId, variables)
+          );
+          markTanStackDbCollectionWrite(store.rateCardsWriteVersionRef);
+          store.rateCards.utils.writeUpsert(rateCard);
+          result = rateCard;
+          return rateCard;
+        },
+      });
+      const transaction = action(input);
+      await transaction.isPersisted.promise;
+      return requireActionResult(result);
+    },
+    catch: normalizeAppApiError,
+  });
+}
+
+function requireActionResult<Success>(result: Success | undefined): Success {
+  if (result === undefined) {
+    throw new Error("TanStack DB action completed without a result.");
   }
 
-  await collection.insert(rateCard).isPersisted.promise;
+  return result;
+}
+
+function isServiceAreaUpdateNoop(
+  serviceArea: ServiceArea,
+  input: UpdateServiceAreaInput
+) {
+  return (
+    (input.name === undefined || input.name === serviceArea.name) &&
+    (input.description === undefined ||
+      (input.description ?? undefined) === serviceArea.description)
+  );
+}
+
+function isRateCardUpdateNoop(rateCard: RateCard, input: UpdateRateCardInput) {
+  return (
+    (input.name === undefined || input.name === rateCard.name) &&
+    (input.lines === undefined ||
+      areRateCardLineInputsEqual(input.lines, rateCard.lines))
+  );
+}
+
+function areRateCardLineInputsEqual(
+  input: NonNullable<UpdateRateCardInput["lines"]>,
+  current: RateCard["lines"]
+) {
+  return (
+    input.length === current.length &&
+    input.every((line, index) => {
+      const currentLine = current[index];
+
+      return (
+        currentLine !== undefined &&
+        line.kind === currentLine.kind &&
+        line.name === currentLine.name &&
+        line.position === currentLine.position &&
+        line.unit === currentLine.unit &&
+        line.value === currentLine.value
+      );
+    })
+  );
 }
 
 function serviceAreasFromCollection(
   collection: ServiceAreasCollection
 ): readonly ServiceArea[] {
-  return collection.toArray.map(withoutVirtualProps);
+  return stripTanStackDbCollectionData(collection.toArray);
 }
 
 function rateCardsFromCollection(
   collection: RateCardsCollection
 ): readonly RateCard[] {
-  return collection.toArray.map(withoutVirtualProps);
-}
-
-function mergeServiceAreaList(
-  response: ServiceAreaListResponse,
-  current: ServiceAreaListResponse
-): ServiceAreaListResponse {
-  return {
-    items: mergeByIdSortedByName(response.items, current.items),
-  };
-}
-
-function mergeRateCardList(
-  response: RateCardListResponse,
-  current: RateCardListResponse
-): RateCardListResponse {
-  return {
-    items: mergeByIdSortedByName(response.items, current.items),
-  };
-}
-
-function mergeByIdSortedByName<
-  Item extends { readonly id: string; readonly name: string },
->(responseItems: readonly Item[], currentItems: readonly Item[]) {
-  const itemsById = new Map<string, Item>();
-
-  for (const item of responseItems) {
-    itemsById.set(item.id, item);
-  }
-
-  for (const item of currentItems) {
-    if (!itemsById.has(item.id)) {
-      itemsById.set(item.id, item);
-    }
-  }
-
-  return [...itemsById.values()].toSorted(compareByNameThenId);
+  return stripTanStackDbCollectionData(collection.toArray);
 }
 
 function sortServiceAreas(items: readonly ServiceArea[]) {
@@ -796,26 +1011,4 @@ function compareByNameThenId(
   return nameComparison === 0
     ? left.id.localeCompare(right.id)
     : nameComparison;
-}
-
-function withoutVirtualProps<Item extends object>(item: Item): Item {
-  const {
-    $collectionId: _collectionId,
-    $key: _key,
-    $origin: _origin,
-    $synced: _synced,
-    ...data
-  } = item as Item & {
-    readonly $collectionId?: unknown;
-    readonly $key?: unknown;
-    readonly $origin?: unknown;
-    readonly $synced?: unknown;
-  };
-
-  void _collectionId;
-  void _key;
-  void _origin;
-  void _synced;
-
-  return data as Item;
 }

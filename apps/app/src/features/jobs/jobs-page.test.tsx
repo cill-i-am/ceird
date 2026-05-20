@@ -1025,20 +1025,20 @@ function renderJobsPage(options?: {
   readonly withCommandBar?: boolean;
 }) {
   setViewportWidth(options?.viewportWidth ?? 1440);
+  const viewer =
+    options?.viewer ??
+    ({
+      role: "owner",
+      userId: memberOneId,
+    } satisfies JobsViewer);
   const page = (
     <JobsStateProvider
       activeOrganizationId={organizationId}
       list={options?.list ?? initialList}
       options={initialOptions}
+      viewer={viewer}
     >
-      <JobsPage
-        viewer={
-          options?.viewer ?? {
-            role: "owner",
-            userId: memberOneId,
-          }
-        }
-      />
+      <JobsPage viewer={viewer} />
     </JobsStateProvider>
   );
 

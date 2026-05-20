@@ -359,6 +359,7 @@ function renderSitesPage({
       <SitesStateProvider
         activeOrganizationId={organizationId}
         options={pageOptions}
+        viewer={{ role, userId }}
       >
         <SitesPage viewer={{ role, userId }} />
       </SitesStateProvider>

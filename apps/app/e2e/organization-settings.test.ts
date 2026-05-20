@@ -157,7 +157,15 @@ test("organization settings service areas and rate cards feed sites and job filt
   await openOrganizationSettingsTab(page, "Service areas");
   await page.getByLabel("New service area name").fill(serviceAreaName);
   await page.getByLabel("New service area description").fill("Northside work");
-  await page.getByRole("button", { name: "Add service area" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/service-areas") &&
+        response.status() < 400
+    ),
+    page.getByRole("button", { name: "Add service area" }).click(),
+  ]);
   await expect(
     page.getByRole("article", { name: `Service area ${serviceAreaName}` })
   ).toBeVisible();
