@@ -78,7 +78,12 @@ describe("Alchemy Drizzle integration", () => {
       snapshot
     );
     const trgmMigrationSql = readFileSync(
-      resolve(repoRoot, domainDrizzleMigrationsDir, "0012_chunky_mercury.sql"),
+      resolve(
+        repoRoot,
+        domainDrizzleMigrationsDir,
+        "20260428201910_chunky_mercury",
+        "migration.sql"
+      ),
       "utf8"
     );
 

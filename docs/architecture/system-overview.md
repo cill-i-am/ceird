@@ -5,8 +5,8 @@
 Ceird is a job-tracking application for trades and construction teams. The
 current product surface includes authentication, organizations, members,
 invitations, jobs, sites, comments, labels, cost lines, collaborator access,
-service areas, rate cards, activity, settings, and Alchemy-native local
-development.
+service areas, rate cards, activity, settings, org/user/thread-scoped agents,
+and Alchemy-native local development.
 
 The repository is still greenfield. Backward compatibility is not a constraint;
 clear APIs, strong type boundaries, and simple architecture matter more than
@@ -30,14 +30,20 @@ MCP clients
   -> apps/domain OAuth/MCP router and tool execution
   -> Postgres via Hyperdrive
 
+Agent clients
+  -> apps/agent Cloudflare Agents SDK Worker at agent.<stage>.ceird.app
+  -> CeirdAgent Durable Objects scoped by org/user/thread
+  -> apps/domain internal action API through DOMAIN service binding
+  -> Postgres via Hyperdrive
+
 apps/domain Cloudflare Worker
   -> Effect HTTP API, Better Auth, and Effect AI MCP surfaces
-  -> repositories, authorization, action execution, and audit
+  -> repositories, authorization, agent action execution, and audit
   -> Hyperdrive private binding
   -> Neon Postgres
   -> Cloudflare Queues for auth email
 
-apps/api and apps/mcp Cloudflare Workers
+apps/api, apps/mcp, and apps/agent Cloudflare Workers
   -> DOMAIN service binding
 ```
 
@@ -49,16 +55,18 @@ to the stage that produced it.
 
 ## Monorepo Ownership
 
-| Area                     | Owns                                                                                                                            | Should not own                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions. |
-| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database. |
-| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                        |
-| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.  |
-| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.  |
-| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                    |
-| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                               |
-| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                     | App/API domain behavior.                                     |
+| Area                     | Owns                                                                                                                            | Should not own                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions.   |
+| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
+| `apps/agent`             | Cloudflare Agents SDK Worker, `CeirdAgent` Durable Object runtime, AI model streaming, and domain action tool calls.            | Product repositories, authorization policy, migrations, or DB. |
+| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
+| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
+| `packages/agents-core`   | Agent thread/action IDs, action DTO schemas, instance-name helpers, internal API contracts, and connect-token schemas.          | AI runtime, repositories, or product service behavior.         |
+| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
+| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
+| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
+| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                     | App/API domain behavior.                                       |
 
 ## Request And Data Flow
 
@@ -89,6 +97,18 @@ where OAuth verification, the Effect AI MCP router, tool execution, organization
 actor resolution, and authorization rules run against the same services as the
 HTTP API.
 
+Agent threads are domain-owned records keyed by organization, user, and thread.
+The domain Worker creates/list/archives threads, issues short-lived connect
+tokens, and records action runs with an operation id. The Agent Worker verifies
+the connect token before routing to the `CeirdAgent` Durable Object instance,
+keeps live chat/runtime state in the Agent store, touches thread activity in
+the domain Worker for each chat turn, and executes Ceird tools by calling the
+domain Worker's internal action API. Read tools are model-available by default;
+mutating tools are gated until a client confirmation flow can approve them
+outside the model prompt. Mutating actions use the domain action-run ledger for
+idempotent replay protection and reuse the same authorization and
+activity-recording paths as the HTTP API.
+
 ## Persistence Model
 
 The domain Worker exports a combined Drizzle schema from
@@ -102,8 +122,9 @@ The domain Worker exports a combined Drizzle schema from
   labels, collaborators, and cost lines.
 - `sitesSchema` contains sites and service areas. Site access notes remain on
   the site record; site comments are separate internal collaboration records.
-- `databaseSchema` merges authentication, comments, labels, sites, and jobs for
-  the full database runtime.
+- `agentsSchema` contains agent threads and the agent action-run ledger.
+- `databaseSchema` merges authentication, comments, labels, sites, jobs, and
+  agents for the full database runtime.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

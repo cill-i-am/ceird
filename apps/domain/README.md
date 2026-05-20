@@ -32,6 +32,7 @@ default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.
 | `src/worker.ts`                       | Private Cloudflare Worker entrypoint and queue consumer.                                  |
 | `src/platform/database`               | Database config, runtime, schema barrel, errors, and test database helpers.               |
 | `src/platform/cloudflare`             | Domain Worker environment, Hyperdrive binding, queue, email, and runtime composition.     |
+| `src/domains/agents`                  | Agent thread records, connect authorization, action registry, action ledger, and schema.  |
 | `src/domains/identity/authentication` | Better Auth, organization hooks, auth schemas, email delivery, and auth runtime config.   |
 | `src/domains/jobs`                    | Jobs services, repositories, authorization, action execution, activity audit, and schema. |
 | `src/domains/sites`                   | Sites services, repositories, geocoding, label assignments, and schema.                   |
@@ -44,9 +45,9 @@ default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.
 The domain Worker owns:
 
 - Better Auth routes and OAuth/MCP resource configuration.
-- Product domain services for jobs, sites, labels, comments, and activity.
+- Product domain services for jobs, sites, labels, comments, agents, and activity.
 - Authorization policy and actor resolution.
-- Action execution for public HTTP and MCP clients.
+- Action execution for public HTTP, MCP, and Agent clients.
 - Audit/activity records.
 - Drizzle schema, migrations, Postgres/Hyperdrive runtime, and repositories.
 - Auth email scheduling and queue delivery.

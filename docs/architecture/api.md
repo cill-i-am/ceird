@@ -17,6 +17,11 @@ the Hyperdrive/Postgres binding.
 `apps/domain` through the same `DOMAIN` service binding so MCP, public HTTP,
 and future agent/bot surfaces share the same capability surface.
 
+`apps/agent` is the Cloudflare Agents SDK runtime. It hosts `CeirdAgent`
+Durable Objects for org/user/thread-scoped conversations, streams model output
+through Workers AI, and executes Ceird actions by calling the private
+`apps/domain` Worker through the same `DOMAIN` service binding.
+
 ## Entry Points
 
 | Workspace     | File/path                        | Purpose                                                                                  |
@@ -25,6 +30,10 @@ and future agent/bot surfaces share the same capability surface.
 | `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.              |
 | `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                    |
 | `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                |
+| `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.         |
+| `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.       |
+| `apps/agent`  | `src/tools.ts`                   | AI SDK tool definitions that call domain-owned Ceird actions.                            |
+| `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.             |
 | `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.        |
 | `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                  |
 | `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, geocoder, and runtime layer composition. |
@@ -52,14 +61,16 @@ The health handler reads `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` through the
 same Effect config path and includes both values in its response, falling back
 to `local` for package-local Node runs.
 
-The API and MCP runtimes read only the `DOMAIN` service binding. The domain
-runtime reads `DATABASE`, `AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`, plus resolved
-configuration for Better Auth, MCP resource metadata, Google Maps, and auth
-email delivery. The root infra stack owns those Alchemy binding resources in
+The API and MCP runtimes read only the `DOMAIN` service binding. The Agent
+runtime reads `DOMAIN`, the `CeirdAgent` Durable Object binding, the Workers
+`AI` binding, and `AGENT_INTERNAL_SECRET`. The domain runtime reads `DATABASE`,
+`AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`, plus resolved configuration for Better
+Auth, MCP resource metadata, agent internal calls, Google Maps, and auth email
+delivery. The root infra stack owns those Alchemy binding resources in
 `infra/cloudflare-stack.ts`; infra tests compare the stack-provided binding and
-config keys with the runtime contracts for API, MCP, and domain Workers. Secret
-and credential values stay typed as Alchemy deploy-time redacted inputs in
-`infra`, while runtime apps see resolved strings through Cloudflare Worker
+config keys with the runtime contracts for API, MCP, Agent, and domain Workers.
+Secret and credential values stay typed as Alchemy deploy-time redacted inputs
+in `infra`, while runtime apps see resolved strings through Cloudflare Worker
 environment values. Runtime apps intentionally stay on their Effect 3
 application dependencies and do not import Alchemy or Effect 4.
 
@@ -73,7 +84,71 @@ for example `/.well-known/oauth-protected-resource/mcp`.
 MCP HTTP is served through `@effect/ai`'s `McpServer.layerHttpRouter`, adapted
 to the domain web-handler boundary after Better Auth OAuth bearer validation.
 The standalone MCP Worker remains a forwarding adapter so generated/action UI,
-future Agents SDK Workers, and bot surfaces can call the same domain surface.
+Agents SDK Workers, and bot surfaces can call the same domain surface.
+
+## Agent Runtime
+
+Agent contracts live in `@ceird/agents-core`. That package defines thread IDs,
+action run IDs, action names, action DTOs, `buildAgentInstanceName`, connect
+token payloads, and the Effect `HttpApi` groups used by the domain Worker.
+
+The domain Worker owns the durable product side of agents:
+
+| Method | Path                                         | Purpose                                                |
+| ------ | -------------------------------------------- | ------------------------------------------------------ |
+| `GET`  | `/agent/threads`                             | List a user's threads in the active org.               |
+| `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.            |
+| `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                  |
+| `POST` | `/agent/threads/:threadId/authorize`         | Issue a short-lived Agent connect token.               |
+| `POST` | `/agent/internal/threads/:threadId/activity` | Touch `lastMessageAt` from trusted Agent chat traffic. |
+| `POST` | `/agent/internal/actions`                    | Execute a domain-owned action for the Agent.           |
+
+Public agent chat traffic goes to:
+
+| Method | Path                                    | Purpose                             |
+| ------ | --------------------------------------- | ----------------------------------- |
+| `*`    | `/agents/CeirdAgent/:agentInstanceName` | Route to the scoped Agent instance. |
+
+The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
+Agent route accepts a short-lived connect token as a bearer token or `token`
+query parameter, verifies that it was signed by the domain-owned secret,
+normalizes the route to the Agents SDK's kebab-case class path, and only then
+delegates to Cloudflare's router. The Agent Worker disables Worker invocation
+logs so short-lived URL tokens are not persisted by platform request logging.
+The Agent Durable Object keeps chat/runtime state in the Agent store; product
+state, authorization, thread activity timestamps, and action side effects
+remain in the domain Worker.
+
+Current domain actions exposed to the Agent runtime are:
+
+| Action                    | Kind        |
+| ------------------------- | ----------- |
+| `ceird.labels.list`       | read        |
+| `ceird.sites.options`     | read        |
+| `ceird.jobs.options`      | read        |
+| `ceird.jobs.list`         | read        |
+| `ceird.jobs.detail`       | read        |
+| `ceird.jobs.add_comment`  | write       |
+| `ceird.jobs.assign_label` | destructive |
+| `ceird.jobs.remove_label` | destructive |
+
+Read tools are available to the model by default. Write and destructive tools
+are hidden unless `AGENT_MUTATION_TOOLS_ENABLED=true`, which is reserved for a
+confirmation-capable client flow so prompt-only execution cannot mutate data.
+
+Every action call includes a domain operation id. The domain action-run ledger
+stores `thread_id`, `action_name`, `operation_id`, status, input hash/size,
+write-action results, and error metadata. Repeated successful mutating calls
+with the same thread and operation id return the original result, while
+repeated failed or in-flight calls are rejected instead of re-executed. Read
+action results are not durably copied into the ledger; a successful replay
+re-runs the read. The actual action implementations use the domain
+authorization, repository, and activity-recording paths rather than bypassing
+domain behavior.
+
+The public API adapter does not forward `/agent/internal/*`; that surface is
+intended for private Worker service-binding calls from `apps/agent` to
+`apps/domain`.
 
 ## Observability
 
@@ -355,20 +430,24 @@ The domain Worker uses Drizzle with Postgres.
 | Database runtime      | `src/platform/database/database.ts`                  |
 | Test database helpers | `src/platform/database/test-database.ts`             |
 | Schema barrel         | `src/platform/database/schema.ts`                    |
-| Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
+| Migrations            | `drizzle/*/migration.sql`, `drizzle/*/snapshot.json` |
 | Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
-`databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
-tables. Keep schema changes in the domain that owns the tables, then export
-through the schema barrel. The Alchemy stack also loads this barrel through
-`Drizzle.Schema`. The native Neon branch applies `apps/domain/drizzle`, so the
-historical SQL files remain the bootstrap path and future Alchemy-generated SQL
-under `drizzle/alchemy` is picked up by the same resource. In infra this is
-modeled as separate generated and applied migration directories.
+`databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges
+authentication, comments, labels, sites, jobs, and agents tables. Keep schema
+changes in the domain that owns the tables, then export through the schema
+barrel. The Alchemy stack also loads this barrel through `Drizzle.Schema`. The
+native Neon branch applies `apps/domain/drizzle`, so the historical migration
+folders remain the bootstrap path and future Alchemy-generated SQL under
+`drizzle/alchemy` is picked up by the same resource. In infra this is modeled
+as separate generated and applied migration directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.
+The `agent_threads` and `agent_action_runs` tables are owned by the agents
+domain and indexed for the common org/user thread listing path and idempotent
+action replay lookups.
 
 ## Errors And Runtime Schemas
 

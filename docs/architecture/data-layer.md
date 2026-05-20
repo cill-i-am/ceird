@@ -7,7 +7,10 @@ The authentication slice uses two closely related database paths:
 - regular Drizzle for Better Auth's adapter
 - Effect SQL for domain-owned repository code
 
-Both target the same Postgres database, but they serve different jobs.
+Both target the same Postgres database, but they serve different jobs. The
+agents domain follows the same pattern as jobs, sites, labels, and comments:
+Drizzle owns table shape and migrations, while Effect SQL owns repository
+behavior.
 
 ## Why Better Auth Uses Regular Drizzle
 
@@ -73,12 +76,14 @@ provider through an Alchemy profile:
 2. Set deployment config in `.env.local` or another Alchemy env file:
    `GOOGLE_MAPS_API_KEY`, `NEON_API_KEY`, and `AUTH_EMAIL_FROM`.
    `CEIRD_ZONE_NAME` defaults to `ceird.app` and can be overridden for another
-   Cloudflare zone.
+   Cloudflare zone. `CEIRD_AGENT_HOSTNAME` can override the stage-scoped Agent
+   Worker hostname when intentionally cutting over a public agent domain.
 3. Run
    `CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main`
    to create or update the Neon project/branch, refresh Alchemy Drizzle
    migration snapshots, apply domain SQL migrations, create or update the
-   Hyperdrive config, Workers, queues, Email Worker binding, and routes.
+   Hyperdrive config, Workers, Agent Durable Object namespace, Workers AI
+   binding, queues, Email Worker binding, and routes.
 
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are still used for
 non-interactive CI provider auth through GitHub secrets. They are deployment
@@ -110,12 +115,30 @@ peers, while Alchemy v2 uses Effect 4 unstable modules internally.
 
 The private domain Worker receives a `DATABASE` Hyperdrive binding and resolves
 the runtime Postgres URL from `env.DATABASE.connectionString`. Public API and
-MCP Workers receive only the `DOMAIN` service binding. Package-local Node runtimes
-still read `DATABASE_URL`.
+MCP Workers receive only the `DOMAIN` service binding. The public Agent Worker
+receives `DOMAIN`, the `CeirdAgent` Durable Object namespace, Workers AI, and
+the same internal agent secret used by the domain Worker. Package-local Node
+runtimes still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from
 `apps/domain/drizzle` before Hyperdrive and the domain Worker are reconciled.
+
+## Agents Tables
+
+The agents domain owns two Postgres tables:
+
+- `agent_threads` stores the domain-visible thread record keyed by organization,
+  user, and thread id. It is indexed by organization, user, status, and update
+  time for efficient user thread listing.
+- `agent_action_runs` stores the action execution ledger keyed by thread and
+  operation id. It records input, result, error metadata, status, and timestamps
+  so mutating Agent tools can replay successful duplicate calls without running
+  the side effect twice.
+
+Live chat/runtime state remains in the Cloudflare Agents SDK Durable Object
+store. Product state, authorization, idempotency, and audit remain in Postgres
+behind the domain Worker.
 
 ## Deferred Decisions
 

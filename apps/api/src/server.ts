@@ -106,6 +106,10 @@ function handleApiRequest(
     return Response.json(makeHealthPayload(readRuntimeConfig(runtimeConfig)));
   }
 
+  if (isInternalAgentPath(url.pathname)) {
+    return new Response("Not found", { status: 404 });
+  }
+
   return domain.request(request);
 }
 
@@ -146,6 +150,12 @@ function requestPathname(url: string) {
 
 function shouldSkipRequestLog(path: string) {
   return path === "/health";
+}
+
+function isInternalAgentPath(pathname: string) {
+  return (
+    pathname === "/agent/internal" || pathname.startsWith("/agent/internal/")
+  );
 }
 
 export const ServerLive = Layer.scopedDiscard(

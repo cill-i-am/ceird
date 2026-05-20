@@ -14,6 +14,7 @@ function makeWorkerEnv(): DomainWorkerEnv {
     AUTH_EMAIL_QUEUE: {
       send: () => Promise.resolve(),
     } as unknown as Queue<unknown>,
+    AGENT_INTERNAL_SECRET: "agent-secret",
     BETTER_AUTH_BASE_URL: "https://api.example.com/api/auth",
     BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
     DATABASE: {

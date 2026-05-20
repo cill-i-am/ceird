@@ -13,8 +13,8 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Frontend Architecture](architecture/frontend.md) explains the TanStack Start
   app, routes, feature folders, hotkeys, auth bridge, and UI testing approach.
 - [API Architecture](architecture/api.md) explains the public API adapter,
-  private domain Worker, Better Auth integration, MCP adapter, jobs domain,
-  database schema, errors, and Cloudflare Workers.
+  public Agent Worker, private domain Worker, Better Auth integration, MCP
+  adapter, jobs domain, database schema, errors, and Cloudflare Workers.
 - [Shared Packages](architecture/packages.md) explains each package under
   `packages/` and what code belongs there.
 - [Local Development And Infrastructure](architecture/local-development-and-infra.md)
@@ -49,8 +49,8 @@ change:
 
 - Routes, UI architecture, hotkeys, or client/server data loading:
   `architecture/frontend.md`
-- API/domain/MCP endpoints, services, repositories, auth behavior, migrations,
-  or runtime configuration: `architecture/api.md`
+- API/domain/MCP/agent endpoints, services, repositories, auth behavior,
+  migrations, or runtime configuration: `architecture/api.md`
 - Shared schemas, DTOs, IDs, errors, or package ownership:
   `architecture/packages.md`
 - Alchemy stages, local environment setup, or deploy infrastructure:

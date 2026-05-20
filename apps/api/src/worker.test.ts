@@ -161,6 +161,38 @@ describe("API Worker adapter", () => {
     ]);
   });
 
+  it("does not forward internal Agent routes", async () => {
+    const domain = makeDomainService(vi.fn<() => Promise<Response>>());
+    const env = {
+      DOMAIN: domain,
+    } satisfies ApiWorkerEnv;
+
+    const responses = await Promise.all([
+      worker.fetch(
+        new Request("https://api.example.com/agent/internal/actions", {
+          method: "POST",
+        }),
+        env,
+        makeExecutionContext()
+      ),
+      worker.fetch(
+        new Request(
+          "https://api.example.com/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity",
+          { method: "POST" }
+        ),
+        env,
+        makeExecutionContext()
+      ),
+    ]);
+
+    expect(responses.map((response) => response.status)).toStrictEqual([
+      404, 404,
+    ]);
+    await expect(responses[0].text()).resolves.toBe("Not found");
+    await expect(responses[1].text()).resolves.toBe("Not found");
+    expect(domain.fetch).not.toHaveBeenCalled();
+  });
+
   it("keeps public health checks in the API adapter", async () => {
     const domain = makeDomainService(vi.fn<() => Promise<Response>>());
     const env = {

@@ -11,6 +11,7 @@ import {
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 
+import { AgentsHttpLive } from "./domains/agents/http.js";
 import {
   AuthenticationHttpLive,
   AuthenticationLive,
@@ -45,6 +46,7 @@ const makeApiHandlersLive = () =>
     Layer.provide(
       Layer.mergeAll(
         SystemLive,
+        AgentsHttpLive,
         AuthenticationHttpLive,
         JobsHttpLive,
         LabelsHttpLive,

@@ -96,6 +96,39 @@ describe("API request logging", () => {
     ]);
   });
 
+  it("does not forward internal Agent routes through the public API adapter", async () => {
+    const fetch = vi.fn<(request: Request) => Promise<Response>>(() =>
+      Promise.resolve(new Response("domain ok"))
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    try {
+      const webHandler = makeApiWebHandler();
+      const responses = await Promise.all([
+        webHandler.handler(
+          new Request("http://127.0.0.1:3001/agent/internal/actions", {
+            method: "POST",
+          })
+        ),
+        webHandler.handler(
+          new Request(
+            "http://127.0.0.1:3001/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity",
+            { method: "POST" }
+          )
+        ),
+      ]);
+
+      expect(responses.map((response) => response.status)).toStrictEqual([
+        404, 404,
+      ]);
+      await expect(responses[0].text()).resolves.toBe("Not found");
+      await expect(responses[1].text()).resolves.toBe("Not found");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("skips health probe logging", async () => {
     const { logger, logs } = captureLogs();
 

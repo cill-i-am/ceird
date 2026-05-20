@@ -128,38 +128,46 @@ export async function applyAllMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
 
   try {
-    for (const migrationFileName of await readMigrationFileNames()) {
-      await applyMigrationWithPool(pool, migrationFileName);
+    for (const migrationPath of await readMigrationFilePaths()) {
+      await applyMigrationWithPool(pool, migrationPath);
     }
   } finally {
     await pool.end();
   }
 }
 
-async function readMigrationFileNames(): Promise<readonly string[]> {
+async function readMigrationFilePaths(): Promise<readonly string[]> {
   const journalPath = path.resolve(
     process.cwd(),
     "drizzle",
     "meta",
     "_journal.json"
   );
-  const journal = JSON.parse(
-    await fs.readFile(journalPath, "utf8")
-  ) as DrizzleJournal;
+  const journal = await readJsonFile<DrizzleJournal>(journalPath);
 
-  return journal.entries.map((entry) => `${entry.tag}.sql`);
+  if (journal !== undefined) {
+    return journal.entries.map((entry) =>
+      path.resolve(process.cwd(), "drizzle", `${entry.tag}.sql`)
+    );
+  }
+
+  const drizzlePath = path.resolve(process.cwd(), "drizzle");
+  const entries = await fs.readdir(drizzlePath, { withFileTypes: true });
+
+  return entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() && entry.name !== "alchemy" && entry.name !== "meta"
+    )
+    .map((entry) => path.resolve(drizzlePath, entry.name, "migration.sql"))
+    .toSorted();
 }
 
 async function applyMigrationWithPool(
   pool: Pool,
-  migrationFileName: string
+  migrationFileNameOrPath: string
 ): Promise<void> {
-  const migrationPath = path.resolve(
-    process.cwd(),
-    "drizzle",
-    migrationFileName
-  );
-  const migrationSql = await fs.readFile(migrationPath, "utf8");
+  const migrationSql = await readMigrationSql(migrationFileNameOrPath);
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
@@ -168,4 +176,90 @@ async function applyMigrationWithPool(
   for (const statement of statements) {
     await pool.query(statement);
   }
+}
+
+export async function readMigrationSql(
+  migrationFileNameOrPath: string
+): Promise<string> {
+  const migrationPath = path.isAbsolute(migrationFileNameOrPath)
+    ? migrationFileNameOrPath
+    : await resolveMigrationPath(migrationFileNameOrPath);
+
+  return fs.readFile(migrationPath, "utf8");
+}
+
+export async function resolveMigrationPath(
+  migrationFileName: string
+): Promise<string> {
+  const drizzlePath = path.resolve(process.cwd(), "drizzle");
+  const flatPath = path.resolve(process.cwd(), "drizzle", migrationFileName);
+
+  if (await fileExists(flatPath)) {
+    return flatPath;
+  }
+
+  const migrationDirectory = migrationFileName.endsWith(".sql")
+    ? migrationFileName.slice(0, -".sql".length)
+    : migrationFileName;
+  const folderPath = path.resolve(
+    drizzlePath,
+    migrationDirectory,
+    "migration.sql"
+  );
+
+  if (await fileExists(folderPath)) {
+    return folderPath;
+  }
+
+  const legacyTag = migrationDirectory.replace(/^\d+_/, "");
+  const entries = await fs.readdir(drizzlePath, { withFileTypes: true });
+  const timestampedDirectory = entries
+    .filter((entry) => entry.isDirectory())
+    .find((entry) => entry.name.endsWith(`_${legacyTag}`));
+
+  if (timestampedDirectory !== undefined) {
+    return path.resolve(
+      drizzlePath,
+      timestampedDirectory.name,
+      "migration.sql"
+    );
+  }
+
+  return folderPath;
+}
+
+async function readJsonFile<Value>(
+  filePath: string
+): Promise<Value | undefined> {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf8")) as Value;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
 }

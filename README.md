@@ -6,8 +6,9 @@ sites, members, activity, and organization configuration without adopting a
 generic project-management workflow.
 
 The codebase is a TypeScript monorepo built with pnpm workspaces. It contains
-a TanStack Start web app, an Effect HTTP API, shared runtime schema packages,
-and Alchemy infrastructure for Cloudflare and Neon.
+a TanStack Start web app, Effect HTTP domain services, a Cloudflare Agents SDK
+runtime, shared runtime schema packages, and Alchemy infrastructure for
+Cloudflare and Neon.
 
 ## Quick Start
 
@@ -33,7 +34,7 @@ pnpm dev -- --stage codex-my-task
 ```
 
 Alchemy creates or updates the stage-scoped Cloudflare Workers, app,
-Hyperdrive, Neon branch, queues, and routes.
+Agent Worker, Hyperdrive, Neon branch, queues, and routes.
 
 Non-parent stages depend on the parent `main` stage because they fork Neon
 branches from its shared project. If a worktree stage reports a missing
@@ -50,8 +51,10 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                      |
 | `apps/api`               | Public HTTP adapter Worker that keeps root/health routes and forwards domain traffic through the private `DOMAIN` service binding. |
+| `apps/agent`             | Public Cloudflare Agents SDK Worker that hosts org/user/thread-scoped `CeirdAgent` Durable Objects.                                |
 | `apps/domain`            | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
 | `apps/mcp`               | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
+| `packages/agents-core`   | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
 | `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                            |
 | `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                      |
 | `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                          |
@@ -98,8 +101,10 @@ The highest-signal guides are:
 The browser app uses TanStack Router file routes and TanStack Start server-only
 helpers. Authentication is owned by the private domain Worker through Better
 Auth, while the public API Worker forwards app traffic through the `DOMAIN`
-service binding after normalizing proxy headers. Jobs data moves
-through Effect `HttpApi` contracts exported by `@ceird/jobs-core`,
+service binding after normalizing proxy headers. The public Agent Worker hosts
+Cloudflare Agents SDK Durable Objects and calls the domain Worker for every
+Ceird action through an internal service-binding API. Jobs data moves through
+Effect `HttpApi` contracts exported by `@ceird/jobs-core`,
 `@ceird/sites-core`, and `@ceird/labels-core`, so frontend clients, domain
 handlers, public adapters, DTOs, and HTTP error responses share the same
 runtime schema boundaries.
@@ -109,12 +114,15 @@ identity domain wires Better Auth, organization membership, invitation preview,
 and auth email delivery. The jobs domain owns job workflows, rate cards,
 job-label assignment, contacts, and activity recording. Sites and organization
 labels have their own domain services, repositories, schemas, and `HttpApi`
-contracts. The public API and MCP Workers are protocol adapters over that shared
+contracts. The agents domain owns agent thread records, connection grants, and
+the action-run ledger used for idempotent mutating agent actions. The public
+API, MCP, and Agent Workers are protocol/runtime adapters over that shared
 capability surface.
 
 Local multi-service development and production infrastructure are both described
 in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Queues,
-Hyperdrive, and Neon Postgres branches per stage.
+Hyperdrive, Cloudflare AI/Agent resources, and Neon Postgres branches per
+stage.
 
 ## Quality Gates
 

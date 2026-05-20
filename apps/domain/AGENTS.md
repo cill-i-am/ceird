@@ -10,10 +10,12 @@ This app owns Ceird's private business/domain Worker.
   instead of hiding its contract behind broad custom wrappers.
 - Keep Drizzle schema, migrations, repository code, and Alchemy schema loading
   aligned.
-- This app owns authorization, persistence, action execution, audit/activity
-  recording, auth email scheduling, and product domain services.
-- `apps/api`, `apps/mcp`, and future agent or bot surfaces should be protocol
-  adapters over this app rather than importing its repositories directly.
+- This app owns authorization, persistence, agent thread records, action
+  execution, audit/activity recording, auth email scheduling, and product
+  domain services.
+- `apps/api`, `apps/mcp`, `apps/agent`, and future bot surfaces should be
+  protocol adapters over this app rather than importing its repositories
+  directly.
 
 ## Contract And Persistence Changes
 

@@ -144,6 +144,79 @@ describe("domain http integration", () => {
     });
   }, 30_000);
 
+  it("protects internal Agent routes with the domain bearer secret", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "agents_http" });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Agents integration database unavailable; skipping internal route auth coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    await withJobsEnvironment(databaseUrl, async () => {
+      const api = makeApiWebHandler();
+      cleanup.push(api.dispose);
+      const threadId = "11111111-1111-4111-8111-111111111111";
+      const actionBody = {
+        input: {},
+        name: "ceird.labels.list",
+        operationId: "tool-call:1",
+        threadId,
+      };
+
+      const missingActionAuth = await api.handler(
+        makeJsonRequest("/agent/internal/actions", actionBody)
+      );
+      const wrongActionAuth = await api.handler(
+        makeJsonRequest("/agent/internal/actions", actionBody, {
+          headers: { authorization: "Bearer wrong-secret" },
+        })
+      );
+      const correctActionAuth = await api.handler(
+        makeJsonRequest("/agent/internal/actions", actionBody, {
+          headers: { authorization: "Bearer agent-integration-secret" },
+        })
+      );
+
+      expect(missingActionAuth.status).toBe(403);
+      expect(wrongActionAuth.status).toBe(403);
+      expect(correctActionAuth.status).toBe(404);
+
+      const missingActivityAuth = await api.handler(
+        makeRequest(`/agent/internal/threads/${threadId}/activity`, {
+          method: "POST",
+        })
+      );
+      const wrongActivityAuth = await api.handler(
+        makeRequest(`/agent/internal/threads/${threadId}/activity`, {
+          headers: { authorization: "Bearer wrong-secret" },
+          method: "POST",
+        })
+      );
+      const correctActivityAuth = await api.handler(
+        makeRequest(`/agent/internal/threads/${threadId}/activity`, {
+          headers: { authorization: "Bearer agent-integration-secret" },
+          method: "POST",
+        })
+      );
+
+      expect(missingActivityAuth.status).toBe(403);
+      expect(wrongActivityAuth.status).toBe(403);
+      expect(correctActivityAuth.status).toBe(404);
+    });
+  }, 30_000);
+
   it("allows trusted browser origins to preflight jobs requests with credentials", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -2088,6 +2161,7 @@ async function withJobsEnvironment<Result>(
     AUTH_APP_ORIGIN: process.env.AUTH_APP_ORIGIN,
     AUTH_EMAIL_FROM: process.env.AUTH_EMAIL_FROM,
     AUTH_EMAIL_FROM_NAME: process.env.AUTH_EMAIL_FROM_NAME,
+    AGENT_INTERNAL_SECRET: process.env.AGENT_INTERNAL_SECRET,
     BETTER_AUTH_BASE_URL: process.env.BETTER_AUTH_BASE_URL,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
@@ -2096,6 +2170,7 @@ async function withJobsEnvironment<Result>(
   process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
   process.env.AUTH_EMAIL_FROM = "noreply@example.com";
   process.env.AUTH_EMAIL_FROM_NAME = "Ceird Test";
+  process.env.AGENT_INTERNAL_SECRET = "agent-integration-secret";
   process.env.BETTER_AUTH_BASE_URL = "http://127.0.0.1:3000";
   process.env.BETTER_AUTH_SECRET = "0123456789abcdef0123456789abcdef";
   process.env.DATABASE_URL = databaseUrl;
@@ -2119,6 +2194,12 @@ async function withJobsEnvironment<Result>(
       delete process.env.AUTH_EMAIL_FROM_NAME;
     } else {
       process.env.AUTH_EMAIL_FROM_NAME = previous.AUTH_EMAIL_FROM_NAME;
+    }
+
+    if (previous.AGENT_INTERNAL_SECRET === undefined) {
+      delete process.env.AGENT_INTERNAL_SECRET;
+    } else {
+      process.env.AGENT_INTERNAL_SECRET = previous.AGENT_INTERNAL_SECRET;
     }
 
     if (previous.BETTER_AUTH_BASE_URL === undefined) {
@@ -2171,11 +2252,13 @@ function makeJsonRequest(
   body: unknown,
   options?: {
     readonly cookieJar?: Map<string, string>;
+    readonly headers?: ConstructorParameters<typeof Headers>[0];
     readonly method?: string;
   }
 ) {
   const headers = new Headers({
     "content-type": "application/json",
+    ...Object.fromEntries(new Headers(options?.headers).entries()),
   });
 
   if (options?.cookieJar !== undefined && options.cookieJar.size > 0) {

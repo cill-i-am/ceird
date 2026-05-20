@@ -91,6 +91,7 @@ describe("Alchemy stage identity", () => {
     expect(config.stage).toBe("dev_cillian");
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
+    expect(config.agentHostname).toBe("agent.dev-cillian.example.com");
     expect(config.authRateLimitEnabled).toBe(true);
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
@@ -128,6 +129,9 @@ describe("Alchemy stage identity", () => {
     expect(config.apiHostname).toBe(
       "api.codex-alchemy-v2-native-migration.ceird.app"
     );
+    expect(config.agentHostname).toBe(
+      "agent.codex-alchemy-v2-native-migration.ceird.app"
+    );
     expect(config.mcpHostname).toBe(
       "mcp.codex-alchemy-v2-native-migration.ceird.app"
     );
@@ -152,6 +156,7 @@ describe("Alchemy stage identity", () => {
     expect(config.zoneName).toBe("ceird.app");
     expect(config.appHostname).toBe("app.main.ceird.app");
     expect(config.apiHostname).toBe("api.main.ceird.app");
+    expect(config.agentHostname).toBe("agent.main.ceird.app");
     expect(config.mcpHostname).toBe("mcp.main.ceird.app");
     expect(config.hyperdriveName).toBe("ceird-production-postgres");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);

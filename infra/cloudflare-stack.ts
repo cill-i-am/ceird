@@ -55,6 +55,19 @@ export type McpWorkerBindingEnv = {
   readonly [BindingName in keyof McpWorkerBindings]: WorkerServiceBinding;
 };
 
+// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
+export type AgentWorkerBindings = {
+  readonly AI: Cloudflare.AiGateway;
+  readonly CeirdAgent: Cloudflare.DurableObjectNamespaceLike;
+  readonly DOMAIN: DomainWorkerResource;
+};
+
+export interface AgentWorkerBindingEnv {
+  readonly AI: Ai;
+  readonly CeirdAgent: DurableObjectNamespace;
+  readonly DOMAIN: WorkerServiceBinding;
+}
+
 type ApiWorkerBindingProps = {
   readonly [BindingName in keyof ApiWorkerBindings]:
     | ApiWorkerBindings[BindingName]
@@ -73,6 +86,12 @@ type McpWorkerBindingProps = {
     | Effect.Effect<McpWorkerBindings[BindingName], never, never>;
 };
 
+type AgentWorkerBindingProps = {
+  readonly [BindingName in keyof AgentWorkerBindings]:
+    | AgentWorkerBindings[BindingName]
+    | Effect.Effect<AgentWorkerBindings[BindingName], never, never>;
+};
+
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
 type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
@@ -87,6 +106,7 @@ export interface ApiWorkerConfiguredEnv {
 }
 
 export interface DomainWorkerConfiguredEnv {
+  readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
@@ -100,6 +120,12 @@ export interface DomainWorkerConfiguredEnv {
 }
 
 export interface McpWorkerConfiguredEnv {
+  readonly NODE_ENV: "production";
+}
+
+export interface AgentWorkerConfiguredEnv {
+  readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
+  readonly AGENT_MUTATION_TOOLS_ENABLED: "false";
   readonly NODE_ENV: "production";
 }
 
@@ -133,13 +159,28 @@ export function makeMcpWorkerBindings(input: {
   } satisfies McpWorkerBindingProps;
 }
 
+export function makeAgentWorkerBindings(input: {
+  readonly ai: Cloudflare.AiGateway;
+  readonly domain: DomainWorkerResource;
+}) {
+  return {
+    AI: input.ai,
+    CeirdAgent: Cloudflare.DurableObjectNamespace("CeirdAgent", {
+      className: "CeirdAgent",
+    }),
+    DOMAIN: input.domain,
+  } satisfies AgentWorkerBindingProps;
+}
+
 export function makeDomainWorkerEnv(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: InfraStageConfig;
 }): DomainWorkerConfiguredEnv {
   const betterAuthBaseUrl = `https://${input.config.apiHostname}/api/auth`;
 
   return {
+    AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
@@ -165,6 +206,50 @@ export function makeMcpWorkerEnv(): McpWorkerConfiguredEnv {
   return {
     NODE_ENV: "production",
   } satisfies McpWorkerConfiguredEnv & WorkerConfiguredEnv;
+}
+
+export function makeAgentWorkerEnv(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+}): AgentWorkerConfiguredEnv {
+  return {
+    AGENT_INTERNAL_SECRET: input.agentInternalSecret,
+    AGENT_MUTATION_TOOLS_ENABLED: "false",
+    NODE_ENV: "production",
+  } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;
+}
+
+export function makeAgentWorkerProps(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly ai: Cloudflare.AiGateway;
+  readonly config: InfraStageConfig;
+  readonly domain: DomainWorkerResource;
+}) {
+  return {
+    name: resourceName(input.config, "agent"),
+    main: "apps/agent/src/worker.ts",
+    compatibility: workerCompatibility,
+    bindings: makeAgentWorkerBindings({
+      ai: input.ai,
+      domain: input.domain,
+    }),
+    env: {
+      ...makeAgentWorkerEnv({
+        agentInternalSecret: input.agentInternalSecret,
+      }),
+    },
+    domain: input.config.agentHostname,
+    observability: {
+      enabled: true,
+      logs: {
+        enabled: true,
+        invocationLogs: false,
+      },
+      traces: {
+        enabled: true,
+      },
+    },
+    url: false,
+  } satisfies InputProps<WorkerProps<AgentWorkerBindingProps>>;
 }
 
 export function makeMcpWorkerProps(input: {
@@ -239,6 +324,7 @@ export function makeCloudflareHyperdriveProps(input: {
 }
 
 export function makeDomainWorkerProps(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: InfraStageConfig;
@@ -255,6 +341,7 @@ export function makeDomainWorkerProps(input: {
     }),
     env: {
       ...makeDomainWorkerEnv({
+        agentInternalSecret: input.agentInternalSecret,
         betterAuthSecret: input.betterAuthSecret,
         config: input.config,
       }),
@@ -279,6 +366,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   yield* Effect.annotateCurrentSpan("stage", input.config.stage);
   yield* Effect.annotateCurrentSpan("appHostname", input.config.appHostname);
   yield* Effect.annotateCurrentSpan("apiHostname", input.config.apiHostname);
+  yield* Effect.annotateCurrentSpan(
+    "agentHostname",
+    input.config.agentHostname
+  );
   yield* Effect.annotateCurrentSpan("mcpHostname", input.config.mcpHostname);
   yield* Effect.annotateCurrentSpan(
     "hyperdriveId",
@@ -286,6 +377,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   );
 
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
+    bytes: 32,
+  });
+  const agentInternalSecret = yield* Alchemy.Random("AgentInternalSecret", {
     bytes: 32,
   });
 
@@ -303,6 +397,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const domain = yield* Cloudflare.Worker(
     "Domain",
     makeDomainWorkerProps({
+      agentInternalSecret: agentInternalSecret.text,
       authEmailQueue,
       betterAuthSecret: betterAuthSecret.text,
       config: input.config,
@@ -368,6 +463,30 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const agentAi = yield* Cloudflare.AiGateway("AgentAiGateway", {
+    id: resourceName(input.config, "agent"),
+    collectLogs: false,
+  });
+
+  const agent = yield* Cloudflare.Worker(
+    "Agent",
+    makeAgentWorkerProps({
+      agentInternalSecret: agentInternalSecret.text,
+      ai: agentAi,
+      config: input.config,
+      domain,
+    })
+  );
+
+  const agentOrigin = agent.domains.pipe(
+    Output.map((domains) =>
+      makeCloudflareWorkerOrigin({
+        domains,
+        fallbackHostname: input.config.agentHostname,
+      })
+    )
+  );
+
   const app = yield* Cloudflare.Vite("App", {
     name: resourceName(input.config, "app"),
     rootDir: "apps/app",
@@ -399,6 +518,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   return {
     api,
     apiOrigin,
+    agent,
+    agentAi,
+    agentOrigin,
     app,
     appOrigin,
     authEmailDeadLetterQueue,

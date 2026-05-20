@@ -50,6 +50,7 @@ export interface InfraStageConfig {
   readonly zoneName: DomainName;
   readonly appHostname: DomainName;
   readonly apiHostname: DomainName;
+  readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
@@ -199,6 +200,7 @@ export function loadInfraStageConfig(stageInput: string) {
     });
     const defaultAppHostname = `app.${identity.stageSlug}.${zoneName}`;
     const defaultApiHostname = `api.${identity.stageSlug}.${zoneName}`;
+    const defaultAgentHostname = `agent.${identity.stageSlug}.${zoneName}`;
     const defaultMcpHostname = `mcp.${identity.stageSlug}.${zoneName}`;
     const defaultHyperdriveName = identity.isProduction
       ? `${identity.appName}-production-postgres`
@@ -209,6 +211,10 @@ export function loadInfraStageConfig(stageInput: string) {
     );
     const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
       Config.withDefault(defaultApiHostname),
+      Config.mapOrFail(decodeDomainName)
+    );
+    const agentHostname = yield* Config.string("CEIRD_AGENT_HOSTNAME").pipe(
+      Config.withDefault(defaultAgentHostname),
       Config.mapOrFail(decodeDomainName)
     );
     const mcpHostname = yield* Config.string("CEIRD_MCP_HOSTNAME").pipe(
@@ -283,6 +289,7 @@ export function loadInfraStageConfig(stageInput: string) {
       zoneName,
       appHostname,
       apiHostname,
+      agentHostname,
       mcpHostname,
       authEmailFrom,
       authEmailFromName,
