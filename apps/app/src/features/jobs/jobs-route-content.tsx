@@ -4,6 +4,7 @@ import type {
   JobListResponse,
   JobOptionsResponse,
 } from "@ceird/jobs-core";
+import type { QueryClient } from "@tanstack/query-core";
 import type { ComponentProps, ReactNode } from "react";
 
 import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
@@ -19,6 +20,7 @@ export function JobsRouteContent({
   list,
   onViewModeChange,
   options,
+  queryClient,
   viewMode,
   viewer,
 }: {
@@ -32,6 +34,7 @@ export function JobsRouteContent({
     typeof JobsPage
   >["onViewModeChange"];
   readonly options: JobOptionsResponse;
+  readonly queryClient?: QueryClient | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
 }) {
@@ -41,6 +44,8 @@ export function JobsRouteContent({
       activeOrganizationId={activeOrganizationId}
       list={list}
       options={options}
+      queryClient={queryClient}
+      viewer={viewer}
     >
       <JobsPage
         listHotkeysEnabled={listHotkeysEnabled}

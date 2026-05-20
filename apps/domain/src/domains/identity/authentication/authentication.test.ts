@@ -1,6 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-
 import {
   HttpClient,
   HttpRouter,
@@ -14,6 +11,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect } from "effect";
 import { Pool } from "pg";
 
+import { readMigrationSql } from "../../../platform/database/test-database.js";
 import {
   createAuthentication,
   makeAuthenticationWebHandler,
@@ -438,12 +436,7 @@ describe("auth schema", () => {
   }, 10_000);
 
   it("stores a database-level slug format check in the organization migration", async () => {
-    const migrationPath = path.resolve(
-      process.cwd(),
-      "drizzle",
-      "0003_organizations.sql"
-    );
-    const migrationSql = await fs.readFile(migrationPath, "utf8");
+    const migrationSql = await readMigrationSql("0003_organizations.sql");
 
     expect(migrationSql).toContain("organization_slug_format_chk");
     expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");

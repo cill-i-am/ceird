@@ -166,9 +166,11 @@ The native Neon branch resource applies the configured `NeonMigrationSource`
 before Hyperdrive reads the branch origin and before new domain code is uploaded.
 That source is Alchemy `Drizzle.Schema`, which loads the domain schema barrel and
 writes generated migration snapshots under `apps/domain/drizzle/alchemy`. The Neon
-branch resource depends on that schema resource, then applies SQL from
-`apps/domain/drizzle`, including historical package-local SQL files and future
-Alchemy-generated SQL files under the nested Alchemy directory.
+branch resource depends on that schema resource, then applies SQL from the
+stage-specific `appliedMigrationsDir`. Parent stages use the full
+`apps/domain/drizzle` bootstrap tree. Child stages fork from the parent and apply
+only `apps/domain/drizzle/alchemy`, avoiding a replay of historical package-local
+SQL files that already exist on the forked branch.
 The root provider layer also keeps a no-op legacy `Drizzle.Migrations`
 tombstone provider so existing Cloudflare state entries from the pre-native
 migration wrapper can be planned and deleted cleanly. New migrations are owned
@@ -228,10 +230,10 @@ The branch migration input is modeled in `infra` as
 `Drizzle.Schema` at the root-owned `infra/domain-drizzle-schema.ts` wrapper. That
 wrapper loads the domain schema barrel at `apps/domain/src/platform/database/schema.ts`
 through the same TypeScript resolver Alchemy needs at deploy time. Its
-`generatedMigrationsDir` is `apps/domain/drizzle/alchemy`, while its
-`appliedMigrationsDir` is `apps/domain/drizzle`. Keeping those roles explicit lets
-Alchemy regenerate future SQL before the Neon branch runs the recursive parent
-migration tree that still contains the historical package-local SQL files.
+`generatedMigrationsDir` is always `apps/domain/drizzle/alchemy`. Parent stages
+use `apps/domain/drizzle` as `appliedMigrationsDir` for bootstrap coverage;
+child stages use `apps/domain/drizzle/alchemy` as `appliedMigrationsDir` because
+they inherit the historical schema from the parent branch.
 
 ## Pull Request Preview Infrastructure
 

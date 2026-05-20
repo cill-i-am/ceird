@@ -36,9 +36,12 @@ Current visible routes:
 | `/sites/$siteId`                   | `_app._org.sites.$siteId.tsx`         | Site detail route.                                             |
 | `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks. |
 
-`apps/app/src/router.tsx` configures scroll restoration, intent preloading, and
-typed route registration. Breadcrumb labels are declared through route
-`staticData`.
+`apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
+router-scoped TanStack Query client, SSR Query dehydration/hydration, and typed
+route registration. The root route is declared with
+`createRootRouteWithContext<AppRouterContext>()` so route loaders and route
+components can share the same Query client. Breadcrumb labels are declared
+through route `staticData`.
 
 Domain-heavy routes keep the route file as the lightweight routing boundary.
 When a loader needs API contracts, server helpers, Effect schemas, or other
@@ -188,23 +191,36 @@ UI state for API-backed feature workflows is kept in focused state modules such
 as `jobs-state.ts`, `jobs-detail-state.ts`, `sites-state.ts`, and
 `organization-configuration-state.ts`.
 
-New API-backed feature state should prefer TanStack DB collections for
-reactive client-side entity state. Collections use shared Effect schemas through
+New API-backed feature state should prefer TanStack DB Query Collections for
+reactive client-side entity state. TanStack Start route loaders remain the
+server-rendered first-paint boundary and should seed the router Query client
+with the same query key used by the matching Query Collection. Route-scoped
+providers then create collections from that seeded cache and components
+subscribe with the shared `useHydratedCollectionItems(...)` adapter for simple
+whole-collection reads. The adapter starts the client collection subscription
+early enough for disabled Query Collections to support explicit `refetch()`,
+but its server and hydration snapshots keep using loader DTOs so TanStack DB
+state does not render during the SSR pass. Use `useLiveQuery` only for
+client-only derived DB queries with an explicit SSR strategy. Collections use
+shared Effect schemas through
 `Schema.standardSchemaV1(...)` at the collection boundary, then call the typed
-Effect HTTP client for server reads and writes. The current migrated slices are:
+Effect HTTP client for server reads and writes. The current migrated slices
+are:
 
 - `features/organizations/organization-configuration-state.tsx`, which keeps
-  service areas and rate cards in route-scoped local collections while
-  preserving pending/error mutation state for the existing UI.
+  service areas and rate cards in route-scoped Query Collections while
+  preserving pending/error mutation state for the existing UI. Create flows use
+  TanStack DB optimistic actions with temporary rows because the server
+  generates canonical IDs.
 - `features/sites/sites-state.ts`, which keeps route-loaded site options and
-  per-site comments in scoped local collections, including optimistic comment
-  state and organization-switch guards for in-flight mutations.
+  per-site comments in scoped Query Collections, including server-confirmed
+  comment state and organization-switch guards for in-flight mutations.
 - `features/jobs/jobs-state.ts`, which owns the jobs route list, options,
   create mutation state, create notice, and list-item synchronization through a
   route-scoped TanStack DB provider. The provider preserves loader first-paint
-  data, refreshes the collection after creates, falls back to an optimistic
-  list item if that refresh fails, and validates collection writes with
-  `JobListItemSchema`.
+  data through Query seeding, refreshes the collection after creates, falls
+  back to a server-confirmed list item if that refresh fails, and validates
+  collection writes with `JobListItemSchema`.
 - `features/jobs/jobs-detail-state.ts`, which owns detail-sheet aggregate state
   and mutation feedback through a route-scoped React provider while continuing
   to call the typed Effect HTTP client at the browser API boundary.
@@ -214,6 +230,53 @@ the jobs page, create flow, and detail sheet read the provider APIs directly.
 Do not add new Effect Atom state in app feature code; new API-backed state
 should follow the TanStack DB/provider pattern unless a feature has a more
 specific architecture note.
+
+TanStack Start loaders remain the first-paint and navigation-preload boundary
+for API DTOs. Do not run TanStack DB collection `preload()` from SSR loaders;
+route loaders should return decoded server data and seed the router Query
+client with `seedRouteQueryData(...)`. Loader seeding should pass the request
+start timestamp so a client-side preload cannot overwrite Query cache data that
+was updated by a newer local/server-confirmed mutation. Providers should use
+`seedQueryCollectionInitialData(...)` as the test/client fallback before
+creating Query Collections. React components should subscribe to collection
+state with `useHydratedCollectionItems(...)` unless they need a client-only
+derived DB query. Do not call `useLiveQuery` in a Start SSR render path without
+a server snapshot strategy; the current React DB hook uses `useSyncExternalStore`
+without `getServerSnapshot` and will force client rendering under SSR.
+
+Query Collection query keys must not accidentally nest unrelated collections
+under a shared prefix. TanStack Query uses prefix matching for cache lookups, so
+a comments collection key must not start with the sites collection key unless
+the comments rows are valid members of that same cache family. API-backed
+collection keys should include the active organization, viewer user, and viewer
+role when responses can vary by session or authorization scope.
+
+Route-scoped Query Collections should rely on TanStack DB's native collection
+garbage collection rather than provider unmount cleanup. Live queries own
+derived subscriptions and will report errors if a source collection is manually
+cleaned up while a live query still depends on it. The shared route-scoped
+collection GC time keeps old route collections short-lived without racing
+React unmount order. Route-scoped providers should also ignore async mutation
+or refresh result dispatches after unmount so in-flight operations can settle
+without scheduling React state updates after navigation or test teardown.
+
+Mutations should use TanStack DB's mutation story according to the server
+contract:
+
+- Use collection `utils.writeUpsert`, `writeDelete`, or `writeBatch` to
+  reconcile canonical rows returned by the typed Effect HTTP client.
+- Use `writeBatch` for full collection replacements that need deletes and
+  upserts to appear atomically to live-query subscribers.
+- Use `createOptimisticAction` when the UI can safely apply a local collection
+  mutation immediately. Its `onMutate` callback must record at least one
+  collection mutation, otherwise TanStack DB completes the transaction without
+  calling `mutationFn`.
+- Prefer server-confirmed writes for operations where the server enriches the
+  row with generated IDs, geocoding, linked contacts/sites, permissions, or
+  other canonical fields that the client cannot accurately predict.
+- Query Collection fetch results are authoritative synced state. Race guards
+  may preserve server-confirmed local writes, but they must not promote
+  `$synced: false` optimistic rows into the fetched result.
 
 ## Hotkeys
 

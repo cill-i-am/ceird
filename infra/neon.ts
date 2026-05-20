@@ -65,11 +65,14 @@ export function makeNeonPostgresLayout(
     productionStage: config.neonParentStage,
     stage: config.stage,
   });
+  const appliedMigrationsDir = identity.isProduction
+    ? domainDrizzleMigrationsDir
+    : domainAlchemyDrizzleMigrationsDir;
 
   return {
     branch: {
       migrationSource: {
-        appliedMigrationsDir: domainDrizzleMigrationsDir,
+        appliedMigrationsDir,
         dialect: "postgres",
         generatedMigrationsDir: domainAlchemyDrizzleMigrationsDir,
         kind: "alchemy-drizzle-schema",

@@ -109,8 +109,10 @@ Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
 `Drizzle.Schema` through `infra/domain-drizzle-schema.ts` to maintain checked-in
 snapshots under `apps/domain/drizzle/alchemy`. The native Neon branch resource
-applies `apps/domain/drizzle`, so historical SQL and future Alchemy-generated SQL
-share the same deploy-time migration table.
+applies `apps/domain/drizzle` only for the parent stage bootstrap. Forked local
+and preview stages branch from that parent and apply only
+`apps/domain/drizzle/alchemy`, which lets Alchemy-generated deltas run without
+replaying historical bootstrap SQL against an already-populated branch.
 
 ## Boundary Rules
 
