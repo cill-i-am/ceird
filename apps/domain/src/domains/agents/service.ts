@@ -4,6 +4,7 @@ import {
   AgentStorageError,
   AgentThreadNotFoundError,
   AGENT_THREAD_LIST_DEFAULT_LIMIT,
+  getAgentActionManifest,
   getAgentActionKind,
   timingSafeEqual,
 } from "@ceird/agents-core";
@@ -59,24 +60,35 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const config = yield* AgentRuntimeConfig;
       const threadsRepository = yield* AgentThreadsRepository;
 
-      const loadActor = Effect.fn("AgentThreadsService.loadActor")(
+      const loadActor = Effect.fn("AgentThreadsService.loadActor")(function* (
+        operation: AgentStorageOperation
+      ) {
+        return yield* actor
+          .get()
+          .pipe(
+            mapAgentActorErrors,
+            Effect.catchTag(
+              ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
+              failStorage(operation)
+            )
+          );
+      });
+
+      const getActions = Effect.fn("AgentThreadsService.getActions")(
         function* () {
-          return yield* actor
-            .get()
-            .pipe(
-              mapAgentActorErrors,
-              Effect.catchTag(
-                ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
-                failStorage("action.run")
-              )
-            );
+          const currentActor = yield* loadActor("action.manifest");
+          yield* authorization
+            .ensureCanViewOrganizationData(currentActor)
+            .pipe(Effect.mapError(mapAuthorizationDenied));
+
+          return getAgentActionManifest();
         }
       );
 
       const list = Effect.fn("AgentThreadsService.list")(function* (
         query: AgentThreadListQuery
       ) {
-        const currentActor = yield* loadActor();
+        const currentActor = yield* loadActor("thread.list");
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -93,7 +105,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const create = Effect.fn("AgentThreadsService.create")(function* (
         input: CreateAgentThreadInput
       ) {
-        const currentActor = yield* loadActor();
+        const currentActor = yield* loadActor("thread.create");
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -112,7 +124,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const archive = Effect.fn("AgentThreadsService.archive")(function* (
         threadId: AgentThreadId
       ) {
-        const currentActor = yield* loadActor();
+        const currentActor = yield* loadActor("thread.archive");
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -139,7 +151,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const authorizeConnect = Effect.fn(
         "AgentThreadsService.authorizeConnect"
       )(function* (threadId: AgentThreadId) {
-        const currentActor = yield* loadActor();
+        const currentActor = yield* loadActor("thread.authorizeConnect");
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -301,6 +313,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         archive,
         authorizeConnect,
         create,
+        getActions,
         list,
         runAction,
         touchActivity,

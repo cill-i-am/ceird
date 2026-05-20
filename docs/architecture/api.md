@@ -94,14 +94,15 @@ token payloads, and the Effect `HttpApi` groups used by the domain Worker.
 
 The domain Worker owns the durable product side of agents:
 
-| Method | Path                                         | Purpose                                                |
-| ------ | -------------------------------------------- | ------------------------------------------------------ |
-| `GET`  | `/agent/threads`                             | List a user's threads in the active org.               |
-| `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.            |
-| `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                  |
-| `POST` | `/agent/threads/:threadId/authorize`         | Issue a short-lived Agent connect token.               |
-| `POST` | `/agent/internal/threads/:threadId/activity` | Touch `lastMessageAt` from trusted Agent chat traffic. |
-| `POST` | `/agent/internal/actions`                    | Execute a domain-owned action for the Agent.           |
+| Method | Path                                         | Purpose                                                                                          |
+| ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET`  | `/agent/actions`                             | Return presentation-safe shared action manifest metadata for authenticated organization clients. |
+| `GET`  | `/agent/threads`                             | List a user's threads in the active org.                                                         |
+| `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.                                                      |
+| `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                                                            |
+| `POST` | `/agent/threads/:threadId/authorize`         | Issue a short-lived Agent connect token.                                                         |
+| `POST` | `/agent/internal/threads/:threadId/activity` | Touch `lastMessageAt` from trusted Agent chat traffic.                                           |
+| `POST` | `/agent/internal/actions`                    | Execute a domain-owned action for the Agent.                                                     |
 
 Public agent chat traffic goes to:
 
@@ -124,6 +125,11 @@ Domain action execution is registry-driven in
 `executable` in `@ceird/agents-core` are required to have domain handlers;
 planned actions remain in the shared manifest without being callable through
 the private Agent execution boundary.
+Browser clients fetch the authenticated public manifest from
+`GET /agent/actions`. The response uses the shared `{ actions: [...] }`
+contract and includes display, model, kind, confirmation policy, and execution
+status metadata only; input schemas and execution internals are not exposed.
+Action execution remains private to `POST /agent/internal/actions`.
 
 Current domain actions exposed to the Agent runtime are:
 

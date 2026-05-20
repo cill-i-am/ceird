@@ -1,4 +1,5 @@
 import {
+  AgentActionsApiGroup,
   AgentInternalApiGroup,
   AgentThreadsApiGroup,
 } from "@ceird/agents-core";
@@ -16,6 +17,7 @@ export const SystemApiGroup = HttpApiGroup.make("system")
 
 export const AppApi = HttpApi.make("CeirdApi")
   .add(SystemApiGroup)
+  .add(AgentActionsApiGroup)
   .add(AgentThreadsApiGroup)
   .add(AgentInternalApiGroup)
   .add(JobsApiGroup)

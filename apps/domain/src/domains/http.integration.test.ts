@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AgentActionManifestResponseSchema } from "@ceird/agents-core";
 import {
   CreateJobResponseSchema,
   CreateRateCardResponseSchema,
@@ -214,6 +215,80 @@ describe("domain http integration", () => {
       expect(missingActivityAuth.status).toBe(403);
       expect(wrongActivityAuth.status).toBe(403);
       expect(correctActivityAuth.status).toBe(404);
+    });
+  }, 30_000);
+
+  it("exposes the agent action manifest to authenticated organization members", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "agent_actions_http",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Agents integration database unavailable; skipping action manifest coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    await withJobsEnvironment(databaseUrl, async () => {
+      const api = makeApiWebHandler();
+      cleanup.push(api.dispose);
+
+      const unauthenticatedResponse = await api.handler(
+        makeRequest("/agent/actions")
+      );
+      expect(unauthenticatedResponse.status).toBe(403);
+
+      const ownerCookieJar = new Map<string, string>();
+      await signUpUser(api, ownerCookieJar, {
+        email: `agent-actions-owner-${randomUUID()}@example.com`,
+        name: "Agent Actions Owner",
+      });
+      await createOrganization(api, ownerCookieJar, {
+        organizationName: "Agent Actions Organization",
+        organizationSlug: `agent-actions-${randomUUID().slice(0, 8)}`,
+      });
+
+      const manifestResponse = await api.handler(
+        makeRequest("/agent/actions", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(manifestResponse.status).toBe(200);
+
+      const manifestJson = await manifestResponse.json();
+      expect(manifestJson).toHaveProperty("actions");
+      expect(manifestJson).not.toHaveProperty("items");
+
+      const manifest = ParseResult.decodeUnknownSync(
+        AgentActionManifestResponseSchema
+      )(manifestJson);
+      const createJobAction = manifest.actions.find(
+        (action) => action.name === "ceird.jobs.create"
+      );
+      const listLabelsAction = manifest.actions.find(
+        (action) => action.name === "ceird.labels.list"
+      );
+
+      expect(createJobAction).toMatchObject({
+        confirmationPolicy: "confirm",
+        executionStatus: "planned",
+        kind: "write",
+        name: "ceird.jobs.create",
+      });
+      expect(createJobAction).not.toHaveProperty("inputSchema");
+      expect(listLabelsAction).toBeDefined();
+      expect(listLabelsAction).not.toHaveProperty("inputSchema");
     });
   }, 30_000);
 

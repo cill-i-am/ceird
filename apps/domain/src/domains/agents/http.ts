@@ -44,6 +44,21 @@ const AgentThreadsHandlersLive = HttpApiBuilder.group(
     })
 );
 
+const AgentActionsHandlersLive = HttpApiBuilder.group(
+  AppApi,
+  "agentActions",
+  (handlers) =>
+    Effect.gen(function* () {
+      const agentThreadsService = yield* AgentThreadsService;
+
+      return handlers.handle("getAgentActionManifest", () =>
+        agentThreadsService
+          .getActions()
+          .pipe(observeAgentsOperation("getAgentActionManifest"))
+      );
+    })
+);
+
 const AgentInternalHandlersLive = HttpApiBuilder.group(
   AppApi,
   "agentInternal",
@@ -67,6 +82,7 @@ const AgentInternalHandlersLive = HttpApiBuilder.group(
 
 export const AgentsHttpLive = Layer.mergeAll(
   DomainCorsLive,
+  AgentActionsHandlersLive,
   AgentThreadsHandlersLive,
   AgentInternalHandlersLive
 ).pipe(Layer.provide(AgentThreadsService.Default));

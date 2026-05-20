@@ -302,6 +302,7 @@ export const AGENT_STORAGE_OPERATIONS = [
   "thread.archive",
   "thread.authorizeConnect",
   "thread.touchActivity",
+  "action.manifest",
   "action.run",
   "action.execute",
 ] as const;
@@ -377,6 +378,13 @@ export const AgentThreadsApiGroup = HttpApiGroup.make("agentThreads")
       .addError(AgentThreadNotFoundError)
       .addError(AgentStorageError)
   );
+
+export const AgentActionsApiGroup = HttpApiGroup.make("agentActions").add(
+  HttpApiEndpoint.get("getAgentActionManifest", "/agent/actions")
+    .addSuccess(AgentActionManifestResponseSchema)
+    .addError(AgentAccessDeniedError)
+    .addError(AgentStorageError)
+);
 
 export const AgentInternalApiGroup = HttpApiGroup.make("agentInternal")
   .add(

@@ -1212,6 +1212,7 @@ describe("authentication integration", () => {
       readonly id: string;
     };
     const publicPreviewEnvironment = {
+      AGENT_INTERNAL_SECRET: "agent-integration-secret",
       AUTH_APP_ORIGIN: "http://127.0.0.1:4173",
       AUTH_EMAIL_FROM: "no-reply@example.com",
       BETTER_AUTH_BASE_URL: "http://127.0.0.1:3000",
