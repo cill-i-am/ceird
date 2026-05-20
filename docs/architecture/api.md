@@ -135,7 +135,7 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.jobs.list`         | read        |
 | `ceird.jobs.detail`       | read        |
 | `ceird.jobs.add_comment`  | write       |
-| `ceird.jobs.assign_label` | destructive |
+| `ceird.jobs.assign_label` | write       |
 | `ceird.jobs.remove_label` | destructive |
 
 Read tools are available to the model by default. Write and destructive tools

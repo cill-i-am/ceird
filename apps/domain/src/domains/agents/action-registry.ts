@@ -1,5 +1,8 @@
 import { AgentActionRejectedError } from "@ceird/agents-core";
-import type { ExecutableAgentActionName } from "@ceird/agents-core";
+import type {
+  AgentActionName,
+  ExecutableAgentActionName,
+} from "@ceird/agents-core";
 import { CommentBodyInputSchema } from "@ceird/comments-core";
 import { JobListQuerySchema, WorkItemId } from "@ceird/jobs-core";
 import type {
@@ -71,7 +74,7 @@ export function defineDomainAgentAction<
   return handler;
 }
 
-export const domainAgentActions = [
+const domainAgentActions = [
   defineDomainAgentAction({
     name: "ceird.labels.list",
     execute: (actor, input) =>
@@ -351,10 +354,20 @@ export const domainAgentActions = [
   }),
 ] as const satisfies readonly DomainAgentActionHandler<ExecutableAgentActionName>[];
 
-export const domainAgentActionsByName = new Map<
+const domainAgentActionsByName = new Map<
   ExecutableAgentActionName,
   DomainAgentActionHandler<ExecutableAgentActionName>
 >(domainAgentActions.map((action) => [action.name, action]));
+
+export function getDomainAgentActionHandler(
+  name: AgentActionName | ExecutableAgentActionName
+): DomainAgentActionHandler<ExecutableAgentActionName> | undefined {
+  return domainAgentActionsByName.get(name as ExecutableAgentActionName);
+}
+
+export function getDomainAgentActionHandlerNames(): readonly ExecutableAgentActionName[] {
+  return domainAgentActions.map((action) => action.name);
+}
 
 function decodeActionInput<A, I, R>(
   actionName: ExecutableAgentActionName,

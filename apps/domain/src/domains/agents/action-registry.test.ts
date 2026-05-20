@@ -3,7 +3,7 @@ import {
   AGENT_EXECUTABLE_ACTIONS,
   AgentActionRejectedError,
 } from "@ceird/agents-core";
-import type { ExecutableAgentActionName } from "@ceird/agents-core";
+import type { AgentActionName } from "@ceird/agents-core";
 import { Effect, Layer } from "effect";
 
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -21,8 +21,8 @@ import {
   SitesRepository,
 } from "../sites/repositories.js";
 import {
-  domainAgentActions,
-  domainAgentActionsByName,
+  getDomainAgentActionHandler,
+  getDomainAgentActionHandlerNames,
 } from "./action-registry.js";
 import { AgentActions } from "./actions.js";
 
@@ -41,29 +41,21 @@ describe("domain agent action registry", () => {
     expect(result).toStrictEqual({ labels: [] });
   });
 
-  it("rejects executable actions without a registered domain handler", async () => {
-    const originalHandler = domainAgentActionsByName.get("ceird.labels.list");
-    domainAgentActionsByName.delete("ceird.labels.list");
+  it("rejects unsupported action names without mutating the registry", async () => {
+    const missingAction = "ceird.missing.action" as AgentActionName;
+    const error = await Effect.runPromise(
+      runAgentAction(missingAction, {}).pipe(Effect.flip)
+    );
 
-    try {
-      const error = await Effect.runPromise(
-        runAgentAction("ceird.labels.list", {}).pipe(Effect.flip)
-      );
-
-      expect(error).toBeInstanceOf(AgentActionRejectedError);
-      expect(error).toMatchObject({
-        message: "Unsupported agent action: ceird.labels.list",
-        name: "ceird.labels.list",
-      });
-    } finally {
-      if (originalHandler !== undefined) {
-        domainAgentActionsByName.set("ceird.labels.list", originalHandler);
-      }
-    }
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      message: "Unsupported agent action: ceird.missing.action",
+      name: missingAction,
+    });
   });
 
   it("registers a domain handler for every executable action", () => {
-    expect([...domainAgentActionsByName.keys()].toSorted()).toStrictEqual(
+    expect(getDomainAgentActionHandlerNames().toSorted()).toStrictEqual(
       AGENT_EXECUTABLE_ACTIONS.map((action) => action.name).toSorted()
     );
   });
@@ -76,15 +68,16 @@ describe("domain agent action registry", () => {
     expect(plannedActionNames.length).toBeGreaterThan(0);
     expect(
       plannedActionNames.every(
-        (name) =>
-          !domainAgentActionsByName.has(name as ExecutableAgentActionName)
+        (name) => getDomainAgentActionHandler(name) === undefined
       )
     ).toBeTruthy();
-    expect(domainAgentActions).toHaveLength(AGENT_EXECUTABLE_ACTIONS.length);
+    expect(getDomainAgentActionHandlerNames()).toHaveLength(
+      AGENT_EXECUTABLE_ACTIONS.length
+    );
   });
 });
 
-function runAgentAction(name: ExecutableAgentActionName, input: unknown) {
+function runAgentAction(name: AgentActionName, input: unknown) {
   return AgentActions.execute(actor, name, input).pipe(
     Effect.provide(
       Layer.provide(

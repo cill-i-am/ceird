@@ -3,10 +3,7 @@ import {
   AgentActionRejectedError,
   AgentStorageError,
 } from "@ceird/agents-core";
-import type {
-  AgentActionName,
-  ExecutableAgentActionName,
-} from "@ceird/agents-core";
+import type { AgentActionName } from "@ceird/agents-core";
 import {
   JOB_ACCESS_DENIED_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
@@ -29,7 +26,7 @@ import {
   ServiceAreasRepository,
   SitesRepository,
 } from "../sites/repositories.js";
-import { domainAgentActionsByName } from "./action-registry.js";
+import { getDomainAgentActionHandler } from "./action-registry.js";
 
 const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
   "@ceird/domains/jobs/WorkItemOrganizationMismatchError";
@@ -66,9 +63,7 @@ export class AgentActions extends Effect.Service<AgentActions>()(
         name: AgentActionName,
         input: unknown
       ) {
-        const handler = domainAgentActionsByName.get(
-          name as ExecutableAgentActionName
-        );
+        const handler = getDomainAgentActionHandler(name);
         const action =
           handler === undefined
             ? Effect.fail(
