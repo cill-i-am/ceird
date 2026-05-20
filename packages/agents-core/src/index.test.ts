@@ -50,6 +50,12 @@ describe("@ceird/agents-core", () => {
     expect(new Set(AGENT_ACTION_NAMES).size).toBe(AGENT_ACTION_NAMES.length);
   });
 
+  it("keeps action registry model names unique", () => {
+    const modelNames = AGENT_ACTIONS.map((action) => action.modelName);
+
+    expect(new Set(modelNames).size).toBe(modelNames.length);
+  });
+
   it.each(AGENT_ACTIONS)(
     "looks up the exact action definition for $name",
     (action) => {
@@ -100,6 +106,9 @@ describe("@ceird/agents-core", () => {
   it("keeps executable actions scoped to the current domain-backed set", () => {
     expect(AGENT_EXECUTABLE_ACTION_NAMES).toStrictEqual([
       "ceird.labels.list",
+      "ceird.labels.create",
+      "ceird.labels.update",
+      "ceird.labels.delete",
       "ceird.sites.options",
       "ceird.jobs.list",
       "ceird.jobs.detail",

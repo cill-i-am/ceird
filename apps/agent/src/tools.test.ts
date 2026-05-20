@@ -58,6 +58,9 @@ describe("Ceird Agent tools", () => {
         )
       )
     ).toEqual(expectedExecutableModelNames);
+    expect(expectedExecutableModelNames).toEqual(
+      expect.arrayContaining(["createLabel", "updateLabel", "deleteLabel"])
+    );
   });
 
   it("does not expose planned actions even when mutations are enabled", () => {
@@ -71,6 +74,9 @@ describe("Ceird Agent tools", () => {
     ).map((action) => action.modelName);
 
     expect(Object.keys(tools)).not.toContain("createJob");
+    expect(Object.keys(tools)).toEqual(
+      expect.arrayContaining(["createLabel", "updateLabel", "deleteLabel"])
+    );
     expect(Object.keys(tools)).not.toEqual(
       expect.arrayContaining(plannedModelNames)
     );

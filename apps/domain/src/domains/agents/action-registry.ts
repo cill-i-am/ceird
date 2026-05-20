@@ -11,7 +11,11 @@ import type {
   JobListQuery,
   WorkItemIdType,
 } from "@ceird/jobs-core";
-import { LabelId } from "@ceird/labels-core";
+import {
+  CreateLabelInputSchema,
+  LabelId,
+  UpdateLabelInputSchema,
+} from "@ceird/labels-core";
 import type { ServiceAreaOption } from "@ceird/sites-core";
 import { Effect, Option, Schema } from "effect";
 
@@ -45,6 +49,13 @@ const AddJobCommentActionInputSchema = Schema.Struct({
 const AssignJobLabelActionInputSchema = Schema.Struct({
   labelId: LabelId,
   workItemId: WorkItemId,
+});
+const LabelPathInputSchema = Schema.Struct({
+  labelId: LabelId,
+});
+const UpdateLabelActionInputSchema = Schema.Struct({
+  input: UpdateLabelInputSchema,
+  labelId: LabelId,
 });
 
 type DomainAgentActionRequirements =
@@ -91,6 +102,88 @@ const domainAgentActions = [
         const labels = yield* labelsRepository.list(actor.organizationId);
 
         return { labels } as const;
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.labels.create",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.labels.create",
+          CreateLabelInputSchema,
+          input
+        );
+        const labelsRepository = yield* LabelsRepository;
+        const organizationAuthorization = yield* OrganizationAuthorization;
+
+        yield* organizationAuthorization.ensureCanManageLabels(actor);
+
+        return yield* labelsRepository.create({
+          name: payload.name,
+          organizationId: actor.organizationId,
+        });
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.labels.update",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.labels.update",
+          UpdateLabelActionInputSchema,
+          input
+        );
+        const labelsRepository = yield* LabelsRepository;
+        const organizationAuthorization = yield* OrganizationAuthorization;
+
+        yield* organizationAuthorization.ensureCanManageLabels(actor);
+
+        const label = yield* labelsRepository
+          .update(actor.organizationId, payload.labelId, {
+            name: payload.input.name,
+          })
+          .pipe(Effect.map(Option.getOrUndefined));
+
+        if (label === undefined) {
+          return yield* Effect.fail(
+            new AgentActionRejectedError({
+              message: "Label does not exist in the organization",
+              name: "ceird.labels.update",
+            })
+          );
+        }
+
+        return label;
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.labels.delete",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.labels.delete",
+          LabelPathInputSchema,
+          input
+        );
+        const labelsRepository = yield* LabelsRepository;
+        const organizationAuthorization = yield* OrganizationAuthorization;
+
+        yield* organizationAuthorization.ensureCanManageLabels(actor);
+
+        const label = yield* labelsRepository
+          .archive(actor.organizationId, payload.labelId)
+          .pipe(Effect.map(Option.getOrUndefined));
+
+        if (label === undefined) {
+          return yield* Effect.fail(
+            new AgentActionRejectedError({
+              message: "Label does not exist in the organization",
+              name: "ceird.labels.delete",
+            })
+          );
+        }
+
+        return label;
       }),
   }),
   defineDomainAgentAction({

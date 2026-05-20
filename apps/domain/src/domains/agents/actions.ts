@@ -8,7 +8,10 @@ import {
   JOB_ACCESS_DENIED_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
 } from "@ceird/jobs-core";
-import { LABEL_NOT_FOUND_ERROR_TAG } from "@ceird/labels-core";
+import {
+  LABEL_NAME_CONFLICT_ERROR_TAG,
+  LABEL_NOT_FOUND_ERROR_TAG,
+} from "@ceird/labels-core";
 import { Effect } from "effect";
 
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -139,7 +142,8 @@ function mapActionError(
   if (
     isTaggedError(error, JOB_NOT_FOUND_ERROR_TAG) ||
     isTaggedError(error, WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG) ||
-    isTaggedError(error, LABEL_NOT_FOUND_ERROR_TAG)
+    isTaggedError(error, LABEL_NOT_FOUND_ERROR_TAG) ||
+    isTaggedError(error, LABEL_NAME_CONFLICT_ERROR_TAG)
   ) {
     return new AgentActionRejectedError({
       message: getStringProperty(error, "message") ?? "Agent action failed",

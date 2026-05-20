@@ -140,6 +140,9 @@ Current domain actions exposed to the Agent runtime are:
 | Action                    | Kind        |
 | ------------------------- | ----------- |
 | `ceird.labels.list`       | read        |
+| `ceird.labels.create`     | write       |
+| `ceird.labels.update`     | write       |
+| `ceird.labels.delete`     | destructive |
 | `ceird.sites.options`     | read        |
 | `ceird.jobs.options`      | read        |
 | `ceird.jobs.list`         | read        |
