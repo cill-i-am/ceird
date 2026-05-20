@@ -94,12 +94,14 @@ directory models that handoff as an `alchemy-drizzle-schema`
 That wrapper loads the domain schema barrel at
 `apps/domain/src/platform/database/schema.ts` through the TypeScript resolver
 Alchemy needs at deploy time. The checked-in Alchemy migration snapshots live
-under `apps/domain/drizzle/alchemy`. The native Neon branch still applies the
-parent `apps/domain/drizzle` directory so existing package-local SQL migrations
-remain the bootstrap sequence and future Alchemy-generated SQL is applied from
-the nested Alchemy directory. The infra contract names those paths separately as
+under `apps/domain/drizzle/alchemy`. The parent native Neon branch applies the
+full `apps/domain/drizzle` directory so existing package-local SQL migrations
+remain the bootstrap sequence. Forked local and preview branches are created from
+that parent and apply only `apps/domain/drizzle/alchemy`, so future
+Alchemy-generated SQL can bring the fork forward without replaying historical
+bootstrap migrations. The infra contract names those paths separately as
 `generatedMigrationsDir` and `appliedMigrationsDir` so the dependency on
-`Drizzle.Schema` is explicit without losing historical migration coverage.
+`Drizzle.Schema` is explicit without losing parent-stage migration coverage.
 
 Keep the root Alchemy stack on Alchemy's Effect 4 line, but keep domain/API/app/shared
 runtime code on the current Effect 3 package line until the Effect
@@ -115,7 +117,8 @@ still read `DATABASE_URL`.
 
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from
-`apps/domain/drizzle` before Hyperdrive and the domain Worker are reconciled.
+the stage-specific `appliedMigrationsDir` before Hyperdrive and the domain
+Worker are reconciled.
 
 ## Deferred Decisions
 

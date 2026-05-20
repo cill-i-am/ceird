@@ -202,7 +202,7 @@ The workflow:
 - deploys through `pnpm alchemy deploy --stage main --yes`
 - serializes deploys with a GitHub Actions concurrency group
 - lets Alchemy `Drizzle.Schema` update domain migration snapshots before the native
-  Neon branch resource applies `apps/domain/drizzle`
+  Neon branch resource applies the stage-specific migration directory
 - caps Hyperdrive origin database connections and points Hyperdrive at the typed
   Neon branch origin
 

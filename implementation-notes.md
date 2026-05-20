@@ -236,3 +236,26 @@
   - `pnpm --filter app test -- src/features/organizations/organization-rate-card-section.test.tsx src/features/organizations/organization-service-areas-section.test.tsx src/features/jobs/jobs-state.test.ts src/features/sites/sites-state.integration.test.tsx src/routes/-_app._org.jobs.test.tsx src/routes/-_app._org.sites.test.tsx`
   - `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 pnpm --filter app exec playwright test --project=chromium e2e/auth.test.ts e2e/organization-settings.test.ts --grep "signup creates|service areas and rate cards"`
   - `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5439/postgres pnpm --filter domain exec vitest run src/platform/database/test-database.test.ts src/domains/identity/authentication/authentication.test.ts src/domains/identity/authentication/authentication.integration.test.ts src/domains/persistence.integration.test.ts src/domains/http.integration.test.ts`: `74 passed`.
+
+---
+
+## CI Preview Deploy Repair
+
+- GitHub Preview run `26185892173` failed while deploying PR stage `pr-107`.
+  The deploy preview forked its Neon branch from `main`, then the native
+  `Neon.Branch` migration step reapplied the full historical
+  `apps/domain/drizzle` tree. After the Drizzle folder-format conversion, those
+  historical migrations are visible as timestamped migration directories, so the
+  preview branch hit `relation "account" already exists`.
+- The fix keeps parent-stage bootstrap behavior on `apps/domain/drizzle`, but
+  switches child/local/preview stages to apply only
+  `apps/domain/drizzle/alchemy` after `Drizzle.Schema` runs. That preserves the
+  parent bootstrap path while preventing forked branches from replaying SQL that
+  already exists on the parent branch.
+- Local repair checks before pushing:
+  - `pnpm exec vitest run infra/neon.test.ts --reporter=verbose`: `5 passed`.
+  - `pnpm run check-types:infra`
+  - `pnpm run test:infra`: `27 passed`.
+  - `pnpm run test:scripts`: `52 passed`.
+  - `pnpm format`
+  - `pnpm lint`
