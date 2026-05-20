@@ -1,6 +1,10 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
-import { Schema } from "effect";
+import {
+  HttpApi,
+  HttpApiEndpoint,
+  HttpApiGroup,
+  HttpApiSchema,
+} from "effect/unstable/httpapi";
 
 import {
   AddSiteCommentInputSchema,
@@ -34,102 +38,130 @@ import { ServiceAreaId, SiteId } from "./ids.js";
 
 const sitesGroup = HttpApiGroup.make("sites")
   .add(
-    HttpApiEndpoint.get("getSiteOptions", "/sites/options")
-      .addSuccess(SitesOptionsResponseSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.get("getSiteOptions", "/sites/options", {
+      success: SitesOptionsResponseSchema,
+      error: [SiteAccessDeniedError, SiteStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.get("listSites", "/sites")
-      .setUrlParams(SiteListQuerySchema)
-      .addSuccess(SiteListResponseSchema)
-      .addError(SiteListCursorInvalidError)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.get("listSites", "/sites", {
+      query: SiteListQuerySchema,
+      success: SiteListResponseSchema,
+      error: [
+        SiteListCursorInvalidError,
+        SiteAccessDeniedError,
+        SiteStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.post("createSite", "/sites")
-      .setPayload(CreateSiteInputSchema)
-      .addSuccess(CreateSiteResponseSchema, { status: 201 })
-      .addError(SiteAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteGeocodingFailedError)
-      .addError(SiteGeocodingProviderError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.post("createSite", "/sites", {
+      payload: CreateSiteInputSchema,
+      success: CreateSiteResponseSchema.pipe(HttpApiSchema.status("Created")),
+      error: [
+        SiteAccessDeniedError,
+        ServiceAreaNotFoundError,
+        SiteGeocodingFailedError,
+        SiteGeocodingProviderError,
+        SiteStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.patch("updateSite", "/sites/:siteId")
-      .setPath(Schema.Struct({ siteId: SiteId }))
-      .setPayload(UpdateSiteInputSchema)
-      .addSuccess(UpdateSiteResponseSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteNotFoundError)
-      .addError(SiteGeocodingFailedError)
-      .addError(SiteGeocodingProviderError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.patch("updateSite", "/sites/:siteId", {
+      params: { siteId: SiteId },
+      payload: UpdateSiteInputSchema,
+      success: UpdateSiteResponseSchema,
+      error: [
+        SiteAccessDeniedError,
+        ServiceAreaNotFoundError,
+        SiteNotFoundError,
+        SiteGeocodingFailedError,
+        SiteGeocodingProviderError,
+        SiteStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.get("listSiteComments", "/sites/:siteId/comments")
-      .setPath(Schema.Struct({ siteId: SiteId }))
-      .addSuccess(SiteCommentsResponseSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteNotFoundError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.get("listSiteComments", "/sites/:siteId/comments", {
+      params: { siteId: SiteId },
+      success: SiteCommentsResponseSchema,
+      error: [SiteAccessDeniedError, SiteNotFoundError, SiteStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("addSiteComment", "/sites/:siteId/comments")
-      .setPath(Schema.Struct({ siteId: SiteId }))
-      .setPayload(AddSiteCommentInputSchema)
-      .addSuccess(AddSiteCommentResponseSchema, { status: 201 })
-      .addError(SiteAccessDeniedError)
-      .addError(SiteNotFoundError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.post("addSiteComment", "/sites/:siteId/comments", {
+      params: { siteId: SiteId },
+      payload: AddSiteCommentInputSchema,
+      success: AddSiteCommentResponseSchema.pipe(
+        HttpApiSchema.status("Created")
+      ),
+      error: [SiteAccessDeniedError, SiteNotFoundError, SiteStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("assignSiteLabel", "/sites/:siteId/labels")
-      .setPath(Schema.Struct({ siteId: SiteId }))
-      .setPayload(AssignSiteLabelInputSchema)
-      .addSuccess(SiteDetailSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteNotFoundError)
-      .addError(LabelNotFoundError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.post("assignSiteLabel", "/sites/:siteId/labels", {
+      params: { siteId: SiteId },
+      payload: AssignSiteLabelInputSchema,
+      success: SiteDetailSchema,
+      error: [
+        SiteAccessDeniedError,
+        SiteNotFoundError,
+        LabelNotFoundError,
+        SiteStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.del("removeSiteLabel", "/sites/:siteId/labels/:labelId")
-      .setPath(Schema.Struct({ siteId: SiteId, labelId: LabelId }))
-      .addSuccess(SiteDetailSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteNotFoundError)
-      .addError(LabelNotFoundError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.delete(
+      "removeSiteLabel",
+      "/sites/:siteId/labels/:labelId",
+      {
+        params: { siteId: SiteId, labelId: LabelId },
+        success: SiteDetailSchema,
+        error: [
+          SiteAccessDeniedError,
+          SiteNotFoundError,
+          LabelNotFoundError,
+          SiteStorageError,
+        ],
+      }
+    )
   );
 
 export const SitesApiGroup = sitesGroup;
 
 const serviceAreasGroup = HttpApiGroup.make("serviceAreas")
   .add(
-    HttpApiEndpoint.get("listServiceAreas", "/service-areas")
-      .addSuccess(ServiceAreaListResponseSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.get("listServiceAreas", "/service-areas", {
+      success: ServiceAreaListResponseSchema,
+      error: [SiteAccessDeniedError, SiteStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("createServiceArea", "/service-areas")
-      .setPayload(CreateServiceAreaInputSchema)
-      .addSuccess(CreateServiceAreaResponseSchema, { status: 201 })
-      .addError(SiteAccessDeniedError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.post("createServiceArea", "/service-areas", {
+      payload: CreateServiceAreaInputSchema,
+      success: CreateServiceAreaResponseSchema.pipe(
+        HttpApiSchema.status("Created")
+      ),
+      error: [SiteAccessDeniedError, SiteStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.patch("updateServiceArea", "/service-areas/:serviceAreaId")
-      .setPath(Schema.Struct({ serviceAreaId: ServiceAreaId }))
-      .setPayload(UpdateServiceAreaInputSchema)
-      .addSuccess(UpdateServiceAreaResponseSchema)
-      .addError(SiteAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteStorageError)
+    HttpApiEndpoint.patch(
+      "updateServiceArea",
+      "/service-areas/:serviceAreaId",
+      {
+        params: { serviceAreaId: ServiceAreaId },
+        payload: UpdateServiceAreaInputSchema,
+        success: UpdateServiceAreaResponseSchema,
+        error: [
+          SiteAccessDeniedError,
+          ServiceAreaNotFoundError,
+          SiteStorageError,
+        ],
+      }
+    )
   );
 
 export const ServiceAreasApiGroup = serviceAreasGroup;

@@ -6,6 +6,8 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
+import { decodeMcpAuthorizedAppCacheConfigInteger } from "../apps/domain/src/domains/mcp/cache-config.ts";
+
 export const domainDrizzleSchemaPath = "infra/domain-drizzle-schema.ts";
 export const domainDrizzleMigrationsDir = "apps/domain/drizzle";
 export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle/alchemy";
@@ -57,6 +59,8 @@ export interface InfraStageConfig {
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
+  readonly mcpAuthorizedAppCacheMaxEntries: number | undefined;
+  readonly mcpAuthorizedAppCacheTtlSeconds: number | undefined;
   readonly neonDatabaseName: string;
   readonly neonDefaultBranchName: string;
   readonly neonHistoryRetentionSeconds: number;
@@ -237,6 +241,24 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(5),
       Config.mapOrFail(decodeHyperdriveOriginConnectionLimit)
     );
+    const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
+      Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
+        Config.mapOrFail(
+          decodeMcpAuthorizedAppCacheConfigInteger(
+            "CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES"
+          )
+        )
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const mcpAuthorizedAppCacheTtlSeconds = yield* Config.option(
+      Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS").pipe(
+        Config.mapOrFail(
+          decodeMcpAuthorizedAppCacheConfigInteger(
+            "CEIRD_MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS"
+          )
+        )
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const neonDatabaseName = yield* Config.string(
       "CEIRD_NEON_DATABASE_NAME"
     ).pipe(Config.withDefault("ceird"));
@@ -290,6 +312,8 @@ export function loadInfraStageConfig(stageInput: string) {
       googleMapsApiKey,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
+      mcpAuthorizedAppCacheMaxEntries,
+      mcpAuthorizedAppCacheTtlSeconds,
       neonDatabaseName,
       neonDefaultBranchName,
       neonHistoryRetentionSeconds,

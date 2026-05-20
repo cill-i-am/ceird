@@ -1,5 +1,5 @@
 /* eslint-disable max-classes-per-file */
-import { Effect, Layer, Match, ParseResult, Schema } from "effect";
+import { Effect, Layer, Match, Schema } from "effect";
 
 import {
   AuthenticationEmailScheduler,
@@ -18,15 +18,16 @@ import type {
   PasswordResetEmailError,
 } from "./auth-email.js";
 
-export class InvalidAuthEmailQueueMessageError extends Schema.TaggedError<InvalidAuthEmailQueueMessageError>()(
+export class InvalidAuthEmailQueueMessageError extends Schema.TaggedErrorClass<InvalidAuthEmailQueueMessageError>()(
   "InvalidAuthEmailQueueMessageError",
   {
     cause: Schema.String,
+    inputKind: Schema.optional(Schema.String),
     message: Schema.String,
   }
 ) {}
 
-export class AuthEmailQueueDeliveryError extends Schema.TaggedError<AuthEmailQueueDeliveryError>()(
+export class AuthEmailQueueDeliveryError extends Schema.TaggedErrorClass<AuthEmailQueueDeliveryError>()(
   "AuthEmailQueueDeliveryError",
   {
     cause: Schema.optional(Schema.String),
@@ -38,7 +39,7 @@ export class AuthEmailQueueDeliveryError extends Schema.TaggedError<AuthEmailQue
   }
 ) {}
 
-export const AuthEmailQueueMessage = Schema.Union(
+export const AuthEmailQueueMessage = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("password-reset"),
     payload: PasswordResetEmailInput,
@@ -50,26 +51,44 @@ export const AuthEmailQueueMessage = Schema.Union(
   Schema.Struct({
     kind: Schema.Literal("organization-invitation"),
     payload: OrganizationInvitationEmailInput,
-  })
-);
+  }),
+]);
 
 export type AuthEmailQueueMessage = Schema.Schema.Type<
   typeof AuthEmailQueueMessage
 >;
 
-const decodeAuthEmailQueueMessage = Schema.decodeUnknown(AuthEmailQueueMessage);
+const decodeAuthEmailQueueMessage = Schema.decodeUnknownEffect(
+  AuthEmailQueueMessage
+);
 
 export function decodeAuthEmailQueueMessageEffect(input: unknown) {
   return decodeAuthEmailQueueMessage(input).pipe(
-    Effect.catchTag("ParseError", (parseError) =>
+    Effect.catchTag("SchemaError", (_parseError) =>
       Effect.fail(
         new InvalidAuthEmailQueueMessageError({
-          cause: formatParseError(parseError),
+          cause: "schema_decode_failed",
+          ...(extractAuthEmailQueueMessageKind(input) === undefined
+            ? {}
+            : { inputKind: extractAuthEmailQueueMessageKind(input) }),
           message: "Invalid auth email queue message",
         })
       )
     )
   );
+}
+
+function extractAuthEmailQueueMessageKind(input: unknown) {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    !("kind" in input) ||
+    typeof input.kind !== "string"
+  ) {
+    return;
+  }
+
+  return input.kind.slice(0, 64);
 }
 
 function scheduleAuthEmailQueueMessage(
@@ -143,10 +162,6 @@ export const sendAuthEmailQueueMessage = Effect.fn(
   );
 });
 
-function formatParseError(parseError: ParseResult.ParseError) {
-  return ParseResult.TreeFormatter.formatErrorSync(parseError);
-}
-
 type AuthEmailQueueDeliverySourceError =
   | EmailVerificationEmailError
   | OrganizationInvitationEmailError
@@ -156,19 +171,30 @@ function mapAuthEmailQueueDelivery(
   message: AuthEmailQueueMessage,
   send: Effect.Effect<void, AuthEmailQueueDeliverySourceError, never>
 ) {
+  const mapDeliveryError = (error: AuthEmailQueueDeliverySourceError) =>
+    Effect.fail(
+      new AuthEmailQueueDeliveryError({
+        cause: serializeUnknownError(error),
+        deliveryKey: message.payload.deliveryKey,
+        emailKind: message.kind,
+        message: "Auth email queue delivery failed",
+        sourceCause: extractUnknownErrorCause(error),
+        sourceTag: extractUnknownErrorTag(error),
+      })
+    );
+
   return send.pipe(
-    Effect.catchAll((error) =>
-      Effect.fail(
-        new AuthEmailQueueDeliveryError({
-          cause: serializeUnknownError(error),
-          deliveryKey: message.payload.deliveryKey,
-          emailKind: message.kind,
-          message: "Auth email queue delivery failed",
-          sourceCause: extractUnknownErrorCause(error),
-          sourceTag: extractUnknownErrorTag(error),
-        })
-      )
-    )
+    Effect.catchTags({
+      EmailVerificationEmailRejectedError: mapDeliveryError,
+      EmailVerificationEmailRequestError: mapDeliveryError,
+      InvalidEmailVerificationEmailInputError: mapDeliveryError,
+      InvalidOrganizationInvitationEmailInputError: mapDeliveryError,
+      InvalidPasswordResetEmailInputError: mapDeliveryError,
+      OrganizationInvitationEmailRejectedError: mapDeliveryError,
+      OrganizationInvitationEmailRequestError: mapDeliveryError,
+      PasswordResetEmailRejectedError: mapDeliveryError,
+      PasswordResetEmailRequestError: mapDeliveryError,
+    })
   );
 }
 
@@ -179,7 +205,7 @@ function extractUnknownErrorCause(error: unknown) {
     "cause" in error &&
     typeof error.cause === "string"
   ) {
-    return error.cause;
+    return serializeUnknownError(error.cause);
   }
 }
 

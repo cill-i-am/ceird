@@ -44,17 +44,9 @@ import type {
   SiteIdType as SiteId,
   SiteOption as JobSiteOption,
 } from "@ceird/sites-core";
-import { HttpServerRequest } from "@effect/platform";
-import { SqlError } from "@effect/sql/SqlError";
-import {
-  Cause,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  ParseResult,
-  Schema,
-} from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -73,7 +65,7 @@ import {
 } from "./repositories.js";
 import { JobsService } from "./service.js";
 
-const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
+const decodeJob = Schema.decodeUnknownSync(JobSchema);
 const decodeActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeJobCollaboratorId = Schema.decodeUnknownSync(JobCollaboratorId);
@@ -81,6 +73,15 @@ const decodeLabelId = Schema.decodeUnknownSync(LabelId);
 const decodeCostLineId = Schema.decodeUnknownSync(CostLineId);
 const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
+
+function makeSqlError(message: string) {
+  return new SqlError({
+    reason: new UnknownError({
+      cause: message,
+      message,
+    }),
+  });
+}
 const undefinedValue = undefined as undefined;
 
 const workItemId = decodeWorkItemId("11111111-1111-4111-8111-111111111111");
@@ -240,7 +241,7 @@ function makeHarness(
     workItemId,
   } satisfies JobCollaborator;
 
-  const jobsRepository = JobsRepository.make({
+  const jobsRepository = JobsRepository.of({
     addActivity: (input: {
       readonly actorUserId?: UserId;
       readonly organizationId: OrganizationId;
@@ -555,7 +556,7 @@ function makeHarness(
         : Effect.fail(options.transactionFailure as Error),
   });
 
-  const sitesRepository = SitesRepository.make({
+  const sitesRepository = SitesRepository.of({
     create: (input: {
       readonly addressLine1: string;
       readonly country: string;
@@ -625,7 +626,7 @@ function makeHarness(
     ) => effect,
   });
 
-  const configurationRepository = ConfigurationRepository.make({
+  const configurationRepository = ConfigurationRepository.of({
     create: (_input: unknown) =>
       Effect.die(new Error("Unexpected repository call: createServiceArea")),
     list: (_organizationId: OrganizationId) =>
@@ -639,14 +640,14 @@ function makeHarness(
     ) => Effect.die(new Error("Unexpected repository call: updateServiceArea")),
   });
 
-  const contactsRepository = ContactsRepository.make({
+  const contactsRepository = ContactsRepository.of({
     create: (_input: unknown) => Effect.succeed(contactId),
     findById: (_organizationId: OrganizationId, _contactId: ContactId) =>
       Effect.succeed(Option.some(contactId)),
     listOptions: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies JobOptionsResponse["contacts"]),
   });
-  const labelsRepository = LabelsRepository.make({
+  const labelsRepository = LabelsRepository.of({
     archive: (
       _organizationId: OrganizationId,
       _requestedLabelId: Label["id"]
@@ -674,7 +675,7 @@ function makeHarness(
     ) => Effect.die(new Error("Unexpected repository call: update label")),
   });
 
-  const jobLabelAssignmentsRepository = JobLabelAssignmentsRepository.make({
+  const jobLabelAssignmentsRepository = JobLabelAssignmentsRepository.of({
     assignToJob: (input: {
       readonly labelId: Label["id"];
       readonly organizationId: OrganizationId;
@@ -745,7 +746,7 @@ function makeHarness(
   const serviceDependencies = Layer.mergeAll(
     Layer.succeed(
       CurrentOrganizationActor,
-      CurrentOrganizationActor.make({
+      CurrentOrganizationActor.of({
         get: () => Effect.succeed(actor),
       })
     ),
@@ -796,7 +797,7 @@ function runJobsServiceExit<Value, Error>(
 
 function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
   return Exit.isFailure(exit)
-    ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+    ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
     : undefined;
 }
 
@@ -1265,9 +1266,7 @@ describe("jobs service", () => {
 
   it("maps inline site service area storage failures before geocoding", async () => {
     const harness = makeHarness({
-      serviceAreaStorageFailure: new SqlError({
-        message: "database unavailable",
-      }),
+      serviceAreaStorageFailure: makeSqlError("database unavailable"),
     });
 
     const exit = await runJobsServiceExit(

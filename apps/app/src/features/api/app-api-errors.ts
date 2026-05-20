@@ -1,9 +1,9 @@
 import type { JobsError } from "@ceird/jobs-core";
 import type { LabelsError } from "@ceird/labels-core";
 import type { SitesError } from "@ceird/sites-core";
+import { Schema } from "effect";
 /* oxlint-disable eslint/max-classes-per-file */
-import { HttpClientError } from "@effect/platform";
-import { ParseResult, Schema } from "effect";
+import { HttpClientError } from "effect/unstable/http";
 
 const APP_API_DOMAIN_ERROR_TAG_PREFIXES = [
   "@ceird/jobs-core/",
@@ -13,7 +13,7 @@ const APP_API_DOMAIN_ERROR_TAG_PREFIXES = [
 
 export const APP_API_ORIGIN_RESOLUTION_ERROR_TAG =
   "@ceird/app/api/AppApiOriginResolutionError" as const;
-export class AppApiOriginResolutionError extends Schema.TaggedError<AppApiOriginResolutionError>()(
+export class AppApiOriginResolutionError extends Schema.TaggedErrorClass<AppApiOriginResolutionError>()(
   APP_API_ORIGIN_RESOLUTION_ERROR_TAG,
   {
     message: Schema.String,
@@ -22,7 +22,7 @@ export class AppApiOriginResolutionError extends Schema.TaggedError<AppApiOrigin
 
 export const APP_API_REQUEST_ERROR_TAG =
   "@ceird/app/api/AppApiRequestError" as const;
-export class AppApiRequestError extends Schema.TaggedError<AppApiRequestError>()(
+export class AppApiRequestError extends Schema.TaggedErrorClass<AppApiRequestError>()(
   APP_API_REQUEST_ERROR_TAG,
   {
     message: Schema.String,
@@ -69,7 +69,7 @@ export function normalizeAppApiError(error: unknown): AppApiError {
     });
   }
 
-  if (ParseResult.isParseError(error)) {
+  if (Schema.isSchemaError(error)) {
     return new AppApiRequestError({
       message: "Ceird API returned an invalid payload.",
     });

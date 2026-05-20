@@ -1,6 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 
+import {
+  configProviderFromMap,
+  effectEither,
+  withConfigProvider,
+} from "../../../test/effect-test-helpers.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthEmailConfigurationError,
@@ -123,7 +128,7 @@ describe("auth email sender password reset delivery", () => {
           "https://user:password@app.ceird.localhost/accept-invitation/inv_789",
         role: "member",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -160,7 +165,7 @@ describe("auth email sender password reset delivery", () => {
         invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_req",
         role: "member",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -199,7 +204,7 @@ describe("auth email sender password reset delivery", () => {
           "https://app.ceird.localhost/accept-invitation/inv_rejected",
         role: "member",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -276,7 +281,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -314,7 +319,7 @@ describe("auth email sender password reset delivery", () => {
         resetUrl:
           "https://user:password@app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -348,7 +353,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -383,7 +388,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -491,7 +496,7 @@ describe("auth email sender email verification delivery", () => {
         verificationUrl:
           "https://user:password@app.ceird.localhost/verify-email?success=1",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -523,7 +528,7 @@ describe("auth email sender email verification delivery", () => {
         recipientName: "Alice",
         verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -558,7 +563,7 @@ describe("auth email sender email verification delivery", () => {
         recipientName: "Alice",
         verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -590,8 +595,12 @@ describe("auth email config loading", () => {
   it("requires auth email config through Config", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(ConfigProvider.fromMap(new Map())),
-        Effect.either
+        withConfigProvider(
+          configProviderFromMap(
+            new Map([["AUTH_APP_ORIGIN", "https://app.ceird.localhost"]])
+          )
+        ),
+        effectEither
       )
     );
 
@@ -607,8 +616,8 @@ describe("auth email config loading", () => {
   it("loads base auth email config without Cloudflare credentials", async () => {
     const config = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
@@ -628,12 +637,12 @@ describe("auth email config loading", () => {
   it("requires AUTH_APP_ORIGIN in auth email config", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([["AUTH_EMAIL_FROM", "auth@ceird.localhost"]])
           )
         ),
-        Effect.either
+        effectEither
       )
     );
 
@@ -649,15 +658,15 @@ describe("auth email config loading", () => {
   it("rejects invalid auth email sender addresses", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "not-an-email"],
             ])
           )
         ),
-        Effect.either
+        effectEither
       )
     );
 

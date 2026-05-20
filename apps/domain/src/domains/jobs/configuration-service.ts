@@ -4,23 +4,17 @@ import type {
   RateCardIdType as RateCardId,
   UpdateRateCardInput,
 } from "@ceird/jobs-core";
-import { Effect } from "effect";
+import { Layer, Context, Effect } from "effect";
 
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
 import { JobsRepositoriesLive, RateCardsRepository } from "./repositories.js";
 
-export class ConfigurationService extends Effect.Service<ConfigurationService>()(
+export class ConfigurationService extends Context.Service<ConfigurationService>()(
   "@ceird/domains/jobs/ConfigurationService",
   {
-    accessors: true,
-    dependencies: [
-      CurrentOrganizationActor.Default,
-      JobsAuthorization.Default,
-      JobsRepositoriesLive,
-    ],
-    effect: Effect.gen(function* ConfigurationServiceLive() {
+    make: Effect.gen(function* ConfigurationServiceLive() {
       const authorization = yield* JobsAuthorization;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
       const rateCardsRepository = yield* RateCardsRepository;
@@ -79,7 +73,27 @@ export class ConfigurationService extends Effect.Service<ConfigurationService>()
       };
     }),
   }
-) {}
+) {
+  static readonly listRateCards = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ConfigurationService>["listRateCards"]
+    >
+  ) => ConfigurationService.use((service) => service.listRateCards(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    ConfigurationService,
+    ConfigurationService.make
+  );
+  static readonly Default =
+    ConfigurationService.DefaultWithoutDependencies.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          CurrentOrganizationActor.Default,
+          JobsAuthorization.Default,
+          JobsRepositoriesLive
+        )
+      )
+    );
+}
 
 function failConfigurationStorageError(
   error: unknown

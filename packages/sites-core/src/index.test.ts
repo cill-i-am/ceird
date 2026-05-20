@@ -1,7 +1,7 @@
 import { LabelNotFoundError } from "@ceird/labels-core";
-import { OpenApi } from "@effect/platform";
 import { describe, expect, it } from "@effect/vitest";
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 
 import type { SiteId, SitesError } from "./index.js";
 import {
@@ -39,7 +39,7 @@ describe("sites-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)(input)
+      Schema.decodeUnknownSync(CreateSiteInputSchema)(input)
     ).toStrictEqual({
       accessNotes: "Enter via reception",
       addressLine1: "1 Custom House Quay",
@@ -52,16 +52,16 @@ describe("sites-core", () => {
     });
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         ...input,
         latitude: 53.3498,
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   });
 
   it("requires Eircodes only for Irish sites", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         addressLine1: "1 Custom House Quay",
         country: "IE",
         county: "Dublin",
@@ -70,7 +70,7 @@ describe("sites-core", () => {
     ).toThrow(/Irish sites require an Eircode/);
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         addressLine1: "10 Downing Street",
         country: "GB",
         county: "Greater London",
@@ -107,10 +107,10 @@ describe("sites-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(site)
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)(site)
     ).toStrictEqual(site);
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
         ...site,
         longitude: -181,
       })
@@ -178,7 +178,7 @@ describe("sites-core", () => {
 
   it("decodes site label assignment DTOs", () => {
     expect(
-      ParseResult.decodeUnknownSync(AssignSiteLabelInputSchema)({
+      Schema.decodeUnknownSync(AssignSiteLabelInputSchema)({
         labelId: "11111111-1111-4111-8111-111111111111",
       })
     ).toStrictEqual({
@@ -199,10 +199,10 @@ describe("sites-core", () => {
     expect(assignOperation?.requestBody).toMatchObject({ required: true });
     expect(JSON.stringify(assignOperation?.requestBody)).toContain("labelId");
     expect(JSON.stringify(assignOperation?.responses["404"])).toContain(
-      "@ceird~1sites-core~1SiteNotFoundError"
+      "SiteNotFoundError"
     );
     expect(JSON.stringify(assignOperation?.responses["404"])).toContain(
-      "@ceird~1labels-core~1LabelNotFoundError"
+      "LabelNotFoundError"
     );
 
     expect(removeOperation?.operationId).toBe("sites.removeSiteLabel");
@@ -210,10 +210,10 @@ describe("sites-core", () => {
       removeOperation?.parameters?.map((parameter) => parameter.name)
     ).toStrictEqual(["siteId", "labelId"]);
     expect(JSON.stringify(removeOperation?.responses["404"])).toContain(
-      "@ceird~1sites-core~1SiteNotFoundError"
+      "SiteNotFoundError"
     );
     expect(JSON.stringify(removeOperation?.responses["404"])).toContain(
-      "@ceird~1labels-core~1LabelNotFoundError"
+      "LabelNotFoundError"
     );
   });
 

@@ -189,7 +189,7 @@ export function UserSettingsPage({
       image: user.image ?? "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(profileSettingsSchema),
+      onSubmit: Schema.toStandardSchemaV1(profileSettingsSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
@@ -231,7 +231,7 @@ export function UserSettingsPage({
       email: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(changeEmailSchema),
+      onSubmit: Schema.toStandardSchemaV1(changeEmailSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });
@@ -283,7 +283,7 @@ export function UserSettingsPage({
       confirmPassword: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(changePasswordSchema),
+      onSubmit: Schema.toStandardSchemaV1(changePasswordSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({ onSubmit: undefined });

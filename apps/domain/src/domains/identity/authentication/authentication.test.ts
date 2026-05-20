@@ -1,24 +1,26 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { NodeHttpServer } from "@effect/platform-node";
+import { getTableName } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { ConfigProvider, Effect, Layer, Logger, References } from "effect";
 import {
   HttpClient,
   HttpRouter,
   HttpServer,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import { NodeHttpServer } from "@effect/platform-node";
-import { getTableName } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect } from "effect";
+} from "effect/unstable/http";
 import { Pool } from "pg";
 
 import {
   createAuthentication,
+  makeEmailFailureReporter,
   makeAuthenticationWebHandler,
   maskInvitationEmail,
   matchesTrustedOrigin,
+  withAuthenticationCors,
 } from "./auth.js";
 import type { CeirdAuthentication } from "./auth.js";
 import {
@@ -140,8 +142,8 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
-      async () => {
-        const config = await Effect.runPromise(loadAuthenticationConfig);
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
 
         expect(config.mcpResourceUrl).toBe("https://mcp.ceird.example/mcp");
         expect(config.oauthIssuerUrl).toBe(
@@ -160,8 +162,8 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
-      async () => {
-        const config = await Effect.runPromise(loadAuthenticationConfig);
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
 
         expect(config.oauthIssuerUrl).toBe(
           "https://auth.ceird.example/api/auth"
@@ -204,8 +206,8 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
-      async () => {
-        const config = await Effect.runPromise(loadAuthenticationConfig);
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
 
         // eslint-disable-next-line vitest/prefer-to-be-falsy
         expect(config.rateLimit.enabled).toBe(false);
@@ -294,8 +296,8 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
-      async () => {
-        const result = Effect.runPromise(loadAuthenticationConfig);
+      async (provider) => {
+        const result = loadAuthenticationConfigForTest(provider);
 
         await expect(result).rejects.toThrow(/BETTER_AUTH_BASE_URL/);
       }
@@ -310,8 +312,8 @@ describe("makeAuthenticationConfig()", () => {
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
-      async () => {
-        const config = await Effect.runPromise(loadAuthenticationConfig);
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
 
         expect(config.baseURL).toBe("https://api.ceird.localhost:1355");
         expect(config.trustedOrigins).not.toContain(
@@ -451,21 +453,20 @@ describe("auth schema", () => {
 
   it("preserves the /api/auth prefix when mounting auth routes", async () => {
     await Effect.gen(function* verifyAuthenticationPrefixPreserved() {
-      const child = HttpRouter.empty.pipe(
-        HttpRouter.get(
+      const routes = Layer.mergeAll(
+        HttpRouter.add(
+          "GET",
           "/api/auth/get-session",
           HttpServerRequest.HttpServerRequest.pipe(
             Effect.map((request) => HttpServerResponse.text(request.url))
           )
-        )
+        ),
+        HttpRouter.add("GET", "/health", HttpServerResponse.text("ok"))
       );
 
-      yield* HttpRouter.empty.pipe(
-        HttpRouter.get("/health", HttpServerResponse.text("ok")),
-        HttpRouter.mountApp("/api/auth", child, { includePrefix: true }),
-        HttpServer.serveEffect()
-      );
+      const app = yield* HttpRouter.toHttpEffect(routes);
 
+      yield* HttpServer.serveEffect(app);
       const client = yield* HttpClient.HttpClient;
 
       const authPath = yield* client
@@ -481,10 +482,8 @@ describe("auth schema", () => {
       expect(authPath).toBe("/api/auth/get-session");
       expect(health).toBe("ok");
       expect(duplicatePathStatus).toBe(404);
-    }).pipe(
-      Effect.provide(NodeHttpServer.layerTest),
-      Effect.scoped,
-      Effect.runPromise
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), Effect.scoped, (effect) =>
+      Effect.runPromise(effect as Effect.Effect<void, unknown, never>)
     );
   }, 10_000);
 });
@@ -587,6 +586,87 @@ describe("createAuthentication()", () => {
       "https://api.ceird.example/api/auth/sign-up/email"
     );
   }, 10_000);
+
+  it("handles trusted auth preflight requests through the auth CORS wrapper", async () => {
+    let delegated = false;
+    const handler = withAuthenticationCors(() => {
+      delegated = true;
+      return Promise.resolve(Response.json({ delegated: true }));
+    }, ["https://app.ceird.example"]);
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-headers": "content-type, authorization",
+          "access-control-request-method": "POST",
+          origin: "https://app.ceird.example",
+        },
+      })
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBe(
+      "true"
+    );
+    expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
+      "content-type, authorization"
+    );
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("POST");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://app.ceird.example"
+    );
+    expect(response.headers.get("Vary")).toContain("Origin");
+    expect(delegated).toBeFalsy();
+  });
+
+  it("rejects untrusted auth preflight requests before Better Auth handles them", async () => {
+    let delegated = false;
+    const handler = withAuthenticationCors(() => {
+      delegated = true;
+      return Promise.resolve(Response.json({ delegated: true }));
+    }, ["https://app.ceird.example"]);
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://evil.example",
+        },
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(delegated).toBeFalsy();
+  });
+
+  it("runs default email failure reports with the captured Effect context", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyEmailFailureReporterContext() {
+      const runtimeContext = yield* Effect.context<never>();
+      const reportFailure = makeEmailFailureReporter(
+        "Password reset email delivery failed",
+        runtimeContext
+      );
+
+      reportFailure(new Error("delivery failed"));
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await Effect.runPromise(Effect.yieldNow);
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain(
+      "Authentication background email delivery failed"
+    );
+    expect(serializedLogs).toContain("Password reset email delivery failed");
+    expect(serializedLogs).toContain("delivery failed");
+  });
 
   it("configures organization invitation delivery through the Better Auth organization plugin", async () => {
     const sentInvitationEmails: unknown[] = [];
@@ -1242,9 +1322,22 @@ function getOrganizationPluginOptions(
   return organizationPlugin.options;
 }
 
+function captureLogs() {
+  const logs: unknown[] = [];
+  const logger = Logger.make((input) => {
+    logs.push({
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
+      message: input.message,
+    });
+  });
+
+  return { logger, logs };
+}
+
 async function withEnvironment(
   nextEnvironment: Record<string, string>,
-  run: () => Promise<void>
+  run: (provider: ConfigProvider.ConfigProvider) => Promise<void>
 ) {
   const previousEnvironment = { ...process.env };
 
@@ -1257,10 +1350,21 @@ async function withEnvironment(
   delete process.env.OAUTH_ISSUER_URL;
 
   Object.assign(process.env, nextEnvironment);
+  const provider = ConfigProvider.fromEnv({ env: nextEnvironment });
 
   try {
-    await run();
+    await run(provider);
   } finally {
     process.env = previousEnvironment;
   }
+}
+
+function loadAuthenticationConfigForTest(
+  provider: ConfigProvider.ConfigProvider
+) {
+  return Effect.runPromise(
+    loadAuthenticationConfig.pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, provider)
+    )
+  );
 }

@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect";
 import { makeApiWebHandler } from "../../server.js";
 import type { ApiWorkerEnv } from "./env.js";
 
-export class ApiDomainForwardingError extends Schema.TaggedError<ApiDomainForwardingError>()(
+export class ApiDomainForwardingError extends Schema.TaggedErrorClass<ApiDomainForwardingError>()(
   "@ceird/api/DomainForwardingError",
   {
     binding: Schema.Literal("DOMAIN"),
@@ -32,7 +32,7 @@ export function handleWorkerFetch(
     Effect.tap((response) => logApiWorkerOutcome(request, env, response)),
     Effect.catchTag("@ceird/api/DomainForwardingError", (failure) =>
       logApiWorkerForwardingFailure(request, env, failure).pipe(
-        Effect.zipRight(Effect.annotateCurrentSpan("http.status", 502)),
+        Effect.andThen(Effect.annotateCurrentSpan("http.status", 502)),
         Effect.as(makeDomainForwardingFailureResponse())
       )
     ),

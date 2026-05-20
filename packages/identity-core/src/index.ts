@@ -1,4 +1,4 @@
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -33,10 +33,11 @@ export const InvitationId = Schema.NonEmptyString.pipe(
 export type InvitationId = Schema.Schema.Type<typeof InvitationId>;
 
 export const IsoDateTimeString = Schema.String.pipe(
-  Schema.filter((value) => isIsoDateTimeString(value)),
-  Schema.annotations({
+  Schema.refine((value): value is string => isIsoDateTimeString(value), {
+    message: "Expected an ISO-8601 UTC datetime string",
+  }),
+  Schema.annotate({
     description: "ISO-8601 UTC datetime string",
-    message: () => "Expected an ISO-8601 UTC datetime string",
   })
 );
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
@@ -59,25 +60,25 @@ export const INVITABLE_ORGANIZATION_ROLES = [
   "external",
 ] as const;
 
-export const OrganizationRole = Schema.Literal(...ORGANIZATION_ROLES);
+export const OrganizationRole = Schema.Literals(ORGANIZATION_ROLES);
 export type OrganizationRole = Schema.Schema.Type<typeof OrganizationRole>;
 
-export const AdministrativeOrganizationRole = Schema.Literal(
-  ...ADMINISTRATIVE_ORGANIZATION_ROLES
+export const AdministrativeOrganizationRole = Schema.Literals(
+  ADMINISTRATIVE_ORGANIZATION_ROLES
 );
 export type AdministrativeOrganizationRole = Schema.Schema.Type<
   typeof AdministrativeOrganizationRole
 >;
 
-export const InternalOrganizationRole = Schema.Literal(
-  ...INTERNAL_ORGANIZATION_ROLES
+export const InternalOrganizationRole = Schema.Literals(
+  INTERNAL_ORGANIZATION_ROLES
 );
 export type InternalOrganizationRole = Schema.Schema.Type<
   typeof InternalOrganizationRole
 >;
 
-export const InvitableOrganizationRole = Schema.Literal(
-  ...INVITABLE_ORGANIZATION_ROLES
+export const InvitableOrganizationRole = Schema.Literals(
+  INVITABLE_ORGANIZATION_ROLES
 );
 export type InvitableOrganizationRole = Schema.Schema.Type<
   typeof InvitableOrganizationRole
@@ -107,12 +108,14 @@ export type OrganizationSummaryList = Schema.Schema.Type<
 >;
 
 export const OrganizationNameSchema = Schema.Trim.pipe(
-  Schema.minLength(ORGANIZATION_NAME_MIN_LENGTH)
+  Schema.check(Schema.isMinLength(ORGANIZATION_NAME_MIN_LENGTH))
 );
 
 export const OrganizationSlugSchema = Schema.Trim.pipe(
-  Schema.minLength(2),
-  Schema.pattern(ORGANIZATION_SLUG_PATTERN)
+  Schema.check(
+    Schema.isMinLength(2),
+    Schema.isPattern(ORGANIZATION_SLUG_PATTERN)
+  )
 );
 
 export function createOrganizationSlugFromName(name: string): string {
@@ -131,19 +134,19 @@ export function createOrganizationSlugFromName(name: string): string {
 export const CreateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
   slug: OrganizationSlugSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
 export const CreateOrganizationNameInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
 export const UpdateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
@@ -172,47 +175,45 @@ export type PublicInvitationPreview = Schema.Schema.Type<
 export function decodeCreateOrganizationInput(
   input: unknown
 ): CreateOrganizationInput {
-  return ParseResult.decodeUnknownSync(CreateOrganizationInputSchema)(input);
+  return Schema.decodeUnknownSync(CreateOrganizationInputSchema)(input);
 }
 
 export function decodeCreateOrganizationNameInput(
   input: unknown
 ): CreateOrganizationNameInput {
-  return ParseResult.decodeUnknownSync(CreateOrganizationNameInputSchema)(
-    input
-  );
+  return Schema.decodeUnknownSync(CreateOrganizationNameInputSchema)(input);
 }
 
 export function decodeUpdateOrganizationInput(
   input: unknown
 ): UpdateOrganizationInput {
-  return ParseResult.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
+  return Schema.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
 }
 
 export function decodePublicInvitationPreview(
   input: unknown
 ): PublicInvitationPreview {
-  return ParseResult.decodeUnknownSync(PublicInvitationPreviewSchema)(input);
+  return Schema.decodeUnknownSync(PublicInvitationPreviewSchema)(input);
 }
 
 export function decodeOrganizationId(input: unknown): OrganizationId {
-  return ParseResult.decodeUnknownSync(OrganizationId)(input);
+  return Schema.decodeUnknownSync(OrganizationId)(input);
 }
 
 export function decodeUserId(input: unknown): UserId {
-  return ParseResult.decodeUnknownSync(UserId)(input);
+  return Schema.decodeUnknownSync(UserId)(input);
 }
 
 export function decodeSessionId(input: unknown): SessionId {
-  return ParseResult.decodeUnknownSync(SessionId)(input);
+  return Schema.decodeUnknownSync(SessionId)(input);
 }
 
 export function decodeInvitationId(input: unknown): InvitationId {
-  return ParseResult.decodeUnknownSync(InvitationId)(input);
+  return Schema.decodeUnknownSync(InvitationId)(input);
 }
 
 export function decodeOrganizationRole(input: unknown): OrganizationRole {
-  return ParseResult.decodeUnknownSync(OrganizationRole)(input);
+  return Schema.decodeUnknownSync(OrganizationRole)(input);
 }
 
 const administrativeOrganizationRoleSet = new Set<OrganizationRole>(
@@ -243,17 +244,15 @@ export function isExternalOrganizationRole(
 export function decodeOrganizationMemberRoleResponse(
   input: unknown
 ): OrganizationMemberRoleResponse {
-  return ParseResult.decodeUnknownSync(OrganizationMemberRoleResponseSchema)(
-    input
-  );
+  return Schema.decodeUnknownSync(OrganizationMemberRoleResponseSchema)(input);
 }
 
 export function decodeOrganizationSummary(input: unknown): OrganizationSummary {
-  return ParseResult.decodeUnknownSync(OrganizationSummarySchema)(input);
+  return Schema.decodeUnknownSync(OrganizationSummarySchema)(input);
 }
 
 export function decodeOrganizationSummaryList(
   input: unknown
 ): OrganizationSummaryList {
-  return ParseResult.decodeUnknownSync(OrganizationSummaryListSchema)(input);
+  return Schema.decodeUnknownSync(OrganizationSummaryListSchema)(input);
 }

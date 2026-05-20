@@ -87,9 +87,10 @@ path uses the deployed Cloudflare Email Worker binding; package-local domain run
 use deterministic development email delivery.
 
 The current stack uses Alchemy v2 native Neon and Cloudflare Hyperdrive
-resources. Domain runtime code still uses the existing Effect 3 database layer;
-deploy-time migration drift is tracked with Alchemy `Drizzle.Schema`. The root `infra`
-directory models that handoff as an `alchemy-drizzle-schema`
+resources. Domain runtime code uses the Effect 4 database layer and
+`@effect/sql-pg`, while deploy-time migration drift is tracked with Alchemy
+`Drizzle.Schema`. The root `infra` directory models that handoff as an
+`alchemy-drizzle-schema`
 `NeonMigrationSource`, pointing at the `infra/domain-drizzle-schema.ts` wrapper.
 That wrapper loads the domain schema barrel at
 `apps/domain/src/platform/database/schema.ts` through the TypeScript resolver
@@ -101,12 +102,11 @@ the nested Alchemy directory. The infra contract names those paths separately as
 `generatedMigrationsDir` and `appliedMigrationsDir` so the dependency on
 `Drizzle.Schema` is explicit without losing historical migration coverage.
 
-Keep the root Alchemy stack on Alchemy's Effect 4 line, but keep domain/API/app/shared
-runtime code on the current Effect 3 package line until the Effect
-platform/sql/rpc packages used by the domain Worker have a compatible v4 migration target.
-As of this migration pass, `@effect/platform`, `@effect/sql`, and
-`@effect/rpc` still publish the stable APIs this app uses against Effect 3
-peers, while Alchemy v2 uses Effect 4 unstable modules internally.
+The root Alchemy stack, runtime apps, and shared domain packages now use the
+same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and
+platform APIs from their current stable or unstable package locations, while
+app-owned Cloudflare resource declarations import Alchemy only from
+`apps/*/infra` modules.
 
 The private domain Worker receives a `DATABASE` Hyperdrive binding and resolves
 the runtime Postgres URL from `env.DATABASE.connectionString`. Public API and

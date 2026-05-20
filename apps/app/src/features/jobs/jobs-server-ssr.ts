@@ -21,7 +21,7 @@ export async function listCurrentServerJobsDirect(
 
   return await runAppApiClient(request, "JobsServer.listJobs", (client) =>
     client.jobs.listJobs({
-      urlParams: query,
+      query,
     })
   );
 }
@@ -35,7 +35,7 @@ export async function listAllCurrentServerJobsDirect(
   let cursor = initialCursor;
 
   while (true) {
-    const urlParams = cursor ? { ...staticQuery, cursor } : staticQuery;
+    const pageQuery = cursor ? { ...staticQuery, cursor } : staticQuery;
     // Cursor pagination must await each page before requesting its next cursor.
     // react-doctor-disable-next-line
     const page = await runAppApiClient(
@@ -43,7 +43,7 @@ export async function listAllCurrentServerJobsDirect(
       "JobsServer.listAllJobs.page",
       (client) =>
         client.jobs.listJobs({
-          urlParams,
+          query: pageQuery,
         })
     );
 
@@ -70,7 +70,7 @@ export async function listCurrentServerOrganizationActivityDirect(
     "JobsServer.listOrganizationActivity",
     (client) =>
       client.jobs.listOrganizationActivity({
-        urlParams: query,
+        query,
       })
   );
 }
@@ -81,7 +81,7 @@ export async function getCurrentServerJobDetailDirect(
   const request = await readServerAppApiRequestStrict();
 
   return await runAppApiClient(request, "JobsServer.getJobDetail", (client) =>
-    client.jobs.getJobDetail({ path: { workItemId } })
+    client.jobs.getJobDetail({ params: { workItemId } })
   );
 }
 

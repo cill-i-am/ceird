@@ -15,13 +15,15 @@ const LegacyDrizzleMigrations =
 export const legacyDrizzleMigrationsProvider = Provider.succeed(
   LegacyDrizzleMigrations,
   {
-    read: Effect.fn(function ({ output }) {
+    read: Effect.fn("LegacyDrizzleMigrations.read")(function ({ output }) {
       return Effect.succeed(output);
     }),
-    reconcile: Effect.fn(function ({ output }) {
+    reconcile: Effect.fn("LegacyDrizzleMigrations.reconcile")(function ({
+      output,
+    }) {
       return Effect.succeed(output ?? {});
     }),
-    delete: Effect.fn(function () {
+    delete: Effect.fn("LegacyDrizzleMigrations.delete")(function () {
       // Tombstone provider only: old Drizzle.Migrations state has no live
       // resource to clean up now that Neon.Branch applies SQL natively.
       return Effect.void;

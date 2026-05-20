@@ -1,7 +1,6 @@
-/* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
-
 import { OrganizationRole } from "@ceird/identity-core";
-import { Effect, ParseResult, Schema } from "effect";
+/* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
+import { Layer, Context, Effect, Schema } from "effect";
 
 import {
   EmailVerificationEmailRejectedError,
@@ -53,32 +52,34 @@ function escapeHtml(value: string) {
 }
 
 const EmailAddress = Schema.String.pipe(
-  Schema.filter((value) => isValidEmailAddress(value), {
-    message: () => "Expected a valid email address",
+  Schema.refine((value): value is string => isValidEmailAddress(value), {
+    message: "Expected a valid email address",
   })
 );
 
 const PasswordResetDeliveryKey = Schema.String.pipe(
-  Schema.filter((value) => PASSWORD_RESET_DELIVERY_KEY_PATTERN.test(value), {
-    message: () =>
-      "Expected a password reset delivery key in the format password-reset/<sha256>",
-  })
+  Schema.refine(
+    (value): value is string => PASSWORD_RESET_DELIVERY_KEY_PATTERN.test(value),
+    {
+      message:
+        "Expected a password reset delivery key in the format password-reset/<sha256>",
+    }
+  )
 );
 
 const DeliveryKey = Schema.String.pipe(
-  Schema.filter(
-    (value) =>
+  Schema.refine(
+    (value): value is string =>
       value.trim().length > 0 && value.length <= DELIVERY_KEY_MAX_LENGTH,
     {
-      message: () =>
-        `Expected a non-empty delivery key up to ${DELIVERY_KEY_MAX_LENGTH} characters`,
+      message: `Expected a non-empty delivery key up to ${DELIVERY_KEY_MAX_LENGTH} characters`,
     }
   )
 );
 
 const ResetUrl = Schema.String.pipe(
-  Schema.filter((value) => isValidResetUrl(value), {
-    message: () => "Expected a valid http or https URL without credentials",
+  Schema.refine((value): value is string => isValidResetUrl(value), {
+    message: "Expected a valid http or https URL without credentials",
   })
 );
 const InvitationUrl = ResetUrl;
@@ -95,7 +96,7 @@ export type PasswordResetEmailInput = Schema.Schema.Type<
   typeof PasswordResetEmailInput
 >;
 
-const decodePasswordResetEmailInput = Schema.decodeUnknown(
+const decodePasswordResetEmailInput = Schema.decodeUnknownEffect(
   PasswordResetEmailInput
 );
 
@@ -113,7 +114,7 @@ export type OrganizationInvitationEmailInput = Schema.Schema.Type<
   typeof OrganizationInvitationEmailInput
 >;
 
-const decodeOrganizationInvitationEmailInput = Schema.decodeUnknown(
+const decodeOrganizationInvitationEmailInput = Schema.decodeUnknownEffect(
   OrganizationInvitationEmailInput
 );
 
@@ -128,13 +129,9 @@ export type EmailVerificationEmailInput = Schema.Schema.Type<
   typeof EmailVerificationEmailInput
 >;
 
-const decodeEmailVerificationEmailInput = Schema.decodeUnknown(
+const decodeEmailVerificationEmailInput = Schema.decodeUnknownEffect(
   EmailVerificationEmailInput
 );
-
-function formatParseError(parseError: ParseResult.ParseError) {
-  return ParseResult.TreeFormatter.formatErrorSync(parseError);
-}
 
 export type OrganizationInvitationEmailError =
   | InvalidOrganizationInvitationEmailInputError
@@ -151,25 +148,22 @@ export type EmailVerificationEmailError =
 
 function decodeAuthEmailInput<Input, ErrorType>(options: {
   readonly rawInput: unknown;
-  readonly decode: (
-    input: unknown
-  ) => Effect.Effect<Input, ParseResult.ParseError>;
+  readonly decode: (input: unknown) => Effect.Effect<Input, Schema.SchemaError>;
   readonly onInvalidInput: (cause: string) => ErrorType;
 }) {
   return options
     .decode(options.rawInput)
     .pipe(
       Effect.mapError((parseError) =>
-        options.onInvalidInput(formatParseError(parseError))
+        options.onInvalidInput(String(parseError))
       )
     );
 }
 
-export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
+export class AuthEmailSender extends Context.Service<AuthEmailSender>()(
   "@ceird/domains/identity/authentication/AuthEmailSender",
   {
-    accessors: true,
-    effect: Effect.gen(function* effect() {
+    make: Effect.gen(function* effect() {
       const transport = yield* AuthEmailTransport;
 
       const sendPasswordResetEmail = Effect.fn(
@@ -341,4 +335,36 @@ export class AuthEmailSender extends Effect.Service<AuthEmailSender>()(
       };
     }),
   }
-) {}
+) {
+  static readonly sendEmailVerificationEmail = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AuthEmailSender
+      >["sendEmailVerificationEmail"]
+    >
+  ) =>
+    AuthEmailSender.use((service) =>
+      service.sendEmailVerificationEmail(...args)
+    );
+  static readonly sendOrganizationInvitationEmail = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AuthEmailSender
+      >["sendOrganizationInvitationEmail"]
+    >
+  ) =>
+    AuthEmailSender.use((service) =>
+      service.sendOrganizationInvitationEmail(...args)
+    );
+  static readonly sendPasswordResetEmail = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AuthEmailSender>["sendPasswordResetEmail"]
+    >
+  ) =>
+    AuthEmailSender.use((service) => service.sendPasswordResetEmail(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AuthEmailSender,
+    AuthEmailSender.make
+  );
+  static readonly Default = AuthEmailSender.DefaultWithoutDependencies;
+}

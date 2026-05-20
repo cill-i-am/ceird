@@ -94,7 +94,7 @@ describe("current organization actor resolution", () => {
       throw new Error("Expected organization actor lookup to fail.");
     }
 
-    const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
 
     expect(failure).toBeInstanceOf(OrganizationSessionRequiredError);
     expect(failure).toMatchObject({
@@ -113,7 +113,7 @@ describe("current organization actor resolution", () => {
       throw new Error("Expected organization actor lookup to fail.");
     }
 
-    const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
 
     expect(failure).toBeInstanceOf(OrganizationSessionRequiredError);
     expect(failure).toMatchObject({
@@ -139,7 +139,7 @@ describe("current organization actor resolution", () => {
       throw new Error("Expected organization actor lookup to fail.");
     }
 
-    const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
 
     expect(failure).toBeInstanceOf(OrganizationSessionIdentityInvalidError);
     expect(failure).toMatchObject({
@@ -160,7 +160,7 @@ describe("current organization actor resolution", () => {
       throw new Error("Expected organization actor lookup to fail.");
     }
 
-    const failure = Option.getOrUndefined(Cause.failureOption(exit.cause));
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
 
     expect(failure).toBeInstanceOf(OrganizationActorStorageError);
     expect(failure).toMatchObject({

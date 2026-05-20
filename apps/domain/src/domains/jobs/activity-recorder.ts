@@ -7,17 +7,15 @@ import type {
   VisitIdType as VisitId,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
-export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()(
+export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>()(
   "@ceird/domains/jobs/JobsActivityRecorder",
   {
-    accessors: true,
-    dependencies: [JobsRepository.Default],
-    effect: Effect.gen(function* JobsActivityRecorderLive() {
+    make: Effect.gen(function* JobsActivityRecorderLive() {
       const repository = yield* JobsRepository;
 
       const recordCreated = Effect.fn("JobsActivityRecorder.recordCreated")(
@@ -181,7 +179,16 @@ export class JobsActivityRecorder extends Effect.Service<JobsActivityRecorder>()
       };
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    JobsActivityRecorder,
+    JobsActivityRecorder.make
+  );
+  static readonly Default =
+    JobsActivityRecorder.DefaultWithoutDependencies.pipe(
+      Layer.provide(JobsRepository.Default)
+    );
+}
 
 function collectPatchEvents(
   before: Job,

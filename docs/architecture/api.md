@@ -55,13 +55,14 @@ to `local` for package-local Node runs.
 The API and MCP runtimes read only the `DOMAIN` service binding. The domain
 runtime reads `DATABASE`, `AUTH_EMAIL_QUEUE`, and `AUTH_EMAIL`, plus resolved
 configuration for Better Auth, MCP resource metadata, Google Maps, and auth
-email delivery. The root infra stack owns those Alchemy binding resources in
-`infra/cloudflare-stack.ts`; infra tests compare the stack-provided binding and
-config keys with the runtime contracts for API, MCP, and domain Workers. Secret
-and credential values stay typed as Alchemy deploy-time redacted inputs in
-`infra`, while runtime apps see resolved strings through Cloudflare Worker
-environment values. Runtime apps intentionally stay on their Effect 3
-application dependencies and do not import Alchemy or Effect 4.
+email delivery. Each app owns its Alchemy Worker binding and configured-env
+declaration in its app-local `infra/cloudflare-worker.ts`; the root infra
+stack still creates shared resources and passes stage-specific names, hostnames,
+secrets, Hyperdrive, queues, and cross-service Worker references into those
+app-owned declarations. Infra tests compare those app-owned binding/config keys
+with the runtime contracts for API, MCP, and domain Workers. Secret and
+credential values stay typed as Alchemy deploy-time redacted inputs, while
+runtime apps see resolved strings through Cloudflare Worker environment values.
 
 `apps/domain/src/server.ts` also intercepts MCP resource-server traffic before
 falling through to the Effect `HttpApi` handler. The MCP route defaults to
@@ -70,8 +71,11 @@ variable is set. Protected-resource metadata is served at
 `/.well-known/oauth-protected-resource` and at the path-specific well-known URL,
 for example `/.well-known/oauth-protected-resource/mcp`.
 
-MCP HTTP is served through `@effect/ai`'s `McpServer.layerHttpRouter`, adapted
+MCP HTTP is served through `effect/unstable/ai`'s `McpServer.layerHttp`, adapted
 to the domain web-handler boundary after Better Auth OAuth bearer validation.
+Bearer validation requires the OAuth token to include `sid`, `sub`, and
+`client_id`; the authorized-app cache is partitioned by session id, user id,
+OAuth client id, and normalized scopes.
 The standalone MCP Worker remains a forwarding adapter so generated/action UI,
 future Agents SDK Workers, and bot surfaces can call the same domain surface.
 
@@ -164,8 +168,8 @@ Initial MCP tools:
 
 `ceird:admin` satisfies all MCP tool scope checks. `ceird:write` does not imply
 read access, and `ceird:read` does not imply write access. All tools fail closed
-when the bearer token lacks a Better Auth session id, lacks a subject, or lacks
-the required Ceird scope.
+when the bearer token lacks a Better Auth session id, lacks a subject, lacks an
+OAuth client id, or lacks the required Ceird scope.
 
 ## Jobs Domain
 

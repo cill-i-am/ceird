@@ -297,7 +297,7 @@ describe("jobs detail sheet integration", () => {
       ).resolves.toBeInTheDocument();
       expect(screen.getByTestId("list-labels")).toHaveTextContent("Urgent");
       expect(mockedAssignJobLabel).toHaveBeenCalledWith({
-        path: { workItemId },
+        params: { workItemId },
         payload: { labelId: urgentLabelId },
       });
     }
@@ -343,7 +343,7 @@ describe("jobs detail sheet integration", () => {
         payload: { name: "Warranty" },
       });
       expect(mockedAssignJobLabel).toHaveBeenCalledWith({
-        path: { workItemId },
+        params: { workItemId },
         payload: { labelId: newLabelId },
       });
     }
@@ -380,7 +380,7 @@ describe("jobs detail sheet integration", () => {
       ).resolves.toBeInTheDocument();
       expect(screen.getByTestId("list-labels")).toHaveTextContent("none");
       expect(mockedRemoveJobLabel).toHaveBeenCalledWith({
-        path: { workItemId, labelId: urgentLabelId },
+        params: { workItemId, labelId: urgentLabelId },
       });
     }
   );

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export class AppDatabaseConnectionError extends Schema.TaggedError<AppDatabaseConnectionError>()(
+export class AppDatabaseConnectionError extends Schema.TaggedErrorClass<AppDatabaseConnectionError>()(
   "@ceird/platform/database/AppDatabaseConnectionError",
   {
     cause: Schema.optional(Schema.String),

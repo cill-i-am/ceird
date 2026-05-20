@@ -49,16 +49,16 @@ to the stage that produced it.
 
 ## Monorepo Ownership
 
-| Area                     | Owns                                                                                                                            | Should not own                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions. |
-| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database. |
-| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                        |
-| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.  |
-| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.  |
-| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                    |
-| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                               |
-| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                     | App/API domain behavior.                                     |
+| Area                     | Owns                                                                                                                            | Should not own                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions.   |
+| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
+| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
+| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
+| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
+| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
+| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
+| `infra`                  | Root Alchemy stage orchestration, shared Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.       | App-owned Worker/Vite declarations or app/API domain behavior. |
 
 ## Request And Data Flow
 

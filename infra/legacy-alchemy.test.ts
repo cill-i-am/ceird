@@ -12,6 +12,6 @@ describe("legacy Alchemy state providers", () => {
       )
     );
 
-    expect(provider.delete).toEqual(expect.any(Function));
+    expect(provider.delete).toStrictEqual(expect.any(Function));
   });
 });

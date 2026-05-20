@@ -49,20 +49,27 @@ import {
   WorkItemId,
 } from "./ids.js";
 
-const JobVisitDurationMinutesSchema = Schema.Int.pipe(Schema.positive());
-const NonEmptyTrimmedString = Schema.Trim.pipe(Schema.minLength(1));
+const JobVisitDurationMinutesSchema = Schema.Int.pipe(
+  Schema.check(Schema.isGreaterThan(0))
+);
+const NonEmptyTrimmedString = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(1))
+);
 const ConfigurationNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.maxLength(120)
+  Schema.check(Schema.isMaxLength(120))
 );
 const RateCardLineNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.maxLength(120)
+  Schema.check(Schema.isMaxLength(120))
 );
-const RateCardLineUnitSchema = NonEmptyTrimmedString.pipe(Schema.maxLength(40));
+const RateCardLineUnitSchema = NonEmptyTrimmedString.pipe(
+  Schema.check(Schema.isMaxLength(40))
+);
 const RateCardLineValueSchema = Schema.Number.pipe(
-  Schema.finite(),
-  Schema.greaterThanOrEqualTo(0)
+  Schema.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))
 );
-const RateCardLinePositionSchema = Schema.Int.pipe(Schema.positive());
+const RateCardLinePositionSchema = Schema.Int.pipe(
+  Schema.check(Schema.isGreaterThan(0))
+);
 
 function hasUniqueRateCardLinePositions(
   lines: readonly { readonly position: number }[]
@@ -101,7 +108,7 @@ export const RateCardLineInputSchema = Schema.Struct({
   position: RateCardLinePositionSchema,
   unit: RateCardLineUnitSchema,
   value: RateCardLineValueSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type RateCardLineInput = Schema.Schema.Type<
@@ -109,17 +116,20 @@ export type RateCardLineInput = Schema.Schema.Type<
 >;
 
 const RateCardLineInputListSchema = Schema.Array(RateCardLineInputSchema).pipe(
-  Schema.maxItems(50),
-  Schema.filter(hasUniqueRateCardLinePositions),
-  Schema.annotations({
-    message: () => "Rate card line positions must be unique",
-  })
+  Schema.check(Schema.isMaxLength(50)),
+  Schema.refine(
+    (lines): lines is readonly RateCardLineInput[] =>
+      hasUniqueRateCardLinePositions(lines),
+    {
+      message: "Rate card line positions must be unique",
+    }
+  )
 );
 
 export const CreateRateCardInputSchema = Schema.Struct({
   name: ConfigurationNameSchema,
   lines: RateCardLineInputListSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type CreateRateCardInput = Schema.Schema.Type<
@@ -134,7 +144,7 @@ export type CreateRateCardResponse = Schema.Schema.Type<
 export const UpdateRateCardInputSchema = Schema.Struct({
   name: Schema.optional(ConfigurationNameSchema),
   lines: Schema.optional(RateCardLineInputListSchema),
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type UpdateRateCardInput = Schema.Schema.Type<
@@ -191,12 +201,10 @@ export const JobListItemSchema = Schema.Struct({
 });
 export type JobListItem = Schema.Schema.Type<typeof JobListItemSchema>;
 
-export const JobCommentSchema = Schema.extend(
-  CommentSchema,
-  Schema.Struct({
-    workItemId: WorkItemId,
-  })
-);
+export const JobCommentSchema = Schema.Struct({
+  ...CommentSchema.fields,
+  workItemId: WorkItemId,
+});
 export type JobComment = Schema.Schema.Type<typeof JobCommentSchema>;
 
 export const JobCollaboratorSchema = Schema.Struct({
@@ -287,7 +295,7 @@ export const JobActivityCostLineAddedPayloadSchema = Schema.Struct({
   costLineType: JobCostLineTypeSchema,
 });
 
-export const JobActivityPayloadSchema = Schema.Union(
+export const JobActivityPayloadSchema = Schema.Union([
   JobActivityJobCreatedPayloadSchema,
   JobActivityStatusChangedPayloadSchema,
   JobActivityBlockedReasonChangedPayloadSchema,
@@ -300,8 +308,8 @@ export const JobActivityPayloadSchema = Schema.Union(
   JobActivityVisitLoggedPayloadSchema,
   JobActivityLabelAddedPayloadSchema,
   JobActivityLabelRemovedPayloadSchema,
-  JobActivityCostLineAddedPayloadSchema
-);
+  JobActivityCostLineAddedPayloadSchema,
+]);
 export type JobActivityPayload = Schema.Schema.Type<
   typeof JobActivityPayloadSchema
 >;
@@ -330,9 +338,11 @@ export const OrganizationActivityQuerySchema = Schema.Struct({
   jobTitle: Schema.optional(NonEmptyTrimmedString),
   limit: Schema.optional(
     Schema.NumberFromString.pipe(
-      Schema.int(),
-      Schema.positive(),
-      Schema.lessThanOrEqualTo(100)
+      Schema.check(
+        Schema.isInt(),
+        Schema.isGreaterThan(0),
+        Schema.isLessThanOrEqualTo(100)
+      )
     )
   ),
   toDate: Schema.optional(IsoDateString),
@@ -350,7 +360,7 @@ export type OrganizationActivityActor = Schema.Schema.Type<
   typeof OrganizationActivityActorSchema
 >;
 
-export const OrganizationActivityItemSchema = Schema.Struct({
+const OrganizationActivityItemBaseSchema = Schema.Struct({
   id: ActivityId,
   workItemId: WorkItemId,
   jobTitle: JobTitleSchema,
@@ -358,12 +368,21 @@ export const OrganizationActivityItemSchema = Schema.Struct({
   eventType: JobActivityEventTypeSchema,
   payload: JobActivityPayloadSchema,
   createdAt: IsoDateTimeString,
-}).pipe(
-  Schema.filter(({ eventType, payload }) => eventType === payload.eventType),
-  Schema.annotations({
-    message: () => "eventType must match payload.eventType",
-  })
-);
+});
+
+export const OrganizationActivityItemSchema =
+  OrganizationActivityItemBaseSchema.pipe(
+    Schema.refine(
+      (
+        item
+      ): item is Schema.Schema.Type<
+        typeof OrganizationActivityItemBaseSchema
+      > => item.eventType === item.payload.eventType,
+      {
+        message: "eventType must match payload.eventType",
+      }
+    )
+  );
 export type OrganizationActivityItem = Schema.Schema.Type<
   typeof OrganizationActivityItemSchema
 >;
@@ -410,9 +429,11 @@ export const JobListQuerySchema = Schema.Struct({
   cursor: Schema.optional(JobListCursor),
   limit: Schema.optional(
     Schema.NumberFromString.pipe(
-      Schema.int(),
-      Schema.positive(),
-      Schema.lessThanOrEqualTo(100)
+      Schema.check(
+        Schema.isInt(),
+        Schema.isGreaterThan(0),
+        Schema.isLessThanOrEqualTo(100)
+      )
     )
   ),
   status: Schema.optional(JobStatusSchema),
@@ -441,10 +462,10 @@ export type CreateJobSiteInlineInput = Schema.Schema.Type<
   typeof CreateJobSiteInlineInputSchema
 >;
 
-export const CreateJobSiteInputSchema = Schema.Union(
+export const CreateJobSiteInputSchema = Schema.Union([
   CreateJobSiteExistingInputSchema,
-  CreateJobSiteInlineInputSchema
-);
+  CreateJobSiteInlineInputSchema,
+]);
 export type CreateJobSiteInput = Schema.Schema.Type<
   typeof CreateJobSiteInputSchema
 >;
@@ -470,10 +491,10 @@ export type CreateJobContactInlineInput = Schema.Schema.Type<
   typeof CreateJobContactInlineInputSchema
 >;
 
-export const CreateJobContactInputSchema = Schema.Union(
+export const CreateJobContactInputSchema = Schema.Union([
   CreateJobContactExistingInputSchema,
-  CreateJobContactInlineInputSchema
-);
+  CreateJobContactInlineInputSchema,
+]);
 export type CreateJobContactInput = Schema.Schema.Type<
   typeof CreateJobContactInputSchema
 >;
@@ -540,25 +561,35 @@ export const AttachJobCollaboratorInputSchema = Schema.Struct({
   userId: UserId,
   roleLabel: JobCollaboratorRoleLabelSchema,
   accessLevel: JobCollaboratorAccessLevelSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type AttachJobCollaboratorInput = Schema.Schema.Type<
   typeof AttachJobCollaboratorInputSchema
 >;
 
-export const UpdateJobCollaboratorInputSchema = Schema.Struct({
+const UpdateJobCollaboratorInputBaseSchema = Schema.Struct({
   roleLabel: Schema.optional(JobCollaboratorRoleLabelSchema),
   accessLevel: Schema.optional(JobCollaboratorAccessLevelSchema),
-}).pipe(
-  Schema.filter(
-    (input) => input.roleLabel !== undefined || input.accessLevel !== undefined
-  ),
-  Schema.annotations({
-    message: () => "Expected at least one collaborator field to update",
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const UpdateJobCollaboratorInputSchema =
+  UpdateJobCollaboratorInputBaseSchema.pipe(
+    Schema.refine(
+      (
+        input
+      ): input is Schema.Schema.Type<
+        typeof UpdateJobCollaboratorInputBaseSchema
+      > => input.roleLabel !== undefined || input.accessLevel !== undefined,
+      {
+        message: "Expected at least one collaborator field to update",
+      }
+    )
+  ).annotate({
     parseOptions: { onExcessProperty: "error" },
-  })
-);
+  });
 export type UpdateJobCollaboratorInput = Schema.Schema.Type<
   typeof UpdateJobCollaboratorInputSchema
 >;
@@ -591,26 +622,34 @@ export type AssignJobLabelInput = Schema.Schema.Type<
   typeof AssignJobLabelInputSchema
 >;
 
-export const AddJobCostLineInputSchema = Schema.Struct({
+const AddJobCostLineInputBaseSchema = Schema.Struct({
   type: JobCostLineTypeSchema,
   description: JobCostLineDescriptionSchema,
   quantity: JobCostLineQuantitySchema,
   unitPriceMinor: JobCostLineUnitPriceMinorSchema,
   taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
-}).pipe(
-  Schema.filter((input) =>
-    Number.isSafeInteger(
-      calculateJobCostLineTotalMinor({
-        quantity: input.quantity,
-        unitPriceMinor: input.unitPriceMinor,
-      })
-    )
-  ),
-  Schema.annotations({
-    message: () => "Expected a safe integer line total",
-    parseOptions: { onExcessProperty: "error" },
-  })
-);
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const AddJobCostLineInputSchema = AddJobCostLineInputBaseSchema.pipe(
+  Schema.refine(
+    (
+      input
+    ): input is Schema.Schema.Type<typeof AddJobCostLineInputBaseSchema> =>
+      Number.isSafeInteger(
+        calculateJobCostLineTotalMinor({
+          quantity: input.quantity,
+          unitPriceMinor: input.unitPriceMinor,
+        })
+      ),
+    {
+      message: "Expected a safe integer line total",
+    }
+  )
+).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
 export type AddJobCostLineInput = Schema.Schema.Type<
   typeof AddJobCostLineInputSchema
 >;
@@ -679,7 +718,7 @@ export type JobContactDetail = Schema.Schema.Type<
 >;
 
 export const JobViewerAccessSchema = Schema.Struct({
-  visibility: Schema.Literal("internal", "external"),
+  visibility: Schema.Literals(["internal", "external"] as const),
   canComment: Schema.Boolean,
 });
 export type JobViewerAccess = Schema.Schema.Type<typeof JobViewerAccessSchema>;
@@ -698,7 +737,7 @@ export const JobDetailSchema = Schema.Struct({
       summary: JobCostSummarySchema,
     })
   ),
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type JobDetail = Schema.Schema.Type<typeof JobDetailSchema>;

@@ -88,7 +88,7 @@ async function listCurrentBrowserSites(
 ): Promise<SiteListResponse> {
   return await runBrowserAppApiClient("SitesClient.listSites", (client) =>
     client.sites.listSites({
-      urlParams: query,
+      query,
     })
   );
 }
@@ -136,7 +136,7 @@ async function listCurrentBrowserJobs(
 ): Promise<JobListResponse> {
   return await runBrowserAppApiClient("JobsClient.listJobs", (client) =>
     client.jobs.listJobs({
-      urlParams: query,
+      query,
     })
   );
 }

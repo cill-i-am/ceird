@@ -11,10 +11,10 @@ export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
 export const UserId = IdentityUserId;
 export type UserId = UserIdType;
 
-export const CommentBodySchema = Schema.String.pipe(Schema.minLength(1));
+export const CommentBodySchema = Schema.String.check(Schema.isMinLength(1));
 export type CommentBody = Schema.Schema.Type<typeof CommentBodySchema>;
 
-export const CommentBodyInputSchema = Schema.Trim.pipe(Schema.minLength(1));
+export const CommentBodyInputSchema = Schema.Trim.check(Schema.isMinLength(1));
 export type CommentBodyInput = Schema.Schema.Type<
   typeof CommentBodyInputSchema
 >;

@@ -13,7 +13,7 @@ export type Label = Schema.Schema.Type<typeof LabelSchema>;
 
 export const CreateLabelInputSchema = Schema.Struct({
   name: LabelNameSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type CreateLabelInput = Schema.Schema.Type<
@@ -22,7 +22,7 @@ export type CreateLabelInput = Schema.Schema.Type<
 
 export const UpdateLabelInputSchema = Schema.Struct({
   name: LabelNameSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type UpdateLabelInput = Schema.Schema.Type<

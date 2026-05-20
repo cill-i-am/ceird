@@ -1,4 +1,4 @@
-import { Config, Effect } from "effect";
+import { Layer, Context, Config, Effect, Schema } from "effect";
 
 import { AuthEmailConfigurationError } from "./auth-email-errors.js";
 
@@ -15,29 +15,36 @@ export interface AuthEmailConfig {
 }
 
 const baseAuthEmailConfig = Config.all({
-  appOrigin: Config.string("AUTH_APP_ORIGIN").pipe(
-    Config.validate({
-      message: "AUTH_APP_ORIGIN must be a valid absolute URL origin",
-      validation: (value) => {
-        try {
-          const url = new URL(value);
-          return (
-            (url.protocol === "http:" || url.protocol === "https:") &&
-            url.username.length === 0 &&
-            url.password.length === 0 &&
-            url.pathname === "/"
-          );
-        } catch {
-          return false;
+  appOrigin: Config.schema(
+    Schema.String.pipe(
+      Schema.refine(
+        (value): value is string => {
+          try {
+            const url = new URL(value);
+            return (
+              (url.protocol === "http:" || url.protocol === "https:") &&
+              url.username.length === 0 &&
+              url.password.length === 0 &&
+              url.pathname === "/"
+            );
+          } catch {
+            return false;
+          }
+        },
+        {
+          message: "AUTH_APP_ORIGIN must be a valid absolute URL origin",
         }
-      },
-    })
+      )
+    ),
+    "AUTH_APP_ORIGIN"
   ),
-  from: Config.string("AUTH_EMAIL_FROM").pipe(
-    Config.validate({
-      message: "AUTH_EMAIL_FROM must be a valid email address",
-      validation: isValidEmailAddress,
-    })
+  from: Config.schema(
+    Schema.String.pipe(
+      Schema.refine((value): value is string => isValidEmailAddress(value), {
+        message: "AUTH_EMAIL_FROM must be a valid email address",
+      })
+    ),
+    "AUTH_EMAIL_FROM"
   ),
   fromName: Config.string("AUTH_EMAIL_FROM_NAME").pipe(
     Config.withDefault("Ceird")
@@ -58,9 +65,15 @@ function mapAuthEmailConfigError<A, E, R>(effect: Effect.Effect<A, E, R>) {
 
 export const loadAuthEmailConfig = mapAuthEmailConfigError(baseAuthEmailConfig);
 
-export class AuthEmailConfigService extends Effect.Service<AuthEmailConfigService>()(
+export class AuthEmailConfigService extends Context.Service<AuthEmailConfigService>()(
   "@ceird/domains/identity/authentication/AuthEmailConfigService",
   {
-    effect: loadAuthEmailConfig,
+    make: loadAuthEmailConfig,
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AuthEmailConfigService,
+    AuthEmailConfigService.make
+  );
+  static readonly Default = AuthEmailConfigService.DefaultWithoutDependencies;
+}

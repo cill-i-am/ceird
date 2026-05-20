@@ -194,7 +194,7 @@ describe("organization rate card section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateRateCard).toHaveBeenCalledWith({
-        path: {
+        params: {
           rateCardId: standardRateCardId,
         },
         payload: {
@@ -251,7 +251,7 @@ describe("organization rate card section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateRateCard).toHaveBeenCalledWith({
-        path: {
+        params: {
           rateCardId: standardRateCardId,
         },
         payload: {

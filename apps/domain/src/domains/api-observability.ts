@@ -23,14 +23,13 @@ export function observeApiOperation(options: ApiOperationObservabilityOptions) {
     effect: Effect.Effect<Success, Error, Requirements>
   ) =>
     effect.pipe(
-      Effect.tapErrorCause((cause) => logApiOperationFailure(options, cause)),
+      Effect.tapCause((cause) => logApiOperationFailure(options, cause)),
       Effect.withSpan(spanName, {
         attributes: {
           apiDomain: options.domain,
           apiOperation: options.operation,
           apiService: options.service,
         },
-        captureStackTrace: false,
       }),
       Effect.withLogSpan(spanName)
     );
@@ -40,7 +39,7 @@ function logApiOperationFailure(
   options: ApiOperationObservabilityOptions,
   cause: Cause.Cause<unknown>
 ) {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
   const serializedFailure = Option.isSome(failure)
     ? serializeFailure(failure.value)
     : {

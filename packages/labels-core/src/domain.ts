@@ -5,8 +5,7 @@ export const IsoDateTimeString = IdentityIsoDateTimeString;
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
 
 export const LabelNameSchema = Schema.Trim.pipe(
-  Schema.minLength(1),
-  Schema.maxLength(48)
+  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(48))
 );
 export type LabelName = Schema.Schema.Type<typeof LabelNameSchema>;
 

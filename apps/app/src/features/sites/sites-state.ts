@@ -515,7 +515,7 @@ function makeSitesCollection(
       getKey: (site) => site.id,
       id: `organization:${organizationId}:sites`,
       initialData: [...sites],
-      schema: Schema.standardSchemaV1(SiteOptionSchema),
+      schema: Schema.toStandardSchemaV1(SiteOptionSchema),
     })
   );
 }
@@ -530,7 +530,7 @@ function makeSiteCommentsCollection(
       getKey: (comment) => comment.id,
       id: `organization:${organizationId}:site:${siteId}:comments`,
       initialData: [...comments],
-      schema: Schema.standardSchemaV1(SiteCommentSchema),
+      schema: Schema.toStandardSchemaV1(SiteCommentSchema),
     })
   );
 }
@@ -779,7 +779,7 @@ function createBrowserSite(input: CreateSiteInput) {
 function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
   return runBrowserAppApiRequest("SitesBrowser.updateSite", (client) =>
     client.sites.updateSite({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -788,7 +788,7 @@ function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
 function listBrowserSiteComments(siteId: SiteIdType) {
   return runBrowserAppApiRequest("SitesBrowser.listSiteComments", (client) =>
     client.sites.listSiteComments({
-      path: { siteId },
+      params: { siteId },
     })
   );
 }
@@ -796,7 +796,7 @@ function listBrowserSiteComments(siteId: SiteIdType) {
 function addBrowserSiteComment(siteId: SiteIdType, input: AddSiteCommentInput) {
   return runBrowserAppApiRequest("SitesBrowser.addSiteComment", (client) =>
     client.sites.addSiteComment({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -808,7 +808,7 @@ function assignBrowserSiteLabel(
 ) {
   return runBrowserAppApiRequest("SitesBrowser.assignSiteLabel", (client) =>
     client.sites.assignSiteLabel({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -817,7 +817,7 @@ function assignBrowserSiteLabel(
 function removeBrowserSiteLabel(siteId: SiteIdType, labelId: LabelIdType) {
   return runBrowserAppApiRequest("SitesBrowser.removeSiteLabel", (client) =>
     client.sites.removeSiteLabel({
-      path: { labelId, siteId },
+      params: { labelId, siteId },
     })
   );
 }
@@ -966,7 +966,7 @@ function compareSiteComments(left: SiteComment, right: SiteComment) {
 }
 
 function failureFromCause(cause: Cause.Cause<AppApiError>): unknown {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   return Option.isSome(failure) ? failure.value : Cause.squash(cause);
 }

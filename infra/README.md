@@ -47,6 +47,9 @@ hostnames are used as fallbacks while the domain lists are resolving. Use
 `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`, and `CEIRD_MCP_HOSTNAME` only for an
 intentional canonical domain cutover; the main deploy workflow sets them to
 `app.ceird.app`, `api.ceird.app`, and `mcp.ceird.app` for production.
+Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
+and passed through the app-owned Worker env module; the root stack does not own
+those runtime defaults.
 It does not output the Neon connection URI; inspect `PostgresBranch` state when
 a local operator needs the direct database URL for Playwright.
 

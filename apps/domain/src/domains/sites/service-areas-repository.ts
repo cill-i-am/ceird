@@ -9,8 +9,8 @@ import type {
   ServiceAreaIdType as ServiceAreaId,
   ServiceAreaOption,
 } from "@ceird/sites-core";
-import { SqlClient } from "@effect/sql";
-import { Effect, Schema } from "effect";
+import { Layer, Context, Effect, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import { generateServiceAreaId } from "./id-generation.js";
 
@@ -41,11 +41,10 @@ const decodeServiceAreaOption = Schema.decodeUnknownSync(
   ServiceAreaOptionSchema
 );
 
-export class ServiceAreasRepository extends Effect.Service<ServiceAreasRepository>()(
+export class ServiceAreasRepository extends Context.Service<ServiceAreasRepository>()(
   "@ceird/domains/sites/ServiceAreasRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* ServiceAreasRepositoryLive() {
+    make: Effect.gen(function* ServiceAreasRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const list = Effect.fn("ServiceAreasRepository.list")(function* (
@@ -144,7 +143,28 @@ export class ServiceAreasRepository extends Effect.Service<ServiceAreasRepositor
       };
     }),
   }
-) {}
+) {
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ServiceAreasRepository>["create"]
+    >
+  ) => ServiceAreasRepository.use((service) => service.create(...args));
+  static readonly list = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ServiceAreasRepository>["list"]
+    >
+  ) => ServiceAreasRepository.use((service) => service.list(...args));
+  static readonly update = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ServiceAreasRepository>["update"]
+    >
+  ) => ServiceAreasRepository.use((service) => service.update(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    ServiceAreasRepository,
+    ServiceAreasRepository.make
+  );
+  static readonly Default = ServiceAreasRepository.DefaultWithoutDependencies;
+}
 
 function mapServiceAreaRow(row: ServiceAreaRow): ServiceArea {
   return decodeServiceArea({

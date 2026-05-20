@@ -11,8 +11,8 @@ import type {
   UpdateRateCardInput,
   UserId,
 } from "@ceird/jobs-core";
-import { HttpServerRequest } from "@effect/platform";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -81,7 +81,7 @@ function makeHarness(
     updateRateCard: 0,
   };
 
-  const rateCardsRepository = RateCardsRepository.make({
+  const rateCardsRepository = RateCardsRepository.of({
     create: (
       input: CreateRateCardInput & {
         readonly organizationId: OrganizationId;
@@ -135,7 +135,7 @@ function makeHarness(
     Layer.mergeAll(
       Layer.succeed(
         CurrentOrganizationActor,
-        CurrentOrganizationActor.make({
+        CurrentOrganizationActor.of({
           get: () => Effect.succeed(actor),
         })
       ),
@@ -180,7 +180,7 @@ function runConfigurationServiceExit<Value, Error>(
 
 function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
   return Exit.isFailure(exit)
-    ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+    ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
     : undefined;
 }
 

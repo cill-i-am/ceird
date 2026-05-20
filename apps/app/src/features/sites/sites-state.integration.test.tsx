@@ -175,7 +175,7 @@ describe("sites state integration", () => {
     },
     async () => {
       mockedCreateSite.mockReturnValue(
-        Effect.async<CreateSiteResponse>((resume) => {
+        Effect.callback<CreateSiteResponse>((resume) => {
           resolveCreatedSite = (site) => resume(Effect.succeed(site));
         })
       );
@@ -202,7 +202,7 @@ describe("sites state integration", () => {
     },
     async () => {
       mockedUpdateSite.mockReturnValue(
-        Effect.async<UpdateSiteResponse>((resume) => {
+        Effect.callback<UpdateSiteResponse>((resume) => {
           resolveUpdatedSite = (site) => resume(Effect.succeed(site));
         })
       );
@@ -245,7 +245,7 @@ describe("sites state integration", () => {
         expect(screen.getByTestId("site-labels")).toHaveTextContent("Urgent");
       });
       expect(mockedAssignSiteLabel).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: { labelId: urgentLabelId },
       });
     }
@@ -279,7 +279,7 @@ describe("sites state integration", () => {
         payload: { name: "Warranty" },
       });
       expect(mockedAssignSiteLabel).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: { labelId: warrantyLabelId },
       });
     }
@@ -293,7 +293,7 @@ describe("sites state integration", () => {
     async () => {
       const warrantyLabel = buildLabel(warrantyLabelId, "Warranty");
       mockedCreateLabel.mockReturnValue(
-        Effect.async<Label>((resume) => {
+        Effect.callback<Label>((resume) => {
           resolveCreatedLabel = (label) => resume(Effect.succeed(label));
         })
       );
@@ -343,7 +343,7 @@ describe("sites state integration", () => {
         expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
       });
       expect(mockedRemoveSiteLabel).toHaveBeenCalledWith({
-        path: { labelId: urgentLabelId, siteId: existingSiteId },
+        params: { labelId: urgentLabelId, siteId: existingSiteId },
       });
     }
   );
@@ -381,7 +381,7 @@ describe("sites state integration", () => {
         );
       });
       expect(mockedListSiteComments).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
       });
     }
   );
@@ -425,11 +425,11 @@ describe("sites state integration", () => {
         );
       });
       expect(mockedAddSiteComment).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: buildAddSiteCommentInput("New note"),
       });
       expect(mockedListSiteComments).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
       });
     }
   );

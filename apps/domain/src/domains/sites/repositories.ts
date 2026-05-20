@@ -1,6 +1,5 @@
-/* oxlint-disable eslint/max-classes-per-file */
-
 import { OrganizationId as OrganizationIdSchema } from "@ceird/identity-core";
+/* oxlint-disable eslint/max-classes-per-file */
 import type { OrganizationId } from "@ceird/identity-core";
 import {
   LabelId as LabelIdSchema,
@@ -29,8 +28,8 @@ import type {
   SiteListQuery,
   SiteOption,
 } from "@ceird/sites-core";
-import { SqlClient } from "@effect/sql";
-import { Effect, Option, Schema } from "effect";
+import { Layer, Context, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { generateSiteId } from "./id-generation.js";
@@ -151,11 +150,10 @@ const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
 );
 
-export class SitesRepository extends Effect.Service<SitesRepository>()(
+export class SitesRepository extends Context.Service<SitesRepository>()(
   "@ceird/domains/sites/SitesRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* SitesRepositoryLive() {
+    make: Effect.gen(function* SitesRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const withTransaction = Effect.fn("SitesRepository.withTransaction")(
@@ -205,7 +203,7 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.id).pipe(Option.map(decodeSiteId));
+        return Option.fromNullishOr(rows[0]?.id).pipe(Option.map(decodeSiteId));
       });
 
       const create = Effect.fn("SitesRepository.create")(function* (
@@ -455,13 +453,39 @@ export class SitesRepository extends Effect.Service<SitesRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly create = (
+    ...args: Parameters<Context.Service.Shape<typeof SitesRepository>["create"]>
+  ) => SitesRepository.use((service) => service.create(...args));
+  static readonly findById = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesRepository>["findById"]
+    >
+  ) => SitesRepository.use((service) => service.findById(...args));
+  static readonly getOptionById = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesRepository>["getOptionById"]
+    >
+  ) => SitesRepository.use((service) => service.getOptionById(...args));
+  static readonly list = (
+    ...args: Parameters<Context.Service.Shape<typeof SitesRepository>["list"]>
+  ) => SitesRepository.use((service) => service.list(...args));
+  static readonly listOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesRepository>["listOptions"]
+    >
+  ) => SitesRepository.use((service) => service.listOptions(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    SitesRepository,
+    SitesRepository.make
+  );
+  static readonly Default = SitesRepository.DefaultWithoutDependencies;
+}
 
-export class SiteLabelAssignmentsRepository extends Effect.Service<SiteLabelAssignmentsRepository>()(
+export class SiteLabelAssignmentsRepository extends Context.Service<SiteLabelAssignmentsRepository>()(
   "@ceird/domains/sites/SiteLabelAssignmentsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* SiteLabelAssignmentsRepositoryLive() {
+    make: Effect.gen(function* SiteLabelAssignmentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const ensureSiteInOrganization = Effect.fn(
@@ -629,7 +653,34 @@ export class SiteLabelAssignmentsRepository extends Effect.Service<SiteLabelAssi
       };
     }),
   }
-) {}
+) {
+  static readonly assignToSite = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof SiteLabelAssignmentsRepository
+      >["assignToSite"]
+    >
+  ) =>
+    SiteLabelAssignmentsRepository.use((service) =>
+      service.assignToSite(...args)
+    );
+  static readonly removeFromSite = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof SiteLabelAssignmentsRepository
+      >["removeFromSite"]
+    >
+  ) =>
+    SiteLabelAssignmentsRepository.use((service) =>
+      service.removeFromSite(...args)
+    );
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    SiteLabelAssignmentsRepository,
+    SiteLabelAssignmentsRepository.make
+  );
+  static readonly Default =
+    SiteLabelAssignmentsRepository.DefaultWithoutDependencies;
+}
 
 function makeSiteValues(
   input: CreateSiteRecordInput | UpdateSiteRecordInput,

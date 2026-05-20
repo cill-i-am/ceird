@@ -114,7 +114,7 @@ export function OrganizationSettingsPage({
       name: organization.name,
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(organizationSettingsSchema),
+      onSubmit: Schema.toStandardSchemaV1(organizationSettingsSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({

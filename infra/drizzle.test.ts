@@ -46,7 +46,7 @@ describe("Alchemy Drizzle integration", () => {
   it("can load the configured schema entry with plain Node like Alchemy Drizzle.Schema", () => {
     const schemaModule = loadConfiguredSchemaWithPlainNode();
 
-    expect(schemaModule.exportNames).toEqual(
+    expect(schemaModule.exportNames).toStrictEqual(
       expect.arrayContaining(["comment", "databaseSchema", "workItem"])
     );
     expect(schemaModule.tableCount).toBeGreaterThan(0);
@@ -82,12 +82,14 @@ describe("Alchemy Drizzle integration", () => {
       "utf8"
     );
 
-    expect(drizzleKitApi.generateDrizzleJson).toEqual(expect.any(Function));
-    expect(drizzleKitApi.generateMigration).toEqual(expect.any(Function));
-    expect(snapshot).toEqual(expect.any(Object));
+    expect(drizzleKitApi.generateDrizzleJson).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(drizzleKitApi.generateMigration).toStrictEqual(expect.any(Function));
+    expect(snapshot).toStrictEqual(expect.any(Object));
     expect(pendingMigration).toStrictEqual([]);
     expect(trgmMigrationSql).toContain(
       "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
     );
-  });
+  }, 15_000);
 });

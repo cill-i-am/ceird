@@ -1,6 +1,6 @@
-import { HttpServerRequest } from "@effect/platform";
 import type { Context } from "effect";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 
 import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
@@ -11,6 +11,7 @@ import {
   CeirdMcpToolkitLayer,
   hasRequiredScope,
   MCP_TOOL_REGISTRATIONS,
+  McpToolDomainRuntime,
   McpToolRequestRuntime,
 } from "./tools.js";
 
@@ -96,7 +97,7 @@ describe("effect ai mcp toolkit", () => {
     );
 
     expect(labelsCalled).toBeTruthy();
-    expect(result.encodedResult).toStrictEqual({ ok: true });
+    expect(result?.encodedResult).toStrictEqual({ ok: true });
   });
 
   it("fails before calling the domain service when scope is insufficient", async () => {
@@ -126,22 +127,31 @@ function runToolkitTool(
   params: unknown,
   runtime: ContextRuntime,
   servicesLayer: Layer.Layer<
-    | ConfigurationService
-    | JobsService
-    | LabelsService
-    | SitesService
-    | HttpServerRequest.HttpServerRequest
+    ConfigurationService | JobsService | LabelsService | SitesService
   >
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
       const toolkit = yield* CeirdMcpToolkit;
-      return yield* toolkit.handle(name, params as never);
+      const stream = yield* toolkit.handle(name, params as never);
+      const results = yield* Stream.runCollect(stream);
+
+      return [...results].at(-1);
     }).pipe(
       Effect.provide(CeirdMcpToolkitLayer),
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(McpToolRequestRuntime, runtime),
+          Layer.succeed(
+            McpToolDomainRuntime,
+            McpToolDomainRuntime.of({
+              run: (effect) => Effect.provide(effect, servicesLayer),
+            })
+          ),
+          Layer.succeed(McpToolRequestRuntime, runtime as never),
+          Layer.succeed(
+            HttpServerRequest.HttpServerRequest,
+            {} as HttpServerRequest.HttpServerRequest
+          ),
           servicesLayer
         )
       )
@@ -149,7 +159,9 @@ function runToolkitTool(
   );
 }
 
-type ContextRuntime = Context.Tag.Service<McpToolRequestRuntime>;
+interface ContextRuntime {
+  readonly scopes: readonly string[];
+}
 
 function makeTestToolServicesLayer(options: {
   readonly labelsList?: () => Effect.Effect<unknown>;
@@ -160,7 +172,7 @@ function makeTestToolServicesLayer(options: {
       LabelsService,
       LabelsService.of({
         list: options.labelsList ?? notImplementedToolService("Labels.list"),
-      } as unknown as Context.Tag.Service<typeof LabelsService>)
+      } as unknown as Context.Service.Shape<typeof LabelsService>)
     ),
     Layer.succeed(
       ConfigurationService,
@@ -168,19 +180,15 @@ function makeTestToolServicesLayer(options: {
         listRateCards:
           options.listRateCards ??
           notImplementedToolService("Configuration.listRateCards"),
-      } as unknown as Context.Tag.Service<typeof ConfigurationService>)
+      } as unknown as Context.Service.Shape<typeof ConfigurationService>)
     ),
     Layer.succeed(
       JobsService,
-      JobsService.of({} as Context.Tag.Service<typeof JobsService>)
+      JobsService.of({} as Context.Service.Shape<typeof JobsService>)
     ),
     Layer.succeed(
       SitesService,
-      SitesService.of({} as Context.Tag.Service<typeof SitesService>)
-    ),
-    Layer.succeed(
-      HttpServerRequest.HttpServerRequest,
-      {} as HttpServerRequest.HttpServerRequest
+      SitesService.of({} as Context.Service.Shape<typeof SitesService>)
     )
   );
 }

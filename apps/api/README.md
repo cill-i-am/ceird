@@ -26,12 +26,13 @@ default and forwards to `DOMAIN_ORIGIN`, which defaults to
 
 ## Important Paths
 
-| Path                      | Purpose                                                      |
-| ------------------------- | ------------------------------------------------------------ |
-| `src/index.ts`            | Node development entrypoint.                                 |
-| `src/server.ts`           | Public adapter web handler, root/health routes, and logging. |
-| `src/worker.ts`           | Cloudflare Worker entrypoint.                                |
-| `src/platform/cloudflare` | API Worker env contract for the private `DOMAIN` service.    |
+| Path                         | Purpose                                                        |
+| ---------------------------- | -------------------------------------------------------------- |
+| `src/index.ts`               | Node development entrypoint.                                   |
+| `src/server.ts`              | Public adapter web handler, root/health routes, and logging.   |
+| `src/worker.ts`              | Cloudflare Worker entrypoint.                                  |
+| `infra/cloudflare-worker.ts` | App-owned Alchemy Worker declaration and binding/env contract. |
+| `src/platform/cloudflare`    | API Worker env contract for the private `DOMAIN` service.      |
 
 ## Runtime Responsibilities
 

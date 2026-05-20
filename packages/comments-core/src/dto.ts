@@ -17,18 +17,16 @@ export const CommentSchema = Schema.Struct({
 });
 export type Comment = Schema.Schema.Type<typeof CommentSchema>;
 
-export const EditableCommentSchema = Schema.extend(
-  CommentSchema,
-  Schema.Struct({
-    updatedAt: IsoDateTimeString,
-    updatedByUserId: Schema.optional(UserId),
-  })
-);
+export const EditableCommentSchema = Schema.Struct({
+  ...CommentSchema.fields,
+  updatedAt: IsoDateTimeString,
+  updatedByUserId: Schema.optional(UserId),
+});
 export type EditableComment = Schema.Schema.Type<typeof EditableCommentSchema>;
 
 export const AddCommentInputSchema = Schema.Struct({
   body: CommentBodyInputSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type AddCommentInput = Schema.Schema.Type<typeof AddCommentInputSchema>;

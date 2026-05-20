@@ -837,7 +837,7 @@ function MapControls({
         });
         onLocate?.(coords);
       } else {
-        const failure = Cause.failureOption(exit.cause);
+        const failure = Cause.findErrorOption(exit.cause);
 
         if (Option.isSome(failure)) {
           onLocateError?.(failure.value);

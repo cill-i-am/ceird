@@ -9,35 +9,35 @@ export interface BrowserGeolocationCoordinates {
   readonly longitude: number;
 }
 
-export class BrowserGeolocationUnavailableError extends Schema.TaggedError<BrowserGeolocationUnavailableError>()(
+export class BrowserGeolocationUnavailableError extends Schema.TaggedErrorClass<BrowserGeolocationUnavailableError>()(
   "BrowserGeolocationUnavailableError",
   {
     message: Schema.String,
   }
 ) {}
 
-export class BrowserGeolocationPermissionDeniedError extends Schema.TaggedError<BrowserGeolocationPermissionDeniedError>()(
+export class BrowserGeolocationPermissionDeniedError extends Schema.TaggedErrorClass<BrowserGeolocationPermissionDeniedError>()(
   "BrowserGeolocationPermissionDeniedError",
   {
     message: Schema.String,
   }
 ) {}
 
-export class BrowserGeolocationPositionUnavailableError extends Schema.TaggedError<BrowserGeolocationPositionUnavailableError>()(
+export class BrowserGeolocationPositionUnavailableError extends Schema.TaggedErrorClass<BrowserGeolocationPositionUnavailableError>()(
   "BrowserGeolocationPositionUnavailableError",
   {
     message: Schema.String,
   }
 ) {}
 
-export class BrowserGeolocationTimeoutError extends Schema.TaggedError<BrowserGeolocationTimeoutError>()(
+export class BrowserGeolocationTimeoutError extends Schema.TaggedErrorClass<BrowserGeolocationTimeoutError>()(
   "BrowserGeolocationTimeoutError",
   {
     message: Schema.String,
   }
 ) {}
 
-export class BrowserGeolocationUnknownError extends Schema.TaggedError<BrowserGeolocationUnknownError>()(
+export class BrowserGeolocationUnknownError extends Schema.TaggedErrorClass<BrowserGeolocationUnknownError>()(
   "BrowserGeolocationUnknownError",
   {
     code: Schema.optional(Schema.Number),
@@ -67,7 +67,7 @@ export const requestBrowserGeolocation = Effect.fn(
     );
   }
 
-  return yield* Effect.async<
+  return yield* Effect.callback<
     BrowserGeolocationCoordinates,
     BrowserGeolocationError
   >((resume) => {

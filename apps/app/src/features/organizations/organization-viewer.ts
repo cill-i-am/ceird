@@ -7,7 +7,7 @@ import type {
   OrganizationRole,
   UserId as UserIdType,
 } from "@ceird/identity-core";
-import { ParseResult } from "effect";
+import { Schema } from "effect";
 
 export type OrganizationViewerRole = OrganizationRole;
 
@@ -29,5 +29,5 @@ export function isExternalOrganizationViewer(
 }
 
 export function decodeOrganizationViewerUserId(input: unknown): UserIdType {
-  return ParseResult.decodeUnknownSync(UserId)(input);
+  return Schema.decodeUnknownSync(UserId)(input);
 }

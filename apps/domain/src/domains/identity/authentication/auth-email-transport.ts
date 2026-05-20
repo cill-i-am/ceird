@@ -40,9 +40,10 @@ export function makeLocalAuthEmailTransport() {
   return Effect.succeed(makeDevelopmentAuthEmailTransport());
 }
 
-export class AuthEmailTransport extends Context.Tag(
-  "@ceird/domains/identity/authentication/AuthEmailTransport"
-)<AuthEmailTransport, AuthEmailTransportImplementation>() {
+export class AuthEmailTransport extends Context.Service<
+  AuthEmailTransport,
+  AuthEmailTransportImplementation
+>()("@ceird/domains/identity/authentication/AuthEmailTransport") {
   static readonly send = (message: TransportMessage) =>
     Effect.gen(function* AuthEmailTransportSend() {
       const transport = yield* AuthEmailTransport;

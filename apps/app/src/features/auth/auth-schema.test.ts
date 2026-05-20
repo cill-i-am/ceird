@@ -68,7 +68,7 @@ describe("auth schemas", () => {
         password: "supersecret",
         confirmPassword: "supersecret",
       })
-    ).toThrow(/is unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 
   it("rejects short reset request passwords", () => {
