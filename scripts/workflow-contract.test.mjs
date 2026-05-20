@@ -175,7 +175,7 @@ test("Alchemy implementation helpers are root-owned, not a workspace package", (
     rootPackage.scripts["check-types:infra"],
     "tsc --noEmit -p tsconfig.infra.json"
   );
-  assert.equal(rootPackage.scripts["test:infra"], "vitest run infra");
+  assert.equal(rootPackage.scripts["test:infra"], "vitest run --dir infra");
   assert.match(
     rootPackage.scripts["check-types"],
     /pnpm run check-types:infra/

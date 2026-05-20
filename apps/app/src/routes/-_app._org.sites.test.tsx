@@ -2,6 +2,7 @@ import { decodeOrganizationId } from "@ceird/identity-core";
 import type { UserId as UserIdType } from "@ceird/identity-core";
 import type { JobListResponse, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
+import { QueryClient } from "@tanstack/query-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
@@ -114,6 +115,62 @@ describe("sites route loader", () => {
       expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
       expect(mockedListAllCurrentServerSites).toHaveBeenCalledOnce();
       expect(mockedGetCurrentServerServiceAreas).toHaveBeenCalledOnce();
+    }
+  );
+
+  it(
+    "seeds the router query client with the scoped sites collection key",
+    { timeout: 10_000 },
+    async () => {
+      const queryClient = new QueryClient();
+      const site = {
+        addressLine1: "1 Custom House Quay",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D01 X2X2",
+        geocodedAt: "2026-04-27T10:00:00.000Z",
+        geocodingProvider: "stub",
+        id: "55555555-5555-4555-8555-555555555555" as SiteIdType,
+        labels: [],
+        latitude: 53.3498,
+        longitude: -6.2603,
+        name: "Docklands Campus",
+      };
+
+      mockedListAllCurrentServerSites.mockResolvedValue({
+        items: [site],
+        nextCursor: undefined,
+      });
+      mockedGetCurrentServerServiceAreas.mockResolvedValue({
+        items: [],
+      });
+
+      const [{ organizationSitesQueryKey }, { loadSitesRouteData }] =
+        await Promise.all([
+          import("#/features/sites/sites-query-keys"),
+          import("#/features/sites/sites-route-loader"),
+        ]);
+
+      await loadSitesRouteData({
+        activeOrganizationId: organizationId,
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: organizationId,
+        },
+        currentOrganizationRole: "owner",
+        currentUserId: userId,
+        queryClient,
+      });
+
+      expect(
+        queryClient.getQueryData(
+          organizationSitesQueryKey({
+            organizationId,
+            role: "owner",
+            userId,
+          })
+        )
+      ).toStrictEqual([site]);
     }
   );
 

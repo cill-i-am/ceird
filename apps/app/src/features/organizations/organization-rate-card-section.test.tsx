@@ -9,8 +9,12 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
+import * as React from "react";
 
-import { OrganizationConfigurationProvider } from "./organization-configuration-state";
+import {
+  OrganizationConfigurationProvider,
+  useUpdateRateCardMutation,
+} from "./organization-configuration-state";
 import { OrganizationRateCardSection } from "./organization-rate-card-section";
 
 type EffectClientMock = (...args: unknown[]) => unknown;
@@ -108,6 +112,7 @@ describe("organization rate card section", () => {
       )
     ).not.toBeInTheDocument();
     expect(screen.getByText("0 lines")).toBeVisible();
+    expect(mockedListRateCards).toHaveBeenCalledOnce();
   });
 
   it("creates the single Standard card on first save when none exists", async () => {
@@ -166,6 +171,60 @@ describe("organization rate card section", () => {
     await expect(
       screen.findByRole("button", { name: "Save rate card" })
     ).resolves.toBeVisible();
+  });
+
+  it("ignores in-flight rate card updates after the provider unmounts", async () => {
+    const rateCardResponse = createDeferredRateCardResponse();
+    mockedUpdateRateCard.mockReturnValue(
+      Effect.promise(() => rateCardResponse.promise)
+    );
+    const originalWindow = globalThis.window;
+    let updatePromise: Promise<unknown> | undefined;
+
+    function UpdateRateCardOnMount() {
+      const [, updateRateCard] = useUpdateRateCardMutation(standardRateCardId);
+
+      React.useEffect(() => {
+        updatePromise = updateRateCard({
+          lines: [
+            {
+              kind: "labour",
+              name: "Labour",
+              position: 1,
+              unit: "hour",
+              value: 85,
+            },
+          ],
+          name: "Standard",
+        });
+      }, [updateRateCard]);
+
+      return null;
+    }
+
+    const { unmount } = render(
+      <OrganizationConfigurationProvider organizationId={organizationId}>
+        <UpdateRateCardOnMount />
+      </OrganizationConfigurationProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockedUpdateRateCard).toHaveBeenCalledOnce();
+    });
+
+    unmount();
+    Reflect.deleteProperty(globalThis, "window");
+
+    try {
+      rateCardResponse.resolve(buildRateCard("Standard", standardRateCardId));
+      await expect(updatePromise).resolves.toBeDefined();
+    } finally {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
+        writable: true,
+      });
+    }
   });
 
   it("edits the existing Standard card and sends the entered line payload", async () => {
@@ -323,6 +382,20 @@ function createDeferredRateCardsResponse() {
       };
     }
   ).withResolvers<{ readonly items: readonly RateCard[] }>();
+
+  return { promise, resolve };
+}
+
+function createDeferredRateCardResponse() {
+  const { promise, resolve } = (
+    Promise as unknown as {
+      withResolvers: <Value>() => {
+        promise: Promise<Value>;
+        reject: (reason?: unknown) => void;
+        resolve: (value: Value) => void;
+      };
+    }
+  ).withResolvers<RateCard>();
 
   return { promise, resolve };
 }

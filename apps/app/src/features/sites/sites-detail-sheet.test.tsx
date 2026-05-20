@@ -263,7 +263,14 @@ function renderSiteDetailSheet({
   }
 
   render(
-    <SitesStateProvider activeOrganizationId={organizationId} options={options}>
+    <SitesStateProvider
+      activeOrganizationId={organizationId}
+      options={options}
+      viewer={{
+        role,
+        userId,
+      }}
+    >
       <SitesDetailSheet
         hasMoreRelatedJobs={hasMoreRelatedJobs}
         initialSite={site}
