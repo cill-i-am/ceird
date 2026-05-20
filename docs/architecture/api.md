@@ -119,6 +119,12 @@ The Agent Durable Object keeps chat/runtime state in the Agent store; product
 state, authorization, thread activity timestamps, and action side effects
 remain in the domain Worker.
 
+Domain action execution is registry-driven in
+`apps/domain/src/domains/agents/action-registry.ts`. Only actions marked
+`executable` in `@ceird/agents-core` are required to have domain handlers;
+planned actions remain in the shared manifest without being callable through
+the private Agent execution boundary.
+
 Current domain actions exposed to the Agent runtime are:
 
 | Action                    | Kind        |
