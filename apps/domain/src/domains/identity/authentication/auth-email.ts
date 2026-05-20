@@ -3,6 +3,8 @@ import { OrganizationRole } from "@ceird/identity-core";
 import { Layer, Context, Effect, Schema } from "effect";
 
 import {
+  AUTH_EMAIL_REJECTED_ERROR_TAG,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
   EmailVerificationEmailRejectedError,
   EmailVerificationEmailRequestError,
   InvalidPasswordResetEmailInputError,
@@ -200,22 +202,22 @@ export class AuthEmailSender extends Context.Service<AuthEmailSender>()(
             html,
           })
           .pipe(
-            Effect.catchTags({
-              AuthEmailRejectedError: (error) =>
-                Effect.fail(
-                  new PasswordResetEmailRejectedError({
-                    message: "Password reset email was rejected for delivery",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-              AuthEmailRequestError: (error) =>
-                Effect.fail(
-                  new PasswordResetEmailRequestError({
-                    message: "Failed to deliver password reset email",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-            })
+            Effect.catchTag(AUTH_EMAIL_REJECTED_ERROR_TAG, (error) =>
+              Effect.fail(
+                new PasswordResetEmailRejectedError({
+                  message: "Password reset email was rejected for delivery",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            ),
+            Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
+              Effect.fail(
+                new PasswordResetEmailRequestError({
+                  message: "Failed to deliver password reset email",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            )
           );
       });
 
@@ -255,23 +257,23 @@ export class AuthEmailSender extends Context.Service<AuthEmailSender>()(
             html,
           })
           .pipe(
-            Effect.catchTags({
-              AuthEmailRejectedError: (error) =>
-                Effect.fail(
-                  new OrganizationInvitationEmailRejectedError({
-                    message:
-                      "Organization invitation email was rejected for delivery",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-              AuthEmailRequestError: (error) =>
-                Effect.fail(
-                  new OrganizationInvitationEmailRequestError({
-                    message: "Failed to deliver organization invitation email",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-            })
+            Effect.catchTag(AUTH_EMAIL_REJECTED_ERROR_TAG, (error) =>
+              Effect.fail(
+                new OrganizationInvitationEmailRejectedError({
+                  message:
+                    "Organization invitation email was rejected for delivery",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            ),
+            Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
+              Effect.fail(
+                new OrganizationInvitationEmailRequestError({
+                  message: "Failed to deliver organization invitation email",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            )
           );
       });
 
@@ -309,22 +311,22 @@ export class AuthEmailSender extends Context.Service<AuthEmailSender>()(
             html,
           })
           .pipe(
-            Effect.catchTags({
-              AuthEmailRejectedError: (error) =>
-                Effect.fail(
-                  new EmailVerificationEmailRejectedError({
-                    message: "Verification email was rejected for delivery",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-              AuthEmailRequestError: (error) =>
-                Effect.fail(
-                  new EmailVerificationEmailRequestError({
-                    message: "Failed to deliver verification email",
-                    cause: error.cause ?? error.message,
-                  })
-                ),
-            })
+            Effect.catchTag(AUTH_EMAIL_REJECTED_ERROR_TAG, (error) =>
+              Effect.fail(
+                new EmailVerificationEmailRejectedError({
+                  message: "Verification email was rejected for delivery",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            ),
+            Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
+              Effect.fail(
+                new EmailVerificationEmailRequestError({
+                  message: "Failed to deliver verification email",
+                  cause: error.cause ?? error.message,
+                })
+              )
+            )
           );
       });
 

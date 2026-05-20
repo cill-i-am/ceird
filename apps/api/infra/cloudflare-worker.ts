@@ -5,25 +5,13 @@ import type { WorkerProps } from "alchemy/Cloudflare";
 import type { InputProps } from "alchemy/Input";
 import type * as Effect from "effect/Effect";
 
+import {
+  ceirdWorkerCompatibility,
+  ceirdWorkerObservability,
+} from "../../../infra/cloudflare-worker-defaults.ts";
 import type { DomainWorkerResource } from "../../domain/infra/cloudflare-worker.ts";
 
 const apiWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
-
-const apiWorkerCompatibility = {
-  date: "2026-04-30",
-  flags: ["nodejs_compat"],
-} satisfies NonNullable<WorkerProps["compatibility"]>;
-
-const apiWorkerObservability = {
-  enabled: true,
-  logs: {
-    enabled: true,
-    invocationLogs: true,
-  },
-  traces: {
-    enabled: true,
-  },
-} satisfies NonNullable<WorkerProps["observability"]>;
 
 export type WorkerServiceBinding = Service;
 
@@ -69,11 +57,11 @@ export function makeApiWorkerProps(input: {
   return {
     name: input.name,
     main: apiWorkerMain,
-    compatibility: apiWorkerCompatibility,
+    compatibility: ceirdWorkerCompatibility,
     bindings: makeApiWorkerBindings({ domain: input.domain }),
     env: { ...makeApiWorkerEnv() },
     domain: input.hostname,
-    observability: apiWorkerObservability,
+    observability: ceirdWorkerObservability,
     url: true,
   } satisfies InputProps<WorkerProps<ApiWorkerBindingProps>>;
 }

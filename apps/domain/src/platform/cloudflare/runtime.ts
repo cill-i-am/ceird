@@ -8,7 +8,9 @@ import type {
   InvalidAuthEmailQueueMessageError,
 } from "../../domains/identity/authentication/auth-email-queue.js";
 import {
+  AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG,
   decodeAuthEmailQueueMessageEffect,
+  INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG,
   makeCloudflareAuthenticationEmailSchedulerLive,
   sendAuthEmailQueueMessage,
 } from "../../domains/identity/authentication/auth-email-queue.js";
@@ -393,16 +395,16 @@ function logAuthEmailQueueDeliveryError(failure: AuthEmailQueueDeliveryError) {
 function handleQueuedAuthEmailMessage(message: Message<unknown>) {
   return sendQueuedAuthEmail(message.body).pipe(
     Effect.andThen(acknowledgeMessage(message)),
-    Effect.catchTags({
-      AuthEmailQueueDeliveryError: (failure) =>
-        logAuthEmailQueueDeliveryError(failure).pipe(
-          Effect.andThen(retryMessage(message))
-        ),
-      InvalidAuthEmailQueueMessageError: (failure) =>
-        logInvalidAuthEmailQueueMessage(failure).pipe(
-          Effect.andThen(acknowledgeMessage(message))
-        ),
-    }),
+    Effect.catchTag(AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG, (failure) =>
+      logAuthEmailQueueDeliveryError(failure).pipe(
+        Effect.andThen(retryMessage(message))
+      )
+    ),
+    Effect.catchTag(INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG, (failure) =>
+      logInvalidAuthEmailQueueMessage(failure).pipe(
+        Effect.andThen(acknowledgeMessage(message))
+      )
+    ),
     Effect.tapCause((cause) =>
       Effect.logError("Auth email queue handler failed with a defect").pipe(
         Effect.annotateLogs({

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Logger, References } from "effect";
 
-import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
+import {
+  AuthEmailConfigurationError,
+  AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
+} from "./domains/identity/authentication/auth-email-errors.js";
 import type { AuthEmailQueueMessage } from "./domains/identity/authentication/auth-email-queue.js";
 import { AuthenticationBackgroundTaskHandler } from "./domains/identity/authentication/auth.js";
 import type {
@@ -407,7 +410,7 @@ describe("worker queue auth email delivery", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailConfigurationError",
+      _tag: AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
       message:
         "Worker auth email delivery requires the AUTH_EMAIL Worker binding",
     });
@@ -438,7 +441,7 @@ describe("worker queue auth email delivery", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailConfigurationError",
+      _tag: AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
       message: "Invalid auth email configuration",
     });
 

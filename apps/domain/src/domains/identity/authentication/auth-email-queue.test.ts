@@ -1,4 +1,8 @@
-import { decodeAuthEmailQueueMessageStrict } from "./auth-email-queue.js";
+import {
+  decodeAuthEmailQueueMessageStrict,
+  InvalidAuthEmailQueueMessageError,
+  INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG,
+} from "./auth-email-queue.js";
 
 describe("auth email queue messages", () => {
   it("decodes password reset messages", () => {
@@ -26,4 +30,13 @@ describe("auth email queue messages", () => {
       })
     ).toThrow("Invalid auth email queue message");
   }, 1000);
+
+  it("uses reverse-domain tags for queue decode errors", () => {
+    const error = new InvalidAuthEmailQueueMessageError({
+      cause: "bad input",
+      message: "Invalid auth email queue message",
+    });
+
+    expect(error._tag).toBe(INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG);
+  });
 });

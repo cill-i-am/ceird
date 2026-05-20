@@ -2,6 +2,17 @@
 import { Effect, Layer, Match, Schema } from "effect";
 
 import {
+  EMAIL_VERIFICATION_EMAIL_REJECTED_ERROR_TAG,
+  EMAIL_VERIFICATION_EMAIL_REQUEST_ERROR_TAG,
+  INVALID_EMAIL_VERIFICATION_EMAIL_INPUT_ERROR_TAG,
+  INVALID_ORGANIZATION_INVITATION_EMAIL_INPUT_ERROR_TAG,
+  INVALID_PASSWORD_RESET_EMAIL_INPUT_ERROR_TAG,
+  ORGANIZATION_INVITATION_EMAIL_REJECTED_ERROR_TAG,
+  ORGANIZATION_INVITATION_EMAIL_REQUEST_ERROR_TAG,
+  PASSWORD_RESET_EMAIL_REJECTED_ERROR_TAG,
+  PASSWORD_RESET_EMAIL_REQUEST_ERROR_TAG,
+} from "./auth-email-errors.js";
+import {
   AuthenticationEmailScheduler,
   AuthenticationEmailSchedulingError,
 } from "./auth-email-scheduler.js";
@@ -18,8 +29,10 @@ import type {
   PasswordResetEmailError,
 } from "./auth-email.js";
 
+export const INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG =
+  "@ceird/domains/identity/authentication/InvalidAuthEmailQueueMessageError" as const;
 export class InvalidAuthEmailQueueMessageError extends Schema.TaggedErrorClass<InvalidAuthEmailQueueMessageError>()(
-  "InvalidAuthEmailQueueMessageError",
+  INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG,
   {
     cause: Schema.String,
     inputKind: Schema.optional(Schema.String),
@@ -27,8 +40,10 @@ export class InvalidAuthEmailQueueMessageError extends Schema.TaggedErrorClass<I
   }
 ) {}
 
+export const AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG =
+  "@ceird/domains/identity/authentication/AuthEmailQueueDeliveryError" as const;
 export class AuthEmailQueueDeliveryError extends Schema.TaggedErrorClass<AuthEmailQueueDeliveryError>()(
-  "AuthEmailQueueDeliveryError",
+  AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG,
   {
     cause: Schema.optional(Schema.String),
     deliveryKey: Schema.optional(Schema.String),
@@ -184,17 +199,36 @@ function mapAuthEmailQueueDelivery(
     );
 
   return send.pipe(
-    Effect.catchTags({
-      EmailVerificationEmailRejectedError: mapDeliveryError,
-      EmailVerificationEmailRequestError: mapDeliveryError,
-      InvalidEmailVerificationEmailInputError: mapDeliveryError,
-      InvalidOrganizationInvitationEmailInputError: mapDeliveryError,
-      InvalidPasswordResetEmailInputError: mapDeliveryError,
-      OrganizationInvitationEmailRejectedError: mapDeliveryError,
-      OrganizationInvitationEmailRequestError: mapDeliveryError,
-      PasswordResetEmailRejectedError: mapDeliveryError,
-      PasswordResetEmailRequestError: mapDeliveryError,
-    })
+    Effect.catchTag(
+      EMAIL_VERIFICATION_EMAIL_REJECTED_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      EMAIL_VERIFICATION_EMAIL_REQUEST_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      INVALID_EMAIL_VERIFICATION_EMAIL_INPUT_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      INVALID_ORGANIZATION_INVITATION_EMAIL_INPUT_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      INVALID_PASSWORD_RESET_EMAIL_INPUT_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      ORGANIZATION_INVITATION_EMAIL_REJECTED_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(
+      ORGANIZATION_INVITATION_EMAIL_REQUEST_ERROR_TAG,
+      mapDeliveryError
+    ),
+    Effect.catchTag(PASSWORD_RESET_EMAIL_REJECTED_ERROR_TAG, mapDeliveryError),
+    Effect.catchTag(PASSWORD_RESET_EMAIL_REQUEST_ERROR_TAG, mapDeliveryError)
   );
 }
 

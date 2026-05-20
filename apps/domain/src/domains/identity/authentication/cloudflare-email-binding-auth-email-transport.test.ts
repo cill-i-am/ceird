@@ -6,7 +6,10 @@ import {
   effectEither,
   withConfigProvider,
 } from "../../../test/effect-test-helpers.js";
-import { AuthEmailRequestError } from "./auth-email-errors.js";
+import {
+  AuthEmailRequestError,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
+} from "./auth-email-errors.js";
 import { AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
 import { CloudflareEmailBinding } from "./cloudflare-email-binding-auth-email-transport.js";
@@ -120,7 +123,7 @@ describe("cloudflare email binding auth email transport", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailRequestError",
+      _tag: AUTH_EMAIL_REQUEST_ERROR_TAG,
       message: "Auth email request failed",
       cause: "sender domain not verified",
     });

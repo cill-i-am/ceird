@@ -10,6 +10,7 @@ import {
   CeirdMcpToolkit,
   CeirdMcpToolkitLayer,
   hasRequiredScope,
+  MCP_TOOL_DEFINITIONS,
   MCP_TOOL_REGISTRATIONS,
   McpToolDomainRuntime,
   McpToolRequestRuntime,
@@ -31,6 +32,16 @@ describe("mcp tools registry metadata", () => {
       "ceird.jobs.remove_label",
     ]);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("derives public registrations from the canonical tool definitions", () => {
+    expect(MCP_TOOL_REGISTRATIONS).toStrictEqual(
+      MCP_TOOL_DEFINITIONS.map(({ isAdminTool, name, requiredScope }) => ({
+        isAdminTool,
+        name,
+        requiredScope,
+      }))
+    );
   });
 
   it("maps read write and admin scopes correctly", () => {

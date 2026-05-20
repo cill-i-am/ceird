@@ -1,7 +1,10 @@
 import { Context, Effect } from "effect";
 
 import { AuthEmailConfigService } from "./auth-email-config.js";
-import { AuthEmailRequestError } from "./auth-email-errors.js";
+import {
+  AuthEmailRequestError,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
+} from "./auth-email-errors.js";
 import {
   buildRecipientLogContext,
   fingerprintDeliveryKey,
@@ -94,7 +97,7 @@ export function makeCloudflareEmailBindingAuthEmailTransport() {
             })
           ),
           Effect.andThen(logOutcome("sent")),
-          Effect.catchTag("AuthEmailRequestError", (error) =>
+          Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
             logOutcome("request_failed").pipe(
               Effect.annotateLogs({
                 authEmailFailureCause: error.cause ?? error.message,

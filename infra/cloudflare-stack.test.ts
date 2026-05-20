@@ -48,6 +48,10 @@ import {
   makeCloudflareHyperdriveProps,
   makeCloudflareWorkerOrigin,
 } from "./cloudflare-stack.ts";
+import {
+  ceirdWorkerCompatibility,
+  ceirdWorkerObservability,
+} from "./cloudflare-worker-defaults.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 
 type AssertTrue<Value extends true> = Value;
@@ -370,6 +374,10 @@ describe("Cloudflare stack", () => {
     expect(domainBindings.DATABASE).toBe(hyperdrive);
     expect(apiBindings.DOMAIN).toBe(domain);
     expect(mcpBindings.DOMAIN).toBe(domain);
+    expect(domainWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
+    expect(domainWorkerProps.observability).toBe(ceirdWorkerObservability);
+    expect(apiWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
+    expect(apiWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(domainWorkerProps).not.toHaveProperty("domain");
     expect(domainWorkerProps.main).toContain("/apps/domain/src/worker.ts");
     expect(domainWorkerProps.url).toBeFalsy();
@@ -415,6 +423,8 @@ describe("Cloudflare stack", () => {
       },
       url: false,
     });
+    expect(mcpWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
+    expect(mcpWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(mcpWorkerProps.main).toContain("/apps/mcp/src/worker.ts");
     expect(mcpWorkerProps.bindings.DOMAIN).toBe(domain);
   });

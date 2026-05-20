@@ -6,23 +6,12 @@ import type { Input, InputProps } from "alchemy/Input";
 import type * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
+import {
+  ceirdWorkerCompatibility,
+  ceirdWorkerObservability,
+} from "../../../infra/cloudflare-worker-defaults.ts";
+
 const domainWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
-
-const domainWorkerCompatibility = {
-  date: "2026-04-30",
-  flags: ["nodejs_compat"],
-} satisfies NonNullable<WorkerProps["compatibility"]>;
-
-const domainWorkerObservability = {
-  enabled: true,
-  logs: {
-    enabled: true,
-    invocationLogs: true,
-  },
-  traces: {
-    enabled: true,
-  },
-} satisfies NonNullable<WorkerProps["observability"]>;
 
 export interface DomainWorkerStageConfig {
   readonly apiHostname: string;
@@ -134,7 +123,7 @@ export function makeDomainWorkerProps(input: {
   return {
     name: input.name,
     main: domainWorkerMain,
-    compatibility: domainWorkerCompatibility,
+    compatibility: ceirdWorkerCompatibility,
     bindings: makeDomainWorkerBindings({
       authEmailQueue: input.authEmailQueue,
       config: input.config,
@@ -146,7 +135,7 @@ export function makeDomainWorkerProps(input: {
         config: input.config,
       }),
     },
-    observability: domainWorkerObservability,
+    observability: ceirdWorkerObservability,
     url: false,
   } satisfies InputProps<WorkerProps<DomainWorkerBindingProps>>;
 }
