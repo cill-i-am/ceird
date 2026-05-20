@@ -1,13 +1,21 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 
-import { AuthEmailRequestError } from "./auth-email-errors.js";
+import {
+  configProviderFromMap,
+  effectEither,
+  withConfigProvider,
+} from "../../../test/effect-test-helpers.js";
+import {
+  AuthEmailRequestError,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
+} from "./auth-email-errors.js";
 import { AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
 import { CloudflareEmailBinding } from "./cloudflare-email-binding-auth-email-transport.js";
 
 function makeConfigProvider() {
-  return ConfigProvider.fromMap(
+  return configProviderFromMap(
     new Map([
       ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
       ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
@@ -49,7 +57,7 @@ describe("cloudflare email binding auth email transport", () => {
       }).pipe(
         Effect.provide(AuthEmailTransport.CloudflareBinding),
         Effect.provide(bindingLive),
-        Effect.withConfigProvider(makeConfigProvider())
+        withConfigProvider(makeConfigProvider())
       )
     );
 
@@ -84,7 +92,7 @@ describe("cloudflare email binding auth email transport", () => {
       }).pipe(
         Effect.provide(AuthEmailTransport.CloudflareBinding),
         Effect.provide(bindingLive),
-        Effect.withConfigProvider(makeConfigProvider())
+        withConfigProvider(makeConfigProvider())
       )
     );
 
@@ -103,8 +111,8 @@ describe("cloudflare email binding auth email transport", () => {
       }).pipe(
         Effect.provide(AuthEmailTransport.CloudflareBinding),
         Effect.provide(bindingLive),
-        Effect.withConfigProvider(makeConfigProvider()),
-        Effect.either
+        withConfigProvider(makeConfigProvider()),
+        effectEither
       )
     );
 
@@ -115,7 +123,7 @@ describe("cloudflare email binding auth email transport", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailRequestError",
+      _tag: AUTH_EMAIL_REQUEST_ERROR_TAG,
       message: "Auth email request failed",
       cause: "sender domain not verified",
     });
@@ -136,8 +144,8 @@ describe("cloudflare email binding auth email transport", () => {
       }).pipe(
         Effect.provide(AuthEmailTransport.CloudflareBinding),
         Effect.provide(bindingLive),
-        Effect.withConfigProvider(makeConfigProvider()),
-        Effect.either
+        withConfigProvider(makeConfigProvider()),
+        effectEither
       )
     );
 
@@ -172,12 +180,12 @@ describe("cloudflare email binding auth email transport", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const transport = yield* AuthEmailTransport;
-        yield* transport.send(makeMessage()).pipe(Effect.either);
+        yield* transport.send(makeMessage()).pipe(effectEither);
         yield* transport.send(makeMessage());
       }).pipe(
         Effect.provide(AuthEmailTransport.CloudflareBinding),
         Effect.provide(bindingLive),
-        Effect.withConfigProvider(makeConfigProvider())
+        withConfigProvider(makeConfigProvider())
       )
     );
 

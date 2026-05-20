@@ -135,9 +135,9 @@ The MCP resource server also exposes protected-resource metadata at:
 - `/.well-known/oauth-protected-resource/<mcp-resource-path>`
 
 Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
-`xmcp` runtime in `apps/api` or `apps/mcp`. MCP auth uses Ceird's existing Better Auth OAuth
-Provider runtime, and MCP HTTP uses the `@effect/ai` MCP HTTP router mounted
-inside the private domain Worker.
+`xmcp` runtime in `apps/api` or `apps/mcp`. MCP auth uses Ceird's existing
+Better Auth OAuth Provider runtime, and MCP HTTP uses the
+`effect/unstable/ai` MCP server layer mounted inside the private domain Worker.
 
 ### MCP Bearer Sessions
 
@@ -148,6 +148,7 @@ Token verification requires:
 - audience equal to `MCP_RESOURCE_URL`
 - a token subject (`sub`) matching the Better Auth user
 - a Better Auth session id (`sid`)
+- an OAuth client id (`client_id`)
 
 MCP tool execution does not synthesize cookie headers. It resolves the
 organization actor by loading the Better Auth `session` row from `sid`, checking
@@ -156,6 +157,14 @@ session, and then loading the user's `member` role in that organization. The
 Effect AI MCP router receives the verified identity through Effect
 context/layers, and the same domain authorization services used by the HTTP API
 decide whether that actor can perform each operation.
+The Cloudflare domain Worker keeps initialized Effect AI MCP apps in an
+isolate-local authorized-app cache keyed by Better Auth session id, user id,
+OAuth client id, and normalized scopes. Deployed stages may tune that cache with
+`CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES` and
+`CEIRD_MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS`; app-owned Worker infra maps those
+stage inputs to the runtime `MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES` and
+`MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS` environment keys. Package-local runs use
+runtime defaults when those values are not provided.
 
 Current Ceird MCP scopes are:
 

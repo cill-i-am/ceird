@@ -31,6 +31,6 @@ describe("organization onboarding schema", () => {
         name: "Acme Field Ops",
         slug: "acme-field-ops",
       })
-    ).toThrow(/is unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 });

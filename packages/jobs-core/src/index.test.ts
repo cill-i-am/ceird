@@ -25,9 +25,9 @@ import {
   UpdateServiceAreaInputSchema,
   UpdateServiceAreaResponseSchema,
 } from "@ceird/sites-core";
-import { OpenApi } from "@effect/platform";
 import { describe, expect, it } from "@effect/vitest";
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 
 import {
   AddJobCostLineInputSchema,
@@ -113,17 +113,17 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(JobCollaboratorSchema)(collaborator)
+      Schema.decodeUnknownSync(JobCollaboratorSchema)(collaborator)
     ).toStrictEqual(collaborator);
     expect(
-      ParseResult.decodeUnknownSync(JobCollaboratorsResponseSchema)({
+      Schema.decodeUnknownSync(JobCollaboratorsResponseSchema)({
         collaborators: [collaborator],
       })
     ).toStrictEqual({
       collaborators: [collaborator],
     });
     expect(
-      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+      Schema.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
         userId: "user_456",
         roleLabel: "  Viewer  ",
         accessLevel: "read",
@@ -160,17 +160,17 @@ describe("jobs-core", () => {
 
   it("keeps job collaborator mutation inputs strict and shapeable", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({})
+      Schema.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({})
     ).toThrow(/Expected at least one collaborator field/);
     expect(
-      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+      Schema.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
         roleLabel: "  Approver  ",
       })
     ).toStrictEqual({
       roleLabel: "Approver",
     });
     expect(
-      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+      Schema.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
         accessLevel: "comment",
       })
     ).toStrictEqual({
@@ -178,19 +178,19 @@ describe("jobs-core", () => {
     });
 
     expect(() =>
-      ParseResult.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
+      Schema.decodeUnknownSync(AttachJobCollaboratorInputSchema)({
         userId: "user_456",
         roleLabel: "Viewer",
         accessLevel: "read",
         extra: true,
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
     expect(() =>
-      ParseResult.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
+      Schema.decodeUnknownSync(UpdateJobCollaboratorInputSchema)({
         roleLabel: "Approver",
         extra: true,
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 5000);
 
   it("decodes service area contracts", () => {
@@ -250,7 +250,7 @@ describe("jobs-core", () => {
       Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
         name: "A".repeat(121),
       })
-    ).toThrow(/maxLength/);
+    ).toThrow(/length of at most 120/);
   }, 5000);
 
   it("decodes rate card input contracts", () => {
@@ -291,7 +291,7 @@ describe("jobs-core", () => {
         ],
         name: "Standard",
       })
-    ).toThrow(/greaterThanOrEqualTo/);
+    ).toThrow(/greater than or equal to 0/);
 
     expect(() =>
       Schema.decodeUnknownSync(CreateRateCardInputSchema)({
@@ -326,7 +326,7 @@ describe("jobs-core", () => {
         })),
         name: "Standard",
       })
-    ).toThrow(/maxItems/);
+    ).toThrow(/length of at most 50/);
 
     expect(() =>
       Schema.decodeUnknownSync(CreateRateCardInputSchema)({
@@ -341,7 +341,7 @@ describe("jobs-core", () => {
         ],
         name: "Standard",
       })
-    ).toThrow(/maxLength/);
+    ).toThrow(/length of at most 120/);
   }, 5000);
 
   it("decodes rate card response contracts", () => {
@@ -369,20 +369,20 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("exports the closed job enums", () => {
-    expect(ParseResult.decodeUnknownSync(JobStatusSchema)("in_progress")).toBe(
+    expect(Schema.decodeUnknownSync(JobStatusSchema)("in_progress")).toBe(
       "in_progress"
     );
-    expect(ParseResult.decodeUnknownSync(JobPrioritySchema)("urgent")).toBe(
+    expect(Schema.decodeUnknownSync(JobPrioritySchema)("urgent")).toBe(
       "urgent"
     );
   }, 5000);
 
   it("rejects empty user ids at DTO boundaries", () => {
-    expect(() => ParseResult.decodeUnknownSync(UserId)("")).toThrow(
-      /Expected a non empty string/
+    expect(() => Schema.decodeUnknownSync(UserId)("")).toThrow(
+      /length of at least 1/
     );
     expect(() =>
-      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+      Schema.decodeUnknownSync(JobDetailResponseSchema)({
         activity: [],
         comments: [],
         job: {
@@ -402,7 +402,7 @@ describe("jobs-core", () => {
         },
         visits: [],
       })
-    ).toThrow(/Expected a non empty string/);
+    ).toThrow(/length of at least 1/);
   }, 5000);
 
   it("decodes job detail with viewer access, optional costs, and selected site detail", () => {
@@ -443,7 +443,7 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(JobViewerAccessSchema)({
+      Schema.decodeUnknownSync(JobViewerAccessSchema)({
         visibility: "internal",
         canComment: false,
       })
@@ -452,10 +452,10 @@ describe("jobs-core", () => {
       canComment: false,
     });
     expect(
-      ParseResult.decodeUnknownSync(JobDetailResponseSchema)(baseDetail)
+      Schema.decodeUnknownSync(JobDetailResponseSchema)(baseDetail)
     ).toStrictEqual(baseDetail);
     expect(
-      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+      Schema.decodeUnknownSync(JobDetailResponseSchema)({
         ...baseDetail,
         costs: {
           lines: [],
@@ -475,19 +475,19 @@ describe("jobs-core", () => {
       },
     });
     expect(() =>
-      ParseResult.decodeUnknownSync(JobDetailResponseSchema)({
+      Schema.decodeUnknownSync(JobDetailResponseSchema)({
         ...baseDetail,
         costLines: [],
         costSummary: {
           subtotalMinor: 0,
         },
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 5000);
 
   it("decodes trimmed boundary DTOs", () => {
     expect(
-      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+      Schema.decodeUnknownSync(CreateJobInputSchema)({
         title: "  Replace boiler  ",
         priority: "high",
         site: {
@@ -527,7 +527,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(AddJobCommentInputSchema)({
+      Schema.decodeUnknownSync(AddJobCommentInputSchema)({
         body: "  Confirmed on site  ",
       })
     ).toStrictEqual({
@@ -535,7 +535,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+      Schema.decodeUnknownSync(CreateJobInputSchema)({
         title: "  Replace boiler  ",
         externalReference: "  PO-4471  ",
         contact: {
@@ -563,7 +563,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(JobContactOptionSchema)({
+      Schema.decodeUnknownSync(JobContactOptionSchema)({
         id: "550e8400-e29b-41d4-a716-446655440001",
         name: "Alex Contact",
         email: "alex@example.com",
@@ -581,7 +581,7 @@ describe("jobs-core", () => {
 
   it("rejects invalid contact emails at DTO boundaries", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+      Schema.decodeUnknownSync(CreateJobInputSchema)({
         title: "Replace boiler",
         contact: {
           kind: "create",
@@ -595,10 +595,10 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("rejects coordinates when creating a site", () => {
-    const rejectedCoordinate = /is unexpected/;
+    const rejectedCoordinate = /[Uu]nexpected/;
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         name: "Docklands Campus",
         addressLine1: "1 Custom House Quay",
         county: "Dublin",
@@ -609,7 +609,7 @@ describe("jobs-core", () => {
     ).toThrow(rejectedCoordinate);
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+      Schema.decodeUnknownSync(CreateJobInputSchema)({
         title: "Replace boiler",
         site: {
           kind: "create",
@@ -626,7 +626,7 @@ describe("jobs-core", () => {
     ).toThrow(rejectedCoordinate);
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         name: "Docklands Campus",
         addressLine1: "1 Custom House Quay",
         county: "Dublin",
@@ -651,7 +651,7 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)(standaloneInput)
+      Schema.decodeUnknownSync(CreateSiteInputSchema)(standaloneInput)
     ).toStrictEqual({
       accessNotes: "Enter via reception",
       addressLine1: "1 Custom House Quay",
@@ -664,7 +664,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(CreateJobInputSchema)({
+      Schema.decodeUnknownSync(CreateJobInputSchema)({
         site: {
           input: standaloneInput,
           kind: "create",
@@ -686,7 +686,7 @@ describe("jobs-core", () => {
     });
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         name: "Docklands Campus",
         addressLine1: "1 Custom House Quay",
         county: "Dublin",
@@ -697,7 +697,7 @@ describe("jobs-core", () => {
 
   it("requires an Eircode for Irish site creation", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         name: "Docklands Campus",
         addressLine1: "1 Custom House Quay",
         county: "Dublin",
@@ -706,7 +706,7 @@ describe("jobs-core", () => {
     ).toThrow(/Irish sites require an Eircode/);
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteInputSchema)({
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
         name: "London Depot",
         addressLine1: "10 Downing Street",
         county: "Greater London",
@@ -736,16 +736,16 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
     ).toStrictEqual(siteOption);
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
         ...siteOption,
         latitude: 100,
       })
     ).toThrow(/less than or equal to 90/);
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)({
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
         id: siteOption.id,
         name: siteOption.name,
         addressLine1: siteOption.addressLine1,
@@ -760,7 +760,7 @@ describe("jobs-core", () => {
 
   it("keeps list filters and patch payloads shapeable", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobListQuerySchema)({
+      Schema.decodeUnknownSync(JobListQuerySchema)({
         limit: "25",
         status: "new",
         priority: "none",
@@ -772,7 +772,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(PatchJobInputSchema)({
+      Schema.decodeUnknownSync(PatchJobInputSchema)({
         title: "  Adjust valve  ",
         coordinatorId: null,
       })
@@ -782,23 +782,23 @@ describe("jobs-core", () => {
     });
 
     expect(() =>
-      ParseResult.decodeUnknownSync(JobListQuerySchema)({
+      Schema.decodeUnknownSync(JobListQuerySchema)({
         limit: "101",
       })
-    ).toThrow(/lessThanOrEqualTo/);
+    ).toThrow(/less than or equal to 100/);
   }, 5000);
 
   it("keeps job label DTOs shapeable", () => {
-    expect(
-      ParseResult.decodeUnknownSync(LabelNameSchema)("  Waiting on PO  ")
-    ).toBe("Waiting on PO");
+    expect(Schema.decodeUnknownSync(LabelNameSchema)("  Waiting on PO  ")).toBe(
+      "Waiting on PO"
+    );
     expect(normalizeLabelName("  Waiting   on PO  ")).toBe("waiting on po");
 
     expect(() =>
-      ParseResult.decodeUnknownSync(LabelNameSchema)(" ".repeat(4))
+      Schema.decodeUnknownSync(LabelNameSchema)(" ".repeat(4))
     ).toThrow(/at least 1/);
 
-    const label = ParseResult.decodeUnknownSync(LabelSchema)({
+    const label = Schema.decodeUnknownSync(LabelSchema)({
       id: "11111111-1111-4111-8111-111111111111",
       name: "Waiting on PO",
       createdAt: "2026-04-28T10:00:00.000Z",
@@ -816,7 +816,7 @@ describe("jobs-core", () => {
       updatedAt: "2026-04-28T10:00:00.000Z",
     };
 
-    const listItem = ParseResult.decodeUnknownSync(JobListItemSchema)({
+    const listItem = Schema.decodeUnknownSync(JobListItemSchema)({
       createdAt: "2026-04-28T10:00:00.000Z",
       id: "22222222-2222-4222-8222-222222222222",
       kind: "job",
@@ -834,7 +834,7 @@ describe("jobs-core", () => {
 
   it("accepts label filters and label activity payloads", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobListQuerySchema)({
+      Schema.decodeUnknownSync(JobListQuerySchema)({
         labelId: "11111111-1111-4111-8111-111111111111",
         limit: "25",
       })
@@ -844,7 +844,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(JobActivityLabelAddedPayloadSchema)({
+      Schema.decodeUnknownSync(JobActivityLabelAddedPayloadSchema)({
         eventType: "label_added",
         labelId: "11111111-1111-4111-8111-111111111111",
         labelName: "Parts ordered",
@@ -858,7 +858,7 @@ describe("jobs-core", () => {
 
   it("keeps the activity and visit DTOs well-formed", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobActivityJobCreatedPayloadSchema)({
+      Schema.decodeUnknownSync(JobActivityJobCreatedPayloadSchema)({
         eventType: "job_created",
         title: "Replace boiler",
         kind: "job",
@@ -872,9 +872,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(
-        JobActivityBlockedReasonChangedPayloadSchema
-      )({
+      Schema.decodeUnknownSync(JobActivityBlockedReasonChangedPayloadSchema)({
         eventType: "blocked_reason_changed",
         fromBlockedReason: "Waiting on access",
         toBlockedReason: null,
@@ -886,7 +884,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(AddJobVisitInputSchema)({
+      Schema.decodeUnknownSync(AddJobVisitInputSchema)({
         visitDate: "2026-04-22",
         note: "Completed intake",
         durationMinutes: 60,
@@ -898,7 +896,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(AddJobVisitInputSchema)({
+      Schema.decodeUnknownSync(AddJobVisitInputSchema)({
         visitDate: "2026-04-22",
         note: "Half hour entry",
         durationMinutes: 30,
@@ -912,7 +910,7 @@ describe("jobs-core", () => {
 
   it("exports organization activity query and response DTOs", () => {
     expect(
-      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+      Schema.decodeUnknownSync(OrganizationActivityQuerySchema)({
         actorUserId: "user_123",
         cursor: "activity_cursor_1",
         eventType: "status_changed",
@@ -932,7 +930,7 @@ describe("jobs-core", () => {
     });
 
     expect(
-      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+      Schema.decodeUnknownSync(OrganizationActivityListResponseSchema)({
         items: [
           {
             id: "550e8400-e29b-41d4-a716-446655440020",
@@ -979,7 +977,7 @@ describe("jobs-core", () => {
 
     expect(OrganizationActivityCursor).toBeDefined();
     expect(
-      ParseResult.decodeUnknownSync(JobMemberOptionsResponseSchema)({
+      Schema.decodeUnknownSync(JobMemberOptionsResponseSchema)({
         members: [
           {
             id: "user_123",
@@ -996,7 +994,7 @@ describe("jobs-core", () => {
       ],
     });
     expect(
-      ParseResult.decodeUnknownSync(JobExternalMemberOptionsResponseSchema)({
+      Schema.decodeUnknownSync(JobExternalMemberOptionsResponseSchema)({
         members: [
           {
             email: "ada@example.com",
@@ -1015,15 +1013,15 @@ describe("jobs-core", () => {
       ],
     });
     expect(() =>
-      ParseResult.decodeUnknownSync(OrganizationActivityQuerySchema)({
+      Schema.decodeUnknownSync(OrganizationActivityQuerySchema)({
         limit: "101",
       })
-    ).toThrow(/lessThanOrEqualTo/);
+    ).toThrow(/less than or equal to 100/);
   }, 5000);
 
   it("rejects organization activity items whose event type differs from the payload", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(OrganizationActivityListResponseSchema)({
+      Schema.decodeUnknownSync(OrganizationActivityListResponseSchema)({
         items: [
           {
             id: "550e8400-e29b-41d4-a716-446655440020",
@@ -1043,7 +1041,7 @@ describe("jobs-core", () => {
   }, 5000);
 
   it("validates add cost line input at the boundary", () => {
-    const decode = ParseResult.decodeUnknownSync(AddJobCostLineInputSchema);
+    const decode = Schema.decodeUnknownSync(AddJobCostLineInputSchema);
 
     expect(
       decode({
@@ -1078,7 +1076,7 @@ describe("jobs-core", () => {
         unitPriceMinor: 6500,
         unexpected: true,
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
 
     expect(() =>
       decode({
@@ -1207,7 +1205,7 @@ describe("jobs-core", () => {
     };
 
     expect(
-      ParseResult.decodeUnknownSync(SiteOptionSchema)(siteOption)
+      Schema.decodeUnknownSync(SiteOptionSchema)(siteOption)
     ).toStrictEqual({
       id: "550e8400-e29b-41d4-a716-446655440010",
       name: "Docklands Campus",
@@ -1227,10 +1225,8 @@ describe("jobs-core", () => {
       serviceAreaName: "Dublin",
     });
     expect(
-      ParseResult.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
-    ).toStrictEqual(
-      ParseResult.decodeUnknownSync(SiteOptionSchema)(siteOption)
-    );
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)(siteOption)
+    ).toStrictEqual(Schema.decodeUnknownSync(SiteOptionSchema)(siteOption));
   }, 5000);
 
   it("surfaces the jobs api contract with the expected paths", () => {
@@ -1385,7 +1381,7 @@ describe("jobs-core", () => {
 
   it("exports a lean sites options response", () => {
     expect(
-      ParseResult.decodeUnknownSync(SitesOptionsResponseSchema)({
+      Schema.decodeUnknownSync(SitesOptionsResponseSchema)({
         serviceAreas: [
           {
             id: "550e8400-e29b-41d4-a716-446655440011",
@@ -1435,7 +1431,7 @@ describe("jobs-core", () => {
 
   it("exports service areas in job options", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobOptionsResponseSchema)({
+      Schema.decodeUnknownSync(JobOptionsResponseSchema)({
         members: [],
         serviceAreas: [
           {
@@ -1495,7 +1491,7 @@ describe("jobs-core", () => {
 
   it("exports runtime schemas for shared context shapes", () => {
     expect(
-      ParseResult.decodeUnknownSync(JobsContextSchema)({
+      Schema.decodeUnknownSync(JobsContextSchema)({
         organizationId: "org_123",
         userId: "user_123",
       })
@@ -1569,7 +1565,7 @@ describe("jobs-core", () => {
 
   it("rejects malformed visit dates at the boundary", () => {
     expect(() =>
-      ParseResult.decodeUnknownSync(AddJobVisitInputSchema)({
+      Schema.decodeUnknownSync(AddJobVisitInputSchema)({
         visitDate: "2026-04-22T10:00:00.000Z",
         note: "Completed intake",
         durationMinutes: 60,

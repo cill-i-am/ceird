@@ -14,12 +14,11 @@
     "@ceird/comments-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
     "@ceird/labels-core": "workspace:*",
-    "@effect/platform": "^0.96.1",
-    "effect": "^3.21.2"
+    "effect": "4.0.0-beta.68"
   },
   "devDependencies": {
     "@effect/language-service": "^0.84.3",
-    "@effect/vitest": "0.29.0",
+    "@effect/vitest": "4.0.0-beta.68",
     "@types/node": "^25.6.0",
     "typescript": "5.9.2",
     "vitest": "^3.2.4"

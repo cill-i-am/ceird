@@ -15,7 +15,7 @@ import type {
   SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 
 import {
   makeBrowserAppApiClient,
@@ -124,7 +124,7 @@ describe("app API client", () => {
           cookie: "better-auth.session_token=session-token",
         },
         "JobsServer.test.listJobs",
-        (client) => client.jobs.listJobs({ urlParams: {} })
+        (client) => client.jobs.listJobs({ query: {} })
       )
     ).resolves.toStrictEqual(listResponse);
 
@@ -154,7 +154,7 @@ describe("app API client", () => {
           },
         },
         "JobsServer.test.listJobs.forwarded",
-        (client) => client.jobs.listJobs({ urlParams: {} })
+        (client) => client.jobs.listJobs({ query: {} })
       )
     ).resolves.toStrictEqual(listResponse);
 
@@ -182,7 +182,7 @@ describe("app API client", () => {
     await expect(
       client.jobs
         .getJobDetail({
-          path: {
+          params: {
             workItemId:
               "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
           },
@@ -243,7 +243,7 @@ describe("app API client", () => {
           requestOrigin: "http://127.0.0.1:3000",
         },
         "SitesServer.test.listSites",
-        (client) => client.sites.listSites({ urlParams: { limit: 25 } })
+        (client) => client.sites.listSites({ query: { limit: 25 } })
       )
     ).resolves.toStrictEqual({
       items: siteOptionsResponse.sites,
@@ -269,7 +269,7 @@ describe("app API client", () => {
         "SitesServer.test.assignSiteLabel",
         (client) =>
           client.sites.assignSiteLabel({
-            path: { siteId: createSiteResponse.id },
+            params: { siteId: createSiteResponse.id },
             payload: { labelId: siteLabelId },
           })
       )
@@ -296,7 +296,7 @@ describe("app API client", () => {
         "SitesServer.test.removeSiteLabel",
         (client) =>
           client.sites.removeSiteLabel({
-            path: { labelId: siteLabelId, siteId: createSiteResponse.id },
+            params: { labelId: siteLabelId, siteId: createSiteResponse.id },
           })
       )
     ).resolves.toStrictEqual(createSiteResponse);
@@ -315,7 +315,7 @@ describe("app API client", () => {
     const capturedError = await runAppApiClient(
       {},
       "JobsServer.test.unresolvedOrigin",
-      (client) => client.jobs.listJobs({ urlParams: {} })
+      (client) => client.jobs.listJobs({ query: {} })
     ).then(
       () => {},
       (rejectedError) => rejectedError
@@ -336,7 +336,7 @@ describe("app API client", () => {
         requestOrigin: "http://127.0.0.1:3000",
       },
       "JobsServer.test.transportFailure",
-      (client) => client.jobs.listJobs({ urlParams: {} })
+      (client) => client.jobs.listJobs({ query: {} })
     ).then(
       () => {},
       (rejectedError) => rejectedError
@@ -357,7 +357,7 @@ describe("app API client", () => {
 
     await expect(
       runBrowserAppApiRequest("JobsBrowser.test.listJobs", (client) =>
-        client.jobs.listJobs({ urlParams: {} })
+        client.jobs.listJobs({ query: {} })
       ).pipe(Effect.runPromise)
     ).resolves.toStrictEqual(listResponse);
 
@@ -366,13 +366,13 @@ describe("app API client", () => {
 
     const failure = await runBrowserAppApiRequest(
       "JobsBrowser.test.listJobs.failure",
-      (client) => client.jobs.listJobs({ urlParams: {} })
-    ).pipe(Effect.either, Effect.runPromise);
+      (client) => client.jobs.listJobs({ query: {} })
+    ).pipe(Effect.result, Effect.runPromise);
 
-    if (Either.isRight(failure)) {
+    if (Result.isSuccess(failure)) {
       throw new Error("Expected browser request to fail");
     }
-    expect(failure.left).toMatchObject({
+    expect(failure.failure).toMatchObject({
       _tag: APP_API_REQUEST_ERROR_TAG,
       message: expect.stringContaining("Transport"),
     });

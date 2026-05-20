@@ -5,7 +5,7 @@ import { Schema } from "effect";
 
 export const ORGANIZATION_SESSION_REQUIRED_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationSessionRequiredError" as const;
-export class OrganizationSessionRequiredError extends Schema.TaggedError<OrganizationSessionRequiredError>()(
+export class OrganizationSessionRequiredError extends Schema.TaggedErrorClass<OrganizationSessionRequiredError>()(
   ORGANIZATION_SESSION_REQUIRED_ERROR_TAG,
   {
     message: Schema.String,
@@ -14,18 +14,18 @@ export class OrganizationSessionRequiredError extends Schema.TaggedError<Organiz
 
 export const ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationSessionIdentityInvalidError" as const;
-export class OrganizationSessionIdentityInvalidError extends Schema.TaggedError<OrganizationSessionIdentityInvalidError>()(
+export class OrganizationSessionIdentityInvalidError extends Schema.TaggedErrorClass<OrganizationSessionIdentityInvalidError>()(
   ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG,
   {
     cause: Schema.optional(Schema.String),
-    field: Schema.Literal("activeOrganizationId", "userId"),
+    field: Schema.Literals(["activeOrganizationId", "userId"]),
     message: Schema.String,
   }
 ) {}
 
 export const ORGANIZATION_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationActiveOrganizationRequiredError" as const;
-export class OrganizationActiveOrganizationRequiredError extends Schema.TaggedError<OrganizationActiveOrganizationRequiredError>()(
+export class OrganizationActiveOrganizationRequiredError extends Schema.TaggedErrorClass<OrganizationActiveOrganizationRequiredError>()(
   ORGANIZATION_ACTIVE_ORGANIZATION_REQUIRED_ERROR_TAG,
   {
     message: Schema.String,
@@ -35,7 +35,7 @@ export class OrganizationActiveOrganizationRequiredError extends Schema.TaggedEr
 
 export const ORGANIZATION_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationActorMembershipNotFoundError" as const;
-export class OrganizationActorMembershipNotFoundError extends Schema.TaggedError<OrganizationActorMembershipNotFoundError>()(
+export class OrganizationActorMembershipNotFoundError extends Schema.TaggedErrorClass<OrganizationActorMembershipNotFoundError>()(
   ORGANIZATION_ACTOR_MEMBERSHIP_NOT_FOUND_ERROR_TAG,
   {
     message: Schema.String,
@@ -46,7 +46,7 @@ export class OrganizationActorMembershipNotFoundError extends Schema.TaggedError
 
 export const ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationRoleNotSupportedError" as const;
-export class OrganizationRoleNotSupportedError extends Schema.TaggedError<OrganizationRoleNotSupportedError>()(
+export class OrganizationRoleNotSupportedError extends Schema.TaggedErrorClass<OrganizationRoleNotSupportedError>()(
   ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG,
   {
     membershipRole: Schema.String,
@@ -58,7 +58,7 @@ export class OrganizationRoleNotSupportedError extends Schema.TaggedError<Organi
 
 export const ORGANIZATION_ACTOR_STORAGE_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationActorStorageError" as const;
-export class OrganizationActorStorageError extends Schema.TaggedError<OrganizationActorStorageError>()(
+export class OrganizationActorStorageError extends Schema.TaggedErrorClass<OrganizationActorStorageError>()(
   ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
   {
     cause: Schema.optional(Schema.String),
@@ -68,7 +68,7 @@ export class OrganizationActorStorageError extends Schema.TaggedError<Organizati
 
 export const ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG =
   "@ceird/domains/organizations/OrganizationAuthorizationDeniedError" as const;
-export class OrganizationAuthorizationDeniedError extends Schema.TaggedError<OrganizationAuthorizationDeniedError>()(
+export class OrganizationAuthorizationDeniedError extends Schema.TaggedErrorClass<OrganizationAuthorizationDeniedError>()(
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
   {
     message: Schema.String,

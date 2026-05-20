@@ -22,7 +22,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
@@ -482,7 +482,7 @@ export function OrganizationMembersPage({
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
-      onSubmit: Schema.standardSchemaV1(organizationMemberInviteSchema),
+      onSubmit: Schema.toStandardSchemaV1(organizationMemberInviteSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({
@@ -1591,7 +1591,7 @@ function isPendingInvitation(input: { readonly status: string }) {
 }
 
 function decodeInvitationExpiresAt(input: unknown): IsoDateTimeStringType {
-  return ParseResult.decodeUnknownSync(IsoDateTimeString)(
+  return Schema.decodeUnknownSync(IsoDateTimeString)(
     input instanceof Date ? input.toISOString() : input
   );
 }
@@ -1607,7 +1607,7 @@ function toInvitation(input: {
     email: input.email,
     expiresAt: decodeInvitationExpiresAt(input.expiresAt),
     id: input.id,
-    role: ParseResult.decodeUnknownSync(InvitableOrganizationRole)(input.role),
+    role: Schema.decodeUnknownSync(InvitableOrganizationRole)(input.role),
     status: input.status,
   };
 }

@@ -46,7 +46,7 @@ export function PasswordResetRequestPage({
       email: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(passwordResetRequestSchema),
+      onSubmit: Schema.toStandardSchemaV1(passwordResetRequestSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({

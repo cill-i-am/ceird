@@ -163,10 +163,11 @@ packages/labels-core
 
 Core packages should not depend on `apps/*`.
 
-Root infrastructure lives outside the package workspace in `infra`, with the
-deploy stack entrypoint at `alchemy.run.ts`. It may point at app/API/MCP/domain
-deploy entrypoints and domain migrations by path, but shared packages should
-not import root infra code.
+Root infrastructure orchestration lives outside the package workspace in
+`infra`, with the deploy stack entrypoint at `alchemy.run.ts`. Deployable apps
+own their Cloudflare resource declarations under
+`apps/*/infra`, but shared packages should not import root
+infra code or app-owned Alchemy resource modules.
 
 ## Testing
 

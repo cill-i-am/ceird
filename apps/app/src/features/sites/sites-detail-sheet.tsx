@@ -211,7 +211,7 @@ export function SitesDetailSheet({
       return true;
     }
 
-    const failure = Cause.failureOption(exit.cause);
+    const failure = Cause.findErrorOption(exit.cause);
 
     if (
       Option.isSome(failure) &&

@@ -96,11 +96,11 @@ The app's Cloudflare runtime env declaration lives in
 `apps/app/src/cloudflare-env.d.ts`; it includes the app/API origins plus
 Alchemy's injected stack and stage bindings, and the infra tests compare that
 contract against the Vite Worker env declared by
-`infra/cloudflare-stack.ts`. The deployed app's `API_ORIGIN` and
-`VITE_API_ORIGIN` are wired from the API Worker's Cloudflare domain output,
-with the configured API hostname used only as the pre-resolution fallback. The
-app Vite config does not manually define `VITE_API_ORIGIN`; the standard Vite
-env flow and Alchemy's Cloudflare Vite resource own client-side env injection.
+`apps/app/infra/cloudflare-vite.ts`. The deployed app's `API_ORIGIN` and
+`VITE_API_ORIGIN` are wired from the API Worker's Cloudflare domain output, with
+the configured API hostname used only as the pre-resolution fallback. The app
+Vite config does not manually define `VITE_API_ORIGIN`; the standard Vite env
+flow and Alchemy's Cloudflare Vite resource own client-side env injection.
 Server-side app helpers read the runtime `API_ORIGIN` from the
 `cloudflare:workers` env binding, with `process.env` only as the package-local
 Node fallback. Non-Cloudflare Vite and Vitest runs alias that module to a local

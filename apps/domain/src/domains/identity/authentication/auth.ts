@@ -4,18 +4,22 @@ import { createHash } from "node:crypto";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   decodeInvitationId,
-  isAdministrativeOrganizationRole,
   decodeCreateOrganizationInput,
+  decodeOrganizationId,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
+  decodeSessionId,
   decodeUpdateOrganizationInput,
+  decodeUserId,
+  isAdministrativeOrganizationRole,
 } from "@ceird/identity-core";
 import type {
   InvitationId,
+  OrganizationId,
   OrganizationRole,
   PublicInvitationPreview,
+  UserId,
 } from "@ceird/identity-core";
-import { HttpApiBuilder, HttpApp } from "@effect/platform";
 import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -30,7 +34,8 @@ import {
 } from "better-auth/plugins/organization/access";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Layer, Runtime } from "effect";
+import { Context, Effect, Layer } from "effect";
+import { HttpEffect, HttpRouter } from "effect/unstable/http";
 
 import { AppDatabase } from "../../../platform/database/database.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
@@ -81,6 +86,7 @@ const SESSION_COOKIE_NAMES = [
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
+type AuthEffectRuntimeContext = Context.Context<never>;
 interface AuthenticationSessionResult {
   readonly session: {
     readonly createdAt: Date | string;
@@ -239,6 +245,17 @@ function decodeWritableOrganizationRole(input: unknown) {
   }
 }
 
+function decodeIdentityBoundaryValue<A>(
+  input: unknown,
+  decode: (input: unknown) => A
+): A | null {
+  try {
+    return decode(input);
+  } catch {
+    return null;
+  }
+}
+
 function assertOrganizationUpdateOnlyChangesName(
   organizationUpdate: Record<string, unknown>
 ) {
@@ -253,7 +270,7 @@ function assertOrganizationUpdateOnlyChangesName(
 
 function makePasswordResetDeliveryKey(input: {
   readonly token: string;
-  readonly userId: string;
+  readonly userId: UserId;
 }) {
   const digest = createHash("sha256")
     .update(`password-reset:${input.userId}:${input.token}`)
@@ -264,7 +281,7 @@ function makePasswordResetDeliveryKey(input: {
 
 function makeEmailVerificationDeliveryKey(input: {
   readonly token: string;
-  readonly userId: string;
+  readonly userId: UserId;
 }) {
   const digest = createHash("sha256")
     .update(`email-verification:${input.userId}:${input.token}`)
@@ -275,7 +292,7 @@ function makeEmailVerificationDeliveryKey(input: {
 
 function makeEmailChangeConfirmationDeliveryKey(input: {
   readonly token: string;
-  readonly userId: string;
+  readonly userId: UserId;
 }) {
   const digest = createHash("sha256")
     .update(`email-change-confirmation:${input.userId}:${input.token}`)
@@ -428,15 +445,17 @@ export function createAuthentication(options: {
             }),
         },
         sendInvitationEmail: async (organizationInvitation) => {
+          const invitationId = decodeInvitationId(organizationInvitation.id);
+
           await deliverAuthEmail({
             reportFailure:
               options.reportOrganizationInvitationEmailFailure ??
               options.reportVerificationEmailFailure,
             send: sendOrganizationInvitationEmail,
             input: {
-              deliveryKey: `organization-invitation/${organizationInvitation.id}`,
+              deliveryKey: `organization-invitation/${invitationId}`,
               invitationUrl: new URL(
-                `/accept-invitation/${organizationInvitation.id}`,
+                `/accept-invitation/${invitationId}`,
                 options.appOrigin
               ).toString(),
               inviterEmail: organizationInvitation.inviter.user.email,
@@ -452,13 +471,15 @@ export function createAuthentication(options: {
     emailAndPassword: {
       ...authConfig.emailAndPassword,
       sendResetPassword: async ({ token, user, url }) => {
+        const userId = decodeUserId(user.id);
+
         await deliverAuthEmail({
           reportFailure: options.reportPasswordResetEmailFailure,
           send: sendPasswordResetEmail,
           input: {
             deliveryKey: makePasswordResetDeliveryKey({
               token,
-              userId: user.id,
+              userId,
             }),
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
@@ -470,13 +491,15 @@ export function createAuthentication(options: {
     emailVerification: {
       ...authConfig.emailVerification,
       sendVerificationEmail: async ({ user, token, url }) => {
+        const userId = decodeUserId(user.id);
+
         await deliverAuthEmail({
           reportFailure: options.reportVerificationEmailFailure,
           send: sendVerificationEmail,
           input: {
             deliveryKey: makeEmailVerificationDeliveryKey({
               token,
-              userId: user.id,
+              userId,
             }),
             recipientEmail: user.email,
             recipientName: user.name ?? user.email,
@@ -490,6 +513,8 @@ export function createAuthentication(options: {
       changeEmail: {
         ...authConfig.user.changeEmail,
         sendChangeEmailConfirmation: async ({ user, token, url }) => {
+          const userId = decodeUserId(user.id);
+
           await deliverAuthEmail({
             reportFailure:
               options.reportEmailChangeConfirmationFailure ??
@@ -498,7 +523,7 @@ export function createAuthentication(options: {
             input: {
               deliveryKey: makeEmailChangeConfirmationDeliveryKey({
                 token,
-                userId: user.id,
+                userId,
               }),
               recipientEmail: user.email,
               recipientName: user.name ?? user.email,
@@ -525,9 +550,12 @@ function makeAuthenticationBackgroundTaskHandler() {
   };
 }
 
-export class AuthenticationBackgroundTaskHandler extends Context.Tag(
+export class AuthenticationBackgroundTaskHandler extends Context.Service<
+  AuthenticationBackgroundTaskHandler,
+  (task: Promise<unknown>) => void
+>()(
   "@ceird/domains/identity/authentication/AuthenticationBackgroundTaskHandler"
-)<AuthenticationBackgroundTaskHandler, (task: Promise<unknown>) => void>() {}
+) {}
 
 export const AuthenticationBackgroundTaskHandlerLive = Layer.succeed(
   AuthenticationBackgroundTaskHandler,
@@ -551,16 +579,14 @@ async function deliverAuthEmail<Input>(options: {
   }
 }
 
-function makeEmailFailureReporter(
-  runtime: Runtime.Runtime<never>,
-  label: string
+export function makeEmailFailureReporter(
+  label: string,
+  runtimeContext: AuthEffectRuntimeContext = Context.empty()
 ) {
-  const runFork = Runtime.runFork(runtime);
-
   return (error: unknown) => {
     const serializedError = serializeBackgroundTaskError(error);
 
-    runFork(
+    Effect.runForkWith(runtimeContext)(
       Effect.logError("Authentication background email delivery failed").pipe(
         Effect.annotateLogs({
           authEmailFailureLabel: label,
@@ -684,6 +710,12 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     return "unknown";
   }
 
+  const userId = decodeIdentityBoundaryValue(session.userId, decodeUserId);
+
+  if (userId === null) {
+    return "nonAdministrative";
+  }
+
   const organizationId = await resolveAdministrativeOrganizationTargetId(
     database,
     request,
@@ -702,7 +734,7 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     .where(
       and(
         eq(memberTable.organizationId, organizationId),
-        eq(memberTable.userId, session.userId)
+        eq(memberTable.userId, userId)
       )
     )
     .limit(1);
@@ -720,7 +752,7 @@ async function resolveAdministrativeOrganizationTargetId(
   database: NodePgDatabase,
   request: Request,
   activeOrganizationId: string | null
-) {
+): Promise<OrganizationId | null> {
   const { searchParams } = new URL(request.url);
   const organizationSlug = searchParams.get("organizationSlug");
 
@@ -733,10 +765,17 @@ async function resolveAdministrativeOrganizationTargetId(
       .where(eq(organizationTable.slug, organizationSlug))
       .limit(1);
 
-    return organizationRow?.id ?? null;
+    return organizationRow === undefined
+      ? null
+      : decodeIdentityBoundaryValue(organizationRow.id, decodeOrganizationId);
   }
 
-  return searchParams.get("organizationId") ?? activeOrganizationId;
+  const organizationId =
+    searchParams.get("organizationId") ?? activeOrganizationId;
+
+  return organizationId === null
+    ? null
+    : decodeIdentityBoundaryValue(organizationId, decodeOrganizationId);
 }
 
 function extractBetterAuthSessionToken(cookieHeader: string | null) {
@@ -816,19 +855,23 @@ function serializeAuthenticationSessionResult(
 
   return {
     session: {
-      activeOrganizationId: result.session.activeOrganizationId ?? null,
+      activeOrganizationId:
+        result.session.activeOrganizationId === null ||
+        result.session.activeOrganizationId === undefined
+          ? null
+          : decodeOrganizationId(result.session.activeOrganizationId),
       createdAt: serializeAuthenticationDate(result.session.createdAt),
       expiresAt: serializeAuthenticationDate(result.session.expiresAt),
-      id: result.session.id,
+      id: decodeSessionId(result.session.id),
       token: result.session.token,
       updatedAt: serializeAuthenticationDate(result.session.updatedAt),
-      userId: result.session.userId,
+      userId: decodeUserId(result.session.userId),
     },
     user: {
       createdAt: serializeAuthenticationDate(result.user.createdAt),
       email: result.user.email,
       emailVerified: result.user.emailVerified,
-      id: result.user.id,
+      id: decodeUserId(result.user.id),
       image: result.user.image ?? null,
       name: result.user.name,
       updatedAt: serializeAuthenticationDate(result.user.updatedAt),
@@ -840,7 +883,7 @@ function serializeAuthenticationDate(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-function withAuthenticationCors(
+export function withAuthenticationCors(
   handler: (request: Request) => Promise<Response>,
   trustedOrigins: readonly string[]
 ) {
@@ -891,36 +934,32 @@ function withAuthenticationCors(
   };
 }
 
-export class Authentication extends Effect.Service<Authentication>()(
+export class Authentication extends Context.Service<Authentication>()(
   "@ceird/domains/identity/authentication/Authentication",
   {
-    dependencies: [
-      AuthenticationEmailSchedulerLive,
-      AuthenticationBackgroundTaskHandlerLive,
-    ],
-    effect: Effect.gen(function* AuthenticationLive() {
+    make: Effect.gen(function* AuthenticationLive() {
       const authEmailConfig = yield* loadAuthEmailConfig;
       const config = yield* loadAuthenticationConfig;
       const { authDb } = yield* AppDatabase;
       const authEmailScheduler = yield* AuthenticationEmailScheduler;
-      const runtime = yield* Effect.runtime<never>();
-      const runPromise = Runtime.runPromise(runtime);
       const backgroundTaskHandler = yield* AuthenticationBackgroundTaskHandler;
+      const runtimeContext = yield* Effect.context<never>();
+      const runAuthEmailEffect = Effect.runPromiseWith(runtimeContext);
       const reportPasswordResetEmailFailure = makeEmailFailureReporter(
-        runtime,
-        "Password reset email delivery failed"
+        "Password reset email delivery failed",
+        runtimeContext
       );
       const reportVerificationEmailFailure = makeEmailFailureReporter(
-        runtime,
-        "Verification email delivery failed"
+        "Verification email delivery failed",
+        runtimeContext
       );
       const reportEmailChangeConfirmationFailure = makeEmailFailureReporter(
-        runtime,
-        "Email change confirmation delivery failed"
+        "Email change confirmation delivery failed",
+        runtimeContext
       );
       const reportOrganizationInvitationEmailFailure = makeEmailFailureReporter(
-        runtime,
-        "Organization invitation email delivery failed"
+        "Organization invitation email delivery failed",
+        runtimeContext
       );
 
       return createAuthentication({
@@ -932,49 +971,60 @@ export class Authentication extends Effect.Service<Authentication>()(
         reportOrganizationInvitationEmailFailure,
         reportPasswordResetEmailFailure,
         sendOrganizationInvitationEmail: (input) =>
-          runPromise(authEmailScheduler.sendOrganizationInvitationEmail(input)),
+          runAuthEmailEffect(
+            authEmailScheduler.sendOrganizationInvitationEmail(input)
+          ),
         reportVerificationEmailFailure,
         sendPasswordResetEmail: (input) =>
-          runPromise(authEmailScheduler.sendPasswordResetEmail(input)),
+          runAuthEmailEffect(authEmailScheduler.sendPasswordResetEmail(input)),
         sendVerificationEmail: (input) =>
-          runPromise(authEmailScheduler.sendVerificationEmail(input)),
+          runAuthEmailEffect(authEmailScheduler.sendVerificationEmail(input)),
       });
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    Authentication,
+    Authentication.make
+  );
+  static readonly Default = Authentication.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        AuthenticationEmailSchedulerLive,
+        AuthenticationBackgroundTaskHandlerLive
+      )
+    )
+  );
+}
 
-export const AuthenticationHttpLive = HttpApiBuilder.Router.use((router) =>
+export const AuthenticationHttpLive = HttpRouter.use((router) =>
   Effect.gen(function* mountAuthenticationHttp() {
     const auth = yield* Authentication;
     const { authDb } = yield* AppDatabase;
     const config = yield* loadAuthenticationConfig;
 
-    // Effect strips mount prefixes by default. Better Auth expects to receive
-    // its configured basePath, so we preserve the full /api/auth prefix here.
-    yield* router.mountApp(
-      "/api/auth",
-      HttpApp.fromWebHandler(
+    // Better Auth expects to receive its configured basePath, so route the
+    // wildcard path directly instead of using a prefix-stripping router.
+    yield* router.add(
+      "*",
+      "/api/auth/*",
+      HttpEffect.fromWebHandler(
         withAuthenticationCors(
           makeAuthenticationWebHandler(auth),
           config.trustedOrigins
         )
-      ),
-      {
-        includePrefix: true,
-      }
+      )
     );
 
-    yield* router.mountApp(
-      "/api/public",
-      HttpApp.fromWebHandler(
+    yield* router.add(
+      "*",
+      "/api/public/*",
+      HttpEffect.fromWebHandler(
         withAuthenticationCors(
           makePublicInvitationPreviewHandler(authDb),
           config.trustedOrigins
         )
-      ),
-      {
-        includePrefix: true,
-      }
+      )
     );
   })
 );

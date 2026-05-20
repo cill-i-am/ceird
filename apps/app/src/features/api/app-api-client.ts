@@ -1,14 +1,13 @@
 import { JobsApiGroup, RateCardsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
 import { ServiceAreasApiGroup, SitesApiGroup } from "@ceird/sites-core";
+import { Cause, Effect, Exit, Layer } from "effect";
 import {
   FetchHttpClient,
-  HttpApi,
-  HttpApiClient,
   HttpClient,
   HttpClientRequest,
-} from "@effect/platform";
-import { Cause, Effect, Exit, Layer } from "effect";
+} from "effect/unstable/http";
+import { HttpApi, HttpApiClient } from "effect/unstable/httpapi";
 
 import { resolveApiOrigin } from "#/lib/api-origin";
 import type { ServerApiForwardedHeaders } from "#/lib/server-api-forwarded-headers";
@@ -25,6 +24,14 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(LabelsApiGroup)
   .add(ServiceAreasApiGroup)
   .add(SitesApiGroup);
+
+const currentGlobalFetch: typeof globalThis.fetch = (input, init) =>
+  globalThis.fetch(input, init);
+
+const AppApiHttpClientLive = Layer.mergeAll(
+  FetchHttpClient.layer,
+  Layer.succeed(FetchHttpClient.Fetch, currentGlobalFetch)
+);
 
 export interface AppApiClientOptions {
   readonly requestOrigin?: string | undefined;
@@ -56,9 +63,7 @@ export function makeAppApiClient(options: AppApiClientOptions = {}) {
   });
 }
 
-export type AppApiClient = Effect.Effect.Success<
-  ReturnType<typeof makeAppApiClient>
->;
+export type AppApiClient = Effect.Success<ReturnType<typeof makeAppApiClient>>;
 
 export function makeBrowserAppApiClient(origin?: string | undefined) {
   const requestOrigin =
@@ -73,7 +78,7 @@ export function makeServerAppApiClient(options: AppApiClientOptions) {
 }
 
 export const BrowserAppApiHttpClientLive = Layer.mergeAll(
-  FetchHttpClient.layer,
+  AppApiHttpClientLive,
   Layer.succeed(FetchHttpClient.RequestInit, {
     credentials: "include" as const,
   })
@@ -117,7 +122,7 @@ export async function runAppApiClient<Response, RequestError>(
   }).pipe(
     Effect.withSpan(operation),
     Effect.mapError(normalizeAppApiError),
-    Effect.provide(FetchHttpClient.layer)
+    Effect.provide(AppApiHttpClientLive)
   );
   const exit = await Effect.runPromiseExit(program);
 

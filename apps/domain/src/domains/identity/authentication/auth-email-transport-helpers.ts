@@ -1,8 +1,14 @@
+import { createHash } from "node:crypto";
+
 import { Effect } from "effect";
 
 const DELIVERY_KEY_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_ADDRESS_IN_TEXT_PATTERN =
   /[^\s<>()"']+@[^\s<>()"']+\.[^\s<>()"']+/g;
+const URL_WITH_QUERY_PATTERN = /\bhttps?:\/\/[^\s<>()"']+/g;
+const SECRET_ASSIGNMENT_PATTERN =
+  /\b(token|code|secret|password|key)=([^&\s<>()"']+)/gi;
+const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 
 export function buildRecipientLogContext(recipient: string) {
   const [_, domain = ""] = recipient.split("@");
@@ -79,7 +85,11 @@ export function sendWithDeliveryKeyDedupe<E, R>(input: {
 }
 
 export function sanitizeProviderErrorMessage(message: string) {
-  return message.replaceAll(EMAIL_ADDRESS_IN_TEXT_PATTERN, "[redacted-email]");
+  return message
+    .replaceAll(EMAIL_ADDRESS_IN_TEXT_PATTERN, "[redacted-email]")
+    .replaceAll(URL_WITH_QUERY_PATTERN, (url) => sanitizeUrl(url))
+    .replaceAll(SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
+    .replaceAll(BEARER_TOKEN_PATTERN, "Bearer [redacted]");
 }
 
 export function serializeUnknownError(error: unknown) {
@@ -93,4 +103,28 @@ export function serializeUnknownError(error: unknown) {
   }
 
   return sanitizeProviderErrorMessage(String(error));
+}
+
+export function fingerprintDeliveryKey(deliveryKey: string | undefined) {
+  if (deliveryKey === undefined) {
+    return;
+  }
+
+  return createHash("sha256").update(deliveryKey).digest("hex").slice(0, 16);
+}
+
+function sanitizeUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    if (url.search.length > 0) {
+      url.search = "?[redacted]";
+    }
+
+    url.username = "";
+    url.password = "";
+    return url.toString();
+  } catch {
+    return value.replaceAll(SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]");
+  }
 }

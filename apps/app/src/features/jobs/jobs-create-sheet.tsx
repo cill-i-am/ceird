@@ -37,7 +37,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { Cause, Exit, Option, ParseResult } from "effect";
+import { Cause, Exit, Option, Schema } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -153,10 +153,10 @@ interface JobsCreateFieldErrors {
   readonly title?: string;
 }
 
-const decodeContactEmail = ParseResult.decodeUnknownSync(ContactEmailSchema);
-const decodeContactName = ParseResult.decodeUnknownSync(ContactNameSchema);
-const decodeContactNotes = ParseResult.decodeUnknownSync(ContactNotesSchema);
-const decodeJobExternalReference = ParseResult.decodeUnknownSync(
+const decodeContactEmail = Schema.decodeUnknownSync(ContactEmailSchema);
+const decodeContactName = Schema.decodeUnknownSync(ContactNameSchema);
+const decodeContactNotes = Schema.decodeUnknownSync(ContactNotesSchema);
+const decodeJobExternalReference = Schema.decodeUnknownSync(
   JobExternalReferenceSchema
 );
 
@@ -318,7 +318,7 @@ export function JobsCreateSheet() {
       return;
     }
 
-    const failure = Cause.failureOption(exit.cause);
+    const failure = Cause.findErrorOption(exit.cause);
 
     if (
       Option.isSome(failure) &&

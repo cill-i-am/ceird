@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-method-this-argument */
 
-import { ParseResult, Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 
 import {
   accountEmailSchema,
@@ -9,30 +9,32 @@ import {
 } from "#/features/auth/auth-schemas";
 
 const SettingsEmail = accountEmailSchema.pipe(
-  Schema.annotations({
-    message: () => "Enter a valid email address",
+  Schema.annotate({
+    message: "Enter a valid email address",
   })
 );
 
 const SettingsPassword = accountPasswordSchema.pipe(
-  Schema.annotations({
-    message: () => "Use 8 or more characters",
+  Schema.annotate({
+    message: "Use 8 or more characters",
   })
 );
 
 const SettingsName = accountNameSchema.pipe(
-  Schema.annotations({
-    message: () => "Use at least 2 characters",
+  Schema.annotate({
+    message: "Use at least 2 characters",
   })
 );
 
-const ImageUrl = Schema.transform(Schema.Trim, Schema.NullOr(Schema.String), {
-  strict: true,
-  decode: (value) => (value.length === 0 ? null : value),
-  encode: (value) => value ?? "",
-}).pipe(
-  Schema.filter(
-    (value) => {
+const ImageUrl = Schema.Trim.pipe(
+  Schema.decodeTo(Schema.NullOr(Schema.String), {
+    decode: SchemaGetter.transform((value) =>
+      value.length === 0 ? null : value
+    ),
+    encode: SchemaGetter.transform((value) => value ?? ""),
+  }),
+  Schema.refine(
+    (value): value is string | null => {
       if (value === null) {
         return true;
       }
@@ -45,9 +47,7 @@ const ImageUrl = Schema.transform(Schema.Trim, Schema.NullOr(Schema.String), {
 
       return url.protocol === "http:" || url.protocol === "https:";
     },
-    {
-      message: () => "Enter a valid http or https image URL",
-    }
+    { message: "Enter a valid http or https image URL" }
   )
 );
 
@@ -65,13 +65,15 @@ const ChangePasswordInputSchema = Schema.Struct({
   newPassword: SettingsPassword,
   confirmPassword: SettingsPassword,
 }).pipe(
-  Schema.filter((input) => input.newPassword === input.confirmPassword, {
-    message: () => "Passwords must match",
-  }),
-  Schema.filter((input) => input.currentPassword !== input.newPassword, {
-    message: () =>
-      "Use a new password that is different from your current password",
-  })
+  Schema.check(
+    Schema.makeFilter((input) => input.newPassword === input.confirmPassword, {
+      message: "Passwords must match",
+    }),
+    Schema.makeFilter((input) => input.currentPassword !== input.newPassword, {
+      message:
+        "Use a new password that is different from your current password",
+    })
+  )
 );
 
 export type ProfileSettingsInput = typeof ProfileSettingsInputSchema.Type;
@@ -85,13 +87,13 @@ export const changePasswordSchema = ChangePasswordInputSchema;
 export function decodeProfileSettingsInput(
   input: unknown
 ): ProfileSettingsInput {
-  return ParseResult.decodeUnknownSync(ProfileSettingsInputSchema)(input);
+  return Schema.decodeUnknownSync(ProfileSettingsInputSchema)(input);
 }
 
 export function decodeChangeEmailInput(input: unknown): ChangeEmailInput {
-  return ParseResult.decodeUnknownSync(ChangeEmailInputSchema)(input);
+  return Schema.decodeUnknownSync(ChangeEmailInputSchema)(input);
 }
 
 export function decodeChangePasswordInput(input: unknown): ChangePasswordInput {
-  return ParseResult.decodeUnknownSync(ChangePasswordInputSchema)(input);
+  return Schema.decodeUnknownSync(ChangePasswordInputSchema)(input);
 }

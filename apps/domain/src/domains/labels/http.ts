@@ -1,5 +1,5 @@
-import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
@@ -26,14 +26,14 @@ const LabelsHandlersLive = HttpApiBuilder.group(AppApi, "labels", (handlers) =>
           .create(payload)
           .pipe(observeLabelsOperation("createLabel"))
       )
-      .handle("updateLabel", ({ path, payload }) =>
+      .handle("updateLabel", ({ params, payload }) =>
         labelsService
-          .update(path.labelId, payload)
+          .update(params.labelId, payload)
           .pipe(observeLabelsOperation("updateLabel"))
       )
-      .handle("deleteLabel", ({ path }) =>
+      .handle("deleteLabel", ({ params }) =>
         labelsService
-          .archive(path.labelId)
+          .archive(params.labelId)
           .pipe(observeLabelsOperation("deleteLabel"))
       );
   })

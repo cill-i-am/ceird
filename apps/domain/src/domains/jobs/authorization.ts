@@ -9,7 +9,7 @@ import type {
   JobStatus,
   WorkItemIdType as WorkItemId,
 } from "@ceird/jobs-core";
-import { Effect } from "effect";
+import { Layer, Context, Effect } from "effect";
 
 import type { OrganizationActor } from "../organizations/current-actor.js";
 
@@ -26,83 +26,80 @@ export interface JobAuthorizationGrant {
   readonly accessLevel: JobCollaboratorAccessLevel;
 }
 
-export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
+type JobAuthorizationCheck = Effect.Effect<void, JobAccessDeniedError>;
+
+export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
   "@ceird/domains/jobs/JobsAuthorization",
   {
-    accessors: true,
-    effect: Effect.sync(() => {
-      const ensureCanView = Effect.fn("JobsAuthorization.ensureCanView")(
-        (_actor: OrganizationActor) => Effect.void
-      );
+    make: Effect.sync(() => {
+      const ensureCanView = (
+        _actor: OrganizationActor
+      ): JobAuthorizationCheck => Effect.void;
 
-      const ensureCanViewJobDetail = Effect.fn(
-        "JobsAuthorization.ensureCanViewJobDetail"
-      )(
-        (
-          actor: OrganizationActor,
-          workItemId: WorkItemId,
-          grant?: JobAuthorizationGrant
-        ) =>
-          isInternalActor(actor) || grant !== undefined
-            ? Effect.void
-            : Effect.fail(
-                makeAccessDenied(
-                  "External collaborators can only view jobs granted to them",
-                  workItemId
-                )
+      const ensureCanViewJobDetail = (
+        actor: OrganizationActor,
+        workItemId: WorkItemId,
+        grant?: JobAuthorizationGrant
+      ): JobAuthorizationCheck =>
+        isInternalActor(actor) || grant !== undefined
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "External collaborators can only view jobs granted to them",
+                workItemId
               )
-      );
+            );
 
-      const ensureCanCreate = Effect.fn("JobsAuthorization.ensureCanCreate")(
-        (actor: OrganizationActor) =>
-          hasElevatedAccess(actor)
-            ? Effect.void
-            : Effect.fail(
-                makeAccessDenied(
-                  "Only organization owners and admins can create jobs"
-                )
+      const ensureCanCreate = (
+        actor: OrganizationActor
+      ): JobAuthorizationCheck =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can create jobs"
               )
-      );
+            );
 
-      const ensureCanManageConfiguration = Effect.fn(
-        "JobsAuthorization.ensureCanManageConfiguration"
-      )((actor: OrganizationActor) =>
+      const ensureCanManageConfiguration = (
+        actor: OrganizationActor
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
               makeAccessDenied(
                 "Only organization owners and admins can manage job configuration"
               )
-            )
-      );
+            );
 
-      const ensureCanViewOrganizationActivity = Effect.fn(
-        "JobsAuthorization.ensureCanViewOrganizationActivity"
-      )((actor: OrganizationActor) =>
+      const ensureCanViewOrganizationActivity = (
+        actor: OrganizationActor
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
               makeAccessDenied(
                 "Only organization owners and admins can view organization activity"
               )
-            )
-      );
+            );
 
-      const ensureCanPatch = Effect.fn("JobsAuthorization.ensureCanPatch")(
-        (actor: OrganizationActor, workItemId: WorkItemId) =>
-          hasElevatedAccess(actor)
-            ? Effect.void
-            : Effect.fail(
-                makeAccessDenied(
-                  "Only organization owners and admins can edit jobs",
-                  workItemId
-                )
+      const ensureCanPatch = (
+        actor: OrganizationActor,
+        workItemId: WorkItemId
+      ): JobAuthorizationCheck =>
+        hasElevatedAccess(actor)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Only organization owners and admins can edit jobs",
+                workItemId
               )
-      );
+            );
 
-      const ensureCanManageCollaborators = Effect.fn(
-        "JobsAuthorization.ensureCanManageCollaborators"
-      )((actor: OrganizationActor, workItemId?: WorkItemId) =>
+      const ensureCanManageCollaborators = (
+        actor: OrganizationActor,
+        workItemId?: WorkItemId
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -110,12 +107,12 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
                 "Only organization owners and admins can manage job collaborators",
                 workItemId
               )
-            )
-      );
+            );
 
-      const ensureCanAssignLabels = Effect.fn(
-        "JobsAuthorization.ensureCanAssignLabels"
-      )((actor: OrganizationActor, job: Job) =>
+      const ensureCanAssignLabels = (
+        actor: OrganizationActor,
+        job: Job
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -124,14 +121,13 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
                 "Members can only assign labels on jobs assigned to them",
                 job.id
               )
-            )
-      );
+            );
 
-      const ensureCanComment = Effect.fn("JobsAuthorization.ensureCanComment")((
+      const ensureCanComment = (
         actor: OrganizationActor,
         workItemId?: WorkItemId,
         grant?: JobAuthorizationGrant
-      ) => {
+      ): JobAuthorizationCheck => {
         if (isInternalActor(actor)) {
           return Effect.void;
         }
@@ -144,11 +140,12 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
               )
             )
           : Effect.void;
-      });
+      };
 
-      const ensureCanAddVisit = Effect.fn(
-        "JobsAuthorization.ensureCanAddVisit"
-      )((actor: OrganizationActor, job: Job) =>
+      const ensureCanAddVisit = (
+        actor: OrganizationActor,
+        job: Job
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -157,12 +154,12 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
                 "Members can only log visits on jobs assigned to them",
                 job.id
               )
-            )
-      );
+            );
 
-      const ensureCanAddCostLine = Effect.fn(
-        "JobsAuthorization.ensureCanAddCostLine"
-      )((actor: OrganizationActor, job: Job) =>
+      const ensureCanAddCostLine = (
+        actor: OrganizationActor,
+        job: Job
+      ): JobAuthorizationCheck =>
         hasElevatedAccess(actor) ||
         (isInternalActor(actor) && job.assigneeId === actor.userId)
           ? Effect.void
@@ -171,12 +168,13 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
                 "Members can only add cost lines on jobs assigned to them",
                 job.id
               )
-            )
-      );
+            );
 
-      const ensureCanTransition = Effect.fn(
-        "JobsAuthorization.ensureCanTransition"
-      )((actor: OrganizationActor, job: Job, nextStatus: JobStatus) => {
+      const ensureCanTransition = (
+        actor: OrganizationActor,
+        job: Job,
+        nextStatus: JobStatus
+      ): JobAuthorizationCheck => {
         if (hasElevatedAccess(actor)) {
           return Effect.void;
         }
@@ -209,20 +207,21 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
                 job.id
               )
             );
-      });
+      };
 
-      const ensureCanReopen = Effect.fn("JobsAuthorization.ensureCanReopen")(
-        (actor: OrganizationActor, job: Job) =>
-          hasElevatedAccess(actor) ||
-          (isInternalActor(actor) && job.assigneeId === actor.userId)
-            ? Effect.void
-            : Effect.fail(
-                makeAccessDenied(
-                  "Members can only reopen jobs assigned to them",
-                  job.id
-                )
+      const ensureCanReopen = (
+        actor: OrganizationActor,
+        job: Job
+      ): JobAuthorizationCheck =>
+        hasElevatedAccess(actor) ||
+        (isInternalActor(actor) && job.assigneeId === actor.userId)
+          ? Effect.void
+          : Effect.fail(
+              makeAccessDenied(
+                "Members can only reopen jobs assigned to them",
+                job.id
               )
-      );
+            );
 
       return {
         ensureCanAddCostLine,
@@ -241,7 +240,91 @@ export class JobsAuthorization extends Effect.Service<JobsAuthorization>()(
       };
     }),
   }
-) {}
+) {
+  static readonly ensureCanAddCostLine = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanAddCostLine"]
+    >
+  ) =>
+    JobsAuthorization.use((service) => service.ensureCanAddCostLine(...args));
+  static readonly ensureCanAddVisit = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanAddVisit"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanAddVisit(...args));
+  static readonly ensureCanAssignLabels = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanAssignLabels"]
+    >
+  ) =>
+    JobsAuthorization.use((service) => service.ensureCanAssignLabels(...args));
+  static readonly ensureCanComment = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanComment"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanComment(...args));
+  static readonly ensureCanCreate = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanCreate"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanCreate(...args));
+  static readonly ensureCanManageCollaborators = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof JobsAuthorization
+      >["ensureCanManageCollaborators"]
+    >
+  ) =>
+    JobsAuthorization.use((service) =>
+      service.ensureCanManageCollaborators(...args)
+    );
+  static readonly ensureCanManageConfiguration = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof JobsAuthorization
+      >["ensureCanManageConfiguration"]
+    >
+  ) =>
+    JobsAuthorization.use((service) =>
+      service.ensureCanManageConfiguration(...args)
+    );
+  static readonly ensureCanPatch = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanPatch"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanPatch(...args));
+  static readonly ensureCanReopen = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanReopen"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanReopen(...args));
+  static readonly ensureCanTransition = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanTransition"]
+    >
+  ) => JobsAuthorization.use((service) => service.ensureCanTransition(...args));
+  static readonly ensureCanViewJobDetail = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsAuthorization>["ensureCanViewJobDetail"]
+    >
+  ) =>
+    JobsAuthorization.use((service) => service.ensureCanViewJobDetail(...args));
+  static readonly ensureCanViewOrganizationActivity = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof JobsAuthorization
+      >["ensureCanViewOrganizationActivity"]
+    >
+  ) =>
+    JobsAuthorization.use((service) =>
+      service.ensureCanViewOrganizationActivity(...args)
+    );
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    JobsAuthorization,
+    JobsAuthorization.make
+  );
+  static readonly Default = JobsAuthorization.DefaultWithoutDependencies;
+}
 
 function hasElevatedAccess(actor: OrganizationActor): boolean {
   return actor.role === "owner" || actor.role === "admin";

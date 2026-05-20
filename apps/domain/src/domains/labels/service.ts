@@ -8,7 +8,7 @@ import type {
   LabelIdType as LabelId,
   UpdateLabelInput,
 } from "@ceird/labels-core";
-import { Effect, Option } from "effect";
+import { Layer, Context, Effect, Option } from "effect";
 
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -17,16 +17,10 @@ import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js
 import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
 import { LabelsRepository } from "./repositories.js";
 
-export class LabelsService extends Effect.Service<LabelsService>()(
+export class LabelsService extends Context.Service<LabelsService>()(
   "@ceird/domains/labels/LabelsService",
   {
-    accessors: true,
-    dependencies: [
-      CurrentOrganizationActor.Default,
-      LabelsRepository.Default,
-      OrganizationAuthorization.Default,
-    ],
-    effect: Effect.gen(function* LabelsServiceLive() {
+    make: Effect.gen(function* LabelsServiceLive() {
       const actor = yield* CurrentOrganizationActor;
       const authorization = yield* OrganizationAuthorization;
       const labelsRepository = yield* LabelsRepository;
@@ -134,7 +128,24 @@ export class LabelsService extends Effect.Service<LabelsService>()(
       };
     }),
   }
-) {}
+) {
+  static readonly list = (
+    ...args: Parameters<Context.Service.Shape<typeof LabelsService>["list"]>
+  ) => LabelsService.use((service) => service.list(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    LabelsService,
+    LabelsService.make
+  );
+  static readonly Default = LabelsService.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        CurrentOrganizationActor.Default,
+        LabelsRepository.Default,
+        OrganizationAuthorization.Default
+      )
+    )
+  );
+}
 
 const mapLabelsActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new LabelAccessDeniedError({ message })

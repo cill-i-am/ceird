@@ -91,13 +91,15 @@ describe("Alchemy stage identity", () => {
     expect(config.stage).toBe("dev_cillian");
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
-    expect(config.authRateLimitEnabled).toBe(true);
+    expect(config.authRateLimitEnabled).toBeTruthy();
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
+    expect(config.mcpAuthorizedAppCacheMaxEntries).toBeUndefined();
+    expect(config.mcpAuthorizedAppCacheTtlSeconds).toBeUndefined();
     expect(config.neonDatabaseName).toBe("ceird");
     expect(config.neonDefaultBranchName).toBe("base");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
-    expect(config.neonParentBranchProtected).toBe(false);
+    expect(config.neonParentBranchProtected).toBeFalsy();
     expect(config.neonParentBranchName).toBe("main");
     expect(config.neonParentStage).toBe("main");
     expect(config.neonPgVersion).toBe(17);
@@ -155,7 +157,7 @@ describe("Alchemy stage identity", () => {
     expect(config.mcpHostname).toBe("mcp.main.ceird.app");
     expect(config.hyperdriveName).toBe("ceird-production-postgres");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
-    expect(config.neonParentBranchProtected).toBe(false);
+    expect(config.neonParentBranchProtected).toBeFalsy();
   });
 
   it("disables auth rate limits by default for PR preview stages", () => {
@@ -165,7 +167,7 @@ describe("Alchemy stage identity", () => {
       )
     );
 
-    expect(config.authRateLimitEnabled).toBe(false);
+    expect(config.authRateLimitEnabled).toBeFalsy();
   });
 
   it("allows PR preview auth rate limits to be enabled explicitly", () => {
@@ -186,7 +188,7 @@ describe("Alchemy stage identity", () => {
       )
     );
 
-    expect(config.authRateLimitEnabled).toBe(true);
+    expect(config.authRateLimitEnabled).toBeTruthy();
   });
 
   it("allows provider-normalized Hyperdrive and Neon retention settings to be overridden", () => {
@@ -211,6 +213,28 @@ describe("Alchemy stage identity", () => {
     expect(config.neonHistoryRetentionSeconds).toBe(86_400);
   });
 
+  it("allows deployed MCP authorized app cache settings to be overridden", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES: "32",
+                CEIRD_MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS: "45",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.mcpAuthorizedAppCacheMaxEntries).toBe(32);
+    expect(config.mcpAuthorizedAppCacheTtlSeconds).toBe(45);
+  });
+
   it("allows parent Neon branch protection to be enabled explicitly", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("main").pipe(
@@ -228,7 +252,7 @@ describe("Alchemy stage identity", () => {
       )
     );
 
-    expect(config.neonParentBranchProtected).toBe(true);
+    expect(config.neonParentBranchProtected).toBeTruthy();
   });
 });
 

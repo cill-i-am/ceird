@@ -644,7 +644,7 @@ async function runTrackedJobsDetailOperation<Success>(
 function getBrowserJobDetail(workItemId: WorkItemIdType) {
   return runBrowserAppApiRequest("JobsBrowser.getJobDetail", (client) =>
     client.jobs.getJobDetail({
-      path: { workItemId },
+      params: { workItemId },
     })
   );
 }
@@ -655,7 +655,7 @@ function transitionBrowserJob(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.transitionJob", (client) =>
     client.jobs.transitionJob({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -664,7 +664,7 @@ function transitionBrowserJob(
 function reopenBrowserJob(workItemId: WorkItemIdType) {
   return runBrowserAppApiRequest("JobsBrowser.reopenJob", (client) =>
     client.jobs.reopenJob({
-      path: { workItemId },
+      params: { workItemId },
     })
   );
 }
@@ -672,7 +672,7 @@ function reopenBrowserJob(workItemId: WorkItemIdType) {
 function patchBrowserJob(workItemId: WorkItemIdType, input: PatchJobInput) {
   return runBrowserAppApiRequest("JobsBrowser.patchJob", (client) =>
     client.jobs.patchJob({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -684,7 +684,7 @@ function addBrowserJobComment(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.addJobComment", (client) =>
     client.jobs.addJobComment({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -696,7 +696,7 @@ function addBrowserJobVisit(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.addJobVisit", (client) =>
     client.jobs.addJobVisit({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -708,7 +708,7 @@ function assignBrowserJobLabel(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.assignJobLabel", (client) =>
     client.jobs.assignJobLabel({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -720,7 +720,7 @@ function addBrowserJobCostLine(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.addJobCostLine", (client) =>
     client.jobs.addJobCostLine({
-      path: { workItemId },
+      params: { workItemId },
       payload: input,
     })
   );
@@ -729,7 +729,7 @@ function addBrowserJobCostLine(
 function listBrowserJobCollaborators(workItemId: WorkItemIdType) {
   return runBrowserAppApiRequest("JobsBrowser.listJobCollaborators", (client) =>
     client.jobs.listJobCollaborators({
-      path: { workItemId },
+      params: { workItemId },
     })
   );
 }
@@ -742,7 +742,7 @@ function attachBrowserJobCollaborator(
     "JobsBrowser.attachJobCollaborator",
     (client) =>
       client.jobs.attachJobCollaborator({
-        path: { workItemId },
+        params: { workItemId },
         payload: input,
       })
   );
@@ -757,7 +757,7 @@ function updateBrowserJobCollaborator(
     "JobsBrowser.updateJobCollaborator",
     (client) =>
       client.jobs.updateJobCollaborator({
-        path: { collaboratorId, workItemId },
+        params: { collaboratorId, workItemId },
         payload: input,
       })
   );
@@ -771,7 +771,7 @@ function detachBrowserJobCollaborator(
     "JobsBrowser.detachJobCollaborator",
     (client) =>
       client.jobs.detachJobCollaborator({
-        path: { collaboratorId, workItemId },
+        params: { collaboratorId, workItemId },
       })
   );
 }
@@ -782,7 +782,7 @@ function removeBrowserJobLabel(
 ) {
   return runBrowserAppApiRequest("JobsBrowser.removeJobLabel", (client) =>
     client.jobs.removeJobLabel({
-      path: { labelId, workItemId },
+      params: { labelId, workItemId },
     })
   );
 }
@@ -876,7 +876,7 @@ function upsertJobCollaborator(
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   return Option.isSome(failure) ? failure.value : Cause.squash(cause);
 }

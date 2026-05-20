@@ -79,7 +79,7 @@ async function listCurrentBrowserJobs(
 ): Promise<JobListResponse> {
   return await runBrowserAppApiClient("JobsClient.listJobs", (client) =>
     client.jobs.listJobs({
-      urlParams: query,
+      query,
     })
   );
 }
@@ -118,7 +118,7 @@ async function listCurrentBrowserOrganizationActivity(
     "JobsClient.listOrganizationActivity",
     (client) =>
       client.jobs.listOrganizationActivity({
-        urlParams: query,
+        query,
       })
   );
 }
@@ -127,7 +127,7 @@ async function getCurrentBrowserJobDetail(
   workItemId: WorkItemIdType
 ): Promise<JobDetailResponse> {
   return await runBrowserAppApiClient("JobsClient.getJobDetail", (client) =>
-    client.jobs.getJobDetail({ path: { workItemId } })
+    client.jobs.getJobDetail({ params: { workItemId } })
   );
 }
 

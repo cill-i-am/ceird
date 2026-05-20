@@ -71,7 +71,7 @@ export async function listCurrentServerSitesDirect(
 
   return await runAppApiClient(request, "SitesServer.listSites", (client) =>
     client.sites.listSites({
-      urlParams: query,
+      query,
     })
   );
 }
@@ -95,14 +95,14 @@ export async function listAllCurrentServerSitesDirect(
     pageCount += 1;
     ensureSitePageLimit(pageCount);
 
-    const urlParams =
+    const pageQuery =
       cursor === undefined ? staticQuery : { ...staticQuery, cursor };
     const page = await runAppApiClient(
       request,
       "SitesServer.listAllSites.page",
       (client) =>
         client.sites.listSites({
-          urlParams,
+          query: pageQuery,
         })
     );
 
@@ -145,7 +145,7 @@ export async function listAllCurrentServerJobsDirect(
       "JobsServer.listJobs",
       (client) =>
         client.jobs.listJobs({
-          urlParams: pageQuery,
+          query: pageQuery,
         })
     );
 
@@ -169,7 +169,7 @@ export async function listCurrentServerJobsDirect(
 
   return await runAppApiClient(request, "JobsServer.listJobs", (client) =>
     client.jobs.listJobs({
-      urlParams: query,
+      query,
     })
   );
 }

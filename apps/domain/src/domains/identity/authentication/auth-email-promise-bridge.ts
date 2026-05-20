@@ -1,4 +1,4 @@
-import { Effect, Layer, Runtime } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type {
@@ -9,30 +9,39 @@ import type {
 
 const makeAuthEmailPromiseBridgeEffect = Effect.gen(
   function* AuthEmailPromiseBridgeLive() {
-    const runtime = yield* Effect.runtime<AuthEmailSender>();
-    const runPromise = Runtime.runPromise(runtime);
+    const context = yield* Effect.context<AuthEmailSender>();
+    const runAuthEmail = Effect.runPromiseWith(context);
 
     return {
       sendEmailVerificationEmail: (input: EmailVerificationEmailInput) =>
-        runPromise(AuthEmailSender.sendEmailVerificationEmail(input)),
+        runAuthEmail(AuthEmailSender.sendEmailVerificationEmail(input)),
       sendOrganizationInvitationEmail: (
         input: OrganizationInvitationEmailInput
-      ) => runPromise(AuthEmailSender.sendOrganizationInvitationEmail(input)),
+      ) => runAuthEmail(AuthEmailSender.sendOrganizationInvitationEmail(input)),
       send: (input: PasswordResetEmailInput) =>
-        runPromise(AuthEmailSender.sendPasswordResetEmail(input)),
+        runAuthEmail(AuthEmailSender.sendPasswordResetEmail(input)),
     };
   }
 );
 
-export class AuthEmailPromiseBridge extends Effect.Service<AuthEmailPromiseBridge>()(
+export class AuthEmailPromiseBridge extends Context.Service<AuthEmailPromiseBridge>()(
   "@ceird/domains/identity/authentication/AuthEmailPromiseBridge",
   {
-    accessors: true,
-    dependencies: [
-      AuthEmailSender.Default.pipe(
-        Layer.provideMerge(AuthEmailTransport.Local)
-      ),
-    ],
-    effect: makeAuthEmailPromiseBridgeEffect,
+    make: makeAuthEmailPromiseBridgeEffect,
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AuthEmailPromiseBridge,
+    AuthEmailPromiseBridge.make
+  );
+  static readonly Default =
+    AuthEmailPromiseBridge.DefaultWithoutDependencies.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          AuthEmailSender.Default.pipe(
+            Layer.provideMerge(AuthEmailTransport.Local)
+          )
+        )
+      )
+    );
+}

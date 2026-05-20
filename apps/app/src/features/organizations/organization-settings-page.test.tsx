@@ -93,18 +93,18 @@ describe("organization settings page", () => {
           labels: {
             createLabel: ({ payload }: { payload: { name: string } }) =>
               Effect.sync(() => mockedCreateLabel(payload)),
-            deleteLabel: ({ path }: { path: { labelId: string } }) =>
-              Effect.sync(() => mockedArchiveLabel(path)),
+            deleteLabel: ({ params }: { params: { labelId: string } }) =>
+              Effect.sync(() => mockedArchiveLabel(params)),
             updateLabel: ({
-              path,
+              params,
               payload,
             }: {
-              path: { labelId: string };
+              params: { labelId: string };
               payload: { name: string };
             }) =>
               Effect.sync(() =>
                 mockedUpdateLabel({
-                  labelId: path.labelId,
+                  labelId: params.labelId,
                   name: payload.name,
                 })
               ),

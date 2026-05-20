@@ -18,14 +18,15 @@ pnpm run test:infra
 
 ## Important Paths
 
-| Path                  | Purpose                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `../alchemy.run.ts`   | Root Alchemy stack entrypoint.                                                                          |
-| `stages.ts`           | Deployment stage config, environment decoding, and resource naming.                                     |
-| `cloudflare-stack.ts` | Cloudflare app, API, MCP, domain Worker, queues, email bindings, Hyperdrive binding, and observability. |
-| `neon.ts`             | Native Neon project/branch layout and resource creation.                                                |
-| `legacy-alchemy.ts`   | Temporary tombstone provider for pre-native Alchemy state cleanup.                                      |
-| `tsconfig.infra.json` | Root TypeScript project for stack helpers and tests.                                                    |
+| Path                            | Purpose                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `../alchemy.run.ts`             | Root Alchemy stack entrypoint.                                                                          |
+| `stages.ts`                     | Deployment stage config, environment decoding, and resource naming.                                     |
+| `cloudflare-stack.ts`           | Cloudflare app, API, MCP, domain Worker, queues, email bindings, Hyperdrive binding, and observability. |
+| `cloudflare-worker-defaults.ts` | Shared Worker compatibility and observability defaults used by app-owned Worker declarations.           |
+| `neon.ts`                       | Native Neon project/branch layout and resource creation.                                                |
+| `legacy-alchemy.ts`             | Temporary tombstone provider for pre-native Alchemy state cleanup.                                      |
+| `tsconfig.infra.json`           | Root TypeScript project for stack helpers and tests.                                                    |
 
 ## Deployed Resources
 
@@ -47,6 +48,11 @@ hostnames are used as fallbacks while the domain lists are resolving. Use
 `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`, and `CEIRD_MCP_HOSTNAME` only for an
 intentional canonical domain cutover; the main deploy workflow sets them to
 `app.ceird.app`, `api.ceird.app`, and `mcp.ceird.app` for production.
+Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
+and passed through the app-owned Worker env module; the root stack does not own
+those runtime defaults. Worker compatibility flags and observability settings
+are intentionally shared in `infra/cloudflare-worker-defaults.ts` because they
+are platform-wide deployment defaults rather than app-specific behavior.
 It does not output the Neon connection URI; inspect `PostgresBranch` state when
 a local operator needs the direct database URL for Playwright.
 

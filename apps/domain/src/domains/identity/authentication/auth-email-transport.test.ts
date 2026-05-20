@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { Effect } from "effect";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../../test/effect-test-helpers.js";
 import { AuthEmailTransport } from "./auth-email-transport.js";
 import type { TransportMessage } from "./auth-email-transport.js";
 
@@ -13,11 +17,13 @@ const message = {
 } satisfies TransportMessage;
 
 function runWithConfig<A, E>(
-  effect: Effect.Effect<A, E, never>,
+  effect: Effect.Effect<A, E, unknown>,
   config: Map<string, string>
 ) {
   return Effect.runPromise(
-    effect.pipe(Effect.withConfigProvider(ConfigProvider.fromMap(config)))
+    effect.pipe(
+      withConfigProvider(configProviderFromMap(config))
+    ) as Effect.Effect<A, E, never>
   );
 }
 

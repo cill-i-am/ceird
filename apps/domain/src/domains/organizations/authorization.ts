@@ -2,31 +2,33 @@ import {
   isExternalOrganizationRole,
   isInternalOrganizationRole,
 } from "@ceird/identity-core";
-import { Effect } from "effect";
+import { Layer, Context, Effect } from "effect";
 
 import type { OrganizationActor } from "./current-actor.js";
 import { OrganizationAuthorizationDeniedError } from "./errors.js";
 
-export class OrganizationAuthorization extends Effect.Service<OrganizationAuthorization>()(
+type OrganizationAuthorizationCheck = (
+  actor: OrganizationActor
+) => Effect.Effect<void, OrganizationAuthorizationDeniedError>;
+
+export class OrganizationAuthorization extends Context.Service<OrganizationAuthorization>()(
   "@ceird/domains/organizations/OrganizationAuthorization",
   {
-    accessors: true,
-    effect: Effect.sync(() => {
-      const ensureCanCreateSite = Effect.fn(
-        "OrganizationAuthorization.ensureCanCreateSite"
-      )((actor: OrganizationActor) =>
+    make: Effect.sync(() => {
+      const ensureCanCreateSite: OrganizationAuthorizationCheck = (
+        actor: OrganizationActor
+      ) =>
         hasElevatedOrganizationAccess(actor)
           ? Effect.void
           : Effect.fail(
               new OrganizationAuthorizationDeniedError({
                 message: "Only organization owners and admins can create sites",
               })
-            )
-      );
+            );
 
-      const ensureCanManageLabels = Effect.fn(
-        "OrganizationAuthorization.ensureCanManageLabels"
-      )((actor: OrganizationActor) =>
+      const ensureCanManageLabels: OrganizationAuthorizationCheck = (
+        actor: OrganizationActor
+      ) =>
         hasElevatedOrganizationAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -34,12 +36,11 @@ export class OrganizationAuthorization extends Effect.Service<OrganizationAuthor
                 message:
                   "Only organization owners and admins can manage labels",
               })
-            )
-      );
+            );
 
-      const ensureCanManageConfiguration = Effect.fn(
-        "OrganizationAuthorization.ensureCanManageConfiguration"
-      )((actor: OrganizationActor) =>
+      const ensureCanManageConfiguration: OrganizationAuthorizationCheck = (
+        actor: OrganizationActor
+      ) =>
         hasElevatedOrganizationAccess(actor)
           ? Effect.void
           : Effect.fail(
@@ -47,12 +48,11 @@ export class OrganizationAuthorization extends Effect.Service<OrganizationAuthor
                 message:
                   "Only organization owners and admins can manage organization configuration",
               })
-            )
-      );
+            );
 
-      const ensureCanViewOrganizationData = Effect.fn(
-        "OrganizationAuthorization.ensureCanViewOrganizationData"
-      )((actor: OrganizationActor) =>
+      const ensureCanViewOrganizationData: OrganizationAuthorizationCheck = (
+        actor: OrganizationActor
+      ) =>
         isInternalOrganizationActor(actor)
           ? Effect.void
           : Effect.fail(
@@ -60,8 +60,7 @@ export class OrganizationAuthorization extends Effect.Service<OrganizationAuthor
                 message:
                   "External collaborators cannot view organization-wide data",
               })
-            )
-      );
+            );
 
       return {
         ensureCanCreateSite,
@@ -71,7 +70,14 @@ export class OrganizationAuthorization extends Effect.Service<OrganizationAuthor
       };
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    OrganizationAuthorization,
+    OrganizationAuthorization.make
+  );
+  static readonly Default =
+    OrganizationAuthorization.DefaultWithoutDependencies;
+}
 
 export function hasElevatedOrganizationAccess(
   actor: OrganizationActor

@@ -226,7 +226,7 @@ describe("organization service areas section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateServiceArea).toHaveBeenCalledWith({
-        path: {
+        params: {
           serviceAreaId,
         },
         payload: {
@@ -257,7 +257,7 @@ describe("organization service areas section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateServiceArea).toHaveBeenCalledWith({
-        path: {
+        params: {
           serviceAreaId,
         },
         payload: {

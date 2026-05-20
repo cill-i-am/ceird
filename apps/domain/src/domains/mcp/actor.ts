@@ -1,6 +1,6 @@
 import type { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
-import { SqlClient } from "@effect/sql";
 import { Effect, Layer } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import {
   CurrentOrganizationActor,
@@ -37,7 +37,7 @@ const makeCurrentOrganizationActorFromMcpSession = (
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
 
-    return CurrentOrganizationActor.make({
+    return CurrentOrganizationActor.of({
       get: () =>
         resolveCurrentOrganizationActorFromMcpSession({
           loadMembershipRoles: (organizationId, userId) =>

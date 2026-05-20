@@ -106,6 +106,8 @@ async function runCommandBarAction(page: Page, label: string) {
 test("an organization admin can update the organization name from account settings", async ({
   page,
 }) => {
+  test.setTimeout(ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS);
+
   const initialOrganizationName = "Acme Field Ops";
   const updatedOrganizationName = "Northwind Field Ops";
 
@@ -124,7 +126,15 @@ test("an organization admin can update the organization name from account settin
   );
 
   await page.getByLabel("Organization name").fill(updatedOrganizationName);
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/organization/update") &&
+        response.status() < 400
+    ),
+    page.getByRole("button", { name: "Save changes" }).click(),
+  ]);
   await expect(page.getByRole("status")).toContainText("Organization updated.");
   await expect(page.getByLabel("Organization name")).toHaveValue(
     updatedOrganizationName

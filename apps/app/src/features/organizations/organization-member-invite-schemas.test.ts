@@ -39,7 +39,7 @@ describe("organization member invite schemas", () => {
   }, 10_000);
 
   it("rejects unsupported invite roles", () => {
-    const standardSchema = Schema.standardSchemaV1(
+    const standardSchema = Schema.toStandardSchemaV1(
       organizationMemberInviteSchema
     );
     const result = standardSchema["~standard"].validate({
@@ -59,6 +59,6 @@ describe("organization member invite schemas", () => {
         role: "member",
         organizationId: "org_123",
       })
-    ).toThrow(/is unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 10_000);
 });

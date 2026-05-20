@@ -65,4 +65,15 @@ describe("Cloudflare Worker environment config", () => {
       "https://auth.example.com/api/auth"
     );
   });
+
+  it("propagates optional MCP authorized app cache overrides", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES: "32",
+      MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS: "45",
+    });
+
+    expect(config.get("MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES")).toBe("32");
+    expect(config.get("MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS")).toBe("45");
+  });
 });

@@ -14,10 +14,11 @@ pnpm --filter mcp build
 
 ## Important Paths
 
-| Path                      | Purpose                                               |
-| ------------------------- | ----------------------------------------------------- |
-| `src/worker.ts`           | Cloudflare Worker entrypoint.                         |
-| `src/platform/cloudflare` | Effect runtime and env contract for private `DOMAIN`. |
+| Path                         | Purpose                                                        |
+| ---------------------------- | -------------------------------------------------------------- |
+| `src/worker.ts`              | Cloudflare Worker entrypoint.                                  |
+| `infra/cloudflare-worker.ts` | App-owned Alchemy Worker declaration and binding/env contract. |
+| `src/platform/cloudflare`    | Effect runtime and env contract for private `DOMAIN`.          |
 
 ## Runtime Behavior
 

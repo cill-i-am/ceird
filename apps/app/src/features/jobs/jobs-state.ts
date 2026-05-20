@@ -575,7 +575,7 @@ function makeJobsCollection(
       },
       queryKey,
       retry: false,
-      schema: Schema.standardSchemaV1(JobListItemSchema),
+      schema: Schema.toStandardSchemaV1(JobListItemSchema),
       staleTime: 30_000,
     })
   );
@@ -704,7 +704,7 @@ function listAllBrowserJobs() {
   return runBrowserAppApiRequest("JobsBrowser.listAllJobs", (client) => {
     const loadPage = (cursor: JobListQuery["cursor"]) =>
       client.jobs.listJobs({
-        urlParams: cursor ? { cursor } : {},
+        query: cursor ? { cursor } : {},
       });
 
     const loadRemainingPages = (
@@ -1007,7 +1007,7 @@ export function upsertJobListItem(
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   return Option.isSome(failure) ? failure.value : Cause.squash(cause);
 }

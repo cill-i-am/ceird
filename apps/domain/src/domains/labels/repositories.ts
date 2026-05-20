@@ -13,9 +13,9 @@ import type {
   LabelIdType as LabelId,
   LabelName,
 } from "@ceird/labels-core";
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql";
-import { Effect, Option, Schema } from "effect";
+import { Layer, Context, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql";
 
 import { generateLabelId } from "./id-generation.js";
 
@@ -45,11 +45,10 @@ const decodeLabelId = Schema.decodeUnknownSync(LabelIdSchema);
 const decodeLabelName = Schema.decodeUnknownSync(LabelNameSchema);
 const decodeLabelsResponse = Schema.decodeUnknownSync(LabelsResponseSchema);
 
-export class LabelsRepository extends Effect.Service<LabelsRepository>()(
+export class LabelsRepository extends Context.Service<LabelsRepository>()(
   "@ceird/domains/labels/LabelsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* LabelsRepositoryLive() {
+    make: Effect.gen(function* LabelsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const findById = Effect.fn("LabelsRepository.findById")(function* (
@@ -65,7 +64,7 @@ export class LabelsRepository extends Effect.Service<LabelsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapLabelRow));
+        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapLabelRow));
       });
 
       const getActiveLabelOrFail = Effect.fn(
@@ -150,7 +149,7 @@ export class LabelsRepository extends Effect.Service<LabelsRepository>()(
           )
         );
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapLabelRow));
+        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapLabelRow));
       });
 
       const archive = Effect.fn("LabelsRepository.archive")(function* (
@@ -168,7 +167,7 @@ export class LabelsRepository extends Effect.Service<LabelsRepository>()(
               returning *
             `;
 
-            const label = Option.fromNullable(rows[0]).pipe(
+            const label = Option.fromNullishOr(rows[0]).pipe(
               Option.map(mapLabelRow)
             );
 
@@ -191,7 +190,31 @@ export class LabelsRepository extends Effect.Service<LabelsRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly archive = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof LabelsRepository>["archive"]
+    >
+  ) => LabelsRepository.use((service) => service.archive(...args));
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof LabelsRepository>["create"]
+    >
+  ) => LabelsRepository.use((service) => service.create(...args));
+  static readonly list = (
+    ...args: Parameters<Context.Service.Shape<typeof LabelsRepository>["list"]>
+  ) => LabelsRepository.use((service) => service.list(...args));
+  static readonly update = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof LabelsRepository>["update"]
+    >
+  ) => LabelsRepository.use((service) => service.update(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    LabelsRepository,
+    LabelsRepository.make
+  );
+  static readonly Default = LabelsRepository.DefaultWithoutDependencies;
+}
 
 function mapLabelRow(row: LabelRow): Label {
   return decodeLabel({

@@ -1,6 +1,6 @@
 import { decodeSessionId, decodeUserId } from "@ceird/identity-core";
-import { SqlClient } from "@effect/sql";
 import { Effect, Exit, Layer } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import {

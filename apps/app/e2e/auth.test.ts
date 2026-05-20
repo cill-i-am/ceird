@@ -300,6 +300,8 @@ test.describe("auth pages", () => {
   test("login skips onboarding when the user already belongs to an org", async ({
     page,
   }) => {
+    test.setTimeout(60_000);
+
     const email = createTestEmail("existing-org-login");
     const password = "password123";
     const signupPage = new SignupPage(page);

@@ -74,7 +74,7 @@ describe("createOrganizationNameInputSchema", () => {
         name: "Acme Field Ops",
         slug: "acme-field-ops",
       })
-    ).toThrow(/is unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 });
 
@@ -103,7 +103,7 @@ describe("updateOrganizationInputSchema", () => {
         name: "Northwind Field Ops",
         slug: "northwind-field-ops",
       })
-    ).toThrow(/is unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 });
 

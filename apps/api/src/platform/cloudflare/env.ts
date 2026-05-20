@@ -2,9 +2,11 @@
 
 import type { DomainServiceBinding } from "@ceird/domain-core";
 
-export interface ApiWorkerBindingRuntimeEnv {
+export interface ApiWorkerBindingEnv {
   readonly DOMAIN: DomainServiceBinding;
 }
+
+export type ApiWorkerBindingRuntimeEnv = ApiWorkerBindingEnv;
 
 export interface ApiWorkerConfigEnv {
   readonly ALCHEMY_STACK_NAME?: string;

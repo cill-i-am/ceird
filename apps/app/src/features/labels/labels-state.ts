@@ -47,7 +47,7 @@ export function updateBrowserLabel(
 ) {
   return runBrowserAppApiRequest("LabelsBrowser.updateLabel", (client) =>
     client.labels.updateLabel({
-      path: { labelId },
+      params: { labelId },
       payload: input,
     })
   );
@@ -56,7 +56,7 @@ export function updateBrowserLabel(
 export function archiveBrowserLabel(labelId: LabelIdType) {
   return runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
     client.labels.deleteLabel({
-      path: { labelId },
+      params: { labelId },
     })
   );
 }

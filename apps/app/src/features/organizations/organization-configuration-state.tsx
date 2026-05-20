@@ -469,7 +469,7 @@ function makeServiceAreasCollection(
         });
       },
       getKey: (serviceArea) => serviceArea.id,
-      schema: Schema.standardSchemaV1(ServiceAreaSchema),
+      schema: Schema.toStandardSchemaV1(ServiceAreaSchema),
     })
   );
   collection.current = createdCollection;
@@ -503,7 +503,7 @@ function makeRateCardsCollection(
         });
       },
       getKey: (rateCard) => rateCard.id,
-      schema: Schema.standardSchemaV1(RateCardSchema),
+      schema: Schema.toStandardSchemaV1(RateCardSchema),
     })
   );
   collection.current = createdCollection;
@@ -672,7 +672,7 @@ function updateBrowserServiceArea(
     "OrganizationConfigurationBrowser.updateServiceArea",
     (client) =>
       client.serviceAreas.updateServiceArea({
-        path: { serviceAreaId },
+        params: { serviceAreaId },
         payload: input,
       })
   );
@@ -703,7 +703,7 @@ function updateBrowserRateCard(
     "OrganizationConfigurationBrowser.updateRateCard",
     (client) =>
       client.rateCards.updateRateCard({
-        path: { rateCardId },
+        params: { rateCardId },
         payload: input,
       })
   );

@@ -16,6 +16,8 @@ export const configWithoutCloudflareBootstrapSecrets = {
   ),
   hyperdriveName: "ceird-production-postgres",
   hyperdriveOriginConnectionLimit: 5,
+  mcpAuthorizedAppCacheMaxEntries: undefined,
+  mcpAuthorizedAppCacheTtlSeconds: undefined,
   neonDatabaseName: "ceird",
   neonDefaultBranchName: "base",
   neonHistoryRetentionSeconds: 21_600,

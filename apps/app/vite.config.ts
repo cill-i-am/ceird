@@ -5,7 +5,6 @@ import { defineDevtoolsConfig, devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
 const cloudflareWorkersEnvStub = fileURLToPath(
@@ -31,6 +30,7 @@ const config = defineConfig({
     alias: isCloudflareBuild
       ? []
       : [{ find: "cloudflare:workers", replacement: cloudflareWorkersEnvStub }],
+    tsconfigPaths: true,
   },
   optimizeDeps: {
     include: [
@@ -52,7 +52,6 @@ const config = defineConfig({
       },
     }),
     devtools(devtoolsConfig),
-    tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
     viteReact(),
   ],

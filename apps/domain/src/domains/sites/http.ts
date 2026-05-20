@@ -1,5 +1,5 @@
-import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
@@ -29,35 +29,35 @@ const SitesHandlersLive = HttpApiBuilder.group(AppApi, "sites", (handlers) =>
       .handle("getSiteOptions", () =>
         sitesService.getOptions().pipe(observeSitesOperation("getSiteOptions"))
       )
-      .handle("listSites", ({ urlParams }) =>
-        sitesService.list(urlParams).pipe(observeSitesOperation("listSites"))
+      .handle("listSites", ({ query }) =>
+        sitesService.list(query).pipe(observeSitesOperation("listSites"))
       )
       .handle("createSite", ({ payload }) =>
         sitesService.create(payload).pipe(observeSitesOperation("createSite"))
       )
-      .handle("updateSite", ({ path, payload }) =>
+      .handle("updateSite", ({ params, payload }) =>
         sitesService
-          .update(path.siteId, payload)
+          .update(params.siteId, payload)
           .pipe(observeSitesOperation("updateSite"))
       )
-      .handle("listSiteComments", ({ path }) =>
+      .handle("listSiteComments", ({ params }) =>
         sitesService
-          .listComments(path.siteId)
+          .listComments(params.siteId)
           .pipe(observeSitesOperation("listSiteComments"))
       )
-      .handle("addSiteComment", ({ path, payload }) =>
+      .handle("addSiteComment", ({ params, payload }) =>
         sitesService
-          .addComment(path.siteId, payload)
+          .addComment(params.siteId, payload)
           .pipe(observeSitesOperation("addSiteComment"))
       )
-      .handle("assignSiteLabel", ({ path, payload }) =>
+      .handle("assignSiteLabel", ({ params, payload }) =>
         sitesService
-          .assignLabel(path.siteId, payload)
+          .assignLabel(params.siteId, payload)
           .pipe(observeSitesOperation("assignSiteLabel"))
       )
-      .handle("removeSiteLabel", ({ path }) =>
+      .handle("removeSiteLabel", ({ params }) =>
         sitesService
-          .removeLabel(path.siteId, path.labelId)
+          .removeLabel(params.siteId, params.labelId)
           .pipe(observeSitesOperation("removeSiteLabel"))
       );
   })
@@ -81,9 +81,9 @@ const ServiceAreasHandlersLive = HttpApiBuilder.group(
             .create(payload)
             .pipe(observeServiceAreasOperation("createServiceArea"))
         )
-        .handle("updateServiceArea", ({ path, payload }) =>
+        .handle("updateServiceArea", ({ params, payload }) =>
           serviceAreasService
-            .update(path.serviceAreaId, payload)
+            .update(params.serviceAreaId, payload)
             .pipe(observeServiceAreasOperation("updateServiceArea"))
         );
     })

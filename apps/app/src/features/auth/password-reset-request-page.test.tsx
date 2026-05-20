@@ -145,7 +145,9 @@ describe("password reset request page", () => {
 
   it("uses the shared password reset request schema for submit validation", async () => {
     const user = userEvent.setup();
-    const standardSchema = Schema.standardSchemaV1(passwordResetRequestSchema);
+    const standardSchema = Schema.toStandardSchemaV1(
+      passwordResetRequestSchema
+    );
     const result = standardSchema["~standard"].validate({
       email: "invalid-email",
     });
