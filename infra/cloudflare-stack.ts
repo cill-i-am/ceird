@@ -126,6 +126,7 @@ export interface McpWorkerConfiguredEnv {
 export interface AgentWorkerConfiguredEnv {
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AGENT_MUTATION_TOOLS_ENABLED: "false";
+  readonly AUTH_APP_ORIGIN: string;
   readonly NODE_ENV: "production";
 }
 
@@ -210,10 +211,12 @@ export function makeMcpWorkerEnv(): McpWorkerConfiguredEnv {
 
 export function makeAgentWorkerEnv(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly config: InfraStageConfig;
 }): AgentWorkerConfiguredEnv {
   return {
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AGENT_MUTATION_TOOLS_ENABLED: "false",
+    AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
     NODE_ENV: "production",
   } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
@@ -235,6 +238,7 @@ export function makeAgentWorkerProps(input: {
     env: {
       ...makeAgentWorkerEnv({
         agentInternalSecret: input.agentInternalSecret,
+        config: input.config,
       }),
     },
     domain: input.config.agentHostname,

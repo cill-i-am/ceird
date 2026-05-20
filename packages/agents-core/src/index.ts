@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
 import { OrganizationId, UserId } from "@ceird/identity-core";
+import { WorkItemId } from "@ceird/jobs-core";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
 
@@ -329,16 +330,20 @@ export class AgentThreadNotFoundError extends Schema.TaggedError<AgentThreadNotF
 
 export class AgentStorageError extends Schema.TaggedError<AgentStorageError>()(
   "@ceird/agents-core/AgentStorageError",
-  { message: Schema.String, operation: AgentStorageOperation },
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+    operation: AgentStorageOperation,
+  },
   HttpApiSchema.annotations({ status: 503 })
 ) {}
 
 export class AgentActionRejectedError extends Schema.TaggedError<AgentActionRejectedError>()(
   "@ceird/agents-core/AgentActionRejectedError",
   {
+    actionName: Schema.optional(AgentActionNameSchema),
     message: Schema.String,
-    name: Schema.String,
-    workItemId: Schema.optional(Schema.String),
+    workItemId: Schema.optional(WorkItemId),
   },
   HttpApiSchema.annotations({ status: 400 })
 ) {}

@@ -90,7 +90,11 @@ function extractAgentInstanceName(url: URL): AgentInstanceNameType {
     throw new AgentRequestUnauthorizedError("Missing agent instance name");
   }
 
-  return decodeAgentInstanceName(decodeURIComponent(encodedName));
+  try {
+    return decodeAgentInstanceName(decodeURIComponent(encodedName));
+  } catch {
+    throw new AgentRequestUnauthorizedError("Invalid agent instance name");
+  }
 }
 
 function extractBearerToken(request: Request): string | undefined {
@@ -108,14 +112,9 @@ function prepareAgentRouteRequest(request: Request): Request {
     "/agents/ceird-agent/"
   );
   const url = new URL(normalizedUrl);
-  const rewritten =
-    normalizedUrl !== request.url || url.searchParams.has("token");
-
   url.searchParams.delete("token");
+  const sanitizedRequest = new Request(url, request);
+  sanitizedRequest.headers.delete("authorization");
 
-  if (!rewritten) {
-    return request;
-  }
-
-  return new Request(url, request);
+  return sanitizedRequest;
 }

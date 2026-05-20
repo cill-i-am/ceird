@@ -158,6 +158,7 @@ type AgentWorkerStackRuntimeConfigEnv = Required<
     | "ALCHEMY_STAGE"
     | "AGENT_INTERNAL_SECRET"
     | "AGENT_MUTATION_TOOLS_ENABLED"
+    | "AUTH_APP_ORIGIN"
     | "NODE_ENV"
   >
 >;
@@ -258,7 +259,10 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
     });
     const mcpEnv = makeMcpWorkerEnv();
-    const agentEnv = makeAgentWorkerEnv({ agentInternalSecret });
+    const agentEnv = makeAgentWorkerEnv({
+      agentInternalSecret,
+      config: configWithoutCloudflareBootstrapSecrets,
+    });
     const appEnv = makeAppWorkerEnv({
       apiOrigin: "https://api.example.com",
     });
@@ -284,6 +288,7 @@ describe("Cloudflare stack", () => {
     expect(agentEnv).toStrictEqual({
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AGENT_MUTATION_TOOLS_ENABLED: "false",
+      AUTH_APP_ORIGIN: "https://app.example.com",
       NODE_ENV: "production",
     });
     expect(appEnv).toStrictEqual({

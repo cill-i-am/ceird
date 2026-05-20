@@ -39,19 +39,56 @@ describe("Agent Worker adapter", () => {
       ttlSeconds: 60,
     });
     const response = await fetchWorker(
-      new Request(makeAgentUrl("ceird-agent", token)),
+      new Request(makeAgentUrl("ceird-agent", token), {
+        headers: {
+          authorization: `Bearer ${token}`,
+          origin: "https://app.example.com",
+        },
+      }),
       env
     );
     const routedRequest = routeAgentRequest.mock.calls[0]?.[0];
 
     expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://app.example.com"
+    );
     expect(routedRequest).toBeInstanceOf(Request);
     expect(new URL((routedRequest as Request).url).pathname).toContain(
       "/agents/ceird-agent/"
     );
+    expect((routedRequest as Request).headers.get("authorization")).toBeNull();
     expect(
       new URL((routedRequest as Request).url).searchParams.has("token")
     ).toBe(false);
+  });
+
+  it("answers browser preflight before agent authorization", async () => {
+    const response = await fetchWorker(
+      new Request(
+        `https://agent.example.com/agents/ceird-agent/${encodeURIComponent(agentInstanceName)}`,
+        {
+          headers: {
+            "access-control-request-headers": "authorization, content-type",
+            origin: "https://app.example.com",
+          },
+          method: "OPTIONS",
+        }
+      ),
+      makeEnv()
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://app.example.com"
+    );
+    expect(response.headers.get("access-control-allow-methods")).toContain(
+      "POST"
+    );
+    expect(response.headers.get("access-control-allow-headers")).toBe(
+      "authorization, content-type"
+    );
+    expect(routeAgentRequest).not.toHaveBeenCalled();
   });
 
   it("does not report Agent routing failures as authorization failures", async () => {
@@ -96,6 +133,16 @@ describe("Agent Worker adapter", () => {
     await expect(response.text()).resolves.toBe("Agent request unauthorized");
     expect(response.status).toBe(401);
   });
+
+  it("rejects malformed Agent instance routes as authorization failures", async () => {
+    const response = await fetchWorker(
+      new Request("https://agent.example.com/agents/ceird-agent/%E0%A4%A"),
+      makeEnv()
+    );
+
+    await expect(response.text()).resolves.toBe("Agent request unauthorized");
+    expect(response.status).toBe(401);
+  });
 });
 
 function makeAgentUrl(routeName: "CeirdAgent" | "ceird-agent", token: string) {
@@ -105,6 +152,7 @@ function makeAgentUrl(routeName: "CeirdAgent" | "ceird-agent", token: string) {
 function makeEnv(): AgentWorkerEnv {
   return {
     AGENT_INTERNAL_SECRET: "agent-secret",
+    AUTH_APP_ORIGIN: "https://app.example.com",
     AI: {} as Ai,
     CeirdAgent: {} as DurableObjectNamespace,
     DOMAIN: {} as DomainServiceBinding,

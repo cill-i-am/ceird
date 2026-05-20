@@ -3,10 +3,10 @@ import {
   RunAgentActionResponseSchema,
 } from "@ceird/agents-core";
 import type {
-  AgentActionName,
   AgentActionOperationId,
   AgentThreadId,
   AgentThreadResponse,
+  RunAgentActionInput,
   RunAgentActionResponse,
 } from "@ceird/agents-core";
 import { makeDomainServiceClient } from "@ceird/domain-core";
@@ -25,7 +25,7 @@ const decodeAgentThreadResponse = ParseResult.decodeUnknownSync(
 
 export interface RunDomainActionInput {
   readonly input: unknown;
-  readonly name: AgentActionName;
+  readonly name: RunAgentActionInput["name"];
   readonly operationId: AgentActionOperationId;
   readonly threadId: AgentThreadId;
 }

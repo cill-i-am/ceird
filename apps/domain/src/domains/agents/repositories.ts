@@ -439,12 +439,17 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
 
       const completeFailed = Effect.fn(
         "AgentActionRunsRepository.completeFailed"
-      )(function* (actionRunId: AgentActionRunId, message: string) {
+      )(function* (
+        actionRunId: AgentActionRunId,
+        message: string,
+        result: unknown | null = null
+      ) {
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
             completed_at = now(),
             error_message = ${message},
+            result = ${result},
             status = 'failed',
             updated_at = now()
           where id = ${actionRunId}

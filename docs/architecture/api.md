@@ -116,6 +116,9 @@ query parameter, verifies that it was signed by the domain-owned secret,
 normalizes the route to the Agents SDK's kebab-case class path, and only then
 delegates to Cloudflare's router. The Agent Worker disables Worker invocation
 logs so short-lived URL tokens are not persisted by platform request logging.
+Browser preflight is answered before token auth for the configured app origin,
+and the routed request has the `token` query parameter and `Authorization`
+header stripped before it enters the Agents SDK runtime.
 The Agent Durable Object keeps chat/runtime state in the Agent store; product
 state, authorization, thread activity timestamps, and action side effects
 remain in the domain Worker.
@@ -503,6 +506,10 @@ Public API errors live in the package that owns the contract:
 `packages/jobs-core/src/errors.ts`, `packages/sites-core/src/errors.ts`, and
 `packages/labels-core/src/errors.ts`. Domain code should return those shared
 errors when a frontend client needs typed behavior.
+Agent action rejection errors use a typed `actionName` field when the failure
+can be attributed to a known registry action; unsupported malformed action
+names stay in the error message rather than crossing the boundary as a typed
+action name.
 
 Use Effect `Config` for environment loading and Effect `Schema` for external
 payload boundaries. Plain TypeScript types are fine for internal computed

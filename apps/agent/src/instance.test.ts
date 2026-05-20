@@ -22,7 +22,9 @@ describe("agent request authorization", () => {
       secret: "agent-secret",
       ttlSeconds: 60,
     });
-    const request = new Request(makeAgentUrl("ceird-agent", token));
+    const request = new Request(makeAgentUrl("ceird-agent", token), {
+      headers: { authorization: `Bearer ${token}` },
+    });
     const authorized = await authorizeAgentRequest(request, makeEnv());
 
     expect(authorized.agentInstanceName).toBe(agentInstanceName);
@@ -32,6 +34,7 @@ describe("agent request authorization", () => {
     expect(new URL(authorized.request.url).pathname).toContain(
       "/agents/ceird-agent/"
     );
+    expect(authorized.request.headers.get("authorization")).toBeNull();
     expect(extractAgentThreadId(agentInstanceName)).toBe(
       "11111111-1111-4111-8111-111111111111"
     );
@@ -71,6 +74,15 @@ describe("agent request authorization", () => {
 
     await expect(
       authorizeAgentRequest(request, makeEnv())
+    ).rejects.toBeInstanceOf(AgentRequestUnauthorizedError);
+  });
+
+  it("rejects malformed encoded instance names as authorization failures", async () => {
+    await expect(
+      authorizeAgentRequest(
+        new Request("https://agent.example.com/agents/ceird-agent/%E0%A4%A"),
+        makeEnv()
+      )
     ).rejects.toBeInstanceOf(AgentRequestUnauthorizedError);
   });
 });

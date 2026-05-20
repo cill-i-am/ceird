@@ -232,8 +232,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.labels.update",
       message: "Label does not exist in the organization",
-      name: "ceird.labels.update",
     });
   });
 
@@ -278,8 +278,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.labels.create",
       message: "Label name already exists in the organization",
-      name: "ceird.labels.create",
     });
   });
 
@@ -498,8 +498,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.sites.comments.list",
       message: "Site does not exist",
-      name: "ceird.sites.comments.list",
     });
   });
 
@@ -1016,8 +1016,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.rate_cards.list",
       message: "Invalid input for ceird.rate_cards.list",
-      name: "ceird.rate_cards.list",
     });
   });
 
@@ -1045,8 +1045,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.rate_cards.update",
       message: "Rate card does not exist in the organization",
-      name: "ceird.rate_cards.update",
     });
   });
 
@@ -1164,8 +1164,8 @@ describe("domain agent action registry", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.service_areas.update",
       message: "Service area does not exist in the organization",
-      name: "ceird.service_areas.update",
     });
   });
 
@@ -1178,8 +1178,8 @@ describe("domain agent action registry", () => {
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
       message: "Unsupported agent action: ceird.missing.action",
-      name: missingAction,
     });
+    expect(error).not.toHaveProperty("actionName", missingAction);
   });
 
   it("registers a domain handler for every executable action", () => {

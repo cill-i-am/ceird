@@ -95,8 +95,8 @@ const domainAgentActions = [
         if (label === undefined) {
           return yield* Effect.fail(
             new AgentActionRejectedError({
+              actionName: "ceird.labels.update",
               message: "Label does not exist in the organization",
-              name: "ceird.labels.update",
             })
           );
         }
@@ -121,8 +121,8 @@ const domainAgentActions = [
         if (label === undefined) {
           return yield* Effect.fail(
             new AgentActionRejectedError({
+              actionName: "ceird.labels.delete",
               message: "Label does not exist in the organization",
-              name: "ceird.labels.delete",
             })
           );
         }
@@ -571,8 +571,8 @@ function decodeActionInput<const Name extends ExecutableAgentActionName>(
     Effect.mapError(
       () =>
         new AgentActionRejectedError({
+          actionName,
           message: `Invalid input for ${actionName}`,
-          name: actionName,
         })
     )
   );

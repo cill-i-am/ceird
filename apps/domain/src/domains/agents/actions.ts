@@ -1,6 +1,7 @@
 import {
   AgentAccessDeniedError,
   AgentActionRejectedError,
+  AgentActionNameSchema,
   AgentStorageError,
 } from "@ceird/agents-core";
 import type { AgentActionName } from "@ceird/agents-core";
@@ -20,7 +21,9 @@ import {
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
   RATE_CARD_NOT_FOUND_ERROR_TAG,
   VISIT_DURATION_INCREMENT_ERROR_TAG,
+  WorkItemId,
 } from "@ceird/jobs-core";
+import type { WorkItemIdType } from "@ceird/jobs-core";
 import {
   LABEL_NAME_CONFLICT_ERROR_TAG,
   LABEL_NOT_FOUND_ERROR_TAG,
@@ -35,7 +38,7 @@ import {
   SITE_STORAGE_ERROR_TAG,
 } from "@ceird/sites-core";
 import type { HttpServerRequest } from "@effect/platform";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -96,6 +99,8 @@ const REJECTED_ERROR_TAGS = [
   SITE_LIST_CURSOR_INVALID_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
 ] as const;
+const isAgentActionName = Schema.is(AgentActionNameSchema);
+const isWorkItemId = Schema.is(WorkItemId);
 
 export class AgentActions extends Effect.Service<AgentActions>()(
   "@ceird/domains/agents/AgentActions",
@@ -142,8 +147,8 @@ export class AgentActions extends Effect.Service<AgentActions>()(
           handler === undefined
             ? Effect.fail(
                 new AgentActionRejectedError({
+                  ...(isAgentActionName(name) ? { actionName: name } : {}),
                   message: `Unsupported agent action: ${name}`,
-                  name,
                 })
               )
             : provideActionServices(
@@ -402,6 +407,7 @@ function mapActionError(
 ): AgentAccessDeniedError | AgentActionRejectedError | AgentStorageError {
   if (isTaggedError(error, "SqlError")) {
     return new AgentStorageError({
+      cause: formatUnknownCause(error),
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
@@ -423,6 +429,7 @@ function mapActionError(
 
   if (isTaggedWithAny(error, STORAGE_ERROR_TAGS)) {
     return new AgentStorageError({
+      cause: formatUnknownCause(error),
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
@@ -430,15 +437,15 @@ function mapActionError(
 
   if (isTaggedWithAny(error, REJECTED_ERROR_TAGS)) {
     return new AgentActionRejectedError({
+      actionName,
       message: getStringProperty(error, "message") ?? "Agent action failed",
-      name: actionName,
-      workItemId: getStringProperty(error, "workItemId"),
+      workItemId: getWorkItemIdProperty(error, "workItemId"),
     });
   }
 
   return new AgentActionRejectedError({
+    actionName,
     message: "Agent action failed",
-    name: actionName,
   });
 }
 
@@ -459,11 +466,32 @@ function getStringProperty(
   error: unknown,
   property: string
 ): string | undefined {
-  if (typeof error === "object" && error !== null) {
-    const value = (error as Record<string, unknown>)[property];
+  const value = getUnknownProperty(error, property);
 
-    return typeof value === "string" ? value : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+function getWorkItemIdProperty(
+  error: unknown,
+  property: string
+): WorkItemIdType | undefined {
+  const value = getUnknownProperty(error, property);
+
+  return isWorkItemId(value) ? value : undefined;
+}
+
+function getUnknownProperty(error: unknown, property: string): unknown {
+  if (typeof error === "object" && error !== null) {
+    return (error as Record<string, unknown>)[property];
   }
 
   return undefined;
+}
+
+function formatUnknownCause(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+
+  return String(error);
 }

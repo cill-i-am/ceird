@@ -1,7 +1,9 @@
 import {
+  AgentAccessDeniedError,
   AgentActionOperationId,
   AgentActionRejectedError,
   AgentActionRunId,
+  AgentStorageError,
   AgentThreadId,
   buildAgentInstanceName,
 } from "@ceird/agents-core";
@@ -18,6 +20,11 @@ import { AgentActions } from "./actions.js";
 import {
   AgentActionRunsRepository,
   AgentThreadsRepository,
+} from "./repositories.js";
+import type {
+  AgentActionRun,
+  AgentActionRunBeginProjection,
+  BeginAgentActionRunInput,
 } from "./repositories.js";
 import { AgentThreadsService } from "./service.js";
 
@@ -56,6 +63,99 @@ const thread = {
 } satisfies AgentThread;
 
 describe("agent threads service", () => {
+  it("replays successful write operations without executing the action again", async () => {
+    let actionCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { shouldNotExecute: true };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, {
+                  result: { labelId: "label_123" },
+                  status: "succeeded",
+                }),
+              }),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: true,
+      result: { labelId: "label_123" },
+    });
+    expect(actionCalls).toBe(0);
+  });
+
+  it("re-executes successful read replays instead of returning a null result", async () => {
+    let actionCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: {},
+            name: "ceird.labels.list",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { items: [] };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, {
+                  result: null,
+                  status: "succeeded",
+                }),
+              }),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: true,
+      result: { items: [] },
+    });
+    expect(actionCalls).toBe(1);
+  });
+
   it("rejects replayed operation ids with different inputs before executing", async () => {
     let actionCalls = 0;
     const error = await Effect.runPromise(
@@ -109,11 +209,155 @@ describe("agent threads service", () => {
 
     expect(error).toBeInstanceOf(AgentActionRejectedError);
     expect(error).toMatchObject({
+      actionName: "ceird.labels.create",
       message:
         "Agent action operation id was already used for a different request",
-      name: "ceird.labels.create",
     });
     expect(actionCalls).toBe(0);
+  });
+
+  it("rejects already-running replays without executing the action again", async () => {
+    let actionCalls = 0;
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .runAction({
+              input: { name: "Plumbing" },
+              name: "ceird.labels.create",
+              operationId,
+              threadId,
+            })
+            .pipe(Effect.flip);
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { shouldNotExecute: true };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, { status: "running" }),
+              }),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      actionName: "ceird.labels.create",
+      message: "Agent action operation is already running",
+    });
+    expect(actionCalls).toBe(0);
+  });
+
+  it("preserves the failure category when replaying failed operations", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .runAction({
+              input: { name: "Plumbing" },
+              name: "ceird.labels.create",
+              operationId,
+              threadId,
+            })
+            .pipe(Effect.flip);
+        }),
+        {
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, {
+                  errorMessage: "Storage was unavailable",
+                  result: { tag: "@ceird/agents-core/AgentStorageError" },
+                  status: "failed",
+                }),
+              }),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentStorageError);
+    expect(error).toMatchObject({
+      message: "Storage was unavailable",
+      operation: "action.execute",
+    });
+  });
+
+  it("records the failure category for fresh failed action runs", async () => {
+    let failureResult: unknown;
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .runAction({
+              input: { name: "Plumbing" },
+              name: "ceird.labels.create",
+              operationId,
+              threadId,
+            })
+            .pipe(Effect.flip);
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.fail(new AgentAccessDeniedError({ message: "No access" })),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeFailed: (
+              completedActionRunId: AgentActionRunId,
+              message: string,
+              result: unknown
+            ) =>
+              Effect.sync(() => {
+                failureResult = result;
+
+                return makeActionRun({
+                  errorMessage: message,
+                  id: completedActionRunId,
+                  result,
+                  status: "failed",
+                });
+              }),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(failureResult).toStrictEqual({
+      tag: "@ceird/agents-core/AgentAccessDeniedError",
+    });
   });
 });
 
@@ -204,3 +448,45 @@ type ContextService<Service> = Service extends {
 }
   ? Value
   : never;
+
+function makeBeginRun(
+  input: BeginAgentActionRunInput,
+  overrides: Partial<AgentActionRunBeginProjection> = {}
+): AgentActionRunBeginProjection {
+  return {
+    actionKind: input.actionKind,
+    actionName: input.actionName,
+    errorMessage: null,
+    id: actionRunId,
+    input: input.input,
+    operationId: input.operationId,
+    result: null,
+    status: "running",
+    ...overrides,
+  };
+}
+
+function makeActionRun(
+  overrides: Partial<AgentActionRun> = {}
+): AgentActionRun {
+  return {
+    actionKind: "write",
+    actionName: "ceird.labels.create",
+    completedAt: "2026-05-20T10:00:01.000Z",
+    createdAt: "2026-05-20T10:00:00.000Z",
+    errorMessage: null,
+    id: actionRunId,
+    input: {
+      byteLength: 2,
+      sha256: "0".repeat(64),
+    },
+    operationId,
+    organizationId,
+    result: null,
+    status: "running",
+    threadId,
+    updatedAt: "2026-05-20T10:00:01.000Z",
+    userId,
+    ...overrides,
+  };
+}

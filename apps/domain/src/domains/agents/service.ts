@@ -21,7 +21,7 @@ import type {
   RunAgentActionResponse,
 } from "@ceird/agents-core";
 import { HttpServerRequest } from "@effect/platform";
-import { Config, Effect, Either, Option } from "effect";
+import { Config, Effect, Either, Option, Schema } from "effect";
 
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -178,13 +178,20 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
           );
         }
 
-        const token = yield* Effect.promise(() =>
-          signAgentConnectToken({
-            agentInstanceName: thread.agentInstanceName,
-            secret: config.internalSecret,
-            ttlSeconds: config.connectTokenTtlSeconds,
-          })
-        );
+        const token = yield* Effect.tryPromise({
+          catch: (error) =>
+            new AgentStorageError({
+              cause: formatUnknownCause(error),
+              message: "Agent connect token signing failed",
+              operation: "thread.authorizeConnect",
+            }),
+          try: () =>
+            signAgentConnectToken({
+              agentInstanceName: thread.agentInstanceName,
+              secret: config.internalSecret,
+              ttlSeconds: config.connectTokenTtlSeconds,
+            }),
+        });
 
         return {
           agentInstanceName: thread.agentInstanceName,
@@ -219,6 +226,12 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const runAction = Effect.fn("AgentThreadsService.runAction")(function* (
         input: RunAgentActionInput
       ) {
+        yield* Effect.annotateCurrentSpan("agent.threadId", input.threadId);
+        yield* Effect.annotateCurrentSpan(
+          "agent.operationId",
+          input.operationId
+        );
+        yield* Effect.annotateCurrentSpan("agent.actionName", input.name);
         yield* ensureInternalRequest(config.internalSecret);
 
         const threadActor = yield* threadsRepository
@@ -238,6 +251,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         }
 
         const actionKind = getAgentActionKind(input.name);
+        yield* Effect.annotateCurrentSpan("agent.actionKind", actionKind);
         const ledgerInput = yield* makeActionInputLedgerValue(
           input.name,
           input.input
@@ -254,6 +268,15 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
               userId: threadActor.actor.userId,
             })
             .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
+          yield* Effect.annotateCurrentSpan("agent.actionRunId", begin.run.id);
+          yield* Effect.annotateCurrentSpan(
+            "agent.actionRunInserted",
+            begin.inserted
+          );
+          yield* Effect.annotateCurrentSpan(
+            "agent.actionRunStatus",
+            begin.run.status
+          );
 
           if (!begin.inserted) {
             yield* ensureReplayMatchesCurrentRequest(begin.run, {
@@ -302,7 +325,11 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
           }
 
           yield* actionRunsRepository
-            .completeFailed(begin.run.id, result.left.message)
+            .completeFailed(
+              begin.run.id,
+              result.left.message,
+              makeActionRunFailureLedgerValue(result.left)
+            )
             .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
 
           return rejectActionRun(result.left);
@@ -339,9 +366,10 @@ function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
 }
 
 function failStorage(operation: AgentStorageOperation) {
-  return (_error: unknown) =>
+  return (error: unknown) =>
     Effect.fail(
       new AgentStorageError({
+        cause: formatUnknownCause(error),
         message: "Agent storage operation failed",
         operation,
       })
@@ -378,12 +406,41 @@ type ActionRunOutcome =
       readonly error: ActionRunFailure;
     };
 
+const ACTION_RUN_FAILURE_LEDGER_TAGS = [
+  "@ceird/agents-core/AgentAccessDeniedError",
+  "@ceird/agents-core/AgentActionRejectedError",
+  "@ceird/agents-core/AgentStorageError",
+] as const;
+const AgentActionRunFailureLedgerValueSchema = Schema.Struct({
+  tag: Schema.Literal(...ACTION_RUN_FAILURE_LEDGER_TAGS),
+});
+type AgentActionRunFailureLedgerValue = Schema.Schema.Type<
+  typeof AgentActionRunFailureLedgerValueSchema
+>;
+const isAgentActionRunFailureLedgerValue = Schema.is(
+  AgentActionRunFailureLedgerValueSchema
+);
+
 function succeedActionRun(response: RunAgentActionResponse): ActionRunOutcome {
   return { _tag: "Succeeded", response };
 }
 
 function rejectActionRun(error: ActionRunFailure): ActionRunOutcome {
   return { _tag: "Rejected", error };
+}
+
+function makeActionRunFailureLedgerValue(
+  error: ActionRunFailure
+): AgentActionRunFailureLedgerValue {
+  if (error instanceof AgentAccessDeniedError) {
+    return { tag: "@ceird/agents-core/AgentAccessDeniedError" };
+  }
+
+  if (error instanceof AgentStorageError) {
+    return { tag: "@ceird/agents-core/AgentStorageError" };
+  }
+
+  return { tag: "@ceird/agents-core/AgentActionRejectedError" };
 }
 
 function actionRunResultToOutcome(
@@ -453,9 +510,9 @@ function ensureReplayMatchesCurrentRequest(
 
   return Effect.fail(
     new AgentActionRejectedError({
+      actionName: request.actionName,
       message:
         "Agent action operation id was already used for a different request",
-      name: request.actionName,
     })
   );
 }
@@ -470,15 +527,16 @@ function makeActionInputLedgerValue(
     const serialized = yield* Effect.try({
       catch: () =>
         new AgentActionRejectedError({
+          actionName,
           message: "Agent action input could not be recorded",
-          name: actionName,
         }),
       try: () => JSON.stringify(input) ?? "null",
     });
     const bytes = actionInputLedgerTextEncoder.encode(serialized);
     const digest = yield* Effect.tryPromise({
-      catch: () =>
+      catch: (error) =>
         new AgentStorageError({
+          cause: formatUnknownCause(error),
           message: "Agent storage operation failed",
           operation: "action.run",
         }),
@@ -504,7 +562,7 @@ function replayActionRun(
     readonly name: AgentActionName;
     readonly result: unknown;
   }
-) {
+): Effect.Effect<RunAgentActionResponse, ActionRunFailure> {
   switch (status) {
     case "succeeded": {
       return Effect.succeed({
@@ -514,28 +572,73 @@ function replayActionRun(
       });
     }
     case "failed": {
-      return Effect.fail(
-        new AgentActionRejectedError({
-          message: input.message ?? "Agent action operation already failed",
-          name: input.name,
-        })
-      );
+      return replayFailedActionRun(input);
     }
     case "running": {
       return Effect.fail(
         new AgentActionRejectedError({
+          actionName: input.name,
           message: "Agent action operation is already running",
-          name: input.name,
         })
       );
     }
     default: {
       return Effect.fail(
         new AgentActionRejectedError({
+          actionName: input.name,
           message: `Unsupported agent action status: ${String(status)}`,
-          name: input.name,
         })
       );
     }
   }
+}
+
+function replayFailedActionRun(input: {
+  readonly message: string | null;
+  readonly name: AgentActionName;
+  readonly result: unknown;
+}): Effect.Effect<never, ActionRunFailure> {
+  const message = input.message ?? "Agent action operation already failed";
+  const failure =
+    isAgentActionRunFailureLedgerValue(input.result) === true
+      ? input.result
+      : ({ tag: "@ceird/agents-core/AgentActionRejectedError" } as const);
+
+  switch (failure.tag) {
+    case "@ceird/agents-core/AgentAccessDeniedError": {
+      return Effect.fail(new AgentAccessDeniedError({ message }));
+    }
+    case "@ceird/agents-core/AgentStorageError": {
+      return Effect.fail(
+        new AgentStorageError({
+          message,
+          operation: "action.execute",
+        })
+      );
+    }
+    case "@ceird/agents-core/AgentActionRejectedError": {
+      return Effect.fail(
+        new AgentActionRejectedError({
+          actionName: input.name,
+          message,
+        })
+      );
+    }
+    default: {
+      return Effect.fail(
+        new AgentActionRejectedError({
+          actionName: input.name,
+          message,
+        })
+      );
+    }
+  }
+}
+
+function formatUnknownCause(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+
+  return String(error);
 }
