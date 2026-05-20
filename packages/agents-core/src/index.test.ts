@@ -3,11 +3,14 @@ import { ParseResult, Schema } from "effect";
 
 import {
   AgentInstanceName,
+  AGENT_ACTION_MANIFEST_SCHEMA,
+  AGENT_ACTION_NAMES,
   AgentThreadId,
   AgentThreadListResponseSchema,
   AgentConnectTokenInvalidError,
   CreateAgentThreadInputSchema,
   buildAgentInstanceName,
+  getAgentActionDefinition,
   parseAgentInstanceName,
   signAgentConnectToken,
   verifyAgentConnectToken,
@@ -25,6 +28,18 @@ const decodeListResponse = ParseResult.decodeUnknownSync(
 const decodeInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 
 describe("@ceird/agents-core", () => {
+  it("exports the shared agent action registry metadata", () => {
+    expect(AGENT_ACTION_NAMES).toContain("ceird.jobs.create");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.sites.create");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.labels.create");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.organization.members.invite");
+    expect(getAgentActionDefinition("ceird.jobs.create").kind).toBe("write");
+    expect(getAgentActionDefinition("ceird.jobs.remove_label").kind).toBe(
+      "destructive"
+    );
+    expect(AGENT_ACTION_MANIFEST_SCHEMA).toBeDefined();
+  });
+
   it("builds and parses deterministic org/user/thread instance names", () => {
     const name = buildAgentInstanceName({
       organizationId: decodeOrganizationId("org:with/slash"),

@@ -4,6 +4,28 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
 
+export {
+  AGENT_ACTION_KINDS,
+  AGENT_ACTION_MANIFEST_SCHEMA,
+  AgentActionConfirmationPolicy,
+  AgentActionKindSchema,
+  AgentActionManifestItemSchema,
+  AgentActionManifestResponseSchema,
+  defineAgentAction,
+} from "./action-registry.js";
+export type {
+  AgentActionConfirmationPolicy as AgentActionConfirmationPolicyType,
+  AgentActionKind,
+  AgentActionManifestItem,
+  AgentActionManifestResponse,
+  AgentActionSpec,
+} from "./action-registry.js";
+import type { AgentActionSpec } from "./action-registry.js";
+import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
+import { labelAgentActions } from "./actions/labels.js";
+import { organizationAgentActions } from "./actions/organization.js";
+import { serviceAreaAgentActions, siteAgentActions } from "./actions/sites.js";
+
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
@@ -113,40 +135,44 @@ export type AgentConnectAuthorization = Schema.Schema.Type<
   typeof AgentConnectAuthorizationSchema
 >;
 
-export const AGENT_ACTION_NAMES = [
-  "ceird.labels.list",
-  "ceird.sites.options",
-  "ceird.jobs.list",
-  "ceird.jobs.detail",
-  "ceird.jobs.options",
-  "ceird.jobs.add_comment",
-  "ceird.jobs.assign_label",
-  "ceird.jobs.remove_label",
+export const AGENT_ACTIONS = [
+  ...labelAgentActions,
+  ...siteAgentActions,
+  ...serviceAreaAgentActions,
+  ...jobAgentActions,
+  ...rateCardAgentActions,
+  ...organizationAgentActions,
 ] as const;
+
+type AgentActionNameTuple = readonly [
+  (typeof AGENT_ACTIONS)[number]["name"],
+  ...Array<(typeof AGENT_ACTIONS)[number]["name"]>,
+];
+
+export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
+  (action) => action.name
+) as unknown as AgentActionNameTuple;
 export const AgentActionNameSchema = Schema.Literal(...AGENT_ACTION_NAMES);
 export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
 
-export const AGENT_ACTION_KINDS = ["read", "write", "destructive"] as const;
-export const AgentActionKindSchema = Schema.Literal(...AGENT_ACTION_KINDS);
-export type AgentActionKind = Schema.Schema.Type<typeof AgentActionKindSchema>;
+const AGENT_ACTIONS_BY_NAME = Object.fromEntries(
+  AGENT_ACTIONS.map((action) => [action.name, action])
+) as Record<AgentActionName, (typeof AGENT_ACTIONS)[number]>;
 
-interface AgentActionDefinition {
-  readonly kind: AgentActionKind;
+export const AGENT_ACTION_DEFINITIONS = AGENT_ACTIONS_BY_NAME;
+
+export function getAgentActionDefinition(
+  name: AgentActionName
+): AgentActionSpec<AgentActionName> {
+  const action = AGENT_ACTIONS_BY_NAME[name];
+
+  return action;
 }
 
-export const AGENT_ACTION_DEFINITIONS = {
-  "ceird.jobs.add_comment": { kind: "write" },
-  "ceird.jobs.assign_label": { kind: "destructive" },
-  "ceird.jobs.detail": { kind: "read" },
-  "ceird.jobs.list": { kind: "read" },
-  "ceird.jobs.options": { kind: "read" },
-  "ceird.jobs.remove_label": { kind: "destructive" },
-  "ceird.labels.list": { kind: "read" },
-  "ceird.sites.options": { kind: "read" },
-} satisfies Record<AgentActionName, AgentActionDefinition>;
-
-export function getAgentActionKind(name: AgentActionName): AgentActionKind {
-  return AGENT_ACTION_DEFINITIONS[name].kind;
+export function getAgentActionKind(
+  name: AgentActionName
+): (typeof AGENT_ACTIONS)[number]["kind"] {
+  return getAgentActionDefinition(name).kind;
 }
 
 export const AgentActionOperationId = Schema.String.pipe(

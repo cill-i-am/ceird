@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@ceird/identity-core": "workspace:*",
+    "@ceird/jobs-core": "workspace:*",
+    "@ceird/labels-core": "workspace:*",
+    "@ceird/sites-core": "workspace:*",
     "@effect/platform": "^0.96.1",
     "effect": "^3.21.2"
   },

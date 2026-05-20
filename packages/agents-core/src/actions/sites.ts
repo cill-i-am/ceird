@@ -1,0 +1,195 @@
+import { LabelId } from "@ceird/labels-core";
+import {
+  AddSiteCommentInputSchema,
+  AssignSiteLabelInputSchema,
+  CreateServiceAreaInputSchema,
+  CreateSiteInputSchema,
+  ServiceAreaId,
+  SiteId,
+  SiteListQuerySchema,
+  UpdateServiceAreaInputSchema,
+  UpdateSiteInputSchema,
+} from "@ceird/sites-core";
+import { Schema } from "effect";
+
+import { defineAgentAction } from "../action-registry.js";
+
+const EmptyActionInputSchema = Schema.Struct({});
+
+const SitePathInputSchema = Schema.Struct({
+  siteId: SiteId,
+});
+
+const UpdateSiteActionInputSchema = Schema.Struct({
+  input: UpdateSiteInputSchema,
+  siteId: SiteId,
+});
+
+const SiteCommentActionInputSchema = Schema.Struct({
+  input: AddSiteCommentInputSchema,
+  siteId: SiteId,
+});
+
+const SiteLabelActionInputSchema = Schema.Struct({
+  input: AssignSiteLabelInputSchema,
+  siteId: SiteId,
+});
+
+const RemoveSiteLabelActionInputSchema = Schema.Struct({
+  labelId: LabelId,
+  siteId: SiteId,
+});
+
+const UpdateServiceAreaActionInputSchema = Schema.Struct({
+  input: UpdateServiceAreaInputSchema,
+  serviceAreaId: ServiceAreaId,
+});
+
+export const siteAgentActions = [
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "List site options",
+      summary: "Read site and service area options.",
+      target: "sites",
+    },
+    inputSchema: EmptyActionInputSchema,
+    kind: "read",
+    modelDescription: "List site options available in the organization.",
+    modelName: "listSiteOptions",
+    name: "ceird.sites.options",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "List sites",
+      summary: "Read organization sites.",
+      target: "sites",
+    },
+    inputSchema: SiteListQuerySchema,
+    kind: "read",
+    modelDescription: "List Ceird sites, optionally filtered by service area.",
+    modelName: "listSites",
+    name: "ceird.sites.list",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Create site",
+      summary: "Create a new customer site.",
+      target: "site",
+    },
+    inputSchema: CreateSiteInputSchema,
+    kind: "write",
+    modelDescription: "Create a Ceird site with address and access details.",
+    modelName: "createSite",
+    name: "ceird.sites.create",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Update site",
+      summary: "Update an existing customer site.",
+      target: "site",
+    },
+    inputSchema: UpdateSiteActionInputSchema,
+    kind: "write",
+    modelDescription: "Update an existing Ceird site by ID.",
+    modelName: "updateSite",
+    name: "ceird.sites.update",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "List site comments",
+      summary: "Read comments for a site.",
+      target: "site",
+    },
+    inputSchema: SitePathInputSchema,
+    kind: "read",
+    modelDescription: "List comments for a Ceird site by ID.",
+    modelName: "listSiteComments",
+    name: "ceird.sites.comments.list",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Add site comment",
+      summary: "Add a comment to a site.",
+      target: "site",
+    },
+    inputSchema: SiteCommentActionInputSchema,
+    kind: "write",
+    modelDescription: "Add a comment to a Ceird site.",
+    modelName: "addSiteComment",
+    name: "ceird.sites.comments.add",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Assign site label",
+      summary: "Assign a label to a site.",
+      target: "site",
+    },
+    inputSchema: SiteLabelActionInputSchema,
+    kind: "write",
+    modelDescription: "Assign an existing label to a Ceird site.",
+    modelName: "assignSiteLabel",
+    name: "ceird.sites.assign_label",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm_destructive",
+    display: {
+      label: "Remove site label",
+      summary: "Remove a label from a site.",
+      target: "site",
+    },
+    inputSchema: RemoveSiteLabelActionInputSchema,
+    kind: "destructive",
+    modelDescription: "Remove a label from a Ceird site.",
+    modelName: "removeSiteLabel",
+    name: "ceird.sites.remove_label",
+  }),
+] as const;
+
+export const serviceAreaAgentActions = [
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "List service areas",
+      summary: "Read organization service areas.",
+      target: "service areas",
+    },
+    inputSchema: EmptyActionInputSchema,
+    kind: "read",
+    modelDescription: "List Ceird service areas.",
+    modelName: "listServiceAreas",
+    name: "ceird.service_areas.list",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Create service area",
+      summary: "Create a new service area.",
+      target: "service area",
+    },
+    inputSchema: CreateServiceAreaInputSchema,
+    kind: "write",
+    modelDescription: "Create a Ceird service area.",
+    modelName: "createServiceArea",
+    name: "ceird.service_areas.create",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "confirm",
+    display: {
+      label: "Update service area",
+      summary: "Update an existing service area.",
+      target: "service area",
+    },
+    inputSchema: UpdateServiceAreaActionInputSchema,
+    kind: "write",
+    modelDescription: "Update a Ceird service area by ID.",
+    modelName: "updateServiceArea",
+    name: "ceird.service_areas.update",
+  }),
+] as const;
