@@ -282,7 +282,7 @@ describe("domain http integration", () => {
 
       expect(createJobAction).toMatchObject({
         confirmationPolicy: "confirm",
-        executionStatus: "planned",
+        executionStatus: "executable",
         kind: "write",
         name: "ceird.jobs.create",
       });

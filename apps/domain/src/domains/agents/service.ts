@@ -9,6 +9,7 @@ import {
   timingSafeEqual,
 } from "@ceird/agents-core";
 import type {
+  AgentActionKind,
   AgentActionName,
   AgentActionRunId,
   AgentActionRunStatus,
@@ -254,6 +255,12 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
             .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
 
           if (!begin.inserted) {
+            yield* ensureReplayMatchesCurrentRequest(begin.run, {
+              actionKind,
+              actionName: input.name,
+              input: ledgerInput,
+            });
+
             if (isReExecutableReadReplay(begin.run)) {
               const replayed = yield* actions
                 .execute(threadActor.actor, input.name, input.input)
@@ -422,6 +429,54 @@ function isReExecutableReadReplay(input: {
   );
 }
 
+interface ActionInputLedgerValue {
+  readonly byteLength: number;
+  readonly sha256: string;
+}
+
+function ensureReplayMatchesCurrentRequest(
+  run: {
+    readonly actionKind: AgentActionKind;
+    readonly actionName: AgentActionName;
+    readonly input: unknown;
+  },
+  request: {
+    readonly actionKind: AgentActionKind;
+    readonly actionName: AgentActionName;
+    readonly input: ActionInputLedgerValue;
+  }
+) {
+  if (
+    run.actionKind === request.actionKind &&
+    run.actionName === request.actionName &&
+    isSameActionInputLedgerValue(run.input, request.input)
+  ) {
+    return Effect.void;
+  }
+
+  return Effect.fail(
+    new AgentActionRejectedError({
+      message:
+        "Agent action operation id was already used for a different request",
+      name: request.actionName,
+    })
+  );
+}
+
+function isSameActionInputLedgerValue(
+  stored: unknown,
+  current: ActionInputLedgerValue
+): boolean {
+  return (
+    typeof stored === "object" &&
+    stored !== null &&
+    "byteLength" in stored &&
+    "sha256" in stored &&
+    stored.byteLength === current.byteLength &&
+    stored.sha256 === current.sha256
+  );
+}
+
 const actionInputLedgerTextEncoder = new TextEncoder();
 
 function makeActionInputLedgerValue(
@@ -450,7 +505,7 @@ function makeActionInputLedgerValue(
     return {
       byteLength: bytes.byteLength,
       sha256: bytesToHex(new Uint8Array(digest)),
-    } as const;
+    } satisfies ActionInputLedgerValue;
   });
 }
 

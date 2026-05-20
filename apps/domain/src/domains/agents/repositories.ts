@@ -78,6 +78,7 @@ interface AgentActionRunBeginProjectionRow {
   readonly action_name: string;
   readonly error_message: string | null;
   readonly id: string;
+  readonly input: unknown;
   readonly inserted: boolean;
   readonly operation_id: string;
   readonly result: unknown | null;
@@ -117,6 +118,7 @@ export interface AgentActionRunBeginProjection {
   readonly actionName: AgentActionName;
   readonly errorMessage: string | null;
   readonly id: AgentActionRunId;
+  readonly input: unknown;
   readonly operationId: AgentActionOperationId;
   readonly result: unknown | null;
   readonly status: AgentActionRunStatusType;
@@ -359,6 +361,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
             operation_id,
             action_name,
             action_kind,
+            input,
             status,
             error_message,
             result,
@@ -467,6 +470,7 @@ function mapActionRunBeginProjectionRow(
     actionName: decodeAgentActionName(row.action_name),
     errorMessage: row.error_message,
     id: decodeAgentActionRunId(row.id),
+    input: row.input,
     operationId: decodeAgentActionOperationId(row.operation_id),
     result: row.result,
     status: decodeAgentActionRunStatus(row.status),

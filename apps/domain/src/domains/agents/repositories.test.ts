@@ -111,6 +111,7 @@ describe("agent repositories", () => {
     expect(firstRun.inserted).toBe(true);
     expect(replayedRun.inserted).toBe(false);
     expect(replayedRun.run.id).toBe(firstRun.run.id);
+    expect(replayedRun.run.input).toStrictEqual({});
     expect(completedRun.status).toBe("succeeded");
     expect(completedRun.result).toStrictEqual({ labels: [] });
   });
