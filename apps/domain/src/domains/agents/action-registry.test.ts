@@ -1228,6 +1228,10 @@ function runAgentAction(
           options
         )
       )
+    ),
+    Effect.provideService(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
     )
   );
 }

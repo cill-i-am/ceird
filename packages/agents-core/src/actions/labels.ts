@@ -7,7 +7,10 @@ import { Schema } from "effect";
 
 import { defineAgentAction } from "../action-registry.js";
 
-const EmptyActionInputSchema = Schema.Struct({});
+const EmptyActionInputSchema = Schema.Record({
+  key: Schema.String,
+  value: Schema.Never,
+});
 
 const LabelPathInputSchema = Schema.Struct({
   labelId: LabelId,

@@ -85,6 +85,14 @@ interface AgentActionRunBeginProjectionRow {
   readonly status: string;
 }
 
+export const AgentActionInputLedgerValueSchema = Schema.Struct({
+  byteLength: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  sha256: Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/u)),
+});
+export type AgentActionInputLedgerValue = Schema.Schema.Type<
+  typeof AgentActionInputLedgerValueSchema
+>;
+
 export interface CreateAgentThreadRecordInput {
   readonly organizationId: OrganizationId;
   readonly title?: string | undefined;
@@ -103,7 +111,7 @@ export interface AgentActionRun {
   readonly createdAt: string;
   readonly errorMessage: string | null;
   readonly id: AgentActionRunId;
-  readonly input: unknown;
+  readonly input: AgentActionInputLedgerValue;
   readonly operationId: AgentActionOperationId;
   readonly organizationId: OrganizationId;
   readonly result: unknown | null;
@@ -118,7 +126,7 @@ export interface AgentActionRunBeginProjection {
   readonly actionName: AgentActionName;
   readonly errorMessage: string | null;
   readonly id: AgentActionRunId;
-  readonly input: unknown;
+  readonly input: AgentActionInputLedgerValue;
   readonly operationId: AgentActionOperationId;
   readonly result: unknown | null;
   readonly status: AgentActionRunStatusType;
@@ -127,7 +135,7 @@ export interface AgentActionRunBeginProjection {
 export interface BeginAgentActionRunInput {
   readonly actionKind: AgentActionKind;
   readonly actionName: AgentActionName;
-  readonly input: unknown;
+  readonly input: AgentActionInputLedgerValue;
   readonly operationId: AgentActionOperationId;
   readonly organizationId: OrganizationId;
   readonly threadId: AgentThreadId;
@@ -151,6 +159,9 @@ const decodeAgentActionRunStatus =
 const decodeAgentInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 const decodeAgentActionName = Schema.decodeUnknownSync(AgentActionNameSchema);
 const decodeAgentActionKind = Schema.decodeUnknownSync(AgentActionKindSchema);
+const decodeAgentActionInputLedgerValue = Schema.decodeUnknownSync(
+  AgentActionInputLedgerValueSchema
+);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
 const decodeTitle = Schema.decodeUnknownSync(
@@ -331,7 +342,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
       const begin = Effect.fn("AgentActionRunsRepository.begin")(function* (
         input: BeginAgentActionRunInput
       ) {
-        const rows = yield* sql<AgentActionRunBeginProjectionRow>`
+        const insertedRows = yield* sql<AgentActionRunBeginProjectionRow>`
           insert into agent_action_runs (
             id,
             thread_id,
@@ -354,8 +365,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
             'running',
             ${input.input}
           )
-          on conflict (thread_id, operation_id) do update
-          set operation_id = excluded.operation_id
+          on conflict (thread_id, operation_id) do nothing
           returning
             id,
             operation_id,
@@ -365,14 +375,41 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
             status,
             error_message,
             result,
-            (xmax = 0) as inserted
+            true as inserted
         `;
+        const [insertedRow] = insertedRows;
 
-        const row = yield* getRequiredRow(rows, "agent action run");
+        if (insertedRow !== undefined) {
+          return {
+            inserted: true,
+            run: mapActionRunBeginProjectionRow(insertedRow),
+          } satisfies BeginAgentActionRunResult;
+        }
+
+        const replayedRows = yield* sql<AgentActionRunBeginProjectionRow>`
+          select
+            id,
+            operation_id,
+            action_name,
+            action_kind,
+            input,
+            status,
+            error_message,
+            result,
+            false as inserted
+          from agent_action_runs
+          where thread_id = ${input.threadId}
+            and operation_id = ${input.operationId}
+          limit 1
+        `;
+        const replayedRow = yield* getRequiredRow(
+          replayedRows,
+          "agent action run"
+        );
 
         return {
-          inserted: row.inserted,
-          run: mapActionRunBeginProjectionRow(row),
+          inserted: false,
+          run: mapActionRunBeginProjectionRow(replayedRow),
         } satisfies BeginAgentActionRunResult;
       });
 
@@ -451,7 +488,7 @@ function mapActionRunRow(row: AgentActionRunRow): AgentActionRun {
     createdAt: row.created_at.toISOString(),
     errorMessage: row.error_message,
     id: decodeAgentActionRunId(row.id),
-    input: row.input,
+    input: decodeAgentActionInputLedgerValue(row.input),
     operationId: decodeAgentActionOperationId(row.operation_id),
     organizationId: decodeOrganizationId(row.organization_id),
     result: row.result,
@@ -470,7 +507,7 @@ function mapActionRunBeginProjectionRow(
     actionName: decodeAgentActionName(row.action_name),
     errorMessage: row.error_message,
     id: decodeAgentActionRunId(row.id),
-    input: row.input,
+    input: decodeAgentActionInputLedgerValue(row.input),
     operationId: decodeAgentActionOperationId(row.operation_id),
     result: row.result,
     status: decodeAgentActionRunStatus(row.status),

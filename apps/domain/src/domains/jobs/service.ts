@@ -62,6 +62,7 @@ import {
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
+import { WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG } from "./errors.js";
 import type { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   ContactsRepository,
@@ -70,9 +71,6 @@ import {
   JobsRepository,
 } from "./repositories.js";
 import type { JobsRepositoryAccess } from "./repositories.js";
-
-const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
-  "@ceird/domains/jobs/WorkItemOrganizationMismatchError" as const;
 
 export class JobsService extends Effect.Service<JobsService>()(
   "@ceird/domains/jobs/JobsService",

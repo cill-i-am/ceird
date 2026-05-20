@@ -34,13 +34,14 @@ import {
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
 } from "@ceird/sites-core";
-import { HttpServerRequest } from "@effect/platform";
+import type { HttpServerRequest } from "@effect/platform";
 import { Effect, Layer } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { ConfigurationService } from "../jobs/configuration-service.js";
+import { WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG } from "../jobs/errors.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
@@ -63,8 +64,6 @@ import {
 import { SitesService } from "../sites/service.js";
 import { getDomainAgentActionHandler } from "./action-registry.js";
 
-const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
-  "@ceird/domains/jobs/WorkItemOrganizationMismatchError";
 const ACCESS_DENIED_ERROR_TAGS = [
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
   JOB_ACCESS_DENIED_ERROR_TAG,
@@ -139,29 +138,6 @@ export class AgentActions extends Effect.Service<AgentActions>()(
         input: unknown
       ) {
         const handler = getDomainAgentActionHandler(name);
-        const sitesServiceLayer = makeSitesServiceLayer(actor, {
-          commentsRepository,
-          organizationAuthorization,
-          serviceAreasRepository,
-          siteGeocoder,
-          siteLabelAssignmentsRepository,
-          sitesRepository,
-        });
-        const jobsServiceLayer = makeJobsServiceLayer(actor, {
-          contactsRepository,
-          jobLabelAssignmentsRepository,
-          jobsActivityRecorder,
-          jobsAuthorization,
-          jobsRepository,
-          labelsRepository,
-          serviceAreasRepository,
-          siteGeocoder,
-          sitesRepository,
-        });
-        const configurationServiceLayer = makeConfigurationServiceLayer(actor, {
-          jobsAuthorization,
-          rateCardsRepository,
-        });
         const action =
           handler === undefined
             ? Effect.fail(
@@ -170,46 +146,26 @@ export class AgentActions extends Effect.Service<AgentActions>()(
                   name,
                 })
               )
-            : handler
-                .execute(actor, input)
-                .pipe(
-                  Effect.provide(configurationServiceLayer),
-                  Effect.provide(jobsServiceLayer),
-                  Effect.provide(sitesServiceLayer),
-                  Effect.provideService(ContactsRepository, contactsRepository),
-                  Effect.provideService(
-                    JobLabelAssignmentsRepository,
-                    jobLabelAssignmentsRepository
-                  ),
-                  Effect.provideService(
-                    JobsActivityRecorder,
-                    jobsActivityRecorder
-                  ),
-                  Effect.provideService(JobsAuthorization, jobsAuthorization),
-                  Effect.provideService(JobsRepository, jobsRepository),
-                  Effect.provideService(LabelsRepository, labelsRepository),
-                  Effect.provideService(
-                    OrganizationAuthorization,
-                    organizationAuthorization
-                  ),
-                  Effect.provideService(
-                    RateCardsRepository,
-                    rateCardsRepository
-                  ),
-                  Effect.provideService(
-                    ServiceAreasRepository,
-                    serviceAreasRepository
-                  ),
-                  Effect.provideService(
-                    SiteLabelAssignmentsRepository,
-                    siteLabelAssignmentsRepository
-                  ),
-                  Effect.provideService(
-                    HttpServerRequest.HttpServerRequest,
-                    {} as HttpServerRequest.HttpServerRequest
-                  ),
-                  Effect.provideService(SitesRepository, sitesRepository)
-                );
+            : provideActionServices(
+                handler.execute(actor, input),
+                name,
+                actor,
+                {
+                  commentsRepository,
+                  contactsRepository,
+                  jobLabelAssignmentsRepository,
+                  jobsActivityRecorder,
+                  jobsAuthorization,
+                  jobsRepository,
+                  labelsRepository,
+                  organizationAuthorization,
+                  rateCardsRepository,
+                  serviceAreasRepository,
+                  siteGeocoder,
+                  siteLabelAssignmentsRepository,
+                  sitesRepository,
+                }
+              );
 
         return yield* action.pipe(
           Effect.mapError((error) => mapActionError(name, error))
@@ -245,6 +201,116 @@ interface JobsServiceLayerDependencies {
 interface ConfigurationServiceLayerDependencies {
   readonly jobsAuthorization: JobsAuthorization;
   readonly rateCardsRepository: RateCardsRepository;
+}
+
+type AgentActionRequirements =
+  | ConfigurationService
+  | LabelsRepository
+  | OrganizationAuthorization
+  | ServiceAreasRepository
+  | SitesRepository
+  | JobsService
+  | SitesService
+  | HttpServerRequest.HttpServerRequest;
+
+type DirectAgentActionRequirements =
+  | ContactsRepository
+  | JobLabelAssignmentsRepository
+  | JobsActivityRecorder
+  | JobsAuthorization
+  | JobsRepository
+  | LabelsRepository
+  | OrganizationAuthorization
+  | RateCardsRepository
+  | ServiceAreasRepository
+  | SiteLabelAssignmentsRepository
+  | SitesRepository
+  | HttpServerRequest.HttpServerRequest;
+
+interface ActionServiceDependencies
+  extends
+    SitesServiceLayerDependencies,
+    JobsServiceLayerDependencies,
+    ConfigurationServiceLayerDependencies {}
+
+function provideActionServices(
+  action: Effect.Effect<unknown, unknown, AgentActionRequirements>,
+  name: AgentActionName,
+  actor: OrganizationActor,
+  dependencies: ActionServiceDependencies
+): Effect.Effect<unknown, unknown, HttpServerRequest.HttpServerRequest> {
+  return provideDirectActionServices(
+    provideDerivedActionService(action, name, actor, dependencies),
+    dependencies
+  );
+}
+
+function provideDerivedActionService(
+  action: Effect.Effect<unknown, unknown, AgentActionRequirements>,
+  name: AgentActionName,
+  actor: OrganizationActor,
+  dependencies: ActionServiceDependencies
+): Effect.Effect<unknown, unknown, DirectAgentActionRequirements> {
+  if (name.startsWith("ceird.jobs.")) {
+    return action.pipe(
+      Effect.provide(makeJobsServiceLayer(actor, dependencies))
+    ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
+  }
+
+  if (name.startsWith("ceird.sites.")) {
+    return action.pipe(
+      Effect.provide(makeSitesServiceLayer(actor, dependencies))
+    ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
+  }
+
+  if (name.startsWith("ceird.rate_cards.")) {
+    return action.pipe(
+      Effect.provide(makeConfigurationServiceLayer(actor, dependencies))
+    ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
+  }
+
+  return action as Effect.Effect<
+    unknown,
+    unknown,
+    DirectAgentActionRequirements
+  >;
+}
+
+function provideDirectActionServices(
+  action: Effect.Effect<unknown, unknown, DirectAgentActionRequirements>,
+  dependencies: ActionServiceDependencies
+): Effect.Effect<unknown, unknown, HttpServerRequest.HttpServerRequest> {
+  return action.pipe(
+    Effect.provideService(ContactsRepository, dependencies.contactsRepository),
+    Effect.provideService(
+      JobLabelAssignmentsRepository,
+      dependencies.jobLabelAssignmentsRepository
+    ),
+    Effect.provideService(
+      JobsActivityRecorder,
+      dependencies.jobsActivityRecorder
+    ),
+    Effect.provideService(JobsAuthorization, dependencies.jobsAuthorization),
+    Effect.provideService(JobsRepository, dependencies.jobsRepository),
+    Effect.provideService(LabelsRepository, dependencies.labelsRepository),
+    Effect.provideService(
+      OrganizationAuthorization,
+      dependencies.organizationAuthorization
+    ),
+    Effect.provideService(
+      RateCardsRepository,
+      dependencies.rateCardsRepository
+    ),
+    Effect.provideService(
+      ServiceAreasRepository,
+      dependencies.serviceAreasRepository
+    ),
+    Effect.provideService(
+      SiteLabelAssignmentsRepository,
+      dependencies.siteLabelAssignmentsRepository
+    ),
+    Effect.provideService(SitesRepository, dependencies.sitesRepository)
+  );
 }
 
 function makeJobsServiceLayer(

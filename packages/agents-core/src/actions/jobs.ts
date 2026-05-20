@@ -21,8 +21,9 @@ import { Schema } from "effect";
 
 import { defineAgentAction } from "../action-registry.js";
 
-const EmptyActionInputSchema = Schema.Struct({}).annotations({
-  parseOptions: { onExcessProperty: "error" },
+const EmptyActionInputSchema = Schema.Record({
+  key: Schema.String,
+  value: Schema.Never,
 });
 
 const JobPathInputSchema = Schema.Struct({

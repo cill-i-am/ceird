@@ -70,12 +70,17 @@ describe("agent repositories", () => {
       AgentThreadsRepository.resolveActiveThreadActor(thread.id)
     );
     const operationId = decodeAgentActionOperationId("tool-call:1");
+    const inputLedgerValue = {
+      byteLength: 2,
+      sha256:
+        "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    };
     const firstRun = await runAgentEffect(
       testDatabase.url,
       AgentActionRunsRepository.begin({
         actionKind: "read",
         actionName: "ceird.labels.list",
-        input: {},
+        input: inputLedgerValue,
         operationId,
         organizationId: identity.organizationId,
         threadId: thread.id,
@@ -87,7 +92,7 @@ describe("agent repositories", () => {
       AgentActionRunsRepository.begin({
         actionKind: "read",
         actionName: "ceird.labels.list",
-        input: {},
+        input: inputLedgerValue,
         operationId,
         organizationId: identity.organizationId,
         threadId: thread.id,
@@ -111,7 +116,7 @@ describe("agent repositories", () => {
     expect(firstRun.inserted).toBe(true);
     expect(replayedRun.inserted).toBe(false);
     expect(replayedRun.run.id).toBe(firstRun.run.id);
-    expect(replayedRun.run.input).toStrictEqual({});
+    expect(replayedRun.run.input).toStrictEqual(inputLedgerValue);
     expect(completedRun.status).toBe("succeeded");
     expect(completedRun.result).toStrictEqual({ labels: [] });
   });

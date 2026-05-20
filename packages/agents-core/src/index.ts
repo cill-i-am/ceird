@@ -157,6 +157,12 @@ export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
 ) as unknown as AgentActionNameTuple;
 export const AgentActionNameSchema = Schema.Literal(...AGENT_ACTION_NAMES);
 export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
+export type AgentActionDefinition<
+  Name extends AgentActionName = AgentActionName,
+> = Extract<(typeof AGENT_ACTIONS)[number], { readonly name: Name }>;
+export type AgentActionInput<Name extends AgentActionName> = Schema.Schema.Type<
+  AgentActionDefinition<Name>["inputSchema"]
+>;
 
 export const AGENT_EXECUTABLE_ACTIONS = AGENT_ACTIONS.filter(
   (action) => action.executionStatus === "executable"
@@ -190,13 +196,10 @@ export const AGENT_ACTION_DEFINITIONS = AGENT_ACTIONS_BY_NAME;
 
 export function getAgentActionDefinition<const Name extends AgentActionName>(
   name: Name
-): Extract<(typeof AGENT_ACTIONS)[number], { readonly name: Name }> {
+): AgentActionDefinition<Name> {
   const action = AGENT_ACTIONS_BY_NAME[name];
 
-  return action as unknown as Extract<
-    (typeof AGENT_ACTIONS)[number],
-    { readonly name: Name }
-  >;
+  return action as unknown as AgentActionDefinition<Name>;
 }
 
 export function getAgentActionKind(

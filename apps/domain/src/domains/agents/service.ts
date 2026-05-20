@@ -34,6 +34,7 @@ import {
   AgentActionRunsRepository,
   AgentThreadsRepository,
 } from "./repositories.js";
+import type { AgentActionInputLedgerValue } from "./repositories.js";
 
 const AgentRuntimeConfig = Config.all({
   connectTokenTtlSeconds: Config.integer(
@@ -429,27 +430,23 @@ function isReExecutableReadReplay(input: {
   );
 }
 
-interface ActionInputLedgerValue {
-  readonly byteLength: number;
-  readonly sha256: string;
-}
-
 function ensureReplayMatchesCurrentRequest(
   run: {
     readonly actionKind: AgentActionKind;
     readonly actionName: AgentActionName;
-    readonly input: unknown;
+    readonly input: AgentActionInputLedgerValue;
   },
   request: {
     readonly actionKind: AgentActionKind;
     readonly actionName: AgentActionName;
-    readonly input: ActionInputLedgerValue;
+    readonly input: AgentActionInputLedgerValue;
   }
 ) {
   if (
     run.actionKind === request.actionKind &&
     run.actionName === request.actionName &&
-    isSameActionInputLedgerValue(run.input, request.input)
+    run.input.byteLength === request.input.byteLength &&
+    run.input.sha256 === request.input.sha256
   ) {
     return Effect.void;
   }
@@ -460,20 +457,6 @@ function ensureReplayMatchesCurrentRequest(
         "Agent action operation id was already used for a different request",
       name: request.actionName,
     })
-  );
-}
-
-function isSameActionInputLedgerValue(
-  stored: unknown,
-  current: ActionInputLedgerValue
-): boolean {
-  return (
-    typeof stored === "object" &&
-    stored !== null &&
-    "byteLength" in stored &&
-    "sha256" in stored &&
-    stored.byteLength === current.byteLength &&
-    stored.sha256 === current.sha256
   );
 }
 
@@ -505,7 +488,7 @@ function makeActionInputLedgerValue(
     return {
       byteLength: bytes.byteLength,
       sha256: bytesToHex(new Uint8Array(digest)),
-    } satisfies ActionInputLedgerValue;
+    } satisfies AgentActionInputLedgerValue;
   });
 }
 
