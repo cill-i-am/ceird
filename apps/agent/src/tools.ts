@@ -1,9 +1,16 @@
-import { AgentActionOperationId } from "@ceird/agents-core";
-import type { AgentActionName, AgentInstanceName } from "@ceird/agents-core";
-import { tool } from "ai";
-import type { ToolExecutionOptions, ToolSet } from "ai";
+import {
+  AGENT_EXECUTABLE_ACTIONS,
+  AgentActionOperationId,
+} from "@ceird/agents-core";
+import type {
+  AgentActionName,
+  AgentInstanceName,
+  ExecutableAgentActionName,
+} from "@ceird/agents-core";
+import { jsonSchema, tool } from "ai";
+import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from "ai";
 import { Schema } from "effect";
-import { z } from "zod";
+import * as JSONSchema from "effect/JSONSchema";
 
 import { runDomainAction } from "./domain-client.js";
 import { extractAgentThreadId } from "./instance.js";
@@ -20,7 +27,7 @@ export function createCeirdTools(
   const threadId = extractAgentThreadId(agentInstanceName);
 
   const runAction = async (
-    name: AgentActionName,
+    name: ExecutableAgentActionName,
     input: unknown,
     options: ToolExecutionOptions
   ) => {
@@ -34,96 +41,76 @@ export function createCeirdTools(
     return response.result;
   };
 
-  const readTools = {
-    getJobDetail: tool({
-      description: "Get full detail for a Ceird job by ID.",
-      inputSchema: z.object({
-        workItemId: z.uuid(),
-      }),
-      execute: (input, options) =>
-        runAction("ceird.jobs.detail", input, options),
-    }),
-    getJobOptions: tool({
-      description:
-        "List job form options such as members, labels, sites, contacts, and service areas.",
-      inputSchema: z.object({}),
-      execute: (input, options) =>
-        runAction("ceird.jobs.options", input, options),
-    }),
-    listJobs: tool({
-      description:
-        "List Ceird jobs, optionally filtered by status or limited in size.",
-      inputSchema: z.object({
-        limit: z.number().int().positive().max(100).optional(),
-        status: z
-          .enum([
-            "new",
-            "triaged",
-            "in_progress",
-            "blocked",
-            "completed",
-            "canceled",
-          ])
-          .optional(),
-      }),
-      execute: (input, options) =>
-        runAction(
-          "ceird.jobs.list",
-          {
-            ...input,
-            limit: input.limit === undefined ? undefined : String(input.limit),
-          },
-          options
-        ),
-    }),
-    listLabels: tool({
-      description: "List active Ceird labels for the organization.",
-      inputSchema: z.object({}),
-      execute: (input, options) =>
-        runAction("ceird.labels.list", input, options),
-    }),
-    listSiteOptions: tool({
-      description: "List site options available in the organization.",
-      inputSchema: z.object({}),
-      execute: (input, options) =>
-        runAction("ceird.sites.options", input, options),
-    }),
-  } satisfies ToolSet;
+  const tools: ToolSet = {};
+  const mutationToolsEnabled = env.AGENT_MUTATION_TOOLS_ENABLED === "true";
 
-  if (env.AGENT_MUTATION_TOOLS_ENABLED !== "true") {
-    return readTools;
+  for (const action of AGENT_EXECUTABLE_ACTIONS) {
+    if (action.kind !== "read" && !mutationToolsEnabled) {
+      continue;
+    }
+
+    tools[action.modelName] = tool({
+      description: action.modelDescription,
+      inputSchema: makeToolInputSchema(action),
+      execute: (input, options) => runAction(action.name, input, options),
+    });
   }
 
-  return {
-    ...readTools,
-    addJobComment: tool({
-      description: "Add a comment to a Ceird job.",
-      inputSchema: z.object({
-        body: z.string().min(1).max(4000),
-        workItemId: z.uuid(),
-      }),
-      execute: (input, options) =>
-        runAction("ceird.jobs.add_comment", input, options),
-    }),
-    assignJobLabel: tool({
-      description: "Assign an existing label to a Ceird job.",
-      inputSchema: z.object({
-        labelId: z.uuid(),
-        workItemId: z.uuid(),
-      }),
-      execute: (input, options) =>
-        runAction("ceird.jobs.assign_label", input, options),
-    }),
-    removeJobLabel: tool({
-      description: "Remove a label from a Ceird job.",
-      inputSchema: z.object({
-        labelId: z.uuid(),
-        workItemId: z.uuid(),
-      }),
-      execute: (input, options) =>
-        runAction("ceird.jobs.remove_label", input, options),
-    }),
-  } satisfies ToolSet;
+  return tools;
+}
+
+type ExecutableAgentAction = (typeof AGENT_EXECUTABLE_ACTIONS)[number];
+
+function makeToolInputSchema<const Action extends ExecutableAgentAction>(
+  action: Action
+): FlexibleSchema<unknown> {
+  return jsonSchema(
+    normalizeJsonSchema(
+      JSONSchema.make(action.inputSchema as Schema.Schema.Any)
+    )
+  );
+}
+
+function normalizeJsonSchema(
+  schema: ReturnType<typeof JSONSchema.make>
+): Parameters<typeof jsonSchema>[0] {
+  const objectSchema = schema as {
+    readonly properties?: unknown;
+    readonly type?: unknown;
+  };
+
+  if (
+    (objectSchema.type === "object" &&
+      isRecord(objectSchema.properties) &&
+      Object.keys(objectSchema.properties).length === 0) ||
+    isEffectEmptyStructJsonSchema(schema)
+  ) {
+    return {
+      additionalProperties: false,
+      properties: {},
+      type: "object",
+    };
+  }
+
+  return schema as Parameters<typeof jsonSchema>[0];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isEffectEmptyStructJsonSchema(
+  schema: ReturnType<typeof JSONSchema.make>
+): boolean {
+  const maybeEmptyStruct = schema as {
+    readonly $id?: unknown;
+    readonly anyOf?: unknown;
+  };
+
+  return (
+    maybeEmptyStruct.$id === "/schemas/%7B%7D" &&
+    Array.isArray(maybeEmptyStruct.anyOf)
+  );
 }
 
 function buildOperationId(

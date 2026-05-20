@@ -32,7 +32,7 @@ through Workers AI, and executes Ceird actions by calling the private
 | `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                |
 | `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.         |
 | `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.       |
-| `apps/agent`  | `src/tools.ts`                   | AI SDK tool definitions that call domain-owned Ceird actions.                            |
+| `apps/agent`  | `src/tools.ts`                   | AI SDK tool adapter derived from executable shared action registry metadata.             |
 | `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.             |
 | `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.        |
 | `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                  |
@@ -125,6 +125,10 @@ Domain action execution is registry-driven in
 `executable` in `@ceird/agents-core` are required to have domain handlers;
 planned actions remain in the shared manifest without being callable through
 the private Agent execution boundary.
+The Agent Worker derives model-callable AI SDK tools from
+`AGENT_EXECUTABLE_ACTIONS`, using each action's registry-owned model name,
+description, and input schema rather than maintaining a separate hand-written
+tool contract.
 Browser clients fetch the authenticated public manifest from
 `GET /agent/actions`. The response uses the shared `{ actions: [...] }`
 contract and includes display, model, kind, confirmation policy, and execution
