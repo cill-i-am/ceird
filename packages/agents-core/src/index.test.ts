@@ -79,15 +79,15 @@ describe("@ceird/agents-core", () => {
       manifest.actions.every((action) =>
         AGENT_ACTION_NAMES.includes(action.name)
       )
-    ).toBe(true);
+    ).toBeTruthy();
 
-    if (executableOnly) {
-      const executableNames = new Set<string>(AGENT_EXECUTABLE_ACTION_NAMES);
+    const executableNames = new Set<string>(AGENT_EXECUTABLE_ACTION_NAMES);
 
-      expect(
-        manifest.actions.every((action) => executableNames.has(action.name))
-      ).toBe(true);
-    }
+    expect(
+      executableOnly
+        ? manifest.actions.every((action) => executableNames.has(action.name))
+        : true
+    ).toBeTruthy();
   });
 
   it("rejects manifest items with unknown action names", () => {
@@ -123,9 +123,20 @@ describe("@ceird/agents-core", () => {
       "ceird.jobs.list",
       "ceird.jobs.detail",
       "ceird.jobs.options",
+      "ceird.jobs.create",
+      "ceird.jobs.update",
+      "ceird.jobs.transition",
+      "ceird.jobs.reopen",
+      "ceird.jobs.activity.list",
       "ceird.jobs.add_comment",
+      "ceird.jobs.visits.add",
       "ceird.jobs.assign_label",
       "ceird.jobs.remove_label",
+      "ceird.jobs.cost_lines.add",
+      "ceird.jobs.collaborators.list",
+      "ceird.jobs.collaborators.attach",
+      "ceird.jobs.collaborators.update",
+      "ceird.jobs.collaborators.detach",
     ]);
     expect(
       AGENT_EXECUTABLE_ACTIONS.every(
@@ -133,19 +144,20 @@ describe("@ceird/agents-core", () => {
           action.executionStatus === "executable" &&
           AGENT_ACTION_NAMES.includes(action.name)
       )
-    ).toBe(true);
+    ).toBeTruthy();
   });
 
   it("keeps action kind and confirmation policy invariants consistent", () => {
-    for (const action of AGENT_ACTIONS) {
-      if (action.kind === "read") {
-        expect(action.confirmationPolicy).toBe("none");
-      }
-
-      if (action.kind === "destructive") {
-        expect(action.confirmationPolicy).toBe("confirm_destructive");
-      }
-    }
+    expect(
+      AGENT_ACTIONS.filter((action) => action.kind === "read").every(
+        (action) => action.confirmationPolicy === "none"
+      )
+    ).toBeTruthy();
+    expect(
+      AGENT_ACTIONS.filter((action) => action.kind === "destructive").every(
+        (action) => action.confirmationPolicy === "confirm_destructive"
+      )
+    ).toBeTruthy();
 
     expect(getAgentActionDefinition("ceird.jobs.assign_label").kind).toBe(
       "write"

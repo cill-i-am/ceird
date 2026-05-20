@@ -1,6 +1,7 @@
 import {
   AGENT_ACTIONS,
   AGENT_EXECUTABLE_ACTIONS,
+  AgentActionRunId,
   AgentInstanceName,
 } from "@ceird/agents-core";
 import type { DomainServiceBinding } from "@ceird/domain-core";
@@ -9,27 +10,34 @@ import type { ToolExecutionOptions } from "ai";
 import { Schema } from "effect";
 import { beforeEach, vi } from "vitest";
 
+import type { runDomainAction as runDomainActionFunction } from "./domain-client.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 import { createCeirdTools } from "./tools.js";
 
+type RunDomainAction = typeof runDomainActionFunction;
+
 const { runDomainAction } = vi.hoisted(() => ({
-  runDomainAction: vi.fn(),
+  runDomainAction: vi.fn<RunDomainAction>(),
 }));
 
 vi.mock(import("./domain-client.js"), () => ({
   runDomainAction,
 }));
 
+const decodeAgentActionRunId = Schema.decodeUnknownSync(AgentActionRunId);
 const decodeAgentInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 const agentInstanceName = decodeAgentInstanceName(
   "org:org_123:user:user_123:thread:11111111-1111-4111-8111-111111111111"
+);
+const actionRunId = decodeAgentActionRunId(
+  "22222222-2222-4222-8222-222222222222"
 );
 
 describe("Ceird Agent tools", () => {
   beforeEach(() => {
     runDomainAction.mockReset();
     runDomainAction.mockResolvedValue({
-      actionRunId: "22222222-2222-4222-8222-222222222222",
+      actionRunId,
       replayed: false,
       result: { ok: true },
     });
@@ -47,7 +55,12 @@ describe("Ceird Agent tools", () => {
       expect.arrayContaining(["listServiceAreas"])
     );
     expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
-      expect.arrayContaining(["listSites", "listSiteComments"])
+      expect.arrayContaining([
+        "listSites",
+        "listSiteComments",
+        "listOrganizationActivity",
+        "listJobCollaborators",
+      ])
     );
   });
 
@@ -76,6 +89,15 @@ describe("Ceird Agent tools", () => {
         "removeSiteLabel",
         "createServiceArea",
         "updateServiceArea",
+        "createJob",
+        "updateJob",
+        "transitionJob",
+        "reopenJob",
+        "addJobVisit",
+        "addJobCostLine",
+        "attachJobCollaborator",
+        "updateJobCollaborator",
+        "detachJobCollaborator",
       ])
     );
   });
@@ -90,7 +112,6 @@ describe("Ceird Agent tools", () => {
       (action) => action.executionStatus === "planned"
     ).map((action) => action.modelName);
 
-    expect(Object.keys(tools)).not.toContain("createJob");
     expect(Object.keys(tools)).toEqual(
       expect.arrayContaining([
         "createLabel",
@@ -103,6 +124,15 @@ describe("Ceird Agent tools", () => {
         "removeSiteLabel",
         "createServiceArea",
         "updateServiceArea",
+        "createJob",
+        "updateJob",
+        "transitionJob",
+        "reopenJob",
+        "addJobVisit",
+        "addJobCostLine",
+        "attachJobCollaborator",
+        "updateJobCollaborator",
+        "detachJobCollaborator",
       ])
     );
     expect(Object.keys(tools)).not.toEqual(

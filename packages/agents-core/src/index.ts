@@ -4,6 +4,17 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
 import { ParseResult, Schema } from "effect";
 
+import {
+  AgentActionConfirmationPolicy,
+  AgentActionExecutionStatus,
+  AgentActionKindSchema,
+} from "./action-registry.js";
+import type { AgentActionSpec } from "./action-registry.js";
+import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
+import { labelAgentActions } from "./actions/labels.js";
+import { organizationAgentActions } from "./actions/organization.js";
+import { serviceAreaAgentActions, siteAgentActions } from "./actions/sites.js";
+
 export {
   AGENT_ACTION_KINDS,
   AgentActionConfirmationPolicy,
@@ -17,16 +28,6 @@ export type {
   AgentActionKind,
   AgentActionSpec,
 } from "./action-registry.js";
-import {
-  AgentActionConfirmationPolicy,
-  AgentActionExecutionStatus,
-  AgentActionKindSchema,
-} from "./action-registry.js";
-import type { AgentActionSpec } from "./action-registry.js";
-import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
-import { labelAgentActions } from "./actions/labels.js";
-import { organizationAgentActions } from "./actions/organization.js";
-import { serviceAreaAgentActions, siteAgentActions } from "./actions/sites.js";
 
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
@@ -148,7 +149,7 @@ export const AGENT_ACTIONS = [
 
 type AgentActionNameTuple = readonly [
   (typeof AGENT_ACTIONS)[number]["name"],
-  ...Array<(typeof AGENT_ACTIONS)[number]["name"]>,
+  ...(typeof AGENT_ACTIONS)[number]["name"][],
 ];
 
 export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
@@ -159,16 +160,14 @@ export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
 
 export const AGENT_EXECUTABLE_ACTIONS = AGENT_ACTIONS.filter(
   (action) => action.executionStatus === "executable"
-) as Array<
-  Extract<
-    (typeof AGENT_ACTIONS)[number],
-    { readonly executionStatus: "executable" }
-  >
->;
+) as Extract<
+  (typeof AGENT_ACTIONS)[number],
+  { readonly executionStatus: "executable" }
+>[];
 
 type ExecutableAgentActionNameTuple = readonly [
   (typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"],
-  ...Array<(typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"]>,
+  ...(typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"][],
 ];
 
 export const AGENT_EXECUTABLE_ACTION_NAMES = AGENT_EXECUTABLE_ACTIONS.map(

@@ -137,29 +137,40 @@ Action execution remains private to `POST /agent/internal/actions`.
 
 Current domain actions exposed to the Agent runtime are:
 
-| Action                       | Kind        |
-| ---------------------------- | ----------- |
-| `ceird.labels.list`          | read        |
-| `ceird.labels.create`        | write       |
-| `ceird.labels.update`        | write       |
-| `ceird.labels.delete`        | destructive |
-| `ceird.sites.options`        | read        |
-| `ceird.sites.list`           | read        |
-| `ceird.sites.create`         | write       |
-| `ceird.sites.update`         | write       |
-| `ceird.sites.comments.list`  | read        |
-| `ceird.sites.comments.add`   | write       |
-| `ceird.sites.assign_label`   | write       |
-| `ceird.sites.remove_label`   | destructive |
-| `ceird.service_areas.list`   | read        |
-| `ceird.service_areas.create` | write       |
-| `ceird.service_areas.update` | write       |
-| `ceird.jobs.options`         | read        |
-| `ceird.jobs.list`            | read        |
-| `ceird.jobs.detail`          | read        |
-| `ceird.jobs.add_comment`     | write       |
-| `ceird.jobs.assign_label`    | write       |
-| `ceird.jobs.remove_label`    | destructive |
+| Action                            | Kind        |
+| --------------------------------- | ----------- |
+| `ceird.labels.list`               | read        |
+| `ceird.labels.create`             | write       |
+| `ceird.labels.update`             | write       |
+| `ceird.labels.delete`             | destructive |
+| `ceird.sites.options`             | read        |
+| `ceird.sites.list`                | read        |
+| `ceird.sites.create`              | write       |
+| `ceird.sites.update`              | write       |
+| `ceird.sites.comments.list`       | read        |
+| `ceird.sites.comments.add`        | write       |
+| `ceird.sites.assign_label`        | write       |
+| `ceird.sites.remove_label`        | destructive |
+| `ceird.service_areas.list`        | read        |
+| `ceird.service_areas.create`      | write       |
+| `ceird.service_areas.update`      | write       |
+| `ceird.jobs.options`              | read        |
+| `ceird.jobs.list`                 | read        |
+| `ceird.jobs.detail`               | read        |
+| `ceird.jobs.create`               | write       |
+| `ceird.jobs.update`               | write       |
+| `ceird.jobs.transition`           | write       |
+| `ceird.jobs.reopen`               | write       |
+| `ceird.jobs.activity.list`        | read        |
+| `ceird.jobs.add_comment`          | write       |
+| `ceird.jobs.visits.add`           | write       |
+| `ceird.jobs.assign_label`         | write       |
+| `ceird.jobs.remove_label`         | destructive |
+| `ceird.jobs.cost_lines.add`       | write       |
+| `ceird.jobs.collaborators.list`   | read        |
+| `ceird.jobs.collaborators.attach` | write       |
+| `ceird.jobs.collaborators.update` | write       |
+| `ceird.jobs.collaborators.detach` | destructive |
 
 Read tools are available to the model by default. Write and destructive tools
 are hidden unless `AGENT_MUTATION_TOOLS_ENABLED=true`, which is reserved for a

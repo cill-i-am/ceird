@@ -62,6 +62,7 @@ import {
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
+import type { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
@@ -848,7 +849,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             .pipe(
               Effect.catchTag(
                 WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-                dieWorkItemOrganizationMismatch
+                failWorkItemOrganizationMismatchAsNotFound
               ),
               Effect.catchTag("SqlError", failJobsStorageError)
             );
@@ -874,7 +875,7 @@ export class JobsService extends Effect.Service<JobsService>()(
             .pipe(
               Effect.catchTag(
                 WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-                dieWorkItemOrganizationMismatch
+                failWorkItemOrganizationMismatchAsNotFound
               ),
               Effect.catchTag("SqlError", failJobsStorageError)
             );
@@ -1097,8 +1098,15 @@ function handleOrganizationMemberNotFoundFailure<Error>(
     : Effect.fail(error);
 }
 
-function dieWorkItemOrganizationMismatch(error: unknown) {
-  return Effect.die(error);
+function failWorkItemOrganizationMismatchAsNotFound(
+  error: WorkItemOrganizationMismatchError
+) {
+  return Effect.fail(
+    new JobNotFoundError({
+      message: "Job does not exist",
+      workItemId: error.workItemId,
+    })
+  );
 }
 
 function ensureCanViewOrganizationJobsData(

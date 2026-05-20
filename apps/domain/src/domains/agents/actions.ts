@@ -5,8 +5,20 @@ import {
 } from "@ceird/agents-core";
 import type { AgentActionName } from "@ceird/agents-core";
 import {
+  BLOCKED_REASON_REQUIRED_ERROR_TAG,
+  CONTACT_NOT_FOUND_ERROR_TAG,
+  COORDINATOR_MATCHES_ASSIGNEE_ERROR_TAG,
+  INVALID_JOB_TRANSITION_ERROR_TAG,
   JOB_ACCESS_DENIED_ERROR_TAG,
+  JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
+  JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
+  JOB_LIST_CURSOR_INVALID_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
+  JOB_STORAGE_ERROR_TAG,
+  ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
+  ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
+  VISIT_DURATION_INCREMENT_ERROR_TAG,
 } from "@ceird/jobs-core";
 import {
   LABEL_NAME_CONFLICT_ERROR_TAG,
@@ -32,12 +44,11 @@ import {
   JobLabelAssignmentsRepository,
   JobsRepository,
 } from "../jobs/repositories.js";
+import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
-import {
-  CurrentOrganizationActor,
-  type OrganizationActor,
-} from "../organizations/current-actor.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
 import { ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG } from "../organizations/errors.js";
 import { SiteGeocoder } from "../sites/geocoder.js";
 import type { SiteGeocoderImplementation } from "../sites/geocoder.js";
@@ -51,6 +62,37 @@ import { getDomainAgentActionHandler } from "./action-registry.js";
 
 const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
   "@ceird/domains/jobs/WorkItemOrganizationMismatchError";
+const ACCESS_DENIED_ERROR_TAGS = [
+  ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+  JOB_ACCESS_DENIED_ERROR_TAG,
+  SITE_ACCESS_DENIED_ERROR_TAG,
+] as const;
+const STORAGE_ERROR_TAGS = [
+  JOB_STORAGE_ERROR_TAG,
+  SITE_STORAGE_ERROR_TAG,
+  SITE_GEOCODING_PROVIDER_ERROR_TAG,
+] as const;
+const REJECTED_ERROR_TAGS = [
+  JOB_NOT_FOUND_ERROR_TAG,
+  JOB_LIST_CURSOR_INVALID_ERROR_TAG,
+  ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
+  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
+  INVALID_JOB_TRANSITION_ERROR_TAG,
+  BLOCKED_REASON_REQUIRED_ERROR_TAG,
+  COORDINATOR_MATCHES_ASSIGNEE_ERROR_TAG,
+  VISIT_DURATION_INCREMENT_ERROR_TAG,
+  JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
+  JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
+  CONTACT_NOT_FOUND_ERROR_TAG,
+  ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
+  WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+  LABEL_NOT_FOUND_ERROR_TAG,
+  LABEL_NAME_CONFLICT_ERROR_TAG,
+  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
+  SITE_NOT_FOUND_ERROR_TAG,
+  SITE_LIST_CURSOR_INVALID_ERROR_TAG,
+  SITE_GEOCODING_FAILED_ERROR_TAG,
+] as const;
 
 export class AgentActions extends Effect.Service<AgentActions>()(
   "@ceird/domains/agents/AgentActions",
@@ -99,6 +141,17 @@ export class AgentActions extends Effect.Service<AgentActions>()(
           siteLabelAssignmentsRepository,
           sitesRepository,
         });
+        const jobsServiceLayer = makeJobsServiceLayer(actor, {
+          contactsRepository,
+          jobLabelAssignmentsRepository,
+          jobsActivityRecorder,
+          jobsAuthorization,
+          jobsRepository,
+          labelsRepository,
+          serviceAreasRepository,
+          siteGeocoder,
+          sitesRepository,
+        });
         const action =
           handler === undefined
             ? Effect.fail(
@@ -110,6 +163,7 @@ export class AgentActions extends Effect.Service<AgentActions>()(
             : handler
                 .execute(actor, input)
                 .pipe(
+                  Effect.provide(jobsServiceLayer),
                   Effect.provide(sitesServiceLayer),
                   Effect.provideService(ContactsRepository, contactsRepository),
                   Effect.provideService(
@@ -159,6 +213,50 @@ interface SitesServiceLayerDependencies {
   readonly siteGeocoder: SiteGeocoderImplementation;
   readonly siteLabelAssignmentsRepository: SiteLabelAssignmentsRepository;
   readonly sitesRepository: SitesRepository;
+}
+
+interface JobsServiceLayerDependencies {
+  readonly contactsRepository: ContactsRepository;
+  readonly jobLabelAssignmentsRepository: JobLabelAssignmentsRepository;
+  readonly jobsActivityRecorder: JobsActivityRecorder;
+  readonly jobsAuthorization: JobsAuthorization;
+  readonly jobsRepository: JobsRepository;
+  readonly labelsRepository: LabelsRepository;
+  readonly serviceAreasRepository: ServiceAreasRepository;
+  readonly siteGeocoder: SiteGeocoderImplementation;
+  readonly sitesRepository: SitesRepository;
+}
+
+function makeJobsServiceLayer(
+  actor: OrganizationActor,
+  dependencies: JobsServiceLayerDependencies
+) {
+  return Layer.provide(
+    JobsService.DefaultWithoutDependencies,
+    Layer.mergeAll(
+      Layer.succeed(ContactsRepository, dependencies.contactsRepository),
+      Layer.succeed(
+        CurrentOrganizationActor,
+        CurrentOrganizationActor.make({
+          get: () => Effect.succeed(actor),
+        })
+      ),
+      Layer.succeed(
+        JobLabelAssignmentsRepository,
+        dependencies.jobLabelAssignmentsRepository
+      ),
+      Layer.succeed(JobsActivityRecorder, dependencies.jobsActivityRecorder),
+      Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
+      Layer.succeed(JobsRepository, dependencies.jobsRepository),
+      Layer.succeed(LabelsRepository, dependencies.labelsRepository),
+      Layer.succeed(
+        ServiceAreasRepository,
+        dependencies.serviceAreasRepository
+      ),
+      Layer.succeed(SiteGeocoder, dependencies.siteGeocoder),
+      Layer.succeed(SitesRepository, dependencies.sitesRepository)
+    )
+  );
 }
 
 function makeSitesServiceLayer(
@@ -212,36 +310,20 @@ function mapActionError(
     return error;
   }
 
-  if (
-    isTaggedError(error, ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG) ||
-    isTaggedError(error, JOB_ACCESS_DENIED_ERROR_TAG) ||
-    isTaggedError(error, SITE_ACCESS_DENIED_ERROR_TAG)
-  ) {
+  if (isTaggedWithAny(error, ACCESS_DENIED_ERROR_TAGS)) {
     return new AgentAccessDeniedError({
       message: getStringProperty(error, "message") ?? "Agent action denied",
     });
   }
 
-  if (
-    isTaggedError(error, SITE_STORAGE_ERROR_TAG) ||
-    isTaggedError(error, SITE_GEOCODING_PROVIDER_ERROR_TAG)
-  ) {
+  if (isTaggedWithAny(error, STORAGE_ERROR_TAGS)) {
     return new AgentStorageError({
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
   }
 
-  if (
-    isTaggedError(error, JOB_NOT_FOUND_ERROR_TAG) ||
-    isTaggedError(error, WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG) ||
-    isTaggedError(error, LABEL_NOT_FOUND_ERROR_TAG) ||
-    isTaggedError(error, LABEL_NAME_CONFLICT_ERROR_TAG) ||
-    isTaggedError(error, SERVICE_AREA_NOT_FOUND_ERROR_TAG) ||
-    isTaggedError(error, SITE_NOT_FOUND_ERROR_TAG) ||
-    isTaggedError(error, SITE_LIST_CURSOR_INVALID_ERROR_TAG) ||
-    isTaggedError(error, SITE_GEOCODING_FAILED_ERROR_TAG)
-  ) {
+  if (isTaggedWithAny(error, REJECTED_ERROR_TAGS)) {
     return new AgentActionRejectedError({
       message: getStringProperty(error, "message") ?? "Agent action failed",
       name: actionName,
@@ -253,6 +335,10 @@ function mapActionError(
     message: "Agent action failed",
     name: actionName,
   });
+}
+
+function isTaggedWithAny(error: unknown, tags: readonly string[]): boolean {
+  return tags.some((tag) => isTaggedError(error, tag));
 }
 
 function isTaggedError(error: unknown, tag: string): boolean {
