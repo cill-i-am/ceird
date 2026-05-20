@@ -43,6 +43,9 @@ describe("Ceird Agent tools", () => {
     expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
       expectedReadModelNames
     );
+    expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
+      expect.arrayContaining(["listServiceAreas"])
+    );
   });
 
   it("exposes every executable action model name when mutations are enabled", () => {
@@ -59,7 +62,13 @@ describe("Ceird Agent tools", () => {
       )
     ).toEqual(expectedExecutableModelNames);
     expect(expectedExecutableModelNames).toEqual(
-      expect.arrayContaining(["createLabel", "updateLabel", "deleteLabel"])
+      expect.arrayContaining([
+        "createLabel",
+        "updateLabel",
+        "deleteLabel",
+        "createServiceArea",
+        "updateServiceArea",
+      ])
     );
   });
 
@@ -75,7 +84,13 @@ describe("Ceird Agent tools", () => {
 
     expect(Object.keys(tools)).not.toContain("createJob");
     expect(Object.keys(tools)).toEqual(
-      expect.arrayContaining(["createLabel", "updateLabel", "deleteLabel"])
+      expect.arrayContaining([
+        "createLabel",
+        "updateLabel",
+        "deleteLabel",
+        "createServiceArea",
+        "updateServiceArea",
+      ])
     );
     expect(Object.keys(tools)).not.toEqual(
       expect.arrayContaining(plannedModelNames)

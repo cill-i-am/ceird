@@ -10,6 +10,11 @@ import type {
   LabelIdType as LabelId,
   LabelName,
 } from "@ceird/labels-core";
+import type {
+  ServiceArea,
+  ServiceAreaIdType as ServiceAreaId,
+} from "@ceird/sites-core";
+import { ServiceAreaNotFoundError } from "@ceird/sites-core";
 import { Effect, Layer, Option } from "effect";
 
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -44,6 +49,12 @@ const label = {
   name: "Urgent" as LabelName,
   updatedAt: "2026-05-20T10:00:00.000Z",
 } satisfies Label;
+const serviceAreaId = "22222222-2222-4222-8222-222222222222" as ServiceAreaId;
+const serviceArea = {
+  description: "North city coverage",
+  id: serviceAreaId,
+  name: "North City",
+} satisfies ServiceArea;
 
 describe("domain agent action registry", () => {
   it("executes labels list through the registered domain handler", async () => {
@@ -171,6 +182,125 @@ describe("domain agent action registry", () => {
     });
   });
 
+  it("executes service area list through the registered domain handler", async () => {
+    const calls: unknown[] = [];
+    const result = await Effect.runPromise(
+      runAgentAction(
+        "ceird.service_areas.list",
+        {},
+        {},
+        {
+          list: (organizationId) => {
+            calls.push({ organizationId });
+
+            return Effect.succeed([serviceArea]);
+          },
+        }
+      )
+    );
+
+    expect(result).toStrictEqual({ items: [serviceArea] });
+    expect(calls).toStrictEqual([{ organizationId: actor.organizationId }]);
+  });
+
+  it("executes service area create through the registered domain handler", async () => {
+    const calls: unknown[] = [];
+    const result = await Effect.runPromise(
+      runAgentAction(
+        "ceird.service_areas.create",
+        { description: "  North city coverage  ", name: "  North City  " },
+        {},
+        {
+          create: (input) => {
+            calls.push(input);
+
+            return Effect.succeed(serviceArea);
+          },
+        }
+      )
+    );
+
+    expect(result).toStrictEqual(serviceArea);
+    expect(calls).toStrictEqual([
+      {
+        description: "North city coverage",
+        name: "North City",
+        organizationId: actor.organizationId,
+      },
+    ]);
+  });
+
+  it("executes service area update through the registered domain handler", async () => {
+    const updatedServiceArea = {
+      description: "South city coverage",
+      id: serviceAreaId,
+      name: "South City",
+    } satisfies ServiceArea;
+    const calls: unknown[] = [];
+    const result = await Effect.runPromise(
+      runAgentAction(
+        "ceird.service_areas.update",
+        {
+          input: {
+            description: "  South city coverage  ",
+            name: "  South City  ",
+          },
+          serviceAreaId,
+        },
+        {},
+        {
+          update: (organizationId, updatedServiceAreaId, input) => {
+            calls.push({
+              input,
+              organizationId,
+              serviceAreaId: updatedServiceAreaId,
+            });
+
+            return Effect.succeed(updatedServiceArea);
+          },
+        }
+      )
+    );
+
+    expect(result).toStrictEqual(updatedServiceArea);
+    expect(calls).toStrictEqual([
+      {
+        input: {
+          description: "South city coverage",
+          name: "South City",
+        },
+        organizationId: actor.organizationId,
+        serviceAreaId,
+      },
+    ]);
+  });
+
+  it("maps missing service areas to agent action rejections", async () => {
+    const error = await Effect.runPromise(
+      runAgentAction(
+        "ceird.service_areas.update",
+        { input: { name: "South City" }, serviceAreaId },
+        {},
+        {
+          update: () =>
+            Effect.fail(
+              new ServiceAreaNotFoundError({
+                message: "Service area does not exist in the organization",
+                organizationId: actor.organizationId,
+                serviceAreaId,
+              })
+            ),
+        }
+      ).pipe(Effect.flip)
+    );
+
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      message: "Service area does not exist in the organization",
+      name: "ceird.service_areas.update",
+    });
+  });
+
   it("rejects unsupported action names without mutating the registry", async () => {
     const missingAction = "ceird.missing.action" as AgentActionName;
     const error = await Effect.runPromise(
@@ -212,20 +342,29 @@ function runAgentAction(
   input: unknown,
   labelsRepositoryOverrides: Partial<
     ContextService<typeof LabelsRepository>
+  > = {},
+  serviceAreasRepositoryOverrides: Partial<
+    ContextService<typeof ServiceAreasRepository>
   > = {}
 ) {
   return AgentActions.execute(actor, name, input).pipe(
     Effect.provide(
       Layer.provide(
         AgentActions.DefaultWithoutDependencies,
-        makeAgentActionsTestLayer(labelsRepositoryOverrides)
+        makeAgentActionsTestLayer(
+          labelsRepositoryOverrides,
+          serviceAreasRepositoryOverrides
+        )
       )
     )
   );
 }
 
 function makeAgentActionsTestLayer(
-  labelsRepositoryOverrides: Partial<ContextService<typeof LabelsRepository>>
+  labelsRepositoryOverrides: Partial<ContextService<typeof LabelsRepository>>,
+  serviceAreasRepositoryOverrides: Partial<
+    ContextService<typeof ServiceAreasRepository>
+  >
 ) {
   return Layer.mergeAll(
     Layer.succeed(
@@ -263,9 +402,13 @@ function makeAgentActionsTestLayer(
     OrganizationAuthorization.Default,
     Layer.succeed(
       ServiceAreasRepository,
-      ServiceAreasRepository.of(
-        {} as ContextService<typeof ServiceAreasRepository>
-      )
+      ServiceAreasRepository.of({
+        create: () => Effect.succeed(serviceArea),
+        list: () => Effect.succeed([]),
+        listOptions: () => Effect.succeed([]),
+        update: () => Effect.succeed(serviceArea),
+        ...serviceAreasRepositoryOverrides,
+      } as unknown as ContextService<typeof ServiceAreasRepository>)
     ),
     Layer.succeed(
       SitesRepository,

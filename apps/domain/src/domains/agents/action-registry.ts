@@ -16,6 +16,11 @@ import {
   LabelId,
   UpdateLabelInputSchema,
 } from "@ceird/labels-core";
+import {
+  CreateServiceAreaInputSchema,
+  ServiceAreaId,
+  UpdateServiceAreaInputSchema,
+} from "@ceird/sites-core";
 import type { ServiceAreaOption } from "@ceird/sites-core";
 import { Effect, Option, Schema } from "effect";
 
@@ -56,6 +61,10 @@ const LabelPathInputSchema = Schema.Struct({
 const UpdateLabelActionInputSchema = Schema.Struct({
   input: UpdateLabelInputSchema,
   labelId: LabelId,
+});
+const UpdateServiceAreaActionInputSchema = Schema.Struct({
+  input: UpdateServiceAreaInputSchema,
+  serviceAreaId: ServiceAreaId,
 });
 
 type DomainAgentActionRequirements =
@@ -206,6 +215,68 @@ const domainAgentActions = [
           : deriveServiceAreaOptionsFromSites(sites);
 
         return { serviceAreas, sites } as const;
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.service_areas.list",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        yield* decodeActionInput(
+          "ceird.service_areas.list",
+          EmptyActionInputSchema,
+          input
+        );
+        const organizationAuthorization = yield* OrganizationAuthorization;
+        const serviceAreasRepository = yield* ServiceAreasRepository;
+
+        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
+        const serviceAreas = yield* serviceAreasRepository.list(
+          actor.organizationId
+        );
+
+        return { items: serviceAreas } as const;
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.service_areas.create",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.service_areas.create",
+          CreateServiceAreaInputSchema,
+          input
+        );
+        const organizationAuthorization = yield* OrganizationAuthorization;
+        const serviceAreasRepository = yield* ServiceAreasRepository;
+
+        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
+
+        return yield* serviceAreasRepository.create({
+          description: payload.description,
+          name: payload.name,
+          organizationId: actor.organizationId,
+        });
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.service_areas.update",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.service_areas.update",
+          UpdateServiceAreaActionInputSchema,
+          input
+        );
+        const organizationAuthorization = yield* OrganizationAuthorization;
+        const serviceAreasRepository = yield* ServiceAreasRepository;
+
+        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
+
+        return yield* serviceAreasRepository.update(
+          actor.organizationId,
+          payload.serviceAreaId,
+          payload.input
+        );
       }),
   }),
   defineDomainAgentAction({

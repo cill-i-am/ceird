@@ -137,19 +137,22 @@ Action execution remains private to `POST /agent/internal/actions`.
 
 Current domain actions exposed to the Agent runtime are:
 
-| Action                    | Kind        |
-| ------------------------- | ----------- |
-| `ceird.labels.list`       | read        |
-| `ceird.labels.create`     | write       |
-| `ceird.labels.update`     | write       |
-| `ceird.labels.delete`     | destructive |
-| `ceird.sites.options`     | read        |
-| `ceird.jobs.options`      | read        |
-| `ceird.jobs.list`         | read        |
-| `ceird.jobs.detail`       | read        |
-| `ceird.jobs.add_comment`  | write       |
-| `ceird.jobs.assign_label` | write       |
-| `ceird.jobs.remove_label` | destructive |
+| Action                       | Kind        |
+| ---------------------------- | ----------- |
+| `ceird.labels.list`          | read        |
+| `ceird.labels.create`        | write       |
+| `ceird.labels.update`        | write       |
+| `ceird.labels.delete`        | destructive |
+| `ceird.sites.options`        | read        |
+| `ceird.service_areas.list`   | read        |
+| `ceird.service_areas.create` | write       |
+| `ceird.service_areas.update` | write       |
+| `ceird.jobs.options`         | read        |
+| `ceird.jobs.list`            | read        |
+| `ceird.jobs.detail`          | read        |
+| `ceird.jobs.add_comment`     | write       |
+| `ceird.jobs.assign_label`    | write       |
+| `ceird.jobs.remove_label`    | destructive |
 
 Read tools are available to the model by default. Write and destructive tools
 are hidden unless `AGENT_MUTATION_TOOLS_ENABLED=true`, which is reserved for a

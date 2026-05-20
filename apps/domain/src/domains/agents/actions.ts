@@ -12,6 +12,7 @@ import {
   LABEL_NAME_CONFLICT_ERROR_TAG,
   LABEL_NOT_FOUND_ERROR_TAG,
 } from "@ceird/labels-core";
+import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@ceird/sites-core";
 import { Effect } from "effect";
 
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -143,7 +144,8 @@ function mapActionError(
     isTaggedError(error, JOB_NOT_FOUND_ERROR_TAG) ||
     isTaggedError(error, WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG) ||
     isTaggedError(error, LABEL_NOT_FOUND_ERROR_TAG) ||
-    isTaggedError(error, LABEL_NAME_CONFLICT_ERROR_TAG)
+    isTaggedError(error, LABEL_NAME_CONFLICT_ERROR_TAG) ||
+    isTaggedError(error, SERVICE_AREA_NOT_FOUND_ERROR_TAG)
   ) {
     return new AgentActionRejectedError({
       message: getStringProperty(error, "message") ?? "Agent action failed",
