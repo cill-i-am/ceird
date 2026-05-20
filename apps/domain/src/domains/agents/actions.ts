@@ -18,6 +18,7 @@ import {
   JOB_STORAGE_ERROR_TAG,
   ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
+  RATE_CARD_NOT_FOUND_ERROR_TAG,
   VISIT_DURATION_INCREMENT_ERROR_TAG,
 } from "@ceird/jobs-core";
 import {
@@ -39,10 +40,12 @@ import { Effect, Layer } from "effect";
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
+import { ConfigurationService } from "../jobs/configuration-service.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
   JobsRepository,
+  RateCardsRepository,
 } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
@@ -86,6 +89,7 @@ const REJECTED_ERROR_TAGS = [
   CONTACT_NOT_FOUND_ERROR_TAG,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
   WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+  RATE_CARD_NOT_FOUND_ERROR_TAG,
   LABEL_NOT_FOUND_ERROR_TAG,
   LABEL_NAME_CONFLICT_ERROR_TAG,
   SERVICE_AREA_NOT_FOUND_ERROR_TAG,
@@ -107,6 +111,7 @@ export class AgentActions extends Effect.Service<AgentActions>()(
       JobsRepository.Default,
       LabelsRepository.Default,
       OrganizationAuthorization.Default,
+      RateCardsRepository.Default,
       ServiceAreasRepository.Default,
       SiteLabelAssignmentsRepository.Default,
       SitesRepository.Default,
@@ -121,6 +126,7 @@ export class AgentActions extends Effect.Service<AgentActions>()(
       const jobsRepository = yield* JobsRepository;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
+      const rateCardsRepository = yield* RateCardsRepository;
       const serviceAreasRepository = yield* ServiceAreasRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const siteLabelAssignmentsRepository =
@@ -152,6 +158,10 @@ export class AgentActions extends Effect.Service<AgentActions>()(
           siteGeocoder,
           sitesRepository,
         });
+        const configurationServiceLayer = makeConfigurationServiceLayer(actor, {
+          jobsAuthorization,
+          rateCardsRepository,
+        });
         const action =
           handler === undefined
             ? Effect.fail(
@@ -163,6 +173,7 @@ export class AgentActions extends Effect.Service<AgentActions>()(
             : handler
                 .execute(actor, input)
                 .pipe(
+                  Effect.provide(configurationServiceLayer),
                   Effect.provide(jobsServiceLayer),
                   Effect.provide(sitesServiceLayer),
                   Effect.provideService(ContactsRepository, contactsRepository),
@@ -180,6 +191,10 @@ export class AgentActions extends Effect.Service<AgentActions>()(
                   Effect.provideService(
                     OrganizationAuthorization,
                     organizationAuthorization
+                  ),
+                  Effect.provideService(
+                    RateCardsRepository,
+                    rateCardsRepository
                   ),
                   Effect.provideService(
                     ServiceAreasRepository,
@@ -225,6 +240,11 @@ interface JobsServiceLayerDependencies {
   readonly serviceAreasRepository: ServiceAreasRepository;
   readonly siteGeocoder: SiteGeocoderImplementation;
   readonly sitesRepository: SitesRepository;
+}
+
+interface ConfigurationServiceLayerDependencies {
+  readonly jobsAuthorization: JobsAuthorization;
+  readonly rateCardsRepository: RateCardsRepository;
 }
 
 function makeJobsServiceLayer(
@@ -287,6 +307,25 @@ function makeSitesServiceLayer(
         dependencies.siteLabelAssignmentsRepository
       ),
       Layer.succeed(SitesRepository, dependencies.sitesRepository)
+    )
+  );
+}
+
+function makeConfigurationServiceLayer(
+  actor: OrganizationActor,
+  dependencies: ConfigurationServiceLayerDependencies
+) {
+  return Layer.provide(
+    ConfigurationService.DefaultWithoutDependencies,
+    Layer.mergeAll(
+      Layer.succeed(
+        CurrentOrganizationActor,
+        CurrentOrganizationActor.make({
+          get: () => Effect.succeed(actor),
+        })
+      ),
+      Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
+      Layer.succeed(RateCardsRepository, dependencies.rateCardsRepository)
     )
   );
 }

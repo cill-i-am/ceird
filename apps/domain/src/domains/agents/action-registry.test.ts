@@ -12,12 +12,16 @@ import {
   JobAccessDeniedError,
   JobCollaboratorConflictError,
   JobStorageError,
+  RateCardNotFoundError,
 } from "@ceird/jobs-core";
 import type {
   CostLineIdType as CostLineId,
   Job,
   JobCollaborator,
   JobCollaboratorIdType as JobCollaboratorId,
+  RateCard,
+  RateCardIdType as RateCardId,
+  RateCardLineIdType as RateCardLineId,
   UserIdType as JobUserId,
   VisitIdType as VisitId,
   WorkItemIdType,
@@ -45,11 +49,13 @@ import { Effect, Layer, Option } from "effect";
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
+import { ConfigurationService } from "../jobs/configuration-service.js";
 import { WorkItemOrganizationMismatchError } from "../jobs/errors.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
   JobsRepository,
+  RateCardsRepository,
 } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
@@ -95,6 +101,8 @@ const collaboratorId =
   "66666666-6666-4666-8666-666666666666" as JobCollaboratorId;
 const visitId = "77777777-7777-4777-8777-777777777777" as VisitId;
 const costLineId = "88888888-8888-4888-8888-888888888888" as CostLineId;
+const rateCardId = "99999999-9999-4999-8999-999999999999" as RateCardId;
+const rateCardLineId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as RateCardLineId;
 const collaboratorUserId = "user_collaborator" as JobUserId;
 const job = {
   createdAt: "2026-05-20T10:00:00.000Z",
@@ -117,6 +125,23 @@ const collaborator = {
   userId: collaboratorUserId,
   workItemId,
 } satisfies JobCollaborator;
+const rateCard = {
+  createdAt: "2026-05-20T10:00:00.000Z",
+  id: rateCardId,
+  lines: [
+    {
+      id: rateCardLineId,
+      kind: "callout",
+      name: "Standard callout",
+      position: 1,
+      rateCardId,
+      unit: "visit",
+      value: 125,
+    },
+  ],
+  name: "Standard",
+  updatedAt: "2026-05-20T10:00:00.000Z",
+} satisfies RateCard;
 const site = {
   accessNotes: "Use the side gate",
   addressLine1: "1 Main Street",
@@ -901,6 +926,130 @@ describe("domain agent action registry", () => {
     expect(attachMismatch).toBeInstanceOf(AgentActionRejectedError);
   });
 
+  it("executes rate card handlers through ConfigurationService with decoded payloads", async () => {
+    const calls: unknown[] = [];
+    const configurationService = makeConfigurationService({
+      createRateCard: (input) => {
+        calls.push({ input, method: "createRateCard" });
+
+        return Effect.succeed(rateCard);
+      },
+      listRateCards: () => {
+        calls.push({ method: "listRateCards" });
+
+        return Effect.succeed({ items: [rateCard] });
+      },
+      updateRateCard: (updatedRateCardId, input) => {
+        calls.push({
+          input,
+          method: "updateRateCard",
+          rateCardId: updatedRateCardId,
+        });
+
+        return Effect.succeed(rateCard);
+      },
+    });
+
+    await Effect.runPromise(
+      Effect.all(
+        [
+          runDomainHandler("ceird.rate_cards.list", {}),
+          runDomainHandler("ceird.rate_cards.create", {
+            lines: [
+              {
+                kind: "callout",
+                name: "  Standard callout  ",
+                position: 1,
+                unit: "  visit  ",
+                value: 125,
+              },
+            ],
+            name: "  Standard  ",
+          }),
+          runDomainHandler("ceird.rate_cards.update", {
+            input: { name: "  Standard 2026  " },
+            rateCardId,
+          }),
+        ],
+        { concurrency: 1 }
+      ).pipe(Effect.provideService(ConfigurationService, configurationService))
+    );
+
+    expect(calls).toStrictEqual([
+      { method: "listRateCards" },
+      {
+        input: {
+          lines: [
+            {
+              kind: "callout",
+              name: "Standard callout",
+              position: 1,
+              unit: "visit",
+              value: 125,
+            },
+          ],
+          name: "Standard",
+        },
+        method: "createRateCard",
+      },
+      {
+        input: { name: "Standard 2026" },
+        method: "updateRateCard",
+        rateCardId,
+      },
+    ]);
+  });
+
+  it("rejects non-empty list rate card input before calling ConfigurationService", async () => {
+    const error = await Effect.runPromise(
+      runDomainHandler("ceird.rate_cards.list", { unexpected: true }).pipe(
+        Effect.provideService(
+          ConfigurationService,
+          makeConfigurationService({
+            listRateCards: () =>
+              Effect.die("Unexpected ConfigurationService.listRateCards call"),
+          })
+        ),
+        Effect.flip
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      message: "Invalid input for ceird.rate_cards.list",
+      name: "ceird.rate_cards.list",
+    });
+  });
+
+  it("maps missing rate cards to agent action rejections", async () => {
+    const error = await Effect.runPromise(
+      runAgentAction(
+        "ceird.rate_cards.update",
+        { input: { name: "Standard 2026" }, rateCardId },
+        {},
+        {},
+        {
+          rateCardsRepository: {
+            update: () =>
+              Effect.fail(
+                new RateCardNotFoundError({
+                  message: "Rate card does not exist in the organization",
+                  organizationId: actor.organizationId,
+                  rateCardId,
+                })
+              ),
+          },
+        }
+      ).pipe(Effect.flip)
+    );
+
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      message: "Rate card does not exist in the organization",
+      name: "ceird.rate_cards.update",
+    });
+  });
+
   it("executes service area list through the registered domain handler", async () => {
     const calls: unknown[] = [];
     const result = await Effect.runPromise(
@@ -1125,6 +1274,7 @@ function makeAgentActionsTestLayer(
     Layer.succeed(
       JobsAuthorization,
       JobsAuthorization.of({
+        ensureCanManageConfiguration: () => Effect.void,
         ensureCanManageCollaborators: () => Effect.void,
         ensureCanView: () => Effect.void,
         ensureCanViewOrganizationActivity: () => Effect.void,
@@ -1142,6 +1292,15 @@ function makeAgentActionsTestLayer(
         ) => effect,
         ...options.jobsRepository,
       } as unknown as ContextService<typeof JobsRepository>)
+    ),
+    Layer.succeed(
+      RateCardsRepository,
+      RateCardsRepository.of({
+        create: () => Effect.succeed(rateCard),
+        list: () => Effect.succeed([rateCard]),
+        update: () => Effect.succeed(rateCard),
+        ...options.rateCardsRepository,
+      } as unknown as ContextService<typeof RateCardsRepository>)
     ),
     Layer.succeed(JobsService, makeJobsService(options.jobsService ?? {})),
     Layer.succeed(
@@ -1283,6 +1442,20 @@ function makeJobsService(
   } as unknown as ContextService<typeof JobsService>);
 }
 
+function makeConfigurationService(
+  overrides: Partial<ContextService<typeof ConfigurationService>>
+) {
+  return ConfigurationService.of({
+    createRateCard: () =>
+      Effect.die("Unexpected ConfigurationService.createRateCard call"),
+    listRateCards: () =>
+      Effect.die("Unexpected ConfigurationService.listRateCards call"),
+    updateRateCard: () =>
+      Effect.die("Unexpected ConfigurationService.updateRateCard call"),
+    ...overrides,
+  } as unknown as ContextService<typeof ConfigurationService>);
+}
+
 interface AgentActionsTestOptions {
   readonly actorOverride?: OrganizationActor;
   readonly commentsRepository?: Partial<
@@ -1297,6 +1470,9 @@ interface AgentActionsTestOptions {
   >;
   readonly jobsRepository?: Partial<ContextService<typeof JobsRepository>>;
   readonly jobsService?: Partial<ContextService<typeof JobsService>>;
+  readonly rateCardsRepository?: Partial<
+    ContextService<typeof RateCardsRepository>
+  >;
   readonly sitesRepository?: Partial<ContextService<typeof SitesRepository>>;
 }
 

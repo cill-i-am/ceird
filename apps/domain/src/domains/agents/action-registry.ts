@@ -10,12 +10,15 @@ import {
   AssignJobLabelInputSchema,
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
+  CreateRateCardInputSchema,
   JobCollaboratorId,
   JobListQuerySchema,
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
+  RateCardId,
   TransitionJobInputSchema,
   UpdateJobCollaboratorInputSchema,
+  UpdateRateCardInputSchema,
   WorkItemId,
 } from "@ceird/jobs-core";
 import {
@@ -37,6 +40,7 @@ import {
 import type { HttpServerRequest } from "@effect/platform";
 import { Effect, Option, Schema } from "effect";
 
+import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -45,7 +49,9 @@ import type { SitesRepository } from "../sites/repositories.js";
 import { ServiceAreasRepository } from "../sites/repositories.js";
 import { SitesService } from "../sites/service.js";
 
-const EmptyActionInputSchema = Schema.Struct({});
+const EmptyActionInputSchema = Schema.Struct({}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
 const JobDetailActionInputSchema = Schema.Struct({
   workItemId: WorkItemId,
 });
@@ -109,8 +115,13 @@ const UpdateServiceAreaActionInputSchema = Schema.Struct({
   input: UpdateServiceAreaInputSchema,
   serviceAreaId: ServiceAreaId,
 });
+const UpdateRateCardActionInputSchema = Schema.Struct({
+  input: UpdateRateCardInputSchema,
+  rateCardId: RateCardId,
+});
 
 type DomainAgentActionRequirements =
+  | ConfigurationService
   | LabelsRepository
   | OrganizationAuthorization
   | ServiceAreasRepository
@@ -411,6 +422,47 @@ const domainAgentActions = [
       }),
   }),
   defineDomainAgentAction({
+    name: "ceird.rate_cards.list",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        yield* decodeStrictEmptyActionInput("ceird.rate_cards.list", input);
+        const configurationService = yield* ConfigurationService;
+
+        return yield* configurationService.listRateCards();
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.rate_cards.create",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.rate_cards.create",
+          CreateRateCardInputSchema,
+          input
+        );
+        const configurationService = yield* ConfigurationService;
+
+        return yield* configurationService.createRateCard(payload);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.rate_cards.update",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.rate_cards.update",
+          UpdateRateCardActionInputSchema,
+          input
+        );
+        const configurationService = yield* ConfigurationService;
+
+        return yield* configurationService.updateRateCard(
+          payload.rateCardId,
+          payload.input
+        );
+      }),
+  }),
+  defineDomainAgentAction({
     name: "ceird.jobs.options",
     execute: (_actor, input) =>
       Effect.gen(function* () {
@@ -690,7 +742,9 @@ function decodeActionInput<A, I, R>(
   schema: Schema.Schema<A, I, R>,
   input: unknown
 ) {
-  return Schema.decodeUnknown(schema)(input).pipe(
+  return Schema.decodeUnknown(schema)(input, {
+    onExcessProperty: "error",
+  }).pipe(
     Effect.mapError(
       () =>
         new AgentActionRejectedError({
@@ -698,5 +752,26 @@ function decodeActionInput<A, I, R>(
           name: actionName,
         })
     )
+  );
+}
+
+function decodeStrictEmptyActionInput(
+  actionName: ExecutableAgentActionName,
+  input: unknown
+) {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    !Array.isArray(input) &&
+    Object.keys(input).length === 0
+  ) {
+    return Effect.void;
+  }
+
+  return Effect.fail(
+    new AgentActionRejectedError({
+      message: `Invalid input for ${actionName}`,
+      name: actionName,
+    })
   );
 }

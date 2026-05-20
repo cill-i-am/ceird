@@ -137,6 +137,9 @@ describe("@ceird/agents-core", () => {
       "ceird.jobs.collaborators.attach",
       "ceird.jobs.collaborators.update",
       "ceird.jobs.collaborators.detach",
+      "ceird.rate_cards.list",
+      "ceird.rate_cards.create",
+      "ceird.rate_cards.update",
     ]);
     expect(
       AGENT_EXECUTABLE_ACTIONS.every(

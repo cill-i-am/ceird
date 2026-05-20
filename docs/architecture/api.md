@@ -171,10 +171,18 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.jobs.collaborators.attach` | write       |
 | `ceird.jobs.collaborators.update` | write       |
 | `ceird.jobs.collaborators.detach` | destructive |
+| `ceird.rate_cards.list`           | read        |
+| `ceird.rate_cards.create`         | write       |
+| `ceird.rate_cards.update`         | write       |
 
 Read tools are available to the model by default. Write and destructive tools
 are hidden unless `AGENT_MUTATION_TOOLS_ENABLED=true`, which is reserved for a
 confirmation-capable client flow so prompt-only execution cannot mutate data.
+
+Rate-card agent actions route through the same
+`ConfigurationService.listRateCards`, `ConfigurationService.createRateCard`,
+and `ConfigurationService.updateRateCard` methods used by the HTTP
+configuration API.
 
 Every action call includes a domain operation id. The domain action-run ledger
 stores `thread_id`, `action_name`, `operation_id`, status, input hash/size,

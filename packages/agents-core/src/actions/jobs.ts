@@ -21,7 +21,9 @@ import { Schema } from "effect";
 
 import { defineAgentAction } from "../action-registry.js";
 
-const EmptyActionInputSchema = Schema.Struct({});
+const EmptyActionInputSchema = Schema.Struct({}).annotations({
+  parseOptions: { onExcessProperty: "error" },
+});
 
 const JobPathInputSchema = Schema.Struct({
   workItemId: WorkItemId,
@@ -326,7 +328,7 @@ export const rateCardAgentActions = [
       target: "rate cards",
     },
     inputSchema: EmptyActionInputSchema,
-    executionStatus: "planned",
+    executionStatus: "executable",
     kind: "read",
     modelDescription: "List Ceird rate cards.",
     modelName: "listRateCards",
@@ -340,7 +342,7 @@ export const rateCardAgentActions = [
       target: "rate card",
     },
     inputSchema: CreateRateCardInputSchema,
-    executionStatus: "planned",
+    executionStatus: "executable",
     kind: "write",
     modelDescription: "Create a Ceird rate card.",
     modelName: "createRateCard",
@@ -354,7 +356,7 @@ export const rateCardAgentActions = [
       target: "rate card",
     },
     inputSchema: UpdateRateCardActionInputSchema,
-    executionStatus: "planned",
+    executionStatus: "executable",
     kind: "write",
     modelDescription: "Update a Ceird rate card by ID.",
     modelName: "updateRateCard",

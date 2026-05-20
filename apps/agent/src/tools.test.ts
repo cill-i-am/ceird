@@ -56,6 +56,7 @@ describe("Ceird Agent tools", () => {
     );
     expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
       expect.arrayContaining([
+        "listRateCards",
         "listSites",
         "listSiteComments",
         "listOrganizationActivity",
@@ -98,6 +99,8 @@ describe("Ceird Agent tools", () => {
         "attachJobCollaborator",
         "updateJobCollaborator",
         "detachJobCollaborator",
+        "createRateCard",
+        "updateRateCard",
       ])
     );
   });
@@ -133,6 +136,8 @@ describe("Ceird Agent tools", () => {
         "attachJobCollaborator",
         "updateJobCollaborator",
         "detachJobCollaborator",
+        "createRateCard",
+        "updateRateCard",
       ])
     );
     expect(Object.keys(tools)).not.toEqual(
