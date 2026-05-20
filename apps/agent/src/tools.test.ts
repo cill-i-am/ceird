@@ -46,6 +46,9 @@ describe("Ceird Agent tools", () => {
     expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
       expect.arrayContaining(["listServiceAreas"])
     );
+    expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
+      expect.arrayContaining(["listSites", "listSiteComments"])
+    );
   });
 
   it("exposes every executable action model name when mutations are enabled", () => {
@@ -66,6 +69,11 @@ describe("Ceird Agent tools", () => {
         "createLabel",
         "updateLabel",
         "deleteLabel",
+        "createSite",
+        "updateSite",
+        "addSiteComment",
+        "assignSiteLabel",
+        "removeSiteLabel",
         "createServiceArea",
         "updateServiceArea",
       ])
@@ -88,6 +96,11 @@ describe("Ceird Agent tools", () => {
         "createLabel",
         "updateLabel",
         "deleteLabel",
+        "createSite",
+        "updateSite",
+        "addSiteComment",
+        "assignSiteLabel",
+        "removeSiteLabel",
         "createServiceArea",
         "updateServiceArea",
       ])

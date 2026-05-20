@@ -144,6 +144,13 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.labels.update`        | write       |
 | `ceird.labels.delete`        | destructive |
 | `ceird.sites.options`        | read        |
+| `ceird.sites.list`           | read        |
+| `ceird.sites.create`         | write       |
+| `ceird.sites.update`         | write       |
+| `ceird.sites.comments.list`  | read        |
+| `ceird.sites.comments.add`   | write       |
+| `ceird.sites.assign_label`   | write       |
+| `ceird.sites.remove_label`   | destructive |
 | `ceird.service_areas.list`   | read        |
 | `ceird.service_areas.create` | write       |
 | `ceird.service_areas.update` | write       |

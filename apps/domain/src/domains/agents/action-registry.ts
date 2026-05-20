@@ -17,11 +17,18 @@ import {
   UpdateLabelInputSchema,
 } from "@ceird/labels-core";
 import {
+  AddSiteCommentInputSchema,
+  AssignSiteLabelInputSchema,
+  CreateSiteInputSchema,
   CreateServiceAreaInputSchema,
   ServiceAreaId,
+  SiteId,
+  SiteListQuerySchema,
+  UpdateSiteInputSchema,
   UpdateServiceAreaInputSchema,
 } from "@ceird/sites-core";
 import type { ServiceAreaOption } from "@ceird/sites-core";
+import { HttpServerRequest } from "@effect/platform";
 import { Effect, Option, Schema } from "effect";
 
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -42,6 +49,7 @@ import {
   ServiceAreasRepository,
   SitesRepository,
 } from "../sites/repositories.js";
+import { SitesService } from "../sites/service.js";
 
 const EmptyActionInputSchema = Schema.Struct({});
 const JobDetailActionInputSchema = Schema.Struct({
@@ -62,6 +70,25 @@ const UpdateLabelActionInputSchema = Schema.Struct({
   input: UpdateLabelInputSchema,
   labelId: LabelId,
 });
+const SitePathInputSchema = Schema.Struct({
+  siteId: SiteId,
+});
+const UpdateSiteActionInputSchema = Schema.Struct({
+  input: UpdateSiteInputSchema,
+  siteId: SiteId,
+});
+const SiteCommentActionInputSchema = Schema.Struct({
+  input: AddSiteCommentInputSchema,
+  siteId: SiteId,
+});
+const SiteLabelActionInputSchema = Schema.Struct({
+  input: AssignSiteLabelInputSchema,
+  siteId: SiteId,
+});
+const RemoveSiteLabelActionInputSchema = Schema.Struct({
+  labelId: LabelId,
+  siteId: SiteId,
+});
 const UpdateServiceAreaActionInputSchema = Schema.Struct({
   input: UpdateServiceAreaInputSchema,
   serviceAreaId: ServiceAreaId,
@@ -76,7 +103,9 @@ type DomainAgentActionRequirements =
   | LabelsRepository
   | OrganizationAuthorization
   | ServiceAreasRepository
-  | SitesRepository;
+  | SitesRepository
+  | SitesService
+  | HttpServerRequest.HttpServerRequest;
 
 export interface DomainAgentActionHandler<
   Name extends ExecutableAgentActionName,
@@ -197,24 +226,114 @@ const domainAgentActions = [
   }),
   defineDomainAgentAction({
     name: "ceird.sites.options",
-    execute: (actor, input) =>
+    execute: (_actor, input) =>
       Effect.gen(function* () {
         yield* decodeActionInput(
           "ceird.sites.options",
           EmptyActionInputSchema,
           input
         );
-        const organizationAuthorization = yield* OrganizationAuthorization;
-        const serviceAreasRepository = yield* ServiceAreasRepository;
-        const sitesRepository = yield* SitesRepository;
+        const sitesService = yield* SitesService;
 
-        yield* organizationAuthorization.ensureCanViewOrganizationData(actor);
-        const sites = yield* sitesRepository.listOptions(actor.organizationId);
-        const serviceAreas = hasElevatedOrganizationAccess(actor)
-          ? yield* serviceAreasRepository.listOptions(actor.organizationId)
-          : deriveServiceAreaOptionsFromSites(sites);
+        return yield* sitesService.getOptions();
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.list",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const query = yield* decodeActionInput(
+          "ceird.sites.list",
+          SiteListQuerySchema,
+          input
+        );
+        const sitesService = yield* SitesService;
 
-        return { serviceAreas, sites } as const;
+        return yield* sitesService.list(query);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.create",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.create",
+          CreateSiteInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.create(payload);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.update",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.update",
+          UpdateSiteActionInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.update(payload.siteId, payload.input);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.comments.list",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.comments.list",
+          SitePathInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.listComments(payload.siteId);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.comments.add",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.comments.add",
+          SiteCommentActionInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.addComment(payload.siteId, payload.input);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.assign_label",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.assign_label",
+          SiteLabelActionInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.assignLabel(payload.siteId, payload.input);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.remove_label",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.remove_label",
+          RemoveSiteLabelActionInputSchema,
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.removeLabel(payload.siteId, payload.labelId);
       }),
   }),
   defineDomainAgentAction({
