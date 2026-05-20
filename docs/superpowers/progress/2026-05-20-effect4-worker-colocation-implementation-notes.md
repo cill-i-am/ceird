@@ -87,6 +87,7 @@ Migrate Ceird runtime apps and shared packages toward Effect 4, then move Cloudf
 - 2026-05-20: The review pass also exposed a practical type boundary in the MCP tool runtime: domain service layers should be provided by the cached MCP app wrapper, while `HttpServerRequest` remains a passthrough tool dependency supplied by Effect AI's HTTP runtime. The test helper now mirrors that split instead of pretending every tool requirement is a domain service.
 - 2026-05-20: While merging `origin/main`, a stale loose `.git/refs/remotes/origin/main` ref in the shared worktree metadata was hanging Git ref reads. I moved that loose remote-tracking ref into `.git/codex-ref-backups/` so Git could fall back to packed refs, then fetched `origin/main` cleanly. No provider-mutating Alchemy commands were run.
 - 2026-05-20: Merge conflict resolution kept main's TanStack DB Query Collection wiring for jobs/sites and preserved this branch's valid Effect 4 schema adapter (`Schema.toStandardSchemaV1(...)`). I also kept the root `test:infra` `opensrc` exclusion because the local dependency source cache makes unbounded Vitest discovery too broad in this workspace, while accepting main's safer `CI` fallback in the local-environment script fixture.
+- 2026-05-20: The preview E2E job failed two long auth/organization flows at Playwright's default 30s timeout on a cold deployed stage. The same cases passed against the warmed preview, including parallel repeats. I gave those multi-step flows explicit timeout budgets and made the organization update test wait for the update response before asserting refreshed form state.
 
 ## Verification Log
 
@@ -130,6 +131,7 @@ Migrate Ceird runtime apps and shared packages toward Effect 4, then move Cloudf
 - Structural follow-up focused verification passes for `pnpm --filter domain check-types`, `pnpm run check-types:infra`, `pnpm --filter domain test -- src/domains/identity/authentication/auth-email.test.ts src/domains/identity/authentication/auth-email-queue.test.ts src/domains/identity/authentication/cloudflare-email-binding-auth-email-transport.test.ts src/domains/jobs/service.test.ts src/domains/mcp/tools.test.ts src/worker.test.ts`, and `pnpm run test:infra -- cloudflare-stack.test.ts`.
 - Structural follow-up full verification passes for `pnpm check-types`, `pnpm lint`, `pnpm format`, and `pnpm test`.
 - Post-`origin/main` merge verification passes for `pnpm --filter app check-types`, focused app jobs/sites state tests, `pnpm --filter domain test -- src/domains/identity/authentication/authentication.test.ts`, `pnpm run test:scripts`, `pnpm run check-types:infra`, `pnpm run test:infra`, `pnpm check-types`, `pnpm lint`, `pnpm format`, and full `pnpm test`.
+- Preview E2E follow-up verification passes for the two previously failed cases against `https://app.pr-108.ceird.app` / `https://api.pr-108.ceird.app`, both serially and with parallel repeats.
 
 ## Open Questions
 
