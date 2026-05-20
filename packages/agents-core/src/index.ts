@@ -6,19 +6,21 @@ import { ParseResult, Schema } from "effect";
 
 export {
   AGENT_ACTION_KINDS,
-  AGENT_ACTION_MANIFEST_SCHEMA,
   AgentActionConfirmationPolicy,
+  AgentActionExecutionStatus,
   AgentActionKindSchema,
-  AgentActionManifestItemSchema,
-  AgentActionManifestResponseSchema,
   defineAgentAction,
 } from "./action-registry.js";
 export type {
   AgentActionConfirmationPolicy as AgentActionConfirmationPolicyType,
+  AgentActionExecutionStatus as AgentActionExecutionStatusType,
   AgentActionKind,
-  AgentActionManifestItem,
-  AgentActionManifestResponse,
   AgentActionSpec,
+} from "./action-registry.js";
+import {
+  AgentActionConfirmationPolicy,
+  AgentActionExecutionStatus,
+  AgentActionKindSchema,
 } from "./action-registry.js";
 import type { AgentActionSpec } from "./action-registry.js";
 import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
@@ -155,18 +157,47 @@ export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
 export const AgentActionNameSchema = Schema.Literal(...AGENT_ACTION_NAMES);
 export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
 
+export const AGENT_EXECUTABLE_ACTIONS = AGENT_ACTIONS.filter(
+  (action) => action.executionStatus === "executable"
+) as Array<
+  Extract<
+    (typeof AGENT_ACTIONS)[number],
+    { readonly executionStatus: "executable" }
+  >
+>;
+
+type ExecutableAgentActionNameTuple = readonly [
+  (typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"],
+  ...Array<(typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"]>,
+];
+
+export const AGENT_EXECUTABLE_ACTION_NAMES = AGENT_EXECUTABLE_ACTIONS.map(
+  (action) => action.name
+) as unknown as ExecutableAgentActionNameTuple;
+export const ExecutableAgentActionNameSchema = Schema.Literal(
+  ...AGENT_EXECUTABLE_ACTION_NAMES
+);
+export type ExecutableAgentActionName = Schema.Schema.Type<
+  typeof ExecutableAgentActionNameSchema
+>;
+
 const AGENT_ACTIONS_BY_NAME = Object.fromEntries(
   AGENT_ACTIONS.map((action) => [action.name, action])
-) as Record<AgentActionName, (typeof AGENT_ACTIONS)[number]>;
+) as {
+  readonly [Action in (typeof AGENT_ACTIONS)[number] as Action["name"]]: Action;
+};
 
 export const AGENT_ACTION_DEFINITIONS = AGENT_ACTIONS_BY_NAME;
 
-export function getAgentActionDefinition(
-  name: AgentActionName
-): AgentActionSpec<AgentActionName> {
+export function getAgentActionDefinition<const Name extends AgentActionName>(
+  name: Name
+): Extract<(typeof AGENT_ACTIONS)[number], { readonly name: Name }> {
   const action = AGENT_ACTIONS_BY_NAME[name];
 
-  return action;
+  return action as unknown as Extract<
+    (typeof AGENT_ACTIONS)[number],
+    { readonly name: Name }
+  >;
 }
 
 export function getAgentActionKind(
@@ -174,6 +205,69 @@ export function getAgentActionKind(
 ): (typeof AGENT_ACTIONS)[number]["kind"] {
   return getAgentActionDefinition(name).kind;
 }
+
+export function isAgentActionExecutable(
+  name: AgentActionName
+): name is ExecutableAgentActionName {
+  return AGENT_EXECUTABLE_ACTION_NAMES.includes(
+    name as ExecutableAgentActionName
+  );
+}
+
+export const AgentActionManifestItemSchema = Schema.Struct({
+  confirmationPolicy: AgentActionConfirmationPolicy,
+  display: Schema.Struct({
+    label: Schema.String,
+    summary: Schema.String,
+    target: Schema.optional(Schema.String),
+  }),
+  executionStatus: AgentActionExecutionStatus,
+  kind: AgentActionKindSchema,
+  modelDescription: Schema.String,
+  modelName: Schema.String,
+  name: AgentActionNameSchema,
+});
+export type AgentActionManifestItem = Schema.Schema.Type<
+  typeof AgentActionManifestItemSchema
+>;
+
+export const AgentActionManifestResponseSchema = Schema.Struct({
+  actions: Schema.Array(AgentActionManifestItemSchema),
+});
+export type AgentActionManifestResponse = Schema.Schema.Type<
+  typeof AgentActionManifestResponseSchema
+>;
+
+export const AGENT_ACTION_MANIFEST_SCHEMA = AgentActionManifestResponseSchema;
+
+export function projectAgentActionManifest(
+  actions: readonly AgentActionSpec<AgentActionName>[]
+): AgentActionManifestResponse {
+  return {
+    actions: actions.map((action) => ({
+      confirmationPolicy: action.confirmationPolicy,
+      display: action.display,
+      executionStatus: action.executionStatus,
+      kind: action.kind,
+      modelDescription: action.modelDescription,
+      modelName: action.modelName,
+      name: action.name,
+    })),
+  };
+}
+
+export function getAgentActionManifest(
+  options: { readonly executableOnly?: boolean } = {}
+): AgentActionManifestResponse {
+  return projectAgentActionManifest(
+    options.executableOnly === true ? AGENT_EXECUTABLE_ACTIONS : AGENT_ACTIONS
+  );
+}
+
+export const AGENT_ACTIONS_MANIFEST = getAgentActionManifest();
+export const AGENT_EXECUTABLE_ACTION_MANIFEST = getAgentActionManifest({
+  executableOnly: true,
+});
 
 export const AgentActionOperationId = Schema.String.pipe(
   Schema.pattern(/^[a-zA-Z0-9_.:-]{8,160}$/),
@@ -185,7 +279,7 @@ export type AgentActionOperationId = Schema.Schema.Type<
 
 export const RunAgentActionInputSchema = Schema.Struct({
   input: Schema.Unknown,
-  name: AgentActionNameSchema,
+  name: ExecutableAgentActionNameSchema,
   operationId: AgentActionOperationId,
   threadId: AgentThreadId,
 });

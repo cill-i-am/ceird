@@ -23,6 +23,7 @@ export const organizationAgentActions = [
       target: "organization",
     },
     inputSchema: OrganizationMemberInviteInputSchema,
+    executionStatus: "planned",
     kind: "write",
     modelDescription:
       "Invite a person to the active Ceird organization with an invitable role.",

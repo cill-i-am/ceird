@@ -3,14 +3,20 @@ import { ParseResult, Schema } from "effect";
 
 import {
   AgentInstanceName,
+  AGENT_ACTIONS,
+  AGENT_ACTIONS_MANIFEST,
   AGENT_ACTION_MANIFEST_SCHEMA,
   AGENT_ACTION_NAMES,
+  AGENT_EXECUTABLE_ACTIONS,
+  AGENT_EXECUTABLE_ACTION_MANIFEST,
+  AGENT_EXECUTABLE_ACTION_NAMES,
   AgentThreadId,
   AgentThreadListResponseSchema,
   AgentConnectTokenInvalidError,
   CreateAgentThreadInputSchema,
   buildAgentInstanceName,
   getAgentActionDefinition,
+  getAgentActionManifest,
   parseAgentInstanceName,
   signAgentConnectToken,
   verifyAgentConnectToken,
@@ -38,6 +44,96 @@ describe("@ceird/agents-core", () => {
       "destructive"
     );
     expect(AGENT_ACTION_MANIFEST_SCHEMA).toBeDefined();
+  });
+
+  it("keeps action registry names unique", () => {
+    expect(new Set(AGENT_ACTION_NAMES).size).toBe(AGENT_ACTION_NAMES.length);
+  });
+
+  it.each(AGENT_ACTIONS)(
+    "looks up the exact action definition for $name",
+    (action) => {
+      expect(getAgentActionDefinition(action.name)).toBe(action);
+    }
+  );
+
+  it.each([
+    { executableOnly: false, manifest: AGENT_ACTIONS_MANIFEST },
+    { executableOnly: true, manifest: AGENT_EXECUTABLE_ACTION_MANIFEST },
+    { executableOnly: false, manifest: getAgentActionManifest() },
+    {
+      executableOnly: true,
+      manifest: getAgentActionManifest({ executableOnly: true }),
+    },
+  ])("projects a valid manifest %#", ({ executableOnly, manifest }) => {
+    expect(
+      Schema.decodeUnknownSync(AGENT_ACTION_MANIFEST_SCHEMA)(manifest)
+    ).toStrictEqual(manifest);
+    expect(
+      manifest.actions.every((action) =>
+        AGENT_ACTION_NAMES.includes(action.name)
+      )
+    ).toBe(true);
+
+    if (executableOnly) {
+      const executableNames = new Set<string>(AGENT_EXECUTABLE_ACTION_NAMES);
+
+      expect(
+        manifest.actions.every((action) => executableNames.has(action.name))
+      ).toBe(true);
+    }
+  });
+
+  it("rejects manifest items with unknown action names", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AGENT_ACTION_MANIFEST_SCHEMA)({
+        actions: [
+          {
+            ...AGENT_ACTIONS_MANIFEST.actions[0],
+            name: "ceird.jobs.not_real",
+          },
+        ],
+      })
+    ).toThrow(/ceird\.jobs\.not_real/);
+  });
+
+  it("keeps executable actions scoped to the current domain-backed set", () => {
+    expect(AGENT_EXECUTABLE_ACTION_NAMES).toStrictEqual([
+      "ceird.labels.list",
+      "ceird.sites.options",
+      "ceird.jobs.list",
+      "ceird.jobs.detail",
+      "ceird.jobs.options",
+      "ceird.jobs.add_comment",
+      "ceird.jobs.assign_label",
+      "ceird.jobs.remove_label",
+    ]);
+    expect(
+      AGENT_EXECUTABLE_ACTIONS.every(
+        (action) =>
+          action.executionStatus === "executable" &&
+          AGENT_ACTION_NAMES.includes(action.name)
+      )
+    ).toBe(true);
+  });
+
+  it("keeps action kind and confirmation policy invariants consistent", () => {
+    for (const action of AGENT_ACTIONS) {
+      if (action.kind === "read") {
+        expect(action.confirmationPolicy).toBe("none");
+      }
+
+      if (action.kind === "destructive") {
+        expect(action.confirmationPolicy).toBe("confirm_destructive");
+      }
+    }
+
+    expect(getAgentActionDefinition("ceird.jobs.assign_label").kind).toBe(
+      "write"
+    );
+    expect(
+      getAgentActionDefinition("ceird.jobs.assign_label").confirmationPolicy
+    ).toBe("confirm");
   });
 
   it("builds and parses deterministic org/user/thread instance names", () => {
