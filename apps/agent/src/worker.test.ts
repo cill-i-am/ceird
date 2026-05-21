@@ -66,6 +66,32 @@ describe("Agent Worker adapter", () => {
     ).toBe(false);
   });
 
+  it("adds browser CORS headers to immutable Durable Object responses", async () => {
+    routeAgentRequest.mockResolvedValue(
+      await fetch("data:application/json,%5B%5D")
+    );
+    const env = makeEnv();
+    const token = await signAgentConnectToken({
+      agentInstanceName,
+      secret: "agent-secret",
+      ttlSeconds: 60,
+    });
+    const url = new URL(makeAgentUrl("ceird-agent", token));
+    url.pathname += "/get-messages";
+    const response = await fetchWorker(
+      new Request(url, {
+        headers: { origin: "https://app.example.com" },
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://app.example.com"
+    );
+    await expect(response.text()).resolves.toBe("[]");
+  });
+
   it("answers browser preflight before agent authorization", async () => {
     const response = await fetchWorker(
       new Request(

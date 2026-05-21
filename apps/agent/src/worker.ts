@@ -84,11 +84,36 @@ function withCorsHeaders(
     return response;
   }
 
+  const mutableResponse = makeResponseHeadersMutable(response);
+
   for (const [key, value] of corsHeaders) {
-    response.headers.set(key, value);
+    mutableResponse.headers.set(key, value);
   }
 
-  return response;
+  return mutableResponse;
+}
+
+function makeResponseHeadersMutable(response: Response): Response {
+  const testHeader = "x-ceird-agent-header-mutability-check";
+
+  try {
+    response.headers.set(testHeader, "1");
+    response.headers.delete(testHeader);
+
+    return response;
+  } catch (error) {
+    if (!(error instanceof TypeError)) {
+      throw error;
+    }
+  }
+
+  return new Response(response.body, {
+    cf: response.cf,
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText,
+    webSocket: response.webSocket,
+  });
 }
 
 function makeCorsHeaders(
