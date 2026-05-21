@@ -4,9 +4,11 @@ import { Schema } from "effect";
 import { defineAgentAction } from "../action-registry.js";
 
 const OrganizationMemberInviteInputSchema = Schema.Struct({
-  email: Schema.Trim.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u)),
+  email: Schema.Trim.pipe(
+    Schema.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u))
+  ),
   role: InvitableOrganizationRole,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 

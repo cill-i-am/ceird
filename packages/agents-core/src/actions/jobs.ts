@@ -19,12 +19,10 @@ import {
 import { LabelId } from "@ceird/labels-core";
 import { Schema } from "effect";
 
-import { defineAgentAction } from "../action-registry.js";
-
-const EmptyActionInputSchema = Schema.Record({
-  key: Schema.String,
-  value: Schema.Never,
-});
+import {
+  defineAgentAction,
+  EmptyAgentActionInputSchema,
+} from "../action-registry.js";
 
 const JobPathInputSchema = Schema.Struct({
   workItemId: WorkItemId,
@@ -45,7 +43,9 @@ const AddJobCommentActionInputSchema = Schema.Struct({
   workItemId: WorkItemId,
 });
 
-const JobNestedInputSchema = <A, I, R>(inputSchema: Schema.Schema<A, I, R>) =>
+const JobNestedInputSchema = <InputSchema extends Schema.Top>(
+  inputSchema: InputSchema
+) =>
   Schema.Struct({
     input: inputSchema,
     workItemId: WorkItemId,
@@ -114,7 +114,7 @@ export const jobAgentActions = [
       summary: "Read job form options.",
       target: "jobs",
     },
-    inputSchema: EmptyActionInputSchema,
+    inputSchema: EmptyAgentActionInputSchema,
     executionStatus: "executable",
     kind: "read",
     modelDescription:
@@ -328,7 +328,7 @@ export const rateCardAgentActions = [
       summary: "Read organization rate cards.",
       target: "rate cards",
     },
-    inputSchema: EmptyActionInputSchema,
+    inputSchema: EmptyAgentActionInputSchema,
     executionStatus: "executable",
     kind: "read",
     modelDescription: "List Ceird rate cards.",

@@ -56,8 +56,10 @@ export class JobsOrganizationRoleNotSupportedError extends Schema.TaggedErrorCla
   }
 ) {}
 
+export const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
+  "@ceird/domains/jobs/WorkItemOrganizationMismatchError" as const;
 export class WorkItemOrganizationMismatchError extends Schema.TaggedErrorClass<WorkItemOrganizationMismatchError>()(
-  "@ceird/domains/jobs/WorkItemOrganizationMismatchError",
+  WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
   {
     message: Schema.String,
     organizationId: OrganizationId,

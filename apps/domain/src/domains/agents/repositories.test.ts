@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AgentActionOperationId } from "@ceird/agents-core";
 import { OrganizationId, UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { AppEffectSqlRuntimeLive } from "../../platform/database/database.js";
 import {
@@ -12,6 +12,10 @@ import {
   createTestDatabase,
   withPool,
 } from "../../platform/database/test-database.js";
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import {
   AgentActionRunsRepository,
   AgentThreadsRepository,
@@ -157,8 +161,8 @@ async function runAgentEffect<Value, Error, Requirements>(
         Effect.provide(AgentThreadsRepository.Default),
         Effect.provide(AgentActionRunsRepository.Default),
         Effect.provide(AppEffectSqlRuntimeLive),
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(new Map([["DATABASE_URL", databaseUrl]]))
+        withConfigProvider(
+          configProviderFromMap(new Map([["DATABASE_URL", databaseUrl]]))
         )
       ) as Effect.Effect<Value, Error, never>
     )

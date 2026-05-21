@@ -2,8 +2,12 @@
 
 import { OrganizationId, UserId } from "@ceird/identity-core";
 import { WorkItemId } from "@ceird/jobs-core";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
+import {
+  HttpApiEndpoint,
+  HttpApiGroup,
+  HttpApiSchema,
+} from "effect/unstable/httpapi";
 
 import {
   AgentActionConfirmationPolicy,
@@ -40,26 +44,27 @@ function isIsoDateTimeString(value: string): boolean {
 }
 
 export const IsoDateTimeString = Schema.String.pipe(
-  Schema.filter((value) => isIsoDateTimeString(value)),
-  Schema.annotations({
+  Schema.refine((value): value is string => isIsoDateTimeString(value), {
+    message: "Expected an ISO-8601 UTC datetime string",
+  }),
+  Schema.annotate({
     description: "ISO-8601 UTC datetime string",
-    message: () => "Expected an ISO-8601 UTC datetime string",
   })
 );
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
 
-export const AgentThreadId = Schema.UUID.pipe(
+export const AgentThreadId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("@ceird/agents-core/AgentThreadId")
 );
 export type AgentThreadId = Schema.Schema.Type<typeof AgentThreadId>;
 
-export const AgentActionRunId = Schema.UUID.pipe(
+export const AgentActionRunId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("@ceird/agents-core/AgentActionRunId")
 );
 export type AgentActionRunId = Schema.Schema.Type<typeof AgentActionRunId>;
 
 export const AGENT_THREAD_STATUSES = ["active", "archived"] as const;
-export const AgentThreadStatus = Schema.Literal(...AGENT_THREAD_STATUSES);
+export const AgentThreadStatus = Schema.Literals(AGENT_THREAD_STATUSES);
 export type AgentThreadStatus = Schema.Schema.Type<typeof AgentThreadStatus>;
 
 export const AGENT_ACTION_RUN_STATUSES = [
@@ -67,15 +72,13 @@ export const AGENT_ACTION_RUN_STATUSES = [
   "succeeded",
   "failed",
 ] as const;
-export const AgentActionRunStatus = Schema.Literal(
-  ...AGENT_ACTION_RUN_STATUSES
-);
+export const AgentActionRunStatus = Schema.Literals(AGENT_ACTION_RUN_STATUSES);
 export type AgentActionRunStatus = Schema.Schema.Type<
   typeof AgentActionRunStatus
 >;
 
 export const AgentInstanceName = Schema.String.pipe(
-  Schema.pattern(/^org:[^:]+:user:[^:]+:thread:[0-9a-f-]{36}$/),
+  Schema.check(Schema.isPattern(/^org:[^:]+:user:[^:]+:thread:[0-9a-f-]{36}$/)),
   Schema.brand("@ceird/agents-core/AgentInstanceName")
 );
 export type AgentInstanceName = Schema.Schema.Type<typeof AgentInstanceName>;
@@ -97,9 +100,11 @@ export const AGENT_THREAD_LIST_MAX_LIMIT = 100;
 export const AgentThreadListQuerySchema = Schema.Struct({
   limit: Schema.optional(
     Schema.NumberFromString.pipe(
-      Schema.int(),
-      Schema.positive(),
-      Schema.lessThanOrEqualTo(AGENT_THREAD_LIST_MAX_LIMIT)
+      Schema.check(
+        Schema.isInt(),
+        Schema.isGreaterThan(0),
+        Schema.isLessThanOrEqualTo(AGENT_THREAD_LIST_MAX_LIMIT)
+      )
     )
   ),
 });
@@ -108,9 +113,10 @@ export type AgentThreadListQuery = Schema.Schema.Type<
 >;
 
 export const CreateAgentThreadInputSchema = Schema.Struct({
-  title: Schema.optionalWith(
-    Schema.Trim.pipe(Schema.minLength(1), Schema.maxLength(120)),
-    { exact: true }
+  title: Schema.optional(
+    Schema.Trim.pipe(
+      Schema.check(Schema.isMinLength(1), Schema.isMaxLength(120))
+    )
   ),
 });
 export type CreateAgentThreadInput = Schema.Schema.Type<
@@ -156,7 +162,7 @@ type AgentActionNameTuple = readonly [
 export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
   (action) => action.name
 ) as unknown as AgentActionNameTuple;
-export const AgentActionNameSchema = Schema.Literal(...AGENT_ACTION_NAMES);
+export const AgentActionNameSchema = Schema.Literals(AGENT_ACTION_NAMES);
 export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
 export type AgentActionDefinition<
   Name extends AgentActionName = AgentActionName,
@@ -180,8 +186,8 @@ type ExecutableAgentActionNameTuple = readonly [
 export const AGENT_EXECUTABLE_ACTION_NAMES = AGENT_EXECUTABLE_ACTIONS.map(
   (action) => action.name
 ) as unknown as ExecutableAgentActionNameTuple;
-export const ExecutableAgentActionNameSchema = Schema.Literal(
-  ...AGENT_EXECUTABLE_ACTION_NAMES
+export const ExecutableAgentActionNameSchema = Schema.Literals(
+  AGENT_EXECUTABLE_ACTION_NAMES
 );
 export type ExecutableAgentActionName = Schema.Schema.Type<
   typeof ExecutableAgentActionNameSchema
@@ -259,21 +265,21 @@ export function projectAgentActionManifest(
   };
 }
 
+export const AGENT_ACTIONS_MANIFEST = projectAgentActionManifest(AGENT_ACTIONS);
+export const AGENT_EXECUTABLE_ACTION_MANIFEST = projectAgentActionManifest(
+  AGENT_EXECUTABLE_ACTIONS
+);
+
 export function getAgentActionManifest(
   options: { readonly executableOnly?: boolean } = {}
 ): AgentActionManifestResponse {
-  return projectAgentActionManifest(
-    options.executableOnly === true ? AGENT_EXECUTABLE_ACTIONS : AGENT_ACTIONS
-  );
+  return options.executableOnly === true
+    ? AGENT_EXECUTABLE_ACTION_MANIFEST
+    : AGENT_ACTIONS_MANIFEST;
 }
 
-export const AGENT_ACTIONS_MANIFEST = getAgentActionManifest();
-export const AGENT_EXECUTABLE_ACTION_MANIFEST = getAgentActionManifest({
-  executableOnly: true,
-});
-
 export const AgentActionOperationId = Schema.String.pipe(
-  Schema.pattern(/^[a-zA-Z0-9_.:-]{8,160}$/),
+  Schema.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{8,160}$/)),
   Schema.brand("@ceird/agents-core/AgentActionOperationId")
 );
 export type AgentActionOperationId = Schema.Schema.Type<
@@ -309,110 +315,150 @@ export const AGENT_STORAGE_OPERATIONS = [
   "action.run",
   "action.execute",
 ] as const;
-export const AgentStorageOperation = Schema.Literal(
-  ...AGENT_STORAGE_OPERATIONS
-);
+export const AgentStorageOperation = Schema.Literals(AGENT_STORAGE_OPERATIONS);
 export type AgentStorageOperation = Schema.Schema.Type<
   typeof AgentStorageOperation
 >;
 
-export class AgentAccessDeniedError extends Schema.TaggedError<AgentAccessDeniedError>()(
-  "@ceird/agents-core/AgentAccessDeniedError",
+export const AGENT_ACTIONS_PATH = "/agent/actions" as const;
+export const AGENT_INTERNAL_PATH_PREFIX = "/agent/internal" as const;
+export const AGENT_INTERNAL_ACTIONS_PATH =
+  `${AGENT_INTERNAL_PATH_PREFIX}/actions` as const;
+export const AGENT_INTERNAL_THREAD_ACTIVITY_PATH =
+  `${AGENT_INTERNAL_PATH_PREFIX}/threads/:threadId/activity` as const;
+
+export function makeAgentInternalThreadActivityPath(
+  threadId: AgentThreadId
+): string {
+  return `${AGENT_INTERNAL_PATH_PREFIX}/threads/${threadId}/activity`;
+}
+
+export function isAgentInternalPath(pathname: string): boolean {
+  return pathname.startsWith(`${AGENT_INTERNAL_PATH_PREFIX}/`);
+}
+
+export const AGENT_ACCESS_DENIED_ERROR_TAG =
+  "@ceird/agents-core/AgentAccessDeniedError" as const;
+export const AGENT_THREAD_NOT_FOUND_ERROR_TAG =
+  "@ceird/agents-core/AgentThreadNotFoundError" as const;
+export const AGENT_STORAGE_ERROR_TAG =
+  "@ceird/agents-core/AgentStorageError" as const;
+export const AGENT_ACTION_REJECTED_ERROR_TAG =
+  "@ceird/agents-core/AgentActionRejectedError" as const;
+
+export class AgentAccessDeniedError extends Schema.TaggedErrorClass<AgentAccessDeniedError>()(
+  AGENT_ACCESS_DENIED_ERROR_TAG,
   { message: Schema.String },
-  HttpApiSchema.annotations({ status: 403 })
+  { httpApiStatus: 403 }
 ) {}
 
-export class AgentThreadNotFoundError extends Schema.TaggedError<AgentThreadNotFoundError>()(
-  "@ceird/agents-core/AgentThreadNotFoundError",
+export class AgentThreadNotFoundError extends Schema.TaggedErrorClass<AgentThreadNotFoundError>()(
+  AGENT_THREAD_NOT_FOUND_ERROR_TAG,
   { message: Schema.String, threadId: Schema.optional(AgentThreadId) },
-  HttpApiSchema.annotations({ status: 404 })
+  { httpApiStatus: 404 }
 ) {}
 
-export class AgentStorageError extends Schema.TaggedError<AgentStorageError>()(
-  "@ceird/agents-core/AgentStorageError",
+export class AgentStorageError extends Schema.TaggedErrorClass<AgentStorageError>()(
+  AGENT_STORAGE_ERROR_TAG,
   {
     cause: Schema.optional(Schema.String),
     message: Schema.String,
     operation: AgentStorageOperation,
   },
-  HttpApiSchema.annotations({ status: 503 })
+  { httpApiStatus: 503 }
 ) {}
 
-export class AgentActionRejectedError extends Schema.TaggedError<AgentActionRejectedError>()(
-  "@ceird/agents-core/AgentActionRejectedError",
+export class AgentActionRejectedError extends Schema.TaggedErrorClass<AgentActionRejectedError>()(
+  AGENT_ACTION_REJECTED_ERROR_TAG,
   {
     actionName: Schema.optional(AgentActionNameSchema),
+    cause: Schema.optional(Schema.String),
     message: Schema.String,
     workItemId: Schema.optional(WorkItemId),
   },
-  HttpApiSchema.annotations({ status: 400 })
+  { httpApiStatus: 400 }
 ) {}
 
 export const AgentThreadsApiGroup = HttpApiGroup.make("agentThreads")
   .add(
-    HttpApiEndpoint.get("listAgentThreads", "/agent/threads")
-      .setUrlParams(AgentThreadListQuerySchema)
-      .addSuccess(AgentThreadListResponseSchema)
-      .addError(AgentAccessDeniedError)
-      .addError(AgentStorageError)
+    HttpApiEndpoint.get("listAgentThreads", "/agent/threads", {
+      query: AgentThreadListQuerySchema,
+      success: AgentThreadListResponseSchema,
+      error: [AgentAccessDeniedError, AgentStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("createAgentThread", "/agent/threads")
-      .setPayload(CreateAgentThreadInputSchema)
-      .addSuccess(AgentThreadResponseSchema, { status: 201 })
-      .addError(AgentAccessDeniedError)
-      .addError(AgentStorageError)
+    HttpApiEndpoint.post("createAgentThread", "/agent/threads", {
+      payload: CreateAgentThreadInputSchema,
+      success: AgentThreadResponseSchema.pipe(HttpApiSchema.status("Created")),
+      error: [AgentAccessDeniedError, AgentStorageError],
+    })
   )
   .add(
     HttpApiEndpoint.post(
       "archiveAgentThread",
-      "/agent/threads/:threadId/archive"
+      "/agent/threads/:threadId/archive",
+      {
+        params: { threadId: AgentThreadId },
+        success: AgentThreadResponseSchema,
+        error: [
+          AgentAccessDeniedError,
+          AgentThreadNotFoundError,
+          AgentStorageError,
+        ],
+      }
     )
-      .setPath(Schema.Struct({ threadId: AgentThreadId }))
-      .addSuccess(AgentThreadResponseSchema)
-      .addError(AgentAccessDeniedError)
-      .addError(AgentThreadNotFoundError)
-      .addError(AgentStorageError)
   )
   .add(
     HttpApiEndpoint.post(
       "authorizeAgentConnect",
-      "/agent/threads/:threadId/authorize"
+      "/agent/threads/:threadId/authorize",
+      {
+        params: { threadId: AgentThreadId },
+        success: AgentConnectAuthorizationSchema,
+        error: [
+          AgentAccessDeniedError,
+          AgentThreadNotFoundError,
+          AgentStorageError,
+        ],
+      }
     )
-      .setPath(Schema.Struct({ threadId: AgentThreadId }))
-      .addSuccess(AgentConnectAuthorizationSchema)
-      .addError(AgentAccessDeniedError)
-      .addError(AgentThreadNotFoundError)
-      .addError(AgentStorageError)
   );
 
 export const AgentActionsApiGroup = HttpApiGroup.make("agentActions").add(
-  HttpApiEndpoint.get("getAgentActionManifest", "/agent/actions")
-    .addSuccess(AgentActionManifestResponseSchema)
-    .addError(AgentAccessDeniedError)
-    .addError(AgentStorageError)
+  HttpApiEndpoint.get("getAgentActionManifest", AGENT_ACTIONS_PATH, {
+    success: AgentActionManifestResponseSchema,
+    error: [AgentAccessDeniedError, AgentStorageError],
+  })
 );
 
 export const AgentInternalApiGroup = HttpApiGroup.make("agentInternal")
   .add(
     HttpApiEndpoint.post(
       "touchAgentThreadActivity",
-      "/agent/internal/threads/:threadId/activity"
+      AGENT_INTERNAL_THREAD_ACTIVITY_PATH,
+      {
+        params: { threadId: AgentThreadId },
+        success: AgentThreadResponseSchema,
+        error: [
+          AgentAccessDeniedError,
+          AgentThreadNotFoundError,
+          AgentStorageError,
+        ],
+      }
     )
-      .setPath(Schema.Struct({ threadId: AgentThreadId }))
-      .addSuccess(AgentThreadResponseSchema)
-      .addError(AgentAccessDeniedError)
-      .addError(AgentThreadNotFoundError)
-      .addError(AgentStorageError)
   )
   .add(
-    HttpApiEndpoint.post("runAgentAction", "/agent/internal/actions")
-      .setPayload(RunAgentActionInputSchema)
-      .addSuccess(RunAgentActionResponseSchema)
-      .addError(AgentAccessDeniedError)
-      .addError(AgentActionRejectedError)
-      .addError(AgentThreadNotFoundError)
-      .addError(AgentStorageError)
+    HttpApiEndpoint.post("runAgentAction", AGENT_INTERNAL_ACTIONS_PATH, {
+      payload: RunAgentActionInputSchema,
+      success: RunAgentActionResponseSchema,
+      error: [
+        AgentAccessDeniedError,
+        AgentActionRejectedError,
+        AgentThreadNotFoundError,
+        AgentStorageError,
+      ],
+    })
   );
 
 export function buildAgentInstanceName(input: {
@@ -424,7 +470,7 @@ export function buildAgentInstanceName(input: {
     input.userId
   )}:thread:${input.threadId}`;
 
-  return ParseResult.decodeUnknownSync(AgentInstanceName)(raw);
+  return Schema.decodeUnknownSync(AgentInstanceName)(raw);
 }
 
 export interface ParsedAgentInstanceName {
@@ -441,15 +487,22 @@ export function parseAgentInstanceName(
   if (!match) {
     throw new Error(`Invalid agent instance name: ${value}`);
   }
+  const [, rawOrganizationId, rawUserId, rawThreadId] = match;
+
+  if (
+    rawOrganizationId === undefined ||
+    rawUserId === undefined ||
+    rawThreadId === undefined
+  ) {
+    throw new Error(`Invalid agent instance name: ${value}`);
+  }
 
   return {
-    organizationId: ParseResult.decodeUnknownSync(OrganizationId)(
-      decodeURIComponent(match[1] ?? "")
+    organizationId: Schema.decodeUnknownSync(OrganizationId)(
+      decodeURIComponent(rawOrganizationId)
     ),
-    threadId: ParseResult.decodeUnknownSync(AgentThreadId)(match[3] ?? ""),
-    userId: ParseResult.decodeUnknownSync(UserId)(
-      decodeURIComponent(match[2] ?? "")
-    ),
+    threadId: Schema.decodeUnknownSync(AgentThreadId)(rawThreadId),
+    userId: Schema.decodeUnknownSync(UserId)(decodeURIComponent(rawUserId)),
   };
 }
 
@@ -535,7 +588,7 @@ export async function verifyAgentConnectToken(
 
 function decodeAgentConnectTokenPayload(encodedPayload: string) {
   try {
-    return ParseResult.decodeUnknownSync(AgentConnectTokenPayloadSchema)(
+    return Schema.decodeUnknownSync(AgentConnectTokenPayloadSchema)(
       JSON.parse(textDecoder.decode(base64UrlDecode(encodedPayload)))
     );
   } catch {

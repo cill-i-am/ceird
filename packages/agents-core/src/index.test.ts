@@ -1,5 +1,5 @@
 import { OrganizationId, UserId } from "@ceird/identity-core";
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
 
 import {
   AgentInstanceName,
@@ -10,6 +10,7 @@ import {
   AGENT_EXECUTABLE_ACTIONS,
   AGENT_EXECUTABLE_ACTION_MANIFEST,
   AGENT_EXECUTABLE_ACTION_NAMES,
+  AGENT_INTERNAL_ACTIONS_PATH,
   AgentThreadId,
   AgentThreadListResponseSchema,
   AgentConnectTokenInvalidError,
@@ -17,6 +18,8 @@ import {
   buildAgentInstanceName,
   getAgentActionDefinition,
   getAgentActionManifest,
+  isAgentInternalPath,
+  makeAgentInternalThreadActivityPath,
   parseAgentInstanceName,
   signAgentConnectToken,
   verifyAgentConnectToken,
@@ -25,10 +28,10 @@ import {
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
-const decodeCreateInput = ParseResult.decodeUnknownSync(
+const decodeCreateInput = Schema.decodeUnknownSync(
   CreateAgentThreadInputSchema
 );
-const decodeListResponse = ParseResult.decodeUnknownSync(
+const decodeListResponse = Schema.decodeUnknownSync(
   AgentThreadListResponseSchema
 );
 const decodeInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
@@ -193,8 +196,28 @@ describe("@ceird/agents-core", () => {
       parseAgentInstanceName("org:a:user:b" as AgentInstanceName)
     ).toThrow(/Invalid agent instance name/);
     expect(() => decodeInstanceName("not-an-agent-name")).toThrow(
-      "Expected a string matching the pattern"
+      /Expected a string matching/
     );
+  });
+
+  it("exports shared internal agent route helpers", () => {
+    const threadId = decodeAgentThreadId(
+      "11111111-1111-4111-8111-111111111111"
+    );
+
+    expect(AGENT_INTERNAL_ACTIONS_PATH).toBe("/agent/internal/actions");
+    expect(makeAgentInternalThreadActivityPath(threadId)).toBe(
+      "/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity"
+    );
+    expect(isAgentInternalPath("/agent/internal/actions")).toBeTruthy();
+    expect(
+      isAgentInternalPath(
+        "/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity"
+      )
+    ).toBeTruthy();
+    expect(isAgentInternalPath("/agent/internal")).toBeFalsy();
+    expect(isAgentInternalPath("/agent/internalize")).toBeFalsy();
+    expect(isAgentInternalPath("/agent/actions")).toBeFalsy();
   });
 
   it("normalizes create input and list responses", () => {

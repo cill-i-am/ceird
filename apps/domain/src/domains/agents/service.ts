@@ -1,10 +1,15 @@
 import {
   AgentAccessDeniedError,
+  AGENT_ACCESS_DENIED_ERROR_TAG,
+  AGENT_ACTION_REJECTED_ERROR_TAG,
+  AGENT_ACTIONS_MANIFEST,
   AgentActionRejectedError,
+  AgentActionNameSchema,
+  AgentStorageOperation,
+  AGENT_STORAGE_ERROR_TAG,
   AgentStorageError,
   AgentThreadNotFoundError,
   AGENT_THREAD_LIST_DEFAULT_LIMIT,
-  getAgentActionManifest,
   getAgentActionKind,
   timingSafeEqual,
 } from "@ceird/agents-core";
@@ -13,15 +18,24 @@ import type {
   AgentActionName,
   AgentActionRunId,
   AgentActionRunStatus,
-  AgentStorageOperation,
   AgentThreadListQuery,
   AgentThreadId,
   CreateAgentThreadInput,
   RunAgentActionInput,
   RunAgentActionResponse,
 } from "@ceird/agents-core";
-import { HttpServerRequest } from "@effect/platform";
-import { Config, Effect, Either, Option, Schema } from "effect";
+import { WorkItemId } from "@ceird/jobs-core";
+import {
+  Config,
+  Context,
+  Effect,
+  Layer,
+  Match,
+  Option,
+  Result,
+  Schema,
+} from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -37,24 +51,16 @@ import {
 import type { AgentActionInputLedgerValue } from "./repositories.js";
 
 const AgentRuntimeConfig = Config.all({
-  connectTokenTtlSeconds: Config.integer(
-    "AGENT_CONNECT_TOKEN_TTL_SECONDS"
-  ).pipe(Config.withDefault(300)),
+  connectTokenTtlSeconds: Config.int("AGENT_CONNECT_TOKEN_TTL_SECONDS").pipe(
+    Config.withDefault(300)
+  ),
   internalSecret: Config.string("AGENT_INTERNAL_SECRET"),
 }).pipe(Effect.orDie);
 
-export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
+export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
   "@ceird/domains/agents/AgentThreadsService",
   {
-    accessors: true,
-    dependencies: [
-      AgentActions.Default,
-      AgentActionRunsRepository.Default,
-      AgentThreadsRepository.Default,
-      CurrentOrganizationActor.Default,
-      OrganizationAuthorization.Default,
-    ],
-    effect: Effect.gen(function* AgentThreadsServiceLive() {
+    make: Effect.gen(function* AgentThreadsServiceLive() {
       const actions = yield* AgentActions;
       const actionRunsRepository = yield* AgentActionRunsRepository;
       const actor = yield* CurrentOrganizationActor;
@@ -79,11 +85,17 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       const getActions = Effect.fn("AgentThreadsService.getActions")(
         function* () {
           const currentActor = yield* loadActor("action.manifest");
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            currentActor.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+          yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
           yield* authorization
             .ensureCanViewOrganizationData(currentActor)
             .pipe(Effect.mapError(mapAuthorizationDenied));
 
-          return getAgentActionManifest();
+          return AGENT_ACTIONS_MANIFEST;
         }
       );
 
@@ -91,15 +103,24 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         query: AgentThreadListQuery
       ) {
         const currentActor = yield* loadActor("thread.list");
+        const limit = query.limit ?? AGENT_THREAD_LIST_DEFAULT_LIMIT;
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          currentActor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
+        yield* Effect.annotateCurrentSpan("agent.threadLimit", limit);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
         const items = yield* threadsRepository
           .listForUser(currentActor.organizationId, currentActor.userId, {
-            limit: query.limit ?? AGENT_THREAD_LIST_DEFAULT_LIMIT,
+            limit,
           })
           .pipe(Effect.catchTag("SqlError", failStorage("thread.list")));
+        yield* Effect.annotateCurrentSpan("agent.threadCount", items.length);
 
         return { items } as const;
       });
@@ -108,6 +129,12 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         input: CreateAgentThreadInput
       ) {
         const currentActor = yield* loadActor("thread.create");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          currentActor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -119,6 +146,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
             userId: currentActor.userId,
           })
           .pipe(Effect.catchTag("SqlError", failStorage("thread.create")));
+        yield* Effect.annotateCurrentSpan("agent.threadId", item.id);
 
         return { item } as const;
       });
@@ -127,6 +155,13 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         threadId: AgentThreadId
       ) {
         const currentActor = yield* loadActor("thread.archive");
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          currentActor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -154,6 +189,13 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
         "AgentThreadsService.authorizeConnect"
       )(function* (threadId: AgentThreadId) {
         const currentActor = yield* loadActor("thread.authorizeConnect");
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          currentActor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
@@ -201,6 +243,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
 
       const touchActivity = Effect.fn("AgentThreadsService.touchActivity")(
         function* (threadId: AgentThreadId) {
+          yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
           yield* ensureInternalRequest(config.internalSecret);
 
           const item = yield* threadsRepository
@@ -288,7 +331,7 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
             if (isReExecutableReadReplay(begin.run)) {
               const replayed = yield* actions
                 .execute(threadActor.actor, input.name, input.input)
-                .pipe(Effect.either);
+                .pipe(Effect.result);
 
               return replayedReadResultToOutcome(replayed, {
                 actionRunId: begin.run.id,
@@ -301,18 +344,18 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
               message: begin.run.errorMessage,
               name: begin.run.actionName,
               result: begin.run.result,
-            }).pipe(Effect.either);
+            }).pipe(Effect.result);
 
             return actionRunResultToOutcome(replayed);
           }
 
           const result = yield* actions
             .execute(threadActor.actor, input.name, input.input)
-            .pipe(Effect.either);
+            .pipe(Effect.result);
 
-          if (Either.isRight(result)) {
+          if (Result.isSuccess(result)) {
             const completed = yield* actionRunsRepository
-              .completeSucceeded(begin.run.id, result.right, {
+              .completeSucceeded(begin.run.id, result.success, {
                 storeResult: actionKind !== "read",
               })
               .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
@@ -320,19 +363,19 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
             return succeedActionRun({
               actionRunId: completed.id,
               replayed: false,
-              result: result.right,
+              result: result.success,
             });
           }
 
           yield* actionRunsRepository
             .completeFailed(
               begin.run.id,
-              result.left.message,
-              makeActionRunFailureLedgerValue(result.left)
+              result.failure.message,
+              makeActionRunFailureLedgerValue(result.failure)
             )
             .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
 
-          return rejectActionRun(result.left);
+          return rejectActionRun(result.failure);
         });
         const outcome =
           actionKind === "read"
@@ -355,7 +398,58 @@ export class AgentThreadsService extends Effect.Service<AgentThreadsService>()(
       };
     }),
   }
-) {}
+) {
+  static readonly archive = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["archive"]
+    >
+  ) => AgentThreadsService.use((service) => service.archive(...args));
+  static readonly authorizeConnect = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["authorizeConnect"]
+    >
+  ) => AgentThreadsService.use((service) => service.authorizeConnect(...args));
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["create"]
+    >
+  ) => AgentThreadsService.use((service) => service.create(...args));
+  static readonly getActions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["getActions"]
+    >
+  ) => AgentThreadsService.use((service) => service.getActions(...args));
+  static readonly list = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["list"]
+    >
+  ) => AgentThreadsService.use((service) => service.list(...args));
+  static readonly runAction = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["runAction"]
+    >
+  ) => AgentThreadsService.use((service) => service.runAction(...args));
+  static readonly touchActivity = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["touchActivity"]
+    >
+  ) => AgentThreadsService.use((service) => service.touchActivity(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AgentThreadsService,
+    AgentThreadsService.make
+  );
+  static readonly Default = AgentThreadsService.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        AgentActions.Default,
+        AgentActionRunsRepository.Default,
+        AgentThreadsRepository.Default,
+        CurrentOrganizationActor.Default,
+        OrganizationAuthorization.Default
+      )
+    )
+  );
+}
 
 const mapAgentActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new AgentAccessDeniedError({ message })
@@ -407,12 +501,16 @@ type ActionRunOutcome =
     };
 
 const ACTION_RUN_FAILURE_LEDGER_TAGS = [
-  "@ceird/agents-core/AgentAccessDeniedError",
-  "@ceird/agents-core/AgentActionRejectedError",
-  "@ceird/agents-core/AgentStorageError",
+  AGENT_ACCESS_DENIED_ERROR_TAG,
+  AGENT_ACTION_REJECTED_ERROR_TAG,
+  AGENT_STORAGE_ERROR_TAG,
 ] as const;
 const AgentActionRunFailureLedgerValueSchema = Schema.Struct({
-  tag: Schema.Literal(...ACTION_RUN_FAILURE_LEDGER_TAGS),
+  actionName: Schema.optional(AgentActionNameSchema),
+  cause: Schema.optional(Schema.String),
+  operation: Schema.optional(AgentStorageOperation),
+  tag: Schema.Literals(ACTION_RUN_FAILURE_LEDGER_TAGS),
+  workItemId: Schema.optional(WorkItemId),
 });
 type AgentActionRunFailureLedgerValue = Schema.Schema.Type<
   typeof AgentActionRunFailureLedgerValueSchema
@@ -433,39 +531,48 @@ function makeActionRunFailureLedgerValue(
   error: ActionRunFailure
 ): AgentActionRunFailureLedgerValue {
   if (error instanceof AgentAccessDeniedError) {
-    return { tag: "@ceird/agents-core/AgentAccessDeniedError" };
+    return { tag: AGENT_ACCESS_DENIED_ERROR_TAG };
   }
 
   if (error instanceof AgentStorageError) {
-    return { tag: "@ceird/agents-core/AgentStorageError" };
+    return {
+      ...(error.cause === undefined ? {} : { cause: error.cause }),
+      operation: error.operation,
+      tag: AGENT_STORAGE_ERROR_TAG,
+    };
   }
 
-  return { tag: "@ceird/agents-core/AgentActionRejectedError" };
+  return {
+    ...(error.actionName === undefined ? {} : { actionName: error.actionName }),
+    ...(error.cause === undefined ? {} : { cause: error.cause }),
+    tag: AGENT_ACTION_REJECTED_ERROR_TAG,
+    ...(error.workItemId === undefined ? {} : { workItemId: error.workItemId }),
+  };
 }
 
 function actionRunResultToOutcome(
-  result: Either.Either<RunAgentActionResponse, ActionRunFailure>
+  result: Result.Result<RunAgentActionResponse, ActionRunFailure>
 ): ActionRunOutcome {
-  return Either.isLeft(result)
-    ? rejectActionRun(result.left)
-    : succeedActionRun(result.right);
+  return Result.isFailure(result)
+    ? rejectActionRun(result.failure)
+    : succeedActionRun(result.success);
 }
 
 function replayedReadResultToOutcome(
-  result: Either.Either<unknown, ActionRunFailure>,
+  result: Result.Result<unknown, ActionRunFailure>,
   context: {
     readonly actionRunId: AgentActionRunId;
     readonly replayed: boolean;
   }
 ): ActionRunOutcome {
-  if (Either.isLeft(result)) {
-    return rejectActionRun(result.left);
+  if (Result.isFailure(result)) {
+    return rejectActionRun(result.failure);
   }
 
   return succeedActionRun({
     actionRunId: context.actionRunId,
     replayed: context.replayed,
-    result: result.right,
+    result: result.success,
   });
 }
 
@@ -563,34 +670,25 @@ function replayActionRun(
     readonly result: unknown;
   }
 ): Effect.Effect<RunAgentActionResponse, ActionRunFailure> {
-  switch (status) {
-    case "succeeded": {
-      return Effect.succeed({
+  return Match.value(status).pipe(
+    Match.when("succeeded", () =>
+      Effect.succeed({
         actionRunId: input.actionRunId,
         replayed: true,
         result: input.result,
-      });
-    }
-    case "failed": {
-      return replayFailedActionRun(input);
-    }
-    case "running": {
-      return Effect.fail(
+      })
+    ),
+    Match.when("failed", () => replayFailedActionRun(input)),
+    Match.when("running", () =>
+      Effect.fail(
         new AgentActionRejectedError({
           actionName: input.name,
           message: "Agent action operation is already running",
         })
-      );
-    }
-    default: {
-      return Effect.fail(
-        new AgentActionRejectedError({
-          actionName: input.name,
-          message: `Unsupported agent action status: ${String(status)}`,
-        })
-      );
-    }
-  }
+      )
+    ),
+    Match.exhaustive
+  );
 }
 
 function replayFailedActionRun(input: {
@@ -602,37 +700,35 @@ function replayFailedActionRun(input: {
   const failure =
     isAgentActionRunFailureLedgerValue(input.result) === true
       ? input.result
-      : ({ tag: "@ceird/agents-core/AgentActionRejectedError" } as const);
+      : ({ tag: AGENT_ACTION_REJECTED_ERROR_TAG } as const);
 
-  switch (failure.tag) {
-    case "@ceird/agents-core/AgentAccessDeniedError": {
-      return Effect.fail(new AgentAccessDeniedError({ message }));
-    }
-    case "@ceird/agents-core/AgentStorageError": {
-      return Effect.fail(
+  return Match.value(failure.tag).pipe(
+    Match.when(AGENT_ACCESS_DENIED_ERROR_TAG, () =>
+      Effect.fail(new AgentAccessDeniedError({ message }))
+    ),
+    Match.when(AGENT_STORAGE_ERROR_TAG, () =>
+      Effect.fail(
         new AgentStorageError({
+          ...(failure.cause === undefined ? {} : { cause: failure.cause }),
           message,
-          operation: "action.execute",
+          operation: failure.operation ?? "action.execute",
         })
-      );
-    }
-    case "@ceird/agents-core/AgentActionRejectedError": {
-      return Effect.fail(
+      )
+    ),
+    Match.when(AGENT_ACTION_REJECTED_ERROR_TAG, () =>
+      Effect.fail(
         new AgentActionRejectedError({
-          actionName: input.name,
+          actionName: failure.actionName ?? input.name,
+          ...(failure.cause === undefined ? {} : { cause: failure.cause }),
           message,
+          ...(failure.workItemId === undefined
+            ? {}
+            : { workItemId: failure.workItemId }),
         })
-      );
-    }
-    default: {
-      return Effect.fail(
-        new AgentActionRejectedError({
-          actionName: input.name,
-          message,
-        })
-      );
-    }
-  }
+      )
+    ),
+    Match.exhaustive
+  );
 }
 
 function formatUnknownCause(error: unknown): string {

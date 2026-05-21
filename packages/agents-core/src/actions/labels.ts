@@ -5,12 +5,10 @@ import {
 } from "@ceird/labels-core";
 import { Schema } from "effect";
 
-import { defineAgentAction } from "../action-registry.js";
-
-const EmptyActionInputSchema = Schema.Record({
-  key: Schema.String,
-  value: Schema.Never,
-});
+import {
+  defineAgentAction,
+  EmptyAgentActionInputSchema,
+} from "../action-registry.js";
 
 const LabelPathInputSchema = Schema.Struct({
   labelId: LabelId,
@@ -29,7 +27,7 @@ export const labelAgentActions = [
       summary: "Read organization labels available for jobs and sites.",
       target: "labels",
     },
-    inputSchema: EmptyActionInputSchema,
+    inputSchema: EmptyAgentActionInputSchema,
     executionStatus: "executable",
     kind: "read",
     modelDescription: "List active Ceird labels for the organization.",

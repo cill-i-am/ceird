@@ -1,5 +1,5 @@
-import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
@@ -21,9 +21,9 @@ const AgentThreadsHandlersLive = HttpApiBuilder.group(
       const agentThreadsService = yield* AgentThreadsService;
 
       return handlers
-        .handle("listAgentThreads", ({ urlParams }) =>
+        .handle("listAgentThreads", ({ query }) =>
           agentThreadsService
-            .list(urlParams)
+            .list(query)
             .pipe(observeAgentsOperation("listAgentThreads"))
         )
         .handle("createAgentThread", ({ payload }) =>
@@ -31,14 +31,14 @@ const AgentThreadsHandlersLive = HttpApiBuilder.group(
             .create(payload)
             .pipe(observeAgentsOperation("createAgentThread"))
         )
-        .handle("archiveAgentThread", ({ path }) =>
+        .handle("archiveAgentThread", ({ params }) =>
           agentThreadsService
-            .archive(path.threadId)
+            .archive(params.threadId)
             .pipe(observeAgentsOperation("archiveAgentThread"))
         )
-        .handle("authorizeAgentConnect", ({ path }) =>
+        .handle("authorizeAgentConnect", ({ params }) =>
           agentThreadsService
-            .authorizeConnect(path.threadId)
+            .authorizeConnect(params.threadId)
             .pipe(observeAgentsOperation("authorizeAgentConnect"))
         );
     })
@@ -72,9 +72,9 @@ const AgentInternalHandlersLive = HttpApiBuilder.group(
             .runAction(payload)
             .pipe(observeAgentsOperation("runAgentAction"))
         )
-        .handle("touchAgentThreadActivity", ({ path }) =>
+        .handle("touchAgentThreadActivity", ({ params }) =>
           agentThreadsService
-            .touchActivity(path.threadId)
+            .touchActivity(params.threadId)
             .pipe(observeAgentsOperation("touchAgentThreadActivity"))
         );
     })

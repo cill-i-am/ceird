@@ -159,6 +159,7 @@ apps/agent
   -> apps/domain through the private service binding
 
 apps/api
+  -> @ceird/agents-core
   -> @ceird/domain-core
   -> apps/domain through the private service binding
 

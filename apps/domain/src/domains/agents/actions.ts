@@ -37,8 +37,8 @@ import {
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
 } from "@ceird/sites-core";
-import type { HttpServerRequest } from "@effect/platform";
-import { Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import type { HttpServerRequest } from "effect/unstable/http";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -102,25 +102,10 @@ const REJECTED_ERROR_TAGS = [
 const isAgentActionName = Schema.is(AgentActionNameSchema);
 const isWorkItemId = Schema.is(WorkItemId);
 
-export class AgentActions extends Effect.Service<AgentActions>()(
+export class AgentActions extends Context.Service<AgentActions>()(
   "@ceird/domains/agents/AgentActions",
   {
-    accessors: true,
-    dependencies: [
-      CommentsRepository.Default,
-      ContactsRepository.Default,
-      JobLabelAssignmentsRepository.Default,
-      JobsActivityRecorder.Default,
-      JobsAuthorization.Default,
-      JobsRepository.Default,
-      LabelsRepository.Default,
-      OrganizationAuthorization.Default,
-      RateCardsRepository.Default,
-      ServiceAreasRepository.Default,
-      SiteLabelAssignmentsRepository.Default,
-      SitesRepository.Default,
-    ],
-    effect: Effect.gen(function* AgentActionsLive() {
+    make: Effect.gen(function* AgentActionsLive() {
       const commentsRepository = yield* CommentsRepository;
       const contactsRepository = yield* ContactsRepository;
       const jobLabelAssignmentsRepository =
@@ -180,32 +165,72 @@ export class AgentActions extends Effect.Service<AgentActions>()(
       return { execute };
     }),
   }
-) {}
+) {
+  static readonly execute = (
+    ...args: Parameters<Context.Service.Shape<typeof AgentActions>["execute"]>
+  ) => AgentActions.use((service) => service.execute(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AgentActions,
+    AgentActions.make
+  );
+  static readonly Default = AgentActions.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        CommentsRepository.Default,
+        ContactsRepository.Default,
+        JobLabelAssignmentsRepository.Default,
+        JobsActivityRecorder.Default,
+        JobsAuthorization.Default,
+        JobsRepository.Default,
+        LabelsRepository.Default,
+        OrganizationAuthorization.Default,
+        RateCardsRepository.Default,
+        ServiceAreasRepository.Default,
+        SiteLabelAssignmentsRepository.Default,
+        SitesRepository.Default
+      )
+    )
+  );
+}
 
 interface SitesServiceLayerDependencies {
-  readonly commentsRepository: CommentsRepository;
-  readonly organizationAuthorization: OrganizationAuthorization;
-  readonly serviceAreasRepository: ServiceAreasRepository;
+  readonly commentsRepository: Context.Service.Shape<typeof CommentsRepository>;
+  readonly organizationAuthorization: Context.Service.Shape<
+    typeof OrganizationAuthorization
+  >;
+  readonly serviceAreasRepository: Context.Service.Shape<
+    typeof ServiceAreasRepository
+  >;
   readonly siteGeocoder: SiteGeocoderImplementation;
-  readonly siteLabelAssignmentsRepository: SiteLabelAssignmentsRepository;
-  readonly sitesRepository: SitesRepository;
+  readonly siteLabelAssignmentsRepository: Context.Service.Shape<
+    typeof SiteLabelAssignmentsRepository
+  >;
+  readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
 }
 
 interface JobsServiceLayerDependencies {
-  readonly contactsRepository: ContactsRepository;
-  readonly jobLabelAssignmentsRepository: JobLabelAssignmentsRepository;
-  readonly jobsActivityRecorder: JobsActivityRecorder;
-  readonly jobsAuthorization: JobsAuthorization;
-  readonly jobsRepository: JobsRepository;
-  readonly labelsRepository: LabelsRepository;
-  readonly serviceAreasRepository: ServiceAreasRepository;
+  readonly contactsRepository: Context.Service.Shape<typeof ContactsRepository>;
+  readonly jobLabelAssignmentsRepository: Context.Service.Shape<
+    typeof JobLabelAssignmentsRepository
+  >;
+  readonly jobsActivityRecorder: Context.Service.Shape<
+    typeof JobsActivityRecorder
+  >;
+  readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
+  readonly jobsRepository: Context.Service.Shape<typeof JobsRepository>;
+  readonly labelsRepository: Context.Service.Shape<typeof LabelsRepository>;
+  readonly serviceAreasRepository: Context.Service.Shape<
+    typeof ServiceAreasRepository
+  >;
   readonly siteGeocoder: SiteGeocoderImplementation;
-  readonly sitesRepository: SitesRepository;
+  readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
 }
 
 interface ConfigurationServiceLayerDependencies {
-  readonly jobsAuthorization: JobsAuthorization;
-  readonly rateCardsRepository: RateCardsRepository;
+  readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
+  readonly rateCardsRepository: Context.Service.Shape<
+    typeof RateCardsRepository
+  >;
 }
 
 type AgentActionRequirements =
@@ -328,7 +353,7 @@ function makeJobsServiceLayer(
       Layer.succeed(ContactsRepository, dependencies.contactsRepository),
       Layer.succeed(
         CurrentOrganizationActor,
-        CurrentOrganizationActor.make({
+        CurrentOrganizationActor.of({
           get: () => Effect.succeed(actor),
         })
       ),
@@ -360,7 +385,7 @@ function makeSitesServiceLayer(
       Layer.succeed(CommentsRepository, dependencies.commentsRepository),
       Layer.succeed(
         CurrentOrganizationActor,
-        CurrentOrganizationActor.make({
+        CurrentOrganizationActor.of({
           get: () => Effect.succeed(actor),
         })
       ),
@@ -391,7 +416,7 @@ function makeConfigurationServiceLayer(
     Layer.mergeAll(
       Layer.succeed(
         CurrentOrganizationActor,
-        CurrentOrganizationActor.make({
+        CurrentOrganizationActor.of({
           get: () => Effect.succeed(actor),
         })
       ),

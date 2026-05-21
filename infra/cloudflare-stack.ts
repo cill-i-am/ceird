@@ -6,6 +6,7 @@ import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 
+import { makeAgentWorker } from "../apps/agent/infra/cloudflare-worker.ts";
 import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
@@ -91,6 +92,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   });
 
   const domain = yield* makeDomainWorker({
+    agentInternalSecret: agentInternalSecret.text,
     authEmailQueue,
     betterAuthSecret: betterAuthSecret.text,
     config: input.config,
@@ -136,6 +138,29 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.mcpHostname,
+      })
+    )
+  );
+
+  const agentAi = yield* Cloudflare.AiGateway("AgentAiGateway", {
+    id: resourceName(input.config, "agent"),
+    collectLogs: false,
+  });
+
+  const agent = yield* makeAgentWorker({
+    agentInternalSecret: agentInternalSecret.text,
+    ai: agentAi,
+    config: input.config,
+    domain,
+    hostname: input.config.agentHostname,
+    name: resourceName(input.config, "agent"),
+  });
+
+  const agentOrigin = agent.domains.pipe(
+    Output.map((domains) =>
+      makeCloudflareWorkerOrigin({
+        domains,
+        fallbackHostname: input.config.agentHostname,
       })
     )
   );

@@ -270,7 +270,7 @@ describe("domain http integration", () => {
       expect(manifestJson).toHaveProperty("actions");
       expect(manifestJson).not.toHaveProperty("items");
 
-      const manifest = ParseResult.decodeUnknownSync(
+      const manifest = Schema.decodeUnknownSync(
         AgentActionManifestResponseSchema
       )(manifestJson);
       const createJobAction = manifest.actions.find(

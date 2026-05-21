@@ -1,5 +1,7 @@
 import {
+  AGENT_INTERNAL_ACTIONS_PATH,
   AgentThreadResponseSchema,
+  makeAgentInternalThreadActivityPath,
   RunAgentActionResponseSchema,
 } from "@ceird/agents-core";
 import type {
@@ -10,18 +12,19 @@ import type {
   RunAgentActionResponse,
 } from "@ceird/agents-core";
 import { makeDomainServiceClient } from "@ceird/domain-core";
-import { ParseResult } from "effect";
+import { Schema } from "effect";
 
 import { DomainActionError } from "./domain-action-error.js";
 import { DomainThreadActivityError } from "./domain-thread-activity-error.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 
-const decodeRunAgentActionResponse = ParseResult.decodeUnknownSync(
+const decodeRunAgentActionResponse = Schema.decodeUnknownSync(
   RunAgentActionResponseSchema
 );
-const decodeAgentThreadResponse = ParseResult.decodeUnknownSync(
+const decodeAgentThreadResponse = Schema.decodeUnknownSync(
   AgentThreadResponseSchema
 );
+const AGENT_INTERNAL_ORIGIN = "https://agent.ceird.internal";
 
 export interface RunDomainActionInput {
   readonly input: unknown;
@@ -37,7 +40,10 @@ export async function touchAgentThreadActivity(
   const domain = makeDomainServiceClient(env.DOMAIN);
   const response = await domain.request(
     new Request(
-      `https://agent.ceird.internal/agent/internal/threads/${threadId}/activity`,
+      new URL(
+        makeAgentInternalThreadActivityPath(threadId),
+        AGENT_INTERNAL_ORIGIN
+      ).toString(),
       {
         headers: {
           authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
@@ -69,14 +75,17 @@ export async function runDomainAction(
 ): Promise<RunAgentActionResponse> {
   const domain = makeDomainServiceClient(env.DOMAIN);
   const response = await domain.request(
-    new Request("https://agent.ceird.internal/agent/internal/actions", {
-      body: JSON.stringify(input),
-      headers: {
-        authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    })
+    new Request(
+      new URL(AGENT_INTERNAL_ACTIONS_PATH, AGENT_INTERNAL_ORIGIN).toString(),
+      {
+        body: JSON.stringify(input),
+        headers: {
+          authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
+          "content-type": "application/json",
+        },
+        method: "POST",
+      }
+    )
   );
   const body = await readJson(
     response,

@@ -1,4 +1,9 @@
-import { AgentActionOperationId, AgentThreadId } from "@ceird/agents-core";
+import {
+  AGENT_INTERNAL_ACTIONS_PATH,
+  AgentActionOperationId,
+  AgentThreadId,
+  makeAgentInternalThreadActivityPath,
+} from "@ceird/agents-core";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
@@ -39,6 +44,17 @@ describe("domain action client", () => {
     expect(requests[0]?.headers.get("authorization")).toBe(
       "Bearer agent-secret"
     );
+    expect(requests[0]?.method).toBe("POST");
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe(
+      AGENT_INTERNAL_ACTIONS_PATH
+    );
+    expect(requests[0]?.headers.get("content-type")).toBe("application/json");
+    expect(await requests[0]?.json()).toStrictEqual({
+      input: {},
+      name: "ceird.labels.list",
+      operationId: "tool-call:1",
+      threadId: "11111111-1111-4111-8111-111111111111",
+    });
     expect(response.result).toStrictEqual({ labels: [] });
   });
 
@@ -105,7 +121,7 @@ describe("domain action client", () => {
 
     expect(requests[0]?.method).toBe("POST");
     expect(new URL(requests[0]?.url ?? "").pathname).toBe(
-      "/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity"
+      makeAgentInternalThreadActivityPath(threadId)
     );
     expect(requests[0]?.headers.get("authorization")).toBe(
       "Bearer agent-secret"

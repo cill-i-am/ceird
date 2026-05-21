@@ -49,6 +49,7 @@ type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
 type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export interface DomainWorkerConfiguredEnv {
+  readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
@@ -78,12 +79,14 @@ export function makeDomainWorkerBindings(input: {
 }
 
 export function makeDomainWorkerEnv(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
 }): DomainWorkerConfiguredEnv {
   const betterAuthBaseUrl = `https://${input.config.apiHostname}/api/auth`;
 
   return {
+    AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
@@ -114,6 +117,7 @@ export function makeDomainWorkerEnv(input: {
 }
 
 export function makeDomainWorkerProps(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
@@ -131,6 +135,7 @@ export function makeDomainWorkerProps(input: {
     }),
     env: {
       ...makeDomainWorkerEnv({
+        agentInternalSecret: input.agentInternalSecret,
         betterAuthSecret: input.betterAuthSecret,
         config: input.config,
       }),
@@ -141,6 +146,7 @@ export function makeDomainWorkerProps(input: {
 }
 
 export function makeDomainWorker(input: {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;

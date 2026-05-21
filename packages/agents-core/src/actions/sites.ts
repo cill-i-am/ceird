@@ -12,12 +12,10 @@ import {
 } from "@ceird/sites-core";
 import { Schema } from "effect";
 
-import { defineAgentAction } from "../action-registry.js";
-
-const EmptyActionInputSchema = Schema.Record({
-  key: Schema.String,
-  value: Schema.Never,
-});
+import {
+  defineAgentAction,
+  EmptyAgentActionInputSchema,
+} from "../action-registry.js";
 
 const SitePathInputSchema = Schema.Struct({
   siteId: SiteId,
@@ -56,7 +54,7 @@ export const siteAgentActions = [
       summary: "Read site and service area options.",
       target: "sites",
     },
-    inputSchema: EmptyActionInputSchema,
+    inputSchema: EmptyAgentActionInputSchema,
     executionStatus: "executable",
     kind: "read",
     modelDescription: "List site options available in the organization.",
@@ -171,7 +169,7 @@ export const serviceAreaAgentActions = [
       summary: "Read organization service areas.",
       target: "service areas",
     },
-    inputSchema: EmptyActionInputSchema,
+    inputSchema: EmptyAgentActionInputSchema,
     executionStatus: "executable",
     kind: "read",
     modelDescription: "List Ceird service areas.",

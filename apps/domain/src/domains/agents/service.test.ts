@@ -1,18 +1,24 @@
 import {
   AgentAccessDeniedError,
+  AGENT_ACCESS_DENIED_ERROR_TAG,
   AgentActionOperationId,
   AgentActionRejectedError,
   AgentActionRunId,
+  AGENT_STORAGE_ERROR_TAG,
   AgentStorageError,
   AgentThreadId,
   buildAgentInstanceName,
 } from "@ceird/agents-core";
 import type { AgentThread } from "@ceird/agents-core";
 import { OrganizationId, UserId } from "@ceird/identity-core";
-import { HttpServerRequest } from "@effect/platform";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -285,7 +291,7 @@ describe("agent threads service", () => {
                 inserted: false,
                 run: makeBeginRun(input, {
                   errorMessage: "Storage was unavailable",
-                  result: { tag: "@ceird/agents-core/AgentStorageError" },
+                  result: { tag: AGENT_STORAGE_ERROR_TAG },
                   status: "failed",
                 }),
               }),
@@ -356,7 +362,7 @@ describe("agent threads service", () => {
 
     expect(error).toBeInstanceOf(AgentAccessDeniedError);
     expect(failureResult).toStrictEqual({
-      tag: "@ceird/agents-core/AgentAccessDeniedError",
+      tag: AGENT_ACCESS_DENIED_ERROR_TAG,
     });
   });
 });
@@ -372,8 +378,8 @@ function runAgentThreadsService<Value, Error>(
   return effect.pipe(
     Effect.provide(AgentThreadsService.DefaultWithoutDependencies),
     Effect.provide(makeAgentThreadsServiceTestLayer(options)),
-    Effect.withConfigProvider(
-      ConfigProvider.fromMap(
+    withConfigProvider(
+      configProviderFromMap(
         new Map([["AGENT_INTERNAL_SECRET", "agent-secret"]])
       )
     )
@@ -415,7 +421,7 @@ function makeAgentThreadsServiceTestLayer(
     ),
     Layer.succeed(
       CurrentOrganizationActor,
-      CurrentOrganizationActor.make({
+      CurrentOrganizationActor.of({
         get: () => Effect.succeed(actor),
       })
     ),

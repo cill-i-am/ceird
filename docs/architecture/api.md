@@ -69,7 +69,7 @@ declaration in its app-local `infra/cloudflare-worker.ts`; the root infra
 stack still creates shared resources and passes stage-specific names, hostnames,
 secrets, Hyperdrive, queues, and cross-service Worker references into those
 app-owned declarations. Infra tests compare those app-owned binding/config keys
-with the runtime contracts for API, MCP, and domain Workers. Secret and
+with the runtime contracts for API, MCP, Agent, and domain Workers. Secret and
 credential values stay typed as Alchemy deploy-time redacted inputs, while
 runtime apps see resolved strings through Cloudflare Worker environment values.
 
@@ -116,11 +116,11 @@ The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
 Agent route accepts a short-lived connect token as a bearer token or `token`
 query parameter, verifies that it was signed by the domain-owned secret,
 normalizes the route to the Agents SDK's kebab-case class path, and only then
-delegates to Cloudflare's router. The Agent Worker disables Worker invocation
-logs so short-lived URL tokens are not persisted by platform request logging.
-Browser preflight is answered before token auth for the configured app origin,
-and the routed request has the `token` query parameter and `Authorization`
-header stripped before it enters the Agents SDK runtime.
+delegates to Cloudflare's router. Browser preflight is answered before token
+auth for the configured app origin, and the routed request has the `token` query
+parameter and `Authorization` header stripped before it enters the Agents SDK
+runtime. Browser clients should prefer bearer tokens; the query-token fallback
+exists only for transports that cannot set headers.
 The Agent Durable Object keeps chat/runtime state in the Agent store; product
 state, authorization, thread activity timestamps, and action side effects
 remain in the domain Worker.

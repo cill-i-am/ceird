@@ -7,8 +7,8 @@ import type {
   AgentActionName,
   ExecutableAgentActionName,
 } from "@ceird/agents-core";
-import type { HttpServerRequest } from "@effect/platform";
 import { Effect, Option, Schema } from "effect";
+import type { HttpServerRequest } from "effect/unstable/http";
 
 import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
@@ -562,18 +562,93 @@ function decodeActionInput<const Name extends ExecutableAgentActionName>(
   input: unknown
 ): Effect.Effect<AgentActionInput<Name>, AgentActionRejectedError> {
   const definition = getAgentActionDefinition(actionName) as {
-    readonly inputSchema: Schema.Schema<AgentActionInput<Name>, unknown, never>;
+    readonly inputSchema: Schema.Schema<AgentActionInput<Name>>;
   };
 
-  return Schema.decodeUnknown(definition.inputSchema)(input, {
+  return Schema.decodeUnknownEffect(definition.inputSchema)(input, {
     onExcessProperty: "error",
   }).pipe(
     Effect.mapError(
-      () =>
+      (issue) =>
         new AgentActionRejectedError({
           actionName,
+          cause: summarizeParseIssue(issue),
           message: `Invalid input for ${actionName}`,
         })
     )
-  );
+  ) as Effect.Effect<AgentActionInput<Name>, AgentActionRejectedError>;
+}
+
+function summarizeParseIssue(issue: unknown): string {
+  const tag = getParseIssueTag(issue);
+
+  switch (tag) {
+    case "Pointer": {
+      const path = getParseIssuePath(issue);
+      const nestedIssue = getParseIssueProperty(issue, "issue");
+
+      return `Invalid field ${formatParseIssuePath(path)}: ${summarizeParseIssue(nestedIssue)}`;
+    }
+    case "Refinement":
+    case "Transformation": {
+      return summarizeParseIssue(getParseIssueProperty(issue, "issue"));
+    }
+    case "Composite": {
+      return "Input failed multiple validation checks";
+    }
+    case "Missing": {
+      return getParseIssueMessage(issue) ?? "Missing required field";
+    }
+    case "Unexpected": {
+      return getParseIssueMessage(issue) ?? "Unexpected field";
+    }
+    case "Type":
+    case "Forbidden": {
+      return getParseIssueMessage(issue) ?? tag;
+    }
+    default: {
+      return "Invalid input";
+    }
+  }
+}
+
+function getParseIssueTag(issue: unknown): string | undefined {
+  return typeof issue === "object" &&
+    issue !== null &&
+    "_tag" in issue &&
+    typeof issue._tag === "string"
+    ? issue._tag
+    : undefined;
+}
+
+function getParseIssueMessage(issue: unknown): string | undefined {
+  const message = getParseIssueProperty(issue, "message");
+
+  return typeof message === "string" ? message : undefined;
+}
+
+function getParseIssuePath(issue: unknown): readonly unknown[] {
+  const path = getParseIssueProperty(issue, "path");
+
+  if (Array.isArray(path)) {
+    return path;
+  }
+
+  if (path === undefined) {
+    return [];
+  }
+
+  return [path];
+}
+
+function getParseIssueProperty(issue: unknown, property: string): unknown {
+  if (typeof issue === "object" && issue !== null) {
+    return (issue as Record<string, unknown>)[property];
+  }
+
+  return undefined;
+}
+
+function formatParseIssuePath(path: readonly unknown[]): string {
+  return path.map(String).join(".");
 }

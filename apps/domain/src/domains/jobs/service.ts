@@ -72,9 +72,6 @@ import {
 } from "./repositories.js";
 import type { JobsRepositoryAccess } from "./repositories.js";
 
-const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
-  "@ceird/domains/jobs/WorkItemOrganizationMismatchError" as const;
-
 type ContactsRepositoryService = Context.Service.Shape<
   typeof ContactsRepository
 >;
@@ -1121,6 +1118,10 @@ function failActorMembershipLoss(options: {
         : { workItemId: options.workItemId }),
     })
   );
+}
+
+function dieWorkItemOrganizationMismatch(error: unknown) {
+  return Effect.die(error);
 }
 
 function failWorkItemOrganizationMismatchAsNotFound(

@@ -29,8 +29,8 @@ import {
   UserId as UserIdSchema,
 } from "@ceird/identity-core";
 import type { OrganizationId, UserId } from "@ceird/identity-core";
-import { SqlClient } from "@effect/sql";
-import { Effect, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import {
@@ -86,8 +86,8 @@ interface AgentActionRunBeginProjectionRow {
 }
 
 export const AgentActionInputLedgerValueSchema = Schema.Struct({
-  byteLength: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-  sha256: Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/u)),
+  byteLength: Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0))),
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
 });
 export type AgentActionInputLedgerValue = Schema.Schema.Type<
   typeof AgentActionInputLedgerValueSchema
@@ -165,21 +165,26 @@ const decodeAgentActionInputLedgerValue = Schema.decodeUnknownSync(
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationIdSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
 const decodeTitle = Schema.decodeUnknownSync(
-  Schema.Trim.pipe(Schema.minLength(1), Schema.maxLength(120))
+  Schema.Trim.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(120)))
 );
 const isOrganizationRole = Schema.is(OrganizationRoleSchema);
 
-export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepository>()(
+export class AgentThreadsRepository extends Context.Service<AgentThreadsRepository>()(
   "@ceird/domains/agents/AgentThreadsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* AgentThreadsRepositoryLive() {
+    make: Effect.gen(function* AgentThreadsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const create = Effect.fn("AgentThreadsRepository.create")(function* (
         input: CreateAgentThreadRecordInput
       ) {
         const id = generateAgentThreadId();
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          input.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("userId", input.userId);
+        yield* Effect.annotateCurrentSpan("agent.threadId", id);
         const title = decodeTitle(input.title ?? DEFAULT_THREAD_TITLE);
         const agentInstanceName = buildAgentInstanceName({
           organizationId: input.organizationId,
@@ -209,6 +214,9 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
           userId: UserId,
           options: { readonly limit: number }
         ) {
+          yield* Effect.annotateCurrentSpan("organizationId", organizationId);
+          yield* Effect.annotateCurrentSpan("userId", userId);
+          yield* Effect.annotateCurrentSpan("agent.threadLimit", options.limit);
           const rows = yield* sql<AgentThreadRow>`
             select *
             from agent_threads
@@ -218,6 +226,7 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
             order by updated_at desc, id desc
             limit ${options.limit}
           `;
+          yield* Effect.annotateCurrentSpan("agent.threadCount", rows.length);
 
           return rows.map(mapThreadRow);
         }
@@ -230,6 +239,9 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
         userId: UserId,
         threadId: AgentThreadId
       ) {
+        yield* Effect.annotateCurrentSpan("organizationId", organizationId);
+        yield* Effect.annotateCurrentSpan("userId", userId);
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
         const rows = yield* sql<AgentThreadRow>`
           select *
           from agent_threads
@@ -239,8 +251,9 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
             and status = 'active'
           limit 1
         `;
+        yield* Effect.annotateCurrentSpan("agent.threadFound", rows.length > 0);
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapThreadRow));
+        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
       });
 
       const archive = Effect.fn("AgentThreadsRepository.archive")(function* (
@@ -248,6 +261,9 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
         userId: UserId,
         threadId: AgentThreadId
       ) {
+        yield* Effect.annotateCurrentSpan("organizationId", organizationId);
+        yield* Effect.annotateCurrentSpan("userId", userId);
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
         const rows = yield* sql<AgentThreadRow>`
           update agent_threads
           set status = 'archived', updated_at = now()
@@ -257,12 +273,14 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
             and status = 'active'
           returning *
         `;
+        yield* Effect.annotateCurrentSpan("agent.threadFound", rows.length > 0);
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapThreadRow));
+        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
       });
 
       const touchActivity = Effect.fn("AgentThreadsRepository.touchActivity")(
         function* (threadId: AgentThreadId) {
+          yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
           const rows = yield* sql<AgentThreadRow>`
           update agent_threads
           set last_message_at = now(), updated_at = now()
@@ -270,14 +288,19 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
             and status = 'active'
           returning *
         `;
+          yield* Effect.annotateCurrentSpan(
+            "agent.threadFound",
+            rows.length > 0
+          );
 
-          return Option.fromNullable(rows[0]).pipe(Option.map(mapThreadRow));
+          return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
         }
       );
 
       const resolveActiveThreadActor = Effect.fn(
         "AgentThreadsRepository.resolveActiveThreadActor"
       )(function* (threadId: AgentThreadId) {
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
         const rows = yield* sql<AgentThreadActorRow>`
           select
             agent_threads.*,
@@ -293,14 +316,23 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
         const [row] = rows;
 
         if (row === undefined) {
+          yield* Effect.annotateCurrentSpan("agent.threadFound", false);
           return Option.none<AgentThreadActor>();
         }
 
         const role = normalizeOrganizationActorRole(row.member_role);
 
         if (role === undefined) {
+          yield* Effect.annotateCurrentSpan("agent.threadFound", false);
           return Option.none<AgentThreadActor>();
         }
+        yield* Effect.annotateCurrentSpan("agent.threadFound", true);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          row.organization_id
+        );
+        yield* Effect.annotateCurrentSpan("userId", row.user_id);
+        yield* Effect.annotateCurrentSpan("actorRole", role);
 
         return Option.some({
           actor: {
@@ -322,13 +354,54 @@ export class AgentThreadsRepository extends Effect.Service<AgentThreadsRepositor
       };
     }),
   }
-) {}
+) {
+  static readonly archive = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["archive"]
+    >
+  ) => AgentThreadsRepository.use((service) => service.archive(...args));
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["create"]
+    >
+  ) => AgentThreadsRepository.use((service) => service.create(...args));
+  static readonly findActiveForUser = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["findActiveForUser"]
+    >
+  ) =>
+    AgentThreadsRepository.use((service) => service.findActiveForUser(...args));
+  static readonly listForUser = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["listForUser"]
+    >
+  ) => AgentThreadsRepository.use((service) => service.listForUser(...args));
+  static readonly resolveActiveThreadActor = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AgentThreadsRepository
+      >["resolveActiveThreadActor"]
+    >
+  ) =>
+    AgentThreadsRepository.use((service) =>
+      service.resolveActiveThreadActor(...args)
+    );
+  static readonly touchActivity = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["touchActivity"]
+    >
+  ) => AgentThreadsRepository.use((service) => service.touchActivity(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AgentThreadsRepository,
+    AgentThreadsRepository.make
+  );
+  static readonly Default = AgentThreadsRepository.DefaultWithoutDependencies;
+}
 
-export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRepository>()(
+export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRepository>()(
   "@ceird/domains/agents/AgentActionRunsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* AgentActionRunsRepositoryLive() {
+    make: Effect.gen(function* AgentActionRunsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const withTransaction = Effect.fn(
@@ -342,6 +415,18 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
       const begin = Effect.fn("AgentActionRunsRepository.begin")(function* (
         input: BeginAgentActionRunInput
       ) {
+        yield* Effect.annotateCurrentSpan("agent.threadId", input.threadId);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          input.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("userId", input.userId);
+        yield* Effect.annotateCurrentSpan(
+          "agent.operationId",
+          input.operationId
+        );
+        yield* Effect.annotateCurrentSpan("agent.actionName", input.actionName);
+        yield* Effect.annotateCurrentSpan("agent.actionKind", input.actionKind);
         const insertedRows = yield* sql<AgentActionRunBeginProjectionRow>`
           insert into agent_action_runs (
             id,
@@ -380,6 +465,15 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
         const [insertedRow] = insertedRows;
 
         if (insertedRow !== undefined) {
+          yield* Effect.annotateCurrentSpan("agent.actionRunInserted", true);
+          yield* Effect.annotateCurrentSpan(
+            "agent.actionRunId",
+            insertedRow.id
+          );
+          yield* Effect.annotateCurrentSpan(
+            "agent.actionRunStatus",
+            insertedRow.status
+          );
           return {
             inserted: true,
             run: mapActionRunBeginProjectionRow(insertedRow),
@@ -406,6 +500,12 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
           replayedRows,
           "agent action run"
         );
+        yield* Effect.annotateCurrentSpan("agent.actionRunInserted", false);
+        yield* Effect.annotateCurrentSpan("agent.actionRunId", replayedRow.id);
+        yield* Effect.annotateCurrentSpan(
+          "agent.actionRunStatus",
+          replayedRow.status
+        );
 
         return {
           inserted: false,
@@ -420,6 +520,11 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
         result: unknown,
         options: { readonly storeResult: boolean }
       ) {
+        yield* Effect.annotateCurrentSpan("agent.actionRunId", actionRunId);
+        yield* Effect.annotateCurrentSpan(
+          "agent.actionRunStoresResult",
+          options.storeResult
+        );
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
@@ -431,6 +536,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
           where id = ${actionRunId}
           returning *
         `;
+        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", "succeeded");
 
         return mapActionRunRow(
           yield* getRequiredRow(rows, "completed agent action run")
@@ -444,6 +550,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
         message: string,
         result: unknown | null = null
       ) {
+        yield* Effect.annotateCurrentSpan("agent.actionRunId", actionRunId);
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
@@ -455,6 +562,7 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
           where id = ${actionRunId}
           returning *
         `;
+        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", "failed");
 
         return mapActionRunRow(
           yield* getRequiredRow(rows, "failed agent action run")
@@ -469,7 +577,39 @@ export class AgentActionRunsRepository extends Effect.Service<AgentActionRunsRep
       };
     }),
   }
-) {}
+) {
+  static readonly begin = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentActionRunsRepository>["begin"]
+    >
+  ) => AgentActionRunsRepository.use((service) => service.begin(...args));
+  static readonly completeFailed = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentActionRunsRepository>["completeFailed"]
+    >
+  ) =>
+    AgentActionRunsRepository.use((service) => service.completeFailed(...args));
+  static readonly completeSucceeded = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AgentActionRunsRepository
+      >["completeSucceeded"]
+    >
+  ) =>
+    AgentActionRunsRepository.use((service) =>
+      service.completeSucceeded(...args)
+    );
+  static readonly withTransaction = <Value, Error, Requirements>(
+    effect: Effect.Effect<Value, Error, Requirements>
+  ) =>
+    AgentActionRunsRepository.use((service) => service.withTransaction(effect));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AgentActionRunsRepository,
+    AgentActionRunsRepository.make
+  );
+  static readonly Default =
+    AgentActionRunsRepository.DefaultWithoutDependencies;
+}
 
 export function mapThreadRow(row: AgentThreadRow): AgentThread {
   return decodeAgentThread({

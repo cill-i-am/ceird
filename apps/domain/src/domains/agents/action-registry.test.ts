@@ -43,8 +43,8 @@ import {
   SiteGeocodingProviderError,
   SiteStorageError,
 } from "@ceird/sites-core";
-import { HttpServerRequest } from "@effect/platform";
 import { Effect, Layer, Option } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -1320,7 +1320,7 @@ function makeAgentActionsTestLayer(
     OrganizationAuthorization.Default,
     Layer.succeed(
       CurrentOrganizationActor,
-      CurrentOrganizationActor.make({
+      CurrentOrganizationActor.of({
         get: () => Effect.succeed(options.actorOverride ?? actor),
       })
     ),

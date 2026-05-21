@@ -19,6 +19,7 @@ permissions:
 
 env:
   CEIRD_API_HOSTNAME: api.ceird.app
+  CEIRD_AGENT_HOSTNAME: agent.ceird.app
   CEIRD_APP_HOSTNAME: app.ceird.app
   CEIRD_CLOUDFLARE: "1"
   CEIRD_MCP_HOSTNAME: mcp.ceird.app

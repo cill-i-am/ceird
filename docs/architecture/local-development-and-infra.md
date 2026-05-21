@@ -116,16 +116,20 @@ The stack provisions:
 - public Cloudflare MCP Worker declared in
   `apps/mcp/infra/cloudflare-worker.ts` and executed from
   `apps/mcp/src/worker.ts`
+- public Cloudflare Agent Worker declared in
+  `apps/agent/infra/cloudflare-worker.ts` and executed from
+  `apps/agent/src/worker.ts`
 - Cloudflare Vite app declared in `apps/app/infra/cloudflare-vite.ts`
 - Cloudflare Queue for auth email
 - Cloudflare dead-letter queue for auth email failures
 - Cloudflare Email Worker binding for deployed auth email delivery
 
-The Agent Worker keeps observability logs and traces enabled, but disables
-platform invocation logs because some browser transports may have to carry the
-short-lived connect token in the URL. Its AI Gateway also disables payload log
-collection by default so prompts, responses, and tool-returned product data are
-not copied into gateway logs.
+The Agent Worker uses shared Worker trace/log settings, but disables
+Cloudflare invocation URL logging while the query-token fallback exists. Its AI
+Gateway disables payload log collection by default so prompts, responses, and
+tool-returned product data are not copied into gateway logs. Browser clients
+should prefer bearer connect tokens; when the query-token fallback is used, the
+Agent Worker strips it before routing into the Agents SDK runtime.
 
 The domain, API, MCP, Agent, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
@@ -134,7 +138,9 @@ The private domain Worker declares the runtime resources that own state:
 `DATABASE` is the native Hyperdrive resource, `AUTH_EMAIL_QUEUE` is the native
 Queue resource, and `AUTH_EMAIL` is the Cloudflare Email Worker binding
 descriptor. Public API and MCP Workers declare only the `DOMAIN` service binding
-to that private Worker. Infra tests compare the app-owned binding/env
+to that private Worker. The public Agent Worker declares `DOMAIN`, Workers AI,
+and its `CeirdAgent` Durable Object namespace in its app-owned infra module.
+Infra tests compare the app-owned binding/env
 declarations against the runtime contracts in each app's
 `src/platform/cloudflare/env.ts`.
 The domain Worker module adapter runs fetch and queue Effect programs; the

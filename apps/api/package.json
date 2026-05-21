@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ceird/agents-core": "workspace:*",
     "@ceird/domain-core": "workspace:*",
     "@effect/platform-node": "4.0.0-beta.68",
     "effect": "4.0.0-beta.68"
