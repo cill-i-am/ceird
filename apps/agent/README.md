@@ -12,5 +12,5 @@ The Domain Worker remains the owner of organizations, threads, authorization,
 Postgres records, and the idempotent action ledger.
 
 Read tools are exposed to the model by default. Write and destructive tools are
-gated behind `AGENT_MUTATION_TOOLS_ENABLED=true` until the client chat surface
-can provide an explicit confirmation flow outside the model prompt.
+gated behind `AGENT_MUTATION_TOOLS_ENABLED=true` and still require the client
+chat surface to approve the action outside the model prompt.

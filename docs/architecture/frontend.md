@@ -87,6 +87,18 @@ Authenticated layout and navigation live under:
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
 
+The authenticated app shell also mounts the global Ceird Agent entry point in
+`features/agent/global-agent-chat.tsx`. It is app-level rather than
+route-level: the fixed launcher, `Mod+J` hotkey, and command bar action are
+available anywhere an active organization exists. Desktop opens a right-side
+drawer and mobile uses the existing bottom drawer behavior. The browser app
+prepares or reuses the current user's active thread through the Agent thread
+API, authorizes that thread with a short-lived connect token, and then connects
+to the Agent Worker with `agents/react` and `@cloudflare/ai-chat/react`.
+Product mutations still execute only through the Agent Worker and private
+domain action registry; the app chat surface owns presentation, thread
+selection, and connection setup.
+
 ## Observability
 
 Server-side app requests use the explicit TanStack Start server entry at
@@ -120,6 +132,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/activity`      | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                                  |
 | `features/settings`      | User settings page schemas, search, and UI.                                                                                                                                                                                                                                                                                                        |
 | `features/command-bar`   | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                         |
+| `features/agent`         | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                              |
 
 Shared app components live in `src/components`. shadcn-style primitives live in
 `src/components/ui`. Hotkey infrastructure lives in `src/hotkeys`.
@@ -128,6 +141,11 @@ Shared app components live in `src/components`. shadcn-style primitives live in
 
 Domain API access is contract-based:
 
+- `features/api/app-api-client.ts` composes the app-wide Effect client,
+  including Agent thread and action groups from `@ceird/agents-core`.
+- `features/agent/agent-client.ts` uses that app-wide client to list/create
+  user threads and authorize Agent Worker connections for the current active
+  organization.
 - `features/jobs/jobs-client.ts` builds a composed Effect `HttpApiClient` from
   jobs, labels, sites, service-area, and rate-card API groups exported by
   `@ceird/jobs-core`, `@ceird/labels-core`, and `@ceird/sites-core`.

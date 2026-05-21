@@ -65,6 +65,7 @@ export function createCeirdTools(
   )) {
     tools[action.modelName] = tool({
       description: action.modelDescription,
+      ...(action.confirmationPolicy === "none" ? {} : { needsApproval: true }),
       inputSchema,
       execute: (input, options) => runAction(action.name, input, options),
     });

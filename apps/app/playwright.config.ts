@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { API_ORIGIN, APP_ORIGIN } from "./e2e/test-origins";
+import { AGENT_ORIGIN, API_ORIGIN, APP_ORIGIN } from "./e2e/test-origins";
 
 const playwrightBaseUrl = APP_ORIGIN;
 const playwrightApiUrl = API_ORIGIN;
+const playwrightAgentUrl = AGENT_ORIGIN;
 const usePackageLocalServer =
   process.env.PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER === "1";
 const playwrightAuthEmailFrom =
@@ -40,7 +41,9 @@ export default defineConfig({
         '`,
         env: {
           ...process.env,
+          AGENT_INTERNAL_SECRET: "agent-e2e-internal-secret",
           API_ORIGIN: playwrightApiUrl,
+          AGENT_ORIGIN: playwrightAgentUrl,
           AUTH_APP_ORIGIN: playwrightBaseUrl,
           AUTH_EMAIL_FROM: playwrightAuthEmailFrom,
           AUTH_EMAIL_FROM_NAME: playwrightAuthEmailFromName,
@@ -49,6 +52,7 @@ export default defineConfig({
           BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
           DOMAIN_ORIGIN: "http://127.0.0.1:3002",
           PORT: "3001",
+          VITE_AGENT_ORIGIN: playwrightAgentUrl,
         },
         port: 4173,
         reuseExistingServer: false,

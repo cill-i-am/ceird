@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import {
+  AppAgentCommandActions,
   AppGlobalCommandActions,
   AppOrganizationCommandActions,
 } from "./app-global-command-actions";
@@ -53,6 +54,9 @@ describe("app global command actions", () => {
 
       expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
+        screen.queryByRole("option", { name: /open ceird agent/i })
+      ).not.toBeInTheDocument();
+      expect(
         screen.queryByRole("option", { name: /go to jobs/i })
       ).not.toBeInTheDocument();
       expect(
@@ -64,6 +68,61 @@ describe("app global command actions", () => {
       );
 
       expect(mockedNavigate).toHaveBeenCalledWith({ to: "/settings" });
+    }
+  );
+
+  it(
+    "opens the app-level agent from the app shell command bar",
+    { timeout: 10_000 },
+    async () => {
+      const user = userEvent.setup();
+      const openListener = vi.fn<() => void>();
+      window.addEventListener("ceird:agent-chat-open", openListener);
+
+      try {
+        render(
+          <CommandBarProvider>
+            <AppAgentCommandActions
+              activeOrganizationId={"org_123" as never}
+              currentOrganizationRole="owner"
+            />
+          </CommandBarProvider>
+        );
+
+        fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+        await user.click(
+          await screen.findByRole("option", { name: /open ceird agent/i })
+        );
+
+        expect(openListener).toHaveBeenCalledOnce();
+      } finally {
+        window.removeEventListener("ceird:agent-chat-open", openListener);
+      }
+    }
+  );
+
+  it(
+    "hides the app-level agent command until agent access is available",
+    { timeout: 10_000 },
+    async () => {
+      render(
+        <CommandBarProvider>
+          <AppAgentCommandActions activeOrganizationId={"org_123" as never} />
+          <AppGlobalCommandActions />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /open user settings/i })
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole("option", { name: /open ceird agent/i })
+      ).not.toBeInTheDocument();
     }
   );
 
@@ -96,6 +155,9 @@ describe("app global command actions", () => {
       expect(
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /open ceird agent/i })
+      ).not.toBeInTheDocument();
       expectCommandShortcut("Go to Home", ["G", "H"]);
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expectCommandShortcut("Go to Sites", ["G", "S"]);
@@ -170,12 +232,16 @@ describe("app global command actions", () => {
   );
 
   it(
-    "registers only jobs and user settings commands for external users",
+    "registers only jobs, agent, and user settings commands for external users",
     { timeout: 10_000 },
     async () => {
       render(
         <CommandBarProvider>
           <AppGlobalCommandActions />
+          <AppAgentCommandActions
+            activeOrganizationId={"org_123" as never}
+            currentOrganizationRole="external"
+          />
           <AppOrganizationCommandActions currentOrganizationRole="external" />
         </CommandBarProvider>
       );
@@ -189,6 +255,10 @@ describe("app global command actions", () => {
       });
 
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
+      expect(
+        screen.getByRole("option", { name: /open ceird agent/i })
+      ).toBeInTheDocument();
+      expectCommandShortcut("Open Ceird Agent", ["J"]);
       expect(
         screen.getByRole("option", { name: /open user settings/i })
       ).toBeInTheDocument();

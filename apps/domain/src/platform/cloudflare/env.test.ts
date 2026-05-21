@@ -77,4 +77,13 @@ describe("Cloudflare Worker environment config", () => {
     expect(config.get("MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES")).toBe("32");
     expect(config.get("MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS")).toBe("45");
   });
+
+  it("propagates the Agent action-run stale window", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "120",
+    });
+
+    expect(config.get("AGENT_ACTION_RUN_STALE_AFTER_SECONDS")).toBe("120");
+  });
 });

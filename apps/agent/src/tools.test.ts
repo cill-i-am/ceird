@@ -156,6 +156,29 @@ describe("Ceird Agent tools", () => {
     );
   });
 
+  it("marks non-read executable actions as approval-gated tools", () => {
+    const tools = createCeirdTools(
+      makeEnv({ AGENT_MUTATION_TOOLS_ENABLED: "true" }),
+      agentInstanceName
+    );
+    const approvalGatedActions = AGENT_EXECUTABLE_ACTIONS.filter(
+      (action) => action.confirmationPolicy !== "none"
+    );
+
+    expect(approvalGatedActions.length).toBeGreaterThan(0);
+
+    for (const action of approvalGatedActions) {
+      expect(
+        (tools[action.modelName] as { readonly needsApproval?: unknown })
+          .needsApproval
+      ).toBe(true);
+    }
+
+    expect(
+      (tools.listLabels as { readonly needsApproval?: unknown }).needsApproval
+    ).toBeUndefined();
+  });
+
   it("normalizes empty action inputs to strict empty object schemas", () => {
     const tools = createCeirdTools(makeEnv(), agentInstanceName);
 

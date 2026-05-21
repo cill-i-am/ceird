@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentActionOperationId } from "@ceird/agents-core";
+import {
+  AGENT_ACTION_REJECTED_ERROR_TAG,
+  AgentActionOperationId,
+} from "@ceird/agents-core";
 import { OrganizationId, UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
@@ -113,6 +116,35 @@ describe("agent repositories", () => {
         { storeResult: true }
       )
     );
+    const lateFailedRun = await runAgentEffect(
+      testDatabase.url,
+      AgentActionRunsRepository.completeFailed(
+        firstRun.run.id,
+        "Late stale recovery",
+        { tag: AGENT_ACTION_REJECTED_ERROR_TAG }
+      )
+    );
+    const freshRun = await runAgentEffect(
+      testDatabase.url,
+      AgentActionRunsRepository.begin({
+        actionKind: "write",
+        actionName: "ceird.labels.create",
+        input: inputLedgerValue,
+        operationId: decodeAgentActionOperationId("tool-call:2"),
+        organizationId: identity.organizationId,
+        threadId: thread.id,
+        userId: identity.userId,
+      })
+    );
+    const freshStaleAttempt = await runAgentEffect(
+      testDatabase.url,
+      AgentActionRunsRepository.completeFailed(
+        freshRun.run.id,
+        "Fresh runs should not be stale",
+        { tag: AGENT_ACTION_REJECTED_ERROR_TAG },
+        { staleAfterSeconds: 900 }
+      )
+    );
 
     expect(thread.title).toBe("Quote follow-up");
     expect(threads.map((item) => item.id)).toContain(thread.id);
@@ -123,6 +155,10 @@ describe("agent repositories", () => {
     expect(replayedRun.run.input).toStrictEqual(inputLedgerValue);
     expect(completedRun.status).toBe("succeeded");
     expect(completedRun.result).toStrictEqual({ labels: [] });
+    expect(lateFailedRun.status).toBe("succeeded");
+    expect(lateFailedRun.result).toStrictEqual({ labels: [] });
+    expect(freshStaleAttempt.status).toBe("running");
+    expect(freshStaleAttempt.errorMessage).toBeNull();
   });
 });
 

@@ -47,6 +47,7 @@ export type InfraGoogleMapsApiKey = Schema.Schema.Type<
 >;
 
 export interface InfraStageConfig {
+  readonly agentActionRunStaleAfterSeconds: number;
   readonly appName: string;
   readonly stage: string;
   readonly zoneName: DomainName;
@@ -102,6 +103,12 @@ const HyperdriveOriginConnectionLimit = Schema.Int.check(
         "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT must be an integer between 5 and 100",
     }
   )
+);
+const AgentActionRunStaleAfterSeconds = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS must be a positive integer",
+  })
 );
 const NeonHistoryRetentionSeconds = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(0, {
@@ -165,6 +172,12 @@ function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
 
 function decodeHyperdriveOriginConnectionLimit(value: number) {
   return Schema.decodeUnknownEffect(HyperdriveOriginConnectionLimit)(
+    value
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeAgentActionRunStaleAfterSeconds(value: number) {
+  return Schema.decodeUnknownEffect(AgentActionRunStaleAfterSeconds)(
     value
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 }
@@ -234,6 +247,12 @@ export function loadInfraStageConfig(stageInput: string) {
     const authRateLimitEnabled = yield* Config.boolean(
       "AUTH_RATE_LIMIT_ENABLED"
     ).pipe(Config.withDefault(!identity.isPullRequestPreview));
+    const agentActionRunStaleAfterSeconds = yield* Config.number(
+      "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
+    ).pipe(
+      Config.withDefault(15 * 60),
+      Config.mapOrFail(decodeAgentActionRunStaleAfterSeconds)
+    );
     const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
       Config.mapOrFail(decodeGoogleMapsApiKey)
     );
@@ -307,6 +326,7 @@ export function loadInfraStageConfig(stageInput: string) {
 
     return {
       appName: "ceird",
+      agentActionRunStaleAfterSeconds,
       stage,
       zoneName,
       appHostname,

@@ -1,6 +1,7 @@
 import {
   AgentAccessDeniedError,
   AGENT_ACCESS_DENIED_ERROR_TAG,
+  AGENT_ACTION_REJECTED_ERROR_TAG,
   AgentActionOperationId,
   AgentActionRejectedError,
   AgentActionRunId,
@@ -194,6 +195,7 @@ describe("agent threads service", () => {
                 run: {
                   actionKind: "write",
                   actionName: "ceird.labels.create",
+                  createdAt: new Date().toISOString(),
                   errorMessage: null,
                   id: actionRunId,
                   input: {
@@ -267,6 +269,202 @@ describe("agent threads service", () => {
       message: "Agent action operation is already running",
     });
     expect(actionCalls).toBe(0);
+  });
+
+  it("fails stale running replays so an abandoned operation becomes terminal", async () => {
+    let actionCalls = 0;
+    let failedActionRunId: AgentActionRunId | undefined;
+    let failureMessage: string | undefined;
+    let failureOptions: unknown;
+    let failureResult: unknown;
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .runAction({
+              input: { name: "Plumbing" },
+              name: "ceird.labels.create",
+              operationId,
+              threadId,
+            })
+            .pipe(Effect.flip);
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { shouldNotExecute: true };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, {
+                  createdAt: "2020-01-01T00:00:00.000Z",
+                  status: "running",
+                }),
+              }),
+            completeFailed: (
+              completedActionRunId: AgentActionRunId,
+              message: string,
+              result: unknown,
+              options?: unknown
+            ) =>
+              Effect.sync(() => {
+                failedActionRunId = completedActionRunId;
+                failureMessage = message;
+                failureOptions = options;
+                failureResult = result;
+
+                return makeActionRun({
+                  createdAt: "2020-01-01T00:00:00.000Z",
+                  errorMessage: message,
+                  id: completedActionRunId,
+                  result,
+                  status: "failed",
+                });
+              }),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentActionRejectedError);
+    expect(error).toMatchObject({
+      actionName: "ceird.labels.create",
+      message: "Agent action operation timed out before completion",
+    });
+    expect(failedActionRunId).toBe(actionRunId);
+    expect(failureMessage).toBe(
+      "Agent action operation timed out before completion"
+    );
+    expect(failureOptions).toStrictEqual({ staleAfterSeconds: 900 });
+    expect(failureResult).toStrictEqual({
+      actionName: "ceird.labels.create",
+      tag: AGENT_ACTION_REJECTED_ERROR_TAG,
+    });
+    expect(actionCalls).toBe(0);
+  });
+
+  it("replays the current terminal run when stale recovery loses a race", async () => {
+    let actionCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { shouldNotExecute: true };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: false,
+                run: makeBeginRun(input, {
+                  createdAt: "2020-01-01T00:00:00.000Z",
+                  status: "running",
+                }),
+              }),
+            completeFailed: (completedActionRunId: AgentActionRunId) =>
+              Effect.succeed(
+                makeActionRun({
+                  id: completedActionRunId,
+                  result: { labelId: "label_123" },
+                  status: "succeeded",
+                })
+              ),
+            withTransaction: <Value, Error, Requirements>(
+              effect: Effect.Effect<Value, Error, Requirements>
+            ) => effect,
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: true,
+      result: { labelId: "label_123" },
+    });
+    expect(actionCalls).toBe(0);
+  });
+
+  it("does not wrap write action execution in the action-run repository transaction", async () => {
+    let actionCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { labelId: "label_123" };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+            withTransaction: () =>
+              Effect.die(
+                "Action execution must not run inside the action-run repository transaction"
+              ),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labelId: "label_123" },
+    });
+    expect(actionCalls).toBe(1);
   });
 
   it("preserves the failure category when replaying failed operations", async () => {
@@ -462,6 +660,7 @@ function makeBeginRun(
   return {
     actionKind: input.actionKind,
     actionName: input.actionName,
+    createdAt: new Date().toISOString(),
     errorMessage: null,
     id: actionRunId,
     input: input.input,

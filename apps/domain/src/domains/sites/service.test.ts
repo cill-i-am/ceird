@@ -125,6 +125,7 @@ function makeHarness(
     removeLabel: 0,
     withTransaction: 0,
   };
+  let insideSiteWriteTransaction = false;
   let siteHasLabel = false;
   const organizationLabel: Label = {
     createdAt: "2026-04-20T10:00:00.000Z",
@@ -177,6 +178,7 @@ function makeHarness(
     }) =>
       Effect.gen(function* () {
         calls.createSite += 1;
+        expect(insideSiteWriteTransaction).toBeTruthy();
         expect(input).toMatchObject({
           addressLine1: "1 Custom House Quay",
           country: "IE",
@@ -264,8 +266,15 @@ function makeHarness(
     ) =>
       Effect.gen(function* () {
         calls.withTransaction += 1;
+        insideSiteWriteTransaction = true;
 
-        return yield* effect;
+        return yield* effect.pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              insideSiteWriteTransaction = false;
+            })
+          )
+        );
       }),
   });
 
@@ -391,6 +400,7 @@ function makeHarness(
     geocode: (input: CreateSiteInput) =>
       Effect.gen(function* () {
         calls.geocode += 1;
+        expect(insideSiteWriteTransaction).toBeFalsy();
         expect(input).toStrictEqual(siteInput);
 
         if (options.geocodingFailure !== undefined) {
@@ -674,6 +684,7 @@ describe("sites service", () => {
     expect(harness.calls.createSite).toBe(1);
     expect(harness.calls.ensureServiceArea).toBe(0);
     expect(harness.calls.getOptionById).toBe(1);
+    expect(harness.calls.withTransaction).toBe(1);
   }, 10_000);
 
   it("blocks organization members from creating standalone sites", async () => {

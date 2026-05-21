@@ -75,26 +75,36 @@ fallback secrets; if no source env file exists, setup stops with a clear error.
 
 Common local and Alchemy variables include:
 
-| Variable                       | Purpose                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------ |
-| `ALCHEMY_STACK_NAME`           | Alchemy-injected runtime stack name for Worker metadata.                             |
-| `ALCHEMY_STAGE`                | Alchemy-injected runtime stage for Worker health checks.                             |
-| `AUTH_APP_ORIGIN`              | Browser app origin used by auth redirects and emails.                                |
-| `AUTH_EMAIL_FROM`              | Sender address for auth emails.                                                      |
-| `AUTH_EMAIL_FROM_NAME`         | Sender display name.                                                                 |
-| `AUTH_RATE_LIMIT_ENABLED`      | Disables auth rate limiting for local and PR-preview E2E.                            |
-| `BETTER_AUTH_BASE_URL`         | API auth URL.                                                                        |
-| `BETTER_AUTH_SECRET`           | Stable local auth secret for package-local domain runs.                              |
-| `DATABASE_URL`                 | Package-local domain database URL.                                                   |
-| `GOOGLE_MAPS_API_KEY`          | Optional local Google geocoding key for site creation.                               |
-| `AGENT_INTERNAL_SECRET`        | Internal domain/Agent shared secret for package-local runs.                          |
-| `AGENT_MUTATION_TOOLS_ENABLED` | Enables write/destructive Agent tools when a confirmation-capable client is present. |
+| Variable                               | Purpose                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `ALCHEMY_STACK_NAME`                   | Alchemy-injected runtime stack name for Worker metadata.                             |
+| `ALCHEMY_STAGE`                        | Alchemy-injected runtime stage for Worker health checks.                             |
+| `AUTH_APP_ORIGIN`                      | Browser app origin used by auth redirects and emails.                                |
+| `AUTH_EMAIL_FROM`                      | Sender address for auth emails.                                                      |
+| `AUTH_EMAIL_FROM_NAME`                 | Sender display name.                                                                 |
+| `AUTH_RATE_LIMIT_ENABLED`              | Disables auth rate limiting for local and PR-preview E2E.                            |
+| `BETTER_AUTH_BASE_URL`                 | API auth URL.                                                                        |
+| `BETTER_AUTH_SECRET`                   | Stable local auth secret for package-local domain runs.                              |
+| `DATABASE_URL`                         | Package-local domain database URL.                                                   |
+| `GOOGLE_MAPS_API_KEY`                  | Optional local Google geocoding key for site creation.                               |
+| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | Agent action ledger stale-running recovery window.                                   |
+| `AGENT_INTERNAL_SECRET`                | Internal domain/Agent shared secret for package-local runs.                          |
+| `AGENT_ORIGIN`                         | Server-side app Agent Worker origin.                                                 |
+| `VITE_AGENT_ORIGIN`                    | Browser-exposed Agent Worker origin used by the global chat client.                  |
+| `AGENT_MUTATION_TOOLS_ENABLED`         | Enables write/destructive Agent tools when a confirmation-capable client is present. |
 
 Package-local domain runs use deterministic development auth email delivery. That
 local transport is separate from deployed Worker email delivery, which uses the
 Cloudflare Email Worker binding declared by the Alchemy stack.
 The Google Maps key is optional for package-local domain startup; when it is
 missing or blank, the domain uses deterministic development geocoding.
+
+Package-local Playwright runs set `AGENT_INTERNAL_SECRET` so the domain app can
+mount its Agent HTTP groups even when a test begins with auth or product
+routes. They also pass `AGENT_ORIGIN` and `VITE_AGENT_ORIGIN`; by default
+`PLAYWRIGHT_AGENT_URL` falls back to the package-local app origin so Agent HTTP
+and WebSocket paths can be mocked in focused app E2E tests without starting a
+separate Agent Worker process.
 
 ## Production Infrastructure
 
@@ -288,14 +298,16 @@ branch forked from the parent `main` branch through the existing
 `PostgresProject.ref` model. The workflow reads the preview branch connection
 URI from Alchemy `PostgresBranch` state for `PLAYWRIGHT_DATABASE_URL`; the value
 is masked before it is exported to the Playwright step and is still omitted from
-root stack outputs. After deploy, CI waits for both preview `/health` endpoints
-and an API auth-session probe that forwards through the private domain Worker
-before starting Playwright. This avoids transient route, domain, TLS, or service
-binding propagation failures on freshly created preview hostnames. The domain
-Worker disables auth rate limiting by default only for `pr-<number>` stages so
-repeated E2E runs against the persistent preview database do not accumulate
-lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview
-needs to exercise production rate-limit behavior.
+root stack outputs. Preview Playwright can target the reconciled Agent Worker
+with `PLAYWRIGHT_AGENT_URL` when a test exercises the real Agent route. After
+deploy, CI waits for both preview `/health` endpoints and an API auth-session
+probe that forwards through the private domain Worker before starting
+Playwright. This avoids transient route, domain, TLS, or service binding
+propagation failures on freshly created preview hostnames. The domain Worker
+disables auth rate limiting by default only for `pr-<number>` stages so repeated
+E2E runs against the persistent preview database do not accumulate lockout
+counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to
+exercise production rate-limit behavior.
 
 Fork pull requests do not run the secret-bearing preview jobs. They continue to
 run the non-deploying build, lint, format, and typecheck jobs without

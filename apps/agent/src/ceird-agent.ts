@@ -1,21 +1,33 @@
 import { AgentInstanceName } from "@ceird/agents-core";
 import { AIChatAgent } from "@cloudflare/ai-chat";
+import type {
+  ChatRecoveryContext,
+  ChatRecoveryOptions,
+} from "@cloudflare/ai-chat";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { ToolSet } from "ai";
 import { Schema } from "effect";
 import { createWorkersAI } from "workers-ai-provider";
 
+import { makeCeirdChatRecoveryOptions } from "./ceird-agent-recovery.js";
 import { touchAgentThreadActivity } from "./domain-client.js";
 import { extractAgentThreadId } from "./instance.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 import { createCeirdTools } from "./tools.js";
 
-const DEFAULT_AGENT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const DEFAULT_AGENT_MODEL = "@cf/zai-org/glm-4.7-flash";
 const decodeAgentInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 
 export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
+  override chatRecovery = true;
   messageConcurrency = "queue" as const;
   maxPersistedMessages = 200;
+
+  override async onChatRecovery(
+    ctx: ChatRecoveryContext
+  ): Promise<ChatRecoveryOptions> {
+    return makeCeirdChatRecoveryOptions(ctx);
+  }
 
   override async onChatMessage(
     onFinish: Parameters<AIChatAgent["onChatMessage"]>[0]

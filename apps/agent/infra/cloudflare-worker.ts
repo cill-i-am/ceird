@@ -51,7 +51,7 @@ export interface AgentWorkerStageConfig {
 
 export interface AgentWorkerConfiguredEnv {
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
-  readonly AGENT_MUTATION_TOOLS_ENABLED: "false";
+  readonly AGENT_MUTATION_TOOLS_ENABLED: "true";
   readonly AUTH_APP_ORIGIN: string;
   readonly NODE_ENV: "production";
 }
@@ -75,7 +75,7 @@ export function makeAgentWorkerEnv(input: {
 }): AgentWorkerConfiguredEnv {
   return {
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
-    AGENT_MUTATION_TOOLS_ENABLED: "false",
+    AGENT_MUTATION_TOOLS_ENABLED: "true",
     AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
     NODE_ENV: "production",
   } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;

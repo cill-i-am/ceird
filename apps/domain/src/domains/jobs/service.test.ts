@@ -183,6 +183,7 @@ interface JobsServiceHarness {
     transition: number;
     updateLabel: number;
     updateCollaborator: number;
+    withTransaction: number;
   };
   readonly layer: Layer.Layer<
     JobsService | HttpServerRequest.HttpServerRequest
@@ -222,7 +223,9 @@ function makeHarness(
     transition: 0,
     updateLabel: 0,
     updateCollaborator: 0,
+    withTransaction: 0,
   };
+  let insideJobWriteTransaction = false;
   const organizationLabel = {
     createdAt: "2026-04-22T10:00:00.000Z",
     id: labelId,
@@ -551,9 +554,23 @@ function makeHarness(
     withTransaction: <Value, Error, Requirements>(
       effect: Effect.Effect<Value, Error, Requirements>
     ) =>
-      options.transactionFailure === undefined
-        ? effect
-        : Effect.fail(options.transactionFailure as Error),
+      Effect.gen(function* () {
+        calls.withTransaction += 1;
+
+        if (options.transactionFailure !== undefined) {
+          return yield* Effect.fail(options.transactionFailure as Error);
+        }
+
+        insideJobWriteTransaction = true;
+
+        return yield* effect.pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              insideJobWriteTransaction = false;
+            })
+          )
+        );
+      }),
   });
 
   const sitesRepository = SitesRepository.of({
@@ -573,6 +590,7 @@ function makeHarness(
     }) =>
       Effect.sync(() => {
         calls.createSite += 1;
+        expect(insideJobWriteTransaction).toBeTruthy();
         expect(input).toMatchObject({
           addressLine1: "1 Custom House Quay",
           country: "IE",
@@ -717,6 +735,7 @@ function makeHarness(
     geocode: (input: CreateSiteInput) =>
       Effect.sync(() => {
         calls.geocode += 1;
+        expect(insideJobWriteTransaction).toBeFalsy();
         expect(input).toStrictEqual(inlineSiteInput);
 
         return {
@@ -1195,6 +1214,7 @@ describe("jobs service", () => {
     expect(harness.calls.createSite).toBe(1);
     expect(harness.calls.create).toBe(1);
     expect(harness.calls.addActivity).toBe(1);
+    expect(harness.calls.withTransaction).toBe(1);
   }, 10_000);
 
   it("does not geocode when creating a job for an existing site", async () => {

@@ -1,3 +1,8 @@
+import {
+  AGENT_THREAD_NOT_FOUND_ERROR_TAG,
+  AgentThreadId,
+  AgentThreadNotFoundError,
+} from "@ceird/agents-core";
 import { JOB_NOT_FOUND_ERROR_TAG, JobNotFoundError } from "@ceird/jobs-core";
 import type {
   JobDetailResponse,
@@ -15,7 +20,7 @@ import type {
   SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 
 import {
   makeBrowserAppApiClient,
@@ -401,6 +406,22 @@ describe("app API client", () => {
     expect(normalizeAppApiError(domainError)).toMatchObject({
       _tag: LABEL_NOT_FOUND_ERROR_TAG,
       message: "Label not found",
+    });
+  }, 1000);
+
+  it("preserves agents-core tagged domain errors", () => {
+    const threadId = Schema.decodeUnknownSync(AgentThreadId)(
+      "11111111-1111-4111-8111-111111111111"
+    );
+    const domainError = new AgentThreadNotFoundError({
+      message: "Agent thread not found",
+      threadId,
+    });
+
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
+      _tag: AGENT_THREAD_NOT_FOUND_ERROR_TAG,
+      message: "Agent thread not found",
     });
   }, 1000);
 });

@@ -50,7 +50,19 @@ import {
 } from "./repositories.js";
 import type { AgentActionInputLedgerValue } from "./repositories.js";
 
+const DEFAULT_AGENT_ACTION_RUN_STALE_AFTER_SECONDS = 15 * 60;
+const STALE_ACTION_RUN_MESSAGE =
+  "Agent action operation timed out before completion";
+
 const AgentRuntimeConfig = Config.all({
+  actionRunStaleAfterSeconds: Config.int(
+    "AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
+  ).pipe(
+    Config.withDefault(DEFAULT_AGENT_ACTION_RUN_STALE_AFTER_SECONDS),
+    Config.mapOrFail(
+      decodePositiveIntegerConfig("AGENT_ACTION_RUN_STALE_AFTER_SECONDS")
+    )
+  ),
   connectTokenTtlSeconds: Config.int("AGENT_CONNECT_TOKEN_TTL_SECONDS").pipe(
     Config.withDefault(300)
   ),
@@ -339,6 +351,20 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
               });
             }
 
+            if (begin.run.status === "running") {
+              const staleOutcome = yield* failStaleRunningActionRun(
+                actionRunsRepository,
+                begin.run,
+                {
+                  staleAfterSeconds: config.actionRunStaleAfterSeconds,
+                }
+              ).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
+
+              if (staleOutcome !== undefined) {
+                return staleOutcome;
+              }
+            }
+
             const replayed = yield* replayActionRun(begin.run.status, {
               actionRunId: begin.run.id,
               message: begin.run.errorMessage,
@@ -377,12 +403,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
 
           return rejectActionRun(result.failure);
         });
-        const outcome =
-          actionKind === "read"
-            ? yield* runActionOnce
-            : yield* actionRunsRepository
-                .withTransaction(runActionOnce)
-                .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
+        const outcome = yield* runActionOnce;
 
         return yield* finishActionRunOutcome(outcome);
       });
@@ -582,6 +603,56 @@ function finishActionRunOutcome(outcome: ActionRunOutcome) {
     : Effect.fail(outcome.error);
 }
 
+function failStaleRunningActionRun(
+  actionRunsRepository: Context.Service.Shape<typeof AgentActionRunsRepository>,
+  run: {
+    readonly actionName: AgentActionName;
+    readonly createdAt: string;
+    readonly id: AgentActionRunId;
+  },
+  options: { readonly staleAfterSeconds: number }
+) {
+  return Effect.gen(function* () {
+    const nowMs = yield* Effect.sync(() => Date.now());
+    const ageMs = nowMs - Date.parse(run.createdAt);
+
+    if (Number.isNaN(ageMs) || ageMs < options.staleAfterSeconds * 1000) {
+      return;
+    }
+
+    yield* Effect.annotateCurrentSpan("agent.actionRunStale", true);
+    yield* Effect.annotateCurrentSpan("agent.actionRunAgeMs", ageMs);
+
+    const error = new AgentActionRejectedError({
+      actionName: run.actionName,
+      message: STALE_ACTION_RUN_MESSAGE,
+    });
+
+    const completed = yield* actionRunsRepository.completeFailed(
+      run.id,
+      error.message,
+      makeActionRunFailureLedgerValue(error),
+      { staleAfterSeconds: options.staleAfterSeconds }
+    );
+
+    if (
+      completed.status !== "failed" ||
+      completed.errorMessage !== error.message
+    ) {
+      const replayed = yield* replayActionRun(completed.status, {
+        actionRunId: completed.id,
+        message: completed.errorMessage,
+        name: completed.actionName,
+        result: completed.result,
+      }).pipe(Effect.result);
+
+      return actionRunResultToOutcome(replayed);
+    }
+
+    return rejectActionRun(error);
+  });
+}
+
 function isReExecutableReadReplay(input: {
   readonly actionKind: string;
   readonly result: unknown;
@@ -659,6 +730,19 @@ function makeActionInputLedgerValue(
 
 function bytesToHex(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function decodePositiveIntegerConfig(configKey: string) {
+  const schema = Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(1, {
+      message: `${configKey} must be a positive integer`,
+    })
+  );
+
+  return (value: number) =>
+    Schema.decodeUnknownEffect(schema)(value).pipe(
+      Effect.mapError((error) => new Config.ConfigError(error))
+    );
 }
 
 function replayActionRun(

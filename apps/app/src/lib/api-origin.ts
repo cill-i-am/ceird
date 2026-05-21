@@ -1,54 +1,12 @@
-const LOCAL_APP_PORTS = new Set(["3000", "4173"]);
+import { mapAppOriginToServiceOrigin, toURL } from "./app-service-origin";
+
 const LOCAL_API_PORT = "3001";
 
-function toURL(input: string): URL | undefined {
-  try {
-    return new URL(input);
-  } catch {
-    return undefined;
-  }
-}
-
 function mapAppOriginToApiOrigin(url: URL): URL | undefined {
-  const mapped = new URL(url.toString());
-
-  if (mapped.hostname === "app.localhost") {
-    mapped.hostname = "api.localhost";
-    return mapped;
-  }
-
-  if (mapped.hostname.endsWith(".localhost")) {
-    return undefined;
-  }
-
-  if (
-    (mapped.hostname === "127.0.0.1" || mapped.hostname === "localhost") &&
-    LOCAL_APP_PORTS.has(mapped.port)
-  ) {
-    mapped.port = LOCAL_API_PORT;
-    return mapped;
-  }
-
-  if (mapped.hostname.startsWith("app.")) {
-    const [, ...remainingLabels] = mapped.hostname.split(".");
-
-    if (remainingLabels.length >= 2) {
-      mapped.hostname = ["api", ...remainingLabels].join(".");
-      return mapped;
-    }
-  }
-
-  if (mapped.hostname.startsWith("app-")) {
-    const [appLabel, ...remainingLabels] = mapped.hostname.split(".");
-    const stageSlug = appLabel?.slice("app-".length);
-
-    if (stageSlug && remainingLabels.length >= 2) {
-      mapped.hostname = [`api-${stageSlug}`, ...remainingLabels].join(".");
-      return mapped;
-    }
-  }
-
-  return undefined;
+  return mapAppOriginToServiceOrigin(url, {
+    localServicePort: LOCAL_API_PORT,
+    serviceLabel: "api",
+  });
 }
 
 export function resolveApiOrigin(

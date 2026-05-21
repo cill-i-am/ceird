@@ -112,6 +112,14 @@ Public agent chat traffic goes to:
 | ------ | --------------------------------------- | ----------------------------------- |
 | `*`    | `/agents/CeirdAgent/:agentInstanceName` | Route to the scoped Agent instance. |
 
+The browser app does not construct agent instance names or connect tokens
+itself. Its global chat surface calls the authenticated domain Agent thread API
+to list/create the current user's thread and then calls
+`POST /agent/threads/:threadId/authorize` immediately before connecting to the
+Agent Worker. The Agent Worker HTTP/WebSocket path owns chat transport, while
+all product reads, writes, destructive operations, idempotency, and audit still
+flow through private domain action execution.
+
 The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
 Agent route accepts a short-lived connect token as a bearer token or `token`
 query parameter, verifies that it was signed by the domain-owned secret,
@@ -181,8 +189,9 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.rate_cards.update`         | write       |
 
 Read tools are available to the model by default. Write and destructive tools
-are hidden unless `AGENT_MUTATION_TOOLS_ENABLED=true`, which is reserved for a
-confirmation-capable client flow so prompt-only execution cannot mutate data.
+are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
+require the confirmation-capable chat client to approve the action outside the
+model prompt.
 
 Rate-card agent actions route through the same
 `ConfigurationService.listRateCards`, `ConfigurationService.createRateCard`,
@@ -193,11 +202,15 @@ Every action call includes a domain operation id. The domain action-run ledger
 stores `thread_id`, `action_name`, `operation_id`, status, input hash/size,
 write-action results, and error metadata. Repeated successful mutating calls
 with the same thread and operation id return the original result, while
-repeated failed or in-flight calls are rejected instead of re-executed. Read
-action results are not durably copied into the ledger; a successful replay
-re-runs the read. The actual action implementations use the domain
-authorization, repository, and activity-recording paths rather than bypassing
-domain behavior.
+repeated failed calls are rejected instead of re-executed. Fresh in-flight calls
+are rejected as already running. Running action rows older than 15 minutes are
+recovered to a terminal failed state and return the same typed rejection, so a
+crashed Agent request cannot block an operation id forever. Read action results
+are not durably copied into the ledger; a successful replay re-runs the read.
+The ledger does not wrap action execution in a long-lived transaction. Actual
+action implementations use the domain authorization, repository, and
+activity-recording paths rather than bypassing domain behavior, and those
+services own their own write transaction boundaries.
 
 The public API adapter does not forward `/agent/internal/*`; that surface is
 intended for private Worker service-binding calls from `apps/agent` to
@@ -435,6 +448,10 @@ Google Maps key. Environment variables configure provider credentials; they do
 not select provider topology. Address-level misses return the user-correctable
 geocoding failure contract, while upstream Google/configuration failures return
 the provider failure contract so deployed misconfiguration fails visibly.
+Site creation, site updates, and inline site creation during job creation
+geocode before opening the write transaction. That keeps provider latency and
+provider failures outside Postgres transactions; the subsequent site/job writes
+still use their normal domain-owned transaction boundaries.
 
 ## Labels API Endpoints
 

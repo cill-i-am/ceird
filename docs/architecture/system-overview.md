@@ -105,7 +105,10 @@ domain Worker's internal action API. Read tools are model-available by default;
 mutating tools are gated until a client confirmation flow can approve them
 outside the model prompt. Mutating actions use the domain action-run ledger for
 idempotent replay protection and reuse the same authorization and
-activity-recording paths as the HTTP API.
+activity-recording paths as the HTTP API. The ledger is a small begin/complete
+record, not an outer transaction around the whole action; domain services keep
+their own transaction boundaries, and abandoned running rows time out to a
+terminal failed state on replay.
 
 ## Persistence Model
 

@@ -137,7 +137,9 @@ The agents domain owns two Postgres tables:
 - `agent_action_runs` stores the action execution ledger keyed by thread and
   operation id. It records input, result, error metadata, status, and timestamps
   so mutating Agent tools can replay successful duplicate calls without running
-  the side effect twice.
+  the side effect twice. The ledger marks abandoned running rows older than 15
+  minutes as failed on replay, which gives crashed Agent requests a terminal
+  recovery path without re-running the side effect.
 
 Live chat/runtime state remains in the Cloudflare Agents SDK Durable Object
 store. Product state, authorization, idempotency, and audit remain in Postgres

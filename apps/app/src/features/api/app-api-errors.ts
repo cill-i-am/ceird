@@ -1,3 +1,9 @@
+import type {
+  AgentAccessDeniedError,
+  AgentActionRejectedError,
+  AgentStorageError,
+  AgentThreadNotFoundError,
+} from "@ceird/agents-core";
 import type { JobsError } from "@ceird/jobs-core";
 import type { LabelsError } from "@ceird/labels-core";
 import type { SitesError } from "@ceird/sites-core";
@@ -6,6 +12,7 @@ import { Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
 
 const APP_API_DOMAIN_ERROR_TAG_PREFIXES = [
+  "@ceird/agents-core/",
   "@ceird/jobs-core/",
   "@ceird/labels-core/",
   "@ceird/sites-core/",
@@ -29,7 +36,12 @@ export class AppApiRequestError extends Schema.TaggedErrorClass<AppApiRequestErr
   }
 ) {}
 
-type AppApiDomainError = JobsError | LabelsError | SitesError;
+type AgentsError =
+  | AgentAccessDeniedError
+  | AgentActionRejectedError
+  | AgentStorageError
+  | AgentThreadNotFoundError;
+type AppApiDomainError = AgentsError | JobsError | LabelsError | SitesError;
 export type AppApiError =
   | AppApiDomainError
   | AppApiOriginResolutionError

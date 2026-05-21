@@ -92,6 +92,7 @@ describe("Alchemy stage identity", () => {
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
     expect(config.authRateLimitEnabled).toBeTruthy();
+    expect(config.agentActionRunStaleAfterSeconds).toBe(900);
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
     expect(config.mcpAuthorizedAppCacheMaxEntries).toBeUndefined();
@@ -237,6 +238,26 @@ describe("Alchemy stage identity", () => {
 
     expect(config.mcpAuthorizedAppCacheMaxEntries).toBe(32);
     expect(config.mcpAuthorizedAppCacheTtlSeconds).toBe(45);
+  });
+
+  it("allows the deployed Agent action-run stale window to be overridden", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "120",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.agentActionRunStaleAfterSeconds).toBe(120);
   });
 
   it("allows parent Neon branch protection to be enabled explicitly", () => {

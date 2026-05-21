@@ -76,6 +76,7 @@ interface AgentActionRunRow {
 interface AgentActionRunBeginProjectionRow {
   readonly action_kind: string;
   readonly action_name: string;
+  readonly created_at: Date;
   readonly error_message: string | null;
   readonly id: string;
   readonly input: unknown;
@@ -124,6 +125,7 @@ export interface AgentActionRun {
 export interface AgentActionRunBeginProjection {
   readonly actionKind: AgentActionKind;
   readonly actionName: AgentActionName;
+  readonly createdAt: string;
   readonly errorMessage: string | null;
   readonly id: AgentActionRunId;
   readonly input: AgentActionInputLedgerValue;
@@ -145,6 +147,10 @@ export interface BeginAgentActionRunInput {
 export interface BeginAgentActionRunResult {
   readonly inserted: boolean;
   readonly run: AgentActionRunBeginProjection;
+}
+
+export interface CompleteFailedAgentActionRunOptions {
+  readonly staleAfterSeconds?: number | undefined;
 }
 
 const decodeAgentThread = Schema.decodeUnknownSync(AgentThreadSchema);
@@ -456,6 +462,7 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
             operation_id,
             action_name,
             action_kind,
+            created_at,
             input,
             status,
             error_message,
@@ -486,6 +493,7 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
             operation_id,
             action_name,
             action_kind,
+            created_at,
             input,
             status,
             error_message,
@@ -534,13 +542,14 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
             status = 'succeeded',
             updated_at = now()
           where id = ${actionRunId}
+            and status = 'running'
           returning *
         `;
-        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", "succeeded");
+        const row = yield* resolveActionRunAfterTerminalRace(actionRunId, rows);
+        const run = mapActionRunRow(row);
+        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", run.status);
 
-        return mapActionRunRow(
-          yield* getRequiredRow(rows, "completed agent action run")
-        );
+        return run;
       });
 
       const completeFailed = Effect.fn(
@@ -548,9 +557,14 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
       )(function* (
         actionRunId: AgentActionRunId,
         message: string,
-        result: unknown | null = null
+        result: unknown | null = null,
+        options: CompleteFailedAgentActionRunOptions = {}
       ) {
         yield* Effect.annotateCurrentSpan("agent.actionRunId", actionRunId);
+        const stalePredicate =
+          options.staleAfterSeconds === undefined
+            ? sql``
+            : sql`and created_at <= now() - (${options.staleAfterSeconds} * interval '1 second')`;
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
@@ -560,13 +574,37 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
             status = 'failed',
             updated_at = now()
           where id = ${actionRunId}
+            and status = 'running'
+            ${stalePredicate}
           returning *
         `;
-        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", "failed");
+        const row = yield* resolveActionRunAfterTerminalRace(actionRunId, rows);
+        const run = mapActionRunRow(row);
+        yield* Effect.annotateCurrentSpan("agent.actionRunStatus", run.status);
 
-        return mapActionRunRow(
-          yield* getRequiredRow(rows, "failed agent action run")
-        );
+        return run;
+      });
+
+      const resolveActionRunAfterTerminalRace = Effect.fn(
+        "AgentActionRunsRepository.resolveActionRunAfterTerminalRace"
+      )(function* (
+        actionRunId: AgentActionRunId,
+        rows: readonly AgentActionRunRow[]
+      ) {
+        const updated = rows[0];
+
+        if (updated !== undefined) {
+          return updated;
+        }
+
+        const currentRows = yield* sql<AgentActionRunRow>`
+          select *
+          from agent_action_runs
+          where id = ${actionRunId}
+          limit 1
+        `;
+
+        return yield* getRequiredRow(currentRows, "agent action run");
       });
 
       return {
@@ -650,6 +688,7 @@ function mapActionRunBeginProjectionRow(
   return {
     actionKind: decodeAgentActionKind(row.action_kind),
     actionName: decodeAgentActionName(row.action_name),
+    createdAt: row.created_at.toISOString(),
     errorMessage: row.error_message,
     id: decodeAgentActionRunId(row.id),
     input: decodeAgentActionInputLedgerValue(row.input),

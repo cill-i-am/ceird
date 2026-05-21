@@ -5,6 +5,7 @@ import { InfraGoogleMapsApiKey } from "./stages.ts";
 import type { InfraStageConfig } from "./stages.ts";
 
 export const configWithoutCloudflareBootstrapSecrets = {
+  agentActionRunStaleAfterSeconds: 900,
   appName: "ceird",
   agentHostname: "agent.example.com",
   apiHostname: "api.example.com",

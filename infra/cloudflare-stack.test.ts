@@ -150,6 +150,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     DomainWorkerConfigEnv,
     | "ALCHEMY_STACK_NAME"
     | "ALCHEMY_STAGE"
+    | "AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
     | "AGENT_INTERNAL_SECRET"
     | "AUTH_APP_ORIGIN"
     | "AUTH_EMAIL_FROM"
@@ -284,6 +285,7 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
     });
     const appEnv = makeAppWorkerEnv({
+      agentOrigin: "https://agent.example.com",
       apiOrigin: "https://api.example.com",
     });
 
@@ -294,6 +296,7 @@ describe("Cloudflare stack", () => {
     expect(appEnv).not.toHaveProperty("ALCHEMY_STAGE");
     expect(apiEnv).toStrictEqual({ NODE_ENV: "production" });
     expect(domainEnv).toMatchObject({
+      AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "900",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AUTH_APP_ORIGIN: "https://app.example.com",
       AUTH_EMAIL_FROM_NAME: "Ceird",
@@ -307,13 +310,15 @@ describe("Cloudflare stack", () => {
     expect(mcpEnv).toStrictEqual({ NODE_ENV: "production" });
     expect(agentEnv).toStrictEqual({
       AGENT_INTERNAL_SECRET: agentInternalSecret,
-      AGENT_MUTATION_TOOLS_ENABLED: "false",
+      AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN: "https://app.example.com",
       NODE_ENV: "production",
     });
     expect(appEnv).toStrictEqual({
+      AGENT_ORIGIN: "https://agent.example.com",
       API_ORIGIN: "https://api.example.com",
       CEIRD_CLOUDFLARE: "1",
+      VITE_AGENT_ORIGIN: "https://agent.example.com",
       VITE_API_ORIGIN: "https://api.example.com",
     });
   });
@@ -379,11 +384,14 @@ describe("Cloudflare stack", () => {
 
     expect(
       makeAppWorkerEnv({
+        agentOrigin: "https://agent.stage.example.com",
         apiOrigin: "https://api.stage.example.com",
       })
     ).toStrictEqual({
+      AGENT_ORIGIN: "https://agent.stage.example.com",
       API_ORIGIN: "https://api.stage.example.com",
       CEIRD_CLOUDFLARE: "1",
+      VITE_AGENT_ORIGIN: "https://agent.stage.example.com",
       VITE_API_ORIGIN: "https://api.stage.example.com",
     });
   });
@@ -500,7 +508,7 @@ describe("Cloudflare stack", () => {
       domain: "agent.example.com",
       env: {
         AGENT_INTERNAL_SECRET: agentInternalSecret,
-        AGENT_MUTATION_TOOLS_ENABLED: "false",
+        AGENT_MUTATION_TOOLS_ENABLED: "true",
         AUTH_APP_ORIGIN: "https://app.example.com",
         NODE_ENV: "production",
       },
