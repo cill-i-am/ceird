@@ -8,10 +8,16 @@ import type {
   InvalidAuthEmailQueueMessageError,
 } from "../../domains/identity/authentication/auth-email-queue.js";
 import {
+  AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG,
   decodeAuthEmailQueueMessageEffect,
+  INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG,
   makeCloudflareAuthenticationEmailSchedulerLive,
   sendAuthEmailQueueMessage,
 } from "../../domains/identity/authentication/auth-email-queue.js";
+import {
+  fingerprintDeliveryKey,
+  sanitizeProviderErrorMessage,
+} from "../../domains/identity/authentication/auth-email-transport-helpers.js";
 import {
   AuthEmailSender,
   AuthEmailTransport,
@@ -21,6 +27,10 @@ import {
   makeAuthenticationLive,
 } from "../../domains/identity/authentication/auth.js";
 import { CloudflareEmailBinding } from "../../domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
+import type { McpAuthorizedAppCacheOptions } from "../../domains/mcp/cache-config.js";
+import { loadMcpAuthorizedAppCacheOptions } from "../../domains/mcp/cache-config.js";
+import type { McpAuthorizedAppCache } from "../../domains/mcp/http.js";
+import { makeMcpAuthorizedAppCache } from "../../domains/mcp/http.js";
 import { SiteGeocoder } from "../../domains/sites/geocoder.js";
 import { makeApiWebHandler } from "../../server.js";
 import {
@@ -30,7 +40,7 @@ import {
 import type { DomainWorkerEnv } from "./env.js";
 import { domainWorkerEnvConfigMap } from "./env.js";
 
-export class DomainWorkerFetchError extends Schema.TaggedError<DomainWorkerFetchError>()(
+export class DomainWorkerFetchError extends Schema.TaggedErrorClass<DomainWorkerFetchError>()(
   "@ceird/domain/WorkerFetchError",
   {
     cause: Schema.String,
@@ -41,10 +51,16 @@ export class DomainWorkerFetchError extends Schema.TaggedError<DomainWorkerFetch
 ) {}
 
 const domainWorkerExecutionContext = new AsyncLocalStorage<ExecutionContext>();
+const domainWorkerMcpAuthorizedAppCaches = new Map<
+  string,
+  McpAuthorizedAppCache
+>();
 
 export function makeWorkerBaseLive(env: DomainWorkerEnv) {
-  return Layer.setConfigProvider(
-    ConfigProvider.fromMap(domainWorkerEnvConfigMap(env))
+  return ConfigProvider.layer(
+    ConfigProvider.fromEnv({
+      env: Object.fromEntries(domainWorkerEnvConfigMap(env)),
+    })
   );
 }
 
@@ -56,9 +72,14 @@ export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
       try {
         await task;
       } catch (error) {
-        console.error("Authentication background task failed", {
-          cause: serializeFailureCause(error),
-        });
+        await Effect.runPromise(
+          Effect.logError("Authentication background task failed").pipe(
+            Effect.annotateLogs({
+              authenticationBackgroundTaskFailureCause:
+                serializeFailureCause(error),
+            })
+          )
+        );
       }
     })();
     const context = domainWorkerExecutionContext.getStore();
@@ -100,22 +121,51 @@ function makeDomainWorkerHandler(env: DomainWorkerEnv) {
     siteGeocoderLive,
   } = makeDomainWorkerRuntimeLayers(env);
 
-  return makeApiWebHandler(
-    databaseRuntimeLive,
+  return makeApiWebHandler({
     authenticationLive,
+    baseLive,
+    databaseRuntimeLive,
     siteGeocoderLive,
-    baseLive
-  );
+    mcpAuthorizedAppCache: getDomainWorkerMcpAuthorizedAppCache(baseLive),
+  });
 }
 
-function disposeDomainWorkerHandler(
+export function getDomainWorkerMcpAuthorizedAppCache(
+  baseLive: Layer.Layer<never, never, never>
+) {
+  const options = Effect.runSync(
+    loadMcpAuthorizedAppCacheOptions.pipe(Effect.provide(baseLive))
+  );
+  const cacheKey = makeDomainWorkerMcpAuthorizedAppCacheKey(options);
+  const existing = domainWorkerMcpAuthorizedAppCaches.get(cacheKey);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const cache = makeMcpAuthorizedAppCache(options);
+  domainWorkerMcpAuthorizedAppCaches.set(cacheKey, cache);
+  return cache;
+}
+
+function makeDomainWorkerMcpAuthorizedAppCacheKey(
+  options: McpAuthorizedAppCacheOptions
+) {
+  return `${options.maxEntries ?? "default"}:${options.ttlMs ?? "default"}`;
+}
+
+export function disposeDomainWorkerHandler(
   webHandler: ReturnType<typeof makeApiWebHandler>
 ) {
   return Effect.promise(() => webHandler.dispose()).pipe(
-    Effect.catchAllCause((cause) =>
+    Effect.catchCause((cause) =>
       Effect.logWarning("Cloudflare domain web handler disposal failed").pipe(
         Effect.annotateLogs({
-          cloudflareWorkerFailureCause: String(Cause.squash(cause)),
+          cloudflareWorkerFailure: "web_handler_disposal_failed",
+          cloudflareWorkerFailureCause: sanitizeProviderErrorMessage(
+            serializeFailureCause(Cause.squash(cause))
+          ),
+          cloudflareWorkerFailureCauseType: typeof Cause.squash(cause),
         })
       )
     )
@@ -255,11 +305,14 @@ function makeWorkerAuthEmailTransportLive(env: DomainWorkerEnv) {
   const authEmail = env.AUTH_EMAIL;
 
   if (!authEmail) {
-    return Layer.fail(
-      new AuthEmailConfigurationError({
-        message:
-          "Worker auth email delivery requires the AUTH_EMAIL Worker binding",
-      })
+    return Layer.effect(
+      AuthEmailTransport,
+      Effect.fail(
+        new AuthEmailConfigurationError({
+          message:
+            "Worker auth email delivery requires the AUTH_EMAIL Worker binding",
+        })
+      )
     );
   }
 
@@ -302,6 +355,9 @@ function logInvalidAuthEmailQueueMessage(
   return Effect.logWarning("Invalid auth email queue message discarded").pipe(
     Effect.annotateLogs({
       authEmailQueueFailureCause: failure.cause,
+      ...(failure.inputKind
+        ? { authEmailQueueMessageKind: failure.inputKind }
+        : {}),
       authEmailQueueFailureMessage: failure.message,
       authEmailQueueFailureTag: failure._tag,
     })
@@ -313,7 +369,11 @@ function logAuthEmailQueueDeliveryError(failure: AuthEmailQueueDeliveryError) {
     Effect.annotateLogs({
       ...(failure.cause ? { authEmailQueueFailureCause: failure.cause } : {}),
       ...(failure.deliveryKey
-        ? { authEmailQueueDeliveryKey: failure.deliveryKey }
+        ? {
+            authEmailQueueDeliveryKeyFingerprint: fingerprintDeliveryKey(
+              failure.deliveryKey
+            ),
+          }
         : {}),
       ...(failure.emailKind
         ? { authEmailQueueEmailKind: failure.emailKind }
@@ -334,18 +394,18 @@ function logAuthEmailQueueDeliveryError(failure: AuthEmailQueueDeliveryError) {
 
 function handleQueuedAuthEmailMessage(message: Message<unknown>) {
   return sendQueuedAuthEmail(message.body).pipe(
-    Effect.zipRight(acknowledgeMessage(message)),
-    Effect.catchTags({
-      AuthEmailQueueDeliveryError: (failure) =>
-        logAuthEmailQueueDeliveryError(failure).pipe(
-          Effect.zipRight(retryMessage(message))
-        ),
-      InvalidAuthEmailQueueMessageError: (failure) =>
-        logInvalidAuthEmailQueueMessage(failure).pipe(
-          Effect.zipRight(acknowledgeMessage(message))
-        ),
-    }),
-    Effect.tapErrorCause((cause) =>
+    Effect.andThen(acknowledgeMessage(message)),
+    Effect.catchTag(AUTH_EMAIL_QUEUE_DELIVERY_ERROR_TAG, (failure) =>
+      logAuthEmailQueueDeliveryError(failure).pipe(
+        Effect.andThen(retryMessage(message))
+      )
+    ),
+    Effect.catchTag(INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG, (failure) =>
+      logInvalidAuthEmailQueueMessage(failure).pipe(
+        Effect.andThen(acknowledgeMessage(message))
+      )
+    ),
+    Effect.tapCause((cause) =>
       Effect.logError("Auth email queue handler failed with a defect").pipe(
         Effect.annotateLogs({
           authEmailQueueFailureMessage: String(Cause.squash(cause)),
@@ -357,6 +417,11 @@ function handleQueuedAuthEmailMessage(message: Message<unknown>) {
 
 export const handleWorkerQueue = Effect.fn("CloudflareWorker.handleQueue")(
   function* (batch: MessageBatch<unknown>, env: DomainWorkerEnv) {
+    yield* Effect.annotateCurrentSpan(
+      "authEmailQueueMessageCount",
+      batch.messages.length
+    );
+
     yield* Effect.forEach(batch.messages, handleQueuedAuthEmailMessage, {
       concurrency: 4,
       discard: true,

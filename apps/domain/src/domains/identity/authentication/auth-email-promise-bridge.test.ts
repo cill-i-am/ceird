@@ -1,5 +1,9 @@
-import { ConfigProvider, Effect } from "effect";
+import { Effect } from "effect";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../../test/effect-test-helpers.js";
 import { AuthEmailPromiseBridge } from "./auth-email-promise-bridge.js";
 
 describe("auth email promise bridge", () => {
@@ -19,8 +23,8 @@ describe("auth email promise bridge", () => {
         );
       }).pipe(
         Effect.provide(AuthEmailPromiseBridge.Default),
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([
               ["AUTH_APP_ORIGIN", "http://127.0.0.1:4173"],
               ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
@@ -28,7 +32,7 @@ describe("auth email promise bridge", () => {
             ])
           )
         )
-      )
+      ) as Effect.Effect<void, unknown, never>
     );
 
     expect(result).toBeUndefined();

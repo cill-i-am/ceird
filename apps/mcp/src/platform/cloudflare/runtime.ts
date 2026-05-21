@@ -8,7 +8,7 @@ const MCP_PATH = "/mcp";
 const OAUTH_PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 const MCP_PROTECTED_RESOURCE_PATH = `${OAUTH_PROTECTED_RESOURCE_PATH}${MCP_PATH}`;
 
-export class McpDomainForwardingError extends Schema.TaggedError<McpDomainForwardingError>()(
+export class McpDomainForwardingError extends Schema.TaggedErrorClass<McpDomainForwardingError>()(
   "@ceird/mcp/DomainForwardingError",
   {
     binding: Schema.Literal("DOMAIN"),
@@ -37,7 +37,7 @@ export function handleMcpWorkerFetch(
     Effect.tap((response) => logMcpForwardingOutcome(request, env, response)),
     Effect.catchTag("@ceird/mcp/DomainForwardingError", (failure) =>
       logMcpForwardingFailure(request, env, failure).pipe(
-        Effect.zipRight(Effect.annotateCurrentSpan("http.status", 502)),
+        Effect.andThen(Effect.annotateCurrentSpan("http.status", 502)),
         Effect.as(makeDomainForwardingFailureResponse())
       )
     ),

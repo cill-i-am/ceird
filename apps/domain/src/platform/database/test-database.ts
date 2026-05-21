@@ -128,46 +128,51 @@ export async function applyAllMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
 
   try {
-    for (const migrationPath of await readMigrationFilePaths()) {
-      await applyMigrationWithPool(pool, migrationPath);
+    for (const migrationIdentifier of await readMigrationIdentifiers()) {
+      await applyMigrationWithPool(pool, migrationIdentifier);
     }
   } finally {
     await pool.end();
   }
 }
 
-async function readMigrationFilePaths(): Promise<readonly string[]> {
+export async function readMigrationSql(
+  migrationIdentifier: string
+): Promise<string> {
+  return await fs.readFile(
+    await resolveMigrationPath(migrationIdentifier),
+    "utf8"
+  );
+}
+
+async function readMigrationIdentifiers(): Promise<readonly string[]> {
   const journalPath = path.resolve(
     process.cwd(),
     "drizzle",
     "meta",
     "_journal.json"
   );
-  const journal = await readJsonFile<DrizzleJournal>(journalPath);
 
-  if (journal !== undefined) {
-    return journal.entries.map((entry) =>
-      path.resolve(process.cwd(), "drizzle", `${entry.tag}.sql`)
-    );
+  try {
+    const journal = JSON.parse(
+      await fs.readFile(journalPath, "utf8")
+    ) as DrizzleJournal;
+
+    return journal.entries.map((entry) => `${entry.tag}.sql`);
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
   }
 
-  const drizzlePath = path.resolve(process.cwd(), "drizzle");
-  const entries = await fs.readdir(drizzlePath, { withFileTypes: true });
-
-  return entries
-    .filter(
-      (entry) =>
-        entry.isDirectory() && entry.name !== "alchemy" && entry.name !== "meta"
-    )
-    .map((entry) => path.resolve(drizzlePath, entry.name, "migration.sql"))
-    .toSorted();
+  return await readMigrationDirectoryNames();
 }
 
 async function applyMigrationWithPool(
   pool: Pool,
-  migrationFileNameOrPath: string
+  migrationIdentifier: string
 ): Promise<void> {
-  const migrationSql = await readMigrationSql(migrationFileNameOrPath);
+  const migrationSql = await readMigrationSql(migrationIdentifier);
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
@@ -178,76 +183,70 @@ async function applyMigrationWithPool(
   }
 }
 
-export async function readMigrationSql(
-  migrationFileNameOrPath: string
+async function resolveMigrationPath(
+  migrationIdentifier: string
 ): Promise<string> {
-  const migrationPath = path.isAbsolute(migrationFileNameOrPath)
-    ? migrationFileNameOrPath
-    : await resolveMigrationPath(migrationFileNameOrPath);
+  const migrationsDirectory = path.resolve(process.cwd(), "drizzle");
+  const directPath = path.resolve(migrationsDirectory, migrationIdentifier);
 
-  return fs.readFile(migrationPath, "utf8");
-}
-
-export async function resolveMigrationPath(
-  migrationFileName: string
-): Promise<string> {
-  const drizzlePath = path.resolve(process.cwd(), "drizzle");
-  const flatPath = path.resolve(process.cwd(), "drizzle", migrationFileName);
-
-  if (await fileExists(flatPath)) {
-    return flatPath;
+  if (await isFile(directPath)) {
+    return directPath;
   }
 
-  const migrationDirectory = migrationFileName.endsWith(".sql")
-    ? migrationFileName.slice(0, -".sql".length)
-    : migrationFileName;
-  const folderPath = path.resolve(
-    drizzlePath,
-    migrationDirectory,
-    "migration.sql"
+  const directDirectoryMigrationPath = path.join(directPath, "migration.sql");
+  if (await isFile(directDirectoryMigrationPath)) {
+    return directDirectoryMigrationPath;
+  }
+
+  const legacyTag = migrationIdentifier.replace(/\.sql$/u, "");
+  const migrationSlug = legacyTag.replace(/^\d+_/u, "");
+  const migrationDirectoryNames = await readMigrationDirectoryNames();
+  const matches = migrationDirectoryNames.filter(
+    (directoryName) =>
+      directoryName === legacyTag || directoryName.endsWith(`_${migrationSlug}`)
+  );
+  const [match] = matches;
+
+  if (matches.length === 1 && match !== undefined) {
+    return path.join(migrationsDirectory, match, "migration.sql");
+  }
+
+  throw new Error(
+    `Unable to resolve migration "${migrationIdentifier}" from ${migrationsDirectory}`
+  );
+}
+
+async function readMigrationDirectoryNames(): Promise<readonly string[]> {
+  const migrationsDirectory = path.resolve(process.cwd(), "drizzle");
+  const entries = await fs.readdir(migrationsDirectory, {
+    withFileTypes: true,
+  });
+  const directoryNames = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const migrationPath = path.join(
+          migrationsDirectory,
+          entry.name,
+          "migration.sql"
+        );
+
+        return (await isFile(migrationPath)) ? entry.name : null;
+      })
   );
 
-  if (await fileExists(folderPath)) {
-    return folderPath;
-  }
-
-  const legacyTag = migrationDirectory.replace(/^\d+_/, "");
-  const entries = await fs.readdir(drizzlePath, { withFileTypes: true });
-  const timestampedDirectory = entries
-    .filter((entry) => entry.isDirectory())
-    .find((entry) => entry.name.endsWith(`_${legacyTag}`));
-
-  if (timestampedDirectory !== undefined) {
-    return path.resolve(
-      drizzlePath,
-      timestampedDirectory.name,
-      "migration.sql"
-    );
-  }
-
-  return folderPath;
+  return directoryNames
+    .filter((name): name is string => name !== null)
+    .toSorted();
 }
 
-async function readJsonFile<Value>(
-  filePath: string
-): Promise<Value | undefined> {
+async function isFile(filePath: string): Promise<boolean> {
   try {
-    return JSON.parse(await fs.readFile(filePath, "utf8")) as Value;
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return undefined;
-    }
+    const stats = await fs.stat(filePath);
 
-    throw error;
-  }
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
+    return stats.isFile();
   } catch (error) {
-    if (isNotFoundError(error)) {
+    if (isMissingFileError(error)) {
       return false;
     }
 
@@ -255,11 +254,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-function isNotFoundError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ENOENT"
-  );
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

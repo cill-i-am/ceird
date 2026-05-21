@@ -3,9 +3,9 @@ import { LabelId as LabelIdSchema, LabelSchema } from "@ceird/labels-core";
 import type { Label } from "@ceird/labels-core";
 import { SiteId as SiteIdSchema } from "@ceird/sites-core";
 import type { SiteIdType as SiteId } from "@ceird/sites-core";
-import type { SqlError } from "@effect/sql";
-import type { SqlClient } from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
+import type { SqlError } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql/SqlClient";
 
 interface SiteLabelRow {
   readonly created_at: Date;

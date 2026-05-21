@@ -3,11 +3,12 @@ import {
   ClientOnly,
   HeadContent,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from "@tanstack/react-router";
 import * as React from "react";
 
 import { Toaster } from "#/components/ui/sonner";
+import type { AppRouterContext } from "#/router-context";
 
 import { TooltipProvider } from "../components/ui/tooltip";
 
@@ -49,7 +50,7 @@ const DevelopmentDevtools = import.meta.env.DEV
     })
   : null;
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<AppRouterContext>()({
   head: () => ({
     meta: [
       {

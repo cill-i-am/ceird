@@ -1,19 +1,21 @@
 import { fileURLToPath } from "node:url";
 
 import viteReact from "@vitejs/plugin-react";
-import tsconfigPaths from "vite-tsconfig-paths";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
+import type { UserConfig } from "vite";
+import type { InlineConfig as VitestInlineConfig } from "vitest/node";
 
 const cloudflareWorkersEnvStub = fileURLToPath(
   new URL("src/test/cloudflare-workers.ts", import.meta.url)
 );
 
-export default defineConfig({
-  plugins: [tsconfigPaths({ projects: ["./tsconfig.json"] }), viteReact()],
+const config = {
+  plugins: [viteReact()],
   resolve: {
     alias: [
       { find: "cloudflare:workers", replacement: cloudflareWorkersEnvStub },
     ],
+    tsconfigPaths: true,
   },
   test: {
     environment: "jsdom",
@@ -23,5 +25,7 @@ export default defineConfig({
     hookTimeout: 30_000,
     setupFiles: ["./src/test/setup.ts"],
     testTimeout: 30_000,
-  },
-});
+  } satisfies VitestInlineConfig,
+} satisfies UserConfig & { readonly test: VitestInlineConfig };
+
+export default defineConfig(config);

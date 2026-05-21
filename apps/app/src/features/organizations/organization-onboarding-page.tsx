@@ -64,7 +64,7 @@ export function OrganizationOnboardingPage() {
       name: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(organizationOnboardingSchema),
+      onSubmit: Schema.toStandardSchemaV1(organizationOnboardingSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({
@@ -188,7 +188,7 @@ function InviteMembersStep({
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
-      onSubmit: Schema.standardSchemaV1(organizationMemberInviteSchema),
+      onSubmit: Schema.toStandardSchemaV1(organizationMemberInviteSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({

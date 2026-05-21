@@ -4,7 +4,7 @@ import type {
   ServiceAreaIdType as ServiceAreaId,
   UpdateServiceAreaInput,
 } from "@ceird/sites-core";
-import { Effect } from "effect";
+import { Layer, Context, Effect } from "effect";
 
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -13,16 +13,10 @@ import type { OrganizationAuthorizationDeniedError } from "../organizations/erro
 import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
 import { ServiceAreasRepository } from "./repositories.js";
 
-export class ServiceAreasService extends Effect.Service<ServiceAreasService>()(
+export class ServiceAreasService extends Context.Service<ServiceAreasService>()(
   "@ceird/domains/sites/ServiceAreasService",
   {
-    accessors: true,
-    dependencies: [
-      CurrentOrganizationActor.Default,
-      OrganizationAuthorization.Default,
-      ServiceAreasRepository.Default,
-    ],
-    effect: Effect.gen(function* ServiceAreasServiceLive() {
+    make: Effect.gen(function* ServiceAreasServiceLive() {
       const actor = yield* CurrentOrganizationActor;
       const authorization = yield* OrganizationAuthorization;
       const repository = yield* ServiceAreasRepository;
@@ -92,7 +86,21 @@ export class ServiceAreasService extends Effect.Service<ServiceAreasService>()(
       };
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    ServiceAreasService,
+    ServiceAreasService.make
+  );
+  static readonly Default = ServiceAreasService.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        CurrentOrganizationActor.Default,
+        OrganizationAuthorization.Default,
+        ServiceAreasRepository.Default
+      )
+    )
+  );
+}
 
 const mapSitesActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new SiteAccessDeniedError({ message })

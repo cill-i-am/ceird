@@ -59,7 +59,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                      |
 | `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                          |
 | `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                         |
-| `infra`                  | Root Alchemy v2 implementation helpers for Cloudflare Workers/Vite, Queues, Hyperdrive, and Neon Postgres.                         |
+| `infra`                  | Root Alchemy v2 stage orchestration helpers for shared Cloudflare resources, Hyperdrive, Neon Postgres, and queues.                |
 | `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                             |
 | `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                       |
 | `opensrc`                | Gitignored dependency source cache for local agent context.                                                                        |

@@ -59,14 +59,12 @@ to the stage that produced it.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions.   |
 | `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
-| `apps/agent`             | Cloudflare Agents SDK Worker, `CeirdAgent` Durable Object runtime, AI model streaming, and domain action tool calls.            | Product repositories, authorization policy, migrations, or DB. |
 | `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
 | `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
-| `packages/agents-core`   | Agent thread/action IDs, action DTO schemas, instance-name helpers, internal API contracts, and connect-token schemas.          | AI runtime, repositories, or product service behavior.         |
 | `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
 | `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
 | `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
-| `infra`                  | Root Alchemy stage config, Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.                     | App/API domain behavior.                                       |
+| `infra`                  | Root Alchemy stage orchestration, shared Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.       | App-owned Worker/Vite declarations or app/API domain behavior. |
 
 ## Request And Data Flow
 
@@ -130,8 +128,10 @@ Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
 `Drizzle.Schema` through `infra/domain-drizzle-schema.ts` to maintain checked-in
 snapshots under `apps/domain/drizzle/alchemy`. The native Neon branch resource
-applies `apps/domain/drizzle`, so historical SQL and future Alchemy-generated SQL
-share the same deploy-time migration table.
+applies `apps/domain/drizzle` only for the parent stage bootstrap. Forked local
+and preview stages branch from that parent and apply only
+`apps/domain/drizzle/alchemy`, which lets Alchemy-generated deltas run without
+replaying historical bootstrap SQL against an already-populated branch.
 
 ## Boundary Rules
 

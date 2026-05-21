@@ -2,7 +2,6 @@ import {
   Outlet,
   createFileRoute,
   useNavigate,
-  useRouteContext,
   useRouterState,
 } from "@tanstack/react-router";
 
@@ -26,9 +25,7 @@ export const Route = createFileRoute("/_app/_org/jobs")({
 });
 
 function JobsRoute() {
-  const { activeOrganizationId } = useRouteContext({
-    from: "/_app/_org",
-  });
+  const { activeOrganizationId, queryClient } = Route.useRouteContext();
   const { list, options, viewer } = Route.useLoaderData();
   const navigate = useNavigate({ from: "/jobs" });
   const search = Route.useSearch();
@@ -50,6 +47,7 @@ function JobsRoute() {
         });
       }}
       options={options}
+      queryClient={queryClient}
       viewMode={search.view ?? "list"}
       viewer={viewer}
     >

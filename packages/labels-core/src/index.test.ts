@@ -1,5 +1,5 @@
-import { ParseResult } from "effect";
-import * as Vitest from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 
 import type { LabelId } from "./index.js";
 import {
@@ -17,20 +17,18 @@ import {
   UpdateLabelInputSchema,
 } from "./index.js";
 
-const { describe, expect, it } = Vitest;
-
 describe("labels-core", () => {
   it("decodes generic organization label DTOs", () => {
-    expect(
-      ParseResult.decodeUnknownSync(LabelNameSchema)("  Waiting on PO  ")
-    ).toBe("Waiting on PO");
+    expect(Schema.decodeUnknownSync(LabelNameSchema)("  Waiting on PO  ")).toBe(
+      "Waiting on PO"
+    );
     expect(normalizeLabelName("  Waiting   on PO  ")).toBe("waiting on po");
 
     expect(() =>
-      ParseResult.decodeUnknownSync(LabelNameSchema)(" ".repeat(4))
+      Schema.decodeUnknownSync(LabelNameSchema)(" ".repeat(4))
     ).toThrow(/at least 1/);
 
-    const label = ParseResult.decodeUnknownSync(LabelSchema)({
+    const label = Schema.decodeUnknownSync(LabelSchema)({
       createdAt: "2026-04-28T10:00:00.000Z",
       id: "11111111-1111-4111-8111-111111111111",
       name: "Waiting on PO",
@@ -39,28 +37,28 @@ describe("labels-core", () => {
 
     expect(label.name).toBe("Waiting on PO");
     expect(
-      ParseResult.decodeUnknownSync(LabelsResponseSchema)({ labels: [label] })
+      Schema.decodeUnknownSync(LabelsResponseSchema)({ labels: [label] })
     ).toStrictEqual({ labels: [label] });
   });
 
   it("keeps label mutation inputs strict", () => {
     expect(
-      ParseResult.decodeUnknownSync(CreateLabelInputSchema)({
+      Schema.decodeUnknownSync(CreateLabelInputSchema)({
         name: "  Access issue  ",
       })
     ).toStrictEqual({ name: "Access issue" });
     expect(
-      ParseResult.decodeUnknownSync(UpdateLabelInputSchema)({
+      Schema.decodeUnknownSync(UpdateLabelInputSchema)({
         name: "  Access resolved  ",
       })
     ).toStrictEqual({ name: "Access resolved" });
 
     expect(() =>
-      ParseResult.decodeUnknownSync(CreateLabelInputSchema)({
+      Schema.decodeUnknownSync(CreateLabelInputSchema)({
         extra: true,
         name: "Access issue",
       })
-    ).toThrow(/unexpected/);
+    ).toThrow(/[Uu]nexpected/);
   });
 
   it("exports labels API group and typed errors", () => {

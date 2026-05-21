@@ -11,7 +11,7 @@ import type {
   PasswordResetEmailError,
 } from "./auth-email.js";
 
-export class AuthenticationEmailSchedulingError extends Schema.TaggedError<AuthenticationEmailSchedulingError>()(
+export class AuthenticationEmailSchedulingError extends Schema.TaggedErrorClass<AuthenticationEmailSchedulingError>()(
   "AuthenticationEmailSchedulingError",
   {
     cause: Schema.optional(Schema.String),
@@ -42,9 +42,10 @@ export interface AuthenticationEmailSchedulerService {
   >;
 }
 
-export class AuthenticationEmailScheduler extends Context.Tag(
-  "@ceird/domains/identity/authentication/AuthenticationEmailScheduler"
-)<AuthenticationEmailScheduler, AuthenticationEmailSchedulerService>() {}
+export class AuthenticationEmailScheduler extends Context.Service<
+  AuthenticationEmailScheduler,
+  AuthenticationEmailSchedulerService
+>()("@ceird/domains/identity/authentication/AuthenticationEmailScheduler") {}
 
 export const AuthenticationEmailSchedulerLive = Layer.effect(
   AuthenticationEmailScheduler,

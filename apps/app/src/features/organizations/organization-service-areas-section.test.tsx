@@ -95,6 +95,7 @@ describe("organization service areas section", () => {
       )
     ).not.toBeInTheDocument();
     await expect(screen.findByText("Dublin")).resolves.toBeVisible();
+    expect(mockedListServiceAreas).toHaveBeenCalledOnce();
   });
 
   it("creates a service area through the jobs client group", async () => {
@@ -225,7 +226,7 @@ describe("organization service areas section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateServiceArea).toHaveBeenCalledWith({
-        path: {
+        params: {
           serviceAreaId,
         },
         payload: {
@@ -256,7 +257,7 @@ describe("organization service areas section", () => {
 
     await waitFor(() => {
       expect(mockedUpdateServiceArea).toHaveBeenCalledWith({
-        path: {
+        params: {
           serviceAreaId,
         },
         payload: {
@@ -265,6 +266,29 @@ describe("organization service areas section", () => {
         },
       });
     });
+  });
+
+  it("treats unchanged service area edits as a local no-op", async () => {
+    const user = userEvent.setup();
+    renderServiceAreasSection();
+
+    const area = await screen.findByRole("article", {
+      name: "Service area Dublin",
+    });
+    await user.click(
+      within(area).getByRole("button", {
+        name: "Service area actions for Dublin",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit service area" })
+    );
+    await user.click(within(area).getByRole("button", { name: "Save Dublin" }));
+
+    await waitFor(() => {
+      expect(within(area).queryByLabelText("Area name for Dublin")).toBeNull();
+    });
+    expect(mockedUpdateServiceArea).not.toHaveBeenCalled();
   });
 
   it("resets a canceled service area edit when editing starts again", async () => {

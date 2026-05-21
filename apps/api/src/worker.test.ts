@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, HashMap, LogLevel, Logger } from "effect";
+import { Effect, Logger, References } from "effect";
 
 import type { ApiWorkerEnv } from "./platform/cloudflare/env.js";
 import { handleWorkerFetch } from "./platform/cloudflare/runtime.js";
@@ -9,8 +9,8 @@ function captureLogs() {
   const logs: unknown[] = [];
   const logger = Logger.make((input) => {
     logs.push({
-      annotations: Object.fromEntries(HashMap.toEntries(input.annotations)),
-      level: input.logLevel.label,
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
       message: input.message,
     });
   });
@@ -98,8 +98,8 @@ describe("API Worker adapter", () => {
       env,
       makeExecutionContext()
     ).pipe(
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.runPromise
     );
 
@@ -134,8 +134,8 @@ describe("API Worker adapter", () => {
       env,
       makeExecutionContext()
     ).pipe(
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.runPromise
     );
 

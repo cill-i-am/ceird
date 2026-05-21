@@ -1,28 +1,51 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Effect, Logger, References } from "effect";
 
-import { AuthEmailConfigurationError } from "./domains/identity/authentication/auth-email-errors.js";
+import {
+  AuthEmailConfigurationError,
+  AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
+} from "./domains/identity/authentication/auth-email-errors.js";
 import type { AuthEmailQueueMessage } from "./domains/identity/authentication/auth-email-queue.js";
 import { AuthenticationBackgroundTaskHandler } from "./domains/identity/authentication/auth.js";
 import type {
   CloudflareEmailBindingMessage,
   CloudflareEmailBindingSendResult,
 } from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
-import type { SiteGeocoder } from "./domains/sites/geocoder.js";
+import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import type { DomainWorkerEnv } from "./platform/cloudflare/env.js";
 import { domainWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
+  disposeDomainWorkerHandler,
   DomainWorkerSiteGeocoderLive,
+  getDomainWorkerMcpAuthorizedAppCache,
   handleWorkerQueue,
   makeDomainWorkerRuntimeLayers,
+  makeWorkerBaseLive,
   makeWorkerAuthenticationBackgroundTaskHandlerLive,
   runWithDomainWorkerExecutionContext,
 } from "./platform/cloudflare/runtime.js";
+import {
+  configProviderFromMap,
+  effectEither,
+} from "./test/effect-test-helpers.js";
 import worker from "./worker.js";
 
 type TestSendEmail = (
   message: CloudflareEmailBindingMessage
 ) => Promise<CloudflareEmailBindingSendResult>;
+
+function captureLogs() {
+  const logs: unknown[] = [];
+  const logger = Logger.make((input) => {
+    logs.push({
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
+      message: input.message,
+    });
+  });
+
+  return { logger, logs };
+}
 
 function makePasswordResetQueueMessage(): AuthEmailQueueMessage {
   return {
@@ -124,10 +147,12 @@ describe("worker queue auth email delivery", () => {
       )
     );
     const geocoderRuntime = await Effect.runPromise(
-      Effect.runtime<SiteGeocoder>().pipe(
+      Effect.gen(function* () {
+        return yield* SiteGeocoder;
+      }).pipe(
         Effect.provide(runtimeLayers.siteGeocoderLive),
         Effect.provide(runtimeLayers.baseLive),
-        Effect.either
+        effectEither
       )
     );
 
@@ -136,6 +161,61 @@ describe("worker queue auth email delivery", () => {
     expect(runtimeLayers.authenticationLive).toBeDefined();
     expect(runtimeLayers.databaseRuntimeLive).toBeDefined();
   }, 10_000);
+
+  it("keys the isolate MCP authorized app cache by Worker env cache options", () => {
+    const oneEntryCache = getDomainWorkerMcpAuthorizedAppCache(
+      makeWorkerBaseLive(
+        makeEnv({
+          MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES: "1",
+          MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS: "60",
+        })
+      )
+    );
+    const sameOptionsCache = getDomainWorkerMcpAuthorizedAppCache(
+      makeWorkerBaseLive(
+        makeEnv({
+          MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES: "1",
+          MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS: "60",
+        })
+      )
+    );
+    const twoEntryCache = getDomainWorkerMcpAuthorizedAppCache(
+      makeWorkerBaseLive(
+        makeEnv({
+          MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES: "2",
+          MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS: "60",
+        })
+      )
+    );
+
+    expect(sameOptionsCache).toBe(oneEntryCache);
+    expect(twoEntryCache).not.toBe(oneEntryCache);
+  });
+
+  it("logs sanitized diagnostics when Worker handler disposal fails", async () => {
+    const { logger, logs } = captureLogs();
+    const webHandler = {
+      dispose: () =>
+        Promise.reject(
+          new Error(
+            "dispose failed for https://api.example.com/mcp?token=secret-token"
+          )
+        ),
+    } as Parameters<typeof disposeDomainWorkerHandler>[0];
+
+    await disposeDomainWorkerHandler(webHandler).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("web_handler_disposal_failed");
+    expect(serializedLogs).toContain("https://api.example.com/mcp?");
+    expect(serializedLogs).not.toContain("secret-token");
+    expect(serializedLogs).not.toContain("token=secret");
+  });
 
   it("routes authentication background tasks through Worker waitUntil", async () => {
     const context = makeExecutionContext();
@@ -183,10 +263,7 @@ describe("worker queue auth email delivery", () => {
 
       expect(waitUntil).toHaveBeenCalledOnce();
       await expect(waitUntil.mock.calls[0]?.[0]).resolves.toBeUndefined();
-      expect(consoleError).toHaveBeenCalledWith(
-        "Authentication background task failed",
-        { cause: "queue unavailable" }
-      );
+      expect(consoleError).not.toHaveBeenCalled();
     } finally {
       consoleError.mockRestore();
     }
@@ -224,14 +301,16 @@ describe("worker queue auth email delivery", () => {
 
   it("uses the Google geocoder layer with Worker environment config", async () => {
     const result = await Effect.runPromise(
-      Effect.runtime<SiteGeocoder>().pipe(
+      Effect.gen(function* () {
+        return yield* SiteGeocoder;
+      }).pipe(
         Effect.provide(DomainWorkerSiteGeocoderLive),
         Effect.provide(
-          Layer.setConfigProvider(
-            ConfigProvider.fromMap(domainWorkerEnvConfigMap(makeEnv()))
+          ConfigProvider.layer(
+            configProviderFromMap(domainWorkerEnvConfigMap(makeEnv()))
           )
         ),
-        Effect.either
+        effectEither
       )
     );
 
@@ -283,6 +362,34 @@ describe("worker queue auth email delivery", () => {
     expect(message.retry).not.toHaveBeenCalled();
   }, 10_000);
 
+  it("redacts malformed queue message diagnostics from Worker logs", async () => {
+    const sendEmail = makeSendEmailMock();
+    const message = makeMessage({
+      kind: "password-reset",
+      payload: {
+        deliveryKey: "password-reset/raw-token-like-value",
+        recipientEmail: "alice@example.com",
+        resetUrl: "https://app.example.com/reset-password?token=secret-token",
+      },
+    });
+    const { logger, logs } = captureLogs();
+
+    await handleWorkerQueue(makeBatch([message]), makeEnv({ sendEmail })).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(message.ack).toHaveBeenCalledOnce();
+    expect(serializedLogs).toContain("schema_decode_failed");
+    expect(serializedLogs).not.toContain("alice@example.com");
+    expect(serializedLogs).not.toContain("secret-token");
+    expect(serializedLogs).not.toContain("reset-password?token");
+    expect(serializedLogs).not.toContain("raw-token-like-value");
+  }, 10_000);
+
   it("fails fast when the Worker email binding is missing", async () => {
     const sendEmail = makeSendEmailMock();
     const message = makeMessage(makePasswordResetQueueMessage());
@@ -294,7 +401,7 @@ describe("worker queue auth email delivery", () => {
           AUTH_EMAIL: undefined as unknown as SendEmail,
           sendEmail,
         })
-      ).pipe(Effect.either)
+      ).pipe(effectEither)
     );
 
     expect(result._tag).toBe("Left");
@@ -304,7 +411,7 @@ describe("worker queue auth email delivery", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailConfigurationError",
+      _tag: AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
       message:
         "Worker auth email delivery requires the AUTH_EMAIL Worker binding",
     });
@@ -325,7 +432,7 @@ describe("worker queue auth email delivery", () => {
           AUTH_EMAIL_FROM: "not-an-email",
           sendEmail,
         })
-      ).pipe(Effect.either)
+      ).pipe(effectEither)
     );
 
     expect(result._tag).toBe("Left");
@@ -335,7 +442,7 @@ describe("worker queue auth email delivery", () => {
 
     expect(result.left).toBeInstanceOf(AuthEmailConfigurationError);
     expect(result.left).toMatchObject({
-      _tag: "AuthEmailConfigurationError",
+      _tag: AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
       message: "Invalid auth email configuration",
     });
 

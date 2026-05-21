@@ -8,6 +8,7 @@ import type {
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { ServiceAreaOption, SiteOption } from "@ceird/sites-core";
+import type { QueryClient } from "@tanstack/query-core";
 
 import {
   getCurrentServerJobDetail,
@@ -25,6 +26,9 @@ import {
   ensureActiveOrganizationId,
   getCurrentOrganizationMemberRole,
 } from "#/features/organizations/organization-access";
+import { seedRouteQueryData } from "#/lib/tanstack-db-query";
+
+import { organizationJobsQueryKey } from "./jobs-query-keys";
 
 const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
@@ -44,6 +48,7 @@ interface JobsRouteOrganizationAccess {
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly currentUserId: UserIdType;
+  readonly queryClient?: QueryClient | undefined;
 }
 
 function toJobsRouteOrganizationAccess(
@@ -74,6 +79,7 @@ export async function loadJobsRouteData(
     };
   }
 
+  const listRequestStartedAt = Date.now();
   const listPromise = listAllCurrentServerJobs({});
   const activeRole = await resolveJobsRouteOrganizationRole(
     resolvedOrganizationAccess
@@ -92,6 +98,30 @@ export async function loadJobsRouteData(
     options = await internalOptionsPromise;
   } else if (isExternalJobsViewer(viewer)) {
     options = await loadExternalJobsScopedOptions(list);
+  }
+
+  if (resolvedOrganizationAccess.queryClient) {
+    const seededItems = seedRouteQueryData(
+      resolvedOrganizationAccess.queryClient,
+      organizationJobsQueryKey({
+        organizationId: resolvedOrganizationAccess.activeOrganizationId,
+        role: viewer.role,
+        userId: viewer.userId,
+      }),
+      list.items,
+      {
+        requestStartedAt: listRequestStartedAt,
+      }
+    );
+
+    return {
+      list: {
+        ...list,
+        items: seededItems,
+      },
+      options,
+      viewer,
+    };
   }
 
   return {

@@ -32,7 +32,7 @@ import {
   SitesOptionsResponseSchema,
   UpdateServiceAreaResponseSchema,
 } from "@ceird/sites-core";
-import { ParseResult } from "effect";
+import { Schema } from "effect";
 import type { Pool } from "pg";
 
 import {
@@ -440,7 +440,7 @@ describe("domain http integration", () => {
         )
       );
       expect(createServiceAreaResponse.status).toBe(201);
-      const createdServiceArea = ParseResult.decodeUnknownSync(
+      const createdServiceArea = Schema.decodeUnknownSync(
         CreateServiceAreaResponseSchema
       )(await createServiceAreaResponse.json());
       expect(createdServiceArea).toMatchObject({
@@ -454,7 +454,7 @@ describe("domain http integration", () => {
         })
       );
       expect(listServiceAreasResponse.status).toBe(200);
-      const serviceAreas = ParseResult.decodeUnknownSync(
+      const serviceAreas = Schema.decodeUnknownSync(
         ServiceAreaListResponseSchema
       )(await listServiceAreasResponse.json());
       expect(serviceAreas.items).toContainEqual(createdServiceArea);
@@ -472,7 +472,7 @@ describe("domain http integration", () => {
         )
       );
       expect(clearServiceAreaDescriptionResponse.status).toBe(200);
-      const clearedServiceArea = ParseResult.decodeUnknownSync(
+      const clearedServiceArea = Schema.decodeUnknownSync(
         UpdateServiceAreaResponseSchema
       )(await clearServiceAreaDescriptionResponse.json());
       expect(clearedServiceArea).toMatchObject({
@@ -563,7 +563,7 @@ describe("domain http integration", () => {
         )
       );
       expect(createRateCardResponse.status).toBe(201);
-      const createdRateCard = ParseResult.decodeUnknownSync(
+      const createdRateCard = Schema.decodeUnknownSync(
         CreateRateCardResponseSchema
       )(await createRateCardResponse.json());
       expect(createdRateCard).toMatchObject({
@@ -580,9 +580,9 @@ describe("domain http integration", () => {
         })
       );
       expect(listRateCardsResponse.status).toBe(200);
-      const rateCards = ParseResult.decodeUnknownSync(
-        RateCardListResponseSchema
-      )(await listRateCardsResponse.json());
+      const rateCards = Schema.decodeUnknownSync(RateCardListResponseSchema)(
+        await listRateCardsResponse.json()
+      );
       expect(rateCards.items).toContainEqual(createdRateCard);
 
       const memberListRateCardsResponse = await api.handler(
@@ -610,9 +610,9 @@ describe("domain http integration", () => {
         )
       );
       expect(createSiteResponse.status).toBe(201);
-      const createdSite = ParseResult.decodeUnknownSync(
-        CreateSiteResponseSchema
-      )(await createSiteResponse.json());
+      const createdSite = Schema.decodeUnknownSync(CreateSiteResponseSchema)(
+        await createSiteResponse.json()
+      );
       expect(createdSite).toMatchObject({
         name: "Docklands Campus",
         serviceAreaId: createdServiceArea.id,
@@ -625,9 +625,9 @@ describe("domain http integration", () => {
         })
       );
       expect(sitesAfterSiteResponse.status).toBe(200);
-      const sitesAfterSite = ParseResult.decodeUnknownSync(
-        SiteListResponseSchema
-      )(await sitesAfterSiteResponse.json());
+      const sitesAfterSite = Schema.decodeUnknownSync(SiteListResponseSchema)(
+        await sitesAfterSiteResponse.json()
+      );
       expect(sitesAfterSite.items).toContainEqual(
         expect.objectContaining({
           id: createdSite.id,
@@ -651,9 +651,9 @@ describe("domain http integration", () => {
         })
       );
       expect(removedSiteOptionsResponse.status).toBe(200);
-      const siteOptions = ParseResult.decodeUnknownSync(
-        SitesOptionsResponseSchema
-      )(await removedSiteOptionsResponse.json());
+      const siteOptions = Schema.decodeUnknownSync(SitesOptionsResponseSchema)(
+        await removedSiteOptionsResponse.json()
+      );
       expect(siteOptions.serviceAreas).toContainEqual({
         id: createdServiceArea.id,
         name: "Dublin",
@@ -669,7 +669,7 @@ describe("domain http integration", () => {
       );
       expect(emptySiteCommentsResponse.status).toBe(200);
       expect(
-        ParseResult.decodeUnknownSync(SiteCommentsResponseSchema)(
+        Schema.decodeUnknownSync(SiteCommentsResponseSchema)(
           await emptySiteCommentsResponse.json()
         )
       ).toStrictEqual({ comments: [] });
@@ -693,7 +693,7 @@ describe("domain http integration", () => {
         )
       );
       expect(addSiteCommentResponse.status).toBe(201);
-      const addedSiteComment = ParseResult.decodeUnknownSync(
+      const addedSiteComment = Schema.decodeUnknownSync(
         AddSiteCommentResponseSchema
       )(await addSiteCommentResponse.json());
       expect(addedSiteComment).toMatchObject({
@@ -708,9 +708,9 @@ describe("domain http integration", () => {
         })
       );
       expect(listSiteCommentsResponse.status).toBe(200);
-      const siteComments = ParseResult.decodeUnknownSync(
-        SiteCommentsResponseSchema
-      )(await listSiteCommentsResponse.json());
+      const siteComments = Schema.decodeUnknownSync(SiteCommentsResponseSchema)(
+        await listSiteCommentsResponse.json()
+      );
       expect(siteComments.comments).toContainEqual(
         expect.objectContaining({
           authorName: "Member User",
@@ -745,9 +745,9 @@ describe("domain http integration", () => {
         )
       );
       expect(foreignSiteResponse.status).toBe(201);
-      const foreignSite = ParseResult.decodeUnknownSync(
-        CreateSiteResponseSchema
-      )(await foreignSiteResponse.json());
+      const foreignSite = Schema.decodeUnknownSync(CreateSiteResponseSchema)(
+        await foreignSiteResponse.json()
+      );
 
       const memberOptionsAfterSiteResponse = await api.handler(
         makeRequest("/jobs/options", {
@@ -755,7 +755,7 @@ describe("domain http integration", () => {
         })
       );
       expect(memberOptionsAfterSiteResponse.status).toBe(200);
-      const memberOptionsAfterSite = ParseResult.decodeUnknownSync(
+      const memberOptionsAfterSite = Schema.decodeUnknownSync(
         JobOptionsResponseSchema
       )(await memberOptionsAfterSiteResponse.json());
       expect(memberOptionsAfterSite.serviceAreas).toContainEqual({
@@ -987,7 +987,7 @@ describe("domain http integration", () => {
         )
       );
       expect(createLabelResponse.status).toBe(201);
-      const createdLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+      const createdLabel = Schema.decodeUnknownSync(LabelResponseSchema)(
         await createLabelResponse.json()
       );
 
@@ -1020,7 +1020,7 @@ describe("domain http integration", () => {
         )
       );
       expect(updateLabelResponse.status).toBe(200);
-      const updatedLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+      const updatedLabel = Schema.decodeUnknownSync(LabelResponseSchema)(
         await updateLabelResponse.json()
       );
       expect(updatedLabel).toMatchObject({
@@ -1040,9 +1040,9 @@ describe("domain http integration", () => {
         )
       );
       expect(conflictingLabelResponse.status).toBe(201);
-      const conflictingLabel = ParseResult.decodeUnknownSync(
-        LabelResponseSchema
-      )(await conflictingLabelResponse.json());
+      const conflictingLabel = Schema.decodeUnknownSync(LabelResponseSchema)(
+        await conflictingLabelResponse.json()
+      );
 
       const duplicateUpdateLabelResponse = await api.handler(
         makeJsonRequest(
@@ -1067,7 +1067,7 @@ describe("domain http integration", () => {
         })
       );
       expect(labelsResponse.status).toBe(200);
-      const labels = ParseResult.decodeUnknownSync(LabelsResponseSchema)(
+      const labels = Schema.decodeUnknownSync(LabelsResponseSchema)(
         await labelsResponse.json()
       );
       expect(labels.labels).toContainEqual(
@@ -1089,9 +1089,9 @@ describe("domain http integration", () => {
         )
       );
       expect(assignSiteLabelResponse.status).toBe(200);
-      const assignedSiteDetail = ParseResult.decodeUnknownSync(
-        SiteDetailSchema
-      )(await assignSiteLabelResponse.json());
+      const assignedSiteDetail = Schema.decodeUnknownSync(SiteDetailSchema)(
+        await assignSiteLabelResponse.json()
+      );
       expect(assignedSiteDetail.labels).toContainEqual(
         expect.objectContaining({
           id: updatedLabel.id,
@@ -1105,7 +1105,7 @@ describe("domain http integration", () => {
         })
       );
       expect(siteOptionsAfterLabelResponse.status).toBe(200);
-      const siteOptionsAfterLabel = ParseResult.decodeUnknownSync(
+      const siteOptionsAfterLabel = Schema.decodeUnknownSync(
         SitesOptionsResponseSchema
       )(await siteOptionsAfterLabelResponse.json());
       expect(
@@ -1173,7 +1173,7 @@ describe("domain http integration", () => {
         })
       );
       expect(removeSiteLabelResponse.status).toBe(200);
-      const removedSiteDetail = ParseResult.decodeUnknownSync(SiteDetailSchema)(
+      const removedSiteDetail = Schema.decodeUnknownSync(SiteDetailSchema)(
         await removeSiteLabelResponse.json()
       );
       expect(removedSiteDetail.labels).toStrictEqual([]);
@@ -1190,9 +1190,9 @@ describe("domain http integration", () => {
         )
       );
       expect(assignLabelResponse.status).toBe(200);
-      const assignedDetail = ParseResult.decodeUnknownSync(
-        JobDetailResponseSchema
-      )(await assignLabelResponse.json());
+      const assignedDetail = Schema.decodeUnknownSync(JobDetailResponseSchema)(
+        await assignLabelResponse.json()
+      );
       expect(assignedDetail.job.labels).toContainEqual(
         expect.objectContaining({
           id: updatedLabel.id,
@@ -1215,7 +1215,7 @@ describe("domain http integration", () => {
         })
       );
       expect(filteredJobsResponse.status).toBe(200);
-      const filteredJobs = ParseResult.decodeUnknownSync(JobListResponseSchema)(
+      const filteredJobs = Schema.decodeUnknownSync(JobListResponseSchema)(
         await filteredJobsResponse.json()
       );
       expect(filteredJobs.items.map((job) => job.id)).toContain(createdJob.id);
@@ -1227,9 +1227,9 @@ describe("domain http integration", () => {
         })
       );
       expect(removeLabelResponse.status).toBe(200);
-      const removedDetail = ParseResult.decodeUnknownSync(
-        JobDetailResponseSchema
-      )(await removeLabelResponse.json());
+      const removedDetail = Schema.decodeUnknownSync(JobDetailResponseSchema)(
+        await removeLabelResponse.json()
+      );
       expect(removedDetail.job.labels).toStrictEqual([]);
       expect(removedDetail.activity).toContainEqual(
         expect.objectContaining({
@@ -1247,7 +1247,7 @@ describe("domain http integration", () => {
         })
       );
       expect(filteredAfterRemoveResponse.status).toBe(200);
-      const filteredAfterRemove = ParseResult.decodeUnknownSync(
+      const filteredAfterRemove = Schema.decodeUnknownSync(
         JobListResponseSchema
       )(await filteredAfterRemoveResponse.json());
       expect(filteredAfterRemove.items).toHaveLength(0);
@@ -1259,7 +1259,7 @@ describe("domain http integration", () => {
         })
       );
       expect(archiveLabelResponse.status).toBe(200);
-      const archivedLabel = ParseResult.decodeUnknownSync(LabelResponseSchema)(
+      const archivedLabel = Schema.decodeUnknownSync(LabelResponseSchema)(
         await archiveLabelResponse.json()
       );
       expect(archivedLabel).toMatchObject({
@@ -1273,9 +1273,9 @@ describe("domain http integration", () => {
         })
       );
       expect(labelsAfterArchiveResponse.status).toBe(200);
-      const labelsAfterArchive = ParseResult.decodeUnknownSync(
-        LabelsResponseSchema
-      )(await labelsAfterArchiveResponse.json());
+      const labelsAfterArchive = Schema.decodeUnknownSync(LabelsResponseSchema)(
+        await labelsAfterArchiveResponse.json()
+      );
       expect(labelsAfterArchive.labels).toStrictEqual([conflictingLabel]);
 
       const updateArchivedLabelResponse = await api.handler(
@@ -1777,7 +1777,7 @@ describe("domain http integration", () => {
       );
       expect(grantedJobResponse.status).toBe(201);
       expect(hiddenJobResponse.status).toBe(201);
-      const grantedJob = ParseResult.decodeUnknownSync(CreateJobResponseSchema)(
+      const grantedJob = Schema.decodeUnknownSync(CreateJobResponseSchema)(
         await grantedJobResponse.json()
       );
       const hiddenJob = (await hiddenJobResponse.json()) as {
@@ -1800,9 +1800,9 @@ describe("domain http integration", () => {
         )
       );
       expect(tenantSiteLabelResponse.status).toBe(201);
-      const tenantSiteLabel = ParseResult.decodeUnknownSync(
-        LabelResponseSchema
-      )(await tenantSiteLabelResponse.json());
+      const tenantSiteLabel = Schema.decodeUnknownSync(LabelResponseSchema)(
+        await tenantSiteLabelResponse.json()
+      );
 
       const assignTenantSiteLabelResponse = await api.handler(
         makeJsonRequest(
@@ -1862,7 +1862,7 @@ describe("domain http integration", () => {
         )
       );
       expect(attachResponse.status).toBe(201);
-      const collaborator = ParseResult.decodeUnknownSync(JobCollaboratorSchema)(
+      const collaborator = Schema.decodeUnknownSync(JobCollaboratorSchema)(
         await attachResponse.json()
       );
 
@@ -1872,7 +1872,7 @@ describe("domain http integration", () => {
         })
       );
       expect(listCollaboratorsResponse.status).toBe(200);
-      const collaborators = ParseResult.decodeUnknownSync(
+      const collaborators = Schema.decodeUnknownSync(
         JobCollaboratorsResponseSchema
       )(await listCollaboratorsResponse.json());
       expect(collaborators.collaborators).toHaveLength(1);
@@ -1883,7 +1883,7 @@ describe("domain http integration", () => {
         })
       );
       expect(externalListResponse.status).toBe(200);
-      const externalList = ParseResult.decodeUnknownSync(JobListResponseSchema)(
+      const externalList = Schema.decodeUnknownSync(JobListResponseSchema)(
         await externalListResponse.json()
       );
       expect(externalList.items.map((item) => item.id)).toStrictEqual([
@@ -1896,9 +1896,9 @@ describe("domain http integration", () => {
         })
       );
       expect(externalDetailResponse.status).toBe(200);
-      const externalDetail = ParseResult.decodeUnknownSync(
-        JobDetailResponseSchema
-      )(await externalDetailResponse.json());
+      const externalDetail = Schema.decodeUnknownSync(JobDetailResponseSchema)(
+        await externalDetailResponse.json()
+      );
       expect(externalDetail.costs).toBeUndefined();
       expect(externalDetail.activity).toStrictEqual([]);
       expect(externalDetail.visits).toStrictEqual([]);
@@ -2076,7 +2076,7 @@ describe("domain http integration", () => {
         )
       );
       expect(updateResponse.status).toBe(200);
-      const updated = ParseResult.decodeUnknownSync(JobCollaboratorSchema)(
+      const updated = Schema.decodeUnknownSync(JobCollaboratorSchema)(
         await updateResponse.json()
       );
       expect(updated.accessLevel).toBe("read");
@@ -2087,9 +2087,9 @@ describe("domain http integration", () => {
         })
       );
       expect(readOnlyDetailResponse.status).toBe(200);
-      const readOnlyDetail = ParseResult.decodeUnknownSync(
-        JobDetailResponseSchema
-      )(await readOnlyDetailResponse.json());
+      const readOnlyDetail = Schema.decodeUnknownSync(JobDetailResponseSchema)(
+        await readOnlyDetailResponse.json()
+      );
       expect([readOnlyDetail.viewerAccess.canComment]).toStrictEqual([true]);
 
       const readGrantCommentResponse = await api.handler(
@@ -2119,7 +2119,7 @@ describe("domain http integration", () => {
         })
       );
       expect(revokedListResponse.status).toBe(200);
-      const revokedList = ParseResult.decodeUnknownSync(JobListResponseSchema)(
+      const revokedList = Schema.decodeUnknownSync(JobListResponseSchema)(
         await revokedListResponse.json()
       );
       expect(revokedList.items.map((item) => item.id)).not.toContain(

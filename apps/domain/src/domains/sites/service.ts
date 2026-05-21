@@ -13,7 +13,14 @@ import {
   SiteNotFoundError,
   SiteStorageError,
 } from "@ceird/sites-core";
-import { Array as EffectArray, Effect, HashMap, Option } from "effect";
+import {
+  Layer,
+  Context,
+  Array as EffectArray,
+  Effect,
+  HashMap,
+  Option,
+} from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
@@ -35,19 +42,15 @@ import {
   SitesRepository,
 } from "./repositories.js";
 
-export class SitesService extends Effect.Service<SitesService>()(
+type OrganizationAuthorizationService = Context.Service.Shape<
+  typeof OrganizationAuthorization
+>;
+type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
+
+export class SitesService extends Context.Service<SitesService>()(
   "@ceird/domains/sites/SitesService",
   {
-    accessors: true,
-    dependencies: [
-      CommentsRepository.Default,
-      CurrentOrganizationActor.Default,
-      OrganizationAuthorization.Default,
-      ServiceAreasRepository.Default,
-      SiteLabelAssignmentsRepository.Default,
-      SitesRepository.Default,
-    ],
-    effect: Effect.gen(function* SitesServiceLive() {
+    make: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
       const commentsRepository = yield* CommentsRepository;
       const serviceAreasRepository = yield* ServiceAreasRepository;
@@ -439,13 +442,35 @@ export class SitesService extends Effect.Service<SitesService>()(
       };
     }),
   }
-) {}
+) {
+  static readonly getOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesService>["getOptions"]
+    >
+  ) => SitesService.use((service) => service.getOptions(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    SitesService,
+    SitesService.make
+  );
+  static readonly Default = SitesService.DefaultWithoutDependencies.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        CommentsRepository.Default,
+        CurrentOrganizationActor.Default,
+        OrganizationAuthorization.Default,
+        ServiceAreasRepository.Default,
+        SiteLabelAssignmentsRepository.Default,
+        SitesRepository.Default
+      )
+    )
+  );
+}
 
 const loadSiteDetailOrFail = Effect.fn("SitesService.loadSiteDetailOrFail")(
   function* (
     organizationId: OrganizationActor["organizationId"],
     siteId: SiteId,
-    sitesRepository: SitesRepository
+    sitesRepository: SitesRepositoryService
   ) {
     yield* Effect.annotateCurrentSpan("organizationId", organizationId);
     yield* Effect.annotateCurrentSpan("siteId", siteId);
@@ -490,7 +515,7 @@ function failSitesStorageError(
 
 function ensureCanViewOrganizationSiteOptions(
   actor: OrganizationActor,
-  authorization: OrganizationAuthorization
+  authorization: OrganizationAuthorizationService
 ) {
   return Effect.gen(function* () {
     if (isExternalOrganizationActor(actor)) {
@@ -515,7 +540,7 @@ function ensureCanViewOrganizationSiteOptions(
 
 function ensureCanUseSiteComments(
   actor: OrganizationActor,
-  authorization: OrganizationAuthorization,
+  authorization: OrganizationAuthorizationService,
   siteId: SiteId
 ) {
   return authorization

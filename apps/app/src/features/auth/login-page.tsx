@@ -40,7 +40,7 @@ export function LoginPage({
       password: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(loginSchema),
+      onSubmit: Schema.toStandardSchemaV1(loginSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({

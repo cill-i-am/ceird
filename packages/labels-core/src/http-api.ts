@@ -1,5 +1,9 @@
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
-import { Schema } from "effect";
+import {
+  HttpApi,
+  HttpApiEndpoint,
+  HttpApiGroup,
+  HttpApiSchema,
+} from "effect/unstable/httpapi";
 
 import {
   CreateLabelInputSchema,
@@ -17,36 +21,41 @@ import { LabelId } from "./ids.js";
 
 const labelsGroup = HttpApiGroup.make("labels")
   .add(
-    HttpApiEndpoint.get("listLabels", "/labels")
-      .addSuccess(LabelsResponseSchema)
-      .addError(LabelAccessDeniedError)
-      .addError(LabelStorageError)
+    HttpApiEndpoint.get("listLabels", "/labels", {
+      success: LabelsResponseSchema,
+      error: [LabelAccessDeniedError, LabelStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("createLabel", "/labels")
-      .setPayload(CreateLabelInputSchema)
-      .addSuccess(LabelResponseSchema, { status: 201 })
-      .addError(LabelAccessDeniedError)
-      .addError(LabelNameConflictError)
-      .addError(LabelStorageError)
+    HttpApiEndpoint.post("createLabel", "/labels", {
+      payload: CreateLabelInputSchema,
+      success: LabelResponseSchema.pipe(HttpApiSchema.status("Created")),
+      error: [
+        LabelAccessDeniedError,
+        LabelNameConflictError,
+        LabelStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.patch("updateLabel", "/labels/:labelId")
-      .setPath(Schema.Struct({ labelId: LabelId }))
-      .setPayload(UpdateLabelInputSchema)
-      .addSuccess(LabelResponseSchema)
-      .addError(LabelAccessDeniedError)
-      .addError(LabelNotFoundError)
-      .addError(LabelNameConflictError)
-      .addError(LabelStorageError)
+    HttpApiEndpoint.patch("updateLabel", "/labels/:labelId", {
+      params: { labelId: LabelId },
+      payload: UpdateLabelInputSchema,
+      success: LabelResponseSchema,
+      error: [
+        LabelAccessDeniedError,
+        LabelNotFoundError,
+        LabelNameConflictError,
+        LabelStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.del("deleteLabel", "/labels/:labelId")
-      .setPath(Schema.Struct({ labelId: LabelId }))
-      .addSuccess(LabelResponseSchema)
-      .addError(LabelAccessDeniedError)
-      .addError(LabelNotFoundError)
-      .addError(LabelStorageError)
+    HttpApiEndpoint.delete("deleteLabel", "/labels/:labelId", {
+      params: { labelId: LabelId },
+      success: LabelResponseSchema,
+      error: [LabelAccessDeniedError, LabelNotFoundError, LabelStorageError],
+    })
   );
 
 export const LabelsApiGroup = labelsGroup;

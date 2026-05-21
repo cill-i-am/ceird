@@ -1,20 +1,37 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 
+import {
+  configProviderFromMap,
+  effectEither,
+  withConfigProvider,
+} from "../../../test/effect-test-helpers.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthEmailConfigurationError,
+  AUTH_EMAIL_CONFIGURATION_ERROR_TAG,
   AuthEmailRejectedError,
+  AUTH_EMAIL_REJECTED_ERROR_TAG,
   AuthEmailRequestError,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
   EmailVerificationEmailRejectedError,
+  EMAIL_VERIFICATION_EMAIL_REJECTED_ERROR_TAG,
   EmailVerificationEmailRequestError,
+  EMAIL_VERIFICATION_EMAIL_REQUEST_ERROR_TAG,
   InvalidEmailVerificationEmailInputError,
+  INVALID_EMAIL_VERIFICATION_EMAIL_INPUT_ERROR_TAG,
   InvalidOrganizationInvitationEmailInputError,
+  INVALID_ORGANIZATION_INVITATION_EMAIL_INPUT_ERROR_TAG,
   InvalidPasswordResetEmailInputError,
+  INVALID_PASSWORD_RESET_EMAIL_INPUT_ERROR_TAG,
   OrganizationInvitationEmailRejectedError,
+  ORGANIZATION_INVITATION_EMAIL_REJECTED_ERROR_TAG,
   OrganizationInvitationEmailRequestError,
+  ORGANIZATION_INVITATION_EMAIL_REQUEST_ERROR_TAG,
   PasswordResetEmailRejectedError,
+  PASSWORD_RESET_EMAIL_REJECTED_ERROR_TAG,
   PasswordResetEmailRequestError,
+  PASSWORD_RESET_EMAIL_REQUEST_ERROR_TAG,
 } from "./auth-email-errors.js";
 import { AuthEmailSender, AuthEmailTransport } from "./auth-email.js";
 import type { TransportMessage } from "./auth-email.js";
@@ -37,6 +54,18 @@ function makeAuthEmailSenderTestLayer(
 }
 
 describe("auth email sender password reset delivery", () => {
+  it("uses reverse-domain tags for auth email errors", () => {
+    expect(
+      new AuthEmailConfigurationError({ message: "Invalid config" })._tag
+    ).toBe(AUTH_EMAIL_CONFIGURATION_ERROR_TAG);
+    expect(new AuthEmailRequestError({ message: "Request failed" })._tag).toBe(
+      AUTH_EMAIL_REQUEST_ERROR_TAG
+    );
+    expect(new AuthEmailRejectedError({ message: "Rejected" })._tag).toBe(
+      AUTH_EMAIL_REJECTED_ERROR_TAG
+    );
+  });
+
   it("composes the expected organization invitation message", async () => {
     const sentMessages: TransportMessage[] = [];
 
@@ -123,7 +152,7 @@ describe("auth email sender password reset delivery", () => {
           "https://user:password@app.ceird.localhost/accept-invitation/inv_789",
         role: "member",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -144,7 +173,7 @@ describe("auth email sender password reset delivery", () => {
       InvalidOrganizationInvitationEmailInputError
     );
     expect(result.left).toMatchObject({
-      _tag: "InvalidOrganizationInvitationEmailInputError",
+      _tag: INVALID_ORGANIZATION_INVITATION_EMAIL_INPUT_ERROR_TAG,
       message: "Invalid organization invitation email input",
     });
   }, 10_000);
@@ -160,7 +189,7 @@ describe("auth email sender password reset delivery", () => {
         invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_req",
         role: "member",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -181,7 +210,7 @@ describe("auth email sender password reset delivery", () => {
 
     expect(result.left).toBeInstanceOf(OrganizationInvitationEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "OrganizationInvitationEmailRequestError",
+      _tag: ORGANIZATION_INVITATION_EMAIL_REQUEST_ERROR_TAG,
       message: "Failed to deliver organization invitation email",
       cause: "upstream timeout",
     });
@@ -199,7 +228,7 @@ describe("auth email sender password reset delivery", () => {
           "https://app.ceird.localhost/accept-invitation/inv_rejected",
         role: "member",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -222,7 +251,7 @@ describe("auth email sender password reset delivery", () => {
       OrganizationInvitationEmailRejectedError
     );
     expect(result.left).toMatchObject({
-      _tag: "OrganizationInvitationEmailRejectedError",
+      _tag: ORGANIZATION_INVITATION_EMAIL_REJECTED_ERROR_TAG,
       message: "Organization invitation email was rejected for delivery",
       cause: "recipient address rejected",
     });
@@ -276,7 +305,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -297,7 +326,7 @@ describe("auth email sender password reset delivery", () => {
 
     expect(result.left).toBeInstanceOf(PasswordResetEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetEmailRequestError",
+      _tag: PASSWORD_RESET_EMAIL_REQUEST_ERROR_TAG,
       message: "Failed to deliver password reset email",
       cause: "upstream timeout",
     });
@@ -314,7 +343,7 @@ describe("auth email sender password reset delivery", () => {
         resetUrl:
           "https://user:password@app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -333,7 +362,7 @@ describe("auth email sender password reset delivery", () => {
     expect(sentMessages).toStrictEqual([]);
     expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "InvalidPasswordResetEmailInputError",
+      _tag: INVALID_PASSWORD_RESET_EMAIL_INPUT_ERROR_TAG,
       message: "Invalid password reset email input",
     });
   }, 10_000);
@@ -348,7 +377,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -367,7 +396,7 @@ describe("auth email sender password reset delivery", () => {
     expect(sentMessages).toStrictEqual([]);
     expect(result.left).toBeInstanceOf(InvalidPasswordResetEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "InvalidPasswordResetEmailInputError",
+      _tag: INVALID_PASSWORD_RESET_EMAIL_INPUT_ERROR_TAG,
       message: "Invalid password reset email input",
     });
     expect(result.left.cause).toMatch(
@@ -383,7 +412,7 @@ describe("auth email sender password reset delivery", () => {
         recipientName: "Alice",
         resetUrl: "https://app.ceird.localhost/reset?token=abc123",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -404,7 +433,7 @@ describe("auth email sender password reset delivery", () => {
 
     expect(result.left).toBeInstanceOf(PasswordResetEmailRejectedError);
     expect(result.left).toMatchObject({
-      _tag: "PasswordResetEmailRejectedError",
+      _tag: PASSWORD_RESET_EMAIL_REJECTED_ERROR_TAG,
       message: "Password reset email was rejected for delivery",
       cause: "recipient address rejected",
     });
@@ -491,7 +520,7 @@ describe("auth email sender email verification delivery", () => {
         verificationUrl:
           "https://user:password@app.ceird.localhost/verify-email?success=1",
       } as never).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -510,7 +539,7 @@ describe("auth email sender email verification delivery", () => {
     expect(sentMessages).toStrictEqual([]);
     expect(result.left).toBeInstanceOf(InvalidEmailVerificationEmailInputError);
     expect(result.left).toMatchObject({
-      _tag: "InvalidEmailVerificationEmailInputError",
+      _tag: INVALID_EMAIL_VERIFICATION_EMAIL_INPUT_ERROR_TAG,
       message: "Invalid verification email input",
     });
   }, 10_000);
@@ -523,7 +552,7 @@ describe("auth email sender email verification delivery", () => {
         recipientName: "Alice",
         verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -544,7 +573,7 @@ describe("auth email sender email verification delivery", () => {
 
     expect(result.left).toBeInstanceOf(EmailVerificationEmailRequestError);
     expect(result.left).toMatchObject({
-      _tag: "EmailVerificationEmailRequestError",
+      _tag: EMAIL_VERIFICATION_EMAIL_REQUEST_ERROR_TAG,
       message: "Failed to deliver verification email",
       cause: "upstream timeout",
     });
@@ -558,7 +587,7 @@ describe("auth email sender email verification delivery", () => {
         recipientName: "Alice",
         verificationUrl: "https://app.ceird.localhost/verify-email?success=1",
       }).pipe(
-        Effect.either,
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer(() =>
             Effect.fail(
@@ -579,7 +608,7 @@ describe("auth email sender email verification delivery", () => {
 
     expect(result.left).toBeInstanceOf(EmailVerificationEmailRejectedError);
     expect(result.left).toMatchObject({
-      _tag: "EmailVerificationEmailRejectedError",
+      _tag: EMAIL_VERIFICATION_EMAIL_REJECTED_ERROR_TAG,
       message: "Verification email was rejected for delivery",
       cause: "recipient address rejected",
     });
@@ -590,8 +619,12 @@ describe("auth email config loading", () => {
   it("requires auth email config through Config", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(ConfigProvider.fromMap(new Map())),
-        Effect.either
+        withConfigProvider(
+          configProviderFromMap(
+            new Map([["AUTH_APP_ORIGIN", "https://app.ceird.localhost"]])
+          )
+        ),
+        effectEither
       )
     );
 
@@ -607,8 +640,8 @@ describe("auth email config loading", () => {
   it("loads base auth email config without Cloudflare credentials", async () => {
     const config = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "auth@ceird.localhost"],
@@ -628,12 +661,12 @@ describe("auth email config loading", () => {
   it("requires AUTH_APP_ORIGIN in auth email config", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([["AUTH_EMAIL_FROM", "auth@ceird.localhost"]])
           )
         ),
-        Effect.either
+        effectEither
       )
     );
 
@@ -649,15 +682,15 @@ describe("auth email config loading", () => {
   it("rejects invalid auth email sender addresses", async () => {
     const result = await Effect.runPromise(
       loadAuthEmailConfig.pipe(
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
+        withConfigProvider(
+          configProviderFromMap(
             new Map([
               ["AUTH_APP_ORIGIN", "https://app.ceird.localhost"],
               ["AUTH_EMAIL_FROM", "not-an-email"],
             ])
           )
         ),
-        Effect.either
+        effectEither
       )
     );
 

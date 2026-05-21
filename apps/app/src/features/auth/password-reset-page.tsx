@@ -44,7 +44,7 @@ export function PasswordResetPage({ search }: PasswordResetPageProps) {
       password: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(passwordResetSchema),
+      onSubmit: Schema.toStandardSchemaV1(passwordResetSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       if (!token) {

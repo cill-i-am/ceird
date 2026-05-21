@@ -16,21 +16,45 @@ import type {
   UpdateSiteResponse,
 } from "@ceird/sites-core";
 import { SiteCommentSchema, SiteOptionSchema } from "@ceird/sites-core";
-import {
-  createCollection,
-  localOnlyCollectionOptions,
-} from "@tanstack/react-db";
+import { QueryClient } from "@tanstack/query-core";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import { createCollection } from "@tanstack/react-db";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import { use } from "react";
 import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
+import { normalizeAppApiError } from "#/features/api/app-api-errors";
 import type { AppApiError } from "#/features/api/app-api-errors";
+import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import { createBrowserLabel } from "#/features/labels/labels-state";
+import type { OrganizationQueryScope } from "#/features/organizations/organization-query-scope";
+import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
+import {
+  ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+  markTanStackDbCollectionWrite,
+  reconcileQueryCollectionDataAfterConcurrentWrite,
+  replaceSyncedCollectionData,
+  stripTanStackDbCollectionData,
+} from "#/lib/tanstack-db-collection";
+import type {
+  TanStackDbCollectionSnapshot,
+  TanStackDbCollectionWriteVersionRef,
+} from "#/lib/tanstack-db-collection";
+import { seedQueryCollectionInitialData } from "#/lib/tanstack-db-query";
+import { useHydratedCollectionItems } from "#/lib/tanstack-db-react";
+
+import {
+  organizationSitesQueryKey,
+  siteCommentsQueryKey,
+} from "./sites-query-keys";
 
 type SitesCollection = ReturnType<typeof makeSitesCollection>;
 type SiteCommentsCollection = ReturnType<typeof makeSiteCommentsCollection>;
+
+const EMPTY_SITE_COMMENTS: readonly SiteComment[] = [];
 
 interface SitesNotice {
   readonly kind: "created" | "updated";
@@ -44,10 +68,18 @@ export interface SitesAsyncResult {
 
 interface SitesStateStore {
   readonly commentsBySiteId: Map<SiteIdType, SiteCommentsCollection>;
+  readonly commentWriteVersionsBySiteId: Map<
+    SiteIdType,
+    TanStackDbCollectionWriteVersionRef
+  >;
+  readonly fallbackSitesRef: React.MutableRefObject<readonly SiteOption[]>;
   readonly initialCommentsBySiteId: Map<SiteIdType, readonly SiteComment[]>;
   readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+  readonly queryScope: OrganizationQueryScope;
+  readonly queryClient: QueryClient;
   readonly refreshVersionsBySiteId: Map<SiteIdType, number>;
   readonly sites: SitesCollection;
+  readonly sitesWriteVersionRef: TanStackDbCollectionWriteVersionRef;
 }
 
 interface SitesStateContextValue {
@@ -138,6 +170,8 @@ export function SitesStateProvider({
   children,
   initialSiteComments,
   options,
+  queryClient: providedQueryClient,
+  viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
   readonly children: React.ReactNode;
@@ -146,12 +180,18 @@ export function SitesStateProvider({
     readonly SiteComment[]
   >;
   readonly options: SitesOptionsResponse;
+  readonly queryClient?: QueryClient | undefined;
+  readonly viewer: OrganizationViewer;
 }) {
   const organizationIdRef = React.useRef(activeOrganizationId);
+  const [fallbackQueryClient] = React.useState(() => new QueryClient());
+  const queryClient = providedQueryClient ?? fallbackQueryClient;
   const [store] = React.useState(() =>
     makeSitesStateStore(
       organizationIdRef,
       activeOrganizationId,
+      viewer,
+      queryClient,
       options.sites,
       initialSiteComments
     )
@@ -169,29 +209,14 @@ export function SitesStateProvider({
     organizationIdRef.current = activeOrganizationId;
   }, [activeOrganizationId, organizationIdRef]);
 
-  React.useEffect(
-    () => () => {
-      void store.sites.cleanup();
-
-      for (const collection of store.commentsBySiteId.values()) {
-        void collection.cleanup();
-      }
-    },
-    [store]
-  );
-
   const replaceSitesOptionsState = React.useCallback(
     async (organizationId: OrganizationId, response: SitesOptionsResponse) => {
       organizationIdRef.current = organizationId;
       store.refreshVersionsBySiteId.clear();
 
-      for (const collection of store.commentsBySiteId.values()) {
-        await collection.cleanup();
-      }
-
-      store.commentsBySiteId.clear();
+      pruneInactiveSiteCommentCollections(store, response.sites);
       store.initialCommentsBySiteId.clear();
-      await replaceSites(store.sites, response.sites);
+      await replaceSites(store, response.sites);
       dispatch({
         serviceAreas: response.serviceAreas,
         type: "replace-options-state",
@@ -386,7 +411,7 @@ export function SitesStateProvider({
 
 export function useSitesOptions(): SitesOptionsResponse {
   const { serviceAreas, store } = useSitesStateContext();
-  const sites = useSitesCollectionItems(store.sites);
+  const sites = useSitesCollectionItems(store);
 
   return React.useMemo(
     () => ({
@@ -423,11 +448,7 @@ export function useUpdateSiteMutation(siteId: SiteIdType) {
 
 export function useSiteComments(siteId: SiteIdType) {
   const { store } = useSitesStateContext();
-  const collection = React.useMemo(
-    () => getOrCreateSiteCommentsCollection(store, siteId),
-    [siteId, store]
-  );
-  const comments = useSiteCommentCollectionItems(collection);
+  const comments = useSiteCommentCollectionItems(store, siteId);
 
   return React.useMemo(() => sortSiteComments(comments), [comments]);
 }
@@ -494,45 +515,122 @@ export function getSitesAsyncErrorMessage(error: unknown): string {
 function makeSitesStateStore(
   organizationIdRef: React.MutableRefObject<OrganizationId>,
   organizationId: OrganizationId,
+  viewer: OrganizationViewer,
+  queryClient: QueryClient,
   sites: readonly SiteOption[],
   initialComments?: ReadonlyMap<SiteIdType, readonly SiteComment[]>
 ): SitesStateStore {
+  const sitesWriteVersionRef = { current: 0 };
+  const queryScope = {
+    organizationId,
+    role: viewer.role,
+    userId: viewer.userId,
+  } satisfies OrganizationQueryScope;
+
   return {
     commentsBySiteId: new Map(),
+    commentWriteVersionsBySiteId: new Map(),
+    fallbackSitesRef: {
+      current: sites,
+    },
     initialCommentsBySiteId: new Map(initialComments),
     organizationIdRef,
+    queryScope,
+    queryClient,
     refreshVersionsBySiteId: new Map(),
-    sites: makeSitesCollection(organizationId, sites),
+    sites: makeSitesCollection(
+      queryScope,
+      queryClient,
+      sites,
+      sitesWriteVersionRef
+    ),
+    sitesWriteVersionRef,
   };
 }
 
 function makeSitesCollection(
-  organizationId: OrganizationId,
-  sites: readonly SiteOption[]
+  queryScope: OrganizationQueryScope,
+  queryClient: QueryClient,
+  sites: readonly SiteOption[],
+  writeVersionRef: TanStackDbCollectionWriteVersionRef
 ) {
-  return createCollection(
-    localOnlyCollectionOptions({
+  const queryKey = organizationSitesQueryKey(queryScope);
+  seedQueryCollectionInitialData(queryClient, queryKey, [...sites]);
+
+  const collection: {
+    current?: TanStackDbCollectionSnapshot<SiteOption>;
+  } = {};
+  const createdCollection = createCollection(
+    queryCollectionOptions({
       getKey: (site) => site.id,
-      id: `organization:${organizationId}:sites`,
-      initialData: [...sites],
-      schema: Schema.standardSchemaV1(SiteOptionSchema),
+      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:sites`,
+      queryClient,
+      queryFn: async () => {
+        const requestWriteVersion = writeVersionRef.current;
+        const response = await listAllCurrentServerSites();
+
+        return reconcileQueryCollectionDataAfterConcurrentWrite({
+          collection: collection.current,
+          incomingItems: response.items,
+          requestWriteVersion,
+          writeVersionRef,
+        });
+      },
+      queryKey,
+      retry: false,
+      schema: Schema.toStandardSchemaV1(SiteOptionSchema),
+      staleTime: 30_000,
     })
   );
+  collection.current = createdCollection;
+  return createdCollection;
 }
 
 function makeSiteCommentsCollection(
-  organizationId: OrganizationId,
+  queryScope: OrganizationQueryScope,
+  queryClient: QueryClient,
   siteId: SiteIdType,
-  comments: readonly SiteComment[]
+  comments: readonly SiteComment[],
+  writeVersionRef: TanStackDbCollectionWriteVersionRef
 ) {
-  return createCollection(
-    localOnlyCollectionOptions({
+  const queryKey = siteCommentsQueryKey(queryScope, siteId);
+  seedQueryCollectionInitialData(
+    queryClient,
+    queryKey,
+    sortSiteComments(comments)
+  );
+
+  const collection: {
+    current?: TanStackDbCollectionSnapshot<SiteComment>;
+  } = {};
+  const createdCollection = createCollection(
+    queryCollectionOptions({
       getKey: (comment) => comment.id,
-      id: `organization:${organizationId}:site:${siteId}:comments`,
-      initialData: [...comments],
-      schema: Schema.standardSchemaV1(SiteCommentSchema),
+      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:site:${siteId}:comments`,
+      queryClient,
+      queryFn: async () => {
+        const requestWriteVersion = writeVersionRef.current;
+        const response = await Effect.runPromise(
+          listBrowserSiteComments(siteId)
+        );
+
+        return reconcileQueryCollectionDataAfterConcurrentWrite({
+          collection: collection.current,
+          incomingItems: sortSiteComments(response.comments),
+          requestWriteVersion,
+          writeVersionRef,
+        });
+      },
+      queryKey,
+      retry: false,
+      schema: Schema.toStandardSchemaV1(SiteCommentSchema),
+      staleTime: 30_000,
     })
   );
+  collection.current = createdCollection;
+  return createdCollection;
 }
 
 function useSitesStateContext() {
@@ -589,57 +687,29 @@ function sitesStateReducer(
 }
 
 function useSitesCollectionItems(
-  collection: SitesCollection
+  store: SitesStateStore
 ): readonly SiteOption[] {
-  const [items, setItems] = React.useState(() =>
-    sitesFromCollection(collection)
+  return useHydratedCollectionItems(
+    store.sites,
+    store.fallbackSitesRef.current
   );
-
-  React.useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      if (active) {
-        setItems(sitesFromCollection(collection));
-      }
-    };
-    const subscription = collection.subscribeChanges(refresh);
-
-    refresh();
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [collection]);
-
-  return items;
 }
 
 function useSiteCommentCollectionItems(
-  collection: SiteCommentsCollection
+  store: SitesStateStore,
+  siteId: SiteIdType
 ): readonly SiteComment[] {
-  const [items, setItems] = React.useState(() =>
-    siteCommentsFromCollection(collection)
+  const isHydrated = useIsHydrated();
+  const collection = React.useMemo(
+    () =>
+      isHydrated ? getOrCreateSiteCommentsCollection(store, siteId) : null,
+    [isHydrated, siteId, store]
   );
 
-  React.useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      if (active) {
-        setItems(siteCommentsFromCollection(collection));
-      }
-    };
-    const subscription = collection.subscribeChanges(refresh);
-
-    refresh();
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [collection]);
-
-  return items;
+  return useHydratedCollectionItems(
+    collection,
+    store.initialCommentsBySiteId.get(siteId) ?? EMPTY_SITE_COMMENTS
+  );
 }
 
 async function runTrackedSitesOperation<Success>(
@@ -677,27 +747,11 @@ async function runSitesOperation<Success>(
   return exit;
 }
 
-async function refreshSiteCommentsState(
+function refreshSiteCommentsState(
   store: SitesStateStore,
   siteId: SiteIdType
 ): Promise<Exit.Exit<readonly SiteComment[], AppApiError>> {
-  const refreshVersion = beginSiteCommentsRefresh(store, siteId);
-  const exit = await Effect.runPromiseExit(
-    listBrowserSiteComments(siteId).pipe(
-      Effect.map((response) => sortSiteComments(response.comments))
-    )
-  );
-
-  if (Exit.isSuccess(exit)) {
-    await replaceSiteCommentsIfCurrent(
-      store,
-      siteId,
-      refreshVersion,
-      exit.value
-    );
-  }
-
-  return exit;
+  return refetchSiteCommentsState(store, siteId);
 }
 
 async function addSiteCommentState(
@@ -723,16 +777,9 @@ async function refreshSiteCommentsIfPossible(
   store: SitesStateStore,
   siteId: SiteIdType
 ) {
-  const refreshVersion = beginSiteCommentsRefresh(store, siteId);
-  const exit = await Effect.runPromiseExit(listBrowserSiteComments(siteId));
+  const exit = await refetchSiteCommentsState(store, siteId);
 
   if (Exit.isSuccess(exit)) {
-    await replaceSiteCommentsIfCurrent(
-      store,
-      siteId,
-      refreshVersion,
-      exit.value.comments
-    );
     return;
   }
 
@@ -747,27 +794,39 @@ async function refreshSiteCommentsIfPossible(
   );
 }
 
+async function refetchSiteCommentsState(
+  store: SitesStateStore,
+  siteId: SiteIdType
+): Promise<Exit.Exit<readonly SiteComment[], AppApiError>> {
+  const refreshVersion = beginSiteCommentsRefresh(store, siteId);
+  const collection = getOrCreateSiteCommentsCollection(store, siteId);
+  const exit = await Effect.runPromiseExit(
+    Effect.tryPromise({
+      try: async () => {
+        await collection.utils.refetch({ throwOnError: true });
+        return sortSiteComments(siteCommentsFromCollection(collection));
+      },
+      catch: normalizeAppApiError,
+    })
+  );
+
+  if (
+    Exit.isSuccess(exit) &&
+    store.refreshVersionsBySiteId.get(siteId) !== refreshVersion
+  ) {
+    return Exit.succeed(
+      sortSiteComments(siteCommentsFromCollection(collection))
+    );
+  }
+
+  return exit;
+}
+
 function beginSiteCommentsRefresh(store: SitesStateStore, siteId: SiteIdType) {
   const nextVersion = (store.refreshVersionsBySiteId.get(siteId) ?? 0) + 1;
   store.refreshVersionsBySiteId.set(siteId, nextVersion);
 
   return nextVersion;
-}
-
-async function replaceSiteCommentsIfCurrent(
-  store: SitesStateStore,
-  siteId: SiteIdType,
-  refreshVersion: number,
-  comments: readonly SiteComment[]
-) {
-  if (store.refreshVersionsBySiteId.get(siteId) !== refreshVersion) {
-    return;
-  }
-
-  await replaceSiteComments(
-    getOrCreateSiteCommentsCollection(store, siteId),
-    sortSiteComments(comments)
-  );
 }
 
 function createBrowserSite(input: CreateSiteInput) {
@@ -779,7 +838,7 @@ function createBrowserSite(input: CreateSiteInput) {
 function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
   return runBrowserAppApiRequest("SitesBrowser.updateSite", (client) =>
     client.sites.updateSite({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -788,7 +847,7 @@ function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
 function listBrowserSiteComments(siteId: SiteIdType) {
   return runBrowserAppApiRequest("SitesBrowser.listSiteComments", (client) =>
     client.sites.listSiteComments({
-      path: { siteId },
+      params: { siteId },
     })
   );
 }
@@ -796,7 +855,7 @@ function listBrowserSiteComments(siteId: SiteIdType) {
 function addBrowserSiteComment(siteId: SiteIdType, input: AddSiteCommentInput) {
   return runBrowserAppApiRequest("SitesBrowser.addSiteComment", (client) =>
     client.sites.addSiteComment({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -808,7 +867,7 @@ function assignBrowserSiteLabel(
 ) {
   return runBrowserAppApiRequest("SitesBrowser.assignSiteLabel", (client) =>
     client.sites.assignSiteLabel({
-      path: { siteId },
+      params: { siteId },
       payload: input,
     })
   );
@@ -817,7 +876,7 @@ function assignBrowserSiteLabel(
 function removeBrowserSiteLabel(siteId: SiteIdType, labelId: LabelIdType) {
   return runBrowserAppApiRequest("SitesBrowser.removeSiteLabel", (client) =>
     client.sites.removeSiteLabel({
-      path: { labelId, siteId },
+      params: { labelId, siteId },
     })
   );
 }
@@ -831,82 +890,39 @@ async function syncChangedSiteDetail(
     return;
   }
 
-  await upsertSiteCollectionItem(store.sites, site);
+  await upsertSiteCollectionItem(store, site);
 }
 
-async function replaceSites(
-  collection: SitesCollection,
+function replaceSites(
+  store: SitesStateStore,
   sites: readonly SiteOption[]
-) {
-  const existingKeys = [...collection.keys()];
-
-  if (existingKeys.length > 0) {
-    await collection.delete(existingKeys).isPersisted.promise;
-  }
-
-  if (sites.length > 0) {
-    await collection.insert([...sites]).isPersisted.promise;
-  }
+): Promise<void> {
+  store.fallbackSitesRef.current = sites;
+  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
+  replaceSyncedCollectionData(store.sites, sites);
+  return Promise.resolve();
 }
 
-async function replaceSiteComments(
-  collection: SiteCommentsCollection,
-  comments: readonly SiteComment[]
-) {
-  const existingKeys = [...collection.keys()];
-
-  if (existingKeys.length > 0) {
-    await collection.delete(existingKeys).isPersisted.promise;
-  }
-
-  if (comments.length > 0) {
-    await collection.insert([...comments]).isPersisted.promise;
-  }
-}
-
-async function upsertSiteCollectionItem(
-  collection: SitesCollection,
+function upsertSiteCollectionItem(
+  store: SitesStateStore,
   site: SiteOption
-) {
-  if (collection.has(site.id)) {
-    await collection.update(site.id, (draft) => {
-      draft.accessNotes = site.accessNotes;
-      draft.addressLine1 = site.addressLine1;
-      draft.addressLine2 = site.addressLine2;
-      draft.country = site.country;
-      draft.county = site.county;
-      draft.eircode = site.eircode;
-      draft.labels = [...site.labels];
-      draft.latitude = site.latitude;
-      draft.longitude = site.longitude;
-      draft.name = site.name;
-      draft.serviceAreaId = site.serviceAreaId;
-      draft.serviceAreaName = site.serviceAreaName;
-    }).isPersisted.promise;
-    return;
-  }
-
-  await collection.insert(site).isPersisted.promise;
+): Promise<void> {
+  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
+  store.sites.utils.writeUpsert(site);
+  return Promise.resolve();
 }
 
-async function upsertSiteCommentCollectionItem(
+function upsertSiteCommentCollectionItem(
   store: SitesStateStore,
   siteId: SiteIdType,
   comment: AddSiteCommentResponse
-) {
+): Promise<void> {
   const collection = getOrCreateSiteCommentsCollection(store, siteId);
-
-  if (collection.has(comment.id)) {
-    await collection.update(comment.id, (draft) => {
-      draft.authorName = comment.authorName;
-      draft.body = comment.body;
-      draft.createdAt = comment.createdAt;
-      draft.siteId = comment.siteId;
-    }).isPersisted.promise;
-    return;
-  }
-
-  await collection.insert(comment).isPersisted.promise;
+  markTanStackDbCollectionWrite(
+    getOrCreateSiteCommentsWriteVersionRef(store, siteId)
+  );
+  collection.utils.writeUpsert(comment);
+  return Promise.resolve();
 }
 
 function getOrCreateSiteCommentsCollection(
@@ -920,25 +936,51 @@ function getOrCreateSiteCommentsCollection(
   }
 
   const collection = makeSiteCommentsCollection(
-    store.organizationIdRef.current,
+    store.queryScope,
+    store.queryClient,
     siteId,
-    store.initialCommentsBySiteId.get(siteId) ?? []
+    store.initialCommentsBySiteId.get(siteId) ?? [],
+    getOrCreateSiteCommentsWriteVersionRef(store, siteId)
   );
   store.commentsBySiteId.set(siteId, collection);
 
   return collection;
 }
 
-function sitesFromCollection(
-  collection: SitesCollection
-): readonly SiteOption[] {
-  return collection.toArray.map(withoutVirtualProps);
+function getOrCreateSiteCommentsWriteVersionRef(
+  store: SitesStateStore,
+  siteId: SiteIdType
+) {
+  const existing = store.commentWriteVersionsBySiteId.get(siteId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = { current: 0 };
+  store.commentWriteVersionsBySiteId.set(siteId, created);
+  return created;
 }
 
 function siteCommentsFromCollection(
   collection: SiteCommentsCollection
 ): readonly SiteComment[] {
-  return collection.toArray.map(withoutVirtualProps);
+  return stripTanStackDbCollectionData(collection.toArray);
+}
+
+function pruneInactiveSiteCommentCollections(
+  store: SitesStateStore,
+  sites: readonly SiteOption[]
+) {
+  const activeSiteIds = new Set(sites.map((site) => site.id));
+  for (const [siteId, collection] of store.commentsBySiteId) {
+    if (activeSiteIds.has(siteId) || collection.subscriberCount > 0) {
+      continue;
+    }
+
+    store.commentsBySiteId.delete(siteId);
+    store.commentWriteVersionsBySiteId.delete(siteId);
+  }
 }
 
 function sortSiteOptions(sites: readonly SiteOption[]) {
@@ -966,29 +1008,7 @@ function compareSiteComments(left: SiteComment, right: SiteComment) {
 }
 
 function failureFromCause(cause: Cause.Cause<AppApiError>): unknown {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   return Option.isSome(failure) ? failure.value : Cause.squash(cause);
-}
-
-function withoutVirtualProps<Item extends object>(item: Item): Item {
-  const {
-    $collectionId: _collectionId,
-    $key: _key,
-    $origin: _origin,
-    $synced: _synced,
-    ...data
-  } = item as Item & {
-    readonly $collectionId?: unknown;
-    readonly $key?: unknown;
-    readonly $origin?: unknown;
-    readonly $synced?: unknown;
-  };
-
-  void _collectionId;
-  void _key;
-  void _origin;
-  void _synced;
-
-  return data as Item;
 }

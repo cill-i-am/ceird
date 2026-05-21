@@ -1,18 +1,24 @@
-import { ParseResult, Schema } from "effect";
+import { Schema } from "effect";
 
 export const accountEmailSchema = Schema.Trim.pipe(
-  Schema.nonEmptyString(),
-  Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+  Schema.check(
+    Schema.isNonEmpty(),
+    Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+  )
 );
 
-export const accountPasswordSchema = Schema.String.pipe(Schema.minLength(8));
+export const accountPasswordSchema = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(8))
+);
 
-export const accountNameSchema = Schema.Trim.pipe(Schema.minLength(2));
+export const accountNameSchema = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(2))
+);
 
 const LoginInputSchema = Schema.Struct({
   email: accountEmailSchema,
   password: accountPasswordSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
@@ -20,19 +26,19 @@ const SignupInputSchema = Schema.Struct({
   name: accountNameSchema,
   email: accountEmailSchema,
   password: accountPasswordSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
 const PasswordResetRequestInputSchema = Schema.Struct({
   email: accountEmailSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
 const PasswordResetInputSchema = Schema.Struct({
   password: accountPasswordSchema,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 
@@ -48,19 +54,19 @@ export const passwordResetRequestSchema = PasswordResetRequestInputSchema;
 export const passwordResetSchema = PasswordResetInputSchema;
 
 export function decodeLoginInput(input: unknown): LoginInput {
-  return ParseResult.decodeUnknownSync(LoginInputSchema)(input);
+  return Schema.decodeUnknownSync(LoginInputSchema)(input);
 }
 
 export function decodeSignupInput(input: unknown): SignupInput {
-  return ParseResult.decodeUnknownSync(SignupInputSchema)(input);
+  return Schema.decodeUnknownSync(SignupInputSchema)(input);
 }
 
 export function decodePasswordResetRequestInput(
   input: unknown
 ): PasswordResetRequestInput {
-  return ParseResult.decodeUnknownSync(PasswordResetRequestInputSchema)(input);
+  return Schema.decodeUnknownSync(PasswordResetRequestInputSchema)(input);
 }
 
 export function decodePasswordResetInput(input: unknown): PasswordResetInput {
-  return ParseResult.decodeUnknownSync(PasswordResetInputSchema)(input);
+  return Schema.decodeUnknownSync(PasswordResetInputSchema)(input);
 }

@@ -43,7 +43,7 @@ export function SignupPage({
       password: "",
     },
     validators: {
-      onSubmit: Schema.standardSchemaV1(signupSchema),
+      onSubmit: Schema.toStandardSchemaV1(signupSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({

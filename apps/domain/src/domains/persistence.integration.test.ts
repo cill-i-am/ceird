@@ -19,7 +19,7 @@ import {
   SiteId,
 } from "@ceird/sites-core";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Cause, ConfigProvider, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 
 import { AppEffectSqlRuntimeLive } from "../platform/database/database.js";
 import {
@@ -38,6 +38,10 @@ import {
   createTestDatabase,
   withPool,
 } from "../platform/database/test-database.js";
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../test/effect-test-helpers.js";
 import { CommentsRepository } from "./comments/repository.js";
 import {
   ContactsRepository,
@@ -3609,7 +3613,7 @@ async function runJobsEffectExit<Value, Error, Requirements>(
 }
 
 function makeConfigProvider(databaseUrl: string) {
-  return ConfigProvider.fromMap(
+  return configProviderFromMap(
     new Map([
       ["DATABASE_URL", databaseUrl],
       ["JOBS_DEFAULT_LIST_LIMIT", "50"],
@@ -3629,7 +3633,7 @@ function prepareJobsEffect<Value, Error, Requirements>(
     Effect.provide(SiteLabelAssignmentsRepository.Default),
     Effect.provide(JobsRepositoriesLive),
     Effect.provide(AppEffectSqlRuntimeLive),
-    Effect.withConfigProvider(makeConfigProvider(databaseUrl))
+    withConfigProvider(makeConfigProvider(databaseUrl))
   ) as Effect.Effect<Value, Error, never>;
 }
 
@@ -3821,7 +3825,7 @@ function expectFailureTag<Value, Error>(
   expectedTag: string
 ) {
   const failure = Exit.isFailure(exit)
-    ? ((Option.getOrUndefined(Cause.failureOption(exit.cause)) as
+    ? ((Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as
         | { readonly _tag?: string }
         | undefined) ?? undefined)
     : undefined;

@@ -2,9 +2,11 @@
 
 import type { DomainServiceBinding } from "@ceird/domain-core";
 
-export interface McpWorkerBindingRuntimeEnv {
+export interface McpWorkerBindingEnv {
   readonly DOMAIN: DomainServiceBinding;
 }
+
+export type McpWorkerBindingRuntimeEnv = McpWorkerBindingEnv;
 
 export interface McpWorkerConfigEnv {
   readonly ALCHEMY_STACK_NAME?: string;

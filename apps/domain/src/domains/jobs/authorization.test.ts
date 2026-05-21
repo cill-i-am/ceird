@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { JobAccessDeniedError, JobSchema, WorkItemId } from "@ceird/jobs-core";
 import type { Job, UserId } from "@ceird/jobs-core";
-import { Cause, Effect, Exit, Option, ParseResult, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 
 import type { OrganizationActor as OrganizationActorType } from "../organizations/current-actor.js";
 import { JobsAuthorization } from "./authorization.js";
 
-const decodeJob = ParseResult.decodeUnknownSync(JobSchema);
+const decodeJob = Schema.decodeUnknownSync(JobSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
 
 function makeActor(
@@ -72,7 +72,9 @@ async function expectAccessDeniedForWorkItem(
     throw new Error("Expected authorization to fail.");
   }
 
-  expect(Option.getOrUndefined(Cause.failureOption(exit.cause))).toMatchObject({
+  expect(
+    Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+  ).toMatchObject({
     workItemId,
   });
 }
@@ -287,7 +289,7 @@ describe("jobs authorization", () => {
       authorizationChecks
         .map((exit) =>
           Exit.isFailure(exit)
-            ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+            ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
             : undefined
         )
         .every((check) => check instanceof JobAccessDeniedError),

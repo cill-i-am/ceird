@@ -48,6 +48,7 @@ you intentionally want Playwright to start the package-local app/API fallback.
 | `src/components/ui`          | shadcn-style UI primitives.                                                                                               |
 | `src/hotkeys`                | Shared hotkey registry, route hotkeys, keycap UI, and shortcuts help overlay.                                             |
 | `src/lib`                    | API origin, auth client, and server forwarding helpers.                                                                   |
+| `infra/cloudflare-vite.ts`   | App-owned Alchemy Cloudflare Vite declaration and deployed env contract.                                                  |
 | `e2e`                        | Playwright tests and page objects.                                                                                        |
 
 ## Architecture

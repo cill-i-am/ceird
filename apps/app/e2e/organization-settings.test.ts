@@ -106,6 +106,8 @@ async function runCommandBarAction(page: Page, label: string) {
 test("an organization admin can update the organization name from account settings", async ({
   page,
 }) => {
+  test.setTimeout(ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS);
+
   const initialOrganizationName = "Acme Field Ops";
   const updatedOrganizationName = "Northwind Field Ops";
 
@@ -124,7 +126,15 @@ test("an organization admin can update the organization name from account settin
   );
 
   await page.getByLabel("Organization name").fill(updatedOrganizationName);
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/organization/update") &&
+        response.status() < 400
+    ),
+    page.getByRole("button", { name: "Save changes" }).click(),
+  ]);
   await expect(page.getByRole("status")).toContainText("Organization updated.");
   await expect(page.getByLabel("Organization name")).toHaveValue(
     updatedOrganizationName
@@ -157,7 +167,15 @@ test("organization settings service areas and rate cards feed sites and job filt
   await openOrganizationSettingsTab(page, "Service areas");
   await page.getByLabel("New service area name").fill(serviceAreaName);
   await page.getByLabel("New service area description").fill("Northside work");
-  await page.getByRole("button", { name: "Add service area" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/service-areas") &&
+        response.status() < 400
+    ),
+    page.getByRole("button", { name: "Add service area" }).click(),
+  ]);
   await expect(
     page.getByRole("article", { name: `Service area ${serviceAreaName}` })
   ).toBeVisible();

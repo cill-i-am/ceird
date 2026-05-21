@@ -1,14 +1,27 @@
 import type { mcpHandler as betterAuthMcpHandler } from "@better-auth/oauth-provider";
-import { SqlClient } from "@effect/sql";
+import { beforeEach, expect } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { beforeEach, expect, vi } from "vitest";
+import { SqlClient } from "effect/unstable/sql";
+import { vi } from "vitest";
 
+import {
+  configProviderFromMap,
+  effectEither,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { makeAuthenticationConfig } from "../identity/authentication/config.js";
 import { SiteGeocoder } from "../sites/geocoder.js";
-import { makeMcpWebHandler } from "./http.js";
+import { loadMcpAuthorizedAppCacheOptions } from "./cache-config.js";
+import {
+  disposeMcpAuthorizedAppCache,
+  makeMcpAuthorizedAppCache,
+  makeMcpWebHandler,
+} from "./http.js";
 
 type BetterAuthMcpHandler = typeof betterAuthMcpHandler;
-
+type McpWebHandler = (
+  request: Request
+) => Response | Promise<Response | null> | null;
 const { mcpHandlerMock } = vi.hoisted(() => ({
   mcpHandlerMock: vi.fn<BetterAuthMcpHandler>(),
 }));
@@ -191,11 +204,7 @@ describe("mcp http handler", () => {
     const response = await handler(
       new Request("http://127.0.0.1:3000/mcp", {
         method: "POST",
-        headers: {
-          authorization: "Bearer token_123",
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-        },
+        headers: makeAuthorizedMcpHeaders(await initializeMcpSession(handler)),
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: "1",
@@ -205,23 +214,21 @@ describe("mcp http handler", () => {
     );
 
     expect(response?.status).toBe(200);
-    await expect(response?.json()).resolves.toMatchObject([
-      {
-        id: 1,
-        jsonrpc: "2.0",
-        result: {
-          tools: expect.arrayContaining([
-            expect.objectContaining({
-              annotations: expect.objectContaining({
-                destructiveHint: false,
-                readOnlyHint: true,
-              }),
-              name: "ceird.labels.list",
+    await expect(response?.json()).resolves.toMatchObject({
+      id: 1,
+      jsonrpc: "2.0",
+      result: {
+        tools: expect.arrayContaining([
+          expect.objectContaining({
+            annotations: expect.objectContaining({
+              destructiveHint: false,
+              readOnlyHint: true,
             }),
-          ]),
-        },
+            name: "ceird.labels.list",
+          }),
+        ]),
       },
-    ]);
+    });
   }, 10_000);
 
   it("handles authorized no-argument MCP tool calls through the Effect AI router", async () => {
@@ -254,11 +261,7 @@ describe("mcp http handler", () => {
     const response = await handler(
       new Request("http://127.0.0.1:3000/mcp", {
         method: "POST",
-        headers: {
-          authorization: "Bearer token_123",
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-        },
+        headers: makeAuthorizedMcpHeaders(await initializeMcpSession(handler)),
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: "1",
@@ -272,23 +275,208 @@ describe("mcp http handler", () => {
 
     expect(response?.status).toBe(200);
     const body = await response?.json();
-    expect(body).toMatchObject([
-      {
+    expect(body).toMatchObject({
+      id: 1,
+      jsonrpc: "2.0",
+      result: {
+        isError: false,
+        structuredContent: {
+          labels: [
+            expect.objectContaining({
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Priority",
+            }),
+          ],
+        },
+      },
+    });
+  }, 10_000);
+
+  it("keeps MCP session state when Worker request handlers share an authorized app cache", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const authorizedAppCache = makeMcpAuthorizedAppCache();
+    const runtimeLive = Layer.mergeAll(
+      makeSuccessfulLabelListSqlLayer(),
+      SiteGeocoder.Development
+    );
+
+    try {
+      const initializeHandler = makeMcpWebHandler({
+        authorizedAppCache,
+        authConfig,
+        runtimeLive,
+      });
+      const sessionId = await initializeMcpSession(initializeHandler);
+      await initializeHandler.dispose();
+
+      const toolHandler = makeMcpWebHandler({
+        authorizedAppCache,
+        authConfig,
+        runtimeLive,
+      });
+      const response = await toolHandler(
+        new Request("http://127.0.0.1:3000/mcp", {
+          method: "POST",
+          headers: makeAuthorizedMcpHeaders(sessionId),
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "1",
+            method: "tools/list",
+          }),
+        })
+      );
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject({
+        id: 1,
+        jsonrpc: "2.0",
+        result: {
+          tools: expect.arrayContaining([
+            expect.objectContaining({ name: "ceird.labels.list" }),
+          ]),
+        },
+      });
+    } finally {
+      await disposeMcpAuthorizedAppCache(authorizedAppCache);
+    }
+  }, 10_000);
+
+  it("does not retain request runtime layers in the authorized app cache", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const authorizedAppCache = makeMcpAuthorizedAppCache();
+    const sql = vi.fn<
+      (strings: TemplateStringsArray) => Effect.Effect<readonly unknown[]>
+    >((strings) => {
+      const statement = strings.join(" ");
+
+      if (statement.includes("from session")) {
+        return Effect.succeed([
+          {
+            activeOrganizationId: "org_123",
+            expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+            userId: "user_abc",
+          },
+        ]);
+      }
+
+      if (statement.includes("from member")) {
+        return Effect.succeed([{ role: "member" }]);
+      }
+
+      if (statement.includes("from labels")) {
+        return Effect.succeed([
+          {
+            archived_at: null,
+            created_at: new Date("2026-01-01T00:00:00.000Z"),
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Priority",
+            normalized_name: "priority",
+            organization_id: "org_123",
+            updated_at: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ]);
+      }
+
+      return Effect.die(new Error(`Unexpected SQL in test mock: ${statement}`));
+    });
+    Object.assign(sql, {
+      withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
+    });
+    let acquiredSqlClients = 0;
+    let releasedSqlClients = 0;
+    const sqlLayer = Layer.effect(SqlClient.SqlClient)(
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          acquiredSqlClients += 1;
+          return sql as unknown as SqlClient.SqlClient;
+        }),
+        () =>
+          Effect.sync(() => {
+            releasedSqlClients += 1;
+          })
+      )
+    );
+    const runtimeLive = Layer.mergeAll(sqlLayer, SiteGeocoder.Development);
+
+    try {
+      const initializeHandler = makeMcpWebHandler({
+        authorizedAppCache,
+        authConfig,
+        runtimeLive,
+      });
+      const sessionId = await initializeMcpSession(initializeHandler);
+      await initializeHandler.dispose();
+
+      expect(acquiredSqlClients).toBe(0);
+      expect(releasedSqlClients).toBe(0);
+
+      const toolHandler = makeMcpWebHandler({
+        authorizedAppCache,
+        authConfig,
+        runtimeLive,
+      });
+      const response = await toolHandler(
+        new Request("http://127.0.0.1:3000/mcp", {
+          method: "POST",
+          headers: makeAuthorizedMcpHeaders(sessionId),
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "1",
+            method: "tools/call",
+            params: {
+              name: "ceird.labels.list",
+            },
+          }),
+        })
+      );
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject({
         id: 1,
         jsonrpc: "2.0",
         result: {
           isError: false,
-          structuredContent: {
-            labels: [
-              expect.objectContaining({
-                id: "11111111-1111-4111-8111-111111111111",
-                name: "Priority",
-              }),
-            ],
-          },
         },
-      },
-    ]);
+      });
+      expect(acquiredSqlClients).toBe(1);
+      expect(releasedSqlClients).toBe(1);
+    } finally {
+      await disposeMcpAuthorizedAppCache(authorizedAppCache);
+    }
   }, 10_000);
 
   it("returns an MCP tool error before domain execution when scope is insufficient", async () => {
@@ -333,11 +521,7 @@ describe("mcp http handler", () => {
     const response = await handler(
       new Request("http://127.0.0.1:3000/mcp", {
         method: "POST",
-        headers: {
-          authorization: "Bearer token_123",
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-        },
+        headers: makeAuthorizedMcpHeaders(await initializeMcpSession(handler)),
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: "1",
@@ -352,26 +536,20 @@ describe("mcp http handler", () => {
 
     expect(response?.status).toBe(200);
     expect(sql).not.toHaveBeenCalled();
-    await expect(response?.json()).resolves.toMatchObject([
-      {
-        id: 1,
-        jsonrpc: "2.0",
-        result: {
-          content: [
-            expect.objectContaining({
-              text: expect.stringContaining(
-                "Forbidden: missing ceird:admin scope"
-              ),
-            }),
-          ],
-          isError: true,
-          structuredContent: {
-            code: "FORBIDDEN",
-            message: "Forbidden: missing ceird:admin scope",
-          },
-        },
+    await expect(response?.json()).resolves.toMatchObject({
+      id: 1,
+      jsonrpc: "2.0",
+      result: {
+        content: [
+          expect.objectContaining({
+            text: expect.stringContaining(
+              "Forbidden: missing ceird:admin scope"
+            ),
+          }),
+        ],
+        isError: true,
       },
-    ]);
+    });
   }, 10_000);
 
   it("rejects verified bearer tokens that do not carry a Better Auth session", async () => {
@@ -415,7 +593,199 @@ describe("mcp http handler", () => {
       'error="invalid_token"'
     );
   }, 10_000);
+
+  it("rejects verified bearer tokens that do not carry an OAuth client id", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const handler = makeMcpWebHandler({ authConfig });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        method: "POST",
+        headers: makeAuthorizedMcpHeaders(),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          method: "tools/list",
+        }),
+      })
+    );
+
+    expect(response?.status).toBe(401);
+    expect(response?.headers.get("WWW-Authenticate")).toContain(
+      'error="invalid_token"'
+    );
+  }, 10_000);
+
+  it("loads authorized app cache options from Effect config", async () => {
+    const configProvider = configProviderFromMap(
+      new Map([
+        ["MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES", "32"],
+        ["MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS", "45"],
+      ])
+    );
+
+    await expect(
+      Effect.runPromise(
+        loadMcpAuthorizedAppCacheOptions.pipe(
+          withConfigProvider(configProvider)
+        )
+      )
+    ).resolves.toStrictEqual({
+      maxEntries: 32,
+      ttlMs: 45_000,
+    });
+  });
+
+  it("rejects non-positive authorized app cache config", async () => {
+    const configProvider = configProviderFromMap(
+      new Map([["MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES", "0"]])
+    );
+
+    const result = await Effect.runPromise(
+      loadMcpAuthorizedAppCacheOptions.pipe(
+        withConfigProvider(configProvider),
+        effectEither
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(
+      String(result._tag === "Left" ? result.left : result.right)
+    ).toContain(
+      "MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES must be a positive integer"
+    );
+  });
+
+  it("rejects non-positive authorized app cache TTL config", async () => {
+    const configProvider = configProviderFromMap(
+      new Map([["MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS", "0"]])
+    );
+
+    const result = await Effect.runPromise(
+      loadMcpAuthorizedAppCacheOptions.pipe(
+        withConfigProvider(configProvider),
+        effectEither
+      )
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(
+      String(result._tag === "Left" ? result.left : result.right)
+    ).toContain(
+      "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS must be a positive integer"
+    );
+  });
+
+  it("does not share initialized MCP sessions across OAuth client ids", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: request.headers.get("x-test-client-id") ?? "mcp-client",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const authorizedAppCache = makeMcpAuthorizedAppCache();
+    const runtimeLive = Layer.mergeAll(
+      makeSuccessfulLabelListSqlLayer(),
+      SiteGeocoder.Development
+    );
+
+    try {
+      const handler = makeMcpWebHandler({
+        authorizedAppCache,
+        authConfig,
+        runtimeLive,
+      });
+      const sessionId = await initializeMcpSession(handler, "client-a");
+      const response = await handler(
+        new Request("http://127.0.0.1:3000/mcp", {
+          method: "POST",
+          headers: makeAuthorizedMcpHeaders(sessionId, "client-b"),
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "1",
+            method: "tools/list",
+          }),
+        })
+      );
+
+      expect(response?.status).not.toBe(200);
+    } finally {
+      await disposeMcpAuthorizedAppCache(authorizedAppCache);
+    }
+  }, 10_000);
 });
+
+async function initializeMcpSession(
+  handler: McpWebHandler,
+  clientId?: string | undefined
+) {
+  const response = await handler(
+    new Request("http://127.0.0.1:3000/mcp", {
+      method: "POST",
+      headers: makeAuthorizedMcpHeaders(undefined, clientId),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 0,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: {
+            name: "ceird-domain-test",
+            version: "0.0.0",
+          },
+        },
+      }),
+    })
+  );
+
+  expect(response?.status).toBe(200);
+  const sessionId = response?.headers.get("mcp-session-id");
+  expect(sessionId).toStrictEqual(expect.any(String));
+
+  return sessionId as string;
+}
+
+function makeAuthorizedMcpHeaders(
+  sessionId?: string | undefined,
+  clientId?: string | undefined
+) {
+  return {
+    authorization: "Bearer token_123",
+    accept: "application/json, text/event-stream",
+    "content-type": "application/json",
+    ...(clientId === undefined ? {} : { "x-test-client-id": clientId }),
+    ...(sessionId === undefined ? {} : { "mcp-session-id": sessionId }),
+  };
+}
 
 function makeSuccessfulLabelListSqlLayer() {
   const sql = vi.fn<

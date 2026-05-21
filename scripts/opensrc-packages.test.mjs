@@ -11,6 +11,7 @@ test("includes runtime and framework packages in the opensrc source list", () =>
     {
       dependencies: {
         "@effect/platform": "^0.96.0",
+        "@tanstack/db": "^0.6.5",
         "@tanstack/react-form": "^1.28.6",
         "@tanstack/react-router": "latest",
         "@tanstack/react-router-ssr-query": "latest",
@@ -28,6 +29,7 @@ test("includes runtime and framework packages in the opensrc source list", () =>
 
   assert.deepEqual(sourceList, [
     "@effect/platform",
+    "@tanstack/db",
     "@tanstack/react-form",
     "@tanstack/react-router",
     "@tanstack/react-router-ssr-query",
@@ -67,6 +69,7 @@ test("excludes assets, lightweight helpers, build tooling, and workspace package
 
 test("matches allowed packages by exact name or approved scope prefix", () => {
   assert.equal(shouldIncludeOpensrcPackage("@effect/sql"), true);
+  assert.equal(shouldIncludeOpensrcPackage("@tanstack/db"), true);
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/react-start"), true);
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/router-plugin"), false);
   assert.equal(shouldIncludeOpensrcPackage("tailwindcss"), true);

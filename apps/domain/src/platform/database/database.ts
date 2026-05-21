@@ -13,16 +13,16 @@ export interface AppDatabaseService {
   readonly pool: Pool;
 }
 
-export class AppDatabaseUrl extends Context.Tag(
+export class AppDatabaseUrl extends Context.Service<AppDatabaseUrl, string>()(
   "@ceird/platform/database/AppDatabaseUrl"
-)<AppDatabaseUrl, string>() {}
+) {}
 
 export const AppDatabaseUrlLive = Layer.effect(AppDatabaseUrl, nodeDatabaseUrl);
 
-export class AppDatabase extends Effect.Service<AppDatabase>()(
+export class AppDatabase extends Context.Service<AppDatabase>()(
   "@ceird/platform/database/AppDatabase",
   {
-    scoped: Effect.gen(function* AppDatabaseLiveEffect() {
+    make: Effect.gen(function* AppDatabaseLiveEffect() {
       const databaseUrl = yield* AppDatabaseUrl;
 
       const pool = yield* Effect.acquireRelease(
@@ -45,7 +45,13 @@ export class AppDatabase extends Effect.Service<AppDatabase>()(
       };
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AppDatabase,
+    AppDatabase.make
+  );
+  static readonly Default = AppDatabase.DefaultWithoutDependencies;
+}
 
 export const AppDatabaseLive = AppDatabase.Default.pipe(
   Layer.provide(AppDatabaseUrlLive)
@@ -56,14 +62,16 @@ export const makeAppDatabaseLive = (databaseUrl: string) =>
     Layer.provide(Layer.succeed(AppDatabaseUrl, databaseUrl))
   );
 
-export const AppEffectSqlLive = Layer.unwrapEffect(
+export const AppEffectSqlLive = Layer.unwrap(
   Effect.gen(function* AppEffectSqlLiveLayer() {
     const { pool } = yield* AppDatabase;
 
-    return PgClient.layerFromPool({
-      // AppDatabase owns the pool lifecycle; the SQL client only borrows it.
-      acquire: Effect.acquireRelease(Effect.succeed(pool), () => Effect.void),
-    });
+    return PgClient.layerFrom(
+      PgClient.fromPool({
+        // AppDatabase owns the pool lifecycle; the SQL client only borrows it.
+        acquire: Effect.acquireRelease(Effect.succeed(pool), () => Effect.void),
+      })
+    );
   })
 );
 

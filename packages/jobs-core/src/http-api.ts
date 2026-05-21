@@ -5,8 +5,12 @@ import {
   SiteGeocodingProviderError,
   SiteNotFoundError,
 } from "@ceird/sites-core";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform";
-import { Schema } from "effect";
+import {
+  HttpApi,
+  HttpApiEndpoint,
+  HttpApiGroup,
+  HttpApiSchema,
+} from "effect/unstable/httpapi";
 
 import {
   AddJobCostLineInputSchema,
@@ -62,228 +66,270 @@ import { JobCollaboratorId, RateCardId, WorkItemId } from "./ids.js";
 
 const jobsGroup = HttpApiGroup.make("jobs")
   .add(
-    HttpApiEndpoint.get("listJobs", "/jobs")
-      .setUrlParams(JobListQuerySchema)
-      .addSuccess(JobListResponseSchema)
-      .addError(JobListCursorInvalidError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("listJobs", "/jobs", {
+      query: JobListQuerySchema,
+      success: JobListResponseSchema,
+      error: [JobListCursorInvalidError, JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.get("getJobOptions", "/jobs/options")
-      .addSuccess(JobOptionsResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("getJobOptions", "/jobs/options", {
+      success: JobOptionsResponseSchema,
+      error: [JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options")
-      .addSuccess(JobMemberOptionsResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options", {
+      success: JobMemberOptionsResponseSchema,
+      error: [JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
     HttpApiEndpoint.get(
       "getJobExternalMemberOptions",
-      "/jobs/external-member-options"
+      "/jobs/external-member-options",
+      {
+        success: JobExternalMemberOptionsResponseSchema,
+        error: [JobAccessDeniedError, JobStorageError],
+      }
     )
-      .addSuccess(JobExternalMemberOptionsResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
   )
   .add(
-    HttpApiEndpoint.post("createJob", "/jobs")
-      .setPayload(CreateJobInputSchema)
-      .addSuccess(CreateJobResponseSchema, { status: 201 })
-      .addError(JobAccessDeniedError)
-      .addError(ServiceAreaNotFoundError)
-      .addError(SiteNotFoundError)
-      .addError(SiteGeocodingFailedError)
-      .addError(SiteGeocodingProviderError)
-      .addError(ContactNotFoundError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("createJob", "/jobs", {
+      payload: CreateJobInputSchema,
+      success: CreateJobResponseSchema.pipe(HttpApiSchema.status("Created")),
+      error: [
+        JobAccessDeniedError,
+        ServiceAreaNotFoundError,
+        SiteNotFoundError,
+        SiteGeocodingFailedError,
+        SiteGeocodingProviderError,
+        ContactNotFoundError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.get("listOrganizationActivity", "/activity")
-      .setUrlParams(OrganizationActivityQuerySchema)
-      .addSuccess(OrganizationActivityListResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(OrganizationActivityCursorInvalidError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("listOrganizationActivity", "/activity", {
+      query: OrganizationActivityQuerySchema,
+      success: OrganizationActivityListResponseSchema,
+      error: [
+        JobAccessDeniedError,
+        OrganizationActivityCursorInvalidError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.get("getJobDetail", "/jobs/:workItemId")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .addSuccess(JobDetailResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("getJobDetail", "/jobs/:workItemId", {
+      params: { workItemId: WorkItemId },
+      success: JobDetailResponseSchema,
+      error: [JobNotFoundError, JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.patch("patchJob", "/jobs/:workItemId")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(PatchJobInputSchema)
-      .addSuccess(PatchJobResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(CoordinatorMatchesAssigneeError)
-      .addError(OrganizationMemberNotFoundError)
-      .addError(SiteNotFoundError)
-      .addError(ContactNotFoundError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.patch("patchJob", "/jobs/:workItemId", {
+      params: { workItemId: WorkItemId },
+      payload: PatchJobInputSchema,
+      success: PatchJobResponseSchema,
+      error: [
+        JobNotFoundError,
+        JobAccessDeniedError,
+        CoordinatorMatchesAssigneeError,
+        OrganizationMemberNotFoundError,
+        SiteNotFoundError,
+        ContactNotFoundError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.post("transitionJob", "/jobs/:workItemId/transitions")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(TransitionJobInputSchema)
-      .addSuccess(TransitionJobResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(InvalidJobTransitionError)
-      .addError(BlockedReasonRequiredError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("transitionJob", "/jobs/:workItemId/transitions", {
+      params: { workItemId: WorkItemId },
+      payload: TransitionJobInputSchema,
+      success: TransitionJobResponseSchema,
+      error: [
+        JobNotFoundError,
+        JobAccessDeniedError,
+        InvalidJobTransitionError,
+        BlockedReasonRequiredError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.post("reopenJob", "/jobs/:workItemId/reopen")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .addSuccess(ReopenJobResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(InvalidJobTransitionError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("reopenJob", "/jobs/:workItemId/reopen", {
+      params: { workItemId: WorkItemId },
+      success: ReopenJobResponseSchema,
+      error: [
+        JobNotFoundError,
+        JobAccessDeniedError,
+        InvalidJobTransitionError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.post("addJobComment", "/jobs/:workItemId/comments")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(AddJobCommentInputSchema)
-      .addSuccess(AddJobCommentResponseSchema, { status: 201 })
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("addJobComment", "/jobs/:workItemId/comments", {
+      params: { workItemId: WorkItemId },
+      payload: AddJobCommentInputSchema,
+      success: AddJobCommentResponseSchema.pipe(
+        HttpApiSchema.status("Created")
+      ),
+      error: [JobNotFoundError, JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("addJobVisit", "/jobs/:workItemId/visits")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(AddJobVisitInputSchema)
-      .addSuccess(AddJobVisitResponseSchema, { status: 201 })
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(VisitDurationIncrementError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("addJobVisit", "/jobs/:workItemId/visits", {
+      params: { workItemId: WorkItemId },
+      payload: AddJobVisitInputSchema,
+      success: AddJobVisitResponseSchema.pipe(HttpApiSchema.status("Created")),
+      error: [
+        JobNotFoundError,
+        JobAccessDeniedError,
+        VisitDurationIncrementError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.post("assignJobLabel", "/jobs/:workItemId/labels")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(AssignJobLabelInputSchema)
-      .addSuccess(JobDetailResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(LabelNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("assignJobLabel", "/jobs/:workItemId/labels", {
+      params: { workItemId: WorkItemId },
+      payload: AssignJobLabelInputSchema,
+      success: JobDetailResponseSchema,
+      error: [
+        JobNotFoundError,
+        LabelNotFoundError,
+        JobAccessDeniedError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
-    HttpApiEndpoint.del("removeJobLabel", "/jobs/:workItemId/labels/:labelId")
-      .setPath(Schema.Struct({ workItemId: WorkItemId, labelId: LabelId }))
-      .addSuccess(JobDetailResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(LabelNotFoundError)
-      .addError(JobStorageError)
-      .addError(JobAccessDeniedError)
+    HttpApiEndpoint.delete(
+      "removeJobLabel",
+      "/jobs/:workItemId/labels/:labelId",
+      {
+        params: { workItemId: WorkItemId, labelId: LabelId },
+        success: JobDetailResponseSchema,
+        error: [
+          JobNotFoundError,
+          LabelNotFoundError,
+          JobStorageError,
+          JobAccessDeniedError,
+        ],
+      }
+    )
   )
   .add(
-    HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines")
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(AddJobCostLineInputSchema)
-      .addSuccess(AddJobCostLineResponseSchema, { status: 201 })
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobCostSummaryLimitExceededError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines", {
+      params: { workItemId: WorkItemId },
+      payload: AddJobCostLineInputSchema,
+      success: AddJobCostLineResponseSchema.pipe(
+        HttpApiSchema.status("Created")
+      ),
+      error: [
+        JobNotFoundError,
+        JobAccessDeniedError,
+        JobCostSummaryLimitExceededError,
+        JobStorageError,
+      ],
+    })
   )
   .add(
     HttpApiEndpoint.get(
       "listJobCollaborators",
-      "/jobs/:workItemId/collaborators"
+      "/jobs/:workItemId/collaborators",
+      {
+        params: { workItemId: WorkItemId },
+        success: JobCollaboratorsResponseSchema,
+        error: [JobNotFoundError, JobAccessDeniedError, JobStorageError],
+      }
     )
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .addSuccess(JobCollaboratorsResponseSchema)
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.post(
       "attachJobCollaborator",
-      "/jobs/:workItemId/collaborators"
+      "/jobs/:workItemId/collaborators",
+      {
+        params: { workItemId: WorkItemId },
+        payload: AttachJobCollaboratorInputSchema,
+        success: JobCollaboratorSchema.pipe(HttpApiSchema.status("Created")),
+        error: [
+          JobNotFoundError,
+          JobAccessDeniedError,
+          OrganizationMemberNotFoundError,
+          JobCollaboratorConflictError,
+          JobStorageError,
+        ],
+      }
     )
-      .setPath(Schema.Struct({ workItemId: WorkItemId }))
-      .setPayload(AttachJobCollaboratorInputSchema)
-      .addSuccess(JobCollaboratorSchema, { status: 201 })
-      .addError(JobNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(OrganizationMemberNotFoundError)
-      .addError(JobCollaboratorConflictError)
-      .addError(JobStorageError)
   )
   .add(
     HttpApiEndpoint.patch(
       "updateJobCollaborator",
-      "/jobs/:workItemId/collaborators/:collaboratorId"
-    )
-      .setPath(
-        Schema.Struct({
+      "/jobs/:workItemId/collaborators/:collaboratorId",
+      {
+        params: {
           workItemId: WorkItemId,
           collaboratorId: JobCollaboratorId,
-        })
-      )
-      .setPayload(UpdateJobCollaboratorInputSchema)
-      .addSuccess(JobCollaboratorSchema)
-      .addError(JobNotFoundError)
-      .addError(JobCollaboratorNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+        },
+        payload: UpdateJobCollaboratorInputSchema,
+        success: JobCollaboratorSchema,
+        error: [
+          JobNotFoundError,
+          JobCollaboratorNotFoundError,
+          JobAccessDeniedError,
+          JobStorageError,
+        ],
+      }
+    )
   )
   .add(
-    HttpApiEndpoint.del(
+    HttpApiEndpoint.delete(
       "detachJobCollaborator",
-      "/jobs/:workItemId/collaborators/:collaboratorId"
-    )
-      .setPath(
-        Schema.Struct({
+      "/jobs/:workItemId/collaborators/:collaboratorId",
+      {
+        params: {
           workItemId: WorkItemId,
           collaboratorId: JobCollaboratorId,
-        })
-      )
-      .addSuccess(JobCollaboratorSchema)
-      .addError(JobNotFoundError)
-      .addError(JobCollaboratorNotFoundError)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+        },
+        success: JobCollaboratorSchema,
+        error: [
+          JobNotFoundError,
+          JobCollaboratorNotFoundError,
+          JobAccessDeniedError,
+          JobStorageError,
+        ],
+      }
+    )
   );
 
 export const JobsApiGroup = jobsGroup;
 
 const rateCardsGroup = HttpApiGroup.make("rateCards")
   .add(
-    HttpApiEndpoint.get("listRateCards", "/rate-cards")
-      .addSuccess(RateCardListResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.get("listRateCards", "/rate-cards", {
+      success: RateCardListResponseSchema,
+      error: [JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.post("createRateCard", "/rate-cards")
-      .setPayload(CreateRateCardInputSchema)
-      .addSuccess(CreateRateCardResponseSchema, { status: 201 })
-      .addError(JobAccessDeniedError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.post("createRateCard", "/rate-cards", {
+      payload: CreateRateCardInputSchema,
+      success: CreateRateCardResponseSchema.pipe(
+        HttpApiSchema.status("Created")
+      ),
+      error: [JobAccessDeniedError, JobStorageError],
+    })
   )
   .add(
-    HttpApiEndpoint.patch("updateRateCard", "/rate-cards/:rateCardId")
-      .setPath(Schema.Struct({ rateCardId: RateCardId }))
-      .setPayload(UpdateRateCardInputSchema)
-      .addSuccess(UpdateRateCardResponseSchema)
-      .addError(JobAccessDeniedError)
-      .addError(RateCardNotFoundError)
-      .addError(JobStorageError)
+    HttpApiEndpoint.patch("updateRateCard", "/rate-cards/:rateCardId", {
+      params: { rateCardId: RateCardId },
+      payload: UpdateRateCardInputSchema,
+      success: UpdateRateCardResponseSchema,
+      error: [JobAccessDeniedError, RateCardNotFoundError, JobStorageError],
+    })
   );
 
 export const RateCardsApiGroup = rateCardsGroup;

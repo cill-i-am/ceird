@@ -17,6 +17,8 @@ export interface DomainWorkerConfigEnv {
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
   readonly GOOGLE_MAPS_API_KEY: string;
+  readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string;
+  readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string;
   readonly MCP_RESOURCE_URL?: string;
   readonly NODE_ENV?: string;
   readonly OAUTH_ISSUER_URL?: string;
@@ -38,6 +40,10 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
+      MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES:
+        env.MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES,
+      MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS:
+        env.MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS,
       MCP_RESOURCE_URL: env.MCP_RESOURCE_URL,
       NODE_ENV: env.NODE_ENV,
       OAUTH_ISSUER_URL: env.OAUTH_ISSUER_URL,

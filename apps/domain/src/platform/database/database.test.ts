@@ -1,8 +1,12 @@
 import { PgClient } from "@effect/sql-pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { ConfigProvider, Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import type { Pool } from "pg";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import {
   AppDatabase,
   AppEffectSqlLive,
@@ -24,7 +28,7 @@ describe("shared app database effect layers", () => {
               Layer.provide(makeTestAppDatabaseLayer(makeTestPool()))
             )
           ),
-          Effect.withConfigProvider(makeConfigProvider())
+          withConfigProvider(makeConfigProvider())
         )
       )
     );
@@ -47,7 +51,7 @@ describe("shared app database effect layers", () => {
           Effect.provide(
             makeAppDatabaseRuntimeLive(makeTestAppDatabaseLayer(pool))
           ),
-          Effect.withConfigProvider(makeConfigProvider())
+          withConfigProvider(makeConfigProvider())
         )
       )
     );
@@ -62,7 +66,7 @@ describe("shared app database effect layers", () => {
 });
 
 function makeConfigProvider() {
-  return ConfigProvider.fromMap(
+  return configProviderFromMap(
     new Map([["DATABASE_URL", IMPOSSIBLE_DATABASE_URL]])
   );
 }
@@ -70,7 +74,7 @@ function makeConfigProvider() {
 function makeTestAppDatabaseLayer(pool: Pool) {
   return Layer.succeed(
     AppDatabase,
-    AppDatabase.make({
+    AppDatabase.of({
       authDb: drizzle({ client: pool }),
       pool,
     })

@@ -4,8 +4,13 @@ import {
 } from "@ceird/sites-core";
 import type { CreateSiteInput } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Duration, Effect } from "effect";
+import { Duration, Effect } from "effect";
 
+import {
+  configProviderFromMap,
+  effectEither,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { makeGoogleSiteGeocoder, SiteGeocoder } from "../sites/geocoder.js";
 
 const FAILED_MESSAGE =
@@ -34,15 +39,19 @@ const gbSiteInput = {
 } satisfies CreateSiteInput;
 
 function configProvider(values: ReadonlyMap<string, string>) {
-  return ConfigProvider.fromMap(new Map(values));
+  return configProviderFromMap(new Map(values));
 }
 
 function runWithConfig<Value, Error>(
-  effect: Effect.Effect<Value, Error, never>,
+  effect: Effect.Effect<Value, Error, unknown>,
   values: ReadonlyMap<string, string>
 ) {
   return Effect.runPromise(
-    effect.pipe(Effect.withConfigProvider(configProvider(values)))
+    effect.pipe(withConfigProvider(configProvider(values))) as Effect.Effect<
+      Value,
+      Error,
+      never
+    >
   );
 }
 
@@ -150,7 +159,7 @@ describe("site geocoder", () => {
     const result = await runWithConfig(
       SiteGeocoder.geocode(siteInput).pipe(
         Effect.provide(SiteGeocoder.Google),
-        Effect.either
+        effectEither
       ),
       new Map()
     );
@@ -174,12 +183,12 @@ describe("site geocoder", () => {
       makeGoogleSiteGeocoder({
         fetch: fetchImplementation,
         googleMapsApiKey: "   ",
-      }).pipe(Effect.either)
+      }).pipe(effectEither)
     );
 
     expect(result._tag).toBe("Left");
     expect(result._tag === "Left" ? String(result.left) : "").toContain(
-      "minLength"
+      "length of at least 1"
     );
   }, 10_000);
 
@@ -197,21 +206,20 @@ describe("site geocoder", () => {
         fetch: fetchImplementation,
         googleMapsApiKey: GOOGLE_MAPS_API_KEY,
         requestTimeout: Duration.zero,
-      }).pipe(Effect.either)
+      }).pipe(effectEither)
     );
 
     expect(result._tag).toBe("Left");
     expect(result._tag === "Left" ? String(result.left) : "").toContain(
-      "betweenDuration"
+      "requestTimeout"
     );
   }, 10_000);
 
   it("google layer does not use an env var for request timeout", async () => {
     const result = await runWithConfig(
-      Effect.runtime<SiteGeocoder>().pipe(
-        Effect.provide(SiteGeocoder.Google),
-        Effect.either
-      ),
+      Effect.gen(function* () {
+        return yield* SiteGeocoder;
+      }).pipe(Effect.provide(SiteGeocoder.Google), effectEither),
       new Map([
         ["GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_API_KEY],
         ["GOOGLE_GEOCODING_REQUEST_TIMEOUT_MS", "not-a-duration"],
@@ -430,7 +438,7 @@ describe("site geocoder", () => {
     const result = await Effect.runPromise(
       makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 
@@ -456,7 +464,7 @@ describe("site geocoder", () => {
     const result = await Effect.runPromise(
       makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 
@@ -491,7 +499,7 @@ describe("site geocoder", () => {
     const result = await Effect.runPromise(
       makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 
@@ -534,7 +542,7 @@ describe("site geocoder", () => {
     const result = await Effect.runPromise(
       makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 
@@ -558,7 +566,7 @@ describe("site geocoder", () => {
     const result = await Effect.runPromise(
       makeGoogleTestGeocoder(fetchImplementation).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 
@@ -592,7 +600,7 @@ describe("site geocoder", () => {
         requestTimeout: Duration.millis(1),
       }).pipe(
         Effect.flatMap((geocoder) => geocoder.geocode(siteInput)),
-        Effect.either
+        effectEither
       )
     );
 

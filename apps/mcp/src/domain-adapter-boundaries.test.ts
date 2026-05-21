@@ -30,7 +30,7 @@ describe("MCP domain adapter boundaries", () => {
     expect(relativeFiles).not.toContain("platform/database/database.ts");
     expect(relativeFiles).not.toContain("platform/database/schema.ts");
     expect(source).not.toContain("drizzle-orm");
-    expect(source).not.toContain("@effect/sql");
+    expect(source).not.toContain("effect/unstable/sql");
     expect(source).not.toContain("@effect/sql-pg");
     expect(source).not.toContain("@ceird/backend-core");
     expect(source).not.toContain('from "pg"');

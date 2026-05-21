@@ -2,15 +2,15 @@ import { createServer } from "node:http";
 
 import { makeDomainOriginClient } from "@ceird/domain-core";
 import type { DomainHttpClient } from "@ceird/domain-core";
+import { NodeHttpServer } from "@effect/platform-node";
+import { Config, Context, Effect, Layer } from "effect";
 import {
-  HttpApp,
+  HttpEffect,
   HttpMiddleware,
   HttpServer,
   HttpServerError,
   HttpServerRequest,
-} from "@effect/platform";
-import { NodeHttpServer } from "@effect/platform-node";
-import { Config, Context, Effect, Layer } from "effect";
+} from "effect/unstable/http";
 
 import { makeHealthPayload } from "./system/health.js";
 
@@ -37,19 +37,16 @@ export const ServerConfig = Config.all({
 
 export const apiRequestLogger: typeof HttpMiddleware.logger =
   HttpMiddleware.make((httpApp) =>
-    Effect.withFiberRuntime((fiber) => {
-      const request = Context.unsafeGet(
-        fiber.currentContext,
+    Effect.withFiber((fiber) => {
+      const request = Context.getUnsafe(
+        fiber.context,
         HttpServerRequest.HttpServerRequest
       );
       const path = requestPathname(request.url);
 
       return Effect.withLogSpan(
         Effect.flatMap(Effect.exit(httpApp), (exit) => {
-          if (
-            fiber.getFiberRef(HttpMiddleware.loggerDisabled) ||
-            shouldSkipRequestLog(path)
-          ) {
+          if (shouldSkipRequestLog(path)) {
             return exit;
           }
 
@@ -62,7 +59,7 @@ export const apiRequestLogger: typeof HttpMiddleware.logger =
               ? Effect.logWarning("Sent HTTP error response")
               : Effect.logInfo("Sent HTTP response");
 
-          return Effect.zipRight(
+          return Effect.andThen(
             log.pipe(
               Effect.annotateLogs({
                 "http.method": request.method,
@@ -152,17 +149,11 @@ function shouldSkipRequestLog(path: string) {
   return path === "/health";
 }
 
-function isInternalAgentPath(pathname: string) {
-  return (
-    pathname === "/agent/internal" || pathname.startsWith("/agent/internal/")
-  );
-}
-
-export const ServerLive = Layer.scopedDiscard(
+export const ServerLive = Layer.effectDiscard(
   Effect.gen(function* runNodeServer() {
     const webHandler = makeApiWebHandler();
 
-    yield* HttpApp.fromWebHandler(webHandler.handler).pipe(
+    yield* HttpEffect.fromWebHandler(webHandler.handler).pipe(
       HttpServer.serveEffect(apiRequestLogger)
     );
   })

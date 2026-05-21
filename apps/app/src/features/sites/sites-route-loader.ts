@@ -4,6 +4,7 @@ import type {
   UserId as UserIdType,
 } from "@ceird/identity-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
+import type { QueryClient } from "@tanstack/query-core";
 
 import {
   getCurrentServerServiceAreas,
@@ -21,6 +22,9 @@ import {
 } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
+import { seedRouteQueryData } from "#/lib/tanstack-db-query";
+
+import { organizationSitesQueryKey } from "./sites-query-keys";
 
 const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   serviceAreas: [],
@@ -32,6 +36,7 @@ interface SitesRouteOrganizationAccess {
   readonly activeOrganizationSync: ActiveOrganizationSync;
   readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly currentUserId: UserIdType;
+  readonly queryClient?: QueryClient | undefined;
 }
 
 function toSitesRouteOrganizationAccess(
@@ -69,6 +74,7 @@ export async function loadSitesRouteData(
 
   assertOrganizationInternalRole({ role: activeRole });
 
+  const sitesRequestStartedAt = Date.now();
   const [sites, serviceAreas] = await Promise.all([
     listAllCurrentServerSites(),
     hasOrganizationElevatedAccess(activeRole)
@@ -81,13 +87,37 @@ export async function loadSitesRouteData(
       : deriveServiceAreasFromSites(sites.items),
     sites: sites.items,
   } satisfies SitesOptionsResponse;
+  const viewer = {
+    role: activeRole,
+    userId: resolvedOrganizationAccess.currentUserId,
+  } satisfies OrganizationViewer;
+
+  if (resolvedOrganizationAccess.queryClient) {
+    const seededSites = seedRouteQueryData(
+      resolvedOrganizationAccess.queryClient,
+      organizationSitesQueryKey({
+        organizationId: resolvedOrganizationAccess.activeOrganizationId,
+        role: viewer.role,
+        userId: viewer.userId,
+      }),
+      siteOptions.sites,
+      {
+        requestStartedAt: sitesRequestStartedAt,
+      }
+    );
+
+    return {
+      options: {
+        ...siteOptions,
+        sites: seededSites,
+      },
+      viewer,
+    };
+  }
 
   return {
     options: siteOptions,
-    viewer: {
-      role: activeRole,
-      userId: resolvedOrganizationAccess.currentUserId,
-    } satisfies OrganizationViewer,
+    viewer,
   };
 }
 

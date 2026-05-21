@@ -168,7 +168,7 @@ describe("login page", () => {
 
   it("uses the shared login schema for submit validation", async () => {
     const user = userEvent.setup();
-    const standardSchema = Schema.standardSchemaV1(loginSchema);
+    const standardSchema = Schema.toStandardSchemaV1(loginSchema);
     const result = standardSchema["~standard"].validate({
       email: "person@example.com",
       password: "short",

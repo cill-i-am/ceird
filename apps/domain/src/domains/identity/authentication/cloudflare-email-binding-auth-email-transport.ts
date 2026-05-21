@@ -1,9 +1,13 @@
 import { Context, Effect } from "effect";
 
 import { AuthEmailConfigService } from "./auth-email-config.js";
-import { AuthEmailRequestError } from "./auth-email-errors.js";
+import {
+  AuthEmailRequestError,
+  AUTH_EMAIL_REQUEST_ERROR_TAG,
+} from "./auth-email-errors.js";
 import {
   buildRecipientLogContext,
+  fingerprintDeliveryKey,
   makeDeliveryKeyDedupeStore,
   sendWithDeliveryKeyDedupe,
   serializeUnknownError,
@@ -22,16 +26,14 @@ export interface CloudflareEmailBindingSendResult {
   readonly messageId: string;
 }
 
-export class CloudflareEmailBinding extends Context.Tag(
-  "@ceird/platform/cloudflare/CloudflareEmailBinding"
-)<
+export class CloudflareEmailBinding extends Context.Service<
   CloudflareEmailBinding,
   {
     readonly send: (
       message: CloudflareEmailBindingMessage
     ) => PromiseLike<CloudflareEmailBindingSendResult>;
   }
->() {}
+>()("@ceird/platform/cloudflare/CloudflareEmailBinding") {}
 
 function buildBindingMessage(
   config: {
@@ -63,7 +65,13 @@ export function makeCloudflareEmailBindingAuthEmailTransport() {
         const logContext = {
           ...buildRecipientLogContext(message.to),
           provider: "cloudflare-email-binding",
-          deliveryKey: message.deliveryKey,
+          ...(message.deliveryKey === undefined
+            ? {}
+            : {
+                deliveryKeyFingerprint: fingerprintDeliveryKey(
+                  message.deliveryKey
+                ),
+              }),
         };
 
         const logOutcome = (
@@ -78,7 +86,7 @@ export function makeCloudflareEmailBindingAuthEmailTransport() {
           ...logContext,
           outcomeBucket: "attempt",
         }).pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.tryPromise({
               try: () => binding.send(buildBindingMessage(config, message)),
               catch: (cause) =>
@@ -88,14 +96,14 @@ export function makeCloudflareEmailBindingAuthEmailTransport() {
                 }),
             })
           ),
-          Effect.zipRight(logOutcome("sent")),
-          Effect.catchTag("AuthEmailRequestError", (error) =>
+          Effect.andThen(logOutcome("sent")),
+          Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
             logOutcome("request_failed").pipe(
               Effect.annotateLogs({
                 authEmailFailureCause: error.cause ?? error.message,
                 authEmailFailureTag: error._tag,
               }),
-              Effect.zipRight(Effect.fail(error))
+              Effect.andThen(Effect.fail(error))
             )
           )
         );

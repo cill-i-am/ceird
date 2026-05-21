@@ -7,8 +7,8 @@ import type {
 import { JobCommentSchema } from "@ceird/jobs-core";
 import { SiteCommentSchema } from "@ceird/sites-core";
 import type { SiteComment, SiteIdType as SiteId } from "@ceird/sites-core";
-import { SqlClient } from "@effect/sql";
-import { Array as EffectArray, Effect, Option, Schema } from "effect";
+import { Layer, Context, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import { generateCommentId } from "./id-generation.js";
 
@@ -57,11 +57,10 @@ export interface AddSiteCommentInput {
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeSiteComment = Schema.decodeUnknownSync(SiteCommentSchema);
 
-export class CommentsRepository extends Effect.Service<CommentsRepository>()(
+export class CommentsRepository extends Context.Service<CommentsRepository>()(
   "@ceird/domains/comments/CommentsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* CommentsRepositoryLive() {
+    make: Effect.gen(function* CommentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const withTransaction = Effect.fn("CommentsRepository.withTransaction")(
@@ -226,7 +225,12 @@ export class CommentsRepository extends Effect.Service<CommentsRepository>()(
           return Option.none<readonly SiteComment[]>();
         }
 
-        const comments = EffectArray.filterMap(rows, mapNullableSiteCommentRow);
+        const comments = rows.flatMap((row) =>
+          Option.match(mapNullableSiteCommentRow(row), {
+            onNone: () => [],
+            onSome: (comment) => [comment],
+          })
+        );
 
         yield* Effect.annotateCurrentSpan("targetExists", true);
         yield* Effect.annotateCurrentSpan("resultCount", comments.length);
@@ -320,7 +324,33 @@ export class CommentsRepository extends Effect.Service<CommentsRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly addForSite = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof CommentsRepository>["addForSite"]
+    >
+  ) => CommentsRepository.use((service) => service.addForSite(...args));
+  static readonly addForWorkItem = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof CommentsRepository>["addForWorkItem"]
+    >
+  ) => CommentsRepository.use((service) => service.addForWorkItem(...args));
+  static readonly listForSite = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof CommentsRepository>["listForSite"]
+    >
+  ) => CommentsRepository.use((service) => service.listForSite(...args));
+  static readonly listForWorkItem = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof CommentsRepository>["listForWorkItem"]
+    >
+  ) => CommentsRepository.use((service) => service.listForWorkItem(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    CommentsRepository,
+    CommentsRepository.make
+  );
+  static readonly Default = CommentsRepository.DefaultWithoutDependencies;
+}
 
 function mapWorkItemCommentRow(row: WorkItemCommentRow): JobComment {
   return decodeJobComment({

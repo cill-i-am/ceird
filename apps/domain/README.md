@@ -30,9 +30,9 @@ default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.
 | `src/index.ts`                        | Node development entrypoint.                                                              |
 | `src/server.ts`                       | Effect API construction, domain HTTP surface, layer composition, and web handler factory. |
 | `src/worker.ts`                       | Private Cloudflare Worker entrypoint and queue consumer.                                  |
+| `infra/cloudflare-worker.ts`          | App-owned Alchemy Worker declaration, binding contract, env, compatibility, and logs.     |
 | `src/platform/database`               | Database config, runtime, schema barrel, errors, and test database helpers.               |
-| `src/platform/cloudflare`             | Domain Worker environment, Hyperdrive binding, queue, email, and runtime composition.     |
-| `src/domains/agents`                  | Agent thread records, connect authorization, action registry, action ledger, and schema.  |
+| `src/platform/cloudflare`             | Runtime Worker environment, Hyperdrive, queue, email, and Effect layer composition.       |
 | `src/domains/identity/authentication` | Better Auth, organization hooks, auth schemas, email delivery, and auth runtime config.   |
 | `src/domains/jobs`                    | Jobs services, repositories, authorization, action execution, activity audit, and schema. |
 | `src/domains/sites`                   | Sites services, repositories, geocoding, label assignments, and schema.                   |

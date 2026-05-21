@@ -1,12 +1,12 @@
+import { NodeHttpServer } from "@effect/platform-node";
+import { describe, expect, it, vi } from "@effect/vitest";
+import { Effect, Logger, References } from "effect";
 import {
   HttpClient,
   HttpRouter,
   HttpServer,
   HttpServerResponse,
-} from "@effect/platform";
-import { NodeHttpServer } from "@effect/platform-node";
-import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, HashMap, LogLevel, Logger } from "effect";
+} from "effect/unstable/http";
 
 import { apiRequestLogger, makeApiWebHandler } from "./server.js";
 
@@ -14,8 +14,8 @@ function captureLogs() {
   const logs: unknown[] = [];
   const logger = Logger.make((input) => {
     logs.push({
-      annotations: Object.fromEntries(HashMap.toEntries(input.annotations)),
-      level: input.logLevel.label,
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
       message: input.message,
     });
   });
@@ -58,13 +58,15 @@ describe("API request logging", () => {
     const { logger, logs } = captureLogs();
 
     await Effect.gen(function* testRedactedRequestLogger() {
-      yield* HttpRouter.empty.pipe(
-        HttpRouter.get(
+      const app = yield* HttpRouter.toHttpEffect(
+        HttpRouter.add(
+          "GET",
           "/api/auth/callback",
           HttpServerResponse.text("callback ok")
-        ),
-        HttpServer.serveEffect(apiRequestLogger)
+        )
       );
+
+      yield* HttpServer.serveEffect(app, apiRequestLogger);
 
       const client = yield* HttpClient.HttpClient;
       const responseText = yield* client
@@ -75,8 +77,8 @@ describe("API request logging", () => {
 
       expect(responseText).toBe("callback ok");
     }).pipe(
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.provide(NodeHttpServer.layerTest),
       Effect.scoped,
       Effect.runPromise
@@ -133,10 +135,11 @@ describe("API request logging", () => {
     const { logger, logs } = captureLogs();
 
     await Effect.gen(function* testHealthProbeLogging() {
-      yield* HttpRouter.empty.pipe(
-        HttpRouter.get("/health", HttpServerResponse.text("ok")),
-        HttpServer.serveEffect(apiRequestLogger)
+      const app = yield* HttpRouter.toHttpEffect(
+        HttpRouter.add("GET", "/health", HttpServerResponse.text("ok"))
       );
+
+      yield* HttpServer.serveEffect(app, apiRequestLogger);
 
       const client = yield* HttpClient.HttpClient;
       const responseText = yield* client
@@ -145,8 +148,8 @@ describe("API request logging", () => {
 
       expect(responseText).toBe("ok");
     }).pipe(
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.provide(NodeHttpServer.layerTest),
       Effect.scoped,
       Effect.runPromise

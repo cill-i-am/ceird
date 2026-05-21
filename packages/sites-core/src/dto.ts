@@ -11,12 +11,14 @@ import {
 } from "./domain.js";
 import { ServiceAreaId, SiteId } from "./ids.js";
 
-const NonEmptyTrimmedString = Schema.Trim.pipe(Schema.minLength(1));
+const NonEmptyTrimmedString = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(1))
+);
 const ConfigurationNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.maxLength(120)
+  Schema.check(Schema.isMaxLength(120))
 );
 const ConfigurationDescriptionSchema = NonEmptyTrimmedString.pipe(
-  Schema.maxLength(500)
+  Schema.check(Schema.isMaxLength(500))
 );
 
 export const ServiceAreaSchema = Schema.Struct({
@@ -37,7 +39,7 @@ export type ServiceAreaOption = Schema.Schema.Type<
 export const CreateServiceAreaInputSchema = Schema.Struct({
   name: ConfigurationNameSchema,
   description: Schema.optional(ConfigurationDescriptionSchema),
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type CreateServiceAreaInput = Schema.Schema.Type<
@@ -52,7 +54,7 @@ export type CreateServiceAreaResponse = Schema.Schema.Type<
 export const UpdateServiceAreaInputSchema = Schema.Struct({
   name: Schema.optional(ConfigurationNameSchema),
   description: Schema.optional(Schema.NullOr(ConfigurationDescriptionSchema)),
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type UpdateServiceAreaInput = Schema.Schema.Type<
@@ -71,7 +73,7 @@ export type ServiceAreaListResponse = Schema.Schema.Type<
   typeof ServiceAreaListResponseSchema
 >;
 
-export const CreateSiteInputSchema = Schema.Struct({
+const CreateSiteInputBaseSchema = Schema.Struct({
   name: NonEmptyTrimmedString,
   serviceAreaId: Schema.optional(ServiceAreaId),
   addressLine1: NonEmptyTrimmedString,
@@ -81,18 +83,21 @@ export const CreateSiteInputSchema = Schema.Struct({
   country: SiteCountrySchema,
   eircode: Schema.optional(NonEmptyTrimmedString),
   accessNotes: Schema.optional(NonEmptyTrimmedString),
-})
-  .annotations({
-    parseOptions: { onExcessProperty: "error" },
-  })
-  .pipe(
-    Schema.filter(
-      ({ country, eircode }) => country !== "IE" || eircode !== undefined
-    ),
-    Schema.annotations({
-      message: () => "Irish sites require an Eircode",
-    })
-  );
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const CreateSiteInputSchema = CreateSiteInputBaseSchema.pipe(
+  Schema.refine(
+    (value): value is Schema.Schema.Type<typeof CreateSiteInputBaseSchema> =>
+      value.country !== "IE" || value.eircode !== undefined,
+    {
+      message: "Irish sites require an Eircode",
+    }
+  )
+).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
 export type CreateSiteInput = Schema.Schema.Type<typeof CreateSiteInputSchema>;
 
 export const SiteOptionSchema = Schema.Struct({
@@ -118,12 +123,10 @@ export type SiteOption = Schema.Schema.Type<typeof SiteOptionSchema>;
 export const SiteDetailSchema = SiteOptionSchema;
 export type SiteDetail = Schema.Schema.Type<typeof SiteDetailSchema>;
 
-export const SiteCommentSchema = Schema.extend(
-  CommentSchema,
-  Schema.Struct({
-    siteId: SiteId,
-  })
-);
+export const SiteCommentSchema = Schema.Struct({
+  ...CommentSchema.fields,
+  siteId: SiteId,
+});
 export type SiteComment = Schema.Schema.Type<typeof SiteCommentSchema>;
 
 export const AddSiteCommentInputSchema = AddCommentInputSchema;
@@ -144,7 +147,7 @@ export type SiteCommentsResponse = Schema.Schema.Type<
 >;
 
 export const SiteListCursor = Schema.String.pipe(
-  Schema.minLength(1),
+  Schema.check(Schema.isMinLength(1)),
   Schema.brand("@ceird/sites-core/SiteListCursor")
 );
 export type SiteListCursor = Schema.Schema.Type<typeof SiteListCursor>;
@@ -153,9 +156,11 @@ export const SiteListQuerySchema = Schema.Struct({
   cursor: Schema.optional(SiteListCursor),
   limit: Schema.optional(
     Schema.NumberFromString.pipe(
-      Schema.int(),
-      Schema.positive(),
-      Schema.lessThanOrEqualTo(100)
+      Schema.check(
+        Schema.isInt(),
+        Schema.isGreaterThan(0),
+        Schema.isLessThanOrEqualTo(100)
+      )
     )
   ),
   serviceAreaId: Schema.optional(ServiceAreaId),
@@ -185,7 +190,7 @@ export type UpdateSiteResponse = Schema.Schema.Type<
 
 export const AssignSiteLabelInputSchema = Schema.Struct({
   labelId: LabelId,
-}).annotations({
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 export type AssignSiteLabelInput = Schema.Schema.Type<

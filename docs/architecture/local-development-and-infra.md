@@ -64,8 +64,14 @@ selected stage.
 Fresh linked worktrees usually do not contain gitignored env files. The local
 environment setup script copies `.env.local` from an explicit
 `LOCAL_ENV_SOURCE` first, then from the primary Git worktree associated with the
-linked worktree. The script does not generate fallback secrets; if no source env
-file exists, setup stops with a clear error.
+linked worktree. It prepares the env file before dependency installation so
+Codex and other non-interactive setup runs fail quickly when credentials are
+missing. When the source directory or primary worktree already has an
+`opensrc/` cache, setup links that cache into the new worktree and runs
+dependency installation with `CI=true` so the root `postinstall` does not repeat
+a network-backed dependency-source refresh. If no cache exists, setup lets
+`pnpm install` run the normal `opensrc` refresh. The script does not generate
+fallback secrets; if no source env file exists, setup stops with a clear error.
 
 Common local and Alchemy variables include:
 
@@ -92,20 +98,25 @@ missing or blank, the domain uses deterministic development geocoding.
 
 ## Production Infrastructure
 
-The repo root defines infrastructure with Alchemy v2. The stack entrypoint is
-`alchemy.run.ts`, with implementation helpers in `infra`.
+The repo root orchestrates infrastructure with Alchemy v2. The stack entrypoint
+is `alchemy.run.ts`; shared stage, Neon, Hyperdrive, queue, and output helpers
+stay in `infra`, while each deployable app owns its Cloudflare Worker/Vite
+resource declaration under `apps/*/infra`.
 
 The stack provisions:
 
 - native Alchemy Neon project and per-stage branch
 - native Alchemy Cloudflare Hyperdrive for Postgres connectivity
-- private Cloudflare domain Worker from `apps/domain/src/worker.ts`
-- public Cloudflare API Worker from `apps/api/src/worker.ts`
-- public Cloudflare MCP Worker from `apps/mcp/src/worker.ts`
-- public Cloudflare Agent Worker from `apps/agent/src/worker.ts`
-- Cloudflare Durable Object namespace for `CeirdAgent`
-- Cloudflare Workers AI binding for the Agent Worker
-- Cloudflare Vite app from `apps/app`
+- private Cloudflare domain Worker declared in
+  `apps/domain/infra/cloudflare-worker.ts` and executed from
+  `apps/domain/src/worker.ts`
+- public Cloudflare API Worker declared in
+  `apps/api/infra/cloudflare-worker.ts` and executed from
+  `apps/api/src/worker.ts`
+- public Cloudflare MCP Worker declared in
+  `apps/mcp/infra/cloudflare-worker.ts` and executed from
+  `apps/mcp/src/worker.ts`
+- Cloudflare Vite app declared in `apps/app/infra/cloudflare-vite.ts`
 - Cloudflare Queue for auth email
 - Cloudflare dead-letter queue for auth email failures
 - Cloudflare Email Worker binding for deployed auth email delivery
@@ -123,21 +134,21 @@ The private domain Worker declares the runtime resources that own state:
 `DATABASE` is the native Hyperdrive resource, `AUTH_EMAIL_QUEUE` is the native
 Queue resource, and `AUTH_EMAIL` is the Cloudflare Email Worker binding
 descriptor. Public API and MCP Workers declare only the `DOMAIN` service binding
-to that private Worker. The public Agent Worker declares `DOMAIN`, Workers AI,
-and the `CeirdAgent` Durable Object namespace; it calls the private domain
-Worker for action execution rather than owning Postgres. Infra tests compare all
-stack binding/env declarations against the runtime contracts in each app's
+to that private Worker. Infra tests compare the app-owned binding/env
+declarations against the runtime contracts in each app's
 `src/platform/cloudflare/env.ts`.
 The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
 queue scheduling, email binding delivery, and site geocoding are composed from
-Cloudflare bindings without making runtime apps import Alchemy. The fetch path
+Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
+modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
 batch.
 The domain Worker is also configured with Better Auth env vars, MCP resource
-metadata, Google Maps geocoding credentials, observability logs, and traces.
+metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
+credentials, observability logs, and traces.
 Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
 origins for deployed Alchemy stages. Every stage, including `main`, defaults to
 `app.<stage>.<zone>`, `api.<stage>.<zone>`, `mcp.<stage>.<zone>`, and
@@ -176,13 +187,11 @@ The native Neon branch resource applies the configured `NeonMigrationSource`
 before Hyperdrive reads the branch origin and before new domain code is uploaded.
 That source is Alchemy `Drizzle.Schema`, which loads the domain schema barrel and
 writes generated migration snapshots under `apps/domain/drizzle/alchemy`. The Neon
-branch resource depends on that schema resource, then applies SQL from
-`apps/domain/drizzle`, including historical package-local SQL files and future
-Alchemy-generated SQL files under the nested Alchemy directory.
-The repository is greenfield, so the Drizzle v2 timestamped migration layout is
-the current source of truth. Any cloud stages created before that layout change
-should be reset or have their migration tracking reconciled before deploying
-this branch.
+branch resource depends on that schema resource, then applies SQL from the
+stage-specific `appliedMigrationsDir`. Parent stages use the full
+`apps/domain/drizzle` bootstrap tree. Child stages fork from the parent and apply
+only `apps/domain/drizzle/alchemy`, avoiding a replay of historical package-local
+SQL files that already exist on the forked branch.
 The root provider layer also keeps a no-op legacy `Drizzle.Migrations`
 tombstone provider so existing Cloudflare state entries from the pre-native
 migration wrapper can be planned and deleted cleanly. New migrations are owned
@@ -196,30 +205,31 @@ environment variables. Do not set a separate infra stage; the Alchemy `--stage`
 value is the environment identity for state, resource names, and future Neon
 branch names.
 
-| Variable                                   | Default         | Purpose                                                                                              |
-| ------------------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------- |
-| `CEIRD_ZONE_NAME`                          | `ceird.app`     | Cloudflare zone.                                                                                     |
-| `CEIRD_APP_HOSTNAME`                       | stage-scoped    | App hostname override.                                                                               |
-| `CEIRD_API_HOSTNAME`                       | stage-scoped    | API hostname override.                                                                               |
-| `CEIRD_AGENT_HOSTNAME`                     | stage-scoped    | Agent Worker hostname override.                                                                      |
-| `CEIRD_MCP_HOSTNAME`                       | stage-scoped    | MCP hostname override.                                                                               |
-| `AUTH_EMAIL_FROM`                          | required        | Sender email address.                                                                                |
-| `AUTH_EMAIL_FROM_NAME`                     | `Ceird`         | Sender display name.                                                                                 |
-| `AUTH_RATE_LIMIT_ENABLED`                  | stage-dependent | Auth rate limiting flag; defaults to `false` for `pr-<number>` stages and `true` otherwise.          |
-| `GOOGLE_MAPS_API_KEY`                      | required        | Google Maps Geocoding API key for deployed domain Worker.                                            |
-| `CEIRD_HYPERDRIVE_NAME`                    | stage-dependent | Hyperdrive config name; the parent stage defaults to the adopted `ceird-production-postgres` config. |
-| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT` | `5`             | Soft maximum Hyperdrive origin database connections.                                                 |
-| `CEIRD_NEON_DATABASE_NAME`                 | `ceird`         | Database created in the parent Neon project.                                                         |
-| `CEIRD_NEON_DEFAULT_BRANCH_NAME`           | `base`          | Unmigrated default branch created with the Neon project.                                             |
-| `CEIRD_NEON_HISTORY_RETENTION_SECONDS`     | `21600`         | Parent Neon project WAL history retention window.                                                    |
-| `CEIRD_NEON_PARENT_BRANCH_PROTECTED`       | `false`         | Set to `true` to protect the parent branch when the Neon plan allows it.                             |
-| `CEIRD_NEON_PARENT_BRANCH_NAME`            | `main`          | Parent branch used by non-parent stages.                                                             |
-| `CEIRD_NEON_PARENT_STAGE`                  | `main`          | Stage that owns the shared Neon project and parent branch.                                           |
-| `CEIRD_NEON_PG_VERSION`                    | `17`            | Neon Postgres major version.                                                                         |
-| `CEIRD_NEON_REGION`                        | `aws-eu-west-2` | Neon project region.                                                                                 |
-| `CEIRD_NEON_ROLE_NAME`                     | `ceird`         | Initial Neon database owner role.                                                                    |
-| `NEON_API_KEY`                             | provider secret | Neon API key consumed by Alchemy's Neon provider.                                                    |
-| `NEON_ORG_ID`                              | optional        | Neon organization ID for project creation.                                                           |
+| Variable                                     | Default         | Purpose                                                                                              |
+| -------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
+| `CEIRD_ZONE_NAME`                            | `ceird.app`     | Cloudflare zone.                                                                                     |
+| `CEIRD_APP_HOSTNAME`                         | stage-scoped    | App hostname override.                                                                               |
+| `CEIRD_API_HOSTNAME`                         | stage-scoped    | API hostname override.                                                                               |
+| `CEIRD_MCP_HOSTNAME`                         | stage-scoped    | MCP hostname override.                                                                               |
+| `CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES` | `512`           | Optional domain Worker MCP authorized-app cache entry limit.                                         |
+| `CEIRD_MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS` | `1800`          | Optional domain Worker MCP authorized-app cache TTL.                                                 |
+| `AUTH_EMAIL_FROM`                            | required        | Sender email address.                                                                                |
+| `AUTH_EMAIL_FROM_NAME`                       | `Ceird`         | Sender display name.                                                                                 |
+| `AUTH_RATE_LIMIT_ENABLED`                    | stage-dependent | Auth rate limiting flag; defaults to `false` for `pr-<number>` stages and `true` otherwise.          |
+| `GOOGLE_MAPS_API_KEY`                        | required        | Google Maps Geocoding API key for deployed domain Worker.                                            |
+| `CEIRD_HYPERDRIVE_NAME`                      | stage-dependent | Hyperdrive config name; the parent stage defaults to the adopted `ceird-production-postgres` config. |
+| `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT`   | `5`             | Soft maximum Hyperdrive origin database connections.                                                 |
+| `CEIRD_NEON_DATABASE_NAME`                   | `ceird`         | Database created in the parent Neon project.                                                         |
+| `CEIRD_NEON_DEFAULT_BRANCH_NAME`             | `base`          | Unmigrated default branch created with the Neon project.                                             |
+| `CEIRD_NEON_HISTORY_RETENTION_SECONDS`       | `21600`         | Parent Neon project WAL history retention window.                                                    |
+| `CEIRD_NEON_PARENT_BRANCH_PROTECTED`         | `false`         | Set to `true` to protect the parent branch when the Neon plan allows it.                             |
+| `CEIRD_NEON_PARENT_BRANCH_NAME`              | `main`          | Parent branch used by non-parent stages.                                                             |
+| `CEIRD_NEON_PARENT_STAGE`                    | `main`          | Stage that owns the shared Neon project and parent branch.                                           |
+| `CEIRD_NEON_PG_VERSION`                      | `17`            | Neon Postgres major version.                                                                         |
+| `CEIRD_NEON_REGION`                          | `aws-eu-west-2` | Neon project region.                                                                                 |
+| `CEIRD_NEON_ROLE_NAME`                       | `ceird`         | Initial Neon database owner role.                                                                    |
+| `NEON_API_KEY`                               | provider secret | Neon API key consumed by Alchemy's Neon provider.                                                    |
+| `NEON_ORG_ID`                                | optional        | Neon organization ID for project creation.                                                           |
 
 Resource names use `ceird-<normalized-alchemy-stage>-<suffix>`. Branch-shaped
 stages are normalized to provider-safe lowercase slugs with deterministic hash
@@ -243,10 +253,10 @@ The branch migration input is modeled in `infra` as
 `Drizzle.Schema` at the root-owned `infra/domain-drizzle-schema.ts` wrapper. That
 wrapper loads the domain schema barrel at `apps/domain/src/platform/database/schema.ts`
 through the same TypeScript resolver Alchemy needs at deploy time. Its
-`generatedMigrationsDir` is `apps/domain/drizzle/alchemy`, while its
-`appliedMigrationsDir` is `apps/domain/drizzle`. Keeping those roles explicit lets
-Alchemy regenerate future SQL before the Neon branch runs the recursive parent
-migration tree that still contains the historical package-local SQL files.
+`generatedMigrationsDir` is always `apps/domain/drizzle/alchemy`. Parent stages
+use `apps/domain/drizzle` as `appliedMigrationsDir` for bootstrap coverage;
+child stages use `apps/domain/drizzle/alchemy` as `appliedMigrationsDir` because
+they inherit the historical schema from the parent branch.
 
 ## Pull Request Preview Infrastructure
 

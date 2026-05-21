@@ -17,9 +17,9 @@ import type {
   SiteOption as JobSiteOption,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
-import { HttpServerRequest } from "@effect/platform";
-import { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -51,6 +51,15 @@ const siteInput = {
   serviceAreaId,
   town: "Dublin",
 } satisfies CreateSiteInput;
+
+function makeSqlError(message: string) {
+  return new SqlError({
+    reason: new UnknownError({
+      cause: message,
+      message,
+    }),
+  });
+}
 
 function makeActor(
   role: OrganizationActor["role"],
@@ -151,7 +160,7 @@ function makeHarness(
   const unexpected = (label: string) =>
     Effect.die(new Error(`Unexpected repository call: ${label}`));
 
-  const sitesRepository = SitesRepository.make({
+  const sitesRepository = SitesRepository.of({
     create: (input: {
       readonly addressLine1: string;
       readonly country: string;
@@ -260,7 +269,7 @@ function makeHarness(
       }),
   });
 
-  const commentsRepository = CommentsRepository.make({
+  const commentsRepository = CommentsRepository.of({
     addForSite: (input: {
       readonly authorUserId: UserId;
       readonly body: string;
@@ -309,7 +318,7 @@ function makeHarness(
     ) => effect,
   });
 
-  const siteLabelAssignmentsRepository = SiteLabelAssignmentsRepository.make({
+  const siteLabelAssignmentsRepository = SiteLabelAssignmentsRepository.of({
     assignToSite: (input: {
       readonly labelId: Label["id"];
       readonly organizationId: OrganizationId;
@@ -360,7 +369,7 @@ function makeHarness(
       }),
   });
 
-  const serviceAreasRepository = ServiceAreasRepository.make({
+  const serviceAreasRepository = ServiceAreasRepository.of({
     create: (_input: unknown) => unexpected("configuration.createServiceArea"),
     list: (_organizationId: OrganizationId) =>
       Effect.succeed([] satisfies readonly ServiceArea[]),
@@ -402,7 +411,7 @@ function makeHarness(
     Layer.mergeAll(
       Layer.succeed(
         CurrentOrganizationActor,
-        CurrentOrganizationActor.make({
+        CurrentOrganizationActor.of({
           get: () => Effect.succeed(actor),
         })
       ),
@@ -454,7 +463,7 @@ function runSitesServiceExit<Value, Error>(
 
 function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
   return Exit.isFailure(exit)
-    ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+    ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
     : undefined;
 }
 
@@ -603,9 +612,7 @@ describe("sites service", () => {
 
   it("maps site label assignment SQL failures without reloading the site", async () => {
     const assignHarness = makeHarness({
-      assignLabelFailure: new SqlError({
-        message: "database unavailable",
-      }),
+      assignLabelFailure: makeSqlError("database unavailable"),
     });
 
     const assignExit = await runSitesServiceExit(
@@ -625,9 +632,7 @@ describe("sites service", () => {
     expect(assignHarness.calls.getOptionById).toBe(0);
 
     const removeHarness = makeHarness({
-      removeLabelFailure: new SqlError({
-        message: "database unavailable",
-      }),
+      removeLabelFailure: makeSqlError("database unavailable"),
     });
 
     const removeExit = await runSitesServiceExit(
@@ -740,9 +745,7 @@ describe("sites service", () => {
 
   it("maps service area validation storage failures from site creation", async () => {
     const harness = makeHarness({
-      serviceAreaStorageFailure: new SqlError({
-        message: "database unavailable",
-      }),
+      serviceAreaStorageFailure: makeSqlError("database unavailable"),
     });
 
     const exit = await runSitesServiceExit(

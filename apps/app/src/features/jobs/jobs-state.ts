@@ -17,18 +17,34 @@ import type {
 import { JobListItemSchema } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
-import {
-  createCollection,
-  localOnlyCollectionOptions,
-} from "@tanstack/react-db";
+import { QueryClient } from "@tanstack/query-core";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import { createCollection } from "@tanstack/react-db";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import { use } from "react";
 import * as React from "react";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
+import { listAllCurrentServerJobs } from "#/features/jobs/jobs-server";
+import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import { upsertOrganizationLabel } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
+import {
+  ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+  markTanStackDbCollectionWrite,
+  reconcileQueryCollectionDataAfterConcurrentWrite,
+  replaceSyncedCollectionData,
+  stripTanStackDbCollectionData,
+} from "#/lib/tanstack-db-collection";
+import type {
+  TanStackDbCollectionSnapshot,
+  TanStackDbCollectionWriteVersionRef,
+} from "#/lib/tanstack-db-collection";
+import { seedQueryCollectionInitialData } from "#/lib/tanstack-db-query";
+import { useHydratedCollectionItems } from "#/lib/tanstack-db-react";
+
+import { organizationJobsQueryKey } from "./jobs-query-keys";
 
 type JobsStatusFilter = "active" | "all" | JobStatus;
 
@@ -72,9 +88,12 @@ export interface JobsAsyncResult {
 type JobsCollection = ReturnType<typeof makeJobsCollection>;
 
 interface JobsStateStore {
+  readonly collectionWriteVersionRef: TanStackDbCollectionWriteVersionRef;
+  readonly fallbackJobsRef: React.MutableRefObject<readonly JobListItem[]>;
   readonly jobOrderRef: React.MutableRefObject<readonly JobListItem["id"][]>;
   readonly jobs: JobsCollection;
   readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+  readonly queryClient: QueryClient;
 }
 
 interface JobsProviderState {
@@ -171,15 +190,27 @@ export function JobsStateProvider({
   children,
   list,
   options,
+  queryClient: providedQueryClient,
+  viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
   readonly children: React.ReactNode;
   readonly list: JobListResponse;
   readonly options: JobOptionsResponse;
+  readonly queryClient?: QueryClient | undefined;
+  readonly viewer: JobsViewer;
 }) {
   const organizationIdRef = React.useRef(activeOrganizationId);
+  const [fallbackQueryClient] = React.useState(() => new QueryClient());
+  const queryClient = providedQueryClient ?? fallbackQueryClient;
   const [store] = React.useState(() =>
-    makeJobsStateStore(organizationIdRef, activeOrganizationId, list.items)
+    makeJobsStateStore(
+      organizationIdRef,
+      activeOrganizationId,
+      viewer,
+      queryClient,
+      list.items
+    )
   );
   const previousListRef = React.useRef(list);
   const previousOptionsRef = React.useRef(options);
@@ -194,13 +225,6 @@ export function JobsStateProvider({
   React.useEffect(() => {
     organizationIdRef.current = activeOrganizationId;
   }, [activeOrganizationId, organizationIdRef]);
-
-  React.useEffect(
-    () => () => {
-      void store.jobs.cleanup();
-    },
-    [store]
-  );
 
   const replaceJobsListState = React.useCallback(
     async (organizationId: OrganizationId, response: JobListResponse) => {
@@ -488,29 +512,75 @@ export function deriveContactsForSite(
 function makeJobsStateStore(
   organizationIdRef: React.MutableRefObject<OrganizationId>,
   organizationId: OrganizationId,
+  viewer: JobsViewer,
+  queryClient: QueryClient,
   jobs: readonly JobListItem[]
 ): JobsStateStore {
+  const collectionWriteVersionRef = { current: 0 };
+  const fallbackJobsRef = {
+    current: jobs,
+  };
+
   return {
+    collectionWriteVersionRef,
+    fallbackJobsRef,
     jobOrderRef: {
       current: jobs.map((job) => job.id),
     },
-    jobs: makeJobsCollection(organizationId, jobs),
+    jobs: makeJobsCollection(
+      organizationId,
+      viewer,
+      queryClient,
+      jobs,
+      collectionWriteVersionRef
+    ),
     organizationIdRef,
+    queryClient,
   };
 }
 
 function makeJobsCollection(
   organizationId: OrganizationId,
-  jobs: readonly JobListItem[]
+  viewer: JobsViewer,
+  queryClient: QueryClient,
+  jobs: readonly JobListItem[],
+  writeVersionRef: TanStackDbCollectionWriteVersionRef
 ) {
-  return createCollection(
-    localOnlyCollectionOptions({
+  const queryKey = organizationJobsQueryKey({
+    organizationId,
+    role: viewer.role,
+    userId: viewer.userId,
+  });
+  seedQueryCollectionInitialData(queryClient, queryKey, [...jobs]);
+
+  const collection: {
+    current?: TanStackDbCollectionSnapshot<JobListItem>;
+  } = {};
+  const createdCollection = createCollection(
+    queryCollectionOptions({
       getKey: (job) => job.id,
-      id: `organization:${organizationId}:jobs`,
-      initialData: [...jobs],
-      schema: Schema.standardSchemaV1(JobListItemSchema),
+      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+      id: `organization:${organizationId}:user:${viewer.userId}:role:${viewer.role}:jobs`,
+      queryClient,
+      queryFn: async () => {
+        const requestWriteVersion = writeVersionRef.current;
+        const response = await listAllCurrentServerJobs({});
+
+        return reconcileQueryCollectionDataAfterConcurrentWrite({
+          collection: collection.current,
+          incomingItems: response.items,
+          requestWriteVersion,
+          writeVersionRef,
+        });
+      },
+      queryKey,
+      retry: false,
+      schema: Schema.toStandardSchemaV1(JobListItemSchema),
+      staleTime: 30_000,
     })
   );
+  collection.current = createdCollection;
+  return createdCollection;
 }
 
 function useJobsStateContext() {
@@ -564,56 +634,48 @@ function jobsProviderStateReducer(
 }
 
 function useJobsCollectionItems(store: JobsStateStore): readonly JobListItem[] {
-  const [items, setItems] = React.useState(() => jobsFromCollection(store));
+  const items = useHydratedCollectionItems(
+    store.jobs,
+    store.fallbackJobsRef.current
+  );
 
-  React.useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      if (active) {
-        setItems(jobsFromCollection(store));
-      }
-    };
-    const subscription = store.jobs.subscribeChanges(refresh);
-
-    refresh();
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [store]);
-
-  return items;
+  return React.useMemo(
+    () => jobsFromCollectionData(store, items),
+    [items, store]
+  );
 }
 
-async function replaceJobs(
+function replaceJobs(
   store: JobsStateStore,
   jobs: readonly JobListItem[]
-) {
+): Promise<void> {
+  store.fallbackJobsRef.current = jobs;
   store.jobOrderRef.current = jobs.map((job) => job.id);
-  const existingKeys = [...store.jobs.keys()];
-
-  if (existingKeys.length > 0) {
-    await store.jobs.delete(existingKeys).isPersisted.promise;
-  }
-
-  if (jobs.length > 0) {
-    await store.jobs.insert([...jobs]).isPersisted.promise;
-  }
+  markTanStackDbCollectionWrite(store.collectionWriteVersionRef);
+  replaceSyncedCollectionData(store.jobs, jobs);
+  return Promise.resolve();
 }
 
 function jobsFromCollection(store: JobsStateStore): readonly JobListItem[] {
+  return jobsFromCollectionData(
+    store,
+    stripTanStackDbCollectionData(store.jobs.toArray)
+  );
+}
+
+function jobsFromCollectionData(
+  store: JobsStateStore,
+  jobs: readonly JobListItem[]
+): readonly JobListItem[] {
   const orderByJobId = new Map(
     store.jobOrderRef.current.map((jobId, index) => [jobId, index])
   );
 
-  return store.jobs.toArray
-    .map(withoutVirtualProps)
-    .toSorted(
-      (left, right) =>
-        (orderByJobId.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
-        (orderByJobId.get(right.id) ?? Number.MAX_SAFE_INTEGER)
-    );
+  return jobs.toSorted(
+    (left, right) =>
+      (orderByJobId.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+      (orderByJobId.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+  );
 }
 
 async function runTrackedJobsOperation<Success>(
@@ -642,7 +704,7 @@ function listAllBrowserJobs() {
   return runBrowserAppApiRequest("JobsBrowser.listAllJobs", (client) => {
     const loadPage = (cursor: JobListQuery["cursor"]) =>
       client.jobs.listJobs({
-        urlParams: cursor ? { cursor } : {},
+        query: cursor ? { cursor } : {},
       });
 
     const loadRemainingPages = (
@@ -945,29 +1007,7 @@ export function upsertJobListItem(
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   return Option.isSome(failure) ? failure.value : Cause.squash(cause);
-}
-
-function withoutVirtualProps<Item extends object>(item: Item): Item {
-  const {
-    $collectionId: _collectionId,
-    $key: _key,
-    $origin: _origin,
-    $synced: _synced,
-    ...data
-  } = item as Item & {
-    readonly $collectionId?: unknown;
-    readonly $key?: unknown;
-    readonly $origin?: unknown;
-    readonly $synced?: unknown;
-  };
-
-  void _collectionId;
-  void _key;
-  void _origin;
-  void _synced;
-
-  return data as Item;
 }

@@ -1,6 +1,5 @@
-/* oxlint-disable eslint/max-classes-per-file */
-
 import { INTERNAL_ORGANIZATION_ROLES } from "@ceird/identity-core";
+/* oxlint-disable eslint/max-classes-per-file */
 import {
   ActivityId as ActivityIdSchema,
   ContactId as ContactIdSchema,
@@ -88,9 +87,9 @@ import {
   SiteOptionSchema,
 } from "@ceird/sites-core";
 import type { SiteIdType as SiteId, SiteOption } from "@ceird/sites-core";
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql";
-import { Config, Effect, Layer, Option, Schema } from "effect";
+import { Context, Config, Effect, Layer, Option, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
@@ -462,15 +461,13 @@ const decodeOrganizationActivityCursorState = Schema.decodeUnknownSync(
   })
 );
 
-export class JobsRepository extends Effect.Service<JobsRepository>()(
+export class JobsRepository extends Context.Service<JobsRepository>()(
   "@ceird/domains/jobs/JobsRepository",
   {
-    accessors: true,
-    dependencies: [CommentsRepository.Default],
-    effect: Effect.gen(function* JobsRepositoryLive() {
+    make: Effect.gen(function* JobsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
       const commentsRepository = yield* CommentsRepository;
-      const defaultListLimit = yield* Config.integer(
+      const defaultListLimit = yield* Config.int(
         "JOBS_DEFAULT_LIST_LIMIT"
       ).pipe(Config.withDefault(50));
       const boundedDefaultListLimit = clampJobListLimit(defaultListLimit);
@@ -722,7 +719,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           ${lockClause}
         `;
 
-        return Option.fromNullable(rows[0]?.organization_id).pipe(
+        return Option.fromNullishOr(rows[0]?.organization_id).pipe(
           Option.map(decodeOrganizationId)
         );
       });
@@ -1255,7 +1252,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]).pipe(
+        return Option.fromNullishOr(rows[0]).pipe(
           Option.map(mapJobCollaboratorRow)
         );
       });
@@ -1310,7 +1307,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           ${lockClause}
         `;
 
-        return Option.fromNullable(rows[0]).pipe(
+        return Option.fromNullishOr(rows[0]).pipe(
           Option.map((row) => mapJobRow(row))
         );
       });
@@ -1380,7 +1377,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           job.contactId === undefined
             ? Effect.succeed(Option.none<JobContactDetail>())
             : findContactDetailById(organizationId, job.contactId).pipe(
-                Effect.map(Option.fromNullable)
+                Effect.map(Option.fromNullishOr)
               );
         const siteEffect =
           job.siteId === undefined
@@ -1516,7 +1513,7 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]).pipe(
+        return Option.fromNullishOr(rows[0]).pipe(
           Option.map(mapJobContactDetailRow),
           Option.getOrUndefined
         );
@@ -1903,13 +1900,104 @@ export class JobsRepository extends Effect.Service<JobsRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly addActivity = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["addActivity"]
+    >
+  ) => JobsRepository.use((service) => service.addActivity(...args));
+  static readonly addComment = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["addComment"]
+    >
+  ) => JobsRepository.use((service) => service.addComment(...args));
+  static readonly addCostLine = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["addCostLine"]
+    >
+  ) => JobsRepository.use((service) => service.addCostLine(...args));
+  static readonly addVisit = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["addVisit"]
+    >
+  ) => JobsRepository.use((service) => service.addVisit(...args));
+  static readonly attachCollaborator = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["attachCollaborator"]
+    >
+  ) => JobsRepository.use((service) => service.attachCollaborator(...args));
+  static readonly create = (
+    ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["create"]>
+  ) => JobsRepository.use((service) => service.create(...args));
+  static readonly findUserCollaboratorGrant = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["findUserCollaboratorGrant"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.findUserCollaboratorGrant(...args));
+  static readonly getDetail = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["getDetail"]
+    >
+  ) => JobsRepository.use((service) => service.getDetail(...args));
+  static readonly linkSiteContact = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["linkSiteContact"]
+    >
+  ) => JobsRepository.use((service) => service.linkSiteContact(...args));
+  static readonly list = (
+    ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["list"]>
+  ) => JobsRepository.use((service) => service.list(...args));
+  static readonly listAccessibleWorkItemIdsForUser = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof JobsRepository
+      >["listAccessibleWorkItemIdsForUser"]
+    >
+  ) =>
+    JobsRepository.use((service) =>
+      service.listAccessibleWorkItemIdsForUser(...args)
+    );
+  static readonly listOrganizationActivity = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listOrganizationActivity"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.listOrganizationActivity(...args));
+  static readonly patch = (
+    ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["patch"]>
+  ) => JobsRepository.use((service) => service.patch(...args));
+  static readonly removeCollaborator = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["removeCollaborator"]
+    >
+  ) => JobsRepository.use((service) => service.removeCollaborator(...args));
+  static readonly reopen = (
+    ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["reopen"]>
+  ) => JobsRepository.use((service) => service.reopen(...args));
+  static readonly transition = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["transition"]
+    >
+  ) => JobsRepository.use((service) => service.transition(...args));
+  static readonly updateCollaborator = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["updateCollaborator"]
+    >
+  ) => JobsRepository.use((service) => service.updateCollaborator(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    JobsRepository,
+    JobsRepository.make
+  );
+  static readonly Default = JobsRepository.DefaultWithoutDependencies.pipe(
+    Layer.provide(CommentsRepository.Default)
+  );
+}
 
-export class RateCardsRepository extends Effect.Service<RateCardsRepository>()(
+export class RateCardsRepository extends Context.Service<RateCardsRepository>()(
   "@ceird/domains/jobs/RateCardsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* RateCardsRepositoryLive() {
+    make: Effect.gen(function* RateCardsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const list = Effect.fn("RateCardsRepository.list")(function* (
@@ -2089,13 +2177,33 @@ export class RateCardsRepository extends Effect.Service<RateCardsRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof RateCardsRepository>["create"]
+    >
+  ) => RateCardsRepository.use((service) => service.create(...args));
+  static readonly list = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof RateCardsRepository>["list"]
+    >
+  ) => RateCardsRepository.use((service) => service.list(...args));
+  static readonly update = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof RateCardsRepository>["update"]
+    >
+  ) => RateCardsRepository.use((service) => service.update(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    RateCardsRepository,
+    RateCardsRepository.make
+  );
+  static readonly Default = RateCardsRepository.DefaultWithoutDependencies;
+}
 
-export class ContactsRepository extends Effect.Service<ContactsRepository>()(
+export class ContactsRepository extends Context.Service<ContactsRepository>()(
   "@ceird/domains/jobs/ContactsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* ContactsRepositoryLive() {
+    make: Effect.gen(function* ContactsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const findById = Effect.fn("ContactsRepository.findById")(function* (
@@ -2111,7 +2219,7 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.id).pipe(
+        return Option.fromNullishOr(rows[0]?.id).pipe(
           Option.map(decodeContactId)
         );
       });
@@ -2174,13 +2282,33 @@ export class ContactsRepository extends Effect.Service<ContactsRepository>()(
       };
     }),
   }
-) {}
+) {
+  static readonly create = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ContactsRepository>["create"]
+    >
+  ) => ContactsRepository.use((service) => service.create(...args));
+  static readonly findById = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ContactsRepository>["findById"]
+    >
+  ) => ContactsRepository.use((service) => service.findById(...args));
+  static readonly listOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof ContactsRepository>["listOptions"]
+    >
+  ) => ContactsRepository.use((service) => service.listOptions(...args));
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    ContactsRepository,
+    ContactsRepository.make
+  );
+  static readonly Default = ContactsRepository.DefaultWithoutDependencies;
+}
 
-export class JobLabelAssignmentsRepository extends Effect.Service<JobLabelAssignmentsRepository>()(
+export class JobLabelAssignmentsRepository extends Context.Service<JobLabelAssignmentsRepository>()(
   "@ceird/domains/jobs/JobLabelAssignmentsRepository",
   {
-    accessors: true,
-    effect: Effect.gen(function* JobLabelAssignmentsRepositoryLive() {
+    make: Effect.gen(function* JobLabelAssignmentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
       const lookupWorkItemOrganization = Effect.fn(
@@ -2193,7 +2321,7 @@ export class JobLabelAssignmentsRepository extends Effect.Service<JobLabelAssign
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]?.organization_id).pipe(
+        return Option.fromNullishOr(rows[0]?.organization_id).pipe(
           Option.map(decodeOrganizationId)
         );
       });
@@ -2238,7 +2366,7 @@ export class JobLabelAssignmentsRepository extends Effect.Service<JobLabelAssign
           limit 1
         `;
 
-        return Option.fromNullable(rows[0]).pipe(Option.map(mapLabelRow));
+        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapLabelRow));
       });
 
       const getActiveLabelOrFail = Effect.fn(
@@ -2362,7 +2490,32 @@ export class JobLabelAssignmentsRepository extends Effect.Service<JobLabelAssign
       };
     }),
   }
-) {}
+) {
+  static readonly assignToJob = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobLabelAssignmentsRepository>["assignToJob"]
+    >
+  ) =>
+    JobLabelAssignmentsRepository.use((service) =>
+      service.assignToJob(...args)
+    );
+  static readonly removeFromJob = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof JobLabelAssignmentsRepository
+      >["removeFromJob"]
+    >
+  ) =>
+    JobLabelAssignmentsRepository.use((service) =>
+      service.removeFromJob(...args)
+    );
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    JobLabelAssignmentsRepository,
+    JobLabelAssignmentsRepository.make
+  );
+  static readonly Default =
+    JobLabelAssignmentsRepository.DefaultWithoutDependencies;
+}
 
 export const JobsRepositoriesLive = Layer.mergeAll(
   CommentsRepository.Default,

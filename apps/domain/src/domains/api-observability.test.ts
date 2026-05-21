@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, HashMap, LogLevel, Logger, Option } from "effect";
+import { Cause, Effect, Exit, Logger, Option, References } from "effect";
 
 import { observeApiOperation } from "./api-observability.js";
 
@@ -6,8 +6,8 @@ function captureLogs() {
   const logs: unknown[] = [];
   const logger = Logger.make((input) => {
     logs.push({
-      annotations: Object.fromEntries(HashMap.toEntries(input.annotations)),
-      level: input.logLevel.label,
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
       message: input.message,
     });
   });
@@ -32,14 +32,14 @@ describe("API operation observability", () => {
         service: "JobsService",
       }),
       Effect.exit,
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.runPromise
     );
 
     expect(Exit.isFailure(exit)).toBeTruthy();
     const actualFailure = Exit.isFailure(exit)
-      ? Option.getOrUndefined(Cause.failureOption(exit.cause))
+      ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
       : undefined;
     expect(actualFailure).toStrictEqual(failure);
     expect(logs).toStrictEqual([
@@ -76,8 +76,8 @@ describe("API operation observability", () => {
         service: "JobsService",
       }),
       Effect.exit,
-      Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
-      Logger.withMinimumLogLevel(LogLevel.Trace),
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
       Effect.runPromise
     );
 

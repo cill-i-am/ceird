@@ -1,4 +1,5 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
+import type { UserId as UserIdType } from "@ceird/identity-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import { SiteCommentSchema } from "@ceird/sites-core";
 import type {
@@ -37,6 +38,7 @@ type EffectClientMock = (...args: unknown[]) => unknown;
 
 const organizationId = decodeOrganizationId("org_123");
 const otherOrganizationId = decodeOrganizationId("org_456");
+const userId = "user_123" as UserIdType;
 const existingSiteId = "11111111-1111-4111-8111-111111111111" as SiteIdType;
 const createdSiteId = "22222222-2222-4222-8222-222222222222" as SiteIdType;
 const urgentLabelId = "33333333-3333-4333-8333-333333333333" as LabelIdType;
@@ -175,7 +177,7 @@ describe("sites state integration", () => {
     },
     async () => {
       mockedCreateSite.mockReturnValue(
-        Effect.async<CreateSiteResponse>((resume) => {
+        Effect.callback<CreateSiteResponse>((resume) => {
           resolveCreatedSite = (site) => resume(Effect.succeed(site));
         })
       );
@@ -202,7 +204,7 @@ describe("sites state integration", () => {
     },
     async () => {
       mockedUpdateSite.mockReturnValue(
-        Effect.async<UpdateSiteResponse>((resume) => {
+        Effect.callback<UpdateSiteResponse>((resume) => {
           resolveUpdatedSite = (site) => resume(Effect.succeed(site));
         })
       );
@@ -245,7 +247,7 @@ describe("sites state integration", () => {
         expect(screen.getByTestId("site-labels")).toHaveTextContent("Urgent");
       });
       expect(mockedAssignSiteLabel).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: { labelId: urgentLabelId },
       });
     }
@@ -279,7 +281,7 @@ describe("sites state integration", () => {
         payload: { name: "Warranty" },
       });
       expect(mockedAssignSiteLabel).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: { labelId: warrantyLabelId },
       });
     }
@@ -293,7 +295,7 @@ describe("sites state integration", () => {
     async () => {
       const warrantyLabel = buildLabel(warrantyLabelId, "Warranty");
       mockedCreateLabel.mockReturnValue(
-        Effect.async<Label>((resume) => {
+        Effect.callback<Label>((resume) => {
           resolveCreatedLabel = (label) => resume(Effect.succeed(label));
         })
       );
@@ -343,7 +345,7 @@ describe("sites state integration", () => {
         expect(screen.getByTestId("site-labels")).toHaveTextContent("none");
       });
       expect(mockedRemoveSiteLabel).toHaveBeenCalledWith({
-        path: { labelId: urgentLabelId, siteId: existingSiteId },
+        params: { labelId: urgentLabelId, siteId: existingSiteId },
       });
     }
   );
@@ -381,7 +383,7 @@ describe("sites state integration", () => {
         );
       });
       expect(mockedListSiteComments).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
       });
     }
   );
@@ -425,11 +427,11 @@ describe("sites state integration", () => {
         );
       });
       expect(mockedAddSiteComment).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
         payload: buildAddSiteCommentInput("New note"),
       });
       expect(mockedListSiteComments).toHaveBeenCalledWith({
-        path: { siteId: existingSiteId },
+        params: { siteId: existingSiteId },
       });
     }
   );
@@ -634,6 +636,10 @@ function renderSitesStateProbe({
       options={{
         serviceAreas: [],
         sites: [site],
+      }}
+      viewer={{
+        role: "owner",
+        userId,
       }}
     >
       <SitesStateProbe />

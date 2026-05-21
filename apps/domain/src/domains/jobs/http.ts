@@ -1,5 +1,5 @@
-import { HttpApiBuilder } from "@effect/platform";
 import { Effect, Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
@@ -26,8 +26,8 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
     const jobsService = yield* JobsService;
 
     return handlers
-      .handle("listJobs", ({ urlParams }) =>
-        jobsService.list(urlParams).pipe(observeJobsOperation("listJobs"))
+      .handle("listJobs", ({ query }) =>
+        jobsService.list(query).pipe(observeJobsOperation("listJobs"))
       )
       .handle("getJobOptions", () =>
         jobsService.getOptions().pipe(observeJobsOperation("getJobOptions"))
@@ -45,74 +45,74 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
       .handle("createJob", ({ payload }) =>
         jobsService.create(payload).pipe(observeJobsOperation("createJob"))
       )
-      .handle("listOrganizationActivity", ({ urlParams }) =>
+      .handle("listOrganizationActivity", ({ query }) =>
         jobsService
-          .listOrganizationActivity(urlParams)
+          .listOrganizationActivity(query)
           .pipe(observeJobsOperation("listOrganizationActivity"))
       )
-      .handle("getJobDetail", ({ path }) =>
+      .handle("getJobDetail", ({ params }) =>
         jobsService
-          .getDetail(path.workItemId)
+          .getDetail(params.workItemId)
           .pipe(observeJobsOperation("getJobDetail"))
       )
-      .handle("patchJob", ({ path, payload }) =>
+      .handle("patchJob", ({ params, payload }) =>
         jobsService
-          .patch(path.workItemId, payload)
+          .patch(params.workItemId, payload)
           .pipe(observeJobsOperation("patchJob"))
       )
-      .handle("transitionJob", ({ path, payload }) =>
+      .handle("transitionJob", ({ params, payload }) =>
         jobsService
-          .transition(path.workItemId, payload)
+          .transition(params.workItemId, payload)
           .pipe(observeJobsOperation("transitionJob"))
       )
-      .handle("reopenJob", ({ path }) =>
+      .handle("reopenJob", ({ params }) =>
         jobsService
-          .reopen(path.workItemId)
+          .reopen(params.workItemId)
           .pipe(observeJobsOperation("reopenJob"))
       )
-      .handle("addJobComment", ({ path, payload }) =>
+      .handle("addJobComment", ({ params, payload }) =>
         jobsService
-          .addComment(path.workItemId, payload)
+          .addComment(params.workItemId, payload)
           .pipe(observeJobsOperation("addJobComment"))
       )
-      .handle("addJobVisit", ({ path, payload }) =>
+      .handle("addJobVisit", ({ params, payload }) =>
         jobsService
-          .addVisit(path.workItemId, payload)
+          .addVisit(params.workItemId, payload)
           .pipe(observeJobsOperation("addJobVisit"))
       )
-      .handle("assignJobLabel", ({ path, payload }) =>
+      .handle("assignJobLabel", ({ params, payload }) =>
         jobsService
-          .assignLabel(path.workItemId, payload)
+          .assignLabel(params.workItemId, payload)
           .pipe(observeJobsOperation("assignJobLabel"))
       )
-      .handle("removeJobLabel", ({ path }) =>
+      .handle("removeJobLabel", ({ params }) =>
         jobsService
-          .removeLabel(path.workItemId, path.labelId)
+          .removeLabel(params.workItemId, params.labelId)
           .pipe(observeJobsOperation("removeJobLabel"))
       )
-      .handle("addJobCostLine", ({ path, payload }) =>
+      .handle("addJobCostLine", ({ params, payload }) =>
         jobsService
-          .addCostLine(path.workItemId, payload)
+          .addCostLine(params.workItemId, payload)
           .pipe(observeJobsOperation("addJobCostLine"))
       )
-      .handle("listJobCollaborators", ({ path }) =>
+      .handle("listJobCollaborators", ({ params }) =>
         jobsService
-          .listCollaborators(path.workItemId)
+          .listCollaborators(params.workItemId)
           .pipe(observeJobsOperation("listJobCollaborators"))
       )
-      .handle("attachJobCollaborator", ({ path, payload }) =>
+      .handle("attachJobCollaborator", ({ params, payload }) =>
         jobsService
-          .attachCollaborator(path.workItemId, payload)
+          .attachCollaborator(params.workItemId, payload)
           .pipe(observeJobsOperation("attachJobCollaborator"))
       )
-      .handle("updateJobCollaborator", ({ path, payload }) =>
+      .handle("updateJobCollaborator", ({ params, payload }) =>
         jobsService
-          .updateCollaborator(path.workItemId, path.collaboratorId, payload)
+          .updateCollaborator(params.workItemId, params.collaboratorId, payload)
           .pipe(observeJobsOperation("updateJobCollaborator"))
       )
-      .handle("detachJobCollaborator", ({ path }) =>
+      .handle("detachJobCollaborator", ({ params }) =>
         jobsService
-          .removeCollaborator(path.workItemId, path.collaboratorId)
+          .removeCollaborator(params.workItemId, params.collaboratorId)
           .pipe(observeJobsOperation("detachJobCollaborator"))
       );
   })
@@ -136,9 +136,9 @@ const RateCardsHandlersLive = HttpApiBuilder.group(
             .createRateCard(payload)
             .pipe(observeRateCardsOperation("createRateCard"))
         )
-        .handle("updateRateCard", ({ path, payload }) =>
+        .handle("updateRateCard", ({ params, payload }) =>
           configurationService
-            .updateRateCard(path.rateCardId, payload)
+            .updateRateCard(params.rateCardId, payload)
             .pipe(observeRateCardsOperation("updateRateCard"))
         );
     })

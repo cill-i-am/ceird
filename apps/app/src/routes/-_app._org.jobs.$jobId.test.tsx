@@ -107,7 +107,7 @@ describe("job detail route", () => {
 
       expect(() =>
         loadJobDetailRouteData("not-a-job-id" as WorkItemIdType)
-      ).toThrow(/Universally Unique Identifier/);
+      ).toThrow(/UUID/);
       expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
     }
   );

@@ -1,4 +1,4 @@
-import { Config, Effect, Option, Schema, pipe } from "effect";
+import { Layer, Context, Config, Effect, Option, Schema, pipe } from "effect";
 
 import {
   DEFAULT_APP_DATABASE_URL,
@@ -27,7 +27,7 @@ export const CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES = [
   "ceird:read",
 ] as const satisfies readonly CeirdOAuthScope[];
 const TrustedOriginPattern = Schema.String.pipe(
-  Schema.pattern(/^https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::\d+)?$/i),
+  Schema.check(Schema.isPattern(/^https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::\d+)?$/i)),
   Schema.brand("TrustedOriginPattern")
 );
 
@@ -69,24 +69,10 @@ const DEFAULT_LOCAL_APP_ORIGINS = DEFAULT_LOCAL_APP_ORIGIN_STRINGS.map(
   makeTrustedOriginPattern
 );
 export const authenticationDatabaseUrlConfig = appDatabaseUrlConfig;
-const authenticationBaseUrlConfig = Config.string("BETTER_AUTH_BASE_URL").pipe(
-  Config.validate({
-    message: "BETTER_AUTH_BASE_URL must be a valid absolute URL",
-    validation: (value) => {
-      try {
-        const url = new URL(value);
-        return url.protocol === "http:" || url.protocol === "https:";
-      } catch {
-        return false;
-      }
-    },
-  })
-);
-const absoluteUrlConfig = (name: string) =>
-  Config.string(name).pipe(
-    Config.validate({
-      message: `${name} must be a valid absolute URL`,
-      validation: (value) => {
+const AbsoluteUrlString = (name: string) =>
+  Schema.String.pipe(
+    Schema.refine(
+      (value): value is string => {
         try {
           const url = new URL(value);
           return url.protocol === "http:" || url.protocol === "https:";
@@ -94,8 +80,17 @@ const absoluteUrlConfig = (name: string) =>
           return false;
         }
       },
-    })
+      {
+        message: `${name} must be a valid absolute URL`,
+      }
+    )
   );
+const authenticationBaseUrlConfig = Config.schema(
+  AbsoluteUrlString("BETTER_AUTH_BASE_URL"),
+  "BETTER_AUTH_BASE_URL"
+);
+const absoluteUrlConfig = (name: string) =>
+  Config.schema(AbsoluteUrlString(name), name);
 
 const authenticationMcpResourceUrlConfig = absoluteUrlConfig(
   "MCP_RESOURCE_URL"
@@ -198,14 +193,21 @@ export interface AuthenticationConfig {
   readonly oauthClientRegistrationDefaultScopes: typeof CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES;
 }
 
-export class AuthenticationConfigService extends Effect.Service<AuthenticationConfigService>()(
+export class AuthenticationConfigService extends Context.Service<AuthenticationConfigService>()(
   "@ceird/domains/identity/authentication/AuthenticationConfigService",
   {
-    effect: Effect.gen(function* AuthenticationConfigServiceEffect() {
+    make: Effect.gen(function* AuthenticationConfigServiceEffect() {
       return yield* loadAuthenticationConfig;
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    AuthenticationConfigService,
+    AuthenticationConfigService.make
+  );
+  static readonly Default =
+    AuthenticationConfigService.DefaultWithoutDependencies;
+}
 
 interface OriginParts {
   readonly hostname: string;
@@ -400,11 +402,13 @@ export const loadAuthenticationConfig = Effect.gen(
     );
     const mcpResourceUrl = yield* authenticationMcpResourceUrlConfig;
     const oauthIssuerUrl = yield* oauthIssuerUrlConfig;
-    const secret = yield* Config.string("BETTER_AUTH_SECRET").pipe(
-      Config.validate({
-        message: "BETTER_AUTH_SECRET must be at least 32 characters long",
-        validation: (value) => value.length >= 32,
-      })
+    const secret = yield* Config.schema(
+      Schema.String.pipe(
+        Schema.refine((value): value is string => value.length >= 32, {
+          message: "BETTER_AUTH_SECRET must be at least 32 characters long",
+        })
+      ),
+      "BETTER_AUTH_SECRET"
     );
     const databaseUrl = yield* authenticationDatabaseUrlConfig;
     const rateLimitEnabled = yield* Config.boolean(

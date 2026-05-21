@@ -11,9 +11,9 @@ import type {
   OrganizationRole,
   UserId as UserIdType,
 } from "@ceird/identity-core";
-import { HttpServerRequest } from "@effect/platform";
-import { SqlClient } from "@effect/sql";
-import { Effect, ParseResult, Schema } from "effect";
+import { Layer, Context, Effect, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
 
 import { Authentication } from "../identity/authentication/auth.js";
 import {
@@ -129,12 +129,10 @@ export const resolveCurrentOrganizationActor = Effect.fn(
   } satisfies OrganizationActor;
 });
 
-export class CurrentOrganizationActor extends Effect.Service<CurrentOrganizationActor>()(
+export class CurrentOrganizationActor extends Context.Service<CurrentOrganizationActor>()(
   "@ceird/domains/organizations/CurrentOrganizationActor",
   {
-    accessors: true,
-    dependencies: [Authentication.Default],
-    effect: Effect.gen(function* CurrentOrganizationActorLive() {
+    make: Effect.gen(function* CurrentOrganizationActorLive() {
       const auth = yield* Authentication;
       const sql = yield* SqlClient.SqlClient;
 
@@ -160,14 +158,23 @@ export class CurrentOrganizationActor extends Effect.Service<CurrentOrganization
       return { get };
     }),
   }
-) {}
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    CurrentOrganizationActor,
+    CurrentOrganizationActor.make
+  );
+  static readonly Default =
+    CurrentOrganizationActor.DefaultWithoutDependencies.pipe(
+      Layer.provide(Authentication.Default)
+    );
+}
 
 function decodeSessionOrganizationId(input: unknown) {
-  return Schema.decodeUnknown(OrganizationId)(input).pipe(
+  return Schema.decodeUnknownEffect(OrganizationId)(input).pipe(
     Effect.mapError(
       (parseError) =>
         new OrganizationSessionIdentityInvalidError({
-          cause: formatParseError(parseError),
+          cause: String(parseError),
           field: "activeOrganizationId",
           message: "Session active organization id is invalid",
         })
@@ -176,11 +183,11 @@ function decodeSessionOrganizationId(input: unknown) {
 }
 
 function decodeSessionUserId(input: unknown) {
-  return Schema.decodeUnknown(UserId)(input).pipe(
+  return Schema.decodeUnknownEffect(UserId)(input).pipe(
     Effect.mapError(
       (parseError) =>
         new OrganizationSessionIdentityInvalidError({
-          cause: formatParseError(parseError),
+          cause: String(parseError),
           field: "userId",
           message: "Session user id is invalid",
         })
@@ -208,10 +215,6 @@ function normalizeOrganizationActorRole(
     isExternalOrganizationRole(membershipRole)
     ? membershipRole
     : undefined;
-}
-
-function formatParseError(parseError: ParseResult.ParseError) {
-  return ParseResult.TreeFormatter.formatErrorSync(parseError);
 }
 
 function formatUnknownError(error: unknown) {

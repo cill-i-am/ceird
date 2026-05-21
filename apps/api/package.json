@@ -10,17 +10,18 @@
   },
   "dependencies": {
     "@ceird/domain-core": "workspace:*",
-    "@effect/platform": "^0.96.1",
-    "@effect/platform-node": "^0.106.0",
-    "effect": "^3.21.2"
+    "@effect/platform-node": "4.0.0-beta.68",
+    "effect": "4.0.0-beta.68"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260501.1",
     "@effect/language-service": "^0.84.3",
-    "@effect/vitest": "0.29.0",
+    "@effect/vitest": "4.0.0-beta.68",
     "@types/node": "^25.6.0",
+    "alchemy": "2.0.0-beta.40",
     "tsx": "^4.21.0",
     "typescript": "5.9.2",
+    "vite": "^8.0.10",
     "vitest": "3.2.4"
   }
 }

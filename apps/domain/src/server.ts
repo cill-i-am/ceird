@@ -1,15 +1,16 @@
 import { createServer } from "node:http";
 
+import { NodeHttpServer } from "@effect/platform-node";
+import { Config, Context, Effect, Layer } from "effect";
 import {
-  HttpApp,
-  HttpApiBuilder,
+  HttpEffect,
   HttpMiddleware,
+  HttpRouter,
   HttpServer,
   HttpServerError,
   HttpServerRequest,
-} from "@effect/platform";
-import { NodeHttpServer } from "@effect/platform-node";
-import { Config, Context, Effect, Layer } from "effect";
+} from "effect/unstable/http";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AgentsHttpLive } from "./domains/agents/http.js";
 import {
@@ -19,6 +20,8 @@ import {
 import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
+import type { McpAuthorizedAppCacheOptions } from "./domains/mcp/cache-config.js";
+import type { McpAuthorizedAppCache } from "./domains/mcp/http.js";
 import { makeMcpWebHandler } from "./domains/mcp/http.js";
 import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
@@ -42,7 +45,7 @@ const SystemLive = HttpApiBuilder.group(AppApi, "system", (handlers) =>
 );
 
 const makeApiHandlersLive = () =>
-  HttpApiBuilder.api(AppApi).pipe(
+  HttpApiBuilder.layer(AppApi).pipe(
     Layer.provide(
       Layer.mergeAll(
         SystemLive,
@@ -59,6 +62,18 @@ type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
 type ApiAuthenticationLive = typeof AuthenticationLive;
 type ApiBaseLive = Layer.Layer<never, never, never>;
 type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
+export interface ApiWebHandlerOptions {
+  readonly mcpAuthorizedAppCache?: McpAuthorizedAppCache | undefined;
+  readonly mcpAuthorizedAppCacheOptions?:
+    | McpAuthorizedAppCacheOptions
+    | undefined;
+}
+export interface ApiWebHandlerInput extends ApiWebHandlerOptions {
+  readonly authenticationLive?: ApiAuthenticationLive | undefined;
+  readonly baseLive?: ApiBaseLive | undefined;
+  readonly databaseRuntimeLive?: ApiDatabaseRuntimeLive | undefined;
+  readonly siteGeocoderLive?: ApiSiteGeocoderLive | undefined;
+}
 
 export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
@@ -84,19 +99,16 @@ export const ServerConfig = Config.all({
 
 export const apiRequestLogger: typeof HttpMiddleware.logger =
   HttpMiddleware.make((httpApp) =>
-    Effect.withFiberRuntime((fiber) => {
-      const request = Context.unsafeGet(
-        fiber.currentContext,
+    Effect.withFiber((fiber) => {
+      const request = Context.getUnsafe(
+        fiber.context,
         HttpServerRequest.HttpServerRequest
       );
       const path = requestPathname(request.url);
 
       return Effect.withLogSpan(
         Effect.flatMap(Effect.exit(httpApp), (exit) => {
-          if (
-            fiber.getFiberRef(HttpMiddleware.loggerDisabled) ||
-            shouldSkipRequestLog(path)
-          ) {
+          if (shouldSkipRequestLog(path)) {
             return exit;
           }
 
@@ -109,7 +121,7 @@ export const apiRequestLogger: typeof HttpMiddleware.logger =
               ? Effect.logWarning("Sent HTTP error response")
               : Effect.logInfo("Sent HTTP response");
 
-          return Effect.zipRight(
+          return Effect.andThen(
             log.pipe(
               Effect.annotateLogs({
                 "http.method": request.method,
@@ -148,12 +160,12 @@ function shouldSkipRequestLog(path: string) {
   return path === "/health";
 }
 
-export const makeApiWebHandler = (
-  databaseRuntimeLive: ApiDatabaseRuntimeLive = AppDatabaseRuntimeLive,
-  authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local,
-  baseLive: ApiBaseLive = Layer.empty
-) => {
+export const makeApiWebHandler = (input: ApiWebHandlerInput = {}) => {
+  const databaseRuntimeLive =
+    input.databaseRuntimeLive ?? AppDatabaseRuntimeLive;
+  const authenticationLive = input.authenticationLive ?? AuthenticationLive;
+  const siteGeocoderLive = input.siteGeocoderLive ?? SiteGeocoder.Local;
+  const baseLive = input.baseLive ?? Layer.empty;
   const authConfig = Effect.runSync(
     loadAuthenticationConfig.pipe(Effect.provide(baseLive))
   );
@@ -163,33 +175,64 @@ export const makeApiWebHandler = (
     siteGeocoderLive
   );
   const mcpWebHandler = makeMcpWebHandler({
+    authorizedAppCache: input.mcpAuthorizedAppCache,
+    authorizedAppCacheOptions: input.mcpAuthorizedAppCacheOptions,
     authConfig,
     baseLive,
     runtimeLive,
   });
-  const apiLayer = Layer.mergeAll(
-    makeApiLive(databaseRuntimeLive, authenticationLive, siteGeocoderLive),
-    NodeHttpServer.layerContext
-  ).pipe(Layer.provide(baseLive));
-  const handler = HttpApiBuilder.toWebHandler(apiLayer, {
+  const apiLayer = makeApiLive(
+    databaseRuntimeLive,
+    authenticationLive,
+    siteGeocoderLive
+  ).pipe(
+    Layer.provide(NodeHttpServer.layerHttpServices),
+    Layer.provide(baseLive)
+  );
+  const handler = HttpRouter.toWebHandler(apiLayer, {
+    disableLogger: true,
     middleware: apiRequestLogger,
   });
 
   return {
-    dispose: handler.dispose,
+    dispose: async () => {
+      throwIfDisposeFailed(
+        await Promise.allSettled([handler.dispose(), mcpWebHandler.dispose()])
+      );
+    },
     handler: async (request: Request) =>
-      (await mcpWebHandler(request)) ?? handler.handler(request),
+      (await mcpWebHandler(request)) ??
+      (handler.handler as (request: Request) => Promise<Response>)(request),
   };
 };
 
-export const ServerLive = Layer.scopedDiscard(
+function throwIfDisposeFailed(
+  results: readonly PromiseSettledResult<unknown>[]
+) {
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+
+  if (failures.length === 1) {
+    throw failures[0].reason;
+  }
+
+  if (failures.length > 1) {
+    throw new AggregateError(
+      failures.map((failure) => failure.reason),
+      "API web handler disposal failed"
+    );
+  }
+}
+
+export const ServerLive = Layer.effectDiscard(
   Effect.gen(function* runNodeServer() {
     const webHandler = yield* Effect.acquireRelease(
       Effect.sync(() => makeApiWebHandler()),
       ({ dispose }) => Effect.promise(() => dispose()).pipe(Effect.orDie)
     );
 
-    yield* HttpApp.fromWebHandler(webHandler.handler).pipe(
+    yield* HttpEffect.fromWebHandler(webHandler.handler).pipe(
       HttpServer.serveEffect()
     );
   })

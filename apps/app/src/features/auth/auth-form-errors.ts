@@ -32,7 +32,8 @@ function normalizeValidationMessage(message: string): string {
   if (
     normalized.includes("expected a non empty string") ||
     normalized.includes("non-empty string") ||
-    normalized.includes("non empty string")
+    normalized.includes("non empty string") ||
+    normalized.includes("length of at least 1")
   ) {
     return "This field is required.";
   }
