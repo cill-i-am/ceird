@@ -1,4 +1,7 @@
-import { AgentInstanceName, signAgentConnectToken } from "@ceird/agents-core";
+import {
+  AgentInstanceName,
+  signAgentConnectToken,
+} from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
 import type { routeAgentRequest as routeAgentRequestFunction } from "agents";

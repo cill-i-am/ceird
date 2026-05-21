@@ -3,11 +3,11 @@ import {
   AgentInstanceName,
   parseAgentInstanceName,
   verifyAgentConnectToken,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import type {
   AgentInstanceName as AgentInstanceNameType,
   AgentThreadId,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import { Schema } from "effect";
 
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";

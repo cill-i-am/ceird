@@ -3,14 +3,14 @@ import {
   AgentThreadResponseSchema,
   makeAgentInternalThreadActivityPath,
   RunAgentActionResponseSchema,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import type {
   AgentActionOperationId,
   AgentThreadId,
   AgentThreadResponse,
   RunAgentActionInput,
   RunAgentActionResponse,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import { makeDomainServiceClient } from "@ceird/domain-core";
 import { Schema } from "effect";
 

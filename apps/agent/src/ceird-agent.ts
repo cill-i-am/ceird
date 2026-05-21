@@ -1,4 +1,4 @@
-import { AgentInstanceName } from "@ceird/agents-core";
+import { AgentInstanceName } from "@ceird/agents-core/runtime";
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import type {
   ChatRecoveryContext,

@@ -3,7 +3,7 @@ import {
   AGENT_EXECUTABLE_ACTIONS,
   AgentActionRunId,
   AgentInstanceName,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
 import type { ToolExecutionOptions } from "ai";

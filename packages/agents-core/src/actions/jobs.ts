@@ -6,17 +6,19 @@ import {
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
   CreateRateCardInputSchema,
-  JobCollaboratorId,
   JobListQuerySchema,
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
-  RateCardId,
   TransitionJobInputSchema,
   UpdateJobCollaboratorInputSchema,
   UpdateRateCardInputSchema,
+} from "@ceird/jobs-core/dto";
+import {
+  JobCollaboratorId,
+  RateCardId,
   WorkItemId,
-} from "@ceird/jobs-core";
-import { LabelId } from "@ceird/labels-core";
+} from "@ceird/jobs-core/ids";
+import { LabelId } from "@ceird/labels-core/ids";
 import { Schema } from "effect";
 
 import {

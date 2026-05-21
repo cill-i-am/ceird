@@ -3,7 +3,7 @@ import {
   AgentActionOperationId,
   AgentThreadId,
   makeAgentInternalThreadActivityPath,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";

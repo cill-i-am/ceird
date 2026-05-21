@@ -1,12 +1,12 @@
 import {
   AGENT_EXECUTABLE_ACTIONS,
   AgentActionOperationId,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import type {
   AgentActionName,
   AgentInstanceName,
   ExecutableAgentActionName,
-} from "@ceird/agents-core";
+} from "@ceird/agents-core/runtime";
 import { jsonSchema, tool } from "ai";
 import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from "ai";
 import { Schema } from "effect";

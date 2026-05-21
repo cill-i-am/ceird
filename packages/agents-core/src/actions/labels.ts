@@ -1,8 +1,8 @@
 import {
   CreateLabelInputSchema,
-  LabelId,
   UpdateLabelInputSchema,
-} from "@ceird/labels-core";
+} from "@ceird/labels-core/dto";
+import { LabelId } from "@ceird/labels-core/ids";
 import { Schema } from "effect";
 
 import {

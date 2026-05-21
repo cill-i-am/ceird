@@ -1,15 +1,14 @@
-import { LabelId } from "@ceird/labels-core";
+import { LabelId } from "@ceird/labels-core/ids";
 import {
   AddSiteCommentInputSchema,
   AssignSiteLabelInputSchema,
   CreateServiceAreaInputSchema,
   CreateSiteInputSchema,
-  ServiceAreaId,
-  SiteId,
   SiteListQuerySchema,
   UpdateServiceAreaInputSchema,
   UpdateSiteInputSchema,
-} from "@ceird/sites-core";
+} from "@ceird/sites-core/dto";
+import { ServiceAreaId, SiteId } from "@ceird/sites-core/ids";
 import { Schema } from "effect";
 
 import {

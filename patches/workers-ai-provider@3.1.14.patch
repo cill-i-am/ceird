@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index c4e5120e98ad89d6ffa2278d4daa352237d83693..16b4238798d0e9ab845f25039040217554dcceae 100644
+--- a/package.json
++++ b/package.json
+@@ -49,5 +49,6 @@
+     "test:e2e:rest": "vitest --config vitest.e2e.config.ts --watch=false test/e2e/workers-ai-rest.e2e.test.ts",
+     "test:e2e:binding": "vitest --config vitest.e2e.config.ts --watch=false test/e2e/workers-ai-binding.e2e.test.ts",
+     "type-check": "tsc --noEmit"
+-  }
++  },
++  "module": "dist/index.mjs"
+ }

@@ -141,6 +141,12 @@ Gateway resource. Browser clients should prefer bearer connect tokens; when the
 query-token fallback is used, the Agent Worker strips it before routing into the
 Agents SDK runtime.
 
+The Agent Worker bundle currently depends on packages that ship only a
+`main` entry even though the Alchemy Cloudflare Rolldown plugin resolves Worker
+bundles through Worker/browser/module fields. Root `pnpm.patchedDependencies`
+adds `module` metadata for those packages so CI/deploy bundles include them
+instead of emitting unresolved bare Worker imports.
+
 The domain, API, MCP, Agent, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
 on Node.js compatibility APIs run consistently across deployable surfaces.

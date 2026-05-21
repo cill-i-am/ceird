@@ -92,7 +92,10 @@ Agents SDK Workers, and bot surfaces can call the same domain surface.
 
 Agent contracts live in `@ceird/agents-core`. That package defines thread IDs,
 action run IDs, action names, action DTOs, `buildAgentInstanceName`, connect
-token payloads, and the Effect `HttpApi` groups used by the domain Worker.
+token payloads, and the Effect `HttpApi` groups used by the domain Worker. The
+Agent Worker imports the `@ceird/agents-core/runtime` subpath so its Worker
+bundle gets the same runtime schemas and action metadata without also bundling
+the domain/app HTTP API group layer.
 
 The domain Worker owns the durable product side of agents:
 
