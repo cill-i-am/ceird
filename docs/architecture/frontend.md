@@ -334,7 +334,7 @@ workflow-specific layouts over decorative landing-page patterns.
 - E2E tests live in `apps/app/e2e`.
 - Page objects for E2E tests live in `apps/app/e2e/pages`.
 - Playwright targets an existing Alchemy stage by default through
-  `PLAYWRIGHT_BASE_URL` and `PLAYWRIGHT_API_URL`; set
+  `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL`, and `PLAYWRIGHT_AGENT_URL`; set
   `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1` only when intentionally using the
   package-local server fallback.
 - Auth E2E tests may read Better Auth verification tokens directly from a test

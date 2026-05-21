@@ -304,12 +304,12 @@ branch forked from the parent `main` branch through the existing
 `PostgresProject.ref` model. The workflow reads the preview branch connection
 URI from Alchemy `PostgresBranch` state for `PLAYWRIGHT_DATABASE_URL`; the value
 is masked before it is exported to the Playwright step and is still omitted from
-root stack outputs. Preview Playwright can target the reconciled Agent Worker
-with `PLAYWRIGHT_AGENT_URL` when a test exercises the real Agent route. After
-deploy, CI waits for both preview `/health` endpoints and an API auth-session
-probe that forwards through the private domain Worker before starting
-Playwright. This avoids transient route, domain, TLS, or service binding
-propagation failures on freshly created preview hostnames. The domain Worker
+root stack outputs. Preview Playwright targets the reconciled Agent Worker with
+`PLAYWRIGHT_AGENT_URL`. After deploy, CI waits for the app, API, and Agent
+preview `/health` endpoints and an API auth-session probe that forwards through
+the private domain Worker before starting Playwright. This avoids transient
+route, domain, TLS, or service binding propagation failures on freshly created
+preview hostnames. The domain Worker
 disables auth rate limiting by default only for `pr-<number>` stages so repeated
 E2E runs against the persistent preview database do not accumulate lockout
 counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to

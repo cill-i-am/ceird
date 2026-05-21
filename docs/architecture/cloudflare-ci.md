@@ -63,6 +63,7 @@ Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
 - `NEON_ORG_ID` (optional)
+- `PLAYWRIGHT_AGENT_URL`
 - `PLAYWRIGHT_API_URL`
 - `PLAYWRIGHT_BASE_URL`
 
@@ -154,13 +155,16 @@ For same-repository PR updates, the workflow:
   `https://app.pr-${PR_NUMBER}.ceird.app`
 - derives `PLAYWRIGHT_API_URL` as
   `https://api.pr-${PR_NUMBER}.ceird.app`
+- derives `PLAYWRIGHT_AGENT_URL` as
+  `https://agent.pr-${PR_NUMBER}.ceird.app`
 - reads and masks `PLAYWRIGHT_DATABASE_URL` from the preview
   `PostgresBranch` state
-- waits for the preview app and API `/health` endpoints to respond, then probes
-  the API's domain-forwarded auth session endpoint, allowing a longer
+- waits for the preview app, API, and Agent `/health` endpoints to respond,
+  then probes the API's domain-forwarded auth session endpoint, allowing a longer
   Cloudflare route, TLS, and service-binding propagation window for freshly
   created preview hostnames
-- creates or updates a single PR comment containing the preview app/API URLs
+- creates or updates a single PR comment containing the preview app/API/Agent
+  URLs
 - runs `pnpm --filter app e2e`
 
 The workflow has a concurrency group per PR:

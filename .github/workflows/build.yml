@@ -140,6 +140,7 @@ jobs:
     needs:
       - check-types
     env:
+      PLAYWRIGHT_AGENT_URL: ${{ vars.PLAYWRIGHT_AGENT_URL }}
       PLAYWRIGHT_API_URL: ${{ vars.PLAYWRIGHT_API_URL }}
       PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL }}
       PLAYWRIGHT_DATABASE_URL: ${{ secrets.PLAYWRIGHT_DATABASE_URL }}

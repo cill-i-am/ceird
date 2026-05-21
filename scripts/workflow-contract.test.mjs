@@ -525,6 +525,7 @@ test("Playwright E2E defaults to an existing Alchemy stage", () => {
   );
   assert.match(buildWorkflow, /PLAYWRIGHT_BASE_URL:/);
   assert.match(buildWorkflow, /PLAYWRIGHT_API_URL:/);
+  assert.match(buildWorkflow, /PLAYWRIGHT_AGENT_URL:/);
   assert.match(buildWorkflow, /PLAYWRIGHT_DATABASE_URL:/);
   assert.doesNotMatch(readme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(appReadme, /PLAYWRIGHT_BASE_URL=<alchemy-app-url>/);
@@ -581,6 +582,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(
     previewWorkflow,
+    /PLAYWRIGHT_AGENT_URL: https:\/\/agent\.pr-\$\{\{ github\.event\.pull_request\.number \}\}\.ceird\.app/
+  );
+  assert.match(
+    previewWorkflow,
     /pnpm alchemy deploy --stage "\$PREVIEW_STAGE" --yes/
   );
   assert.match(
@@ -609,6 +614,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     /"\$PLAYWRIGHT_API_URL\/api\/auth\/organization\/create"/
   );
   assert.match(previewWorkflow, /waiting for service binding propagation/);
+  assert.match(previewWorkflow, /"\$PLAYWRIGHT_AGENT_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
   assert.match(previewWorkflow, /wait_for_app_authenticated_navigation/);
   assert.match(previewWorkflow, /preview-app-health-%s@example\.com/);
@@ -617,6 +623,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /actions\/github-script@v/);
   assert.match(previewWorkflow, /ceird-preview-environment/);
   assert.match(previewWorkflow, /Preview environment is ready/);
+  assert.match(previewWorkflow, /Agent \|/);
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 
