@@ -21,6 +21,7 @@ For full cloud-backed app/API/Postgres testing, start an Alchemy stage first:
 pnpm dev -- --stage codex-my-task
 PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
 PLAYWRIGHT_API_URL=<alchemy-api-url> \
+PLAYWRIGHT_AGENT_URL=<alchemy-agent-url> \
 PLAYWRIGHT_DATABASE_URL=<alchemy-database-url> \
 pnpm --filter app e2e
 ```

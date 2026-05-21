@@ -529,6 +529,7 @@ test("Playwright E2E defaults to an existing Alchemy stage", () => {
   assert.match(buildWorkflow, /PLAYWRIGHT_DATABASE_URL:/);
   assert.doesNotMatch(readme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(appReadme, /PLAYWRIGHT_BASE_URL=<alchemy-app-url>/);
+  assert.match(appReadme, /PLAYWRIGHT_AGENT_URL=<alchemy-agent-url>/);
   assert.doesNotMatch(appReadme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.doesNotMatch(developmentGuide, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(developmentGuide, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1/);
