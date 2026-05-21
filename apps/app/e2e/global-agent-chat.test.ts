@@ -170,16 +170,13 @@ test.describe("global agent chat", () => {
       .poll(() =>
         page.evaluate(
           (input) => {
-            const expectedPath = new URL(
-              `/agents/ceird-agent/${encodeURIComponent(input.issuedAgentInstanceName)}`,
-              input.origin
-            ).pathname;
+            const expectedPath = `/agents/ceird-agent/${input.issuedAgentInstanceName}`;
 
             return (window.__CEIRD_AGENT_WS_URLS ?? []).some((rawUrl) => {
               const url = new URL(rawUrl);
 
               return (
-                url.pathname === expectedPath &&
+                decodeURIComponent(url.pathname) === expectedPath &&
                 url.searchParams.get("token") === input.issuedToken
               );
             });
