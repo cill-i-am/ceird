@@ -214,6 +214,12 @@ stage-specific `appliedMigrationsDir`. Parent stages use the full
 `apps/domain/drizzle` bootstrap tree. Child stages fork from the parent and apply
 only `apps/domain/drizzle/alchemy`, avoiding a replay of historical package-local
 SQL files that already exist on the forked branch.
+The checked-in Alchemy baseline must describe the currently deployed parent
+stage, not feature-branch schema that has not reached the parent yet. When a
+feature branch adds package-local migrations, child stages let `Drizzle.Schema`
+generate the transient SQL diff during deploy. After the parent stage applies
+the package-local migration, refresh the Alchemy baseline so later child stages
+do not regenerate already-applied tables.
 The root provider layer also keeps a no-op legacy `Drizzle.Migrations`
 tombstone provider so existing Cloudflare state entries from the pre-native
 migration wrapper can be planned and deleted cleanly. New migrations are owned

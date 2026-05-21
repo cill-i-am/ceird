@@ -153,6 +153,9 @@ outputs are logged.
 For database changes, generate and inspect the package-local Drizzle migration
 under `apps/domain/drizzle`, then update/verify the Alchemy-generated migration
 state under `apps/domain/drizzle/alchemy` before running domain and infra tests.
+Keep that Alchemy baseline aligned to the deployed parent stage; feature-branch
+schema changes should let `Drizzle.Schema` generate child-stage SQL during
+deploy, then refresh the baseline after the parent stage has been migrated.
 
 ## Repository Conventions
 

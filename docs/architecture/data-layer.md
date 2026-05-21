@@ -108,6 +108,15 @@ Alchemy-generated SQL can bring the fork forward without replaying historical
 bootstrap migrations. The infra contract names those paths separately as
 `generatedMigrationsDir` and `appliedMigrationsDir` so the dependency on
 `Drizzle.Schema` is explicit without losing parent-stage migration coverage.
+That Alchemy baseline is intentionally a parent-stage snapshot. Feature branches
+that add package-local migrations should not advance the baseline to their new
+schema before the parent has those tables, because that makes preview branches
+skip the generated SQL diff.
+Because the parent stage scans `apps/domain/drizzle` recursively, feature
+branches should not check in transient child-stage SQL under the nested
+`drizzle/alchemy` directory. Let `Drizzle.Schema` generate that SQL during child
+deploys, then refresh the Alchemy baseline after the parent stage has applied
+the package-local migration.
 
 The root Alchemy stack, runtime apps, and shared domain packages now use the
 same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and
