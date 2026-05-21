@@ -100,10 +100,10 @@ resources. Domain runtime code uses the Effect 4 database layer and
 That wrapper loads the domain schema barrel at
 `apps/domain/src/platform/database/schema.ts` through the TypeScript resolver
 Alchemy needs at deploy time. The checked-in Alchemy migration snapshots live
-under `apps/domain/drizzle/alchemy`. The parent native Neon branch applies the
+under `apps/domain/drizzle-alchemy`. The parent native Neon branch applies the
 full `apps/domain/drizzle` directory so existing package-local SQL migrations
 remain the bootstrap sequence. Forked local and preview branches are created from
-that parent and apply only `apps/domain/drizzle/alchemy`, so future
+that parent and apply only `apps/domain/drizzle-alchemy`, so future
 Alchemy-generated SQL can bring the fork forward without replaying historical
 bootstrap migrations. The infra contract names those paths separately as
 `generatedMigrationsDir` and `appliedMigrationsDir` so the dependency on
@@ -112,11 +112,12 @@ That Alchemy baseline is intentionally a parent-stage snapshot. Feature branches
 that add package-local migrations should not advance the baseline to their new
 schema before the parent has those tables, because that makes preview branches
 skip the generated SQL diff.
-Because the parent stage scans `apps/domain/drizzle` recursively, feature
-branches should not check in transient child-stage SQL under the nested
-`drizzle/alchemy` directory. Let `Drizzle.Schema` generate that SQL during child
-deploys, then refresh the Alchemy baseline after the parent stage has applied
-the package-local migration.
+The Alchemy migration stream lives outside `apps/domain/drizzle` because the
+parent stage scans the package-local migration tree recursively. When a feature
+branch needs a checked-in child-branch delta, give the `drizzle-alchemy`
+migration the same directory name as the canonical `apps/domain/drizzle`
+migration. Existing preview branches can apply the SQL, and branches forked
+after the parent deploy can skip it through the copied `neon_migrations` record.
 
 The root Alchemy stack, runtime apps, and shared domain packages now use the
 same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and

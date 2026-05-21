@@ -504,7 +504,7 @@ The domain Worker uses Drizzle with Postgres.
 | Test database helpers | `src/platform/database/test-database.ts`             |
 | Schema barrel         | `src/platform/database/schema.ts`                    |
 | Migrations            | `drizzle/*/migration.sql`, `drizzle/*/snapshot.json` |
-| Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
+| Alchemy snapshots     | `drizzle-alchemy/*/{migration.sql,snapshot.json}`    |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
 `databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
@@ -512,7 +512,7 @@ tables. Keep schema changes in the domain that owns the tables, then export
 through the schema barrel. The Alchemy stack also loads this barrel through
 `Drizzle.Schema`. The parent native Neon branch applies `apps/domain/drizzle`, so
 historical SQL files remain the bootstrap path. Forked local and preview branches
-apply `drizzle/alchemy` only, so Alchemy-generated deltas can run after the fork
+apply `drizzle-alchemy` only, so Alchemy-generated deltas can run after the fork
 without replaying the bootstrap tree. In infra this is modeled as separate
 generated and applied migration directories.
 

@@ -46,6 +46,10 @@ function readDomainMigrationSqlBySlug(slug: string): string {
   return readMigrationSqlBySlug(domainDrizzleMigrationsDir, slug);
 }
 
+function readAlchemyMigrationSqlBySlug(slug: string): string {
+  return readMigrationSqlBySlug(domainAlchemyDrizzleMigrationsDir, slug);
+}
+
 function readMigrationSqlBySlug(migrationsDir: string, slug: string): string {
   const migrationsDirectory = resolve(repoRoot, migrationsDir);
   const matches = readdirSync(migrationsDirectory, {
@@ -63,6 +67,36 @@ function readMigrationSqlBySlug(migrationsDir: string, slug: string): string {
     join(migrationsDirectory, match.name, "migration.sql"),
     "utf8"
   );
+}
+
+function readLatestAlchemySnapshot(): unknown {
+  const migrationsDirectory = resolve(
+    repoRoot,
+    domainAlchemyDrizzleMigrationsDir
+  );
+  let latestMigrationDir: string | undefined;
+  for (const entry of readdirSync(migrationsDirectory, {
+    withFileTypes: true,
+  })) {
+    if (!entry.isDirectory() || !/^\d+_/.test(entry.name)) {
+      continue;
+    }
+
+    if (latestMigrationDir === undefined || entry.name > latestMigrationDir) {
+      latestMigrationDir = entry.name;
+    }
+  }
+
+  if (latestMigrationDir === undefined) {
+    throw new Error("Expected at least one Alchemy migration snapshot");
+  }
+
+  return JSON.parse(
+    readFileSync(
+      join(migrationsDirectory, latestMigrationDir, "snapshot.json"),
+      "utf8"
+    )
+  ) as unknown;
 }
 
 describe("Alchemy Drizzle integration", () => {
@@ -88,36 +122,28 @@ describe("Alchemy Drizzle integration", () => {
         .href
     );
     const snapshot = await drizzleKitApi.generateDrizzleJson(schemaModule);
-    const baselineSnapshot = JSON.parse(
-      readFileSync(
-        join(
-          repoRoot,
-          domainAlchemyDrizzleMigrationsDir,
-          "00000000000000_baseline",
-          "snapshot.json"
-        ),
-        "utf8"
-      )
-    ) as unknown;
+    const committedSnapshot = readLatestAlchemySnapshot();
     const pendingMigration = await drizzleKitApi.generateMigration(
-      baselineSnapshot,
+      committedSnapshot,
       snapshot
     );
-    const pendingMigrationSql = pendingMigration.join("\n");
     const trgmMigrationSql = readDomainMigrationSqlBySlug("chunky_mercury");
     const agentMigrationSql = readDomainMigrationSqlBySlug("neat_skullbuster");
+    const agentAlchemyMigrationSql =
+      readAlchemyMigrationSqlBySlug("neat_skullbuster");
 
     expect(drizzleKitApi.generateDrizzleJson).toStrictEqual(
       expect.any(Function)
     );
     expect(drizzleKitApi.generateMigration).toStrictEqual(expect.any(Function));
     expect(snapshot).toStrictEqual(expect.any(Object));
-    expect(pendingMigrationSql).toContain('CREATE TABLE "agent_threads"');
-    expect(pendingMigrationSql).toContain('CREATE TABLE "agent_action_runs"');
+    expect(pendingMigration).toStrictEqual([]);
+    expect(
+      domainAlchemyDrizzleMigrationsDir.startsWith("apps/domain/drizzle/")
+    ).toBe(false);
     expect(trgmMigrationSql).toContain(
       "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
     );
-    expect(agentMigrationSql).toContain('CREATE TABLE "agent_threads"');
-    expect(agentMigrationSql).toContain('CREATE TABLE "agent_action_runs"');
+    expect(agentAlchemyMigrationSql).toBe(agentMigrationSql);
   }, 15_000);
 });

@@ -208,18 +208,18 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy state get ceird <stage> PostgresBranch --env-fil
 The native Neon branch resource applies the configured `NeonMigrationSource`
 before Hyperdrive reads the branch origin and before new domain code is uploaded.
 That source is Alchemy `Drizzle.Schema`, which loads the domain schema barrel and
-writes generated migration snapshots under `apps/domain/drizzle/alchemy`. The Neon
+writes generated migration snapshots under `apps/domain/drizzle-alchemy`. The Neon
 branch resource depends on that schema resource, then applies SQL from the
 stage-specific `appliedMigrationsDir`. Parent stages use the full
 `apps/domain/drizzle` bootstrap tree. Child stages fork from the parent and apply
-only `apps/domain/drizzle/alchemy`, avoiding a replay of historical package-local
+only `apps/domain/drizzle-alchemy`, avoiding a replay of historical package-local
 SQL files that already exist on the forked branch.
 The checked-in Alchemy baseline must describe the currently deployed parent
 stage, not feature-branch schema that has not reached the parent yet. When a
-feature branch adds package-local migrations, child stages let `Drizzle.Schema`
-generate the transient SQL diff during deploy. After the parent stage applies
-the package-local migration, refresh the Alchemy baseline so later child stages
-do not regenerate already-applied tables.
+feature branch adds package-local migrations, check in the matching child-stage
+SQL under `apps/domain/drizzle-alchemy` with the same migration directory name.
+That lets current child branches apply the delta and later branches skip it once
+the parent has the same `neon_migrations` record.
 The root provider layer also keeps a no-op legacy `Drizzle.Migrations`
 tombstone provider so existing Cloudflare state entries from the pre-native
 migration wrapper can be planned and deleted cleanly. New migrations are owned
@@ -281,9 +281,9 @@ The branch migration input is modeled in `infra` as
 `Drizzle.Schema` at the root-owned `infra/domain-drizzle-schema.ts` wrapper. That
 wrapper loads the domain schema barrel at `apps/domain/src/platform/database/schema.ts`
 through the same TypeScript resolver Alchemy needs at deploy time. Its
-`generatedMigrationsDir` is always `apps/domain/drizzle/alchemy`. Parent stages
+`generatedMigrationsDir` is always `apps/domain/drizzle-alchemy`. Parent stages
 use `apps/domain/drizzle` as `appliedMigrationsDir` for bootstrap coverage;
-child stages use `apps/domain/drizzle/alchemy` as `appliedMigrationsDir` because
+child stages use `apps/domain/drizzle-alchemy` as `appliedMigrationsDir` because
 they inherit the historical schema from the parent branch.
 
 ## Pull Request Preview Infrastructure

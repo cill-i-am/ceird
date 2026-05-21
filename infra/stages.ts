@@ -10,7 +10,7 @@ import { decodeMcpAuthorizedAppCacheConfigInteger } from "../apps/domain/src/dom
 
 export const domainDrizzleSchemaPath = "infra/domain-drizzle-schema.ts";
 export const domainDrizzleMigrationsDir = "apps/domain/drizzle";
-export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle/alchemy";
+export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle-alchemy";
 
 export const InfraStage = Schema.NonEmptyString;
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
