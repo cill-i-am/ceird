@@ -142,14 +142,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
-  const agentAi = yield* Cloudflare.AiGateway("AgentAiGateway", {
-    id: resourceName(input.config, "agent"),
-    collectLogs: false,
-  });
-
   const agent = yield* makeAgentWorker({
     agentInternalSecret: agentInternalSecret.text,
-    ai: agentAi,
     config: input.config,
     domain,
     hostname: input.config.agentHostname,
@@ -185,7 +179,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     api,
     apiOrigin,
     agent,
-    agentAi,
     agentOrigin,
     app,
     appOrigin,

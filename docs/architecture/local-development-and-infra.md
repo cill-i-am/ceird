@@ -135,11 +135,11 @@ The stack provisions:
 - Cloudflare Email Worker binding for deployed auth email delivery
 
 The Agent Worker uses shared Worker trace/log settings, but disables
-Cloudflare invocation URL logging while the query-token fallback exists. Its AI
-Gateway disables payload log collection by default so prompts, responses, and
-tool-returned product data are not copied into gateway logs. Browser clients
-should prefer bearer connect tokens; when the query-token fallback is used, the
-Agent Worker strips it before routing into the Agents SDK runtime.
+Cloudflare invocation URL logging while the query-token fallback exists. It
+binds native Workers AI directly and does not provision an account-level AI
+Gateway resource. Browser clients should prefer bearer connect tokens; when the
+query-token fallback is used, the Agent Worker strips it before routing into the
+Agents SDK runtime.
 
 The domain, API, MCP, Agent, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely

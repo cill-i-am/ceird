@@ -7,12 +7,14 @@ import * as Redacted from "effect/Redacted";
 
 import type {
   AgentWorkerBindingEnv,
+  AgentWorkerBindings,
   AgentWorkerConfiguredEnv,
 } from "../apps/agent/infra/cloudflare-worker.ts";
 import {
   makeAgentWorkerBindings,
   makeAgentWorkerEnv,
   makeAgentWorkerProps,
+  makeAgentWorkersAiBinding,
 } from "../apps/agent/infra/cloudflare-worker.ts";
 import type {
   AgentWorkerBindingRuntimeEnv,
@@ -95,11 +97,10 @@ const apiWorkerBindingKeys = [
 const mcpWorkerBindingKeys = [
   "DOMAIN",
 ] as const satisfies readonly (keyof McpWorkerBindingEnv)[];
-const agentWorkerBindingKeys = [
-  "AI",
+const agentWorkerResourceBindingKeys = [
   "CeirdAgent",
   "DOMAIN",
-] as const satisfies readonly (keyof AgentWorkerBindingEnv)[];
+] as const satisfies readonly (keyof AgentWorkerBindings)[];
 
 const domainWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<DomainWorkerBindingEnv, DomainWorkerBindingRuntimeEnv>
@@ -410,10 +411,6 @@ describe("Cloudflare stack", () => {
     const domain = {
       workerName: "ceird-test-domain",
     } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
-    const ai = {
-      Type: "Cloudflare.AiGateway",
-      id: "ceird-test-agent",
-    } as unknown as Cloudflare.AiGateway;
 
     const domainBindings = makeDomainWorkerBindings({
       authEmailQueue,
@@ -435,7 +432,7 @@ describe("Cloudflare stack", () => {
       name: "ceird-main-api",
     });
     const mcpBindings = makeMcpWorkerBindings({ domain });
-    const agentBindings = makeAgentWorkerBindings({ ai, domain });
+    const agentBindings = makeAgentWorkerBindings({ domain });
     const authEmail = Effect.runSync(domainBindings.AUTH_EMAIL);
 
     expect(Object.keys(domainBindings)).toStrictEqual([
@@ -444,8 +441,11 @@ describe("Cloudflare stack", () => {
     expect(Object.keys(apiBindings)).toStrictEqual([...apiWorkerBindingKeys]);
     expect(Object.keys(mcpBindings)).toStrictEqual([...mcpWorkerBindingKeys]);
     expect(Object.keys(agentBindings)).toStrictEqual([
-      ...agentWorkerBindingKeys,
+      ...agentWorkerResourceBindingKeys,
     ]);
+    expect(makeAgentWorkersAiBinding()).toStrictEqual({
+      bindings: [{ name: "AI", type: "ai" }],
+    });
     expect(domainWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
     expect(domainWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
     expect(domainWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
@@ -463,7 +463,6 @@ describe("Cloudflare stack", () => {
     expect(apiBindings.DOMAIN).toBe(domain);
     expect(mcpBindings.DOMAIN).toBe(domain);
     expect(agentBindings.DOMAIN).toBe(domain);
-    expect(agentBindings.AI).toBe(ai);
     expect(domainWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(domainWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(apiWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
@@ -490,14 +489,9 @@ describe("Cloudflare stack", () => {
     const domain = {
       workerName: "ceird-test-domain",
     } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
-    const ai = {
-      Type: "Cloudflare.AiGateway",
-      id: "ceird-test-agent",
-    } as unknown as Cloudflare.AiGateway;
     const agentInternalSecret = Redacted.make("agent-secret");
     const agentWorkerProps = makeAgentWorkerProps({
       agentInternalSecret,
-      ai,
       config: configWithoutCloudflareBootstrapSecrets,
       domain,
       hostname: "agent.example.com",
@@ -528,7 +522,10 @@ describe("Cloudflare stack", () => {
     });
     expect(agentWorkerProps.main).toContain("/apps/agent/src/worker.ts");
     expect(agentWorkerProps.bindings.DOMAIN).toBe(domain);
-    expect(agentWorkerProps.bindings.AI).toBe(ai);
+    expect(agentWorkerProps.bindings).not.toHaveProperty("AI");
+    expect(makeAgentWorkersAiBinding()).toStrictEqual({
+      bindings: [{ name: "AI", type: "ai" }],
+    });
     expect(agentWorkerProps.bindings.CeirdAgent).toMatchObject({
       className: "CeirdAgent",
     });

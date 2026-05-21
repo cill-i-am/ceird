@@ -67,11 +67,21 @@ interface AgentConnection {
 
 type ChatPart = UIMessage["parts"][number];
 type ChatMessage = UIMessage;
-type ToolApprovalResponse = {
+interface ToolApprovalResponse {
   readonly approved: boolean;
   readonly id: string;
-};
+}
 type ToolStateLabel = ReturnType<typeof getToolPartState>;
+
+const TOOL_STATE_LABELS = {
+  approved: "Approved",
+  complete: "Complete",
+  denied: "Rejected",
+  error: "Error",
+  loading: "Working",
+  streaming: "Working",
+  "waiting-approval": "Approval needed",
+} satisfies Record<ToolStateLabel, string>;
 
 interface GlobalAgentChatProps {
   readonly activeOrganizationId?: OrganizationId | null | undefined;
@@ -98,6 +108,12 @@ const initialThreadState: ThreadState = {
   session: null,
 };
 
+const loadingThreadState: ThreadState = {
+  error: null,
+  status: "loading",
+  session: null,
+};
+
 export function requestOpenGlobalAgentChat() {
   window.dispatchEvent(new CustomEvent(GLOBAL_AGENT_CHAT_OPEN_EVENT));
 }
@@ -115,25 +131,49 @@ export function GlobalAgentChat({
     React.useState<ThreadState>(initialThreadState);
   const previousActiveOrganizationId = React.useRef(activeOrganizationId);
 
-  const openAgentChat = React.useCallback(() => {
+  const startAgentChat = React.useCallback(() => {
     if (!canUseAgent) {
       return;
     }
 
     setOpen(true);
+    setThreadState(loadingThreadState);
   }, [canUseAgent]);
+  const startAgentChatRef = React.useRef(startAgentChat);
+  startAgentChatRef.current = startAgentChat;
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        startAgentChat();
+        return;
+      }
 
-  useAppHotkey("openAgentChat", openAgentChat, {
+      setOpen(false);
+    },
+    [startAgentChat]
+  );
+
+  useAppHotkey("openAgentChat", startAgentChat, {
     enabled: canUseAgent,
   });
 
   React.useEffect(() => {
-    window.addEventListener(GLOBAL_AGENT_CHAT_OPEN_EVENT, openAgentChat);
+    const handleOpenAgentChatEvent = () => {
+      startAgentChatRef.current();
+    };
+
+    window.addEventListener(
+      GLOBAL_AGENT_CHAT_OPEN_EVENT,
+      handleOpenAgentChatEvent
+    );
 
     return () => {
-      window.removeEventListener(GLOBAL_AGENT_CHAT_OPEN_EVENT, openAgentChat);
+      window.removeEventListener(
+        GLOBAL_AGENT_CHAT_OPEN_EVENT,
+        handleOpenAgentChatEvent
+      );
     };
-  }, [openAgentChat]);
+  }, []);
 
   React.useEffect(() => {
     if (canUseAgent) {
@@ -155,69 +195,58 @@ export function GlobalAgentChat({
   }, [activeOrganizationId]);
 
   React.useEffect(() => {
-    if (!open || !canUseAgent) {
-      return;
-    }
-
-    setThreadState((current) =>
-      current.status === "idle" || current.status === "error"
-        ? { error: null, status: "loading", session: null }
-        : current
-    );
-  }, [canUseAgent, open]);
-
-  React.useEffect(() => {
     if (threadState.status !== "loading" || !canUseAgent) {
       return;
     }
 
     let cancelled = false;
 
-    async function prepareThread() {
+    async function prepareThread(): Promise<ThreadState> {
       try {
         const host = resolveBrowserAgentHost();
 
         if (!host) {
-          if (!cancelled) {
-            setThreadState({
-              error: AGENT_HOST_MISSING_MESSAGE,
-              status: "error",
-              session: null,
-            });
-          }
-          return;
+          return {
+            error: AGENT_HOST_MISSING_MESSAGE,
+            status: "error",
+            session: null,
+          };
         }
 
         const thread = await ensureCurrentAgentThread();
         const authorization = await authorizeCurrentAgentThread(thread.id);
 
-        if (!cancelled) {
-          setThreadState({
-            error: null,
-            session: { authorization, host, threadId: thread.id },
-            status: "ready",
-          });
-        }
+        return {
+          error: null,
+          session: { authorization, host, threadId: thread.id },
+          status: "ready",
+        };
       } catch (error: unknown) {
-        if (!cancelled) {
-          setThreadState({
-            error:
-              error instanceof Error
-                ? error.message
-                : "The agent thread could not be prepared.",
-            status: "error",
-            session: null,
-          });
-        }
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : "The agent thread could not be prepared.",
+          status: "error",
+          session: null,
+        };
       }
     }
 
-    void prepareThread();
+    async function commitPreparedThread() {
+      const nextThreadState = await prepareThread();
+
+      if (!cancelled) {
+        setThreadState(nextThreadState);
+      }
+    }
+
+    void commitPreparedThread();
 
     return () => {
       cancelled = true;
     };
-  }, [canUseAgent, threadState.status]);
+  }, [activeOrganizationId, canUseAgent, threadState.status]);
 
   if (!canUseAgent) {
     return null;
@@ -234,13 +263,13 @@ export function GlobalAgentChat({
         aria-label="Open Ceird Agent"
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={openAgentChat}
+        onClick={startAgentChat}
       >
         <Sparkles className="size-4" aria-hidden="true" />
         <span>Agent</span>
       </button>
 
-      <ResponsiveDrawer open={open} onOpenChange={setOpen}>
+      <ResponsiveDrawer open={open} onOpenChange={handleOpenChange}>
         <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=bottom]:min-h-[70vh] data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-xl">
           <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
             <div className="flex min-w-0 items-start justify-between gap-4">
@@ -270,11 +299,7 @@ export function GlobalAgentChat({
             <AgentChatBody
               threadState={threadState}
               onRetry={() => {
-                setThreadState({
-                  error: null,
-                  status: "loading",
-                  session: null,
-                });
+                setThreadState(loadingThreadState);
               }}
             />
           </div>
@@ -294,7 +319,7 @@ function AgentChatBody({
   if (threadState.status === "loading") {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
-        Preparing the agent...
+        Preparing the agent
       </div>
     );
   }
@@ -324,7 +349,7 @@ function AgentChatBody({
     <React.Suspense
       fallback={
         <div className="flex flex-1 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
-          Preparing the agent...
+          Preparing the agent
         </div>
       }
     >
@@ -338,7 +363,28 @@ function AgentChatSession({
 }: {
   readonly session: AgentChatSessionState;
 }) {
+  const initialAuthorizationRef =
+    React.useRef<AgentConnectAuthorization | null>(null);
+  const initialAuthorizationAgentNameRef = React.useRef<string | null>(null);
+
+  if (
+    initialAuthorizationAgentNameRef.current !==
+    session.authorization.agentInstanceName
+  ) {
+    initialAuthorizationRef.current = session.authorization;
+    initialAuthorizationAgentNameRef.current =
+      session.authorization.agentInstanceName;
+  }
+
   const query = React.useCallback(async () => {
+    const initialAuthorization = initialAuthorizationRef.current;
+
+    if (initialAuthorization !== null) {
+      initialAuthorizationRef.current = null;
+
+      return { token: initialAuthorization.token };
+    }
+
     const authorization = await authorizeCurrentAgentThread(session.threadId);
 
     if (
@@ -393,9 +439,9 @@ function AgentConversation({ agent }: { readonly agent: AgentConnection }) {
           </div>
         ) : (
           <div className="space-y-4">
-            {messages.map((message, index) => (
+            {messages.map((message) => (
               <AgentMessage
-                key={message.id ?? `${message.role ?? "message"}-${index}`}
+                key={getMessageKey(message)}
                 message={message}
                 onToolApprovalResponse={addToolApprovalResponse}
               />
@@ -405,7 +451,7 @@ function AgentConversation({ agent }: { readonly agent: AgentConnection }) {
 
         {busy ? (
           <p className="mt-4 text-xs text-muted-foreground">
-            Ceird Agent is working...
+            Ceird Agent is working
           </p>
         ) : null}
 
@@ -429,7 +475,7 @@ function AgentComposer({
   readonly sendMessage: (message: { readonly text: string }) => Promise<void>;
 }) {
   const [draft, setDraft] = React.useState("");
-  const formRef = React.useRef<HTMLFormElement | null>(null);
+  const composerRef = React.useRef<HTMLDivElement | null>(null);
 
   const submitDraft = React.useCallback(async () => {
     const text = draft.trim();
@@ -443,35 +489,31 @@ function AgentComposer({
   }, [busy, draft, sendMessage]);
 
   useAppHotkey("agentSubmit", () => {
-    if (activeElementIsInside(formRef)) {
+    if (activeElementIsInside(composerRef)) {
       void submitDraft();
     }
   });
 
   return (
     <DrawerFooter className="shrink-0 gap-3 border-t px-5 py-3 sm:px-6">
-      <form
-        ref={formRef}
-        className="flex w-full items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submitDraft();
-        }}
-      >
+      <div ref={composerRef} className="flex w-full items-end gap-2">
         <Textarea
           aria-label="Message Ceird Agent"
           className="max-h-32 min-h-12 flex-1 resize-none py-3"
-          placeholder="Ask Ceird to do something..."
+          placeholder="Ask Ceird to do something"
           value={draft}
           onChange={(event) => {
             setDraft(event.currentTarget.value);
           }}
         />
         <Button
-          type="submit"
+          type="button"
           size="icon-lg"
           aria-label="Send"
           disabled={!draft.trim() || busy}
+          onClick={() => {
+            void submitDraft();
+          }}
         >
           <SendHorizontal className="size-4" aria-hidden="true" />
         </Button>
@@ -481,7 +523,7 @@ function AgentComposer({
           hotkey={HOTKEYS.agentSubmit.hotkey}
           label={HOTKEYS.agentSubmit.label}
         />
-      </form>
+      </div>
     </DrawerFooter>
   );
 }
@@ -514,9 +556,9 @@ function AgentMessage({
         >
           {isUser ? "You" : "Ceird Agent"}
         </p>
-        {parts.map((part, index) => (
+        {parts.map((part) => (
           <AgentMessagePart
-            key={`${part.type}-${index}`}
+            key={getMessagePartKey(part)}
             part={part}
             onToolApprovalResponse={onToolApprovalResponse}
           />
@@ -589,22 +631,7 @@ function AgentMessagePart({
 }
 
 function getToolStateLabel(state: ToolStateLabel): string {
-  switch (state) {
-    case "approved":
-      return "Approved";
-    case "complete":
-      return "Complete";
-    case "denied":
-      return "Rejected";
-    case "error":
-      return "Error";
-    case "streaming":
-      return "Working";
-    case "waiting-approval":
-      return "Approval needed";
-    case "loading":
-      return "Working";
-  }
+  return TOOL_STATE_LABELS[state];
 }
 
 function getToolName(part: ChatPart) {
@@ -615,6 +642,38 @@ function getToolName(part: ChatPart) {
   return part.type.startsWith("tool-")
     ? part.type.slice("tool-".length)
     : "Tool";
+}
+
+function getMessageKey(message: ChatMessage) {
+  return message.id ?? `${message.role ?? "message"}-${hashKey(message.parts)}`;
+}
+
+function getMessagePartKey(part: ChatPart) {
+  if ("id" in part && typeof part.id === "string") {
+    return `${part.type}-${part.id}`;
+  }
+
+  if ("toolCallId" in part && typeof part.toolCallId === "string") {
+    return `${part.type}-${part.toolCallId}`;
+  }
+
+  if (part.type === "text") {
+    return `${part.type}-${hashKey(part.text)}`;
+  }
+
+  return `${part.type}-${hashKey(part)}`;
+}
+
+function hashKey(value: unknown) {
+  const source =
+    typeof value === "string" ? value : (JSON.stringify(value) ?? "unknown");
+  let hash = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + (source.codePointAt(index) ?? 0)) % 1_000_000_007;
+  }
+
+  return Math.abs(hash).toString(36);
 }
 
 function ToolPayload({

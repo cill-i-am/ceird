@@ -9,7 +9,7 @@ import { APP_ORIGIN } from "../test-urls";
 
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
-export function createTestEmail(prefix: string): string {
+function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
 }
 
@@ -17,7 +17,7 @@ function createTestSlug(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
 }
 
-export async function expectAuthenticatedHome(page: Page) {
+async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
   await expect(page).toHaveURL(`${APP_ORIGIN}/`, {

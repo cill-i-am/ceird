@@ -1,22 +1,42 @@
 import type { ChatRecoveryContext } from "@cloudflare/ai-chat";
-import { describe, expect, it } from "@effect/vitest";
+import type * as AiChatModule from "@cloudflare/ai-chat";
+import { beforeAll, describe, expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 
-const { mockedMakeCeirdChatRecoveryOptions } = vi.hoisted(() => ({
-  mockedMakeCeirdChatRecoveryOptions: vi.fn(),
+import type { makeCeirdChatRecoveryOptions } from "./ceird-agent-recovery.js";
+import type { CeirdAgent as CeirdAgentType } from "./ceird-agent.js";
+
+type CeirdAgentConstructor = typeof CeirdAgentType;
+type MakeCeirdChatRecoveryOptions = typeof makeCeirdChatRecoveryOptions;
+
+const { MockAIChatAgent, mockedMakeCeirdChatRecoveryOptions } = vi.hoisted(
+  () => {
+    class MockAIChatAgentBase {
+      readonly mockAgentBase = true;
+    }
+
+    return {
+      MockAIChatAgent: MockAIChatAgentBase,
+      mockedMakeCeirdChatRecoveryOptions: vi.fn<MakeCeirdChatRecoveryOptions>(),
+    };
+  }
+);
+
+vi.mock(import("@cloudflare/ai-chat"), () => ({
+  AIChatAgent: MockAIChatAgent as unknown as typeof AiChatModule.AIChatAgent,
 }));
 
-vi.mock("@cloudflare/ai-chat", () => ({
-  AIChatAgent: class {},
-}));
-
-vi.mock("./ceird-agent-recovery.js", () => ({
+vi.mock(import("./ceird-agent-recovery.js"), () => ({
   makeCeirdChatRecoveryOptions: mockedMakeCeirdChatRecoveryOptions,
 }));
 
-import { CeirdAgent } from "./ceird-agent.js";
-
 describe("CeirdAgent", () => {
+  let CeirdAgent: CeirdAgentConstructor;
+
+  beforeAll(async () => {
+    ({ CeirdAgent } = await import("./ceird-agent.js"));
+  });
+
   it("enables chat recovery on the Agent class", () => {
     const agent = new CeirdAgent({} as never, {} as never);
 
@@ -26,7 +46,7 @@ describe("CeirdAgent", () => {
   it("delegates chat recovery decisions to the recovery helper", async () => {
     const agent = new CeirdAgent({} as never, {} as never);
     const ctx = {
-      createdAt: 1_000,
+      createdAt: 1000,
       messages: [],
       partialParts: [],
       partialText: "",

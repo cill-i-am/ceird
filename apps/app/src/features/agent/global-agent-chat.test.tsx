@@ -232,9 +232,20 @@ describe("global agent chat", () => {
     const useAgentOptions = mockedUseAgent.mock.calls.at(-1)?.[0];
     expect(useAgentOptions?.cacheTtl).toBeLessThan(300_000);
     mockedAuthorizeCurrentAgentThread.mockClear();
-    await expect(
-      (useAgentOptions?.query as () => Promise<{ readonly token: string }>)()
-    ).resolves.toStrictEqual({ token: "agent-connect-token" });
+    const refreshQuery = useAgentOptions?.query as () => Promise<{
+      readonly token: string;
+    }>;
+    await expect(refreshQuery()).resolves.toStrictEqual({
+      token: "agent-connect-token",
+    });
+    expect(mockedAuthorizeCurrentAgentThread).not.toHaveBeenCalled();
+    mockedAuthorizeCurrentAgentThread.mockResolvedValueOnce({
+      agentInstanceName: thread.agentInstanceName,
+      token: "agent-connect-token-refreshed",
+    });
+    await expect(refreshQuery()).resolves.toStrictEqual({
+      token: "agent-connect-token-refreshed",
+    });
     expect(mockedAuthorizeCurrentAgentThread).toHaveBeenCalledWith(thread.id);
     const useAgentChatOptions = mockedUseAgentChat.mock.calls.at(-1)?.[0];
     expect(useAgentChatOptions?.getInitialMessages).toBeUndefined();

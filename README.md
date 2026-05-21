@@ -121,8 +121,8 @@ capability surface.
 
 Local multi-service development and production infrastructure are both described
 in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Queues,
-Hyperdrive, Cloudflare AI/Agent resources, and Neon Postgres branches per
-stage.
+Hyperdrive, Workers AI bindings, Agent Durable Objects, and Neon Postgres
+branches per stage.
 
 ## Quality Gates
 

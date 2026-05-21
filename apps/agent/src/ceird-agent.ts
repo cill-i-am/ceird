@@ -20,13 +20,14 @@ const decodeAgentInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 
 export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
   override chatRecovery = true;
+  private readonly makeChatRecoveryOptions = makeCeirdChatRecoveryOptions;
   messageConcurrency = "queue" as const;
   maxPersistedMessages = 200;
 
-  override async onChatRecovery(
+  override onChatRecovery(
     ctx: ChatRecoveryContext
   ): Promise<ChatRecoveryOptions> {
-    return makeCeirdChatRecoveryOptions(ctx);
+    return Promise.resolve(this.makeChatRecoveryOptions(ctx));
   }
 
   override async onChatMessage(

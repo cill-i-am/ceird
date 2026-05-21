@@ -3,7 +3,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 
 import {
@@ -25,7 +25,6 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type AgentWorkerBindings = {
-  readonly AI: Cloudflare.AiGateway;
   readonly CeirdAgent: Cloudflare.DurableObjectNamespaceLike;
   readonly DOMAIN: DomainWorkerResource;
 };
@@ -57,16 +56,20 @@ export interface AgentWorkerConfiguredEnv {
 }
 
 export function makeAgentWorkerBindings(input: {
-  readonly ai: Cloudflare.AiGateway;
   readonly domain: DomainWorkerResource;
 }) {
   return {
-    AI: input.ai,
     CeirdAgent: Cloudflare.DurableObjectNamespace("CeirdAgent", {
       className: "CeirdAgent",
     }),
     DOMAIN: input.domain,
   } satisfies AgentWorkerBindingProps;
+}
+
+export function makeAgentWorkersAiBinding() {
+  return {
+    bindings: [{ type: "ai", name: "AI" }],
+  } satisfies Cloudflare.Worker["Binding"];
 }
 
 export function makeAgentWorkerEnv(input: {
@@ -83,7 +86,6 @@ export function makeAgentWorkerEnv(input: {
 
 export function makeAgentWorkerProps(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
-  readonly ai: Cloudflare.AiGateway;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
@@ -94,7 +96,6 @@ export function makeAgentWorkerProps(input: {
     main: agentWorkerMain,
     compatibility: ceirdWorkerCompatibility,
     bindings: makeAgentWorkerBindings({
-      ai: input.ai,
       domain: input.domain,
     }),
     env: {
@@ -111,11 +112,19 @@ export function makeAgentWorkerProps(input: {
 
 export function makeAgentWorker(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
-  readonly ai: Cloudflare.AiGateway;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
   readonly name: string;
 }) {
-  return Cloudflare.Worker("Agent", makeAgentWorkerProps(input));
+  return Effect.gen(function* () {
+    const worker = yield* Cloudflare.Worker(
+      "Agent",
+      makeAgentWorkerProps(input)
+    );
+
+    yield* worker.bind("AgentWorkersAiBinding", makeAgentWorkersAiBinding());
+
+    return worker;
+  });
 }

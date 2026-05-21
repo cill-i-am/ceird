@@ -164,15 +164,15 @@ test.describe("global agent chat", () => {
     );
     expect(authorization.token).toEqual(expect.any(String));
     await expect(page).toHaveURL(`${APP_ORIGIN}/jobs`);
-    const agentInstanceName = String(authorization.agentInstanceName);
-    const token = String(authorization.token);
+    const issuedAgentInstanceName = String(authorization.agentInstanceName);
+    const issuedToken = String(authorization.token);
     await expect
       .poll(() =>
         page.evaluate(
-          ({ agentInstanceName, origin, token }) => {
+          (input) => {
             const expectedPath = new URL(
-              `/agents/ceird-agent/${encodeURIComponent(agentInstanceName)}`,
-              origin
+              `/agents/ceird-agent/${encodeURIComponent(input.issuedAgentInstanceName)}`,
+              input.origin
             ).pathname;
 
             return (window.__CEIRD_AGENT_WS_URLS ?? []).some((rawUrl) => {
@@ -180,11 +180,15 @@ test.describe("global agent chat", () => {
 
               return (
                 url.pathname === expectedPath &&
-                url.searchParams.get("token") === token
+                url.searchParams.get("token") === input.issuedToken
               );
             });
           },
-          { agentInstanceName, origin: AGENT_ORIGIN, token }
+          {
+            issuedAgentInstanceName,
+            issuedToken,
+            origin: AGENT_ORIGIN,
+          }
         )
       )
       .toBe(true);
@@ -195,7 +199,7 @@ test.describe("global agent chat", () => {
 
           return (
             url.pathname.endsWith("/get-messages") &&
-            url.searchParams.get("token") === token
+            url.searchParams.get("token") === issuedToken
           );
         })
       )

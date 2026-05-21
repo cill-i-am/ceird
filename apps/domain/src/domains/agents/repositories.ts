@@ -591,7 +591,7 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
         actionRunId: AgentActionRunId,
         rows: readonly AgentActionRunRow[]
       ) {
-        const updated = rows[0];
+        const [updated] = rows;
 
         if (updated !== undefined) {
           return updated;
