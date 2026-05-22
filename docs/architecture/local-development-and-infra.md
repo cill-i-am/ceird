@@ -315,11 +315,13 @@ root stack outputs. Preview Playwright targets the reconciled Agent Worker with
 preview `/health` endpoints and an API auth-session probe that forwards through
 the private domain Worker before starting Playwright. This avoids transient
 route, domain, TLS, or service binding propagation failures on freshly created
-preview hostnames. The domain Worker
-disables auth rate limiting by default only for `pr-<number>` stages so repeated
-E2E runs against the persistent preview database do not accumulate lockout
-counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to
-exercise production rate-limit behavior.
+preview hostnames. The domain Worker disables auth rate limiting by default for
+`pr-<number>` stages, and the main deploy workflow explicitly keeps it disabled
+for the canonical main hosts because main E2E runs also create many auth records
+from a single runner IP. This prevents repeated E2E runs against persistent CI
+databases from accumulating lockout counters; set
+`AUTH_RATE_LIMIT_ENABLED=true` explicitly when a stage needs to exercise
+production rate-limit behavior.
 
 Fork pull requests do not run the secret-bearing preview jobs. They continue to
 run the non-deploying build, lint, format, and typecheck jobs without

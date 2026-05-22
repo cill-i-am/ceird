@@ -101,10 +101,10 @@ deploy, `.github/workflows/preview.yml` reads the preview stage's
 `add-mask` command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to
 `GITHUB_ENV`.
 
-Preview stages named `pr-<number>` deploy the domain Worker with
-`AUTH_RATE_LIMIT_ENABLED=false`. This keeps repeated same-PR E2E runs from
-locking themselves out against a persistent preview database while preserving
-auth rate limiting for `main` and ordinary non-PR stages by default.
+Preview stages named `pr-<number>` and the canonical `main` deploy workflow
+deploy the domain Worker with `AUTH_RATE_LIMIT_ENABLED=false`. This keeps
+repeated E2E runs from locking themselves out against persistent CI databases
+while preserving auth rate limiting for ordinary non-PR stages by default.
 
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` is the JSON body from
 `~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a
@@ -218,9 +218,13 @@ Neon plan can create another protected branch. `CEIRD_NEON_HISTORY_RETENTION_SEC
 defaults to `21600` so the workflow declares the provider-reported Neon
 retention window instead of re-planning it on every deploy.
 
-The main deploy workflow sets `CEIRD_APP_HOSTNAME=app.ceird.app` and
-`CEIRD_API_HOSTNAME=api.ceird.app` so the production stage keeps the canonical
-app/API routes. Other stages use stage-scoped hostnames such as
+The main deploy workflow sets `CEIRD_APP_HOSTNAME=app.ceird.app`,
+`CEIRD_API_HOSTNAME=api.ceird.app`, `CEIRD_MCP_HOSTNAME=mcp.ceird.app`, and
+`CEIRD_AGENT_HOSTNAME=agent.ceird.app` so the production stage keeps the
+canonical app/API/MCP/Agent routes. It also sets
+`AUTH_RATE_LIMIT_ENABLED=false` because the main Build workflow's E2E suite
+targets those persistent canonical hosts and creates many auth records from the
+same runner IP. Other stages use stage-scoped hostnames such as
 `app.<stage>.ceird.app` and `api.<stage>.ceird.app` unless explicitly
 overridden.
 

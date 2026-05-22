@@ -49,7 +49,9 @@ resolving. Use `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
 `CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` only for an intentional
 canonical domain cutover; the main deploy workflow sets them to
 `app.ceird.app`, `api.ceird.app`, `mcp.ceird.app`, and `agent.ceird.app` for
-production.
+production. The main deploy workflow also sets `AUTH_RATE_LIMIT_ENABLED=false`
+so the persistent canonical hosts remain compatible with the main Build E2E
+suite's signup-heavy auth flows.
 Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
 and passed through the app-owned Worker env module; the root stack does not own
 those runtime defaults. Worker compatibility flags and observability settings
