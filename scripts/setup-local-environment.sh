@@ -99,5 +99,5 @@ fi
 if [[ "$skip_opensrc_sync" == "true" ]]; then
   CI=true pnpm install --frozen-lockfile
 else
-  pnpm install --frozen-lockfile
+  CI= pnpm install --frozen-lockfile
 fi
