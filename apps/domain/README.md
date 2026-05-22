@@ -45,9 +45,9 @@ default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.
 The domain Worker owns:
 
 - Better Auth routes and OAuth/MCP resource configuration.
-- Product domain services for jobs, sites, labels, comments, and activity.
+- Product domain services for jobs, sites, labels, comments, agents, and activity.
 - Authorization policy and actor resolution.
-- Action execution for public HTTP and MCP clients.
+- Action execution for public HTTP, MCP, and Agent clients.
 - Audit/activity records.
 - Drizzle schema, migrations, Postgres/Hyperdrive runtime, and repositories.
 - Auth email scheduling and queue delivery.

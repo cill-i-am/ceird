@@ -1,5 +1,6 @@
 export const DEFAULT_APP_ORIGIN = "http://127.0.0.1:4173";
 export const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
+export const DEFAULT_AGENT_ORIGIN = DEFAULT_APP_ORIGIN;
 
 export const USE_PACKAGE_LOCAL_SERVER =
   process.env.PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER === "1";
@@ -33,4 +34,9 @@ export const APP_ORIGIN = readPlaywrightOrigin(
 export const API_ORIGIN = readPlaywrightOrigin(
   "PLAYWRIGHT_API_URL",
   DEFAULT_API_ORIGIN
+);
+
+export const AGENT_ORIGIN = readPlaywrightOrigin(
+  "PLAYWRIGHT_AGENT_URL",
+  DEFAULT_AGENT_ORIGIN
 );

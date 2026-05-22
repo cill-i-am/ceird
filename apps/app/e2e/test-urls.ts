@@ -1,4 +1,5 @@
 import {
+  AGENT_ORIGIN,
   API_ORIGIN,
   APP_ORIGIN,
   readOptionalEnv,
@@ -24,4 +25,4 @@ export function readPlaywrightDatabaseUrl() {
   );
 }
 
-export { API_ORIGIN, APP_ORIGIN, USE_PACKAGE_LOCAL_SERVER };
+export { AGENT_ORIGIN, API_ORIGIN, APP_ORIGIN, USE_PACKAGE_LOCAL_SERVER };

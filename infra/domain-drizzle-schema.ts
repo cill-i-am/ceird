@@ -2,6 +2,9 @@ import { tsImport } from "tsx/esm/api";
 
 const schemaExportNames = [
   "account",
+  "agentActionRun",
+  "agentsSchema",
+  "agentThread",
   "authSchema",
   "comment",
   "commentsSchema",
@@ -61,6 +64,9 @@ function requireSchemaExport(name: SchemaExportName) {
 }
 
 export const account = requireSchemaExport("account");
+export const agentActionRun = requireSchemaExport("agentActionRun");
+export const agentsSchema = requireSchemaExport("agentsSchema");
+export const agentThread = requireSchemaExport("agentThread");
 export const authSchema = requireSchemaExport("authSchema");
 export const comment = requireSchemaExport("comment");
 export const commentsSchema = requireSchemaExport("commentsSchema");

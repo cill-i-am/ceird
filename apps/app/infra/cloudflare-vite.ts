@@ -22,22 +22,28 @@ type WorkerConfiguredEnvValue = Input<NonNullable<ViteProps["env"]>[string]>;
 type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export interface AppWorkerConfiguredEnv {
+  readonly AGENT_ORIGIN: Input<string>;
   readonly API_ORIGIN: Input<string>;
   readonly CEIRD_CLOUDFLARE: "1";
+  readonly VITE_AGENT_ORIGIN: Input<string>;
   readonly VITE_API_ORIGIN: Input<string>;
 }
 
 export function makeAppWorkerEnv(input: {
+  readonly agentOrigin: Input<string>;
   readonly apiOrigin: Input<string>;
 }): AppWorkerConfiguredEnv {
   return {
+    AGENT_ORIGIN: input.agentOrigin,
     API_ORIGIN: input.apiOrigin,
     CEIRD_CLOUDFLARE: "1",
+    VITE_AGENT_ORIGIN: input.agentOrigin,
     VITE_API_ORIGIN: input.apiOrigin,
   } satisfies AppWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
 
 export function makeAppWorker(input: {
+  readonly agentOrigin: Input<string>;
   readonly apiOrigin: Input<string>;
   readonly hostname: string;
   readonly name: string;
@@ -46,7 +52,12 @@ export function makeAppWorker(input: {
     name: input.name,
     rootDir: "apps/app",
     compatibility: appWorkerCompatibility,
-    env: { ...makeAppWorkerEnv({ apiOrigin: input.apiOrigin }) },
+    env: {
+      ...makeAppWorkerEnv({
+        agentOrigin: input.agentOrigin,
+        apiOrigin: input.apiOrigin,
+      }),
+    },
     domain: input.hostname,
     observability: appWorkerObservability,
     url: true,

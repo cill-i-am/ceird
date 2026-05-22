@@ -4,59 +4,76 @@ import type { ComponentProps, ReactElement } from "react";
 
 import { AppLayout } from "./app-layout";
 
-const { mockedAppSidebar, mockedEmailVerificationBanner, mockedSidebarInset } =
-  vi.hoisted(() => ({
-    mockedAppSidebar: vi.fn<
-      ({
-        user,
-      }: {
-        user?: {
-          name: string;
-          email: string;
-          image?: string | null;
-        } | null;
-      } & ComponentProps<"div">) => ReactElement
-    >(
-      ({
-        activeOrganizationId: _activeOrganizationId,
-        currentOrganizationRole: _currentOrganizationRole,
-        user,
-        ...props
-      }: {
-        activeOrganizationId?: unknown;
-        currentOrganizationRole?: unknown;
-        user?: {
-          name: string;
-          email: string;
-          image?: string | null;
-        } | null;
-      } & ComponentProps<"div">) => (
-        <aside data-testid="app-sidebar" {...props}>
-          {user?.name ?? "missing user"}
-        </aside>
-      )
-    ),
-    mockedEmailVerificationBanner: vi.fn<
-      ({
-        email,
-        emailVerified,
-      }: {
+const {
+  mockedAppSidebar,
+  mockedEmailVerificationBanner,
+  mockedGlobalAgentChat,
+  mockedSidebarInset,
+} = vi.hoisted(() => ({
+  mockedAppSidebar: vi.fn<
+    ({
+      user,
+    }: {
+      user?: {
+        name: string;
         email: string;
-        emailVerified: boolean;
-      }) => ReactElement
-    >(({ email, emailVerified }) => (
-      <div data-testid="email-verification-banner">
-        {email}:{String(emailVerified)}
-      </div>
-    )),
-    mockedSidebarInset: vi.fn<
-      ({ children, ...props }: ComponentProps<"div">) => ReactElement
-    >(({ children, ...props }: ComponentProps<"div">) => (
-      <div data-testid="sidebar-inset" {...props}>
-        {children}
-      </div>
-    )),
-  }));
+        image?: string | null;
+      } | null;
+    } & ComponentProps<"div">) => ReactElement
+  >(
+    ({
+      activeOrganizationId: _activeOrganizationId,
+      currentOrganizationRole: _currentOrganizationRole,
+      user,
+      ...props
+    }: {
+      activeOrganizationId?: unknown;
+      currentOrganizationRole?: unknown;
+      user?: {
+        name: string;
+        email: string;
+        image?: string | null;
+      } | null;
+    } & ComponentProps<"div">) => (
+      <aside data-testid="app-sidebar" {...props}>
+        {user?.name ?? "missing user"}
+      </aside>
+    )
+  ),
+  mockedEmailVerificationBanner: vi.fn<
+    ({
+      email,
+      emailVerified,
+    }: {
+      email: string;
+      emailVerified: boolean;
+    }) => ReactElement
+  >(({ email, emailVerified }) => (
+    <div data-testid="email-verification-banner">
+      {email}:{String(emailVerified)}
+    </div>
+  )),
+  mockedGlobalAgentChat: vi.fn<
+    ({
+      activeOrganizationId,
+      currentOrganizationRole,
+    }: {
+      activeOrganizationId?: unknown;
+      currentOrganizationRole?: unknown;
+    }) => ReactElement | null
+  >(({ activeOrganizationId, currentOrganizationRole }) =>
+    activeOrganizationId && currentOrganizationRole ? (
+      <button type="button">Open Ceird Agent</button>
+    ) : null
+  ),
+  mockedSidebarInset: vi.fn<
+    ({ children, ...props }: ComponentProps<"div">) => ReactElement
+  >(({ children, ...props }: ComponentProps<"div">) => (
+    <div data-testid="sidebar-inset" {...props}>
+      {children}
+    </div>
+  )),
+}));
 
 const { mockedNavigate } = vi.hoisted(() => ({
   mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
@@ -96,6 +113,11 @@ vi.mock(import("#/components/app-sidebar"), () => ({
 
 vi.mock(import("#/features/auth/email-verification-banner"), () => ({
   EmailVerificationBanner: mockedEmailVerificationBanner,
+}));
+
+vi.mock(import("#/features/agent/global-agent-chat"), () => ({
+  GlobalAgentChat: mockedGlobalAgentChat,
+  requestOpenGlobalAgentChat: vi.fn<() => void>(),
 }));
 
 describe("app layout", () => {
@@ -209,6 +231,55 @@ describe("app layout", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", { name: /open organization settings/i })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "mounts the app-level agent chat only inside an organization",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      const { rerender } = render(
+        <AppLayout
+          activeOrganizationId={"org_123" as never}
+          currentOrganizationRole="owner"
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: true,
+            image: null,
+          }}
+        />
+      );
+
+      expect(mockedGlobalAgentChat.mock.lastCall?.[0]).toStrictEqual({
+        activeOrganizationId: "org_123",
+        currentOrganizationRole: "owner",
+      });
+      expect(
+        screen.getByRole("button", { name: /open ceird agent/i })
+      ).toBeInTheDocument();
+
+      rerender(
+        <AppLayout
+          activeOrganizationId={null}
+          user={{
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: true,
+            image: null,
+          }}
+        />
+      );
+
+      expect(mockedGlobalAgentChat.mock.lastCall?.[0]).toStrictEqual({
+        activeOrganizationId: null,
+        currentOrganizationRole: undefined,
+      });
+      expect(
+        screen.queryByRole("button", { name: /open ceird agent/i })
       ).not.toBeInTheDocument();
     }
   );

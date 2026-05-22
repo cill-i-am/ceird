@@ -12,6 +12,7 @@ import {
 } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 
+import { AgentsHttpLive } from "./domains/agents/http.js";
 import {
   AuthenticationHttpLive,
   AuthenticationLive,
@@ -48,6 +49,7 @@ const makeApiHandlersLive = () =>
     Layer.provide(
       Layer.mergeAll(
         SystemLive,
+        AgentsHttpLive,
         AuthenticationHttpLive,
         JobsHttpLive,
         LabelsHttpLive,

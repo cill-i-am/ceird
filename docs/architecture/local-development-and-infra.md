@@ -4,8 +4,8 @@
 
 Local development uses the same root Alchemy stack as deployment. Root
 `pnpm dev` delegates to `alchemy dev --env-file .env.local`, which creates or
-updates a cloud-backed stage with Cloudflare Workers/Vite, Hyperdrive, queues,
-routes, and a Neon branch.
+updates a cloud-backed stage with Cloudflare Workers/Vite, the Agent Worker,
+Hyperdrive, queues, routes, and a Neon branch.
 
 Authenticate Cloudflare locally through the Alchemy profile before the first
 cloud-backed run:
@@ -41,13 +41,14 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 The Alchemy stack and stage are the identities for state, resource names,
 Worker health payloads, and Neon branches. Use the `--stage` CLI flag to choose
 the stage; `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` are injected into app/API
-runtimes after Alchemy resolves the stack and stage. Both health endpoints
+runtimes after Alchemy resolves the stack and stage. Worker health endpoints
 return those values as `stackName` and `stage`, falling back to `local` in
-package-local Node runs. The root stack outputs `app` and `api` as stage HTTPS
-origins derived from the reconciled Cloudflare Worker domains, with the
-configured hostnames as pre-resolution fallbacks. Canonical domain cutover is an
-explicit `CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` override so a parent-stage
-deploy cannot accidentally take over a hostname owned by another Worker. Use the
+package-local Node runs. The root stack outputs `app`, `api`, `mcp`, and
+`agent` as stage HTTPS origins derived from the reconciled Cloudflare Worker
+domains, with the configured hostnames as pre-resolution fallbacks. Canonical
+domain cutover is an explicit `CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` /
+`CEIRD_MCP_HOSTNAME` / `CEIRD_AGENT_HOSTNAME` override so a parent-stage deploy
+cannot accidentally take over a hostname owned by another Worker. Use the
 Alchemy CLI directly for explicit deploy and destroy operations:
 
 ```bash
@@ -74,24 +75,36 @@ fallback secrets; if no source env file exists, setup stops with a clear error.
 
 Common local and Alchemy variables include:
 
-| Variable                  | Purpose                                                   |
-| ------------------------- | --------------------------------------------------------- |
-| `ALCHEMY_STACK_NAME`      | Alchemy-injected runtime stack name for Worker metadata.  |
-| `ALCHEMY_STAGE`           | Alchemy-injected runtime stage for app/API health checks. |
-| `AUTH_APP_ORIGIN`         | Browser app origin used by auth redirects and emails.     |
-| `AUTH_EMAIL_FROM`         | Sender address for auth emails.                           |
-| `AUTH_EMAIL_FROM_NAME`    | Sender display name.                                      |
-| `AUTH_RATE_LIMIT_ENABLED` | Disables auth rate limiting for local and PR-preview E2E. |
-| `BETTER_AUTH_BASE_URL`    | API auth URL.                                             |
-| `BETTER_AUTH_SECRET`      | Stable local auth secret for package-local domain runs.   |
-| `DATABASE_URL`            | Package-local domain database URL.                        |
-| `GOOGLE_MAPS_API_KEY`     | Optional local Google geocoding key for site creation.    |
+| Variable                               | Purpose                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `ALCHEMY_STACK_NAME`                   | Alchemy-injected runtime stack name for Worker metadata.                             |
+| `ALCHEMY_STAGE`                        | Alchemy-injected runtime stage for Worker health checks.                             |
+| `AUTH_APP_ORIGIN`                      | Browser app origin used by auth redirects and emails.                                |
+| `AUTH_EMAIL_FROM`                      | Sender address for auth emails.                                                      |
+| `AUTH_EMAIL_FROM_NAME`                 | Sender display name.                                                                 |
+| `AUTH_RATE_LIMIT_ENABLED`              | Disables auth rate limiting for local and PR-preview E2E.                            |
+| `BETTER_AUTH_BASE_URL`                 | API auth URL.                                                                        |
+| `BETTER_AUTH_SECRET`                   | Stable local auth secret for package-local domain runs.                              |
+| `DATABASE_URL`                         | Package-local domain database URL.                                                   |
+| `GOOGLE_MAPS_API_KEY`                  | Optional local Google geocoding key for site creation.                               |
+| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | Agent action ledger stale-running recovery window.                                   |
+| `AGENT_INTERNAL_SECRET`                | Internal domain/Agent shared secret for package-local runs.                          |
+| `AGENT_ORIGIN`                         | Server-side app Agent Worker origin.                                                 |
+| `VITE_AGENT_ORIGIN`                    | Browser-exposed Agent Worker origin used by the global chat client.                  |
+| `AGENT_MUTATION_TOOLS_ENABLED`         | Enables write/destructive Agent tools when a confirmation-capable client is present. |
 
 Package-local domain runs use deterministic development auth email delivery. That
 local transport is separate from deployed Worker email delivery, which uses the
 Cloudflare Email Worker binding declared by the Alchemy stack.
 The Google Maps key is optional for package-local domain startup; when it is
 missing or blank, the domain uses deterministic development geocoding.
+
+Package-local Playwright runs set `AGENT_INTERNAL_SECRET` so the domain app can
+mount its Agent HTTP groups even when a test begins with auth or product
+routes. They also pass `AGENT_ORIGIN` and `VITE_AGENT_ORIGIN`; by default
+`PLAYWRIGHT_AGENT_URL` falls back to the package-local app origin so Agent HTTP
+and WebSocket paths can be mocked in focused app E2E tests without starting a
+separate Agent Worker process.
 
 ## Production Infrastructure
 
@@ -113,19 +126,37 @@ The stack provisions:
 - public Cloudflare MCP Worker declared in
   `apps/mcp/infra/cloudflare-worker.ts` and executed from
   `apps/mcp/src/worker.ts`
+- public Cloudflare Agent Worker declared in
+  `apps/agent/infra/cloudflare-worker.ts` and executed from
+  `apps/agent/src/worker.ts`
 - Cloudflare Vite app declared in `apps/app/infra/cloudflare-vite.ts`
 - Cloudflare Queue for auth email
 - Cloudflare dead-letter queue for auth email failures
 - Cloudflare Email Worker binding for deployed auth email delivery
 
-The domain, API, MCP, and Cloudflare Vite app share the same typed Worker
+The Agent Worker uses shared Worker trace/log settings, but disables
+Cloudflare invocation URL logging while the query-token fallback exists. It
+binds native Workers AI directly and does not provision an account-level AI
+Gateway resource. Browser clients should prefer bearer connect tokens; when the
+query-token fallback is used, the Agent Worker strips it before routing into the
+Agents SDK runtime.
+
+The Agent Worker bundle currently depends on packages that ship only a
+`main` entry even though the Alchemy Cloudflare Rolldown plugin resolves Worker
+bundles through Worker/browser/module fields. Root `pnpm.patchedDependencies`
+adds `module` metadata for those packages so CI/deploy bundles include them
+instead of emitting unresolved bare Worker imports.
+
+The domain, API, MCP, Agent, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely
 on Node.js compatibility APIs run consistently across deployable surfaces.
 The private domain Worker declares the runtime resources that own state:
 `DATABASE` is the native Hyperdrive resource, `AUTH_EMAIL_QUEUE` is the native
 Queue resource, and `AUTH_EMAIL` is the Cloudflare Email Worker binding
 descriptor. Public API and MCP Workers declare only the `DOMAIN` service binding
-to that private Worker. Infra tests compare the app-owned binding/env
+to that private Worker. The public Agent Worker declares `DOMAIN`, Workers AI,
+and its `CeirdAgent` Durable Object namespace in its app-owned infra module.
+Infra tests compare the app-owned binding/env
 declarations against the runtime contracts in each app's
 `src/platform/cloudflare/env.ts`.
 The domain Worker module adapter runs fetch and queue Effect programs; the
@@ -142,20 +173,21 @@ metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
 credentials, observability logs, and traces.
 Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
 origins for deployed Alchemy stages. Every stage, including `main`, defaults to
-`app.<stage>.<zone>`, `api.<stage>.<zone>`, and `mcp.<stage>.<zone>`, so each stage can share auth
-cookies only within its own `<stage>.<zone>` parent without relying on local
-sandbox host aliases. Canonical
-`app.<zone>`, `api.<zone>`, and `mcp.<zone>` hostnames require explicit
-`CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`, and `CEIRD_MCP_HOSTNAME` overrides
-after any existing Worker routes have been cut over intentionally; `.github/workflows/deploy-main.yml`
-sets those overrides for Ceird's production `main` stage.
+`app.<stage>.<zone>`, `api.<stage>.<zone>`, `mcp.<stage>.<zone>`, and
+`agent.<stage>.<zone>`, so each stage can share auth cookies only within its own
+`<stage>.<zone>` parent without relying on local sandbox host aliases.
+Canonical `app.<zone>`, `api.<zone>`, `mcp.<zone>`, and `agent.<zone>`
+hostnames require explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
+`CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` overrides after any existing
+Worker routes have been cut over intentionally; `.github/workflows/deploy-main.yml`
+sets production overrides for Ceird's `main` stage.
 The app is configured with app/API origins, Cloudflare-specific Vite flags, and
 Cloudflare observability logs and traces. Its API origin is derived from the API
 Worker's reconciled Cloudflare domain output, with the configured API hostname
 used as the fallback before the domain list is available, so the app Worker
 tracks the API resource rather than reconstructing that origin independently.
 The root Alchemy stack returns the same domain-derived origins as its operator
-outputs for `app`, `api`, and `mcp`. The private domain Worker has no public
+outputs for `app`, `api`, `mcp`, and `agent`. The private domain Worker has no public
 route and disables its workers.dev URL; public workers.dev URLs remain
 underlying Cloudflare resource attributes for adapter Workers rather than the
 primary deployment endpoints. It also returns the Neon branch name, Hyperdrive
@@ -176,12 +208,18 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy state get ceird <stage> PostgresBranch --env-fil
 The native Neon branch resource applies the configured `NeonMigrationSource`
 before Hyperdrive reads the branch origin and before new domain code is uploaded.
 That source is Alchemy `Drizzle.Schema`, which loads the domain schema barrel and
-writes generated migration snapshots under `apps/domain/drizzle/alchemy`. The Neon
+writes generated migration snapshots under `apps/domain/drizzle-alchemy`. The Neon
 branch resource depends on that schema resource, then applies SQL from the
 stage-specific `appliedMigrationsDir`. Parent stages use the full
 `apps/domain/drizzle` bootstrap tree. Child stages fork from the parent and apply
-only `apps/domain/drizzle/alchemy`, avoiding a replay of historical package-local
+only `apps/domain/drizzle-alchemy`, avoiding a replay of historical package-local
 SQL files that already exist on the forked branch.
+The checked-in Alchemy baseline must describe the currently deployed parent
+stage, not feature-branch schema that has not reached the parent yet. When a
+feature branch adds package-local migrations, check in the matching child-stage
+SQL under `apps/domain/drizzle-alchemy` with the same migration directory name.
+That lets current child branches apply the delta and later branches skip it once
+the parent has the same `neon_migrations` record.
 The root provider layer also keeps a no-op legacy `Drizzle.Migrations`
 tombstone provider so existing Cloudflare state entries from the pre-native
 migration wrapper can be planned and deleted cleanly. New migrations are owned
@@ -243,9 +281,9 @@ The branch migration input is modeled in `infra` as
 `Drizzle.Schema` at the root-owned `infra/domain-drizzle-schema.ts` wrapper. That
 wrapper loads the domain schema barrel at `apps/domain/src/platform/database/schema.ts`
 through the same TypeScript resolver Alchemy needs at deploy time. Its
-`generatedMigrationsDir` is always `apps/domain/drizzle/alchemy`. Parent stages
+`generatedMigrationsDir` is always `apps/domain/drizzle-alchemy`. Parent stages
 use `apps/domain/drizzle` as `appliedMigrationsDir` for bootstrap coverage;
-child stages use `apps/domain/drizzle/alchemy` as `appliedMigrationsDir` because
+child stages use `apps/domain/drizzle-alchemy` as `appliedMigrationsDir` because
 they inherit the historical schema from the parent branch.
 
 ## Pull Request Preview Infrastructure
@@ -265,20 +303,23 @@ so preview deploy and cleanup can use the existing state store directly instead
 of re-running Alchemy's Cloudflare bootstrap flow.
 
 Preview stages are ordinary non-parent stages. They use the default
-stage-scoped hostnames (`app.pr-<number>.ceird.app` and
-`api.pr-<number>.ceird.app`), stage-scoped Cloudflare resources, and a Neon
+stage-scoped hostnames (`app.pr-<number>.ceird.app`,
+`api.pr-<number>.ceird.app`, `mcp.pr-<number>.ceird.app`, and
+`agent.pr-<number>.ceird.app`), stage-scoped Cloudflare resources, and a Neon
 branch forked from the parent `main` branch through the existing
 `PostgresProject.ref` model. The workflow reads the preview branch connection
 URI from Alchemy `PostgresBranch` state for `PLAYWRIGHT_DATABASE_URL`; the value
 is masked before it is exported to the Playwright step and is still omitted from
-root stack outputs. After deploy, CI waits for both preview `/health` endpoints
-and an API auth-session probe that forwards through the private domain Worker
-before starting Playwright. This avoids transient route, domain, TLS, or service
-binding propagation failures on freshly created preview hostnames. The domain
-Worker disables auth rate limiting by default only for `pr-<number>` stages so
-repeated E2E runs against the persistent preview database do not accumulate
-lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview
-needs to exercise production rate-limit behavior.
+root stack outputs. Preview Playwright targets the reconciled Agent Worker with
+`PLAYWRIGHT_AGENT_URL`. After deploy, CI waits for the app, API, and Agent
+preview `/health` endpoints and an API auth-session probe that forwards through
+the private domain Worker before starting Playwright. This avoids transient
+route, domain, TLS, or service binding propagation failures on freshly created
+preview hostnames. The domain Worker
+disables auth rate limiting by default only for `pr-<number>` stages so repeated
+E2E runs against the persistent preview database do not accumulate lockout
+counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to
+exercise production rate-limit behavior.
 
 Fork pull requests do not run the secret-bearing preview jobs. They continue to
 run the non-deploying build, lint, format, and typecheck jobs without

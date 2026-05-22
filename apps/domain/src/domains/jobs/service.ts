@@ -62,6 +62,8 @@ import {
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
+import { WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG } from "./errors.js";
+import type { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
@@ -69,9 +71,6 @@ import {
   JobsRepository,
 } from "./repositories.js";
 import type { JobsRepositoryAccess } from "./repositories.js";
-
-const WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG =
-  "@ceird/domains/jobs/WorkItemOrganizationMismatchError" as const;
 
 type ContactsRepositoryService = Context.Service.Shape<
   typeof ContactsRepository
@@ -871,7 +870,7 @@ export class JobsService extends Context.Service<JobsService>()(
             .pipe(
               Effect.catchTag(
                 WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-                dieWorkItemOrganizationMismatch
+                failWorkItemOrganizationMismatchAsNotFound
               ),
               Effect.catchTag("SqlError", failJobsStorageError)
             );
@@ -897,7 +896,7 @@ export class JobsService extends Context.Service<JobsService>()(
             .pipe(
               Effect.catchTag(
                 WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-                dieWorkItemOrganizationMismatch
+                failWorkItemOrganizationMismatchAsNotFound
               ),
               Effect.catchTag("SqlError", failJobsStorageError)
             );
@@ -1123,6 +1122,17 @@ function failActorMembershipLoss(options: {
 
 function dieWorkItemOrganizationMismatch(error: unknown) {
   return Effect.die(error);
+}
+
+function failWorkItemOrganizationMismatchAsNotFound(
+  error: WorkItemOrganizationMismatchError
+) {
+  return Effect.fail(
+    new JobNotFoundError({
+      message: "Job does not exist",
+      workItemId: error.workItemId,
+    })
+  );
 }
 
 function ensureCanViewOrganizationJobsData(

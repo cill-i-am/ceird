@@ -23,6 +23,30 @@ Target packages extend the base comment DTO with their own target IDs, such as
 authorization, SQL ownership rows, and target-specific service behavior out of
 this package.
 
+## `@ceird/agents-core`
+
+Path: `packages/agents-core`
+
+Exports shared agent primitives and contracts used by the domain Worker and
+Agent Worker:
+
+- `AgentThreadId`, `AgentActionRunId`, and `AgentInstanceName`
+- agent action names, action kinds, action statuses, and operation ids
+- org/user/thread instance-name helpers
+- connect-token payload schemas and signing/verification helpers
+- thread DTOs, action request/response DTOs, and Effect `HttpApi` groups
+
+The root export includes the Effect `HttpApi` groups used by app/domain clients.
+The Agent Worker imports `@ceird/agents-core/runtime` instead; that subpath keeps
+the same IDs, DTO schemas, action registry metadata, connect-token helpers, and
+internal agent paths, but leaves HTTP API group construction out of the Worker
+bundle.
+
+Use this package for payloads and ids that cross between `apps/domain`,
+`apps/agent`, and future bot/client surfaces. Keep AI model setup, Cloudflare
+Agent runtime state, SQL repositories, authorization, and action
+implementations out of this package.
+
 ## `@ceird/identity-core`
 
 Path: `packages/identity-core`
@@ -77,6 +101,10 @@ Exports the shared jobs contract:
 - `JobsApi`, an Effect `HttpApi` contract for jobs, rate cards, job label
   assignment, collaborators, visits, comments, costs, and activity
 
+Subpath exports `@ceird/jobs-core/ids` and `@ceird/jobs-core/dto` are available
+for runtimes, such as the Agent Worker, that need schemas without pulling in the
+HTTP API construction surface.
+
 This package is the source of truth for jobs payloads crossing the HTTP
 boundary. Keep SQL repositories, React state, and service-layer authorization
 out of this package.
@@ -97,6 +125,9 @@ Exports the shared sites and service-area contract:
 - service-area create/update/list DTOs
 - typed site, service-area, access-denied, storage, and geocoding errors
 - `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
+
+Subpath exports `@ceird/sites-core/ids` and `@ceird/sites-core/dto` are
+available for schema-only consumers that should not bundle HTTP API groups.
 
 Sites are independent shared organization data. Keep geocoding, SQL
 repositories, authorization, and React state in the domain Worker or app.
@@ -129,13 +160,19 @@ apps/app
   -> @ceird/labels-core
 
 apps/domain
+  -> @ceird/agents-core
   -> @ceird/comments-core
   -> @ceird/identity-core
   -> @ceird/jobs-core
   -> @ceird/sites-core
   -> @ceird/labels-core
 
+apps/agent
+  -> @ceird/agents-core/runtime
+  -> apps/domain through the private service binding
+
 apps/api
+  -> @ceird/agents-core
   -> @ceird/domain-core
   -> apps/domain through the private service binding
 
@@ -176,6 +213,7 @@ applicable:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/agents-core test
 pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/domain-core test
 pnpm --filter @ceird/jobs-core test

@@ -5,8 +5,8 @@
 Ceird is a job-tracking application for trades and construction teams. The
 current product surface includes authentication, organizations, members,
 invitations, jobs, sites, comments, labels, cost lines, collaborator access,
-service areas, rate cards, activity, settings, and Alchemy-native local
-development.
+service areas, rate cards, activity, settings, org/user/thread-scoped agents,
+and Alchemy-native local development.
 
 The repository is still greenfield. Backward compatibility is not a constraint;
 clear APIs, strong type boundaries, and simple architecture matter more than
@@ -30,14 +30,20 @@ MCP clients
   -> apps/domain OAuth/MCP router and tool execution
   -> Postgres via Hyperdrive
 
+Agent clients
+  -> apps/agent Cloudflare Agents SDK Worker at agent.<stage>.ceird.app
+  -> CeirdAgent Durable Objects scoped by org/user/thread
+  -> apps/domain internal action API through DOMAIN service binding
+  -> Postgres via Hyperdrive
+
 apps/domain Cloudflare Worker
   -> Effect HTTP API, Better Auth, and Effect AI MCP surfaces
-  -> repositories, authorization, action execution, and audit
+  -> repositories, authorization, agent action execution, and audit
   -> Hyperdrive private binding
   -> Neon Postgres
   -> Cloudflare Queues for auth email
 
-apps/api and apps/mcp Cloudflare Workers
+apps/api, apps/mcp, and apps/agent Cloudflare Workers
   -> DOMAIN service binding
 ```
 
@@ -89,6 +95,21 @@ where OAuth verification, the Effect AI MCP router, tool execution, organization
 actor resolution, and authorization rules run against the same services as the
 HTTP API.
 
+Agent threads are domain-owned records keyed by organization, user, and thread.
+The domain Worker creates/list/archives threads, issues short-lived connect
+tokens, and records action runs with an operation id. The Agent Worker verifies
+the connect token before routing to the `CeirdAgent` Durable Object instance,
+keeps live chat/runtime state in the Agent store, touches thread activity in
+the domain Worker for each chat turn, and executes Ceird tools by calling the
+domain Worker's internal action API. Read tools are model-available by default;
+mutating tools are gated until a client confirmation flow can approve them
+outside the model prompt. Mutating actions use the domain action-run ledger for
+idempotent replay protection and reuse the same authorization and
+activity-recording paths as the HTTP API. The ledger is a small begin/complete
+record, not an outer transaction around the whole action; domain services keep
+their own transaction boundaries, and abandoned running rows time out to a
+terminal failed state on replay.
+
 ## Persistence Model
 
 The domain Worker exports a combined Drizzle schema from
@@ -102,16 +123,17 @@ The domain Worker exports a combined Drizzle schema from
   labels, collaborators, and cost lines.
 - `sitesSchema` contains sites and service areas. Site access notes remain on
   the site record; site comments are separate internal collaboration records.
-- `databaseSchema` merges authentication, comments, labels, sites, and jobs for
-  the full database runtime.
+- `agentsSchema` contains agent threads and the agent action-run ledger.
+- `databaseSchema` merges authentication, comments, labels, sites, jobs, and
+  agents for the full database runtime.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses
 `Drizzle.Schema` through `infra/domain-drizzle-schema.ts` to maintain checked-in
-snapshots under `apps/domain/drizzle/alchemy`. The native Neon branch resource
+snapshots under `apps/domain/drizzle-alchemy`. The native Neon branch resource
 applies `apps/domain/drizzle` only for the parent stage bootstrap. Forked local
 and preview stages branch from that parent and apply only
-`apps/domain/drizzle/alchemy`, which lets Alchemy-generated deltas run without
+`apps/domain/drizzle-alchemy`, which lets Alchemy-generated deltas run without
 replaying historical bootstrap SQL against an already-populated branch.
 
 ## Boundary Rules

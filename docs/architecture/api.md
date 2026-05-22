@@ -17,6 +17,11 @@ the Hyperdrive/Postgres binding.
 `apps/domain` through the same `DOMAIN` service binding so MCP, public HTTP,
 and future agent/bot surfaces share the same capability surface.
 
+`apps/agent` is the Cloudflare Agents SDK runtime. It hosts `CeirdAgent`
+Durable Objects for org/user/thread-scoped conversations, streams model output
+through Workers AI, and executes Ceird actions by calling the private
+`apps/domain` Worker through the same `DOMAIN` service binding.
+
 ## Entry Points
 
 | Workspace     | File/path                        | Purpose                                                                                  |
@@ -25,6 +30,10 @@ and future agent/bot surfaces share the same capability surface.
 | `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.              |
 | `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                    |
 | `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                |
+| `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.         |
+| `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.       |
+| `apps/agent`  | `src/tools.ts`                   | AI SDK tool adapter derived from executable shared action registry metadata.             |
+| `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.             |
 | `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.        |
 | `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                  |
 | `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, geocoder, and runtime layer composition. |
@@ -60,7 +69,7 @@ declaration in its app-local `infra/cloudflare-worker.ts`; the root infra
 stack still creates shared resources and passes stage-specific names, hostnames,
 secrets, Hyperdrive, queues, and cross-service Worker references into those
 app-owned declarations. Infra tests compare those app-owned binding/config keys
-with the runtime contracts for API, MCP, and domain Workers. Secret and
+with the runtime contracts for API, MCP, Agent, and domain Workers. Secret and
 credential values stay typed as Alchemy deploy-time redacted inputs, while
 runtime apps see resolved strings through Cloudflare Worker environment values.
 
@@ -77,7 +86,138 @@ Bearer validation requires the OAuth token to include `sid`, `sub`, and
 `client_id`; the authorized-app cache is partitioned by session id, user id,
 OAuth client id, and normalized scopes.
 The standalone MCP Worker remains a forwarding adapter so generated/action UI,
-future Agents SDK Workers, and bot surfaces can call the same domain surface.
+Agents SDK Workers, and bot surfaces can call the same domain surface.
+
+## Agent Runtime
+
+Agent contracts live in `@ceird/agents-core`. That package defines thread IDs,
+action run IDs, action names, action DTOs, `buildAgentInstanceName`, connect
+token payloads, and the Effect `HttpApi` groups used by the domain Worker. The
+Agent Worker imports the `@ceird/agents-core/runtime` subpath so its Worker
+bundle gets the same runtime schemas and action metadata without also bundling
+the domain/app HTTP API group layer.
+
+The domain Worker owns the durable product side of agents:
+
+| Method | Path                                         | Purpose                                                                                          |
+| ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET`  | `/agent/actions`                             | Return presentation-safe shared action manifest metadata for authenticated organization clients. |
+| `GET`  | `/agent/threads`                             | List a user's threads in the active org.                                                         |
+| `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.                                                      |
+| `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                                                            |
+| `POST` | `/agent/threads/:threadId/authorize`         | Issue a short-lived Agent connect token.                                                         |
+| `POST` | `/agent/internal/threads/:threadId/activity` | Touch `lastMessageAt` from trusted Agent chat traffic.                                           |
+| `POST` | `/agent/internal/actions`                    | Execute a domain-owned action for the Agent.                                                     |
+
+Public agent chat traffic goes to:
+
+| Method | Path                                    | Purpose                             |
+| ------ | --------------------------------------- | ----------------------------------- |
+| `*`    | `/agents/CeirdAgent/:agentInstanceName` | Route to the scoped Agent instance. |
+
+The browser app does not construct agent instance names or connect tokens
+itself. Its global chat surface calls the authenticated domain Agent thread API
+to list/create the current user's thread and then calls
+`POST /agent/threads/:threadId/authorize` immediately before connecting to the
+Agent Worker. The Agent Worker HTTP/WebSocket path owns chat transport, while
+all product reads, writes, destructive operations, idempotency, and audit still
+flow through private domain action execution.
+
+The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
+Agent route accepts a short-lived connect token as a bearer token or `token`
+query parameter, verifies that it was signed by the domain-owned secret,
+normalizes the route to the Agents SDK's kebab-case class path, and only then
+delegates to Cloudflare's router. Browser preflight is answered before token
+auth for the configured app origin, and the routed request has the `token` query
+parameter and `Authorization` header stripped before it enters the Agents SDK
+runtime. Browser clients should prefer bearer tokens; the query-token fallback
+exists only for transports that cannot set headers.
+The Agent Durable Object keeps chat/runtime state in the Agent store; product
+state, authorization, thread activity timestamps, and action side effects
+remain in the domain Worker.
+
+Domain action execution is registry-driven in
+`apps/domain/src/domains/agents/action-registry.ts`. Only actions marked
+`executable` in `@ceird/agents-core` are required to have domain handlers;
+planned actions remain in the shared manifest without being callable through
+the private Agent execution boundary.
+The Agent Worker derives model-callable AI SDK tools from
+`AGENT_EXECUTABLE_ACTIONS`, using each action's registry-owned model name,
+description, and input schema rather than maintaining a separate hand-written
+tool contract.
+Browser clients fetch the authenticated public manifest from
+`GET /agent/actions`. The response uses the shared `{ actions: [...] }`
+contract and includes display, model, kind, confirmation policy, and execution
+status metadata only; input schemas and execution internals are not exposed.
+Action execution remains private to `POST /agent/internal/actions`.
+
+Current domain actions exposed to the Agent runtime are:
+
+| Action                            | Kind        |
+| --------------------------------- | ----------- |
+| `ceird.labels.list`               | read        |
+| `ceird.labels.create`             | write       |
+| `ceird.labels.update`             | write       |
+| `ceird.labels.delete`             | destructive |
+| `ceird.sites.options`             | read        |
+| `ceird.sites.list`                | read        |
+| `ceird.sites.create`              | write       |
+| `ceird.sites.update`              | write       |
+| `ceird.sites.comments.list`       | read        |
+| `ceird.sites.comments.add`        | write       |
+| `ceird.sites.assign_label`        | write       |
+| `ceird.sites.remove_label`        | destructive |
+| `ceird.service_areas.list`        | read        |
+| `ceird.service_areas.create`      | write       |
+| `ceird.service_areas.update`      | write       |
+| `ceird.jobs.options`              | read        |
+| `ceird.jobs.list`                 | read        |
+| `ceird.jobs.detail`               | read        |
+| `ceird.jobs.create`               | write       |
+| `ceird.jobs.update`               | write       |
+| `ceird.jobs.transition`           | write       |
+| `ceird.jobs.reopen`               | write       |
+| `ceird.jobs.activity.list`        | read        |
+| `ceird.jobs.add_comment`          | write       |
+| `ceird.jobs.visits.add`           | write       |
+| `ceird.jobs.assign_label`         | write       |
+| `ceird.jobs.remove_label`         | destructive |
+| `ceird.jobs.cost_lines.add`       | write       |
+| `ceird.jobs.collaborators.list`   | read        |
+| `ceird.jobs.collaborators.attach` | write       |
+| `ceird.jobs.collaborators.update` | write       |
+| `ceird.jobs.collaborators.detach` | destructive |
+| `ceird.rate_cards.list`           | read        |
+| `ceird.rate_cards.create`         | write       |
+| `ceird.rate_cards.update`         | write       |
+
+Read tools are available to the model by default. Write and destructive tools
+are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
+require the confirmation-capable chat client to approve the action outside the
+model prompt.
+
+Rate-card agent actions route through the same
+`ConfigurationService.listRateCards`, `ConfigurationService.createRateCard`,
+and `ConfigurationService.updateRateCard` methods used by the HTTP
+configuration API.
+
+Every action call includes a domain operation id. The domain action-run ledger
+stores `thread_id`, `action_name`, `operation_id`, status, input hash/size,
+write-action results, and error metadata. Repeated successful mutating calls
+with the same thread and operation id return the original result, while
+repeated failed calls are rejected instead of re-executed. Fresh in-flight calls
+are rejected as already running. Running action rows older than 15 minutes are
+recovered to a terminal failed state and return the same typed rejection, so a
+crashed Agent request cannot block an operation id forever. Read action results
+are not durably copied into the ledger; a successful replay re-runs the read.
+The ledger does not wrap action execution in a long-lived transaction. Actual
+action implementations use the domain authorization, repository, and
+activity-recording paths rather than bypassing domain behavior, and those
+services own their own write transaction boundaries.
+
+The public API adapter does not forward `/agent/internal/*`; that surface is
+intended for private Worker service-binding calls from `apps/agent` to
+`apps/domain`.
 
 ## Observability
 
@@ -311,6 +451,10 @@ Google Maps key. Environment variables configure provider credentials; they do
 not select provider topology. Address-level misses return the user-correctable
 geocoding failure contract, while upstream Google/configuration failures return
 the provider failure contract so deployed misconfiguration fails visibly.
+Site creation, site updates, and inline site creation during job creation
+geocode before opening the write transaction. That keeps provider latency and
+provider failures outside Postgres transactions; the subsequent site/job writes
+still use their normal domain-owned transaction boundaries.
 
 ## Labels API Endpoints
 
@@ -359,8 +503,8 @@ The domain Worker uses Drizzle with Postgres.
 | Database runtime      | `src/platform/database/database.ts`                  |
 | Test database helpers | `src/platform/database/test-database.ts`             |
 | Schema barrel         | `src/platform/database/schema.ts`                    |
-| Migrations            | `drizzle/*.sql`, `drizzle/meta/*.json`               |
-| Alchemy snapshots     | `drizzle/alchemy/*/{migration.sql,snapshot.json}`    |
+| Migrations            | `drizzle/*/migration.sql`, `drizzle/*/snapshot.json` |
+| Alchemy snapshots     | `drizzle-alchemy/*/{migration.sql,snapshot.json}`    |
 | Drizzle CLI config    | `drizzle.config.ts`                                  |
 
 `databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
@@ -368,12 +512,15 @@ tables. Keep schema changes in the domain that owns the tables, then export
 through the schema barrel. The Alchemy stack also loads this barrel through
 `Drizzle.Schema`. The parent native Neon branch applies `apps/domain/drizzle`, so
 historical SQL files remain the bootstrap path. Forked local and preview branches
-apply `drizzle/alchemy` only, so Alchemy-generated deltas can run after the fork
+apply `drizzle-alchemy` only, so Alchemy-generated deltas can run after the fork
 without replaying the bootstrap tree. In infra this is modeled as separate
 generated and applied migration directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.
+The `agent_threads` and `agent_action_runs` tables are owned by the agents
+domain and indexed for the common org/user thread listing path and idempotent
+action replay lookups.
 
 ## Errors And Runtime Schemas
 
@@ -381,6 +528,10 @@ Public API errors live in the package that owns the contract:
 `packages/jobs-core/src/errors.ts`, `packages/sites-core/src/errors.ts`, and
 `packages/labels-core/src/errors.ts`. Domain code should return those shared
 errors when a frontend client needs typed behavior.
+Agent action rejection errors use a typed `actionName` field when the failure
+can be attributed to a known registry action; unsupported malformed action
+names stay in the error message rather than crossing the boundary as a typed
+action name.
 
 Use Effect `Config` for environment loading and Effect `Schema` for external
 payload boundaries. Plain TypeScript types are fine for internal computed

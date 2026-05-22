@@ -1,6 +1,11 @@
 import { Cause, Effect, Option } from "effect";
 
 const FAILURE_DETAIL_KEYS = [
+  "actionRunId",
+  "actionName",
+  "operation",
+  "operationId",
+  "threadId",
   "collaboratorId",
   "labelId",
   "organizationId",

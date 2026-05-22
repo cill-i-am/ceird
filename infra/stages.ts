@@ -10,7 +10,7 @@ import { decodeMcpAuthorizedAppCacheConfigInteger } from "../apps/domain/src/dom
 
 export const domainDrizzleSchemaPath = "infra/domain-drizzle-schema.ts";
 export const domainDrizzleMigrationsDir = "apps/domain/drizzle";
-export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle/alchemy";
+export const domainAlchemyDrizzleMigrationsDir = "apps/domain/drizzle-alchemy";
 
 export const InfraStage = Schema.NonEmptyString;
 export type InfraStage = Schema.Schema.Type<typeof InfraStage>;
@@ -47,11 +47,13 @@ export type InfraGoogleMapsApiKey = Schema.Schema.Type<
 >;
 
 export interface InfraStageConfig {
+  readonly agentActionRunStaleAfterSeconds: number;
   readonly appName: string;
   readonly stage: string;
   readonly zoneName: DomainName;
   readonly appHostname: DomainName;
   readonly apiHostname: DomainName;
+  readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
@@ -101,6 +103,12 @@ const HyperdriveOriginConnectionLimit = Schema.Int.check(
         "CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT must be an integer between 5 and 100",
     }
   )
+);
+const AgentActionRunStaleAfterSeconds = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS must be a positive integer",
+  })
 );
 const NeonHistoryRetentionSeconds = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(0, {
@@ -168,6 +176,12 @@ function decodeHyperdriveOriginConnectionLimit(value: number) {
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 }
 
+function decodeAgentActionRunStaleAfterSeconds(value: number) {
+  return Schema.decodeUnknownEffect(AgentActionRunStaleAfterSeconds)(
+    value
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
 function decodeNeonHistoryRetentionSeconds(value: number) {
   return Schema.decodeUnknownEffect(NeonHistoryRetentionSeconds)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
@@ -203,6 +217,7 @@ export function loadInfraStageConfig(stageInput: string) {
     });
     const defaultAppHostname = `app.${identity.stageSlug}.${zoneName}`;
     const defaultApiHostname = `api.${identity.stageSlug}.${zoneName}`;
+    const defaultAgentHostname = `agent.${identity.stageSlug}.${zoneName}`;
     const defaultMcpHostname = `mcp.${identity.stageSlug}.${zoneName}`;
     const defaultHyperdriveName = identity.isProduction
       ? `${identity.appName}-production-postgres`
@@ -213,6 +228,10 @@ export function loadInfraStageConfig(stageInput: string) {
     );
     const apiHostname = yield* Config.string("CEIRD_API_HOSTNAME").pipe(
       Config.withDefault(defaultApiHostname),
+      Config.mapOrFail(decodeDomainName)
+    );
+    const agentHostname = yield* Config.string("CEIRD_AGENT_HOSTNAME").pipe(
+      Config.withDefault(defaultAgentHostname),
       Config.mapOrFail(decodeDomainName)
     );
     const mcpHostname = yield* Config.string("CEIRD_MCP_HOSTNAME").pipe(
@@ -228,6 +247,12 @@ export function loadInfraStageConfig(stageInput: string) {
     const authRateLimitEnabled = yield* Config.boolean(
       "AUTH_RATE_LIMIT_ENABLED"
     ).pipe(Config.withDefault(!identity.isPullRequestPreview));
+    const agentActionRunStaleAfterSeconds = yield* Config.number(
+      "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
+    ).pipe(
+      Config.withDefault(15 * 60),
+      Config.mapOrFail(decodeAgentActionRunStaleAfterSeconds)
+    );
     const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
       Config.mapOrFail(decodeGoogleMapsApiKey)
     );
@@ -301,10 +326,12 @@ export function loadInfraStageConfig(stageInput: string) {
 
     return {
       appName: "ceird",
+      agentActionRunStaleAfterSeconds,
       stage,
       zoneName,
       appHostname,
       apiHostname,
+      agentHostname,
       mcpHostname,
       authEmailFrom,
       authEmailFromName,

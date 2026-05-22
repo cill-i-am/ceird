@@ -15,6 +15,7 @@ export type HotkeyScope = (typeof HOTKEY_SCOPES)[number];
 export const HOTKEY_GROUPS = [
   "Navigation",
   "Layout",
+  "Agent",
   "Home",
   "Jobs",
   "Job drawer",
@@ -56,6 +57,22 @@ export const HOTKEYS = {
     id: "toggleSidebar",
     label: "Toggle sidebar",
     scope: "global",
+  },
+  openAgentChat: {
+    group: "Agent",
+    hotkey: "Mod+J",
+    id: "openAgentChat",
+    label: "Open Ceird Agent",
+    scope: "global",
+    when: "Organization is active",
+  },
+  agentSubmit: {
+    group: "Agent",
+    hotkey: "Mod+Enter",
+    id: "agentSubmit",
+    label: "Send agent message",
+    scope: "global",
+    when: "Agent composer is focused",
   },
   goHome: {
     group: "Navigation",

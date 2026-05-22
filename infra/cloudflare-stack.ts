@@ -6,6 +6,7 @@ import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 
+import { makeAgentWorker } from "../apps/agent/infra/cloudflare-worker.ts";
 import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
@@ -62,6 +63,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   yield* Effect.annotateCurrentSpan("stage", input.config.stage);
   yield* Effect.annotateCurrentSpan("appHostname", input.config.appHostname);
   yield* Effect.annotateCurrentSpan("apiHostname", input.config.apiHostname);
+  yield* Effect.annotateCurrentSpan(
+    "agentHostname",
+    input.config.agentHostname
+  );
   yield* Effect.annotateCurrentSpan("mcpHostname", input.config.mcpHostname);
   yield* Effect.annotateCurrentSpan(
     "hyperdriveId",
@@ -69,6 +74,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   );
 
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
+    bytes: 32,
+  });
+  const agentInternalSecret = yield* Alchemy.Random("AgentInternalSecret", {
     bytes: 32,
   });
 
@@ -84,6 +92,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   });
 
   const domain = yield* makeDomainWorker({
+    agentInternalSecret: agentInternalSecret.text,
     authEmailQueue,
     betterAuthSecret: betterAuthSecret.text,
     config: input.config,
@@ -133,7 +142,25 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const agent = yield* makeAgentWorker({
+    agentInternalSecret: agentInternalSecret.text,
+    config: input.config,
+    domain,
+    hostname: input.config.agentHostname,
+    name: resourceName(input.config, "agent"),
+  });
+
+  const agentOrigin = agent.domains.pipe(
+    Output.map((domains) =>
+      makeCloudflareWorkerOrigin({
+        domains,
+        fallbackHostname: input.config.agentHostname,
+      })
+    )
+  );
+
   const app = yield* makeAppWorker({
+    agentOrigin,
     apiOrigin,
     hostname: input.config.appHostname,
     name: resourceName(input.config, "app"),
@@ -151,6 +178,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   return {
     api,
     apiOrigin,
+    agent,
+    agentOrigin,
     app,
     appOrigin,
     authEmailDeadLetterQueue,

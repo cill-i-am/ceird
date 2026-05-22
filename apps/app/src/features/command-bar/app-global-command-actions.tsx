@@ -1,7 +1,7 @@
 "use client";
 import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
-import type { OrganizationRole } from "@ceird/identity-core";
-import { Settings02Icon } from "@hugeicons/core-free-icons";
+import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import { AiGenerativeIcon, Settings02Icon } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -9,6 +9,7 @@ import {
   getPrimaryNavItemsForRole,
   getPrimaryNavShortcut,
 } from "#/components/app-navigation";
+import { requestOpenGlobalAgentChat } from "#/features/agent/global-agent-chat";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { useRegisterCommandActions } from "./command-bar";
@@ -31,6 +32,42 @@ export function AppGlobalCommandActions() {
       },
     ],
     [navigate]
+  );
+
+  useRegisterCommandActions(actions);
+
+  return null;
+}
+
+export function AppAgentCommandActions({
+  activeOrganizationId,
+  currentOrganizationRole,
+}: {
+  readonly activeOrganizationId?: OrganizationId | null | undefined;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
+}) {
+  const canUseAgent =
+    activeOrganizationId !== null &&
+    activeOrganizationId !== undefined &&
+    currentOrganizationRole !== undefined;
+  const actions = React.useMemo<readonly CommandAction[]>(
+    () =>
+      canUseAgent
+        ? [
+            {
+              group: "Agent",
+              icon: AiGenerativeIcon,
+              id: "app-open-agent-chat",
+              keywords: ["assistant", "chat", "action"],
+              priority: 90,
+              run: requestOpenGlobalAgentChat,
+              scope: "global" as const,
+              shortcut: HOTKEYS.openAgentChat,
+              title: "Open Ceird Agent",
+            },
+          ]
+        : [],
+    [canUseAgent]
   );
 
   useRegisterCommandActions(actions);

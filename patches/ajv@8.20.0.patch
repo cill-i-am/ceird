@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index 50fa6a639c704492f0a6c0c28a3c86d20321a395..452df6625292537bcc1f8601a2630747c3094457 100644
+--- a/package.json
++++ b/package.json
+@@ -122,5 +122,6 @@
+   },
+   "lint-staged": {
+     "*.{json,yaml,js,ts}": "prettier --write"
+-  }
++  },
++  "module": "dist/ajv.js"
+ }

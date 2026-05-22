@@ -6,8 +6,12 @@ import { AppSidebar } from "#/components/app-sidebar";
 import type { NavUserAccount } from "#/components/nav-user";
 import { SiteHeader } from "#/components/site-header";
 import { SidebarInset, SidebarProvider } from "#/components/ui/sidebar";
+import { GlobalAgentChat } from "#/features/agent/global-agent-chat";
 import { EmailVerificationBanner } from "#/features/auth/email-verification-banner";
-import { AppGlobalCommandActions } from "#/features/command-bar/app-global-command-actions";
+import {
+  AppAgentCommandActions,
+  AppGlobalCommandActions,
+} from "#/features/command-bar/app-global-command-actions";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 export type AppLayoutUser =
@@ -30,6 +34,10 @@ export function AppLayout({
   return (
     <CommandBarProvider>
       <AppGlobalCommandActions />
+      <AppAgentCommandActions
+        activeOrganizationId={activeOrganizationId}
+        currentOrganizationRole={currentOrganizationRole}
+      />
       <SidebarProvider className="[--header-height:calc(--spacing(15))]">
         <AppSidebar
           activeOrganizationId={activeOrganizationId}
@@ -49,6 +57,10 @@ export function AppLayout({
           </div>
         </SidebarInset>
       </SidebarProvider>
+      <GlobalAgentChat
+        activeOrganizationId={activeOrganizationId}
+        currentOrganizationRole={currentOrganizationRole}
+      />
     </CommandBarProvider>
   );
 }
