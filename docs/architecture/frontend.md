@@ -198,8 +198,9 @@ The `/create-organization` onboarding route stays outside the app shell while
 the first workspace is created. The client submits only the team name to
 `features/organizations/organization-server.ts`; that server helper generates
 the Better Auth organization slug, forwards auth cookies from the Better Auth
-response, decodes the created organization summary, and returns that summary to
-the client. The same onboarding page then offers an optional invite-members
+response, sets the new organization as active for the current session when
+Better Auth accepts the sync, decodes the created organization summary, and
+returns that summary to the client. The same onboarding page then offers an optional invite-members
 step before navigating into the app. Skipping or completing this step enters the
 active workspace; invite creation uses Better Auth's
 `authClient.organization.inviteMember` with the newly created organization ID.

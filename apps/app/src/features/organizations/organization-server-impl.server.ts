@@ -79,8 +79,7 @@ export async function createCurrentServerOrganizationDirect(
   });
 
   if (response.ok) {
-    await forwardAuthResponseCookies(response);
-    return await readCreatedOrganization(response);
+    return await finalizeCreatedOrganization(authRequest, response);
   }
 
   if (await isOrganizationSlugConflictResponse(response)) {
@@ -90,8 +89,7 @@ export async function createCurrentServerOrganizationDirect(
     });
 
     if (retryResponse.ok) {
-      await forwardAuthResponseCookies(retryResponse);
-      return await readCreatedOrganization(retryResponse);
+      return await finalizeCreatedOrganization(authRequest, retryResponse);
     }
 
     throw new Error(
@@ -102,6 +100,28 @@ export async function createCurrentServerOrganizationDirect(
   throw new Error(
     `Organization creation failed with status ${response.status}.`
   );
+}
+
+async function finalizeCreatedOrganization(
+  authRequest: ServerAuthRequest,
+  response: Response
+): Promise<OrganizationSummary> {
+  const organization = await readCreatedOrganization(response);
+  const setCookies = [...readSetCookieHeaders(response.headers)];
+  const activeOrganizationResponse = await trySetCreatedOrganizationActive(
+    authRequest,
+    organization.id
+  );
+
+  if (activeOrganizationResponse?.ok) {
+    setCookies.push(
+      ...readSetCookieHeaders(activeOrganizationResponse.headers)
+    );
+  }
+
+  await forwardAuthSetCookies(setCookies);
+
+  return organization;
 }
 
 export async function getCurrentServerOrganizationSessionDirect(): Promise<OrganizationAccessSession | null> {
@@ -258,19 +278,7 @@ export async function setCurrentServerActiveOrganizationDirect(
 ): Promise<void> {
   const { getRequestHeader } = await import("@tanstack/react-start/server");
   const authRequest = readServerAuthRequestStrict(getRequestHeader);
-  const response = await fetch(
-    new URL("organization/set-active", `${authRequest.authBaseURL}/`),
-    {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        cookie: authRequest.cookie,
-        ...authRequest.forwardedHeaders,
-      },
-      body: JSON.stringify({ organizationId }),
-    }
-  );
+  const response = await postSetActiveOrganization(authRequest, organizationId);
 
   if (!response.ok) {
     throw new Error(
@@ -381,6 +389,36 @@ async function postCreateOrganization(
   );
 }
 
+async function postSetActiveOrganization(
+  authRequest: ServerAuthRequest,
+  organizationId: OrganizationIdType
+) {
+  return await fetch(
+    new URL("organization/set-active", `${authRequest.authBaseURL}/`),
+    {
+      body: JSON.stringify({ organizationId }),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        cookie: authRequest.cookie,
+        ...authRequest.forwardedHeaders,
+      },
+      method: "POST",
+    }
+  );
+}
+
+async function trySetCreatedOrganizationActive(
+  authRequest: ServerAuthRequest,
+  organizationId: OrganizationIdType
+) {
+  try {
+    return await postSetActiveOrganization(authRequest, organizationId);
+  } catch {
+    return null;
+  }
+}
+
 async function isOrganizationSlugConflictResponse(response: Response) {
   if (response.status !== 400) {
     return false;
@@ -396,15 +434,13 @@ async function isOrganizationSlugConflictResponse(response: Response) {
   );
 }
 
-async function forwardAuthResponseCookies(response: Response) {
-  const setCookies = readSetCookieHeaders(response.headers);
-
+async function forwardAuthSetCookies(setCookies: readonly string[]) {
   if (setCookies.length === 0) {
     return;
   }
 
   const { setResponseHeader } = await import("@tanstack/react-start/server");
-  setResponseHeader("set-cookie", setCookies);
+  setResponseHeader("set-cookie", [...setCookies]);
 }
 
 async function readCreatedOrganization(

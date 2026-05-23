@@ -360,16 +360,28 @@ describe("server organization lookup", () => {
     });
     process.env.API_ORIGIN = "https://api.example.com";
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json(
-        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
-        {
-          headers: {
-            "set-cookie": "better-auth.session_token=next-session",
-          },
-        }
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+          {
+            headers: {
+              "set-cookie": "better-auth.session_token=next-session",
+            },
+          }
+        )
       )
-    );
+      .mockResolvedValueOnce(
+        Response.json(
+          {},
+          {
+            headers: {
+              "set-cookie": "better-auth.session_token=active-session",
+            },
+          }
+        )
+      );
 
     await expect(
       createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
@@ -397,8 +409,24 @@ describe("server organization lookup", () => {
         method: "POST",
       }
     );
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/set-active", "https://api.example.com/api/auth/"),
+      {
+        body: JSON.stringify({ organizationId: "org_123" }),
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: "__Secure-better-auth.session_token=session-token",
+          origin: "https://app.ceird.example.com",
+          "x-forwarded-host": "api.ceird.example.com",
+          "x-forwarded-proto": "https",
+        },
+        method: "POST",
+      }
+    );
     expect(mockedSetResponseHeader).toHaveBeenCalledWith("set-cookie", [
       "better-auth.session_token=next-session",
+      "better-auth.session_token=active-session",
     ]);
   }, 1000);
 
@@ -473,7 +501,7 @@ describe("server organization lookup", () => {
       slug: "acme-field-ops-retry",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       body: JSON.stringify({
         name: "Acme Field Ops",
