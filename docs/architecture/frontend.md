@@ -40,8 +40,12 @@ Current visible routes:
 router-scoped TanStack Query client, SSR Query dehydration/hydration, and typed
 route registration. The root route is declared with
 `createRootRouteWithContext<AppRouterContext>()` so route loaders and route
-components can share the same Query client. Breadcrumb labels are declared
-through route `staticData`.
+components can share the same Query client. Intent preloads and loader results
+stay fresh briefly so sidebar hover/preload and quick back-and-forth navigation
+do not immediately repeat API-backed loaders; product mutations, organization
+switches, and active-organization sync still call `router.invalidate(...)` when
+fresh data is required. Breadcrumb labels are declared through route
+`staticData`.
 
 Domain-heavy routes keep the route file as the lightweight routing boundary.
 When a loader needs API contracts, server helpers, Effect schemas, or other
@@ -53,6 +57,9 @@ adds another chunk fetch before the loader can start its API work. Canvas and
 map-heavy feature views should also be loaded behind feature-level lazy
 boundaries so the authenticated shell does not pull map libraries or
 visualization code into the initial chunk.
+Form-heavy route pages should group their `component` with
+`codeSplitGroupings` as well; auth, settings, and administration forms import
+validation/form libraries that are unnecessary for unrelated first paint.
 Route `validateSearch` functions run in the route manifest, so they should stay
 small and avoid importing domain API contracts or boundary schemas when a local
 query-string parser can preserve the same behavior.
@@ -75,6 +82,15 @@ list and set-active client APIs through
 and organization-owned data together. If Better Auth accepts the switch but the
 router refresh fails, the app reloads to avoid showing stale organization data
 against the new active session.
+TanStack Start request middleware in `apps/app/src/start.ts` hydrates auth
+request context once for routes that need it. Organization pages also prefetch
+the organization list and active member role in parallel before router loading,
+so `_app`, `_app/_org`, and child loaders can reuse request context instead of
+serializing Better Auth `get-session`, organization list, and member-role calls.
+The `_app` route remains the authenticated-shell boundary; child organization
+routes reuse that parent session through
+`ensureActiveOrganizationIdForSession(...)` and then load only route-specific
+state.
 
 Authenticated layout and navigation live under:
 
@@ -90,14 +106,23 @@ Authenticated layout and navigation live under:
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than
 route-level: the fixed launcher, `Mod+J` hotkey, and command bar action are
-available anywhere an active organization exists. Desktop opens a right-side
+available anywhere an active organization exists. The shell entry stays
+intentionally small; it lazy-loads
+`features/agent/global-agent-chat-panel.tsx` only after the user opens the
+drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the Agent API
+client out of normal authenticated page startup. Desktop opens a right-side
 drawer and mobile uses the existing bottom drawer behavior. The browser app
 prepares or reuses the current user's active thread through the Agent thread
 API, authorizes that thread with a short-lived connect token, and then connects
-to the Agent Worker with `agents/react` and `@cloudflare/ai-chat/react`.
-Product mutations still execute only through the Agent Worker and private
-domain action registry; the app chat surface owns presentation, thread
-selection, and connection setup.
+to the Agent Worker. Product mutations still execute only through the Agent
+Worker and private domain action registry; the app chat surface owns
+presentation, thread selection, and connection setup.
+
+Shared mutation feedback uses a short minimum pending duration in
+`apps/app/src/lib/mutation-feedback.ts`. Keep that default below a perceptual
+delay threshold so successful auth, organization, member, job, and site
+mutations do not feel slower than the network response; pass an explicit longer
+duration only for flows that genuinely need extra transition time.
 
 ## Observability
 

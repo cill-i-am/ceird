@@ -26,12 +26,38 @@ import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
-import { EMPTY_AUTHENTICATED_HOME_DASHBOARD } from "./authenticated-shell-home-dashboard";
 import type {
   AuthenticatedHomeDashboard,
   AuthenticatedHomeJobItem,
   AuthenticatedHomeSiteItem,
 } from "./authenticated-shell-home-dashboard";
+
+const EMPTY_AUTHENTICATED_HOME_DASHBOARD: AuthenticatedHomeDashboard = {
+  activity: {
+    available: false,
+    items: [],
+  },
+  jobs: {
+    items: [],
+    stats: {
+      activeJobs: 0,
+      blockedJobs: 0,
+      priorityWatchJobs: 0,
+      totalJobs: 0,
+      unassignedJobs: 0,
+    },
+  },
+  members: {
+    total: 0,
+  },
+  sites: {
+    items: [],
+    stats: {
+      mappedSites: 0,
+      totalSites: 0,
+    },
+  },
+};
 
 export function AuthenticatedShellHome({
   dashboard = EMPTY_AUTHENTICATED_HOME_DASHBOARD,

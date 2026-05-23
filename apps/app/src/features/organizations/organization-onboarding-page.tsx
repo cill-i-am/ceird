@@ -195,7 +195,9 @@ function InviteMembersStep({
         onSubmit: undefined,
       });
 
-      const mutationFeedback = beginMutationFeedback();
+      const mutationFeedback = beginMutationFeedback({
+        minimumDurationMs: 500,
+      });
       const invite = decodeOrganizationMemberInviteInput(value);
       const result = await authClient.organization.inviteMember({
         email: invite.email,

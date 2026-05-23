@@ -9,6 +9,7 @@ export const Route = createFileRoute("/_app/settings")({
       label: "Settings",
     },
   },
+  codeSplitGroupings: [["component"]],
   validateSearch: decodeUserSettingsSearch,
   component: SettingsRoute,
 });

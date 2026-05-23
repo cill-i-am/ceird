@@ -4,6 +4,7 @@ import { PasswordResetPage } from "#/features/auth/password-reset-page";
 import { decodePasswordResetSearch } from "#/features/auth/password-reset-search";
 
 export const Route = createFileRoute("/reset-password")({
+  codeSplitGroupings: [["component"]],
   validateSearch: decodePasswordResetSearch,
   component: ResetPasswordRoute,
 });

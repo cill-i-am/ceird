@@ -38,7 +38,8 @@ describe("organization home route", () => {
   it.each<OrganizationRole>(["owner", "admin", "member"])(
     "keeps %s users on the organization home route",
     async (role) => {
-      const { loadOrganizationHomeRoute } = await import("./_app._org.index");
+      const { loadOrganizationHomeRoute } =
+        await import("#/features/auth/authenticated-home-route-loader");
 
       expect(
         loadOrganizationHomeRoute({
@@ -55,7 +56,8 @@ describe("organization home route", () => {
   );
 
   it("redirects external users from organization home to jobs", async () => {
-    const { loadOrganizationHomeRoute } = await import("./_app._org.index");
+    const { loadOrganizationHomeRoute } =
+      await import("#/features/auth/authenticated-home-route-loader");
     let result: unknown;
 
     try {
@@ -95,7 +97,7 @@ describe("organization home route", () => {
     });
 
     const { loadOrganizationHomeDashboardRouteData } =
-      await import("./_app._org.index");
+      await import("#/features/auth/authenticated-home-route-loader");
 
     await expect(
       loadOrganizationHomeDashboardRouteData({

@@ -19,6 +19,8 @@ import {
   readServerApiForwardedHeaders,
 } from "#/lib/server-api-forwarded-headers";
 
+import { readGlobalAppServerContext } from "../auth/app-server-context";
+
 const NullableString = Schema.NullOr(Schema.String);
 const NullableOrganizationId = Schema.NullOr(OrganizationId);
 const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
@@ -63,6 +65,8 @@ interface ServerAuthRequest {
   forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
 }
 
+type RequestHeaderReader = (name: string) => string | undefined;
+
 export async function createCurrentServerOrganizationDirect(
   input: CreateOrganizationNameInput
 ): Promise<OrganizationSummary> {
@@ -101,6 +105,14 @@ export async function createCurrentServerOrganizationDirect(
 }
 
 export async function getCurrentServerOrganizationSessionDirect(): Promise<OrganizationAccessSession | null> {
+  const cachedSession = readGlobalAppServerContext().authSession;
+
+  if (cachedSession !== undefined) {
+    return cachedSession === null
+      ? null
+      : decodeOrganizationAccessSession(cachedSession);
+  }
+
   const { getRequestHeader } = await import("@tanstack/react-start/server");
   const authRequest = readServerSessionRequest(getRequestHeader);
 
@@ -133,8 +145,37 @@ export async function getCurrentServerOrganizationSessionDirect(): Promise<Organ
 }
 
 export async function getCurrentServerOrganizationsDirect() {
+  const cachedOrganizations = readGlobalAppServerContext().organizations;
+
+  if (cachedOrganizations !== undefined) {
+    return cachedOrganizations;
+  }
+
   const { getRequestHeader } = await import("@tanstack/react-start/server");
   const authRequest = readServerAuthRequestStrict(getRequestHeader);
+  const response = await fetchOrganizations(authRequest);
+
+  if (!response.ok) {
+    throw new Error(
+      `Organization lookup failed with status ${response.status}.`
+    );
+  }
+
+  const organizations = (await response.json()) as unknown;
+
+  if (!organizations) {
+    throw new Error("Organization lookup returned no data.");
+  }
+
+  return decodeOrganizationSummariesStrict(organizations);
+}
+
+export async function getCurrentServerOrganizationsForRequest(
+  request: Request
+) {
+  const authRequest = readServerAuthRequestStrict(
+    getHeaderFromRequest(request)
+  );
   const response = await fetchOrganizations(authRequest);
 
   if (!response.ok) {
@@ -155,8 +196,37 @@ export async function getCurrentServerOrganizationsDirect() {
 export async function getCurrentServerOrganizationMemberRoleDirect(
   organizationId: OrganizationIdType
 ): Promise<OrganizationMemberRole> {
+  const appServerContext = readGlobalAppServerContext();
+  const cachedRole = appServerContext.currentOrganizationRole;
+  const cachedRoleOrganizationId =
+    appServerContext.authSession?.session.activeOrganizationId;
+
+  if (cachedRole !== undefined && cachedRoleOrganizationId === organizationId) {
+    return { role: cachedRole };
+  }
+
   const { getRequestHeader } = await import("@tanstack/react-start/server");
   const authRequest = readServerAuthRequestStrict(getRequestHeader);
+  return await getCurrentServerOrganizationMemberRoleForAuthRequest(
+    authRequest,
+    organizationId
+  );
+}
+
+export async function getCurrentServerOrganizationMemberRoleForRequest(
+  request: Request,
+  organizationId: OrganizationIdType
+): Promise<OrganizationMemberRole> {
+  return await getCurrentServerOrganizationMemberRoleForAuthRequest(
+    readServerAuthRequestStrict(getHeaderFromRequest(request)),
+    organizationId
+  );
+}
+
+async function getCurrentServerOrganizationMemberRoleForAuthRequest(
+  authRequest: ServerAuthRequest,
+  organizationId: OrganizationIdType
+): Promise<OrganizationMemberRole> {
   const response = await fetch(
     new URL(
       `organization/get-active-member-role?organizationId=${encodeURIComponent(
@@ -210,7 +280,7 @@ export async function setCurrentServerActiveOrganizationDirect(
 }
 
 function readServerSessionRequest(
-  getRequestHeader: (name: string) => string | undefined
+  getRequestHeader: RequestHeaderReader
 ): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
 
@@ -240,7 +310,7 @@ function readServerSessionRequest(
 }
 
 function readServerAuthRequestStrict(
-  getRequestHeader: (name: string) => string | undefined
+  getRequestHeader: RequestHeaderReader
 ): ServerAuthRequest {
   const cookie = getRequestHeader("cookie");
 
@@ -269,6 +339,10 @@ function readServerAuthRequestStrict(
     authBaseURL,
     forwardedHeaders,
   };
+}
+
+function getHeaderFromRequest(request: Request): RequestHeaderReader {
+  return (name) => request.headers.get(name) ?? undefined;
 }
 
 function readServerAuthBaseURL(): string | undefined {

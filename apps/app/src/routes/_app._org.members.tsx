@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_app/_org/members")({
       to: "/members",
     },
   },
+  codeSplitGroupings: [["component"]],
   beforeLoad: ({ context }) => loadMembersRouteData(context),
   component: MembersRoute,
 });

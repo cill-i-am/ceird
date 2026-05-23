@@ -4,6 +4,7 @@ import { PasswordResetRequestPage } from "#/features/auth/password-reset-request
 import { validateInvitationContinuationSearch } from "#/features/organizations/invitation-continuation";
 
 export const Route = createFileRoute("/forgot-password")({
+  codeSplitGroupings: [["component"]],
   validateSearch: validateInvitationContinuationSearch,
   component: ForgotPasswordRoute,
 });

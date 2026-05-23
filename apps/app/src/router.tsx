@@ -5,6 +5,9 @@ import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query
 import type { AppRouterContext } from "./router-context";
 import { routeTree } from "./routeTree.gen";
 
+export const ROUTER_LOADER_STALE_TIME_MS = 10_000;
+export const ROUTER_PRELOAD_STALE_TIME_MS = 30_000;
+
 export function getRouter() {
   return createAppRouter();
 }
@@ -18,7 +21,8 @@ function createAppRouter() {
     routeTree,
     scrollRestoration: true,
     defaultPreload: "intent",
-    defaultPreloadStaleTime: 0,
+    defaultPreloadStaleTime: ROUTER_PRELOAD_STALE_TIME_MS,
+    defaultStaleTime: ROUTER_LOADER_STALE_TIME_MS,
   });
 
   setupRouterSsrQueryIntegration({

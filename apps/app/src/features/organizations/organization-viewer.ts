@@ -1,13 +1,12 @@
 import {
+  decodeUserId,
   isAdministrativeOrganizationRole,
   isExternalOrganizationRole,
-  UserId,
 } from "@ceird/identity-core";
 import type {
   OrganizationRole,
   UserId as UserIdType,
 } from "@ceird/identity-core";
-import { Schema } from "effect";
 
 export type OrganizationViewerRole = OrganizationRole;
 
@@ -29,5 +28,5 @@ export function isExternalOrganizationViewer(
 }
 
 export function decodeOrganizationViewerUserId(input: unknown): UserIdType {
-  return Schema.decodeUnknownSync(UserId)(input);
+  return decodeUserId(input);
 }

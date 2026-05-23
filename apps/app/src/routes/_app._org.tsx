@@ -6,16 +6,18 @@ import {
 } from "@tanstack/react-router";
 
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
-import {
-  getCurrentOrganizationMemberRole,
-  requireOrganizationAccess,
-} from "#/features/organizations/organization-access";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 
 export const Route = createFileRoute("/_app/_org")({
   beforeLoad: async ({ context }) => {
-    const organizationAccess = await requireOrganizationAccess();
+    const {
+      ensureActiveOrganizationIdForSession,
+      getCurrentOrganizationMemberRole,
+    } = await import("#/features/organizations/organization-access");
+    const organizationAccess = await ensureActiveOrganizationIdForSession(
+      context.session
+    );
     const { currentOrganizationRole: contextCurrentOrganizationRole } = context;
     let currentOrganizationRole: OrganizationRole | undefined;
 

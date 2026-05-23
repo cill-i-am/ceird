@@ -15,6 +15,7 @@ import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
+import { readGlobalAppServerContext } from "../auth/app-server-context";
 import { getLoginNavigationTarget } from "../auth/auth-navigation";
 import { isServerEnvironment } from "../auth/runtime-environment";
 
@@ -56,6 +57,12 @@ async function getCurrentSession(): Promise<Session | null> {
 export async function listOrganizations(): Promise<
   readonly OrganizationSummary[]
 > {
+  const cachedOrganizations = readGlobalAppServerContext().organizations;
+
+  if (cachedOrganizations !== undefined) {
+    return cachedOrganizations;
+  }
+
   if (isServerEnvironment()) {
     const { getCurrentServerOrganizations } = await importOrganizationServer();
     return await getCurrentServerOrganizations();
@@ -81,6 +88,10 @@ export async function ensureActiveOrganizationId() {
     throw redirect(getLoginNavigationTarget());
   }
 
+  return await ensureActiveOrganizationIdForSession(session);
+}
+
+export async function ensureActiveOrganizationIdForSession(session: Session) {
   const {
     activeOrganization,
     activeOrganizationId,

@@ -5,6 +5,7 @@ import { redirectIfAuthenticated } from "#/features/auth/redirect-if-authenticat
 import { validateInvitationContinuationSearch } from "#/features/organizations/invitation-continuation";
 
 export const Route = createFileRoute("/login")({
+  codeSplitGroupings: [["component"]],
   validateSearch: validateInvitationContinuationSearch,
   beforeLoad: ({ search }) => redirectIfAuthenticated(search),
   component: LoginRoute,

@@ -1,32 +1,33 @@
-import { Schema } from "effect";
-
 const EMAIL_CHANGE_COMPLETE = "complete" as const;
 const EMAIL_CHANGE_FAILED = "failed" as const;
 
-const RawUserSettingsSearch = Schema.Struct({
-  emailChange: Schema.optional(Schema.Unknown),
-  error: Schema.optional(Schema.Unknown),
-});
+export type EmailChangeStatus =
+  | typeof EMAIL_CHANGE_COMPLETE
+  | typeof EMAIL_CHANGE_FAILED;
 
-const UserSettingsSearch = Schema.Struct({
-  emailChange: Schema.optional(
-    Schema.Literals([EMAIL_CHANGE_COMPLETE, EMAIL_CHANGE_FAILED])
-  ),
-});
-
-export type UserSettingsSearch = typeof UserSettingsSearch.Type;
-export type EmailChangeStatus = NonNullable<UserSettingsSearch["emailChange"]>;
+export interface UserSettingsSearch {
+  readonly emailChange?: EmailChangeStatus | undefined;
+}
 
 export function decodeUserSettingsSearch(input: unknown): UserSettingsSearch {
-  const { emailChange, error } = Schema.decodeUnknownSync(
-    RawUserSettingsSearch
-  )(input);
+  const emailChange = readSearchParam(input, "emailChange");
+  const error = readSearchParam(input, "error");
 
-  if (typeof error === "string" && error.length > 0) {
+  if (error && error.length > 0) {
     return { emailChange: EMAIL_CHANGE_FAILED };
   }
 
   return emailChange === EMAIL_CHANGE_COMPLETE
     ? { emailChange: EMAIL_CHANGE_COMPLETE }
     : {};
+}
+
+function readSearchParam(input: unknown, key: string) {
+  if (typeof input !== "object" || input === null) {
+    return;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+
+  return typeof value === "string" ? value : undefined;
 }

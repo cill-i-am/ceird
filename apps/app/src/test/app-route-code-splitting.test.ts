@@ -7,6 +7,7 @@ const APP_SRC_DIR = resolve(process.cwd(), "src");
 
 const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.activity.tsx",
+  "routes/_app._org.index.tsx",
   "routes/_app._org.jobs.$jobId.tsx",
   "routes/_app._org.jobs.tsx",
   "routes/_app._org.organization.settings.tsx",
@@ -14,9 +15,22 @@ const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.sites.tsx",
 ] as const;
 
+const FORM_HEAVY_ROUTE_FILES = [
+  "routes/_app._org.members.tsx",
+  "routes/forgot-password.tsx",
+  "routes/login.tsx",
+  "routes/reset-password.tsx",
+  "routes/signup.tsx",
+  "routes/verify-email.tsx",
+  "routes/_app.settings.tsx",
+] as const;
+
 const ROUTE_SEARCH_FILES = [
+  "features/auth/email-verification-search.ts",
+  "features/auth/password-reset-search.ts",
   "features/activity/activity-search.ts",
   "features/jobs/jobs-search.ts",
+  "features/settings/user-settings-search.ts",
 ] as const;
 
 describe("app route code splitting", () => {
@@ -38,6 +52,24 @@ describe("app route code splitting", () => {
         /await\s+import\(\s*["'][^"']*route-loader["']\s*\)/u
       );
     }
+  });
+
+  it("does not export domain-heavy route helper functions from route files", () => {
+    for (const filePath of DOMAIN_HEAVY_ROUTE_FILES) {
+      const source = readAppSource(filePath);
+
+      expect(source).not.toMatch(/export\s+(async\s+)?function\s+load/u);
+    }
+  });
+
+  it("keeps form-heavy route pages in lazy route chunks", () => {
+    const unsplitRouteFiles = FORM_HEAVY_ROUTE_FILES.filter((filePath) => {
+      const source = readAppSource(filePath);
+
+      return !hasComponentCodeSplitGrouping(source);
+    });
+
+    expect(unsplitRouteFiles).toStrictEqual([]);
   });
 
   it("keeps route search decoders free of boundary schema imports", () => {
@@ -67,4 +99,10 @@ function readAppSource(filePath: string) {
 
 function hasLoaderCodeSplitGrouping(source: string) {
   return /codeSplitGroupings:\s*\[[\s\S]*["']loader["'][\s\S]*\]/u.test(source);
+}
+
+function hasComponentCodeSplitGrouping(source: string) {
+  return /codeSplitGroupings:\s*\[[\s\S]*["']component["'][\s\S]*\]/u.test(
+    source
+  );
 }

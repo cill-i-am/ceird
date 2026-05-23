@@ -4,6 +4,7 @@ import { isRedirect } from "@tanstack/react-router";
 
 import {
   ensureActiveOrganizationId,
+  ensureActiveOrganizationIdForSession,
   listOrganizations,
   redirectIfOrganizationReady,
   requireOrganizationAdministrationAccess,
@@ -219,6 +220,38 @@ describe("organization access helpers", () => {
     await expect(listOrganizations()).resolves.toStrictEqual([
       { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
     ]);
+    expect(mockedGetStrictServerOrganizations).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("resolves organization access from an existing session without reloading the session", async () => {
+    mockedIsServerEnvironment.mockReturnValue(true);
+    mockedGetStrictServerOrganizations.mockResolvedValue([
+      { id: serverOrganizationId, name: "Server Org", slug: "server-org" },
+    ]);
+
+    await expect(
+      ensureActiveOrganizationIdForSession({
+        session: {
+          activeOrganizationId: serverOrganizationId,
+        },
+        user: {
+          email: "server@example.com",
+          id: "user_server",
+          name: "Server User",
+        },
+      })
+    ).resolves.toMatchObject({
+      activeOrganization: {
+        id: serverOrganizationId,
+        name: "Server Org",
+      },
+      activeOrganizationId: serverOrganizationId,
+      activeOrganizationSync: {
+        required: false,
+        targetOrganizationId: serverOrganizationId,
+      },
+    });
+    expect(mockedGetStrictServerSession).not.toHaveBeenCalled();
     expect(mockedGetStrictServerOrganizations).toHaveBeenCalledOnce();
   }, 1000);
 

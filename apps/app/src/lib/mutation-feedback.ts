@@ -1,6 +1,6 @@
 import { Duration, Effect } from "effect";
 
-const MUTATION_SUCCESS_MINIMUM_PENDING_MS = 500;
+const MUTATION_SUCCESS_MINIMUM_PENDING_MS = 150;
 
 export function beginMutationFeedback({
   minimumDurationMs = MUTATION_SUCCESS_MINIMUM_PENDING_MS,

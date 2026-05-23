@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { Button } from "./button";
 
@@ -32,5 +33,24 @@ describe("button", () => {
 
     const button = screen.getByRole("button", { name: /save changes/i });
     expect(button.querySelector("[data-loading-slot]")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("preserves native submit button behavior", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn<(event: React.FormEvent<HTMLFormElement>) => void>(
+      (event) => {
+        event.preventDefault();
+      }
+    );
+
+    render(
+      <form onSubmit={onSubmit}>
+        <Button type="submit">Save changes</Button>
+      </form>
+    );
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(onSubmit).toHaveBeenCalledOnce();
   }, 10_000);
 });

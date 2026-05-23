@@ -5,6 +5,7 @@ import { SignupPage } from "#/features/auth/signup-page";
 import { validateInvitationContinuationSearch } from "#/features/organizations/invitation-continuation";
 
 export const Route = createFileRoute("/signup")({
+  codeSplitGroupings: [["component"]],
   validateSearch: validateInvitationContinuationSearch,
   beforeLoad: ({ search }) => redirectIfAuthenticated(search),
   component: SignupRoute,

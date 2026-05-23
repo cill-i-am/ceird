@@ -10,6 +10,14 @@ const isCloudflareBuild = process.env.CEIRD_CLOUDFLARE === "1";
 const cloudflareWorkersEnvStub = fileURLToPath(
   new URL("src/test/cloudflare-workers.ts", import.meta.url)
 );
+const hugeiconsTreeShakableEntry = fileURLToPath(
+  new URL(
+    "node_modules/@hugeicons/core-free-icons/dist/esm/index.js",
+    import.meta.url
+  )
+);
+const CEIRD_DOMAIN_PACKAGE_PATTERN =
+  /\/packages\/(?:agents-core|identity-core|jobs-core|sites-core)\/src\//;
 export const appRouteFileIgnorePattern = "\\.test\\.(ts|tsx)$";
 const devtoolsConfig = defineDevtoolsConfig({
   injectSource: {
@@ -18,18 +26,40 @@ const devtoolsConfig = defineDevtoolsConfig({
 });
 
 const config = defineConfig({
-  build: isCloudflareBuild
-    ? {
-        rollupOptions: {
-          external: ["cloudflare:workers", "node:async_hooks"],
+  build: {
+    rollupOptions: {
+      external: isCloudflareBuild
+        ? ["cloudflare:workers", "node:async_hooks"]
+        : undefined,
+      output: {
+        manualChunks(id) {
+          if (id.includes("/node_modules/effect/")) {
+            return "effect";
+          }
+
+          if (CEIRD_DOMAIN_PACKAGE_PATTERN.test(id)) {
+            return "ceird-domain";
+          }
         },
-        target: "esnext",
-      }
-    : undefined,
+      },
+    },
+    target: isCloudflareBuild ? "esnext" : undefined,
+  },
   resolve: {
-    alias: isCloudflareBuild
-      ? []
-      : [{ find: "cloudflare:workers", replacement: cloudflareWorkersEnvStub }],
+    alias: [
+      {
+        find: "@hugeicons/core-free-icons",
+        replacement: hugeiconsTreeShakableEntry,
+      },
+      ...(isCloudflareBuild
+        ? []
+        : [
+            {
+              find: "cloudflare:workers",
+              replacement: cloudflareWorkersEnvStub,
+            },
+          ]),
+    ],
     tsconfigPaths: true,
   },
   optimizeDeps: {

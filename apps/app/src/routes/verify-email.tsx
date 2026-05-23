@@ -5,6 +5,7 @@ import { decodeEmailVerificationSearch } from "#/features/auth/email-verificatio
 import type { EmailVerificationSearch } from "#/features/auth/email-verification-search";
 
 export const Route = createFileRoute("/verify-email")({
+  codeSplitGroupings: [["component"]],
   validateSearch: (search: Record<string, unknown>): EmailVerificationSearch =>
     decodeEmailVerificationSearch(search),
   component: VerifyEmailRoute,

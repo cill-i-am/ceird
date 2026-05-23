@@ -1,35 +1,33 @@
-import { Schema } from "effect";
-
 const INVALID_TOKEN = "INVALID_TOKEN" as const;
 
-const RawPasswordResetSearch = Schema.Struct({
-  invitation: Schema.optional(Schema.Unknown),
-  token: Schema.optional(Schema.Unknown),
-  error: Schema.optional(Schema.Unknown),
-});
-
-const PasswordResetSearch = Schema.Struct({
-  invitation: Schema.optional(Schema.String),
-  token: Schema.optional(Schema.String),
-  error: Schema.optional(Schema.Literal(INVALID_TOKEN)),
-});
-
-export type PasswordResetSearch = typeof PasswordResetSearch.Type;
+export interface PasswordResetSearch {
+  readonly invitation?: string | undefined;
+  readonly token?: string | undefined;
+  readonly error?: typeof INVALID_TOKEN | undefined;
+}
 
 export function decodePasswordResetSearch(input: unknown): PasswordResetSearch {
-  const { error, invitation, token } = Schema.decodeUnknownSync(
-    RawPasswordResetSearch
-  )(input);
+  const error = readSearchParam(input, "error");
+  const invitation = readSearchParam(input, "invitation");
+  const token = readSearchParam(input, "token");
   const invitationSearch =
-    typeof invitation === "string" && invitation.length > 0
-      ? { invitation }
-      : {};
+    invitation && invitation.length > 0 ? { invitation } : {};
 
   if (error === INVALID_TOKEN) {
     return { ...invitationSearch, error: INVALID_TOKEN };
   }
 
-  return typeof token === "string" && token.length > 0
+  return token && token.length > 0
     ? { ...invitationSearch, token }
     : invitationSearch;
+}
+
+function readSearchParam(input: unknown, key: string) {
+  if (typeof input !== "object" || input === null) {
+    return;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+
+  return typeof value === "string" ? value : undefined;
 }

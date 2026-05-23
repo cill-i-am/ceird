@@ -103,6 +103,39 @@ describe("authenticated app route loader", () => {
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
   });
 
+  it("uses request middleware auth context without reloading the session or role", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    await expect(
+      loadAuthenticatedAppRoute({
+        serverContext: {
+          authSession: {
+            session: { activeOrganizationId: "org_active" },
+            user: {
+              email: "taylor@example.com",
+              id: "user_123",
+              name: "Taylor Example",
+            },
+          },
+          currentOrganizationRole: "owner",
+        },
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "owner",
+      session: {
+        session: { activeOrganizationId: "org_active" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
   it("falls back to no role when role lookup fails", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 
