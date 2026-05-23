@@ -18,6 +18,11 @@ import { authClient } from "#/lib/auth-client";
 
 import { readGlobalAppServerContext } from "../auth/app-server-context";
 import { getLoginNavigationTarget } from "../auth/auth-navigation";
+import {
+  clearClientAuthSessionCache,
+  getCachedClientAuthSession,
+} from "../auth/client-session-cache";
+import type { ClientAuthSession as Session } from "../auth/client-session-cache";
 import { isServerEnvironment } from "../auth/runtime-environment";
 
 const importOrganizationServer = () => import("./organization-server");
@@ -29,9 +34,6 @@ export interface ActiveOrganizationSync {
   readonly targetOrganizationId: OrganizationIdType | null;
 }
 
-type Session = NonNullable<
-  Awaited<ReturnType<typeof authClient.getSession>>["data"]
->;
 type RawOrganization = NonNullable<
   Awaited<ReturnType<typeof authClient.organization.list>>["data"]
 >[number];
@@ -46,7 +48,6 @@ interface ClientAccessCacheEntry<Value> {
   readonly promise: Promise<Value>;
 }
 
-let clientSessionCache: ClientAccessCacheEntry<Session | null> | undefined;
 let clientOrganizationsCache:
   | ClientAccessCacheEntry<readonly OrganizationSummary[]>
   | undefined;
@@ -56,7 +57,7 @@ const clientOrganizationRoleCache = new Map<
 >();
 
 export function clearOrganizationAccessClientCache() {
-  clientSessionCache = undefined;
+  clearClientAuthSessionCache();
   clientOrganizationsCache = undefined;
   clientOrganizationRoleCache.clear();
 }
@@ -68,34 +69,7 @@ async function getCurrentSession(): Promise<Session | null> {
     return await getCurrentServerOrganizationSession();
   }
 
-  return await getCachedClientSession();
-}
-
-async function getCachedClientSession(): Promise<Session | null> {
-  if (isFreshClientCacheEntry(clientSessionCache)) {
-    return await clientSessionCache.promise;
-  }
-
-  const promise = (async () =>
-    readClientSession(await authClient.getSession()))();
-
-  clientSessionCache = createClientCacheEntry(promise);
-
-  try {
-    const session = await promise;
-
-    if (session === null && clientSessionCache?.promise === promise) {
-      clientSessionCache = undefined;
-    }
-
-    return session;
-  } catch (error) {
-    if (clientSessionCache?.promise === promise) {
-      clientSessionCache = undefined;
-    }
-
-    throw error;
-  }
+  return await getCachedClientAuthSession();
 }
 
 export async function listOrganizations(): Promise<
@@ -414,16 +388,6 @@ function isFreshClientCacheEntry<Value>(
   entry: ClientAccessCacheEntry<Value> | undefined
 ): entry is ClientAccessCacheEntry<Value> {
   return entry !== undefined && entry.expiresAt > Date.now();
-}
-
-function readClientSession(
-  input: Awaited<ReturnType<typeof authClient.getSession>>
-) {
-  if (input.error) {
-    throw input.error;
-  }
-
-  return input.data ?? null;
 }
 
 function readClientOrganizations(

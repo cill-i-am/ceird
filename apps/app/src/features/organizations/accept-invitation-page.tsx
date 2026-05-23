@@ -13,6 +13,7 @@ import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
 } from "../auth/auth-navigation";
+import { getCachedClientAuthSession } from "../auth/client-session-cache";
 import {
   EntryContextPanel,
   EntryShell,
@@ -20,6 +21,7 @@ import {
 } from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
+import { clearOrganizationAccessClientCache } from "./organization-access";
 import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
 interface InvitationPreviewDetails {
@@ -256,13 +258,13 @@ function useAcceptInvitationPageModel(
 
       // The cancellation guard above avoids calling Better Auth after cleanup.
       // react-doctor-disable-next-line
-      const session = await authClient.getSession();
+      const session = await getInvitationClientSession();
 
       if (cancelled) {
         return;
       }
 
-      const isSignedOut = Boolean(session.error || !session.data);
+      const isSignedOut = !session;
 
       if (isSignedOut) {
         const preview = await loadPublicPreview();
@@ -391,6 +393,7 @@ function useAcceptInvitationPageModel(
       }
     }
 
+    clearOrganizationAccessClientCache();
     await mutationFeedback.waitForSuccess();
     await navigate({
       to: "/",
@@ -460,6 +463,14 @@ function useAcceptInvitationPageModel(
     showsAcceptInvitationCta,
     state,
   };
+}
+
+async function getInvitationClientSession() {
+  try {
+    return await getCachedClientAuthSession();
+  } catch {
+    return null;
+  }
 }
 
 function AcceptInvitationView({

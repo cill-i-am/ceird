@@ -1,5 +1,6 @@
 import { isRedirect } from "@tanstack/react-router";
 
+import { clearClientAuthSessionCache } from "./client-session-cache";
 import { redirectIfAuthenticated } from "./redirect-if-authenticated";
 
 const {
@@ -72,6 +73,7 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
 
 describe("auth route redirect guard", () => {
   afterEach(() => {
+    clearClientAuthSessionCache();
     vi.clearAllMocks();
   });
 
@@ -138,6 +140,39 @@ describe("auth route redirect guard", () => {
     });
 
     await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
+  }, 1000);
+
+  it("reuses fresh authenticated client session lookups", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_cached",
+        },
+        user: {
+          name: "Taylor Example",
+          email: "person@example.com",
+          image: null,
+        },
+      },
+      error: null,
+    });
+
+    await expect(redirectIfAuthenticated()).rejects.toSatisfy(isRedirect);
+    await expect(redirectIfAuthenticated()).rejects.toSatisfy(isRedirect);
+    expect(mockedGetSession).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("does not cache unauthenticated client session checks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
+    await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
+    expect(mockedGetSession).toHaveBeenCalledTimes(2);
   }, 1000);
 
   it("uses the server session check during SSR", async () => {

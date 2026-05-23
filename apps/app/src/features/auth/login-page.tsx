@@ -25,6 +25,7 @@ import {
 } from "./auth-navigation";
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
+import { clearClientAuthSessionCache } from "./client-session-cache";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 
 export function LoginPage({
@@ -63,6 +64,7 @@ export function LoginPage({
       }
 
       await mutationFeedback.waitForSuccess();
+      clearClientAuthSessionCache();
       await navigateOnSuccess();
     },
   });

@@ -27,6 +27,7 @@ import {
 } from "./auth-navigation";
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
+import { clearClientAuthSessionCache } from "./client-session-cache";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 
 export function SignupPage({
@@ -71,6 +72,7 @@ export function SignupPage({
       }
 
       await mutationFeedback.waitForSuccess();
+      clearClientAuthSessionCache();
       await navigateOnSuccess();
     },
   });

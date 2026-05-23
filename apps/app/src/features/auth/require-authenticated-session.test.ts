@@ -1,5 +1,6 @@
 import { isRedirect } from "@tanstack/react-router";
 
+import { clearClientAuthSessionCache } from "./client-session-cache";
 import { requireAuthenticatedSession } from "./require-authenticated-session";
 
 interface Session {
@@ -73,6 +74,7 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
 
 describe("authenticated-session requirement", () => {
   afterEach(() => {
+    clearClientAuthSessionCache();
     vi.clearAllMocks();
   });
 
@@ -150,6 +152,46 @@ describe("authenticated-session requirement", () => {
     await expect(requireAuthenticatedSession()).resolves.toStrictEqual(session);
     expect(mockedGetSession).toHaveBeenCalledOnce();
     expect(mockedGetServerAuthSession).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("reuses fresh client session lookups during protected route transitions", async () => {
+    const session: AuthSession = {
+      session: {
+        id: "session_cached",
+        createdAt: new Date("2026-04-03T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-03T12:00:00.000Z"),
+        userId: "user_cached",
+        expiresAt: new Date("2026-04-10T12:00:00.000Z"),
+        token: "session-token-cached",
+      },
+      user: {
+        name: "Taylor Example",
+        email: "person@example.com",
+        image: null,
+      },
+    };
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: session,
+      error: null,
+    });
+
+    await expect(requireAuthenticatedSession()).resolves.toStrictEqual(session);
+    await expect(requireAuthenticatedSession()).resolves.toStrictEqual(session);
+    expect(mockedGetSession).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("does not cache unauthenticated client session checks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    await expect(requireAuthenticatedSession()).rejects.toSatisfy(isRedirect);
+    await expect(requireAuthenticatedSession()).rejects.toSatisfy(isRedirect);
+    expect(mockedGetSession).toHaveBeenCalledTimes(2);
   }, 1000);
 
   it("rethrows session lookup failures instead of redirecting", async () => {
