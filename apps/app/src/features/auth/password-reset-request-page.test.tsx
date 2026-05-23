@@ -98,6 +98,11 @@ describe("password reset request page", () => {
         ),
       });
     });
+    await expect(
+      screen.findByText(
+        "If an account exists for that email, the newest reset link is on its way."
+      )
+    ).resolves.toBeInTheDocument();
   }, 10_000);
 
   it("shows the generic success state after submit", async () => {

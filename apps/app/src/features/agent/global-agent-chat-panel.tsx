@@ -129,14 +129,6 @@ export function GlobalAgentChatPanel({
   );
 
   React.useEffect(() => {
-    if (canUseAgent) {
-      return;
-    }
-
-    onOpenChange(false);
-  }, [canUseAgent, onOpenChange]);
-
-  React.useEffect(() => {
     if (threadState.status !== "loading" || !canUseAgent) {
       return;
     }
