@@ -32,8 +32,17 @@ function shouldSkipRepositoryEntry(entry, relativePath) {
   return (
     entry === ".git" ||
     entry === ".agents" ||
+    entry === ".alchemy" ||
+    entry === ".auto-research" ||
+    entry === ".pnpm-store" ||
+    entry === ".worktrees" ||
+    entry === "build" ||
+    entry === "coverage" ||
+    entry === "dist" ||
+    entry === "node-compile-cache" ||
     entry === "node_modules" ||
     entry === "opensrc" ||
+    entry === "out" ||
     relativePath.startsWith("docs/superpowers")
   );
 }

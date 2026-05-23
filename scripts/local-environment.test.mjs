@@ -349,6 +349,7 @@ function runScript(scriptPath, fixture, env = {}, cwd = fixture.repoDir) {
   return run("bash", [scriptPath], {
     cwd,
     env: {
+      CI: "",
       LOCAL_ENV_CALL_LOG: fixture.callLog,
       PATH: `${fixture.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
       ...env,
