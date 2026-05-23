@@ -90,7 +90,9 @@ serializing Better Auth `get-session`, organization list, and member-role calls.
 The `_app` route remains the authenticated-shell boundary; child organization
 routes reuse that parent session through
 `ensureActiveOrganizationIdForSession(...)` and then load only route-specific
-state.
+state. Internal guard redirects use typed router targets so client-side
+navigation and SSR stay on the same route transition path; raw `href` redirects
+are reserved for external or intentionally document-level navigation.
 
 Authenticated layout and navigation live under:
 

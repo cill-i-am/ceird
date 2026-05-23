@@ -100,7 +100,7 @@ export async function ensureActiveOrganizationIdForSession(session: Session) {
   } = await resolveOrganizationAccessState(session);
 
   if (!activeOrganizationId) {
-    throw redirect({ href: "/create-organization" });
+    throw redirect({ to: "/create-organization" });
   }
 
   return {

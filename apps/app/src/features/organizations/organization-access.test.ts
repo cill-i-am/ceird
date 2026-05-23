@@ -487,7 +487,7 @@ describe("organization access helpers", () => {
     const result = ensureActiveOrganizationId();
 
     await expect(result).rejects.toMatchObject({
-      options: { href: "/create-organization" },
+      options: { to: "/create-organization" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
     expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
@@ -653,7 +653,7 @@ describe("organization access helpers", () => {
     const result = requireOrganizationAccess();
 
     await expect(result).rejects.toMatchObject({
-      options: { href: "/create-organization" },
+      options: { to: "/create-organization" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
   }, 1000);
