@@ -209,8 +209,9 @@ Client-side protected-route guards reuse fresh session, organization list, and
 active-member-role lookups for a short window in
 `features/organizations/organization-access.ts`. The cache is browser-memory
 only, skips unauthenticated sessions, and is cleared after active-organization
-changes and sign-out so route transitions do not fan out repeated Better Auth
-requests while identity state changes still force a fresh read.
+changes, first organization creation, and sign-out so route transitions do not
+fan out repeated Better Auth requests while identity state changes still force a
+fresh read.
 
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with

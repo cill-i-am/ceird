@@ -18,10 +18,12 @@ type InviteMemberInput = Parameters<
 
 const {
   mockedCreateOrganization,
+  mockedClearOrganizationAccessClientCache,
   mockedInviteMember,
   mockedNavigate,
   mockedToastSuccess,
 } = vi.hoisted(() => ({
+  mockedClearOrganizationAccessClientCache: vi.fn<() => void>(),
   mockedCreateOrganization: vi.fn<
     (input: { data: { name: string } }) => Promise<{
       id: string;
@@ -52,6 +54,16 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
   return {
     ...actual,
     useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
+  };
+});
+
+vi.mock(import("./organization-access"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    clearOrganizationAccessClientCache:
+      mockedClearOrganizationAccessClientCache as typeof actual.clearOrganizationAccessClientCache,
   };
 });
 
@@ -99,6 +111,7 @@ describe("organization onboarding page", () => {
       error: null,
     });
     mockedToastSuccess.mockClear();
+    mockedClearOrganizationAccessClientCache.mockClear();
   });
 
   afterEach(() => {
@@ -168,6 +181,7 @@ describe("organization onboarding page", () => {
         screen.getByRole("heading", { name: "Invite members" })
       ).toBeInTheDocument();
     });
+    expect(mockedClearOrganizationAccessClientCache).toHaveBeenCalledOnce();
     const inviteProgress = screen.getByRole("navigation", {
       name: /Workspace setup progress/,
     });

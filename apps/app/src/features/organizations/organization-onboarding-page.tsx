@@ -28,6 +28,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
 
+import { clearOrganizationAccessClientCache } from "./organization-access";
 import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,
@@ -89,6 +90,7 @@ export function OrganizationOnboardingPage() {
       }
 
       await mutationFeedback.waitForSuccess();
+      clearOrganizationAccessClientCache();
       setCreatedOrganization(organization);
     },
   });
