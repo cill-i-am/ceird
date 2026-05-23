@@ -1,7 +1,11 @@
 import { readConfiguredApiOrigin } from "#/lib/api-origin";
 import { authClient, resolveAuthBaseURL } from "#/lib/auth-client";
 
+import { clearOrganizationAccessClientCache } from "../organizations/organization-access";
+
 export async function signOut() {
+  clearOrganizationAccessClientCache();
+
   const result = await authClient.signOut();
 
   if (typeof window !== "undefined") {

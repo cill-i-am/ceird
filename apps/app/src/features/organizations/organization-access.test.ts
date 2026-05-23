@@ -3,6 +3,7 @@ import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { isRedirect } from "@tanstack/react-router";
 
 import {
+  clearOrganizationAccessClientCache,
   ensureActiveOrganizationId,
   ensureActiveOrganizationIdForSession,
   listOrganizations,
@@ -140,6 +141,7 @@ describe("organization access helpers", () => {
   });
 
   afterEach(() => {
+    clearOrganizationAccessClientCache();
     vi.clearAllMocks();
   });
 
@@ -167,6 +169,78 @@ describe("organization access helpers", () => {
       organizationId: "org_next",
     });
   });
+
+  it("reuses fresh client organization access lookups during route transitions", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          activeOrganizationId: "org_active",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
+    mockedGetClientActiveMemberRole.mockResolvedValue({
+      data: {
+        role: "admin",
+      },
+      error: null,
+    });
+
+    await expect(
+      requireOrganizationAdministrationAccess()
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+    });
+    await expect(
+      requireOrganizationAdministrationAccess()
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+    });
+
+    expect(mockedGetSession).toHaveBeenCalledOnce();
+    expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
+    expect(mockedGetClientActiveMemberRole).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("does not cache unauthenticated client sessions", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({ data: null, error: null });
+
+    await expect(ensureActiveOrganizationId()).rejects.toSatisfy(isRedirect);
+    await expect(ensureActiveOrganizationId()).rejects.toSatisfy(isRedirect);
+
+    expect(mockedGetSession).toHaveBeenCalledTimes(2);
+  }, 1000);
+
+  it("clears client organization access lookups after active organization changes", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_active", name: "Active Org", slug: "active-org" },
+    ]);
+    await expect(
+      setActiveOrganization(decodeOrganizationId("org_active"))
+    ).resolves.toBeUndefined();
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_active", name: "Active Org", slug: "active-org" },
+    ]);
+
+    expect(mockedGetClientOrganizations).toHaveBeenCalledTimes(2);
+  }, 1000);
 
   it("clears the client active organization when sync targets no organization", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);

@@ -8,6 +8,7 @@ import {
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
+  OrganizationMemberRoleResponse,
   OrganizationRole,
   OrganizationSummary,
 } from "@ceird/identity-core";
@@ -20,6 +21,7 @@ import { getLoginNavigationTarget } from "../auth/auth-navigation";
 import { isServerEnvironment } from "../auth/runtime-environment";
 
 const importOrganizationServer = () => import("./organization-server");
+const CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS = 10_000;
 
 export type { OrganizationSummary } from "@ceird/identity-core";
 export interface ActiveOrganizationSync {
@@ -38,6 +40,27 @@ type OrganizationMemberRole = NonNullable<
     ReturnType<typeof authClient.organization.getActiveMemberRole>
   >["data"]
 >;
+
+interface ClientAccessCacheEntry<Value> {
+  readonly expiresAt: number;
+  readonly promise: Promise<Value>;
+}
+
+let clientSessionCache: ClientAccessCacheEntry<Session | null> | undefined;
+let clientOrganizationsCache:
+  | ClientAccessCacheEntry<readonly OrganizationSummary[]>
+  | undefined;
+const clientOrganizationRoleCache = new Map<
+  OrganizationIdType,
+  ClientAccessCacheEntry<OrganizationMemberRoleResponse>
+>();
+
+export function clearOrganizationAccessClientCache() {
+  clientSessionCache = undefined;
+  clientOrganizationsCache = undefined;
+  clientOrganizationRoleCache.clear();
+}
+
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
     const { getCurrentServerOrganizationSession } =
@@ -45,13 +68,34 @@ async function getCurrentSession(): Promise<Session | null> {
     return await getCurrentServerOrganizationSession();
   }
 
-  const session = await authClient.getSession();
+  return await getCachedClientSession();
+}
 
-  if (session.error) {
-    throw session.error;
+async function getCachedClientSession(): Promise<Session | null> {
+  if (isFreshClientCacheEntry(clientSessionCache)) {
+    return await clientSessionCache.promise;
   }
 
-  return session.data ?? null;
+  const promise = (async () =>
+    readClientSession(await authClient.getSession()))();
+
+  clientSessionCache = createClientCacheEntry(promise);
+
+  try {
+    const session = await promise;
+
+    if (session === null && clientSessionCache?.promise === promise) {
+      clientSessionCache = undefined;
+    }
+
+    return session;
+  } catch (error) {
+    if (clientSessionCache?.promise === promise) {
+      clientSessionCache = undefined;
+    }
+
+    throw error;
+  }
 }
 
 export async function listOrganizations(): Promise<
@@ -68,17 +112,30 @@ export async function listOrganizations(): Promise<
     return await getCurrentServerOrganizations();
   }
 
-  const organizations = await authClient.organization.list();
+  return await getCachedClientOrganizations();
+}
 
-  if (organizations.error) {
-    throw organizations.error;
+async function getCachedClientOrganizations(): Promise<
+  readonly OrganizationSummary[]
+> {
+  if (isFreshClientCacheEntry(clientOrganizationsCache)) {
+    return await clientOrganizationsCache.promise;
   }
 
-  if (!organizations.data) {
-    throw new Error("Organization lookup returned no data.");
-  }
+  const promise = (async () =>
+    readClientOrganizations(await authClient.organization.list()))();
 
-  return organizations.data.map(toOrganizationSummary);
+  clientOrganizationsCache = createClientCacheEntry(promise);
+
+  try {
+    return await promise;
+  } catch (error) {
+    if (clientOrganizationsCache?.promise === promise) {
+      clientOrganizationsCache = undefined;
+    }
+
+    throw error;
+  }
 }
 
 export async function ensureActiveOrganizationId() {
@@ -238,23 +295,41 @@ export async function getCurrentOrganizationMemberRole(
     return await getCurrentServerOrganizationMemberRole(organizationId);
   }
 
-  const result = await authClient.organization.getActiveMemberRole({
-    query: {
-      organizationId,
-    },
-  });
+  return await getCachedClientOrganizationMemberRole(organizationId);
+}
 
-  if (result.error) {
-    throw result.error;
+async function getCachedClientOrganizationMemberRole(
+  organizationId: OrganizationIdType
+) {
+  const cachedRole = clientOrganizationRoleCache.get(organizationId);
+
+  if (isFreshClientCacheEntry(cachedRole)) {
+    return await cachedRole.promise;
   }
 
-  if (!result.data) {
-    throw new Error("Organization member role lookup returned no data.");
-  }
+  const promise = (async () =>
+    readClientOrganizationMemberRole(
+      await authClient.organization.getActiveMemberRole({
+        query: {
+          organizationId,
+        },
+      })
+    ))();
 
-  return decodeOrganizationMemberRoleResponse(
-    result.data satisfies OrganizationMemberRole
+  clientOrganizationRoleCache.set(
+    organizationId,
+    createClientCacheEntry(promise)
   );
+
+  try {
+    return await promise;
+  } catch (error) {
+    if (clientOrganizationRoleCache.get(organizationId)?.promise === promise) {
+      clientOrganizationRoleCache.delete(organizationId);
+    }
+
+    throw error;
+  }
 }
 
 function toOrganizationSummary(
@@ -312,6 +387,8 @@ export async function setActiveOrganization(
   if (result.error) {
     throw result.error;
   }
+
+  clearOrganizationAccessClientCache();
 }
 
 export async function synchronizeClientActiveOrganization(
@@ -322,4 +399,59 @@ export async function synchronizeClientActiveOrganization(
   }
 
   await setActiveOrganization(activeOrganizationSync.targetOrganizationId);
+}
+
+function createClientCacheEntry<Value>(
+  promise: Promise<Value>
+): ClientAccessCacheEntry<Value> {
+  return {
+    expiresAt: Date.now() + CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS,
+    promise,
+  };
+}
+
+function isFreshClientCacheEntry<Value>(
+  entry: ClientAccessCacheEntry<Value> | undefined
+): entry is ClientAccessCacheEntry<Value> {
+  return entry !== undefined && entry.expiresAt > Date.now();
+}
+
+function readClientSession(
+  input: Awaited<ReturnType<typeof authClient.getSession>>
+) {
+  if (input.error) {
+    throw input.error;
+  }
+
+  return input.data ?? null;
+}
+
+function readClientOrganizations(
+  input: Awaited<ReturnType<typeof authClient.organization.list>>
+) {
+  if (input.error) {
+    throw input.error;
+  }
+
+  if (!input.data) {
+    throw new Error("Organization lookup returned no data.");
+  }
+
+  return input.data.map(toOrganizationSummary);
+}
+
+function readClientOrganizationMemberRole(
+  input: Awaited<ReturnType<typeof authClient.organization.getActiveMemberRole>>
+) {
+  if (input.error) {
+    throw input.error;
+  }
+
+  if (!input.data) {
+    throw new Error("Organization member role lookup returned no data.");
+  }
+
+  return decodeOrganizationMemberRoleResponse(
+    input.data satisfies OrganizationMemberRole
+  );
 }

@@ -205,6 +205,13 @@ step before navigating into the app. Skipping or completing this step enters the
 active workspace; invite creation uses Better Auth's
 `authClient.organization.inviteMember` with the newly created organization ID.
 
+Client-side protected-route guards reuse fresh session, organization list, and
+active-member-role lookups for a short window in
+`features/organizations/organization-access.ts`. The cache is browser-memory
+only, skips unauthenticated sessions, and is cleared after active-organization
+changes and sign-out so route transitions do not fan out repeated Better Auth
+requests while identity state changes still force a fresh read.
+
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with
 `authClient.organization.listMembers`, keeps pending invitation management on
