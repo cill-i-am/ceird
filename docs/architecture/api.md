@@ -72,6 +72,10 @@ app-owned declarations. Infra tests compare those app-owned binding/config keys
 with the runtime contracts for API, MCP, Agent, and domain Workers. Secret and
 credential values stay typed as Alchemy deploy-time redacted inputs, while
 runtime apps see resolved strings through Cloudflare Worker environment values.
+The domain Worker caches its Effect web handler per Worker environment inside
+the isolate. That keeps the Hyperdrive-backed `pg` pool, Better Auth runtime,
+MCP authorized-app cache, and handler graph warm across fetches; failed handler
+initialization attempts are evicted so the next request can retry cleanly.
 
 `apps/domain/src/server.ts` also intercepts MCP resource-server traffic before
 falling through to the Effect `HttpApi` handler. The MCP route defaults to

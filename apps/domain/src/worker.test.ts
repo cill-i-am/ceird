@@ -16,7 +16,9 @@ import type { DomainWorkerEnv } from "./platform/cloudflare/env.js";
 import { domainWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
   disposeDomainWorkerHandler,
+  disposeCachedDomainWorkerHandlersForTest,
   DomainWorkerSiteGeocoderLive,
+  getDomainWorkerHandler,
   getDomainWorkerMcpAuthorizedAppCache,
   handleWorkerQueue,
   makeDomainWorkerRuntimeLayers,
@@ -190,6 +192,58 @@ describe("worker queue auth email delivery", () => {
 
     expect(sameOptionsCache).toBe(oneEntryCache);
     expect(twoEntryCache).not.toBe(oneEntryCache);
+  });
+
+  it("reuses the fetch web handler for matching Worker environment config", async () => {
+    await disposeCachedDomainWorkerHandlersForTest();
+
+    const env = makeEnv();
+    const webHandler = {
+      dispose: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      handler: vi.fn<(request: Request) => Promise<Response>>(() =>
+        Promise.resolve(Response.json({ ok: true }))
+      ),
+    };
+    const makeHandler = vi.fn(() => webHandler);
+
+    const firstHandler = await getDomainWorkerHandler(env, makeHandler);
+    const secondHandler = await getDomainWorkerHandler(env, makeHandler);
+
+    expect(firstHandler).toBe(webHandler);
+    expect(secondHandler).toBe(webHandler);
+    expect(makeHandler).toHaveBeenCalledOnce();
+
+    await disposeCachedDomainWorkerHandlersForTest();
+    expect(webHandler.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("evicts failed Worker web handler initialization attempts", async () => {
+    await disposeCachedDomainWorkerHandlersForTest();
+
+    const env = makeEnv();
+    const webHandler = {
+      dispose: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      handler: vi.fn<(request: Request) => Promise<Response>>(() =>
+        Promise.resolve(Response.json({ ok: true }))
+      ),
+    };
+    const makeHandler = vi
+      .fn<() => typeof webHandler>()
+      .mockImplementationOnce(() => {
+        throw new Error("handler setup failed");
+      })
+      .mockReturnValue(webHandler);
+
+    await expect(getDomainWorkerHandler(env, makeHandler)).rejects.toThrow(
+      "handler setup failed"
+    );
+    await expect(getDomainWorkerHandler(env, makeHandler)).resolves.toBe(
+      webHandler
+    );
+
+    expect(makeHandler).toHaveBeenCalledTimes(2);
+
+    await disposeCachedDomainWorkerHandlersForTest();
   });
 
   it("logs sanitized diagnostics when Worker handler disposal fails", async () => {

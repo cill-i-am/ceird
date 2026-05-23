@@ -164,10 +164,11 @@ single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
 queue scheduling, email binding delivery, and site geocoding are composed from
 Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
-modules rather than request handlers or domain services. The fetch path
-acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
-connections stay request-scoped; queues compose their email sender runtime per
-batch.
+modules rather than request handlers or domain services. The fetch path caches a
+DB-backed web handler per Worker environment inside the isolate so the
+Hyperdrive-backed `pg` pool and Effect handler graph stay warm across requests;
+failed initialization attempts are removed from the cache and retried by the
+next request. Queues compose their email sender runtime per batch.
 The domain Worker is also configured with Better Auth env vars, MCP resource
 metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
 credentials, observability logs, and traces.
