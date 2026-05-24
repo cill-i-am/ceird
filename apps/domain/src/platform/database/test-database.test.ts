@@ -64,15 +64,15 @@ describe("test database base URL resolution", () => {
   });
 
   it("detects when integration database availability is required", () => {
-    expect(isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "1" })).toBe(
-      true
-    );
+    expect(
+      isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "1" })
+    ).toBeTruthy();
     expect(
       isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "true" })
-    ).toBe(true);
-    expect(isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "0" })).toBe(
-      false
-    );
+    ).toBeTruthy();
+    expect(
+      isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "0" })
+    ).toBeFalsy();
   });
 
   it("uses the configured base database for test database administration", () => {
