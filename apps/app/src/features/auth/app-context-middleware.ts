@@ -14,7 +14,7 @@ export const requestAppContextMiddleware = createMiddleware().server(
       hydrateOrganizationContext,
     });
     const shouldIncludeOrganizationContext =
-      hydrateOrganizationContext && snapshot.activeOrganizationId;
+      hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
 
     if (shouldIncludeOrganizationContext && snapshot.organizations) {
       return await next({
