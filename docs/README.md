@@ -1,6 +1,8 @@
 # Documentation Index
 
-This directory documents the current Ceird codebase. The `architecture` guides
+This directory documents the current Ceird app and platform: the TanStack Start
+web app, public adapters, private domain Worker, Agent runtime, shared
+packages, and Alchemy-managed infrastructure. The `architecture` guides
 describe how the major systems fit together; `superpowers/specs` and
 `superpowers/plans` preserve historical design and implementation context.
 
@@ -12,9 +14,9 @@ describe how the major systems fit together; `superpowers/specs` and
   runtime services, request flow, data flow, and code ownership boundaries.
 - [Frontend Architecture](architecture/frontend.md) explains the TanStack Start
   app, routes, feature folders, hotkeys, auth bridge, and UI testing approach.
-- [API Architecture](architecture/api.md) explains the public API adapter,
-  public Agent Worker, private domain Worker, Better Auth integration, MCP
-  adapter, jobs domain, database schema, errors, and Cloudflare Workers.
+- [API Architecture](architecture/api.md) explains the public API and MCP
+  adapters, private domain Worker, public Agent Worker, Better Auth
+  integration, domain actions, database schema, errors, and Cloudflare Workers.
 - [Shared Packages](architecture/packages.md) explains each package under
   `packages/` and what code belongs there.
 - [Local Development And Infrastructure](architecture/local-development-and-infra.md)

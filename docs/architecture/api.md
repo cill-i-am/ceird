@@ -15,7 +15,7 @@ the Hyperdrive/Postgres binding.
 
 `apps/mcp` is the standalone MCP adapter. It forwards MCP traffic to
 `apps/domain` through the same `DOMAIN` service binding so MCP, public HTTP,
-and future agent/bot surfaces share the same capability surface.
+the Agent Worker, and bot/client surfaces share the same capability surface.
 
 `apps/agent` is the Cloudflare Agents SDK runtime. It hosts `CeirdAgent`
 Durable Objects for org/user/thread-scoped conversations, streams model output
