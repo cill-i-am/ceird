@@ -13,6 +13,10 @@ import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
 import {
+  makeAuthenticationRequestObservation,
+  runWithAuthenticationRequestObservation,
+} from "./auth-observability.js";
+import {
   createAuthentication,
   makeEmailFailureReporter,
   makeAuthenticationWebHandler,
@@ -578,6 +582,48 @@ describe("createAuthentication()", () => {
     expect(delegatedUrl).toBe(
       "https://api.ceird.example/api/auth/sign-up/email"
     );
+  }, 10_000);
+
+  it("records Better Auth handler timing in the active request observation", async () => {
+    const auth = {
+      api: {
+        getSession: () => Promise.resolve(null),
+      },
+      handler: () => Promise.resolve(Response.json({ delegated: true })),
+      options: {
+        plugins: [],
+      },
+    } as unknown as CeirdAuthentication;
+    const handler = makeAuthenticationWebHandler(auth);
+    const observation = makeAuthenticationRequestObservation();
+
+    await runWithAuthenticationRequestObservation(observation, () =>
+      handler(
+        new Request("https://api.ceird.example/api/auth/sign-up/email", {
+          method: "POST",
+        })
+      )
+    );
+
+    expect(observation.timings).toMatchObject({
+      "auth.betterAuthMs": expect.any(Number),
+    });
+  }, 10_000);
+
+  it("configures an observable database-backed auth rate-limit store", () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      expect(auth.options.rateLimit).toMatchObject({
+        storage: "database",
+        customStorage: {
+          get: expect.any(Function),
+          set: expect.any(Function),
+        },
+      });
+    } finally {
+      void cleanup();
+    }
   }, 10_000);
 
   it("handles trusted auth preflight requests through the auth CORS wrapper", async () => {

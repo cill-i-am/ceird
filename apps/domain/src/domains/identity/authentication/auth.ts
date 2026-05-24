@@ -21,7 +21,6 @@ import type {
   UserId,
 } from "@ceird/identity-core";
 import { betterAuth } from "better-auth";
-import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import type { Role } from "better-auth/plugins/access";
@@ -48,6 +47,7 @@ import type {
   OrganizationInvitationEmailInput,
   PasswordResetEmailInput,
 } from "./auth-email.js";
+import { measureAuthenticationPhase } from "./auth-observability.js";
 import { loadAuthenticationConfig, matchesTrustedOrigin } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
@@ -55,6 +55,7 @@ import {
   invitation as invitationTable,
   member as memberTable,
   organization as organizationTable,
+  rateLimit as rateLimitTable,
   session as sessionTable,
 } from "./schema.js";
 
@@ -87,6 +88,20 @@ const SESSION_COOKIE_NAMES = [
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
 type AuthEffectRuntimeContext = Context.Context<never>;
+type BetterAuthOptions = Parameters<typeof betterAuth>[0];
+interface ObservedRateLimit {
+  readonly count: number;
+  readonly key: string;
+  readonly lastRequest: number;
+}
+interface ObservedRateLimitStorage {
+  readonly get: (key: string) => Promise<ObservedRateLimit | null | undefined>;
+  readonly set: (
+    key: string,
+    value: ObservedRateLimit,
+    update?: boolean | undefined
+  ) => Promise<void>;
+}
 interface AuthenticationSessionResult {
   readonly session: {
     readonly createdAt: Date | string;
@@ -352,6 +367,10 @@ export function createAuthentication(options: {
       schema: authSchema,
     }),
     disabledPaths: ["/token"],
+    rateLimit: {
+      ...authConfig.rateLimit,
+      customStorage: makeObservedDatabaseRateLimitStorage(database),
+    },
     plugins: [
       jwt({
         disableSettingJwtHeader: true,
@@ -540,6 +559,68 @@ export function createAuthentication(options: {
   return auth as CeirdAuthentication;
 }
 
+function makeObservedDatabaseRateLimitStorage(
+  database: NodePgDatabase
+): ObservedRateLimitStorage {
+  return {
+    get: (key) =>
+      measureAuthenticationPhase("auth.rateLimitReadMs", async () => {
+        const [row] = await database
+          .select({
+            count: rateLimitTable.count,
+            key: rateLimitTable.key,
+            lastRequest: rateLimitTable.lastRequest,
+          })
+          .from(rateLimitTable)
+          .where(eq(rateLimitTable.key, key))
+          .limit(1);
+
+        return row ?? null;
+      }),
+    set: (key, value, update) =>
+      measureAuthenticationPhase("auth.rateLimitWriteMs", async () => {
+        const nextValue = {
+          count: value.count,
+          key: value.key,
+          lastRequest: value.lastRequest,
+        } satisfies ObservedRateLimit;
+
+        try {
+          if (update) {
+            await database
+              .update(rateLimitTable)
+              .set({
+                count: nextValue.count,
+                lastRequest: nextValue.lastRequest,
+              })
+              .where(eq(rateLimitTable.key, key));
+            return;
+          }
+
+          await database
+            .insert(rateLimitTable)
+            .values(nextValue)
+            .onConflictDoUpdate({
+              set: {
+                count: nextValue.count,
+                lastRequest: nextValue.lastRequest,
+              },
+              target: rateLimitTable.key,
+            });
+        } catch (error) {
+          await Effect.runPromise(
+            Effect.logWarning("Auth rate-limit storage write failed").pipe(
+              Effect.annotateLogs({
+                authRateLimitFailure: "write_failed",
+                authRateLimitFailureCause: serializeUnknownCause(error),
+              })
+            )
+          );
+        }
+      }),
+  };
+}
+
 function makeAuthenticationBackgroundTaskHandler() {
   return (task: Promise<unknown>) => {
     // Package-local Node runtime only. The Cloudflare Worker runtime provides a
@@ -621,6 +702,10 @@ function serializeBackgroundTaskError(error: unknown) {
   return {
     message: String(error),
   };
+}
+
+function serializeUnknownCause(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function appendVaryHeader(headers: Headers, value: string) {
@@ -833,17 +918,18 @@ function isAuthenticationSessionRequest(request: Request) {
 }
 
 export function makeAuthenticationWebHandler(auth: CeirdAuthentication) {
-  return async (request: Request) => {
-    if (!isAuthenticationSessionRequest(request)) {
-      return auth.handler(request);
-    }
+  return (request: Request) =>
+    measureAuthenticationPhase("auth.betterAuthMs", async () => {
+      if (!isAuthenticationSessionRequest(request)) {
+        return auth.handler(request);
+      }
 
-    const session = await auth.api.getSession({
-      headers: request.headers,
+      const session = await auth.api.getSession({
+        headers: request.headers,
+      });
+
+      return Response.json(serializeAuthenticationSessionResult(session));
     });
-
-    return Response.json(serializeAuthenticationSessionResult(session));
-  };
 }
 
 function serializeAuthenticationSessionResult(

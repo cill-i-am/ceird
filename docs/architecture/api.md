@@ -233,12 +233,25 @@ failures log at info level. Those fields include the API domain, service,
 operation, failure tag, failure message, safe entity identifiers when present,
 and failure cause when present.
 
+Cloudflare API requests carry an `x-request-id` header. The public API Worker
+accepts a caller-provided value or generates one, forwards it through the
+private `DOMAIN` service binding, returns it on the response, and logs it with
+the Cloudflare ray id when available. API Worker forwarding logs include
+`api.forwardMs` and total `http.durationMs`. Domain Worker request logs include
+the same request id, ray id, total duration, handler construction time,
+handler execution time, database initialization timing, and auth critical-path
+timings when the request touches Better Auth.
+
 Background auth email delivery uses the same structured failure vocabulary.
 Password reset, verification, email-change confirmation, and organization
 invitation delivery failures are reported through the authentication failure
 reporters. Cloudflare queue delivery failures log the email kind, delivery key,
 source tag, and source cause before retrying. Deployed Workers rely on
 Cloudflare observability logs and traces configured by the infra stack.
+Auth email scheduling through Cloudflare Queues records `auth.emailQueueSendMs`
+under the active request observation and emits a background task completion log
+with the same request id when Better Auth schedules email work with
+`context.waitUntil`.
 The standalone MCP Worker emits its own forwarding log for each domain call
 with method, status, and path-only URL metadata, then relies on the domain
 Worker for OAuth, tool execution, authorization, and domain audit logs.

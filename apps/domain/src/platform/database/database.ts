@@ -1,12 +1,18 @@
 /* eslint-disable max-classes-per-file */
+import { performance } from "node:perf_hooks";
+
 import { PgClient } from "@effect/sql-pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer } from "effect";
 import { Pool } from "pg";
 
+import {
+  makePlatformRequestLogAnnotations,
+  readCurrentPlatformRequestObservation,
+  recordPlatformRequestAnnotation,
+} from "../request-observability.js";
 import { nodeDatabaseUrl } from "./database-url.js";
-import { AppDatabaseConnectionError } from "./errors.js";
 
 export interface AppDatabaseService {
   readonly authDb: NodePgDatabase;
@@ -24,23 +30,28 @@ export class AppDatabase extends Context.Service<AppDatabase>()(
   {
     make: Effect.gen(function* AppDatabaseLiveEffect() {
       const databaseUrl = yield* AppDatabaseUrl;
+      const initializedAt = performance.now();
 
       const pool = yield* Effect.acquireRelease(
         Effect.sync(() => new Pool({ connectionString: databaseUrl })),
         (poolInstance) => Effect.promise(() => poolInstance.end())
       );
+      const authDb = drizzle({ client: pool });
+      const dbInitMs = roundDurationMs(performance.now() - initializedAt);
 
-      yield* Effect.tryPromise({
-        try: () => pool.query("select 1"),
-        catch: (cause) =>
-          new AppDatabaseConnectionError({
-            cause: cause instanceof Error ? cause.message : String(cause),
-            message: "Failed to connect to the application database",
-          }),
-      });
+      recordPlatformRequestAnnotation("db.initMs", dbInitMs);
+      recordPlatformRequestAnnotation("db.preflightQuery", false);
+
+      yield* Effect.logInfo("App database initialized").pipe(
+        Effect.annotateLogs({
+          ...makeCurrentRequestLogAnnotations(),
+          "db.initMs": dbInitMs,
+          "db.preflightQuery": false,
+        })
+      );
 
       return {
-        authDb: drizzle({ client: pool }),
+        authDb,
         pool,
       };
     }),
@@ -92,3 +103,15 @@ export const AppEffectSqlRuntimeLive =
 
 export const AppDatabaseRuntimeLive =
   makeAppDatabaseRuntimeLive(AppDatabaseLive);
+
+function roundDurationMs(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function makeCurrentRequestLogAnnotations() {
+  const observation = readCurrentPlatformRequestObservation();
+
+  return observation === undefined
+    ? {}
+    : makePlatformRequestLogAnnotations(observation);
+}

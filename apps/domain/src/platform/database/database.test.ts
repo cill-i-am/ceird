@@ -19,6 +19,50 @@ const SHARED_POOL_DATABASE_URL =
   "postgresql://postgres:postgres@127.0.0.1:5432/ceird_shared_pool";
 
 describe("shared app database effect layers", () => {
+  it("does not run a database round trip when constructing AppDatabase", async () => {
+    vi.resetModules();
+
+    const pool = {
+      connect: vi.fn<() => void>(),
+      end: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      ending: false,
+      on: vi.fn<() => void>(),
+      options: {
+        application_name: "@ceird/test",
+        connectionString: SHARED_POOL_DATABASE_URL,
+      },
+      query: vi.fn<() => Promise<{ readonly rows: readonly unknown[] }>>(() =>
+        Promise.resolve({ rows: [{ one: 1 }] })
+      ),
+    } as unknown as Pool;
+    const PoolMock = vi.fn<() => Pool>(() => pool) as unknown as typeof Pool;
+
+    vi.doMock(import("pg"), () => ({ Pool: PoolMock }));
+
+    try {
+      const databaseModule = await import("./database.js");
+
+      const database = await Effect.runPromise(
+        Effect.scoped(
+          databaseModule.AppDatabase.pipe(
+            Effect.provide(
+              databaseModule.makeAppDatabaseLive(SHARED_POOL_DATABASE_URL)
+            )
+          )
+        )
+      );
+
+      expect(database.pool).toBe(pool);
+      expect(PoolMock).toHaveBeenCalledWith({
+        connectionString: SHARED_POOL_DATABASE_URL,
+      });
+      expect(pool.query).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("pg");
+      vi.resetModules();
+    }
+  }, 10_000);
+
   it("builds the Effect SQL client from AppDatabase.pool", async () => {
     const client = await Effect.runPromise(
       Effect.scoped(

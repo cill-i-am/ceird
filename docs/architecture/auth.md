@@ -183,6 +183,10 @@ Current note:
 
 - auth config currently defines custom rate-limit rules for sign-in, sign-up,
   and verification email delivery
+- Better Auth still stores rate-limit state in the `rate_limit` table, but the
+  auth runtime installs a small database-backed `customStorage` wrapper so
+  rate-limit reads and writes can be measured as `auth.rateLimitReadMs` and
+  `auth.rateLimitWriteMs`
 - password reset revokes existing sessions once the new password is accepted
 
 ### Auth Email Runtime Configuration
@@ -251,6 +255,10 @@ The domain Worker enqueues validated auth email messages during Better Auth hook
 The same Worker consumes the queue and sends through the existing
 `AuthEmailSender` and Cloudflare transport boundary. Queue retries and the
 dead-letter queue own durable failure handling.
+Queue scheduling records `auth.emailQueueSendMs` in the active auth request
+observation. Because Better Auth schedules verification and reset delivery as
+background work in the Cloudflare runtime, the Worker also logs background task
+completion/failure with the propagated request id and accumulated auth timings.
 
 Package-local Node runtime continues to use direct promise-based delivery.
 
@@ -775,6 +783,8 @@ These are the important current rules we are following.
 - keep auth mounted at `/api/auth`
 - restrict trusted origins to known app origins
 - use database-backed rate limiting
+- keep auth rate-limit storage observable through the measured custom storage
+  wrapper
 - send verification links through `AuthEmailSender`
 - revoke existing sessions on successful password reset
 - use server-first session lookup for SSR-protected routes
