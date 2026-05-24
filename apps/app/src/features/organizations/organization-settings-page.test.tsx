@@ -17,6 +17,7 @@ const blockedLabelId = "22222222-2222-4222-8222-222222222222" as LabelIdType;
 
 const {
   mockedArchiveLabel,
+  mockedClearOrganizationAccessClientCache,
   mockedCreateLabel,
   mockedInvalidate,
   mockedRunBrowserAppApiRequest,
@@ -24,6 +25,7 @@ const {
   mockedUpdateOrganization,
 } = vi.hoisted(() => ({
   mockedArchiveLabel: vi.fn<(input: { labelId: string }) => Label>(),
+  mockedClearOrganizationAccessClientCache: vi.fn<() => void>(),
   mockedCreateLabel: vi.fn<(input: { name: string }) => Label>(),
   mockedInvalidate: vi.fn<() => Promise<void>>(),
   mockedRunBrowserAppApiRequest:
@@ -54,6 +56,10 @@ vi.mock(import("#/lib/auth-client"), () => ({
       update: mockedUpdateOrganization,
     },
   } as unknown as typeof AuthClient,
+}));
+
+vi.mock(import("./organization-access-cache"), () => ({
+  clearOrganizationAccessClientCache: mockedClearOrganizationAccessClientCache,
 }));
 
 vi.mock(import("./organization-service-areas-section"), () => ({
@@ -455,6 +461,7 @@ describe("organization settings page", () => {
       });
     });
     await waitFor(() => {
+      expect(mockedClearOrganizationAccessClientCache).toHaveBeenCalledOnce();
       expect(mockedInvalidate).toHaveBeenCalledOnce();
     });
     await expect(

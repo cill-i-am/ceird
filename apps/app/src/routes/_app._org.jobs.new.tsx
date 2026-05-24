@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
-import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 
 export const Route = createFileRoute("/_app/_org/jobs/new")({
   staticData: {

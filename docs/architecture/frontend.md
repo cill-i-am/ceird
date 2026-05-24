@@ -82,10 +82,11 @@ list and set-active client APIs through
 and organization-owned data together. If Better Auth accepts the switch but the
 router refresh fails, the app reloads to avoid showing stale organization data
 against the new active session.
-TanStack Start request middleware in `apps/app/src/start.ts` hydrates auth
-request context once for routes that need it. Organization pages also prefetch
-the organization list and active member role in parallel before router loading,
-so `_app`, `_app/_org`, and child loaders can reuse request context instead of
+TanStack Start request middleware wired from
+`apps/app/src/features/auth/app-context-middleware.ts` hydrates auth request
+context once for routes that need it. Organization pages also prefetch the
+organization list and active member role in parallel before router loading, so
+`_app`, `_app/_org`, and child loaders can reuse request context instead of
 serializing Better Auth `get-session`, organization list, and member-role calls.
 The `_app` route remains the authenticated-shell boundary; child organization
 routes reuse that parent session through
@@ -185,14 +186,53 @@ Domain API access is contract-based:
 - `features/jobs/jobs-server-ssr.ts` reads request headers, forwards cookies and
   proxy headers, and calls the API from the server runtime.
 
-Organization and auth helpers call Better Auth endpoints directly because those
-routes are owned by Better Auth rather than the jobs `HttpApi` contract:
+The frontend has two deliberately separate API lanes.
+
+The app/auth lane owns shell identity and organization context. TanStack Start
+request middleware reads the authenticated request once, and app-owned server
+functions handle Better Auth operations that need server cookies or app shell
+state. This lane includes:
 
 - `lib/auth-client.ts`
 - `lib/auth-client.server.ts`
+- `features/auth/app-context-functions.ts`
+- `features/auth/app-context-middleware.ts`
 - `features/auth/server-session.ts`
 - `features/organizations/organization-server.ts`
 - `features/auth/sign-out.ts`
+
+The app/auth lane may use short-lived browser caches for shell context only:
+session, active organization, organization list, and current role. Client-side
+auth route guards reuse the app auth context snapshot for a short window
+through `features/auth/app-context-client-cache.ts`, so protected-route
+navigation can share the same session and active-organization context read.
+Organization route guards prefer hydrated app/request context for session and
+organization-list reads, then fall back to Better Auth client organization APIs
+for UI paths that do not yet have organization data in the snapshot. Those
+fallback Better Auth organization-list and member-role promise caches live in
+`features/organizations/organization-access-cache.ts`. Its
+`clearOrganizationAccessClientCache()` helper clears the app-context snapshot,
+organization-list cache, and member-role cache after sign-in, sign-up,
+active-organization changes, first organization creation, invitation acceptance,
+and sign-out so route transitions do not fan out repeated Better Auth requests
+while identity state changes still force a fresh read.
+
+The domain data lane calls the typed domain API directly for product data:
+jobs, sites, activity, comments, labels, and future ElectricSQL/TanStack DB
+synced product state. Keep these reads and writes outside app server functions.
+The API/domain layer remains the product authorization, validation, and sync
+boundary; the app shell must not proxy product data through app-owned
+server-function middleware just to reuse auth context.
+
+Route parents own shell context. The `/_app` parent establishes authenticated
+session context, and the `/_app/_org` parent establishes the active
+organization context. Child routes reuse parent route context and load only
+their route-specific product data through the domain data lane. Product route
+loaders may import the lane-neutral role/assertion helpers in
+`features/organizations/organization-route-access.ts`, but must not import
+`features/organizations/organization-access.ts` or the app-context cache/server
+function modules; those modules belong to the app/auth lane and can trigger
+extra shell reads from product navigation.
 
 The `/create-organization` onboarding route stays outside the app shell while
 the first workspace is created. The client submits only the team name to
@@ -204,15 +244,6 @@ returns that summary to the client. The same onboarding page then offers an opti
 step before navigating into the app. Skipping or completing this step enters the
 active workspace; invite creation uses Better Auth's
 `authClient.organization.inviteMember` with the newly created organization ID.
-
-Client-side auth route guards reuse fresh authenticated session lookups for a
-short window through `features/auth/client-session-cache.ts`. Organization route
-guards layer browser-memory organization-list and active-member-role caches in
-`features/organizations/organization-access.ts`. These caches skip
-unauthenticated sessions and are cleared after sign-in, sign-up,
-active-organization changes, first organization creation, invitation acceptance,
-and sign-out so route transitions do not fan out repeated Better Auth requests
-while identity state changes still force a fresh read.
 
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with

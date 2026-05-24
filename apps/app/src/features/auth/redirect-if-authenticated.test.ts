@@ -1,13 +1,15 @@
 import { isRedirect } from "@tanstack/react-router";
 
-import { clearClientAuthSessionCache } from "./client-session-cache";
+import { clearAppContextClientCache } from "./app-context-client-cache";
 import { redirectIfAuthenticated } from "./redirect-if-authenticated";
 
 const {
+  mockedGetCurrentAppContext,
   mockedGetServerAuthSession,
   mockedGetSession,
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
+  mockedGetCurrentAppContext: vi.fn<() => Promise<unknown>>(),
   mockedGetServerAuthSession: vi.fn<
     (...args: unknown[]) => Promise<{
       session: {
@@ -16,7 +18,7 @@ const {
         updatedAt: Date;
         userId: string;
         expiresAt: Date;
-        token: string;
+        token?: string;
         ipAddress?: string | null;
         userAgent?: string | null;
       };
@@ -44,6 +46,16 @@ const {
   >(),
   mockedIsServerEnvironment: vi.fn<() => boolean>(),
 }));
+
+vi.mock(import("./app-context-functions"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getCurrentAppContext:
+      mockedGetCurrentAppContext as unknown as typeof actual.getCurrentAppContext,
+  };
+});
 
 vi.mock(import("./server-session"), async (importActual) => {
   const actual = await importActual();
@@ -73,25 +85,36 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
 
 describe("auth route redirect guard", () => {
   afterEach(() => {
-    clearClientAuthSessionCache();
+    clearAppContextClientCache();
     vi.clearAllMocks();
   });
 
   it("throws a redirect to / when a session exists", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: {
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: {
         session: {
           id: "session_123",
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+          userId: "user_123",
+          expiresAt: "2026-04-10T12:00:00.000Z",
         },
         user: {
+          id: "user_123",
           name: "Taylor Example",
           email: "person@example.com",
           image: null,
+          emailVerified: true,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
         },
       },
-      error: null,
+      activeOrganizationId: null,
     });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run in guards")
+    );
 
     const result = redirectIfAuthenticated();
 
@@ -99,22 +122,32 @@ describe("auth route redirect guard", () => {
       options: { to: "/" },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 
   it("preserves invitation continuation for authenticated auth-page visits", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: {
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: {
         session: {
           id: "session_123",
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+          userId: "user_123",
+          expiresAt: "2026-04-10T12:00:00.000Z",
         },
         user: {
+          id: "user_123",
           name: "Taylor Example",
           email: "person@example.com",
           image: null,
+          emailVerified: true,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
         },
       },
-      error: null,
+      activeOrganizationId: null,
     });
 
     const result = redirectIfAuthenticated({
@@ -134,45 +167,59 @@ describe("auth route redirect guard", () => {
 
   it("resolves without throwing when no session exists", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: null,
-      error: null,
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: null,
+      activeOrganizationId: null,
     });
 
     await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
+    expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 
-  it("reuses fresh authenticated client session lookups", async () => {
+  it("reuses fresh authenticated app context lookups", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: {
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: {
         session: {
           id: "session_cached",
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+          userId: "user_cached",
+          expiresAt: "2026-04-10T12:00:00.000Z",
         },
         user: {
+          id: "user_cached",
           name: "Taylor Example",
           email: "person@example.com",
           image: null,
+          emailVerified: true,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
         },
       },
-      error: null,
+      activeOrganizationId: null,
     });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run in guards")
+    );
 
     await expect(redirectIfAuthenticated()).rejects.toSatisfy(isRedirect);
     await expect(redirectIfAuthenticated()).rejects.toSatisfy(isRedirect);
-    expect(mockedGetSession).toHaveBeenCalledOnce();
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 
-  it("does not cache unauthenticated client session checks", async () => {
+  it("does not cache unauthenticated app context checks", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: null,
-      error: null,
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: null,
+      activeOrganizationId: null,
     });
 
     await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
     await expect(redirectIfAuthenticated()).resolves.toBeUndefined();
-    expect(mockedGetSession).toHaveBeenCalledTimes(2);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledTimes(2);
+    expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 
   it("uses the server session check during SSR", async () => {
@@ -184,7 +231,6 @@ describe("auth route redirect guard", () => {
         updatedAt: new Date("2026-04-03T12:00:00.000Z"),
         userId: "user_123",
         expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-        token: "session-token",
       },
       user: {
         name: "Taylor Example",
@@ -208,7 +254,7 @@ describe("auth route redirect guard", () => {
 
   it("rethrows session lookup failures instead of treating them as unauthenticated", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockRejectedValue(new Error("network down"));
+    mockedGetCurrentAppContext.mockRejectedValue(new Error("network down"));
 
     const failure = await redirectIfAuthenticated().catch(
       (caughtError) => caughtError
@@ -216,5 +262,6 @@ describe("auth route redirect guard", () => {
 
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toBe("network down");
+    expect(mockedGetSession).not.toHaveBeenCalled();
   }, 1000);
 });

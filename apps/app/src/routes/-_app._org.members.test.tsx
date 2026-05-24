@@ -3,7 +3,7 @@ import type { OrganizationRole } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
 
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 
 const readySync: ActiveOrganizationSync = {

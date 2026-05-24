@@ -10,8 +10,8 @@ import {
   listAllCurrentServerJobs,
   listCurrentServerOrganizationActivity,
 } from "#/features/jobs/jobs-server";
-import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-access";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-route-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
 
 export function loadOrganizationHomeRoute(context: {

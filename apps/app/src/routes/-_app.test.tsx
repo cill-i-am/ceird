@@ -1,25 +1,50 @@
 import type { OrganizationId } from "@ceird/identity-core";
+import { isRedirect } from "@tanstack/react-router";
 
-const { mockedGetCurrentOrganizationMemberRole, mockedRequireSession } =
-  vi.hoisted(() => ({
-    mockedGetCurrentOrganizationMemberRole: vi.fn<
-      (organizationId: OrganizationId) => Promise<{
-        role: "owner" | "admin" | "member" | "external";
-      }>
-    >(),
-    mockedRequireSession: vi.fn<
-      () => Promise<{
-        session: {
-          activeOrganizationId?: string | null;
-        };
-        user: {
-          email: string;
-          id: string;
-          name: string;
-        };
-      }>
-    >(),
-  }));
+const {
+  mockedGetCachedClientAppContext,
+  mockedGetCurrentOrganizationMemberRole,
+  mockedIsServerEnvironment,
+  mockedRequireSession,
+} = vi.hoisted(() => ({
+  mockedGetCachedClientAppContext:
+    vi.fn<(options?: unknown) => Promise<unknown>>(),
+  mockedGetCurrentOrganizationMemberRole: vi.fn<
+    (organizationId: OrganizationId) => Promise<{
+      role: "owner" | "admin" | "member" | "external";
+    }>
+  >(),
+  mockedIsServerEnvironment: vi.fn<() => boolean>(),
+  mockedRequireSession: vi.fn<
+    () => Promise<{
+      session: {
+        activeOrganizationId?: string | null;
+      };
+      user: {
+        email: string;
+        id: string;
+        name: string;
+      };
+    }>
+  >(),
+}));
+
+vi.mock(
+  import("#/features/auth/app-context-client-cache"),
+  async (importActual) => {
+    const actual = await importActual();
+
+    return {
+      ...actual,
+      getCachedClientAppContext:
+        mockedGetCachedClientAppContext as unknown as typeof actual.getCachedClientAppContext,
+    };
+  }
+);
+
+vi.mock(import("#/features/auth/runtime-environment"), () => ({
+  isServerEnvironment: mockedIsServerEnvironment,
+}));
 
 vi.mock(
   import("#/features/auth/require-authenticated-session"),
@@ -55,6 +80,7 @@ describe("authenticated app route loader", () => {
   it("decodes the active organization id and refreshes the current role", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 
+    mockedIsServerEnvironment.mockReturnValue(true);
     mockedRequireSession.mockResolvedValue({
       session: { activeOrganizationId: "org_active" },
       user: {
@@ -87,6 +113,7 @@ describe("authenticated app route loader", () => {
   it("skips role lookup when the session has no active organization", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 
+    mockedIsServerEnvironment.mockReturnValue(true);
     mockedRequireSession.mockResolvedValue({
       session: { activeOrganizationId: null },
       user: {
@@ -106,15 +133,27 @@ describe("authenticated app route loader", () => {
   it("uses request middleware auth context without reloading the session or role", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 
+    mockedIsServerEnvironment.mockReturnValue(true);
     await expect(
       loadAuthenticatedAppRoute({
         serverContext: {
           authSession: {
-            session: { activeOrganizationId: "org_active" },
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_active",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
             user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
               email: "taylor@example.com",
+              emailVerified: false,
               id: "user_123",
+              image: null,
               name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
             },
           },
           currentOrganizationRole: "owner",
@@ -124,6 +163,98 @@ describe("authenticated app route loader", () => {
       activeOrganizationId: "org_active",
       currentOrganizationRole: "owner",
       session: {
+        session: {
+          id: "session_123",
+          activeOrganizationId: "org_active",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-05-24T10:00:00.000Z",
+          email: "taylor@example.com",
+          emailVerified: false,
+          id: "user_123",
+          image: null,
+          name: "Taylor Example",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+        },
+      },
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("passes TanStack Start server context into the route guard", async () => {
+    const { Route } = await import("./_app");
+    const { beforeLoad } = Route.options;
+
+    expect(beforeLoad).toBeDefined();
+    mockedIsServerEnvironment.mockReturnValue(true);
+
+    await expect(
+      beforeLoad?.({
+        context: {
+          authSession: null,
+        },
+        location: {
+          pathname: "/settings",
+        },
+        serverContext: {
+          authSession: {
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_active",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
+            user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
+              email: "taylor@example.com",
+              emailVerified: false,
+              id: "user_123",
+              image: null,
+              name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+            },
+          },
+          currentOrganizationRole: "admin",
+        },
+      } as never)
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "admin",
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("uses the browser app context snapshot when request auth context is absent during client navigation", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCachedClientAppContext.mockResolvedValue({
+      session: {
+        session: { activeOrganizationId: "org_active" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "admin",
+    });
+
+    await expect(loadAuthenticatedAppRoute()).resolves.toStrictEqual({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "admin",
+      session: {
         session: { activeOrganizationId: "org_active" },
         user: {
           email: "taylor@example.com",
@@ -132,13 +263,75 @@ describe("authenticated app route loader", () => {
         },
       },
     });
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: false,
+    });
     expect(mockedRequireSession).not.toHaveBeenCalled();
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("requests organization-hydrated browser context for organization route navigation", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCachedClientAppContext.mockResolvedValue({
+      session: {
+        session: { activeOrganizationId: "org_active" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "owner",
+      organizations: [
+        { id: "org_active", name: "Active Org", slug: "active-org" },
+      ],
+    });
+
+    await expect(
+      loadAuthenticatedAppRoute({ pathname: "/jobs" })
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "owner",
+    });
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: true,
+    });
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("redirects from the browser app context snapshot when no session exists", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCachedClientAppContext.mockResolvedValue({
+      session: null,
+      activeOrganizationId: null,
+    });
+
+    const result = loadAuthenticatedAppRoute();
+
+    await expect(result).rejects.toMatchObject({
+      options: {
+        search: {
+          invitation: undefined,
+        },
+        to: "/login",
+      },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: false,
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
   });
 
   it("falls back to no role when role lookup fails", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 
+    mockedIsServerEnvironment.mockReturnValue(true);
     mockedRequireSession.mockResolvedValue({
       session: { activeOrganizationId: "org_active" },
       user: {

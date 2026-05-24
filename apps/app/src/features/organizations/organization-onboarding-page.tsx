@@ -28,7 +28,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
 
-import { clearOrganizationAccessClientCache } from "./organization-access";
+import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,

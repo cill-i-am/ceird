@@ -2,6 +2,7 @@ import { decodeOrganizationId } from "@ceird/identity-core";
 
 import {
   createCurrentServerOrganizationDirect,
+  getCurrentServerOrganizationMemberRoleDirect as getCurrentServerOrganizationMemberRole,
   getCurrentServerOrganizationSessionDirect as getCurrentServerOrganizationSession,
   getCurrentServerOrganizationsDirect as getCurrentServerOrganizations,
   setCurrentServerActiveOrganizationDirect as setCurrentServerActiveOrganization,
@@ -42,11 +43,116 @@ interface AuthSession {
   user: User;
 }
 
-const { mockedGetRequestHeader, mockedSetResponseHeader } = vi.hoisted(() => ({
+function createAuthSession(overrides: Partial<Session> = {}): AuthSession {
+  return {
+    session: {
+      id: "session_123",
+      createdAt: "2026-04-04T17:08:12.497Z",
+      updatedAt: "2026-04-04T17:08:12.497Z",
+      userId: "user_123",
+      expiresAt: "2026-04-11T17:08:12.497Z",
+      token: "session-token",
+      ipAddress: "",
+      userAgent: "curl/8.7.1",
+      activeOrganizationId: "org_123",
+      ...overrides,
+    },
+    user: {
+      id: "user_123",
+      name: "Taylor Example",
+      email: "taylor@example.com",
+      image: null,
+      emailVerified: false,
+      createdAt: "2026-04-04T17:08:12.488Z",
+      updatedAt: "2026-04-04T17:08:12.488Z",
+    },
+  };
+}
+
+interface MockServerFnBuilder {
+  handler: ReturnType<typeof vi.fn<() => MockServerFn>>;
+  inputValidator: ReturnType<
+    typeof vi.fn<
+      (validator: (input: unknown) => unknown) => MockServerFnBuilder
+    >
+  >;
+  middleware: ReturnType<
+    typeof vi.fn<(middlewares: readonly unknown[]) => MockServerFnBuilder>
+  >;
+}
+
+type MockServerFn = ReturnType<typeof vi.fn<() => void>>;
+
+function readMockServerFnBuilder(reference: {
+  readonly current?: MockServerFnBuilder;
+}) {
+  if (reference.current === undefined) {
+    throw new Error("Mock server function builder was read before assignment.");
+  }
+
+  return reference.current;
+}
+
+const {
+  capturedCreateServerFns,
+  mockedCreateServerFn,
+  mockedGetGlobalStartContext,
+  mockedGetRequestHeader,
+  mockedSetResponseHeader,
+} = vi.hoisted(() => ({
+  capturedCreateServerFns: [] as {
+    inputValidators: ((input: unknown) => unknown)[];
+    middlewareCalls: (readonly unknown[])[];
+    options: { method: string };
+  }[],
+  mockedCreateServerFn: vi.fn<
+    (options: { method: string }) => MockServerFnBuilder
+  >((options) => {
+    const record = {
+      inputValidators: [] as ((input: unknown) => unknown)[],
+      middlewareCalls: [] as (readonly unknown[])[],
+      options,
+    };
+    capturedCreateServerFns.push(record);
+
+    const serverFunction = vi.fn<() => void>();
+    const builderReference: { current?: MockServerFnBuilder } = {};
+    const builder = Object.assign(serverFunction, {
+      handler: vi.fn<() => MockServerFn>(() => serverFunction),
+      inputValidator: vi.fn<
+        (validator: (input: unknown) => unknown) => MockServerFnBuilder
+      >((validator) => {
+        record.inputValidators.push(validator);
+        return readMockServerFnBuilder(builderReference);
+      }),
+      middleware: vi.fn<
+        (middlewares: readonly unknown[]) => MockServerFnBuilder
+      >((middlewares) => {
+        record.middlewareCalls.push(middlewares);
+        return readMockServerFnBuilder(builderReference);
+      }),
+    });
+    builderReference.current = builder;
+
+    return builder;
+  }),
+  mockedGetGlobalStartContext: vi.fn<() => unknown>(),
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
   mockedSetResponseHeader:
     vi.fn<(name: string, value: string | string[]) => void>(),
 }));
+
+vi.mock(import("@tanstack/react-start"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    createServerFn:
+      mockedCreateServerFn as unknown as typeof actual.createServerFn,
+    getGlobalStartContext:
+      mockedGetGlobalStartContext as typeof actual.getGlobalStartContext,
+  };
+});
 
 vi.mock(import("@tanstack/react-start/server"), async (importActual) => {
   const actual = await importActual();
@@ -57,6 +163,62 @@ vi.mock(import("@tanstack/react-start/server"), async (importActual) => {
     setResponseHeader:
       mockedSetResponseHeader as typeof actual.setResponseHeader,
   };
+});
+
+describe("server organization function middleware", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    capturedCreateServerFns.length = 0;
+  });
+
+  it("protects organization server functions with the expected middleware", async () => {
+    const {
+      createCurrentServerOrganization,
+      setCurrentServerActiveOrganization:
+        setCurrentServerActiveOrganizationServerFn,
+    } = await import("./organization-server");
+    const { organizationFunctionMiddleware, requiredAuthFunctionMiddleware } =
+      await import("../auth/app-context-middleware");
+
+    expect(createCurrentServerOrganization).toStrictEqual(expect.any(Function));
+    expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(capturedCreateServerFns[0]?.middlewareCalls).toContainEqual([
+      requiredAuthFunctionMiddleware,
+    ]);
+    expect(capturedCreateServerFns[4]?.middlewareCalls).toContainEqual([
+      organizationFunctionMiddleware,
+    ]);
+  });
+
+  it("validates organization id inputs at the server-function boundary", async () => {
+    const {
+      getCurrentServerOrganizationMemberRole:
+        getCurrentServerOrganizationMemberRoleServerFn,
+      setCurrentServerActiveOrganization:
+        setCurrentServerActiveOrganizationServerFn,
+    } = await import("./organization-server");
+    const [roleValidator] = capturedCreateServerFns[3]?.inputValidators ?? [];
+    const [setActiveValidator] =
+      capturedCreateServerFns[4]?.inputValidators ?? [];
+
+    expect(getCurrentServerOrganizationMemberRoleServerFn).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(roleValidator?.("org_123")).toStrictEqual(
+      decodeOrganizationId("org_123")
+    );
+    expect(setActiveValidator?.("org_123")).toStrictEqual(
+      decodeOrganizationId("org_123")
+    );
+    expect(() => roleValidator?.("")).toThrow(/Expected/);
+    expect(() => setActiveValidator?.("")).toThrow(/Expected/);
+  });
 });
 
 describe("server organization lookup", () => {
@@ -139,9 +301,19 @@ describe("server organization lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(authSession));
 
-    await expect(getCurrentServerOrganizationSession()).resolves.toStrictEqual(
-      authSession
-    );
+    await expect(getCurrentServerOrganizationSession()).resolves.toStrictEqual({
+      ...authSession,
+      session: {
+        id: authSession.session.id,
+        activeOrganizationId: authSession.session.activeOrganizationId,
+        createdAt: authSession.session.createdAt,
+        expiresAt: authSession.session.expiresAt,
+        ipAddress: authSession.session.ipAddress,
+        updatedAt: authSession.session.updatedAt,
+        userAgent: authSession.session.userAgent,
+        userId: authSession.session.userId,
+      },
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("get-session", "https://api.example.com/api/auth/"),
       {
@@ -153,7 +325,7 @@ describe("server organization lookup", () => {
     );
   }, 1000);
 
-  it("returns the decoded strict session shape after validation", async () => {
+  it("returns the tokenless strict session shape after validation", async () => {
     const authSession = {
       session: {
         id: "session_123",
@@ -165,7 +337,6 @@ describe("server organization lookup", () => {
         ipAddress: "",
         userAgent: "curl/8.7.1",
         activeOrganizationId: "org_123",
-        extraSessionField: "keep-me",
       },
       user: {
         id: "user_123",
@@ -175,7 +346,6 @@ describe("server organization lookup", () => {
         emailVerified: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
-        extraUserField: "keep-me-too",
       },
     };
 
@@ -193,7 +363,6 @@ describe("server organization lookup", () => {
         updatedAt: "2026-04-04T17:08:12.497Z",
         userId: "user_123",
         expiresAt: "2026-04-11T17:08:12.497Z",
-        token: "session-token",
         ipAddress: "",
         userAgent: "curl/8.7.1",
         activeOrganizationId: "org_123",
@@ -256,6 +425,45 @@ describe("server organization lookup", () => {
           id: "user_123",
           name: "Taylor Example",
           email: "taylor@example.com",
+        },
+      })
+    );
+
+    const failure = await getCurrentServerOrganizationSession().catch(
+      (caughtError) => caughtError
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(
+      "Session lookup returned an invalid payload."
+    );
+  }, 1000);
+
+  it("throws when strict session lookup returns an empty session token", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        session: {
+          id: "session_123",
+          createdAt: "2026-04-04T17:08:12.497Z",
+          updatedAt: "2026-04-04T17:08:12.497Z",
+          userId: "user_123",
+          expiresAt: "2026-04-11T17:08:12.497Z",
+          token: "",
+          activeOrganizationId: "org_123",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+          image: null,
+          emailVerified: false,
+          createdAt: "2026-04-04T17:08:12.488Z",
+          updatedAt: "2026-04-04T17:08:12.488Z",
         },
       })
     );
@@ -334,6 +542,52 @@ describe("server organization lookup", () => {
         method: "POST",
       }
     );
+  }, 1000);
+
+  it("reads the organization member role with the organization id query parameter", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ role: "owner" }));
+
+    await expect(
+      getCurrentServerOrganizationMemberRole(organizationId)
+    ).resolves.toStrictEqual({ role: "owner" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_123",
+        "https://api.example.com/api/auth/"
+      ),
+      {
+        headers: {
+          accept: "application/json",
+          cookie: "better-auth.session_token=session-token",
+        },
+      }
+    );
+  }, 1000);
+
+  it("returns the cached organization member role when it matches the active organization", async () => {
+    mockedGetGlobalStartContext.mockReturnValue({
+      authSession: createAuthSession(),
+      currentOrganizationRole: "admin",
+    });
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      getCurrentServerOrganizationMemberRole(organizationId)
+    ).resolves.toStrictEqual({ role: "admin" });
+    expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 
   it("creates an organization with a server-generated slug", async () => {

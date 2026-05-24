@@ -3,7 +3,6 @@ import type {
   JobMemberOptionsResponse,
   OrganizationActivityListResponse,
 } from "@ceird/jobs-core";
-import { redirect } from "@tanstack/react-router";
 
 import type { ActivitySearch } from "#/features/activity/activity-search";
 import { toOrganizationActivityQuery } from "#/features/activity/activity-search";
@@ -11,8 +10,11 @@ import {
   getCurrentServerJobMemberOptions,
   listCurrentServerOrganizationActivity,
 } from "#/features/jobs/jobs-server";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
-import { assertOrganizationAdministrationRole } from "#/features/organizations/organization-access";
+import {
+  assertOrganizationAdministrationRole,
+  requireOrganizationRouteContextRole,
+} from "#/features/organizations/organization-route-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 
 const EMPTY_ACTIVITY: OrganizationActivityListResponse = {
   items: [],
@@ -40,11 +42,7 @@ export async function loadActivityRouteData(
     };
   }
 
-  const role = context.currentOrganizationRole;
-
-  if (role === undefined) {
-    throw redirect({ to: "/" });
-  }
+  const role = requireOrganizationRouteContextRole(context);
 
   assertOrganizationAdministrationRole({ role });
 

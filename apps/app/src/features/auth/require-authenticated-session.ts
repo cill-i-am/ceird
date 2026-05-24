@@ -1,7 +1,7 @@
 import { redirect } from "@tanstack/react-router";
 
+import { getCachedClientAppContext } from "./app-context-client-cache";
 import { getLoginNavigationTarget } from "./auth-navigation";
-import { getCachedClientAuthSession } from "./client-session-cache";
 import { isServerEnvironment } from "./runtime-environment";
 
 const importServerSession = () => import("./server-session");
@@ -12,7 +12,9 @@ async function getCurrentSession() {
     return await getCurrentServerSession();
   }
 
-  return await getCachedClientAuthSession();
+  const appContext = await getCachedClientAppContext();
+
+  return appContext.session;
 }
 
 export async function requireAuthenticatedSession() {

@@ -1,9 +1,6 @@
 import {
   createOrganizationSlugFromName,
-  decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummary,
-  decodeOrganizationSummaryList,
-  OrganizationId,
 } from "@ceird/identity-core";
 import type {
   CreateOrganizationNameInput,
@@ -11,18 +8,19 @@ import type {
   OrganizationMemberRoleResponse,
   OrganizationSummary,
 } from "@ceird/identity-core";
-import { Schema } from "effect";
 
-import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
-import {
-  normalizeServerApiCookieHeader,
-  readServerApiForwardedHeaders,
-} from "#/lib/server-api-forwarded-headers";
-
+import { decodeServerAuthSession } from "../auth/app-context-types";
 import { readGlobalAppServerContext } from "../auth/app-server-context";
+import {
+  buildAuthReadHeaders,
+  readOptionalStrictSessionAuthRequest,
+  readRequiredServerAuthRequest,
+  readServerOrganizationMemberRole,
+  readServerOrganizations,
+} from "../auth/auth-request-context.server";
+import type { ServerAuthRequest } from "../auth/auth-request-context.server";
+import type { ServerAuthSession } from "../auth/server-session-types";
 
-const NullableString = Schema.NullOr(Schema.String);
-const NullableOrganizationId = Schema.NullOr(OrganizationId);
 const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
   "ORGANIZATION_ALREADY_EXISTS",
   "ORGANIZATION_SLUG_ALREADY_TAKEN",
@@ -30,48 +28,14 @@ const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
   "Organization slug already taken",
 ] as const;
 
-const OrganizationAccessSessionSchema = Schema.Struct({
-  session: Schema.Struct({
-    id: Schema.String,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-    userId: Schema.String,
-    expiresAt: Schema.String,
-    token: Schema.String,
-    ipAddress: Schema.optional(NullableString),
-    userAgent: Schema.optional(NullableString),
-    activeOrganizationId: Schema.optional(NullableOrganizationId),
-  }),
-  user: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.optional(NullableString),
-    emailVerified: Schema.Boolean,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-  }),
-});
-
-export type OrganizationAccessSession = Schema.Schema.Type<
-  typeof OrganizationAccessSessionSchema
->;
-
+export type OrganizationAccessSession = ServerAuthSession;
 export type OrganizationMemberRole = OrganizationMemberRoleResponse;
-
-interface ServerAuthRequest {
-  cookie: string;
-  authBaseURL: string;
-  forwardedHeaders?: ReturnType<typeof readServerApiForwardedHeaders>;
-}
-
-type RequestHeaderReader = (name: string) => string | undefined;
 
 export async function createCurrentServerOrganizationDirect(
   input: CreateOrganizationNameInput
 ): Promise<OrganizationSummary> {
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest = readServerAuthRequestStrict(getRequestHeader);
+  const authRequest = readRequiredServerAuthRequest(getRequestHeader);
   const baseSlug = createOrganizationSlugFromName(input.name);
   const response = await postCreateOrganization(authRequest, {
     name: input.name,
@@ -128,13 +92,11 @@ export async function getCurrentServerOrganizationSessionDirect(): Promise<Organ
   const cachedSession = readGlobalAppServerContext().authSession;
 
   if (cachedSession !== undefined) {
-    return cachedSession === null
-      ? null
-      : decodeOrganizationAccessSession(cachedSession);
+    return cachedSession;
   }
 
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest = readServerSessionRequest(getRequestHeader);
+  const authRequest = readOptionalStrictSessionAuthRequest(getRequestHeader);
 
   if (!authRequest) {
     return null;
@@ -144,9 +106,7 @@ export async function getCurrentServerOrganizationSessionDirect(): Promise<Organ
     new URL("get-session", `${authRequest.authBaseURL}/`),
     {
       headers: {
-        accept: "application/json",
-        cookie: authRequest.cookie,
-        ...authRequest.forwardedHeaders,
+        ...buildAuthReadHeaders(authRequest),
       },
     }
   );
@@ -172,45 +132,8 @@ export async function getCurrentServerOrganizationsDirect() {
   }
 
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest = readServerAuthRequestStrict(getRequestHeader);
-  const response = await fetchOrganizations(authRequest);
-
-  if (!response.ok) {
-    throw new Error(
-      `Organization lookup failed with status ${response.status}.`
-    );
-  }
-
-  const organizations = (await response.json()) as unknown;
-
-  if (!organizations) {
-    throw new Error("Organization lookup returned no data.");
-  }
-
-  return decodeOrganizationSummariesStrict(organizations);
-}
-
-export async function getCurrentServerOrganizationsForRequest(
-  request: Request
-) {
-  const authRequest = readServerAuthRequestStrict(
-    getHeaderFromRequest(request)
-  );
-  const response = await fetchOrganizations(authRequest);
-
-  if (!response.ok) {
-    throw new Error(
-      `Organization lookup failed with status ${response.status}.`
-    );
-  }
-
-  const organizations = (await response.json()) as unknown;
-
-  if (!organizations) {
-    throw new Error("Organization lookup returned no data.");
-  }
-
-  return decodeOrganizationSummariesStrict(organizations);
+  const authRequest = readRequiredServerAuthRequest(getRequestHeader);
+  return await readServerOrganizations(authRequest);
 }
 
 export async function getCurrentServerOrganizationMemberRoleDirect(
@@ -226,58 +149,15 @@ export async function getCurrentServerOrganizationMemberRoleDirect(
   }
 
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest = readServerAuthRequestStrict(getRequestHeader);
-  return await getCurrentServerOrganizationMemberRoleForAuthRequest(
-    authRequest,
-    organizationId
-  );
-}
-
-export async function getCurrentServerOrganizationMemberRoleForRequest(
-  request: Request,
-  organizationId: OrganizationIdType
-): Promise<OrganizationMemberRole> {
-  return await getCurrentServerOrganizationMemberRoleForAuthRequest(
-    readServerAuthRequestStrict(getHeaderFromRequest(request)),
-    organizationId
-  );
-}
-
-async function getCurrentServerOrganizationMemberRoleForAuthRequest(
-  authRequest: ServerAuthRequest,
-  organizationId: OrganizationIdType
-): Promise<OrganizationMemberRole> {
-  const response = await fetch(
-    new URL(
-      `organization/get-active-member-role?organizationId=${encodeURIComponent(
-        organizationId
-      )}`,
-      `${authRequest.authBaseURL}/`
-    ),
-    {
-      headers: {
-        accept: "application/json",
-        cookie: authRequest.cookie,
-        ...authRequest.forwardedHeaders,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Organization member role lookup failed with status ${response.status}.`
-    );
-  }
-
-  const role = (await response.json()) as unknown;
-  return decodeOrganizationMemberRole(role);
+  const authRequest = readRequiredServerAuthRequest(getRequestHeader);
+  return await readServerOrganizationMemberRole(authRequest, organizationId);
 }
 
 export async function setCurrentServerActiveOrganizationDirect(
   organizationId: OrganizationIdType
 ): Promise<void> {
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest = readServerAuthRequestStrict(getRequestHeader);
+  const authRequest = readRequiredServerAuthRequest(getRequestHeader);
   const response = await postSetActiveOrganization(authRequest, organizationId);
 
   if (!response.ok) {
@@ -285,89 +165,6 @@ export async function setCurrentServerActiveOrganizationDirect(
       `Active organization sync failed with status ${response.status}.`
     );
   }
-}
-
-function readServerSessionRequest(
-  getRequestHeader: RequestHeaderReader
-): ServerAuthRequest | null {
-  const cookie = getRequestHeader("cookie");
-
-  if (!cookie) {
-    return null;
-  }
-
-  const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders({
-    forwardedHost: getRequestHeader("x-forwarded-host"),
-    host: getRequestHeader("host"),
-    origin: getRequestHeader("origin"),
-    forwardedProto: getRequestHeader("x-forwarded-proto"),
-  });
-
-  if (!authBaseURL) {
-    throw new Error(
-      "Cannot resolve the auth base URL for organization auth requests."
-    );
-  }
-
-  return {
-    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
-    authBaseURL,
-    forwardedHeaders,
-  };
-}
-
-function readServerAuthRequestStrict(
-  getRequestHeader: RequestHeaderReader
-): ServerAuthRequest {
-  const cookie = getRequestHeader("cookie");
-
-  if (!cookie) {
-    throw new Error(
-      "Cannot list organizations without the current auth cookie."
-    );
-  }
-
-  const authBaseURL = readServerAuthBaseURL();
-  const forwardedHeaders = readServerApiForwardedHeaders({
-    forwardedHost: getRequestHeader("x-forwarded-host"),
-    host: getRequestHeader("host"),
-    origin: getRequestHeader("origin"),
-    forwardedProto: getRequestHeader("x-forwarded-proto"),
-  });
-
-  if (!authBaseURL) {
-    throw new Error(
-      "Cannot resolve the auth base URL for organization auth requests."
-    );
-  }
-
-  return {
-    cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
-    authBaseURL,
-    forwardedHeaders,
-  };
-}
-
-function getHeaderFromRequest(request: Request): RequestHeaderReader {
-  return (name) => request.headers.get(name) ?? undefined;
-}
-
-function readServerAuthBaseURL(): string | undefined {
-  return resolveConfiguredServerAuthBaseURL();
-}
-
-async function fetchOrganizations(authRequest: ServerAuthRequest) {
-  return await fetch(
-    new URL("organization/list", `${authRequest.authBaseURL}/`),
-    {
-      headers: {
-        accept: "application/json",
-        cookie: authRequest.cookie,
-        ...authRequest.forwardedHeaders,
-      },
-    }
-  );
 }
 
 async function postCreateOrganization(
@@ -467,32 +264,12 @@ function readSetCookieHeaders(headers: Headers): string[] {
   return setCookie ? [setCookie] : [];
 }
 
-function decodeOrganizationSummariesStrict(
-  organizations: unknown
-): readonly OrganizationSummary[] {
-  try {
-    return decodeOrganizationSummaryList(organizations);
-  } catch {
-    throw new Error("Organization lookup returned an invalid payload.");
-  }
-}
-
 function decodeOrganizationAccessSession(
   session: unknown
 ): OrganizationAccessSession {
   try {
-    return Schema.decodeUnknownSync(OrganizationAccessSessionSchema)(session);
+    return decodeServerAuthSession(session);
   } catch {
     throw new Error("Session lookup returned an invalid payload.");
-  }
-}
-
-function decodeOrganizationMemberRole(role: unknown): OrganizationMemberRole {
-  try {
-    return decodeOrganizationMemberRoleResponse(role);
-  } catch {
-    throw new Error(
-      "Organization member role lookup returned an invalid payload."
-    );
   }
 }

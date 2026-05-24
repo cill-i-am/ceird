@@ -11,6 +11,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
+import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
 import {
   getAuthFailureMessage,
   getErrorText,
@@ -25,7 +26,6 @@ import {
 } from "./auth-navigation";
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
-import { clearClientAuthSessionCache } from "./client-session-cache";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
 
 export function LoginPage({
@@ -64,7 +64,7 @@ export function LoginPage({
       }
 
       await mutationFeedback.waitForSuccess();
-      clearClientAuthSessionCache();
+      clearOrganizationAccessClientCache();
       await navigateOnSuccess();
     },
   });

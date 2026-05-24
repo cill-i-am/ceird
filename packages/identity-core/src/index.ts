@@ -225,7 +225,7 @@ const internalOrganizationRoleSet = new Set<OrganizationRole>(
 
 export function isAdministrativeOrganizationRole(
   role: OrganizationRole
-): boolean {
+): role is AdministrativeOrganizationRole {
   return administrativeOrganizationRoleSet.has(role);
 }
 

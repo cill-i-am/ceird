@@ -1,34 +1,73 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
+import { shouldHydrateOrganizationContext } from "#/features/auth/app-context-route-selection";
 import { readAppServerContext } from "#/features/auth/app-server-context";
+import { getLoginNavigationTarget } from "#/features/auth/auth-navigation";
 import { AuthenticatedAppLayout } from "#/features/auth/authenticated-app-layout";
 import { requireAuthenticatedSession } from "#/features/auth/require-authenticated-session";
+import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: loadAuthenticatedAppRoute,
+  beforeLoad: ({ location, serverContext }) =>
+    loadAuthenticatedAppRoute({
+      pathname: location.pathname,
+      serverContext,
+    }),
   component: AuthenticatedAppLayout,
 });
 
 export async function loadAuthenticatedAppRoute(input?: {
+  readonly pathname?: string | undefined;
   readonly serverContext?: unknown;
 }) {
   const serverContext = readAppServerContext(input?.serverContext);
-  const session =
-    serverContext.authSession === undefined
-      ? await requireAuthenticatedSession()
-      : await requireAuthenticatedServerContextSession(
-          serverContext.authSession
-        );
-  const activeOrganizationId = session.session.activeOrganizationId
-    ? decodeOrganizationId(session.session.activeOrganizationId)
-    : null;
+  const hydrateOrganizationContext =
+    input?.pathname !== undefined &&
+    shouldHydrateOrganizationContext(input.pathname);
+  const clientAppContext =
+    serverContext.authSession === undefined && !isServerEnvironment()
+      ? await getCachedClientAppContext({ hydrateOrganizationContext })
+      : undefined;
+  const session = await getAuthenticatedRouteSession({
+    clientAppContext,
+    serverContextSession: serverContext.authSession,
+  });
+  const activeOrganizationId =
+    clientAppContext === undefined
+      ? decodeActiveOrganizationIdFromSession(session)
+      : clientAppContext.activeOrganizationId;
   const currentOrganizationRole =
     serverContext.currentOrganizationRole ??
+    clientAppContext?.currentOrganizationRole ??
     (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId));
 
   return { activeOrganizationId, currentOrganizationRole, session };
+}
+
+async function getAuthenticatedRouteSession({
+  clientAppContext,
+  serverContextSession,
+}: {
+  readonly clientAppContext:
+    | Awaited<ReturnType<typeof getCachedClientAppContext>>
+    | undefined;
+  readonly serverContextSession:
+    | Awaited<ReturnType<typeof requireAuthenticatedSession>>
+    | null
+    | undefined;
+}) {
+  if (serverContextSession !== undefined) {
+    return await requireAuthenticatedServerContextSession(serverContextSession);
+  }
+
+  if (clientAppContext) {
+    return requireAuthenticatedClientContextSession(clientAppContext.session);
+  }
+
+  return await requireAuthenticatedSession();
 }
 
 async function requireAuthenticatedServerContextSession(
@@ -39,6 +78,24 @@ async function requireAuthenticatedServerContextSession(
   }
 
   return session;
+}
+
+function requireAuthenticatedClientContextSession(
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>> | null
+) {
+  if (!session) {
+    throw redirect(getLoginNavigationTarget());
+  }
+
+  return session;
+}
+
+function decodeActiveOrganizationIdFromSession(
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>>
+) {
+  return session.session.activeOrganizationId
+    ? decodeOrganizationId(session.session.activeOrganizationId)
+    : null;
 }
 
 async function resolveCurrentOrganizationRoleOrUndefined(

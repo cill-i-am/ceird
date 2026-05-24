@@ -13,6 +13,7 @@ import { AcceptInvitationPage } from "./accept-invitation-page";
 
 const {
   mockedAcceptInvitation,
+  mockedClearAppContextClientCache,
   mockedGetInvitation,
   mockedGetPublicInvitationPreview,
   mockedGetSession,
@@ -38,6 +39,7 @@ const {
       } | null;
     }>
   >(),
+  mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetInvitation: vi.fn<
     (input: { query: { id: string } }) => Promise<{
       data: {
@@ -88,6 +90,37 @@ const {
   >(),
   mockedSignOut: vi.fn<typeof SignOutModule.signOut>(),
 }));
+
+vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getCachedClientAppContext: (async () => {
+      const sessionResponse = await mockedGetSession();
+
+      return {
+        activeOrganizationId: null,
+        currentOrganizationRole: undefined,
+        organizations: undefined,
+        session: sessionResponse.data,
+      };
+    }) as typeof actual.getCachedClientAppContext,
+  };
+});
+
+vi.mock(
+  import("../auth/app-context-client-cache-state"),
+  async (importActual) => {
+    const actual = await importActual();
+
+    return {
+      ...actual,
+      clearAppContextClientCache:
+        mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
+    };
+  }
+);
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -319,6 +352,7 @@ describe("accept invitation page", () => {
         to: "/",
       });
     });
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(
       mockedSetActiveOrganization.mock.invocationCallOrder[0]
     ).toBeLessThan(mockedNavigate.mock.invocationCallOrder[0]);
@@ -408,6 +442,53 @@ describe("accept invitation page", () => {
     expect(
       screen.getByRole("button", { name: "Accept invitation" })
     ).toBeEnabled();
+  }, 10_000);
+
+  it("clears organization caches when acceptance succeeds but activation fails", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_123",
+        },
+        user: {
+          email: "member@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedSetActiveOrganization.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Could not activate organization",
+        status: 500,
+        statusText: "Internal Server Error",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<AcceptInvitationPage invitationId="inv_123" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Accept invitation" })
+    );
+
+    await waitFor(() => {
+      expect(mockedAcceptInvitation).toHaveBeenCalledWith({
+        invitationId: "inv_123",
+      });
+    });
+    await waitFor(() => {
+      expect(mockedSetActiveOrganization).toHaveBeenCalledWith({
+        organizationId: "org_123",
+      });
+    });
+
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("We couldn't accept this invitation. Please try again.")
+    ).toBeInTheDocument();
   }, 10_000);
 
   it("lets the user sign out and retry with another account when lookup is denied", async () => {

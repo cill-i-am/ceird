@@ -1,8 +1,8 @@
 import { redirect } from "@tanstack/react-router";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
+import { getCachedClientAppContext } from "./app-context-client-cache";
 import { getAuthSuccessNavigationTarget } from "./auth-navigation";
-import { getCachedClientAuthSession } from "./client-session-cache";
 import { isServerEnvironment } from "./runtime-environment";
 
 const importServerSession = () => import("./server-session");
@@ -13,7 +13,9 @@ async function getCurrentSession() {
     return await getCurrentServerSession();
   }
 
-  return await getCachedClientAuthSession();
+  const appContext = await getCachedClientAppContext();
+
+  return appContext.session;
 }
 
 export async function redirectIfAuthenticated(

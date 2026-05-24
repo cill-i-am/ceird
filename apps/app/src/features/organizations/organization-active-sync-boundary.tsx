@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@ceird/identity-core";
 import { useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useReducer } from "react";
@@ -5,8 +6,8 @@ import { useEffect, useReducer } from "react";
 import { Button } from "#/components/ui/button";
 import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 
-import type { ActiveOrganizationSync } from "./organization-access";
 import { synchronizeClientActiveOrganization } from "./organization-access";
+import type { ActiveOrganizationSync } from "./organization-route-access";
 
 interface OrganizationActiveSyncBoundaryProps {
   readonly activeOrganizationSync: ActiveOrganizationSync;
@@ -16,12 +17,16 @@ interface OrganizationActiveSyncBoundaryProps {
 type SyncState = "ready" | "syncing" | "error";
 
 interface OrganizationSyncState {
+  readonly completedTargetOrganizationId?: OrganizationId | null | undefined;
   readonly retryCount: number;
   readonly status: SyncState;
 }
 
 type OrganizationSyncAction =
-  | { readonly type: "ready" }
+  | {
+      readonly targetOrganizationId?: OrganizationId | null | undefined;
+      readonly type: "ready";
+    }
   | { readonly type: "syncing" }
   | { readonly type: "error" }
   | { readonly type: "retry" };
@@ -39,7 +44,11 @@ function organizationSyncReducer(
 ): OrganizationSyncState {
   switch (action.type) {
     case "ready": {
-      return setSyncStatus(state, "ready");
+      return {
+        completedTargetOrganizationId: action.targetOrganizationId,
+        retryCount: state.retryCount,
+        status: "ready",
+      };
     }
     case "syncing": {
       return setSyncStatus(state, "syncing");
@@ -67,9 +76,16 @@ export function OrganizationActiveSyncBoundary({
   const router = useRouter();
   const { required, targetOrganizationId } = activeOrganizationSync;
   const [syncState, dispatchSyncState] = useReducer(organizationSyncReducer, {
+    completedTargetOrganizationId: undefined,
     retryCount: 0,
     status: required ? "syncing" : "ready",
   });
+  const renderStatus =
+    required &&
+    syncState.status === "ready" &&
+    syncState.completedTargetOrganizationId !== targetOrganizationId
+      ? "syncing"
+      : syncState.status;
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +108,7 @@ export function OrganizationActiveSyncBoundary({
         await router.invalidate({ sync: true });
 
         if (!cancelled) {
-          dispatchSyncState({ type: "ready" });
+          dispatchSyncState({ targetOrganizationId, type: "ready" });
         }
       } catch {
         if (!cancelled) {
@@ -106,7 +122,7 @@ export function OrganizationActiveSyncBoundary({
     };
   }, [required, syncState.retryCount, router, targetOrganizationId]);
 
-  if (syncState.status === "syncing") {
+  if (renderStatus === "syncing") {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md items-center justify-center px-4 py-10 text-center">
         <DotMatrixLoadingState label="Loading your organization" />
@@ -114,7 +130,7 @@ export function OrganizationActiveSyncBoundary({
     );
   }
 
-  if (syncState.status === "error") {
+  if (renderStatus === "error") {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm">
         <p className="text-destructive">

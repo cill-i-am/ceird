@@ -1,3 +1,4 @@
+import type { OrganizationSummary } from "@ceird/identity-core";
 import { normalizeLabelName } from "@ceird/labels-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { QueryClient } from "@tanstack/query-core";
@@ -43,7 +44,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
 
-import type { OrganizationSummary } from "./organization-access";
+import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import { OrganizationConfigurationProvider } from "./organization-configuration-state";
 import type { OrganizationQueryScope } from "./organization-query-scope";
 import { OrganizationRateCardSection } from "./organization-rate-card-section";
@@ -179,6 +180,7 @@ export function OrganizationSettingsPage({
       });
       savedOrganizationNameRef.current = result.data.name;
       setSuccessMessage("Organization updated.");
+      clearOrganizationAccessClientCache();
 
       try {
         await router.invalidate();

@@ -138,6 +138,9 @@ describe("password reset request page", () => {
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.click(screen.getByRole("button", { name: /send reset link/i }));
 
+    await expect(
+      screen.findByRole("heading", { name: "Check your email" })
+    ).resolves.toBeInTheDocument();
     const successBackLink = await screen.findByRole("link", {
       name: "Back to login",
     });

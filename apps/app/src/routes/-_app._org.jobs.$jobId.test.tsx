@@ -24,6 +24,13 @@ const labelId = "99999999-9999-4999-8999-999999999999" as LabelIdType;
 const serviceAreaId =
   "55555555-5555-4555-8555-555555555555" as ServiceAreaIdType;
 const organizationId = decodeOrganizationId("org_123");
+const readyOrganizationContext = {
+  activeOrganizationSync: {
+    required: false,
+    targetOrganizationId: organizationId,
+  },
+  currentOrganizationRole: "owner" as const,
+};
 
 const { mockedGetCurrentServerJobDetail, mockedNavigate } = vi.hoisted(() => ({
   mockedGetCurrentServerJobDetail: vi.fn<AsyncLoaderMock>(),
@@ -89,9 +96,9 @@ describe("job detail route", () => {
       const { loadJobDetailRouteData } =
         await import("#/features/jobs/jobs-detail-route-loader");
 
-      await expect(loadJobDetailRouteData(workItemId)).resolves.toStrictEqual(
-        detail
-      );
+      await expect(
+        loadJobDetailRouteData(workItemId, readyOrganizationContext)
+      ).resolves.toStrictEqual(detail);
       expect(mockedGetCurrentServerJobDetail).toHaveBeenCalledWith(workItemId);
     }
   );
@@ -106,7 +113,10 @@ describe("job detail route", () => {
         await import("#/features/jobs/jobs-detail-route-loader");
 
       expect(() =>
-        loadJobDetailRouteData("not-a-job-id" as WorkItemIdType)
+        loadJobDetailRouteData(
+          "not-a-job-id" as WorkItemIdType,
+          readyOrganizationContext
+        )
       ).toThrow(/UUID/);
       expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
     }

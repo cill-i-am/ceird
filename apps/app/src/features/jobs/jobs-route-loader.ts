@@ -1,10 +1,8 @@
-import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import type {
   JobContactOption,
   JobDetailResponse,
   JobListResponse,
   JobOptionsResponse,
-  UserIdType,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { ServiceAreaOption, SiteOption } from "@ceird/sites-core";
@@ -21,11 +19,8 @@ import {
   isExternalJobsViewer,
 } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
-import {
-  ensureActiveOrganizationId,
-  getCurrentOrganizationMemberRole,
-} from "#/features/organizations/organization-access";
+import { requireOrganizationRouteContextRole } from "#/features/organizations/organization-route-access";
+import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
 import { seedRouteQueryData } from "#/lib/tanstack-db-query";
 
 import { organizationJobsQueryKey } from "./jobs-query-keys";
@@ -43,51 +38,31 @@ const EMPTY_JOBS_LIST: JobListResponse = {
   nextCursor: undefined,
 };
 
-interface JobsRouteOrganizationAccess {
-  readonly activeOrganizationId: OrganizationId;
-  readonly activeOrganizationSync: ActiveOrganizationSync;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly currentUserId: UserIdType;
+interface JobsRouteOrganizationAccess extends OrganizationProductRouteContext {
   readonly queryClient?: QueryClient | undefined;
 }
 
-function toJobsRouteOrganizationAccess(
-  organizationAccess: Awaited<ReturnType<typeof ensureActiveOrganizationId>>
-): JobsRouteOrganizationAccess {
-  return {
-    activeOrganizationId: organizationAccess.activeOrganizationId,
-    activeOrganizationSync: organizationAccess.activeOrganizationSync,
-    currentUserId: decodeJobsViewerUserId(organizationAccess.session.user.id),
-  };
-}
-
 export async function loadJobsRouteData(
-  organizationAccess?: JobsRouteOrganizationAccess
+  organizationAccess: JobsRouteOrganizationAccess
 ) {
-  const resolvedOrganizationAccess =
-    organizationAccess ??
-    toJobsRouteOrganizationAccess(await ensureActiveOrganizationId());
-
-  if (resolvedOrganizationAccess.activeOrganizationSync.required) {
+  if (organizationAccess.activeOrganizationSync.required) {
     return {
       list: EMPTY_JOBS_LIST,
       options: EMPTY_JOBS_OPTIONS,
       viewer: {
         role: "member",
-        userId: resolvedOrganizationAccess.currentUserId,
+        userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
       } satisfies JobsViewer,
     };
   }
 
-  const listRequestStartedAt = Date.now();
-  const listPromise = listAllCurrentServerJobs({});
-  const activeRole = await resolveJobsRouteOrganizationRole(
-    resolvedOrganizationAccess
-  );
+  const activeRole = requireOrganizationRouteContextRole(organizationAccess);
   const viewer = {
     role: activeRole,
-    userId: resolvedOrganizationAccess.currentUserId,
+    userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
   } satisfies JobsViewer;
+  const listRequestStartedAt = Date.now();
+  const listPromise = listAllCurrentServerJobs({});
   const internalOptionsPromise = canUseInternalJobOptions(viewer)
     ? getCurrentServerJobOptions()
     : undefined;
@@ -100,11 +75,11 @@ export async function loadJobsRouteData(
     options = await loadExternalJobsScopedOptions(list);
   }
 
-  if (resolvedOrganizationAccess.queryClient) {
+  if (organizationAccess.queryClient) {
     const seededItems = seedRouteQueryData(
-      resolvedOrganizationAccess.queryClient,
+      organizationAccess.queryClient,
       organizationJobsQueryKey({
-        organizationId: resolvedOrganizationAccess.activeOrganizationId,
+        organizationId: organizationAccess.activeOrganizationId,
         role: viewer.role,
         userId: viewer.userId,
       }),
@@ -188,18 +163,4 @@ function deriveExternalJobsScopedOptions(
     serviceAreas: [...serviceAreasById.values()],
     sites: [...sitesById.values()],
   };
-}
-
-async function resolveJobsRouteOrganizationRole(
-  organizationAccess: JobsRouteOrganizationAccess
-) {
-  if (organizationAccess.currentOrganizationRole !== undefined) {
-    return organizationAccess.currentOrganizationRole;
-  }
-
-  const role = await getCurrentOrganizationMemberRole(
-    organizationAccess.activeOrganizationId
-  );
-
-  return role.role;
 }

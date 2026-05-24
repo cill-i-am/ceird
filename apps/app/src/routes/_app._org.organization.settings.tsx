@@ -2,8 +2,8 @@ import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import * as React from "react";
 
-import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 import { OrganizationSettingsPage } from "#/features/organizations/organization-settings-page";
 import { loadSettingsRoute } from "#/features/organizations/organization-settings-route-loader";
 
