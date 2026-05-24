@@ -1,8 +1,17 @@
+import { vi } from "@effect/vitest";
+import { Effect } from "effect";
+
 import {
   decodeAuthEmailQueueMessageStrict,
   InvalidAuthEmailQueueMessageError,
   INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG,
+  makeCloudflareAuthenticationEmailSchedulerLive,
 } from "./auth-email-queue.js";
+import { AuthenticationEmailScheduler } from "./auth-email-scheduler.js";
+import {
+  makeAuthenticationRequestObservation,
+  runWithAuthenticationRequestObservation,
+} from "./auth-observability.js";
 
 describe("auth email queue messages", () => {
   it("decodes password reset messages", () => {
@@ -39,4 +48,34 @@ describe("auth email queue messages", () => {
 
     expect(error._tag).toBe(INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG);
   });
+
+  it("records queue send timing in the active request observation", async () => {
+    const queue = {
+      send: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    } as unknown as Queue<unknown>;
+    const observation = makeAuthenticationRequestObservation();
+
+    await runWithAuthenticationRequestObservation(observation, () =>
+      Effect.runPromise(
+        Effect.gen(function* scheduleVerificationEmail() {
+          const scheduler = yield* AuthenticationEmailScheduler;
+
+          yield* scheduler.sendVerificationEmail({
+            deliveryKey:
+              "email-verification/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            recipientEmail: "user@example.com",
+            recipientName: "User",
+            verificationUrl: "https://app.example.com/verify?token=abc",
+          });
+        }).pipe(
+          Effect.provide(makeCloudflareAuthenticationEmailSchedulerLive(queue))
+        )
+      )
+    );
+
+    expect(queue.send).toHaveBeenCalledOnce();
+    expect(observation.timings).toMatchObject({
+      "auth.emailQueueSendMs": expect.any(Number),
+    });
+  }, 1000);
 });

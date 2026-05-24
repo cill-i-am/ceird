@@ -1,4 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 
 import { Cause, ConfigProvider, Effect, Layer, Schema } from "effect";
 
@@ -23,6 +25,12 @@ import {
   AuthEmailTransport,
 } from "../../domains/identity/authentication/auth-email.js";
 import {
+  makeAuthenticationRequestObservation,
+  readCurrentAuthenticationRequestObservation,
+  runWithAuthenticationRequestObservation,
+} from "../../domains/identity/authentication/auth-observability.js";
+import type { AuthenticationRequestObservation } from "../../domains/identity/authentication/auth-observability.js";
+import {
   AuthenticationBackgroundTaskHandler,
   makeAuthenticationLive,
 } from "../../domains/identity/authentication/auth.js";
@@ -37,8 +45,17 @@ import {
   makeAppDatabaseLive,
   makeAppDatabaseRuntimeLive,
 } from "../database/database.js";
+import {
+  makePlatformRequestLogAnnotations,
+  makePlatformRequestObservation,
+  readCurrentPlatformRequestObservation,
+  runWithPlatformRequestObservation,
+} from "../request-observability.js";
+import type { PlatformRequestObservation } from "../request-observability.js";
 import type { DomainWorkerEnv } from "./env.js";
 import { domainWorkerEnvConfigMap } from "./env.js";
+
+const REQUEST_ID_HEADER = "x-request-id";
 
 export class DomainWorkerFetchError extends Schema.TaggedErrorClass<DomainWorkerFetchError>()(
   "@ceird/domain/WorkerFetchError",
@@ -68,13 +85,29 @@ export const DomainWorkerSiteGeocoderLive = SiteGeocoder.Google;
 
 export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
   return Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
+    const authenticationObservation =
+      readCurrentAuthenticationRequestObservation();
+    const platformObservation = readCurrentPlatformRequestObservation();
+    const startedAt = nowMs();
     const backgroundTask = (async () => {
       try {
         await task;
+        await Effect.runPromise(
+          Effect.logInfo("Authentication background task completed").pipe(
+            Effect.annotateLogs({
+              ...makeOptionalPlatformRequestLogAnnotations(platformObservation),
+              "auth.backgroundTaskMs": elapsedMs(startedAt),
+              ...authenticationObservation?.timings,
+            })
+          )
+        );
       } catch (error) {
         await Effect.runPromise(
           Effect.logError("Authentication background task failed").pipe(
             Effect.annotateLogs({
+              ...makeOptionalPlatformRequestLogAnnotations(platformObservation),
+              "auth.backgroundTaskMs": elapsedMs(startedAt),
+              ...authenticationObservation?.timings,
               authenticationBackgroundTaskFailureCause:
                 serializeFailureCause(error),
             })
@@ -172,7 +205,11 @@ export function disposeDomainWorkerHandler(
   );
 }
 
-function makeDomainWorkerHandlerEffect(request: Request, env: DomainWorkerEnv) {
+function makeDomainWorkerHandlerEffect(
+  request: Request,
+  env: DomainWorkerEnv,
+  observation: DomainWorkerRequestObservation
+) {
   return Effect.try({
     catch: (cause) =>
       new DomainWorkerFetchError({
@@ -181,7 +218,15 @@ function makeDomainWorkerHandlerEffect(request: Request, env: DomainWorkerEnv) {
         method: request.method,
         path: requestPathname(request.url),
       }),
-    try: () => makeDomainWorkerHandler(env),
+    try: () => {
+      const startedAt = nowMs();
+
+      try {
+        return makeDomainWorkerHandler(env);
+      } finally {
+        observation.handlerInitMs = elapsedMs(startedAt);
+      }
+    },
   });
 }
 
@@ -197,8 +242,11 @@ export function handleWorkerFetch(
   env: DomainWorkerEnv,
   context: ExecutionContext
 ) {
+  const observation = makeDomainWorkerRequestObservation(request);
+  const observedRequest = withRequestIdHeader(request, observation.requestId);
+
   return Effect.acquireUseRelease(
-    makeDomainWorkerHandlerEffect(request, env),
+    makeDomainWorkerHandlerEffect(observedRequest, env, observation),
     (webHandler) =>
       Effect.tryPromise({
         catch: (cause) =>
@@ -208,21 +256,36 @@ export function handleWorkerFetch(
             method: request.method,
             path: requestPathname(request.url),
           }),
-        try: () =>
-          runWithDomainWorkerExecutionContext(context, () =>
-            webHandler.handler(request)
-          ),
+        try: async () => {
+          const startedAt = nowMs();
+
+          try {
+            return await runWithDomainWorkerExecutionContext(context, () =>
+              runWithPlatformRequestObservation(observation.platform, () =>
+                runWithAuthenticationRequestObservation(
+                  observation.authentication,
+                  () => webHandler.handler(observedRequest)
+                )
+              )
+            );
+          } finally {
+            observation.handlerMs = elapsedMs(startedAt);
+          }
+        },
       }),
     disposeDomainWorkerHandler
   ).pipe(
     Effect.catchTag("@ceird/domain/WorkerFetchError", (failure) =>
-      logDomainWorkerFetchFailure(env, failure).pipe(
+      logDomainWorkerFetchFailure(env, failure, observation).pipe(
         Effect.as(
-          Response.json(
-            {
-              error: "domain_worker_failed",
-            },
-            { status: 500 }
+          withRequestIdResponseHeader(
+            Response.json(
+              {
+                error: "domain_worker_failed",
+              },
+              { status: 500 }
+            ),
+            observation.requestId
           )
         )
       )
@@ -230,12 +293,18 @@ export function handleWorkerFetch(
     Effect.tap((response) =>
       Effect.annotateCurrentSpan("http.status", response.status)
     ),
+    Effect.map((response) =>
+      withRequestIdResponseHeader(response, observation.requestId)
+    ),
     Effect.tap((response) =>
-      logDomainWorkerFetchOutcome(request, env, response)
+      logDomainWorkerFetchOutcome(observedRequest, env, response, observation)
+    ),
+    Effect.annotateLogs(
+      makeDomainWorkerFetchAnnotations(observedRequest, env, observation)
     ),
     Effect.withLogSpan("domain.request"),
     Effect.withSpan("DomainWorker.handleFetch", {
-      attributes: makeDomainWorkerFetchAnnotations(request, env),
+      attributes: makeDomainWorkerFetchAnnotations(observedRequest, env),
     })
   );
 }
@@ -243,7 +312,8 @@ export function handleWorkerFetch(
 function logDomainWorkerFetchOutcome(
   request: Request,
   env: DomainWorkerEnv,
-  response: Response
+  response: Response,
+  observation: DomainWorkerRequestObservation
 ) {
   if (requestPathname(request.url) === "/health") {
     return Effect.void;
@@ -256,7 +326,7 @@ function logDomainWorkerFetchOutcome(
 
   return log.pipe(
     Effect.annotateLogs({
-      ...makeDomainWorkerFetchAnnotations(request, env),
+      ...makeDomainWorkerFetchAnnotations(request, env, observation),
       "http.status": response.status,
     })
   );
@@ -264,7 +334,8 @@ function logDomainWorkerFetchOutcome(
 
 function logDomainWorkerFetchFailure(
   env: DomainWorkerEnv,
-  failure: DomainWorkerFetchError
+  failure: DomainWorkerFetchError,
+  observation: DomainWorkerRequestObservation
 ) {
   return Effect.logError("Domain Worker request failed").pipe(
     Effect.annotateLogs({
@@ -275,8 +346,10 @@ function logDomainWorkerFetchFailure(
         ? {}
         : { "alchemy.stage": env.ALCHEMY_STAGE }),
       "ceird.adapter": "domain",
+      ...makePlatformRequestLogAnnotations(observation.platform),
       "domain.failure": "domain_worker_failed",
       "domain.failureTag": failure._tag,
+      ...makeDomainWorkerTimingAnnotations(observation),
       "http.method": failure.method,
       "http.path": failure.path,
       "http.status": 500,
@@ -286,7 +359,8 @@ function logDomainWorkerFetchFailure(
 
 function makeDomainWorkerFetchAnnotations(
   request: Request,
-  env: DomainWorkerEnv
+  env: DomainWorkerEnv,
+  observation?: DomainWorkerRequestObservation | undefined
 ) {
   return {
     ...(env.ALCHEMY_STACK_NAME === undefined
@@ -296,9 +370,67 @@ function makeDomainWorkerFetchAnnotations(
       ? {}
       : { "alchemy.stage": env.ALCHEMY_STAGE }),
     "ceird.adapter": "domain",
+    ...(observation === undefined
+      ? {}
+      : makePlatformRequestLogAnnotations(observation.platform)),
+    ...(observation === undefined
+      ? {}
+      : makeDomainWorkerTimingAnnotations(observation)),
     "http.method": request.method,
     "http.path": requestPathname(request.url),
   };
+}
+
+interface DomainWorkerRequestObservation {
+  readonly authentication: AuthenticationRequestObservation;
+  readonly cfRay?: string | undefined;
+  handlerInitMs?: number | undefined;
+  handlerMs?: number | undefined;
+  readonly platform: PlatformRequestObservation;
+  readonly requestId: string;
+  readonly startedAtMs: number;
+}
+
+function makeDomainWorkerRequestObservation(
+  request: Request
+): DomainWorkerRequestObservation {
+  const cfRay = request.headers.get("cf-ray") ?? undefined;
+  const requestId = request.headers.get(REQUEST_ID_HEADER) ?? makeRequestId();
+
+  return {
+    authentication: makeAuthenticationRequestObservation(),
+    cfRay,
+    platform: makePlatformRequestObservation({
+      cfRay,
+      requestId,
+    }),
+    requestId,
+    startedAtMs: nowMs(),
+  };
+}
+
+function makeDomainWorkerTimingAnnotations(
+  observation: DomainWorkerRequestObservation
+) {
+  return {
+    ...(observation.handlerInitMs === undefined
+      ? {}
+      : { "domain.handlerInitMs": observation.handlerInitMs }),
+    ...(observation.handlerMs === undefined
+      ? {}
+      : { "domain.handlerMs": observation.handlerMs }),
+    "http.durationMs": elapsedMs(observation.startedAtMs),
+    ...observation.platform.annotations,
+    ...observation.authentication.timings,
+  };
+}
+
+function makeOptionalPlatformRequestLogAnnotations(
+  observation: PlatformRequestObservation | undefined
+) {
+  return observation === undefined
+    ? {}
+    : makePlatformRequestLogAnnotations(observation);
 }
 
 function makeWorkerAuthEmailTransportLive(env: DomainWorkerEnv) {
@@ -456,4 +588,38 @@ function requestPathname(url: string) {
 
 function serializeFailureCause(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+function withRequestIdHeader(request: Request, requestId: string) {
+  if (request.headers.get(REQUEST_ID_HEADER) === requestId) {
+    return request;
+  }
+
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+
+  return new Request(request, { headers });
+}
+
+function withRequestIdResponseHeader(response: Response, requestId: string) {
+  const headers = new Headers(response.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+function makeRequestId() {
+  return randomUUID();
+}
+
+function nowMs() {
+  return performance.now();
+}
+
+function elapsedMs(startedAt: number) {
+  return Math.round((nowMs() - startedAt) * 100) / 100;
 }

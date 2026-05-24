@@ -51,6 +51,7 @@ describe("API Worker adapter", () => {
           authorization: "Bearer public-token",
           "cf-connecting-ip": "203.0.113.10",
           "content-type": "application/json",
+          "x-request-id": "req_public_forward",
           "x-forwarded-host": "evil.example",
           "x-forwarded-proto": "http",
         },
@@ -78,6 +79,10 @@ describe("API Worker adapter", () => {
       "api.example.com"
     );
     expect(forwardedRequests[0].headers.get("x-forwarded-proto")).toBe("https");
+    expect(forwardedRequests[0].headers.get("x-request-id")).toBe(
+      "req_public_forward"
+    );
+    expect(response.headers.get("x-request-id")).toBe("req_public_forward");
     await expect(forwardedRequests[0].text()).resolves.toBe(
       JSON.stringify({ title: "Install boiler" })
     );
@@ -94,7 +99,12 @@ describe("API Worker adapter", () => {
     } satisfies ApiWorkerEnv;
 
     const response = await handleWorkerFetch(
-      new Request("https://api.example.com/jobs?token=secret"),
+      new Request("https://api.example.com/jobs?token=secret", {
+        headers: {
+          "cf-ray": "cf-ray-api",
+          "x-request-id": "req_api_log",
+        },
+      }),
       env,
       makeExecutionContext()
     ).pipe(
@@ -104,21 +114,25 @@ describe("API Worker adapter", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(logs).toStrictEqual([
-      {
-        annotations: {
-          "alchemy.stackName": "ceird",
-          "alchemy.stage": "codex-domain-worker-boundary-split",
-          "ceird.adapter": "api",
-          "ceird.domainBinding": "DOMAIN",
-          "http.method": "GET",
-          "http.path": "/jobs",
-          "http.status": 202,
-        },
-        level: "INFO",
-        message: ["Handled API Worker request"],
-      },
-    ]);
+    expect(response.headers.get("x-request-id")).toBe("req_api_log");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      annotations: expect.objectContaining({
+        "alchemy.stackName": "ceird",
+        "alchemy.stage": "codex-domain-worker-boundary-split",
+        "api.forwardMs": expect.any(Number),
+        "ceird.adapter": "api",
+        "ceird.domainBinding": "DOMAIN",
+        "ceird.requestId": "req_api_log",
+        "cf.ray": "cf-ray-api",
+        "http.durationMs": expect.any(Number),
+        "http.method": "GET",
+        "http.path": "/jobs",
+        "http.status": 202,
+      }),
+      level: "INFO",
+      message: ["Handled API Worker request"],
+    });
   });
 
   it("returns an observable bad gateway response when domain forwarding fails", async () => {
@@ -130,7 +144,11 @@ describe("API Worker adapter", () => {
     } satisfies ApiWorkerEnv;
 
     const response = await handleWorkerFetch(
-      new Request("https://api.example.com/jobs"),
+      new Request("https://api.example.com/jobs", {
+        headers: {
+          "x-request-id": "req_api_failure",
+        },
+      }),
       env,
       makeExecutionContext()
     ).pipe(
@@ -143,22 +161,25 @@ describe("API Worker adapter", () => {
       error: "domain_forwarding_failed",
     });
     expect(response.status).toBe(502);
-    expect(logs).toStrictEqual([
-      {
-        annotations: {
-          "api.failure": "domain_forwarding_failed",
-          "api.failureBinding": "DOMAIN",
-          "api.failureTag": "@ceird/api/DomainForwardingError",
-          "ceird.adapter": "api",
-          "ceird.domainBinding": "DOMAIN",
-          "http.method": "GET",
-          "http.path": "/jobs",
-          "http.status": 502,
-        },
-        level: "WARN",
-        message: ["API domain forwarding failed"],
-      },
-    ]);
+    expect(response.headers.get("x-request-id")).toBe("req_api_failure");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      annotations: expect.objectContaining({
+        "api.failure": "domain_forwarding_failed",
+        "api.failureBinding": "DOMAIN",
+        "api.failureTag": "@ceird/api/DomainForwardingError",
+        "api.forwardMs": expect.any(Number),
+        "ceird.adapter": "api",
+        "ceird.domainBinding": "DOMAIN",
+        "ceird.requestId": "req_api_failure",
+        "http.durationMs": expect.any(Number),
+        "http.method": "GET",
+        "http.path": "/jobs",
+        "http.status": 502,
+      }),
+      level: "WARN",
+      message: ["API domain forwarding failed"],
+    });
   });
 
   it("does not forward internal Agent routes", async () => {

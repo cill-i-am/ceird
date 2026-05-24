@@ -18,6 +18,7 @@ import {
   disposeDomainWorkerHandler,
   DomainWorkerSiteGeocoderLive,
   getDomainWorkerMcpAuthorizedAppCache,
+  handleWorkerFetch,
   handleWorkerQueue,
   makeDomainWorkerRuntimeLayers,
   makeWorkerBaseLive,
@@ -215,6 +216,57 @@ describe("worker queue auth email delivery", () => {
     expect(serializedLogs).toContain("https://api.example.com/mcp?");
     expect(serializedLogs).not.toContain("secret-token");
     expect(serializedLogs).not.toContain("token=secret");
+  });
+
+  it("logs domain Worker request IDs, Cloudflare ray IDs, and phase timings", async () => {
+    const { logger, logs } = captureLogs();
+
+    const response = await handleWorkerFetch(
+      new Request("https://api.example.com/", {
+        headers: {
+          "cf-ray": "cf-ray-domain",
+          "x-request-id": "req_domain_log",
+        },
+      }),
+      makeEnv({
+        ALCHEMY_STACK_NAME: "ceird",
+        ALCHEMY_STAGE: "codex-signup-observability",
+      }),
+      makeExecutionContext()
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.text()).resolves.toBe('"ceird api"');
+    expect(response.headers.get("x-request-id")).toBe("req_domain_log");
+
+    const requestLog = logs.find(
+      (log) =>
+        (log as { readonly message?: readonly unknown[] }).message?.[0] ===
+        "Handled domain Worker request"
+    );
+
+    expect(requestLog).toMatchObject({
+      annotations: expect.objectContaining({
+        "alchemy.stackName": "ceird",
+        "alchemy.stage": "codex-signup-observability",
+        "ceird.adapter": "domain",
+        "ceird.requestId": "req_domain_log",
+        "cf.ray": "cf-ray-domain",
+        "db.initMs": expect.any(Number),
+        "db.preflightQuery": false,
+        "domain.handlerInitMs": expect.any(Number),
+        "domain.handlerMs": expect.any(Number),
+        "http.durationMs": expect.any(Number),
+        "http.method": "GET",
+        "http.path": "/",
+        "http.status": 200,
+      }),
+      level: "INFO",
+      message: ["Handled domain Worker request"],
+    });
   });
 
   it("routes authentication background tasks through Worker waitUntil", async () => {

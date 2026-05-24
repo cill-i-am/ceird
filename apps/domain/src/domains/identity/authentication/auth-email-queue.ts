@@ -28,6 +28,7 @@ import type {
   OrganizationInvitationEmailError,
   PasswordResetEmailError,
 } from "./auth-email.js";
+import { measureAuthenticationPhase } from "./auth-observability.js";
 
 export const INVALID_AUTH_EMAIL_QUEUE_MESSAGE_ERROR_TAG =
   "@ceird/domains/identity/authentication/InvalidAuthEmailQueueMessageError" as const;
@@ -118,7 +119,10 @@ function scheduleAuthEmailQueueMessage(
         emailKind: message.kind,
         message: "Failed to schedule auth email queue message",
       }),
-    try: () => queue.send(message),
+    try: () =>
+      measureAuthenticationPhase("auth.emailQueueSendMs", () =>
+        queue.send(message)
+      ),
   });
 }
 
