@@ -1,7 +1,12 @@
 import {
+  optionalAuthFunctionMiddleware,
+  organizationAdminFunctionMiddleware,
+  organizationFunctionMiddleware,
+  requiredAuthFunctionMiddleware,
   shouldHydrateAuthContext,
   shouldHydrateOrganizationContext,
 } from "./app-context-middleware";
+import { decodeServerAuthSession } from "./app-context-types";
 import { buildAppAuthContextSnapshotForRequest } from "./auth-request-context.server";
 
 interface Session {
@@ -61,6 +66,24 @@ function buildAuthRequest() {
     },
   });
 }
+
+function createDeferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return { promise, resolve };
+}
+
+describe("app/auth server function middleware exports", () => {
+  it("exports app/auth server function middleware", () => {
+    expect(optionalAuthFunctionMiddleware).toBeDefined();
+    expect(requiredAuthFunctionMiddleware).toBeDefined();
+    expect(organizationFunctionMiddleware).toBeDefined();
+    expect(organizationAdminFunctionMiddleware).toBeDefined();
+  });
+});
 
 describe("app context request middleware route selection", () => {
   it.each([
@@ -188,6 +211,235 @@ describe("app auth context snapshot for request", () => {
         },
       }
     );
+  });
+
+  it("skips organization and role lookups for an active-organization session when organization hydration is disabled", async () => {
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(authSessionWithActiveOrganization));
+
+    await expect(
+      buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
+        hydrateOrganizationContext: false,
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_123",
+      session: authSessionWithActiveOrganization,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("get-session", "https://api.example.com/api/auth/"),
+      {
+        headers: {
+          accept: "application/json",
+          cookie: "better-auth.session_token=session-token",
+        },
+      }
+    );
+  });
+
+  it("hydrates organization context from a known session without fetching the session again", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+    ];
+    const knownSession = decodeServerAuthSession(
+      authSessionWithActiveOrganization
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    await expect(
+      buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
+        hydrateOrganizationContext: true,
+        session: knownSession,
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_123",
+      currentOrganizationRole: "admin",
+      organizations,
+      session: knownSession,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      new URL("get-session", "https://api.example.com/api/auth/"),
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("organization/list", "https://api.example.com/api/auth/"),
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_123",
+        "https://api.example.com/api/auth/"
+      ),
+      expect.anything()
+    );
+  });
+
+  it("starts organization and role lookups in parallel for the default known-active-organization path", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+    ];
+    const knownSession = decodeServerAuthSession(
+      authSessionWithActiveOrganization
+    );
+    const organizationsDeferred = createDeferredResponse();
+    const roleDeferred = createDeferredResponse();
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname.endsWith("/organization/list")) {
+          return organizationsDeferred.promise;
+        }
+
+        if (url.pathname.endsWith("/organization/get-active-member-role")) {
+          return roleDeferred.promise;
+        }
+
+        return Promise.reject(new Error(`Unexpected fetch: ${url.toString()}`));
+      });
+
+    const snapshotPromise = buildAppAuthContextSnapshotForRequest(
+      buildAuthRequest(),
+      {
+        hydrateOrganizationContext: true,
+        session: knownSession,
+      }
+    );
+
+    await Promise.resolve();
+    const fetchCountBeforeResolvingEitherResponse = fetchMock.mock.calls.length;
+    organizationsDeferred.resolve(Response.json(organizations));
+    roleDeferred.resolve(Response.json({ role: "owner" }));
+
+    await expect(snapshotPromise).resolves.toStrictEqual({
+      activeOrganizationId: "org_123",
+      currentOrganizationRole: "owner",
+      organizations,
+      session: knownSession,
+    });
+    expect(fetchCountBeforeResolvingEitherResponse).toBe(2);
+  });
+
+  it("resolves a missing active organization from the first organization without fetching the session again", async () => {
+    const authSessionWithoutActiveOrganization = decodeServerAuthSession({
+      ...authSessionWithActiveOrganization,
+      session: {
+        ...authSessionWithActiveOrganization.session,
+        activeOrganizationId: null,
+      },
+    });
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+    ];
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "owner" }));
+
+    await expect(
+      buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
+        hydrateOrganizationContext: true,
+        resolveActiveOrganizationFromList: true,
+        session: authSessionWithoutActiveOrganization,
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_123",
+      currentOrganizationRole: "owner",
+      organizations,
+      session: authSessionWithoutActiveOrganization,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      new URL("get-session", "https://api.example.com/api/auth/"),
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_123",
+        "https://api.example.com/api/auth/"
+      ),
+      expect.anything()
+    );
+  });
+
+  it("resolves a stale active organization from the first organization and reads that role", async () => {
+    const authSessionWithStaleActiveOrganization = decodeServerAuthSession({
+      ...authSessionWithActiveOrganization,
+      session: {
+        ...authSessionWithActiveOrganization.session,
+        activeOrganizationId: "org_stale",
+      },
+    });
+    const organizations = [
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+      { id: "org_789", name: "Gamma Field Ops", slug: "gamma-field-ops" },
+    ];
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    await expect(
+      buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
+        hydrateOrganizationContext: true,
+        resolveActiveOrganizationFromList: true,
+        session: authSessionWithStaleActiveOrganization,
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_456",
+      currentOrganizationRole: "admin",
+      organizations,
+      session: authSessionWithStaleActiveOrganization,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_456",
+        "https://api.example.com/api/auth/"
+      ),
+      expect.anything()
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_stale",
+        "https://api.example.com/api/auth/"
+      ),
+      expect.anything()
+    );
+  });
+
+  it("preserves default organization hydration behavior when active organization is missing", async () => {
+    const authSessionWithoutActiveOrganization = decodeServerAuthSession({
+      ...authSessionWithActiveOrganization,
+      session: {
+        ...authSessionWithActiveOrganization.session,
+        activeOrganizationId: null,
+      },
+    });
+    process.env.API_ORIGIN = "https://api.example.com";
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
+        hydrateOrganizationContext: true,
+        session: authSessionWithoutActiveOrganization,
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: null,
+      session: authSessionWithoutActiveOrganization,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects when organization list lookup fails", async () => {

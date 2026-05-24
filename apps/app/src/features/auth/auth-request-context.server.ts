@@ -96,9 +96,16 @@ export async function readOptionalServerAuthSessionForRequest(
 
 export async function buildAppAuthContextSnapshotForRequest(
   request: Request,
-  options: { readonly hydrateOrganizationContext?: boolean } = {}
+  options: {
+    readonly hydrateOrganizationContext?: boolean;
+    readonly resolveActiveOrganizationFromList?: boolean;
+    readonly session?: ServerAuthSession | null | undefined;
+  } = {}
 ): Promise<AppAuthContextSnapshot> {
-  const session = await readOptionalServerAuthSessionForRequest(request);
+  const session =
+    options.session === undefined
+      ? await readOptionalServerAuthSessionForRequest(request)
+      : options.session;
   const activeOrganizationId = session?.session.activeOrganizationId
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
@@ -106,7 +113,7 @@ export async function buildAppAuthContextSnapshotForRequest(
   if (
     !session ||
     !options.hydrateOrganizationContext ||
-    !activeOrganizationId
+    (!options.resolveActiveOrganizationFromList && !activeOrganizationId)
   ) {
     return {
       activeOrganizationId,
@@ -122,13 +129,41 @@ export async function buildAppAuthContextSnapshotForRequest(
     throw new Error("Cannot read organization auth context for this request.");
   }
 
-  const [organizations, currentOrganizationRole] = await Promise.all([
-    readServerOrganizations(authRequest),
-    readCurrentOrganizationRole(authRequest, activeOrganizationId),
-  ]);
+  if (!options.resolveActiveOrganizationFromList) {
+    if (!activeOrganizationId) {
+      return {
+        activeOrganizationId,
+        session,
+      };
+    }
+
+    const [organizations, currentOrganizationRole] = await Promise.all([
+      readServerOrganizations(authRequest),
+      readCurrentOrganizationRole(authRequest, activeOrganizationId),
+    ]);
+
+    return {
+      activeOrganizationId,
+      currentOrganizationRole,
+      organizations,
+      session,
+    };
+  }
+
+  const organizations = await readServerOrganizations(authRequest);
+  const resolvedActiveOrganizationId = resolveActiveOrganizationId(
+    activeOrganizationId,
+    organizations
+  );
+  const currentOrganizationRole = resolvedActiveOrganizationId
+    ? await readCurrentOrganizationRole(
+        authRequest,
+        resolvedActiveOrganizationId
+      )
+    : undefined;
 
   return {
-    activeOrganizationId,
+    activeOrganizationId: resolvedActiveOrganizationId,
     currentOrganizationRole,
     organizations,
     session,
@@ -240,6 +275,23 @@ async function readCurrentOrganizationRole(
   } catch {
     // Role is an optimization here; route-level guards still enforce access.
   }
+}
+
+function resolveActiveOrganizationId(
+  activeOrganizationId: OrganizationId | null,
+  organizations: readonly OrganizationSummary[]
+): OrganizationId | null {
+  if (!activeOrganizationId) {
+    return organizations[0]?.id ?? null;
+  }
+
+  return (
+    organizations.find(
+      (organization) => organization.id === activeOrganizationId
+    )?.id ??
+    organizations[0]?.id ??
+    null
+  );
 }
 
 export function buildAuthReadHeaders(authRequest: ServerAuthRequest) {
