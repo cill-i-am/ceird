@@ -4,11 +4,8 @@ import type { WorkItemIdType } from "@ceird/jobs-core";
 import { Schema } from "effect";
 
 import { getCurrentServerJobDetail } from "#/features/jobs/jobs-server";
-import {
-  assertOrganizationAdministrationRouteContext,
-  requireOrganizationAdministrationAccess,
-} from "#/features/organizations/organization-access";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 
 import { CREATE_JOB_ROUTE_DATA } from "./jobs-detail-route-data";
 import type { CreateJobRouteData } from "./jobs-detail-route-data";
@@ -22,20 +19,14 @@ export type JobDetailRouteData =
 
 export function loadJobDetailRouteData(
   workItemId: string | WorkItemIdType,
-  organizationAccess?: {
+  organizationAccess: {
     readonly activeOrganizationSync: ActiveOrganizationSync;
     readonly currentOrganizationRole?: OrganizationRole | undefined;
   }
 ): Promise<JobDetailRouteData> {
   if (workItemId === "new") {
-    if (organizationAccess !== undefined) {
-      assertOrganizationAdministrationRouteContext(organizationAccess);
-      return Promise.resolve(CREATE_JOB_ROUTE_DATA);
-    }
-
-    return requireOrganizationAdministrationAccess().then(
-      () => CREATE_JOB_ROUTE_DATA
-    );
+    assertOrganizationAdministrationRouteContext(organizationAccess);
+    return Promise.resolve(CREATE_JOB_ROUTE_DATA);
   }
 
   const decodedWorkItemId = decodeWorkItemId(workItemId);

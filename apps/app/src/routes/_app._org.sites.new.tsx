@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 import { SitesCreateSheet } from "#/features/sites/sites-create-sheet";
 
 export const Route = createFileRoute("/_app/_org/sites/new")({

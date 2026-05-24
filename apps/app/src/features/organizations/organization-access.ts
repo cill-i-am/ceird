@@ -2,13 +2,9 @@ import {
   decodeOrganizationId,
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummary,
-  isAdministrativeOrganizationRole,
-  isExternalOrganizationRole,
-  isInternalOrganizationRole,
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
-  OrganizationRole,
   OrganizationSummary,
 } from "@ceird/identity-core";
 import { redirect } from "@tanstack/react-router";
@@ -32,15 +28,20 @@ import {
   setClientOrganizationRoleCache,
   setClientOrganizationsCache,
 } from "./organization-access-cache";
+import { assertOrganizationAdministrationRole } from "./organization-route-access";
+import type { ActiveOrganizationSync } from "./organization-route-access";
 
 const importOrganizationServer = () => import("./organization-server");
 
 export { clearOrganizationAccessClientCache } from "./organization-access-cache";
+export {
+  assertOrganizationAdministrationRole,
+  assertOrganizationAdministrationRouteContext,
+  assertOrganizationInternalRole,
+  assertOrganizationInternalRouteContext,
+} from "./organization-route-access";
+export type { ActiveOrganizationSync } from "./organization-route-access";
 export type { OrganizationSummary } from "@ceird/identity-core";
-export interface ActiveOrganizationSync {
-  readonly required: boolean;
-  readonly targetOrganizationId: OrganizationIdType | null;
-}
 
 type RawOrganization = NonNullable<
   Awaited<ReturnType<typeof authClient.organization.list>>["data"]
@@ -163,58 +164,6 @@ export async function requireOrganizationAdministrationAccess() {
   assertOrganizationAdministrationRole(role);
 
   return organizationAccess;
-}
-
-export function assertOrganizationAdministrationRole(input: {
-  readonly role: OrganizationRole;
-}) {
-  if (!isAdministrativeOrganizationRole(input.role)) {
-    throw redirect({ to: "/" });
-  }
-}
-
-export function assertOrganizationAdministrationRouteContext(context: {
-  readonly activeOrganizationSync: ActiveOrganizationSync;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-}) {
-  if (context.activeOrganizationSync.required) {
-    return;
-  }
-
-  const role = context.currentOrganizationRole;
-
-  if (role === undefined) {
-    throw redirect({ to: "/" });
-  }
-
-  assertOrganizationAdministrationRole({ role });
-}
-
-export function assertOrganizationInternalRole(input: {
-  readonly role: OrganizationRole;
-}) {
-  if (!isInternalOrganizationRole(input.role)) {
-    throw redirect({
-      to: isExternalOrganizationRole(input.role) ? "/jobs" : "/",
-    });
-  }
-}
-
-export function assertOrganizationInternalRouteContext(context: {
-  readonly activeOrganizationSync: ActiveOrganizationSync;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-}) {
-  if (context.activeOrganizationSync.required) {
-    return;
-  }
-
-  const role = context.currentOrganizationRole;
-
-  if (role === undefined) {
-    throw redirect({ to: "/" });
-  }
-
-  assertOrganizationInternalRole({ role });
 }
 
 export async function redirectIfOrganizationReady() {

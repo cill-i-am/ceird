@@ -1,7 +1,7 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 
 import { getCurrentServerLabels } from "#/features/api/app-api-server";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 
 interface SettingsRouteContext {
   readonly activeOrganizationId: OrganizationId;

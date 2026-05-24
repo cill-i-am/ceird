@@ -9,9 +9,9 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 
-import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-access";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import { OrganizationMembersPage } from "#/features/organizations/organization-members-page";
+import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
+import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 
 export const Route = createFileRoute("/_app/_org/members")({
   staticData: {

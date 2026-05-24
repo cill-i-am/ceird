@@ -5,8 +5,8 @@ import { useEffect, useReducer } from "react";
 import { Button } from "#/components/ui/button";
 import { DotMatrixLoadingState } from "#/components/ui/dot-matrix-loader";
 
-import type { ActiveOrganizationSync } from "./organization-access";
 import { synchronizeClientActiveOrganization } from "./organization-access";
+import type { ActiveOrganizationSync } from "./organization-route-access";
 
 interface OrganizationActiveSyncBoundaryProps {
   readonly activeOrganizationSync: ActiveOrganizationSync;

@@ -1,8 +1,3 @@
-import type {
-  OrganizationId,
-  OrganizationRole,
-  UserId as UserIdType,
-} from "@ceird/identity-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 import type { QueryClient } from "@tanstack/query-core";
 
@@ -10,12 +5,11 @@ import {
   getCurrentServerServiceAreas,
   listAllCurrentServerSites,
 } from "#/features/api/app-api-server";
-import type { ActiveOrganizationSync } from "#/features/organizations/organization-access";
 import {
   assertOrganizationInternalRole,
-  ensureActiveOrganizationId,
-  getCurrentOrganizationMemberRole,
-} from "#/features/organizations/organization-access";
+  requireOrganizationRouteContextRole,
+} from "#/features/organizations/organization-route-access";
+import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
 import {
   decodeOrganizationViewerUserId,
   hasOrganizationElevatedAccess,
@@ -31,46 +25,26 @@ const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   sites: [],
 };
 
-interface SitesRouteOrganizationAccess {
-  readonly activeOrganizationId: OrganizationId;
-  readonly activeOrganizationSync: ActiveOrganizationSync;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly currentUserId: UserIdType;
+interface SitesRouteOrganizationAccess extends OrganizationProductRouteContext {
   readonly queryClient?: QueryClient | undefined;
 }
 
-function toSitesRouteOrganizationAccess(
-  organizationAccess: Awaited<ReturnType<typeof ensureActiveOrganizationId>>
-): SitesRouteOrganizationAccess {
-  return {
-    activeOrganizationId: organizationAccess.activeOrganizationId,
-    activeOrganizationSync: organizationAccess.activeOrganizationSync,
-    currentUserId: decodeOrganizationViewerUserId(
-      organizationAccess.session.user.id
-    ),
-  };
-}
-
 export async function loadSitesRouteData(
-  organizationAccess?: SitesRouteOrganizationAccess
+  organizationAccess: SitesRouteOrganizationAccess
 ) {
-  const resolvedOrganizationAccess =
-    organizationAccess ??
-    toSitesRouteOrganizationAccess(await ensureActiveOrganizationId());
-
-  if (resolvedOrganizationAccess.activeOrganizationSync.required) {
+  if (organizationAccess.activeOrganizationSync.required) {
     return {
       options: EMPTY_SITE_OPTIONS,
       viewer: {
         role: "member",
-        userId: resolvedOrganizationAccess.currentUserId,
+        userId: decodeOrganizationViewerUserId(
+          organizationAccess.currentUserId
+        ),
       } satisfies OrganizationViewer,
     };
   }
 
-  const activeRole = await resolveSitesRouteOrganizationRole(
-    resolvedOrganizationAccess
-  );
+  const activeRole = requireOrganizationRouteContextRole(organizationAccess);
 
   assertOrganizationInternalRole({ role: activeRole });
 
@@ -89,14 +63,14 @@ export async function loadSitesRouteData(
   } satisfies SitesOptionsResponse;
   const viewer = {
     role: activeRole,
-    userId: resolvedOrganizationAccess.currentUserId,
+    userId: decodeOrganizationViewerUserId(organizationAccess.currentUserId),
   } satisfies OrganizationViewer;
 
-  if (resolvedOrganizationAccess.queryClient) {
+  if (organizationAccess.queryClient) {
     const seededSites = seedRouteQueryData(
-      resolvedOrganizationAccess.queryClient,
+      organizationAccess.queryClient,
       organizationSitesQueryKey({
-        organizationId: resolvedOrganizationAccess.activeOrganizationId,
+        organizationId: organizationAccess.activeOrganizationId,
         role: viewer.role,
         userId: viewer.userId,
       }),
@@ -119,18 +93,4 @@ export async function loadSitesRouteData(
     options: siteOptions,
     viewer,
   };
-}
-
-async function resolveSitesRouteOrganizationRole(
-  organizationAccess: SitesRouteOrganizationAccess
-) {
-  if (organizationAccess.currentOrganizationRole !== undefined) {
-    return organizationAccess.currentOrganizationRole;
-  }
-
-  const role = await getCurrentOrganizationMemberRole(
-    organizationAccess.activeOrganizationId
-  );
-
-  return role.role;
 }

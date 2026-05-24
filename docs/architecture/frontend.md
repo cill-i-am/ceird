@@ -227,7 +227,12 @@ server-function middleware just to reuse auth context.
 Route parents own shell context. The `/_app` parent establishes authenticated
 session context, and the `/_app/_org` parent establishes the active
 organization context. Child routes reuse parent route context and load only
-their route-specific product data through the domain data lane.
+their route-specific product data through the domain data lane. Product route
+loaders may import the lane-neutral role/assertion helpers in
+`features/organizations/organization-route-access.ts`, but must not import
+`features/organizations/organization-access.ts` or the app-context cache/server
+function modules; those modules belong to the app/auth lane and can trigger
+extra shell reads from product navigation.
 
 The `/create-organization` onboarding route stays outside the app shell while
 the first workspace is created. The client submits only the team name to

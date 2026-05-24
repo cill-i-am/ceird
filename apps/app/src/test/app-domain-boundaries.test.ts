@@ -63,12 +63,15 @@ const PRODUCT_DOMAIN_FEATURE_PREFIXES = [
   "features/activity/",
 ] as const;
 const APP_AUTH_SERVER_FUNCTION_LANE_MODULES = new Set([
+  "features/auth/app-context-client-cache",
   "features/auth/app-context-functions",
   "features/auth/app-context-middleware",
   "features/auth/app-server-context",
   "features/auth/auth-request-context.server",
   "features/auth/server-session",
   "features/auth/server-session-impl.server",
+  "features/organizations/organization-access",
+  "features/organizations/organization-access-cache",
   "features/organizations/organization-server",
   "features/organizations/organization-server-impl.server",
 ]);
@@ -135,12 +138,16 @@ describe("app domain package boundaries", () => {
       findAppAuthServerFunctionLaneImportViolations(
         "features/jobs/example.ts",
         `
+          import { ensureActiveOrganizationId } from "#/features/organizations/organization-access";
           import { getCurrentAppContext } from "#/features/auth/app-context-functions";
+          import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
           const organizationServer = import("../organizations/organization-server");
         `
       )
     ).toStrictEqual([
+      "features/jobs/example.ts: #/features/organizations/organization-access -> features/organizations/organization-access",
       "features/jobs/example.ts: #/features/auth/app-context-functions -> features/auth/app-context-functions",
+      "features/jobs/example.ts: #/features/auth/app-context-client-cache -> features/auth/app-context-client-cache",
       "features/jobs/example.ts: ../organizations/organization-server -> features/organizations/organization-server",
     ]);
 
