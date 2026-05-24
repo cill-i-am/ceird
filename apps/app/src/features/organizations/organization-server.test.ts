@@ -43,11 +43,43 @@ interface AuthSession {
   user: User;
 }
 
+interface MockServerFnBuilder {
+  handler: ReturnType<typeof vi.fn>;
+  inputValidator: ReturnType<typeof vi.fn>;
+  middleware: ReturnType<typeof vi.fn>;
+}
+
 const {
+  capturedCreateServerFns,
+  mockedCreateServerFn,
   mockedGetGlobalStartContext,
   mockedGetRequestHeader,
   mockedSetResponseHeader,
 } = vi.hoisted(() => ({
+  capturedCreateServerFns: [] as Array<{
+    middlewareCalls: Array<ReadonlyArray<unknown>>;
+    options: { method: string };
+  }>,
+  mockedCreateServerFn: vi.fn((options: { method: string }) => {
+    const record = {
+      middlewareCalls: [] as Array<ReadonlyArray<unknown>>,
+      options,
+    };
+    capturedCreateServerFns.push(record);
+
+    const serverFunction = vi.fn();
+    let builder: MockServerFnBuilder;
+    builder = Object.assign(serverFunction, {
+      handler: vi.fn(() => serverFunction),
+      inputValidator: vi.fn(() => builder),
+      middleware: vi.fn((middlewares: ReadonlyArray<unknown>) => {
+        record.middlewareCalls.push(middlewares);
+        return builder;
+      }),
+    });
+
+    return builder;
+  }),
   mockedGetGlobalStartContext: vi.fn<() => unknown>(),
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
   mockedSetResponseHeader:
@@ -59,6 +91,8 @@ vi.mock(import("@tanstack/react-start"), async (importActual) => {
 
   return {
     ...actual,
+    createServerFn:
+      mockedCreateServerFn as unknown as typeof actual.createServerFn,
     getGlobalStartContext:
       mockedGetGlobalStartContext as typeof actual.getGlobalStartContext,
   };
@@ -73,6 +107,32 @@ vi.mock(import("@tanstack/react-start/server"), async (importActual) => {
     setResponseHeader:
       mockedSetResponseHeader as typeof actual.setResponseHeader,
   };
+});
+
+describe("server organization function middleware", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    capturedCreateServerFns.length = 0;
+  });
+
+  it("protects organization server functions with the expected middleware", async () => {
+    const {
+      createCurrentServerOrganization,
+      setCurrentServerActiveOrganization,
+    } = await import("./organization-server");
+    const { organizationFunctionMiddleware, requiredAuthFunctionMiddleware } =
+      await import("../auth/app-context-middleware");
+
+    expect(createCurrentServerOrganization).toEqual(expect.any(Function));
+    expect(setCurrentServerActiveOrganization).toEqual(expect.any(Function));
+    expect(capturedCreateServerFns[0]?.middlewareCalls).toContainEqual([
+      requiredAuthFunctionMiddleware,
+    ]);
+    expect(capturedCreateServerFns[4]?.middlewareCalls).toContainEqual([
+      organizationFunctionMiddleware,
+    ]);
+  });
 });
 
 describe("server organization lookup", () => {

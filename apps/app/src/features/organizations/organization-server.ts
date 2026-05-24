@@ -8,9 +8,15 @@ import type {
 } from "@ceird/identity-core";
 import { createServerFn } from "@tanstack/react-start";
 
+import {
+  organizationFunctionMiddleware,
+  requiredAuthFunctionMiddleware,
+} from "../auth/app-context-middleware";
+
 export const createCurrentServerOrganization = createServerFn({
   method: "POST",
 })
+  .middleware([requiredAuthFunctionMiddleware])
   .inputValidator((input: unknown) => decodeCreateOrganizationNameInput(input))
   .handler(async ({ data }) => {
     const { createCurrentServerOrganizationDirect } =
@@ -70,6 +76,7 @@ export async function getCurrentServerOrganizationMemberRole(
 const setCurrentServerActiveOrganizationFn = createServerFn({
   method: "POST",
 })
+  .middleware([organizationFunctionMiddleware])
   .inputValidator((input: unknown) => decodeOrganizationId(input))
   .handler(async ({ data }) => {
     const { setCurrentServerActiveOrganizationDirect } =
