@@ -270,8 +270,12 @@ async function readCurrentOrganizationRole(
   organizationId: OrganizationId
 ) {
   try {
-    return (await readServerOrganizationMemberRole(authRequest, organizationId))
-      .role;
+    const memberRole = await readServerOrganizationMemberRole(
+      authRequest,
+      organizationId
+    );
+
+    return memberRole.role;
   } catch {
     // Role is an optimization here; route-level guards still enforce access.
   }

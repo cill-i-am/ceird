@@ -13,7 +13,9 @@ async function getCurrentSession() {
     return await getCurrentServerSession();
   }
 
-  return (await getCachedClientAppContext()).session;
+  const appContext = await getCachedClientAppContext();
+
+  return appContext.session;
 }
 
 export async function redirectIfAuthenticated(

@@ -44,9 +44,23 @@ interface AuthSession {
 }
 
 interface MockServerFnBuilder {
-  handler: ReturnType<typeof vi.fn>;
-  inputValidator: ReturnType<typeof vi.fn>;
-  middleware: ReturnType<typeof vi.fn>;
+  handler: ReturnType<typeof vi.fn<() => MockServerFn>>;
+  inputValidator: ReturnType<typeof vi.fn<() => MockServerFnBuilder>>;
+  middleware: ReturnType<
+    typeof vi.fn<(middlewares: readonly unknown[]) => MockServerFnBuilder>
+  >;
+}
+
+type MockServerFn = ReturnType<typeof vi.fn<() => void>>;
+
+function readMockServerFnBuilder(reference: {
+  readonly current?: MockServerFnBuilder;
+}) {
+  if (reference.current === undefined) {
+    throw new Error("Mock server function builder was read before assignment.");
+  }
+
+  return reference.current;
 }
 
 const {
@@ -56,27 +70,34 @@ const {
   mockedGetRequestHeader,
   mockedSetResponseHeader,
 } = vi.hoisted(() => ({
-  capturedCreateServerFns: [] as Array<{
-    middlewareCalls: Array<ReadonlyArray<unknown>>;
+  capturedCreateServerFns: [] as {
+    middlewareCalls: (readonly unknown[])[];
     options: { method: string };
-  }>,
-  mockedCreateServerFn: vi.fn((options: { method: string }) => {
+  }[],
+  mockedCreateServerFn: vi.fn<
+    (options: { method: string }) => MockServerFnBuilder
+  >((options) => {
     const record = {
-      middlewareCalls: [] as Array<ReadonlyArray<unknown>>,
+      middlewareCalls: [] as (readonly unknown[])[],
       options,
     };
     capturedCreateServerFns.push(record);
 
-    const serverFunction = vi.fn();
-    let builder: MockServerFnBuilder;
-    builder = Object.assign(serverFunction, {
-      handler: vi.fn(() => serverFunction),
-      inputValidator: vi.fn(() => builder),
-      middleware: vi.fn((middlewares: ReadonlyArray<unknown>) => {
+    const serverFunction = vi.fn<() => void>();
+    const builderReference: { current?: MockServerFnBuilder } = {};
+    const builder = Object.assign(serverFunction, {
+      handler: vi.fn<() => MockServerFn>(() => serverFunction),
+      inputValidator: vi.fn<() => MockServerFnBuilder>(() =>
+        readMockServerFnBuilder(builderReference)
+      ),
+      middleware: vi.fn<
+        (middlewares: readonly unknown[]) => MockServerFnBuilder
+      >((middlewares) => {
         record.middlewareCalls.push(middlewares);
-        return builder;
+        return readMockServerFnBuilder(builderReference);
       }),
     });
+    builderReference.current = builder;
 
     return builder;
   }),
@@ -119,13 +140,16 @@ describe("server organization function middleware", () => {
   it("protects organization server functions with the expected middleware", async () => {
     const {
       createCurrentServerOrganization,
-      setCurrentServerActiveOrganization,
+      setCurrentServerActiveOrganization:
+        setCurrentServerActiveOrganizationServerFn,
     } = await import("./organization-server");
     const { organizationFunctionMiddleware, requiredAuthFunctionMiddleware } =
       await import("../auth/app-context-middleware");
 
-    expect(createCurrentServerOrganization).toEqual(expect.any(Function));
-    expect(setCurrentServerActiveOrganization).toEqual(expect.any(Function));
+    expect(createCurrentServerOrganization).toStrictEqual(expect.any(Function));
+    expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
+      expect.any(Function)
+    );
     expect(capturedCreateServerFns[0]?.middlewareCalls).toContainEqual([
       requiredAuthFunctionMiddleware,
     ]);

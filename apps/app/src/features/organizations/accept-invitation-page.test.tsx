@@ -98,12 +98,16 @@ vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
     ...actual,
     clearAppContextClientCache:
       mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
-    getCachedClientAppContext: (async () => ({
-      activeOrganizationId: null,
-      currentOrganizationRole: undefined,
-      organizations: undefined,
-      session: (await mockedGetSession()).data,
-    })) as typeof actual.getCachedClientAppContext,
+    getCachedClientAppContext: (async () => {
+      const sessionResponse = await mockedGetSession();
+
+      return {
+        activeOrganizationId: null,
+        currentOrganizationRole: undefined,
+        organizations: undefined,
+        session: sessionResponse.data,
+      };
+    }) as typeof actual.getCachedClientAppContext,
   };
 });
 

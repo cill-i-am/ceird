@@ -22,14 +22,10 @@ export async function loadAuthenticatedAppRoute(input?: {
     serverContext.authSession === undefined && !isServerEnvironment()
       ? await getCachedClientAppContext()
       : undefined;
-  const session =
-    serverContext.authSession !== undefined
-      ? await requireAuthenticatedServerContextSession(
-          serverContext.authSession
-        )
-      : clientAppContext
-        ? requireAuthenticatedClientContextSession(clientAppContext.session)
-        : await requireAuthenticatedSession();
+  const session = await getAuthenticatedRouteSession({
+    clientAppContext,
+    serverContextSession: serverContext.authSession,
+  });
   const activeOrganizationId =
     clientAppContext === undefined
       ? decodeActiveOrganizationIdFromSession(session)
@@ -40,6 +36,29 @@ export async function loadAuthenticatedAppRoute(input?: {
     (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId));
 
   return { activeOrganizationId, currentOrganizationRole, session };
+}
+
+async function getAuthenticatedRouteSession({
+  clientAppContext,
+  serverContextSession,
+}: {
+  readonly clientAppContext:
+    | Awaited<ReturnType<typeof getCachedClientAppContext>>
+    | undefined;
+  readonly serverContextSession:
+    | Awaited<ReturnType<typeof requireAuthenticatedSession>>
+    | null
+    | undefined;
+}) {
+  if (serverContextSession !== undefined) {
+    return await requireAuthenticatedServerContextSession(serverContextSession);
+  }
+
+  if (clientAppContext) {
+    return requireAuthenticatedClientContextSession(clientAppContext.session);
+  }
+
+  return await requireAuthenticatedSession();
 }
 
 async function requireAuthenticatedServerContextSession(

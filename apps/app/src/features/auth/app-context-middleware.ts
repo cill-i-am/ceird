@@ -106,7 +106,7 @@ export const organizationAdminFunctionMiddleware = createMiddleware({
     const { redirect } = await import("@tanstack/react-router");
     const { isAdministrativeOrganizationRole } =
       await import("@ceird/identity-core");
-    const currentOrganizationRole = context.currentOrganizationRole;
+    const { currentOrganizationRole } = context;
 
     if (
       currentOrganizationRole === undefined ||

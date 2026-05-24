@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-array-sort */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, posix, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join, posix, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -77,17 +78,7 @@ interface SourceFile {
   readonly source: string;
 }
 
-const SOURCE_FILES: readonly SourceFile[] = getSourceFiles(APP_SRC_DIR).flatMap(
-  (filePath) =>
-    filePath === THIS_FILE
-      ? []
-      : [
-          {
-            filePath,
-            source: readFileSync(join(APP_SRC_DIR, filePath), "utf8"),
-          },
-        ]
-);
+let sourceFilesCache: readonly SourceFile[] | undefined;
 
 describe("app domain package boundaries", () => {
   it("does not import site or organization label primitives from jobs-core", () => {
@@ -109,7 +100,7 @@ describe("app domain package boundaries", () => {
   it("keeps site and label app features independent from jobs features", () => {
     const violations: string[] = [];
 
-    for (const { filePath, source } of SOURCE_FILES) {
+    for (const { filePath, source } of getAppSourceFiles()) {
       if (
         !filePath.startsWith("features/sites/") &&
         !filePath.startsWith("features/labels/")
@@ -126,7 +117,7 @@ describe("app domain package boundaries", () => {
   it("keeps product domain features outside app auth server functions", () => {
     const violations: string[] = [];
 
-    for (const { filePath, source } of SOURCE_FILES) {
+    for (const { filePath, source } of getAppSourceFiles()) {
       if (!isProductDomainFeature(filePath)) {
         continue;
       }
@@ -179,11 +170,26 @@ function collectSourceFileViolations(
 ) {
   const violations: string[] = [];
 
-  for (const { filePath, source } of SOURCE_FILES) {
+  for (const { filePath, source } of getAppSourceFiles()) {
     violations.push(...findViolations(filePath, source));
   }
 
   return violations;
+}
+
+function getAppSourceFiles() {
+  sourceFilesCache ??= getSourceFiles(APP_SRC_DIR).flatMap((filePath) =>
+    filePath === THIS_FILE
+      ? []
+      : [
+          {
+            filePath,
+            source: readFileSync(join(APP_SRC_DIR, filePath), "utf8"),
+          },
+        ]
+  );
+
+  return sourceFilesCache;
 }
 
 function findJobsCoreImportViolations(filePath: string, source: string) {
@@ -297,14 +303,14 @@ function getForbiddenAppAuthServerFunctionLaneTarget(
   );
 
   if (srcRelativeSpecifier === undefined) {
-    return undefined;
+    return;
   }
 
   const resolvedTarget = stripTypeScriptExtension(srcRelativeSpecifier);
 
-  return APP_AUTH_SERVER_FUNCTION_LANE_MODULES.has(resolvedTarget)
-    ? resolvedTarget
-    : undefined;
+  if (APP_AUTH_SERVER_FUNCTION_LANE_MODULES.has(resolvedTarget)) {
+    return resolvedTarget;
+  }
 }
 
 function toSrcRelativeImportSpecifier(filePath: string, specifier: string) {
@@ -313,7 +319,7 @@ function toSrcRelativeImportSpecifier(filePath: string, specifier: string) {
   }
 
   if (!specifier.startsWith(".")) {
-    return undefined;
+    return;
   }
 
   return posix.normalize(posix.join(posix.dirname(filePath), specifier));
@@ -324,24 +330,26 @@ function stripTypeScriptExtension(specifier: string) {
 }
 
 function getSourceFiles(directory: string): readonly string[] {
-  const entries = readdirSync(directory);
-  const files: string[] = [];
+  const appDirectory = resolve(directory, "..");
+  const trackedFiles = execFileSync("git", ["ls-files", "src"], {
+    cwd: appDirectory,
+    encoding: "utf8",
+  });
 
-  for (const entry of entries) {
-    const absolutePath = join(directory, entry);
-    const stat = statSync(absolutePath);
+  return trackedFiles
+    .split("\n")
+    .flatMap((filePath) => {
+      if (!filePath.startsWith("src/")) {
+        return [];
+      }
 
-    if (stat.isDirectory()) {
-      files.push(...getSourceFiles(absolutePath));
-      continue;
-    }
+      const sourcePath = filePath.slice("src/".length);
 
-    if (SOURCE_EXTENSIONS.has(getExtension(entry))) {
-      files.push(relative(APP_SRC_DIR, absolutePath).replaceAll("\\", "/"));
-    }
-  }
-
-  return files.sort();
+      return SOURCE_EXTENSIONS.has(getExtension(sourcePath))
+        ? [sourcePath]
+        : [];
+    })
+    .sort();
 }
 
 function getExtension(filePath: string) {

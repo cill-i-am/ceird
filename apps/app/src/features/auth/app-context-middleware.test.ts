@@ -68,12 +68,14 @@ function buildAuthRequest() {
 }
 
 function createDeferredResponse() {
-  let resolve!: (response: Response) => void;
-  const promise = new Promise<Response>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-
-  return { promise, resolve };
+  return (
+    Promise as unknown as {
+      withResolvers<Value>(): {
+        promise: Promise<Value>;
+        resolve: (value: Value | PromiseLike<Value>) => void;
+      };
+    }
+  ).withResolvers<Response>();
 }
 
 describe("app/auth server function middleware exports", () => {
@@ -105,11 +107,11 @@ describe("app context request middleware route selection", () => {
     "/jobs/job_123",
     "/sites/site_123",
   ])("hydrates auth context for %s", (pathname) => {
-    expect(shouldHydrateAuthContext(pathname)).toBe(true);
+    expect(shouldHydrateAuthContext(pathname)).toBeTruthy();
   });
 
   it("does not hydrate auth context for the health route", () => {
-    expect(shouldHydrateAuthContext("/health")).toBe(false);
+    expect(shouldHydrateAuthContext("/health")).toBeFalsy();
   });
 
   it.each([
@@ -122,13 +124,13 @@ describe("app context request middleware route selection", () => {
     "/jobs/job_123",
     "/sites/site_123",
   ])("hydrates organization context for %s", (pathname) => {
-    expect(shouldHydrateOrganizationContext(pathname)).toBe(true);
+    expect(shouldHydrateOrganizationContext(pathname)).toBeTruthy();
   });
 
   it.each(["/login", "/signup", "/create-organization", "/forgot-password"])(
     "does not hydrate organization context for %s",
     (pathname) => {
-      expect(shouldHydrateOrganizationContext(pathname)).toBe(false);
+      expect(shouldHydrateOrganizationContext(pathname)).toBeFalsy();
     }
   );
 });
@@ -227,8 +229,7 @@ describe("app auth context snapshot for request", () => {
       activeOrganizationId: "org_123",
       session: authSessionWithActiveOrganization,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       new URL("get-session", "https://api.example.com/api/auth/"),
       {
         headers: {
@@ -504,8 +505,7 @@ describe("app auth context snapshot for request", () => {
       activeOrganizationId: null,
       session: authSessionWithoutActiveOrganization,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       new URL("get-session", "https://api.example.com/api/auth/"),
       {
         headers: {

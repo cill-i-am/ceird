@@ -467,7 +467,9 @@ function useAcceptInvitationPageModel(
 
 async function getInvitationClientSession() {
   try {
-    return (await getCachedClientAppContext()).session;
+    const appContext = await getCachedClientAppContext();
+
+    return appContext.session;
   } catch {
     return null;
   }

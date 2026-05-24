@@ -58,7 +58,9 @@ async function getCurrentSession(): Promise<Session | null> {
     return await getCurrentServerOrganizationSession();
   }
 
-  return (await getCachedClientAppContext()).session;
+  const appContext = await getCachedClientAppContext();
+
+  return appContext.session;
 }
 
 export async function listOrganizations(): Promise<

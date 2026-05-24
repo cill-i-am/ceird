@@ -58,7 +58,7 @@ describe("app auth context types", () => {
         session: null,
         activeOrganizationId: null,
       })
-    ).toThrow();
+    ).toThrow(/Expected/);
   });
 
   it("rejects malformed session active organization ids", () => {
@@ -86,6 +86,6 @@ describe("app auth context types", () => {
         },
         activeOrganizationId: "org_123",
       })
-    ).toThrow();
+    ).toThrow(/Expected/);
   });
 });

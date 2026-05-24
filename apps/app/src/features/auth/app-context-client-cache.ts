@@ -1,8 +1,6 @@
 import { getCurrentAppContext } from "./app-context-functions";
-import {
-  type AppAuthContextSnapshot,
-  decodeAppAuthContextSnapshot,
-} from "./app-context-types";
+import type { AppAuthContextSnapshot } from "./app-context-types";
+import { decodeAppAuthContextSnapshot } from "./app-context-types";
 
 const APP_CONTEXT_CLIENT_CACHE_TTL_MS = 10_000;
 

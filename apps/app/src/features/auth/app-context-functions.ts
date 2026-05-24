@@ -7,4 +7,4 @@ export const getCurrentAppContext = createServerFn({
   method: "GET",
 })
   .middleware([optionalAuthFunctionMiddleware])
-  .handler(async ({ context }) => decodeAppAuthContextSnapshot(context));
+  .handler(({ context }) => decodeAppAuthContextSnapshot(context));
