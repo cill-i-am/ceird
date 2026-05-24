@@ -1,6 +1,6 @@
 import {
   AgentActionRejectedError,
-  getAgentActionDefinition,
+  getAgentActionInputSchema,
 } from "@ceird/agents-core";
 import type {
   AgentActionInput,
@@ -542,15 +542,15 @@ const domainAgentActions = [
   }),
 ] as const satisfies readonly DomainAgentActionHandler<ExecutableAgentActionName>[];
 
-const domainAgentActionsByName = new Map<
-  ExecutableAgentActionName,
+const domainAgentActionsByName: ReadonlyMap<
+  AgentActionName,
   DomainAgentActionHandler<ExecutableAgentActionName>
->(domainAgentActions.map((action) => [action.name, action]));
+> = new Map(domainAgentActions.map((action) => [action.name, action]));
 
 export function getDomainAgentActionHandler(
-  name: AgentActionName | ExecutableAgentActionName
+  name: AgentActionName
 ): DomainAgentActionHandler<ExecutableAgentActionName> | undefined {
-  return domainAgentActionsByName.get(name as ExecutableAgentActionName);
+  return domainAgentActionsByName.get(name);
 }
 
 export function getDomainAgentActionHandlerNames(): readonly ExecutableAgentActionName[] {
@@ -561,11 +561,9 @@ function decodeActionInput<const Name extends ExecutableAgentActionName>(
   actionName: Name,
   input: unknown
 ): Effect.Effect<AgentActionInput<Name>, AgentActionRejectedError> {
-  const definition = getAgentActionDefinition(actionName) as {
-    readonly inputSchema: Schema.Schema<AgentActionInput<Name>>;
-  };
+  const inputSchema = getAgentActionInputSchema(actionName);
 
-  return Schema.decodeUnknownEffect(definition.inputSchema)(input, {
+  return Schema.decodeUnknownEffect(inputSchema)(input, {
     onExcessProperty: "error",
   }).pipe(
     Effect.mapError(
