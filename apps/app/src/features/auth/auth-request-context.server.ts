@@ -1,4 +1,5 @@
 import {
+  decodeOrganizationId,
   decodeOrganizationMemberRoleResponse,
   decodeOrganizationSummaryList,
 } from "@ceird/identity-core";
@@ -15,6 +16,7 @@ import {
 } from "#/lib/server-api-forwarded-headers";
 
 import { decodeServerAuthSession } from "./app-context-types";
+import type { AppAuthContextSnapshot } from "./app-context-types";
 import type { ServerAuthSession } from "./server-session-types";
 
 export type RequestHeaderReader = (name: string) => string | undefined;
@@ -90,6 +92,47 @@ export async function readOptionalServerAuthSessionForRequest(
   return await readOptionalServerAuthSessionFromHeaders(
     getHeaderFromRequest(request)
   );
+}
+
+export async function buildAppAuthContextSnapshotForRequest(
+  request: Request,
+  options: { readonly hydrateOrganizationContext?: boolean } = {}
+): Promise<AppAuthContextSnapshot> {
+  const session = await readOptionalServerAuthSessionForRequest(request);
+  const activeOrganizationId = session?.session.activeOrganizationId
+    ? decodeOrganizationId(session.session.activeOrganizationId)
+    : null;
+
+  if (
+    !session ||
+    !options.hydrateOrganizationContext ||
+    !activeOrganizationId
+  ) {
+    return {
+      activeOrganizationId,
+      session,
+    };
+  }
+
+  const authRequest = readOptionalServerAuthRequest(
+    getHeaderFromRequest(request)
+  );
+
+  if (!authRequest) {
+    throw new Error("Cannot read organization auth context for this request.");
+  }
+
+  const [organizations, currentOrganizationRole] = await Promise.all([
+    readServerOrganizations(authRequest),
+    readCurrentOrganizationRole(authRequest, activeOrganizationId),
+  ]);
+
+  return {
+    activeOrganizationId,
+    currentOrganizationRole,
+    organizations,
+    session,
+  };
 }
 
 export async function readOptionalServerAuthSessionFromHeaders(
@@ -184,6 +227,18 @@ export async function readServerOrganizationMemberRole(
     throw new Error(
       "Organization member role lookup returned an invalid payload."
     );
+  }
+}
+
+async function readCurrentOrganizationRole(
+  authRequest: ServerAuthRequest,
+  organizationId: OrganizationId
+) {
+  try {
+    return (await readServerOrganizationMemberRole(authRequest, organizationId))
+      .role;
+  } catch {
+    // Role is an optimization here; route-level guards still enforce access.
   }
 }
 

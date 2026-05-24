@@ -82,10 +82,11 @@ list and set-active client APIs through
 and organization-owned data together. If Better Auth accepts the switch but the
 router refresh fails, the app reloads to avoid showing stale organization data
 against the new active session.
-TanStack Start request middleware in `apps/app/src/start.ts` hydrates auth
-request context once for routes that need it. Organization pages also prefetch
-the organization list and active member role in parallel before router loading,
-so `_app`, `_app/_org`, and child loaders can reuse request context instead of
+TanStack Start request middleware wired from
+`apps/app/src/features/auth/app-context-middleware.ts` hydrates auth request
+context once for routes that need it. Organization pages also prefetch the
+organization list and active member role in parallel before router loading, so
+`_app`, `_app/_org`, and child loaders can reuse request context instead of
 serializing Better Auth `get-session`, organization list, and member-role calls.
 The `_app` route remains the authenticated-shell boundary; child organization
 routes reuse that parent session through
