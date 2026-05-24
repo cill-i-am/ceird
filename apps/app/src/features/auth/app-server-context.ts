@@ -2,20 +2,29 @@ import {
   OrganizationRole,
   OrganizationSummaryListSchema,
 } from "@ceird/identity-core";
+import type {
+  OrganizationRole as OrganizationRoleType,
+  OrganizationSummary,
+} from "@ceird/identity-core";
 import { getGlobalStartContext } from "@tanstack/react-start";
 import { Schema } from "effect";
 
+import type { ServerAuthSession } from "./app-context-types";
 import { ServerAuthSessionSchema } from "./app-context-types";
 
-const AppServerContextSchema = Schema.Struct({
-  authSession: Schema.optional(Schema.NullOr(ServerAuthSessionSchema)),
-  currentOrganizationRole: Schema.optional(OrganizationRole),
-  organizations: Schema.optional(OrganizationSummaryListSchema),
-});
+function createAppServerContextSchema() {
+  return Schema.Struct({
+    authSession: Schema.optional(Schema.NullOr(ServerAuthSessionSchema)),
+    currentOrganizationRole: Schema.optional(OrganizationRole),
+    organizations: Schema.optional(OrganizationSummaryListSchema),
+  });
+}
 
-export type AppServerContext = Schema.Schema.Type<
-  typeof AppServerContextSchema
->;
+export interface AppServerContext {
+  readonly authSession?: ServerAuthSession | null;
+  readonly currentOrganizationRole?: OrganizationRoleType;
+  readonly organizations?: readonly OrganizationSummary[];
+}
 
 export function readAppServerContext(input: unknown): AppServerContext {
   if (typeof input !== "object" || input === null) {
@@ -25,7 +34,7 @@ export function readAppServerContext(input: unknown): AppServerContext {
   const record = input as Record<string, unknown>;
 
   try {
-    return Schema.decodeUnknownSync(AppServerContextSchema)({
+    return Schema.decodeUnknownSync(createAppServerContextSchema())({
       authSession: record.authSession,
       currentOrganizationRole: record.currentOrganizationRole,
       organizations: record.organizations,
