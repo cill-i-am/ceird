@@ -36,6 +36,10 @@ a remembered summary.
 - `review-swarm`: read `/Users/cillianbarron/.codex/skills/review-swarm/SKILL.md`
   when the user or hook asks for Review Swarm, parallel review, or multi-angle
   diff review.
+- `ceird-auth-context-review`: read
+  `../ceird-auth-context-review/SKILL.md` when auth/session/organization
+  context, route guards, client/server auth caches, auth middleware, or app
+  boundary tests changed.
 - `vercel-composition-patterns`: read
   `../vercel-composition-patterns/SKILL.md` for React component architecture,
   provider design, composition APIs, boolean prop growth, or reusable component
@@ -66,6 +70,9 @@ Run the relevant checks for the touched code.
   security/privacy, reliability/performance, and contract/test gaps. If
   sub-agents are not allowed in the current context, apply the same review roles
   locally.
+- **Ceird Auth Context Review:** follow the loaded
+  `ceird-auth-context-review` skill for session/org context, route guards,
+  cache invalidation, server/client trust boundaries, and auth boundary tests.
 - **Vercel React Composition Patterns:** follow the loaded
   `vercel-composition-patterns` skill for component boundaries, boolean prop
   growth, compound component fit, provider shape, children over render props,
