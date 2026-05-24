@@ -1,5 +1,9 @@
 import { DEFAULT_APP_DATABASE_URL } from "./config.js";
-import { resolveTestDatabaseBaseUrl } from "./test-database.js";
+import {
+  isTestDatabaseRequired,
+  resolveAdminDatabaseUrl,
+  resolveTestDatabaseBaseUrl,
+} from "./test-database.js";
 
 describe("test database base URL resolution", () => {
   it("uses an explicit base URL before environment defaults", () => {
@@ -57,5 +61,25 @@ describe("test database base URL resolution", () => {
     ).toBe("postgresql://postgres:postgres@127.0.0.1:5442/runtime");
 
     expect(resolveTestDatabaseBaseUrl({}, {})).toBe(DEFAULT_APP_DATABASE_URL);
+  });
+
+  it("detects when integration database availability is required", () => {
+    expect(isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "1" })).toBe(
+      true
+    );
+    expect(
+      isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "true" })
+    ).toBe(true);
+    expect(isTestDatabaseRequired({ CEIRD_REQUIRE_TEST_DATABASE: "0" })).toBe(
+      false
+    );
+  });
+
+  it("uses the configured base database for test database administration", () => {
+    expect(
+      resolveAdminDatabaseUrl(
+        "postgresql://ceird:secret@example.neon.tech/ceird?sslmode=require"
+      )
+    ).toBe("postgresql://ceird:secret@example.neon.tech/ceird?sslmode=require");
   });
 });
