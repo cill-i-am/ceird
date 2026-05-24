@@ -8,7 +8,6 @@ import {
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
-  OrganizationMemberRoleResponse,
   OrganizationRole,
   OrganizationSummary,
 } from "@ceird/identity-core";
@@ -17,19 +16,26 @@ import { redirect } from "@tanstack/react-router";
 import { authClient } from "#/lib/auth-client";
 
 import {
-  clearAppContextClientCache,
   getCachedClientAppContext,
   readFreshCachedClientAppContext,
 } from "../auth/app-context-client-cache";
 import { readGlobalAppServerContext } from "../auth/app-server-context";
 import { getLoginNavigationTarget } from "../auth/auth-navigation";
-import { clearClientAuthSessionCache } from "../auth/client-session-cache";
 import { isServerEnvironment } from "../auth/runtime-environment";
 import type { ServerAuthSession as Session } from "../auth/server-session-types";
+import {
+  clearClientOrganizationRoleCacheForPromise,
+  clearClientOrganizationsCacheForPromise,
+  clearOrganizationAccessClientCache,
+  readFreshClientOrganizationRoleCache,
+  readFreshClientOrganizationsCache,
+  setClientOrganizationRoleCache,
+  setClientOrganizationsCache,
+} from "./organization-access-cache";
 
 const importOrganizationServer = () => import("./organization-server");
-const CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS = 10_000;
 
+export { clearOrganizationAccessClientCache } from "./organization-access-cache";
 export type { OrganizationSummary } from "@ceird/identity-core";
 export interface ActiveOrganizationSync {
   readonly required: boolean;
@@ -44,26 +50,6 @@ type OrganizationMemberRole = NonNullable<
     ReturnType<typeof authClient.organization.getActiveMemberRole>
   >["data"]
 >;
-
-interface ClientAccessCacheEntry<Value> {
-  readonly expiresAt: number;
-  readonly promise: Promise<Value>;
-}
-
-let clientOrganizationsCache:
-  | ClientAccessCacheEntry<readonly OrganizationSummary[]>
-  | undefined;
-const clientOrganizationRoleCache = new Map<
-  OrganizationIdType,
-  ClientAccessCacheEntry<OrganizationMemberRoleResponse>
->();
-
-export function clearOrganizationAccessClientCache() {
-  clearAppContextClientCache();
-  clearClientAuthSessionCache();
-  clientOrganizationsCache = undefined;
-  clientOrganizationRoleCache.clear();
-}
 
 async function getCurrentSession(): Promise<Session | null> {
   if (isServerEnvironment()) {
@@ -101,21 +87,20 @@ export async function listOrganizations(): Promise<
 async function getCachedClientOrganizations(): Promise<
   readonly OrganizationSummary[]
 > {
-  if (isFreshClientCacheEntry(clientOrganizationsCache)) {
-    return await clientOrganizationsCache.promise;
+  const cachedOrganizations = readFreshClientOrganizationsCache();
+
+  if (cachedOrganizations) {
+    return await cachedOrganizations;
   }
 
   const promise = listBetterAuthClientOrganizations();
 
-  clientOrganizationsCache = createClientCacheEntry(promise);
+  setClientOrganizationsCache(promise);
 
   try {
     return await promise;
   } catch (error) {
-    if (clientOrganizationsCache?.promise === promise) {
-      clientOrganizationsCache = undefined;
-    }
-
+    clearClientOrganizationsCacheForPromise(promise);
     throw error;
   }
 }
@@ -290,10 +275,10 @@ export async function getCurrentOrganizationMemberRole(
 async function getCachedClientOrganizationMemberRole(
   organizationId: OrganizationIdType
 ) {
-  const cachedRole = clientOrganizationRoleCache.get(organizationId);
+  const cachedRole = readFreshClientOrganizationRoleCache(organizationId);
 
-  if (isFreshClientCacheEntry(cachedRole)) {
-    return await cachedRole.promise;
+  if (cachedRole) {
+    return await cachedRole;
   }
 
   const promise = (async () =>
@@ -305,18 +290,12 @@ async function getCachedClientOrganizationMemberRole(
       })
     ))();
 
-  clientOrganizationRoleCache.set(
-    organizationId,
-    createClientCacheEntry(promise)
-  );
+  setClientOrganizationRoleCache(organizationId, promise);
 
   try {
     return await promise;
   } catch (error) {
-    if (clientOrganizationRoleCache.get(organizationId)?.promise === promise) {
-      clientOrganizationRoleCache.delete(organizationId);
-    }
-
+    clearClientOrganizationRoleCacheForPromise(organizationId, promise);
     throw error;
   }
 }
@@ -388,21 +367,6 @@ export async function synchronizeClientActiveOrganization(
   }
 
   await setActiveOrganization(activeOrganizationSync.targetOrganizationId);
-}
-
-function createClientCacheEntry<Value>(
-  promise: Promise<Value>
-): ClientAccessCacheEntry<Value> {
-  return {
-    expiresAt: Date.now() + CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS,
-    promise,
-  };
-}
-
-function isFreshClientCacheEntry<Value>(
-  entry: ClientAccessCacheEntry<Value> | undefined
-): entry is ClientAccessCacheEntry<Value> {
-  return entry !== undefined && entry.expiresAt > Date.now();
 }
 
 function readClientOrganizations(

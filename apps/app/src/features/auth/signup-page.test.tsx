@@ -4,17 +4,28 @@ import type { ComponentProps } from "react";
 
 import type * as AuthClientModule from "#/lib/auth-client";
 
+import { listOrganizations } from "../organizations/organization-access";
+import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
 import { SignupPage } from "./signup-page";
 
 const {
+  mockedClearAppContextClientCache,
   mockedGetSession,
+  mockedListOrganizations,
   mockedNavigate,
   mockedSignInEmail,
   mockedSignUpEmail,
 } = vi.hoisted(() => ({
+  mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetSession: vi.fn<
     () => Promise<{
       data: null;
+      error: null;
+    }>
+  >(),
+  mockedListOrganizations: vi.fn<
+    () => Promise<{
+      data: { id: string; name: string; slug: string }[] | null;
       error: null;
     }>
   >(),
@@ -55,6 +66,16 @@ const {
     }>
   >(),
 }));
+
+vi.mock(import("./app-context-client-cache"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    clearAppContextClientCache:
+      mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
+  };
+});
 
 vi.mock(import("./auth-navigation"), async (importActual) => {
   const actual = await importActual();
@@ -106,6 +127,9 @@ vi.mock(import("#/lib/auth-client"), async () => {
   return {
     authClient: {
       getSession: mockedGetSession,
+      organization: {
+        list: mockedListOrganizations,
+      },
       signIn: {
         email: mockedSignInEmail,
       },
@@ -121,6 +145,10 @@ describe("signup page", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "http://localhost:3000/signup");
     mockedGetSession.mockResolvedValue({ data: null, error: null });
+    mockedListOrganizations.mockResolvedValue({
+      data: [{ id: "org_current", name: "Current Org", slug: "current" }],
+      error: null,
+    });
     mockedNavigate.mockResolvedValue();
     mockedSignInEmail.mockResolvedValue({
       data: {
@@ -147,6 +175,7 @@ describe("signup page", () => {
   });
 
   afterEach(() => {
+    clearOrganizationAccessClientCache();
     vi.clearAllMocks();
   });
 
@@ -173,7 +202,44 @@ describe("signup page", () => {
         to: "/",
       });
     });
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("clears stale organization cache after successful sign-up", async () => {
+    mockedListOrganizations
+      .mockResolvedValueOnce({
+        data: [{ id: "org_previous", name: "Previous Org", slug: "previous" }],
+        error: null,
+      })
+      .mockResolvedValue({
+        data: [{ id: "org_current", name: "Current Org", slug: "current" }],
+        error: null,
+      });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_previous", name: "Previous Org", slug: "previous" },
+    ]);
+
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_current", name: "Current Org", slug: "current" },
+    ]);
+    expect(mockedListOrganizations).toHaveBeenCalledTimes(2);
   }, 10_000);
 
   it("continues after invitation signup without forcing a second sign-in", async () => {

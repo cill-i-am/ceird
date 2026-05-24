@@ -9,11 +9,11 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { authClient, getPublicInvitationPreview } from "#/lib/auth-client";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
+import { getCachedClientAppContext } from "../auth/app-context-client-cache";
 import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
 } from "../auth/auth-navigation";
-import { getCachedClientAuthSession } from "../auth/client-session-cache";
 import {
   EntryContextPanel,
   EntryShell,
@@ -21,7 +21,7 @@ import {
 } from "../auth/entry-shell";
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
-import { clearOrganizationAccessClientCache } from "./organization-access";
+import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
 interface InvitationPreviewDetails {
@@ -377,6 +377,7 @@ function useAcceptInvitationPageModel(
     }
 
     const acceptedOrganizationId = result.data?.member.organizationId;
+    clearOrganizationAccessClientCache();
 
     if (acceptedOrganizationId) {
       const activeOrganizationResult = await authClient.organization.setActive({
@@ -393,7 +394,6 @@ function useAcceptInvitationPageModel(
       }
     }
 
-    clearOrganizationAccessClientCache();
     await mutationFeedback.waitForSuccess();
     await navigate({
       to: "/",
@@ -467,7 +467,7 @@ function useAcceptInvitationPageModel(
 
 async function getInvitationClientSession() {
   try {
-    return await getCachedClientAuthSession();
+    return (await getCachedClientAppContext()).session;
   } catch {
     return null;
   }

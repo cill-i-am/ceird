@@ -211,9 +211,11 @@ window through `features/auth/app-context-client-cache.ts`, so protected-route
 navigation can share the same session and active-organization context read.
 Organization route guards prefer hydrated app/request context for session and
 organization-list reads, then fall back to Better Auth client organization APIs
-for UI paths that do not yet have organization data in the snapshot. The older
-session, organization-list, and active-member-role caches still support direct
-Better Auth fallbacks and are cleared after sign-in, sign-up,
+for UI paths that do not yet have organization data in the snapshot. Those
+fallback Better Auth organization-list and member-role promise caches live in
+`features/organizations/organization-access-cache.ts`. Its
+`clearOrganizationAccessClientCache()` helper clears the app-context snapshot,
+organization-list cache, and member-role cache after sign-in, sign-up,
 active-organization changes, first organization creation, invitation acceptance,
 and sign-out so route transitions do not fan out repeated Better Auth requests
 while identity state changes still force a fresh read.

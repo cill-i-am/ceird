@@ -5,34 +5,57 @@ import type { ComponentProps } from "react";
 
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
+import { listOrganizations } from "../organizations/organization-access";
+import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
 import { loginSchema } from "./auth-schemas";
 import { LoginPage } from "./login-page";
 
-const { mockedGetSession, mockedNavigate, mockedSignInEmail } = vi.hoisted(
-  () => ({
-    mockedGetSession: vi.fn<
-      () => Promise<{
-        data: null;
-        error: null;
-      }>
-    >(),
-    mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
-    mockedSignInEmail: vi.fn<
-      (input: { email: string; password: string }) => Promise<{
-        data: {
-          session: {
-            id: string;
-          };
-        } | null;
-        error: {
-          message: string;
-          status: number;
-          statusText: string;
-        } | null;
-      }>
-    >(),
-  })
-);
+const {
+  mockedClearAppContextClientCache,
+  mockedGetSession,
+  mockedListOrganizations,
+  mockedNavigate,
+  mockedSignInEmail,
+} = vi.hoisted(() => ({
+  mockedClearAppContextClientCache: vi.fn<() => void>(),
+  mockedGetSession: vi.fn<
+    () => Promise<{
+      data: null;
+      error: null;
+    }>
+  >(),
+  mockedListOrganizations: vi.fn<
+    () => Promise<{
+      data: { id: string; name: string; slug: string }[] | null;
+      error: null;
+    }>
+  >(),
+  mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
+  mockedSignInEmail: vi.fn<
+    (input: { email: string; password: string }) => Promise<{
+      data: {
+        session: {
+          id: string;
+        };
+      } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+}));
+
+vi.mock(import("./app-context-client-cache"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    clearAppContextClientCache:
+      mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
+  };
+});
 
 vi.mock(import("./auth-navigation"), async (importActual) => {
   const actual = await importActual();
@@ -80,6 +103,9 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
     getSession: mockedGetSession,
+    organization: {
+      list: mockedListOrganizations,
+    },
     signIn: {
       email: mockedSignInEmail,
     },
@@ -89,6 +115,10 @@ vi.mock(import("#/lib/auth-client"), () => ({
 describe("login page", () => {
   beforeEach(() => {
     mockedGetSession.mockResolvedValue({ data: null, error: null });
+    mockedListOrganizations.mockResolvedValue({
+      data: [{ id: "org_current", name: "Current Org", slug: "current" }],
+      error: null,
+    });
     mockedNavigate.mockResolvedValue();
     mockedSignInEmail.mockResolvedValue({
       data: {
@@ -101,6 +131,7 @@ describe("login page", () => {
   });
 
   afterEach(() => {
+    clearOrganizationAccessClientCache();
     vi.clearAllMocks();
   });
 
@@ -124,6 +155,42 @@ describe("login page", () => {
         to: "/",
       });
     });
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  it("clears stale organization cache after successful sign-in", async () => {
+    mockedListOrganizations
+      .mockResolvedValueOnce({
+        data: [{ id: "org_previous", name: "Previous Org", slug: "previous" }],
+        error: null,
+      })
+      .mockResolvedValue({
+        data: [{ id: "org_current", name: "Current Org", slug: "current" }],
+        error: null,
+      });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_previous", name: "Previous Org", slug: "previous" },
+    ]);
+
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_current", name: "Current Org", slug: "current" },
+    ]);
+    expect(mockedListOrganizations).toHaveBeenCalledTimes(2);
   }, 10_000);
 
   it("preserves invitation continuation in the forgot-password link", () => {

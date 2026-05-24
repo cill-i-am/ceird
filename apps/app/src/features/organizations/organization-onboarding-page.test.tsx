@@ -17,13 +17,13 @@ type InviteMemberInput = Parameters<
 >[0];
 
 const {
+  mockedClearAppContextClientCache,
   mockedCreateOrganization,
-  mockedClearOrganizationAccessClientCache,
   mockedInviteMember,
   mockedNavigate,
   mockedToastSuccess,
 } = vi.hoisted(() => ({
-  mockedClearOrganizationAccessClientCache: vi.fn<() => void>(),
+  mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedCreateOrganization: vi.fn<
     (input: { data: { name: string } }) => Promise<{
       id: string;
@@ -57,13 +57,13 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
   };
 });
 
-vi.mock(import("./organization-access"), async (importActual) => {
+vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
   const actual = await importActual();
 
   return {
     ...actual,
-    clearOrganizationAccessClientCache:
-      mockedClearOrganizationAccessClientCache as typeof actual.clearOrganizationAccessClientCache,
+    clearAppContextClientCache:
+      mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
   };
 });
 
@@ -111,7 +111,7 @@ describe("organization onboarding page", () => {
       error: null,
     });
     mockedToastSuccess.mockClear();
-    mockedClearOrganizationAccessClientCache.mockClear();
+    mockedClearAppContextClientCache.mockClear();
   });
 
   afterEach(() => {
@@ -181,7 +181,7 @@ describe("organization onboarding page", () => {
         screen.getByRole("heading", { name: "Invite members" })
       ).toBeInTheDocument();
     });
-    expect(mockedClearOrganizationAccessClientCache).toHaveBeenCalledOnce();
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     const inviteProgress = screen.getByRole("navigation", {
       name: /Workspace setup progress/,
     });
