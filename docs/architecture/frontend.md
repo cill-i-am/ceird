@@ -218,8 +218,8 @@ and sign-out so route transitions do not fan out repeated Better Auth requests
 while identity state changes still force a fresh read.
 
 The domain data lane calls the typed domain API directly for product data:
-jobs, sites, activity, comments, labels, and future ElectricSQL/TanStack DB
-synced product state. Keep these reads and writes outside app server functions.
+jobs, sites, activity, comments, labels, and TanStack DB-backed synced product
+state as it expands. Keep these reads and writes outside app server functions.
 The API/domain layer remains the product authorization, validation, and sync
 boundary; the app shell must not proxy product data through app-owned
 server-function middleware just to reuse auth context.

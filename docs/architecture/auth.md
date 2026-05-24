@@ -347,15 +347,14 @@ the auth slice.
 Responsibilities:
 
 - create the `pg` connection pool
-- validate connectivity on startup
 - expose a Drizzle database for Better Auth
-- expose Effect SQL / Drizzle layers for future backend composition
+- expose Effect SQL layers for domain-owned repositories
 
 Current architectural decision:
 
 - Better Auth uses the Drizzle adapter directly
-- the surrounding Effect database layers exist as extension points, not as a
-  wrapper around Better Auth today
+- the surrounding Effect database layers support domain repositories, not a
+  wrapper around Better Auth
 
 ## Frontend Ownership
 

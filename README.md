@@ -1,9 +1,9 @@
 # Ceird
 
-Ceird is a greenfield ceird for trades and construction teams. The
-product gives small and medium-sized businesses a focused way to manage jobs,
-sites, members, activity, and organization configuration without adopting a
-generic project-management workflow.
+Ceird is a focused operations app for trades and construction teams. It gives
+small and medium-sized businesses one place to manage jobs, sites, members,
+activity, and organization configuration without adopting a generic
+project-management workflow.
 
 The codebase is a TypeScript monorepo built with pnpm workspaces. It contains
 a TanStack Start web app, Effect HTTP domain services, a Cloudflare Agents SDK

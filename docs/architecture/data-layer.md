@@ -26,7 +26,8 @@ This keeps the Better Auth boundary conventional and easy to reason about.
 
 ## Why We Also Added Effect SQL
 
-The project is Effect-first, so it still helps to establish an Effect-native database path for future app code.
+The project is Effect-first, so domain-owned repository code uses an
+Effect-native database path.
 
 The auth slice exposes:
 
@@ -170,6 +171,5 @@ The following are intentionally left for later:
 - broader domain data services
 - auth-specific Effect wrappers
 - app-facing typed auth endpoints
-- full domain/API/app/shared Effect 4 migration
 
 That keeps the current implementation simple while still leaving a clean path toward a more Effect-native backend as the project grows.
