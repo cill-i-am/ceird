@@ -24,6 +24,8 @@ import {
   signAgentConnectToken,
   verifyAgentConnectToken,
 } from "./index.js";
+import * as publicExports from "./index.js";
+import * as runtimeExports from "./runtime.js";
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
@@ -65,6 +67,25 @@ describe("@ceird/agents-core", () => {
       expect(getAgentActionDefinition(action.name)).toBe(action);
     }
   );
+
+  it("shares action registry construction between public and runtime entrypoints", () => {
+    expect(runtimeExports.AGENT_ACTIONS).toBe(publicExports.AGENT_ACTIONS);
+    expect(runtimeExports.AGENT_EXECUTABLE_ACTIONS).toBe(
+      publicExports.AGENT_EXECUTABLE_ACTIONS
+    );
+    expect(runtimeExports.AGENT_ACTION_DEFINITIONS).toBe(
+      publicExports.AGENT_ACTION_DEFINITIONS
+    );
+    expect(runtimeExports.AGENT_ACTIONS_MANIFEST).toBe(
+      publicExports.AGENT_ACTIONS_MANIFEST
+    );
+    expect(runtimeExports.AGENT_EXECUTABLE_ACTION_MANIFEST).toBe(
+      publicExports.AGENT_EXECUTABLE_ACTION_MANIFEST
+    );
+    expect(runtimeExports.getAgentActionDefinition("ceird.jobs.create")).toBe(
+      publicExports.getAgentActionDefinition("ceird.jobs.create")
+    );
+  });
 
   it.each([
     { executableOnly: false, manifest: AGENT_ACTIONS_MANIFEST },

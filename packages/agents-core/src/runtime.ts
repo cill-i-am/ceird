@@ -2,16 +2,38 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { Schema } from "effect";
 
 import {
-  AgentActionConfirmationPolicy,
-  AgentActionExecutionStatus,
-  AgentActionKindSchema,
-} from "./action-registry.js";
-import type { AgentActionSpec } from "./action-registry.js";
-import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
-import { labelAgentActions } from "./actions/labels.js";
-import { organizationAgentActions } from "./actions/organization.js";
-import { serviceAreaAgentActions, siteAgentActions } from "./actions/sites.js";
+  AgentActionNameSchema,
+  ExecutableAgentActionNameSchema,
+} from "./action-definitions.js";
 
+export {
+  AGENT_ACTION_DEFINITIONS,
+  AGENT_ACTION_MANIFEST_SCHEMA,
+  AGENT_ACTION_NAMES,
+  AGENT_ACTIONS,
+  AGENT_ACTIONS_MANIFEST,
+  AGENT_EXECUTABLE_ACTION_MANIFEST,
+  AGENT_EXECUTABLE_ACTION_NAMES,
+  AGENT_EXECUTABLE_ACTIONS,
+  AgentActionManifestItemSchema,
+  AgentActionManifestResponseSchema,
+  AgentActionNameSchema,
+  ExecutableAgentActionNameSchema,
+  getAgentActionDefinition,
+  getAgentActionInputSchema,
+  getAgentActionKind,
+  getAgentActionManifest,
+  isAgentActionExecutable,
+  projectAgentActionManifest,
+} from "./action-definitions.js";
+export type {
+  AgentActionDefinition,
+  AgentActionInput,
+  AgentActionManifestItem,
+  AgentActionManifestResponse,
+  AgentActionName,
+  ExecutableAgentActionName,
+} from "./action-definitions.js";
 export {
   AGENT_ACTION_KINDS,
   AgentActionConfirmationPolicy,
@@ -136,139 +158,6 @@ export const AgentConnectAuthorizationSchema = Schema.Struct({
 export type AgentConnectAuthorization = Schema.Schema.Type<
   typeof AgentConnectAuthorizationSchema
 >;
-
-export const AGENT_ACTIONS = [
-  ...labelAgentActions,
-  ...siteAgentActions,
-  ...serviceAreaAgentActions,
-  ...jobAgentActions,
-  ...rateCardAgentActions,
-  ...organizationAgentActions,
-] as const;
-
-type AgentActionNameTuple = readonly [
-  (typeof AGENT_ACTIONS)[number]["name"],
-  ...(typeof AGENT_ACTIONS)[number]["name"][],
-];
-
-export const AGENT_ACTION_NAMES = AGENT_ACTIONS.map(
-  (action) => action.name
-) as unknown as AgentActionNameTuple;
-export const AgentActionNameSchema = Schema.Literals(AGENT_ACTION_NAMES);
-export type AgentActionName = Schema.Schema.Type<typeof AgentActionNameSchema>;
-export type AgentActionDefinition<
-  Name extends AgentActionName = AgentActionName,
-> = Extract<(typeof AGENT_ACTIONS)[number], { readonly name: Name }>;
-export type AgentActionInput<Name extends AgentActionName> = Schema.Schema.Type<
-  AgentActionDefinition<Name>["inputSchema"]
->;
-
-export const AGENT_EXECUTABLE_ACTIONS = AGENT_ACTIONS.filter(
-  (action) => action.executionStatus === "executable"
-) as Extract<
-  (typeof AGENT_ACTIONS)[number],
-  { readonly executionStatus: "executable" }
->[];
-
-type ExecutableAgentActionNameTuple = readonly [
-  (typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"],
-  ...(typeof AGENT_EXECUTABLE_ACTIONS)[number]["name"][],
-];
-
-export const AGENT_EXECUTABLE_ACTION_NAMES = AGENT_EXECUTABLE_ACTIONS.map(
-  (action) => action.name
-) as unknown as ExecutableAgentActionNameTuple;
-export const ExecutableAgentActionNameSchema = Schema.Literals(
-  AGENT_EXECUTABLE_ACTION_NAMES
-);
-export type ExecutableAgentActionName = Schema.Schema.Type<
-  typeof ExecutableAgentActionNameSchema
->;
-
-const AGENT_ACTIONS_BY_NAME = Object.fromEntries(
-  AGENT_ACTIONS.map((action) => [action.name, action])
-) as {
-  readonly [Action in (typeof AGENT_ACTIONS)[number] as Action["name"]]: Action;
-};
-
-export const AGENT_ACTION_DEFINITIONS = AGENT_ACTIONS_BY_NAME;
-
-export function getAgentActionDefinition<const Name extends AgentActionName>(
-  name: Name
-): AgentActionDefinition<Name> {
-  const action = AGENT_ACTIONS_BY_NAME[name];
-
-  return action as unknown as AgentActionDefinition<Name>;
-}
-
-export function getAgentActionKind(
-  name: AgentActionName
-): (typeof AGENT_ACTIONS)[number]["kind"] {
-  return getAgentActionDefinition(name).kind;
-}
-
-export function isAgentActionExecutable(
-  name: AgentActionName
-): name is ExecutableAgentActionName {
-  return AGENT_EXECUTABLE_ACTION_NAMES.includes(
-    name as ExecutableAgentActionName
-  );
-}
-
-export const AgentActionManifestItemSchema = Schema.Struct({
-  confirmationPolicy: AgentActionConfirmationPolicy,
-  display: Schema.Struct({
-    label: Schema.String,
-    summary: Schema.String,
-    target: Schema.optional(Schema.String),
-  }),
-  executionStatus: AgentActionExecutionStatus,
-  kind: AgentActionKindSchema,
-  modelDescription: Schema.String,
-  modelName: Schema.String,
-  name: AgentActionNameSchema,
-});
-export type AgentActionManifestItem = Schema.Schema.Type<
-  typeof AgentActionManifestItemSchema
->;
-
-export const AgentActionManifestResponseSchema = Schema.Struct({
-  actions: Schema.Array(AgentActionManifestItemSchema),
-});
-export type AgentActionManifestResponse = Schema.Schema.Type<
-  typeof AgentActionManifestResponseSchema
->;
-
-export const AGENT_ACTION_MANIFEST_SCHEMA = AgentActionManifestResponseSchema;
-
-export function projectAgentActionManifest(
-  actions: readonly AgentActionSpec<AgentActionName>[]
-): AgentActionManifestResponse {
-  return {
-    actions: actions.map((action) => ({
-      confirmationPolicy: action.confirmationPolicy,
-      display: action.display,
-      executionStatus: action.executionStatus,
-      kind: action.kind,
-      modelDescription: action.modelDescription,
-      modelName: action.modelName,
-      name: action.name,
-    })),
-  };
-}
-
-export const AGENT_ACTIONS_MANIFEST = projectAgentActionManifest(AGENT_ACTIONS);
-export const AGENT_EXECUTABLE_ACTION_MANIFEST = projectAgentActionManifest(
-  AGENT_EXECUTABLE_ACTIONS
-);
-
-export function getAgentActionManifest(
-  options: { readonly executableOnly?: boolean } = {}
-): AgentActionManifestResponse {
-  return options.executableOnly === true
-    ? AGENT_EXECUTABLE_ACTION_MANIFEST
-    : AGENT_ACTIONS_MANIFEST;
-}
 
 export const AgentActionOperationId = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{8,160}$/)),
