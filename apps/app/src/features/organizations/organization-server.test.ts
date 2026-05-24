@@ -2,6 +2,7 @@ import { decodeOrganizationId } from "@ceird/identity-core";
 
 import {
   createCurrentServerOrganizationDirect,
+  getCurrentServerOrganizationMemberRoleDirect as getCurrentServerOrganizationMemberRole,
   getCurrentServerOrganizationSessionDirect as getCurrentServerOrganizationSession,
   getCurrentServerOrganizationsDirect as getCurrentServerOrganizations,
   setCurrentServerActiveOrganizationDirect as setCurrentServerActiveOrganization,
@@ -42,11 +43,26 @@ interface AuthSession {
   user: User;
 }
 
-const { mockedGetRequestHeader, mockedSetResponseHeader } = vi.hoisted(() => ({
+const {
+  mockedGetGlobalStartContext,
+  mockedGetRequestHeader,
+  mockedSetResponseHeader,
+} = vi.hoisted(() => ({
+  mockedGetGlobalStartContext: vi.fn<() => unknown>(),
   mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
   mockedSetResponseHeader:
     vi.fn<(name: string, value: string | string[]) => void>(),
 }));
+
+vi.mock(import("@tanstack/react-start"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getGlobalStartContext:
+      mockedGetGlobalStartContext as typeof actual.getGlobalStartContext,
+  };
+});
 
 vi.mock(import("@tanstack/react-start/server"), async (importActual) => {
   const actual = await importActual();
@@ -334,6 +350,56 @@ describe("server organization lookup", () => {
         method: "POST",
       }
     );
+  }, 1000);
+
+  it("reads the organization member role with the organization id query parameter", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ role: "owner" }));
+
+    await expect(
+      getCurrentServerOrganizationMemberRole(organizationId)
+    ).resolves.toStrictEqual({ role: "owner" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_123",
+        "https://api.example.com/api/auth/"
+      ),
+      {
+        headers: {
+          accept: "application/json",
+          cookie: "better-auth.session_token=session-token",
+        },
+      }
+    );
+  }, 1000);
+
+  it("returns the cached organization member role when it matches the active organization", async () => {
+    mockedGetGlobalStartContext.mockReturnValue({
+      authSession: {
+        session: {
+          activeOrganizationId: "org_123",
+        },
+      },
+      currentOrganizationRole: "admin",
+    });
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      getCurrentServerOrganizationMemberRole(organizationId)
+    ).resolves.toStrictEqual({ role: "admin" });
+    expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 
   it("creates an organization with a server-generated slug", async () => {

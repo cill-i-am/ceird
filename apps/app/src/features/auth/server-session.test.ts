@@ -27,9 +27,22 @@ interface AuthSession {
   user: User;
 }
 
-const { mockedGetRequestHeader } = vi.hoisted(() => ({
-  mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
-}));
+const { mockedGetGlobalStartContext, mockedGetRequestHeader } = vi.hoisted(
+  () => ({
+    mockedGetGlobalStartContext: vi.fn<() => unknown>(),
+    mockedGetRequestHeader: vi.fn<(name: string) => string | undefined>(),
+  })
+);
+
+vi.mock(import("@tanstack/react-start"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getGlobalStartContext:
+      mockedGetGlobalStartContext as typeof actual.getGlobalStartContext,
+  };
+});
 
 vi.mock(import("@tanstack/react-start/server"), () => ({
   getRequestHeader: mockedGetRequestHeader,
@@ -104,6 +117,42 @@ describe("server session lookup", () => {
         },
       }
     );
+  }, 1000);
+
+  it("returns the cached app server context auth session without fetching", async () => {
+    const authSession: AuthSession = {
+      session: {
+        id: "session_cached",
+        createdAt: "2026-04-04T17:08:12.497Z",
+        updatedAt: "2026-04-04T17:08:12.497Z",
+        userId: "user_cached",
+        expiresAt: "2026-04-11T17:08:12.497Z",
+        token: "cached-session-token",
+        ipAddress: null,
+        userAgent: "start/1.0",
+        activeOrganizationId: "org_cached",
+      },
+      user: {
+        id: "user_cached",
+        name: "Cached User",
+        email: "cached@example.com",
+        image: null,
+        emailVerified: true,
+        createdAt: "2026-04-04T17:08:12.488Z",
+        updatedAt: "2026-04-04T17:08:12.488Z",
+      },
+    };
+
+    mockedGetGlobalStartContext.mockReturnValue({ authSession });
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
+    expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 
   it("forwards the public api host and protocol for server auth reads", async () => {
