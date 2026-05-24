@@ -7,8 +7,12 @@ export async function renderAndFlushReact(
   options?: RenderOptions
 ) {
   const result = render(ui, options);
+  await flushReactUpdates();
+  return result;
+}
+
+export async function flushReactUpdates() {
   await act(async () => {
     await Promise.resolve();
   });
-  return result;
 }

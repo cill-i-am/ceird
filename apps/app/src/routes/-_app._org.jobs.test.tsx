@@ -9,11 +9,11 @@ import type {
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
-import { renderAndFlushReact } from "#/test/react-render";
+import { flushReactUpdates, renderAndFlushReact } from "#/test/react-render";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
@@ -435,7 +435,7 @@ describe("jobs route loader", () => {
       const { JobsRouteContent } =
         await import("#/features/jobs/jobs-route-content");
 
-      await renderAndFlushReact(
+      render(
         <JobsRouteContent
           activeOrganizationId={organizationId}
           list={{
@@ -473,6 +473,8 @@ describe("jobs route loader", () => {
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
+
+      await flushReactUpdates();
     }
   );
 

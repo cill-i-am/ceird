@@ -10,10 +10,10 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 
-import { renderAndFlushReact } from "#/test/react-render";
+import { flushReactUpdates } from "#/test/react-render";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 type NavigateMock = (...args: unknown[]) => Promise<void>;
@@ -154,7 +154,7 @@ describe("job detail route", () => {
       const { JobsDetailRouteContent, JobsRouteContent } =
         await import("#/features/jobs/jobs-route-content");
 
-      await renderAndFlushReact(
+      render(
         <JobsRouteContent
           activeOrganizationId={organizationId}
           list={{
@@ -243,6 +243,8 @@ describe("job detail route", () => {
       expect(
         screen.getByText("Checked the burner and reset the controls.")
       ).toBeInTheDocument();
+
+      await flushReactUpdates();
     }
   );
 });
