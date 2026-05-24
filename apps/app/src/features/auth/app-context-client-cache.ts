@@ -17,6 +17,16 @@ export function clearAppContextClientCache() {
   appContextClientCache = undefined;
 }
 
+export function readFreshCachedClientAppContext():
+  | Promise<AppAuthContextSnapshot>
+  | undefined {
+  if (!isFreshAppContextClientCacheEntry(appContextClientCache)) {
+    return undefined;
+  }
+
+  return appContextClientCache.promise;
+}
+
 export async function getCachedClientAppContext(): Promise<AppAuthContextSnapshot> {
   if (isFreshAppContextClientCacheEntry(appContextClientCache)) {
     return await appContextClientCache.promise;

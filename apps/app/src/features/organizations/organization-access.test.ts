@@ -3,6 +3,10 @@ import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { isRedirect } from "@tanstack/react-router";
 
 import {
+  clearAppContextClientCache,
+  getCachedClientAppContext,
+} from "../auth/app-context-client-cache";
+import {
   clearOrganizationAccessClientCache,
   ensureActiveOrganizationId,
   ensureActiveOrganizationIdForSession,
@@ -46,7 +50,37 @@ interface Organization {
 
 const serverOrganizationId = decodeOrganizationId("org_server");
 
+function createAppContextSession(input?: {
+  readonly activeOrganizationId?: string | null;
+  readonly id?: string;
+}): Session {
+  const id = input?.id ?? "session_app_context";
+
+  return {
+    session: {
+      id,
+      createdAt: "2026-05-24T10:00:00.000Z",
+      updatedAt: "2026-05-24T10:00:00.000Z",
+      userId: "user_app_context",
+      expiresAt: "2026-05-31T10:00:00.000Z",
+      token: `${id}-token`,
+      activeOrganizationId: input?.activeOrganizationId,
+    },
+    user: {
+      id: "user_app_context",
+      name: "App Context User",
+      email: "app-context@example.com",
+      image: null,
+      emailVerified: true,
+      createdAt: "2026-05-24T10:00:00.000Z",
+      updatedAt: "2026-05-24T10:00:00.000Z",
+    },
+  };
+}
+
 const {
+  mockedGetCurrentAppContext,
+  mockedGetGlobalStartContext,
   mockedGetStrictServerSession,
   mockedGetServerOrganizationMemberRole,
   mockedGetStrictServerOrganizations,
@@ -56,6 +90,8 @@ const {
   mockedSetClientActiveOrganization,
   mockedIsServerEnvironment,
 } = vi.hoisted(() => ({
+  mockedGetCurrentAppContext: vi.fn<() => Promise<unknown>>(),
+  mockedGetGlobalStartContext: vi.fn<() => unknown>(),
   mockedGetStrictServerSession: vi.fn<() => Promise<Session | null>>(),
   mockedGetServerOrganizationMemberRole:
     vi.fn<
@@ -84,6 +120,26 @@ const {
     >(),
   mockedIsServerEnvironment: vi.fn<() => boolean>(),
 }));
+
+vi.mock(import("@tanstack/react-start"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getGlobalStartContext:
+      mockedGetGlobalStartContext as typeof actual.getGlobalStartContext,
+  };
+});
+
+vi.mock(import("../auth/app-context-functions"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    getCurrentAppContext:
+      mockedGetCurrentAppContext as unknown as typeof actual.getCurrentAppContext,
+  };
+});
 
 vi.mock(import("./organization-server"), async (importActual) => {
   const actual = await importActual();
@@ -125,6 +181,39 @@ vi.mock(import("#/lib/auth-client"), async (importActual) => {
 
 describe("organization access helpers", () => {
   beforeEach(() => {
+    mockedGetGlobalStartContext.mockImplementation(() => {
+      throw new Error("No global app server context");
+    });
+    mockedGetCurrentAppContext.mockImplementation(async () => {
+      const sessionResult = await mockedGetSession();
+      const session =
+        sessionResult?.data === null || sessionResult?.data === undefined
+          ? null
+          : {
+              ...createAppContextSession({
+                activeOrganizationId:
+                  sessionResult.data.session.activeOrganizationId,
+                id: sessionResult.data.session.id,
+              }),
+              session: {
+                ...createAppContextSession({
+                  activeOrganizationId:
+                    sessionResult.data.session.activeOrganizationId,
+                  id: sessionResult.data.session.id,
+                }).session,
+                ...sessionResult.data.session,
+              },
+              user: {
+                ...createAppContextSession().user,
+                ...sessionResult.data.user,
+              },
+            };
+
+      return {
+        session,
+        activeOrganizationId: session?.session.activeOrganizationId ?? null,
+      };
+    });
     mockedGetClientActiveMemberRole.mockResolvedValue({
       data: {
         role: "owner",
@@ -141,6 +230,7 @@ describe("organization access helpers", () => {
   });
 
   afterEach(() => {
+    clearAppContextClientCache();
     clearOrganizationAccessClientCache();
     vi.clearAllMocks();
   });
@@ -156,6 +246,112 @@ describe("organization access helpers", () => {
       { id: "org_123", name: "Acme", slug: "acme" },
     ]);
     expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("prefers request app context organizations over client organization lookups", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetGlobalStartContext.mockReturnValue({
+      organizations: [
+        { id: "org_context", name: "Context Org", slug: "context-org" },
+      ],
+    });
+    mockedGetClientOrganizations.mockRejectedValue(
+      new Error("Better Auth organization list should not run")
+    );
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_context", name: "Context Org", slug: "context-org" },
+    ]);
+    expect(mockedGetCurrentAppContext).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+    expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("lists organizations through Better Auth without fetching app context when no app context cache exists", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_auth", name: "Auth Org", slug: "auth-org" }],
+      error: null,
+    });
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_auth", name: "Auth Org", slug: "auth-org" },
+    ]);
+    expect(mockedGetCurrentAppContext).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("prefers a fresh browser app context cache with organizations when no request context exists", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_context" }),
+      activeOrganizationId: "org_context",
+      organizations: [
+        { id: "org_context", name: "Context Org", slug: "context-org" },
+      ],
+    });
+    mockedGetClientOrganizations.mockRejectedValue(
+      new Error("Better Auth organization list should not run")
+    );
+
+    await expect(getCachedClientAppContext()).resolves.toMatchObject({
+      activeOrganizationId: "org_context",
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_context", name: "Context Org", slug: "context-org" },
+    ]);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("falls back to the Better Auth organization list when the fresh browser app context cache has no organizations", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_auth" }),
+      activeOrganizationId: "org_auth",
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [{ id: "org_auth", name: "Auth Org", slug: "auth-org" }],
+      error: null,
+    });
+
+    await expect(getCachedClientAppContext()).resolves.toMatchObject({
+      activeOrganizationId: "org_auth",
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+
+    await expect(listOrganizations()).resolves.toStrictEqual([
+      { id: "org_auth", name: "Auth Org", slug: "auth-org" },
+    ]);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetClientOrganizations).toHaveBeenCalledOnce();
+  }, 1000);
+
+  it("uses the browser app context session for organization access checks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_context" }),
+      activeOrganizationId: "org_context",
+      organizations: [
+        { id: "org_context", name: "Context Org", slug: "context-org" },
+      ],
+    });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run")
+    );
+
+    await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
+      activeOrganizationId: "org_context",
+      activeOrganizationSync: {
+        required: false,
+        targetOrganizationId: "org_context",
+      },
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
   it("sets the client active organization through Better Auth", async () => {
@@ -307,11 +503,21 @@ describe("organization access helpers", () => {
       ensureActiveOrganizationIdForSession({
         session: {
           activeOrganizationId: serverOrganizationId,
+          createdAt: "2026-05-24T10:00:00.000Z",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          id: "session_server_context",
+          token: "session-server-context-token",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_server",
         },
         user: {
+          createdAt: "2026-05-24T10:00:00.000Z",
           email: "server@example.com",
+          emailVerified: true,
           id: "user_server",
+          image: null,
           name: "Server User",
+          updatedAt: "2026-05-24T10:00:00.000Z",
         },
       })
     ).resolves.toMatchObject({
@@ -452,7 +658,7 @@ describe("organization access helpers", () => {
       error: null,
     });
 
-    await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+    await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
       activeOrganization: {
         id: "org_current",
         name: "Current Org",
@@ -505,7 +711,7 @@ describe("organization access helpers", () => {
       error: null,
     });
 
-    await expect(ensureActiveOrganizationId()).resolves.toStrictEqual({
+    await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
       activeOrganization: {
         id: "org_first",
         name: "First Org",

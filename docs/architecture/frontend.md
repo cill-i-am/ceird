@@ -206,11 +206,14 @@ step before navigating into the app. Skipping or completing this step enters the
 active workspace; invite creation uses Better Auth's
 `authClient.organization.inviteMember` with the newly created organization ID.
 
-Client-side auth route guards reuse fresh authenticated session lookups for a
-short window through `features/auth/client-session-cache.ts`. Organization route
-guards layer browser-memory organization-list and active-member-role caches in
-`features/organizations/organization-access.ts`. These caches skip
-unauthenticated sessions and are cleared after sign-in, sign-up,
+Client-side auth route guards reuse the app auth context snapshot for a short
+window through `features/auth/app-context-client-cache.ts`, so protected-route
+navigation can share the same session and active-organization context read.
+Organization route guards prefer hydrated app/request context for session and
+organization-list reads, then fall back to Better Auth client organization APIs
+for UI paths that do not yet have organization data in the snapshot. The older
+session, organization-list, and active-member-role caches still support direct
+Better Auth fallbacks and are cleared after sign-in, sign-up,
 active-organization changes, first organization creation, invitation acceptance,
 and sign-out so route transitions do not fan out repeated Better Auth requests
 while identity state changes still force a fresh read.

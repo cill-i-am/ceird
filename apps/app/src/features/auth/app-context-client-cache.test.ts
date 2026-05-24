@@ -1,6 +1,7 @@
 import {
   clearAppContextClientCache,
   getCachedClientAppContext,
+  readFreshCachedClientAppContext,
 } from "./app-context-client-cache";
 
 const { mockedGetCurrentAppContext } = vi.hoisted(() => ({
@@ -61,6 +62,19 @@ describe("app context client cache", () => {
     );
     await expect(getCachedClientAppContext()).resolves.toStrictEqual(
       authenticatedSnapshot
+    );
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+  });
+
+  it("peeks only existing fresh snapshots without fetching", async () => {
+    expect(readFreshCachedClientAppContext()).toBeUndefined();
+    expect(mockedGetCurrentAppContext).not.toHaveBeenCalled();
+
+    mockedGetCurrentAppContext.mockResolvedValue(authenticatedSnapshot);
+    const cachedSnapshot = await getCachedClientAppContext();
+
+    await expect(readFreshCachedClientAppContext()).resolves.toStrictEqual(
+      cachedSnapshot
     );
     expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
   });

@@ -1,10 +1,13 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
 import { readAppServerContext } from "#/features/auth/app-server-context";
+import { getLoginNavigationTarget } from "#/features/auth/auth-navigation";
 import { AuthenticatedAppLayout } from "#/features/auth/authenticated-app-layout";
 import { requireAuthenticatedSession } from "#/features/auth/require-authenticated-session";
+import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: loadAuthenticatedAppRoute,
@@ -15,17 +18,25 @@ export async function loadAuthenticatedAppRoute(input?: {
   readonly serverContext?: unknown;
 }) {
   const serverContext = readAppServerContext(input?.serverContext);
+  const clientAppContext =
+    serverContext.authSession === undefined && !isServerEnvironment()
+      ? await getCachedClientAppContext()
+      : undefined;
   const session =
-    serverContext.authSession === undefined
-      ? await requireAuthenticatedSession()
-      : await requireAuthenticatedServerContextSession(
+    serverContext.authSession !== undefined
+      ? await requireAuthenticatedServerContextSession(
           serverContext.authSession
-        );
-  const activeOrganizationId = session.session.activeOrganizationId
-    ? decodeOrganizationId(session.session.activeOrganizationId)
-    : null;
+        )
+      : clientAppContext
+        ? requireAuthenticatedClientContextSession(clientAppContext.session)
+        : await requireAuthenticatedSession();
+  const activeOrganizationId =
+    clientAppContext === undefined
+      ? decodeActiveOrganizationIdFromSession(session)
+      : clientAppContext.activeOrganizationId;
   const currentOrganizationRole =
     serverContext.currentOrganizationRole ??
+    clientAppContext?.currentOrganizationRole ??
     (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId));
 
   return { activeOrganizationId, currentOrganizationRole, session };
@@ -39,6 +50,24 @@ async function requireAuthenticatedServerContextSession(
   }
 
   return session;
+}
+
+function requireAuthenticatedClientContextSession(
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>> | null
+) {
+  if (!session) {
+    throw redirect(getLoginNavigationTarget());
+  }
+
+  return session;
+}
+
+function decodeActiveOrganizationIdFromSession(
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>>
+) {
+  return session.session.activeOrganizationId
+    ? decodeOrganizationId(session.session.activeOrganizationId)
+    : null;
 }
 
 async function resolveCurrentOrganizationRoleOrUndefined(

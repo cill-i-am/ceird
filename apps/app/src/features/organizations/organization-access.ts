@@ -16,14 +16,16 @@ import { redirect } from "@tanstack/react-router";
 
 import { authClient } from "#/lib/auth-client";
 
+import {
+  clearAppContextClientCache,
+  getCachedClientAppContext,
+  readFreshCachedClientAppContext,
+} from "../auth/app-context-client-cache";
 import { readGlobalAppServerContext } from "../auth/app-server-context";
 import { getLoginNavigationTarget } from "../auth/auth-navigation";
-import {
-  clearClientAuthSessionCache,
-  getCachedClientAuthSession,
-} from "../auth/client-session-cache";
-import type { ClientAuthSession as Session } from "../auth/client-session-cache";
+import { clearClientAuthSessionCache } from "../auth/client-session-cache";
 import { isServerEnvironment } from "../auth/runtime-environment";
+import type { ServerAuthSession as Session } from "../auth/server-session-types";
 
 const importOrganizationServer = () => import("./organization-server");
 const CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS = 10_000;
@@ -57,6 +59,7 @@ const clientOrganizationRoleCache = new Map<
 >();
 
 export function clearOrganizationAccessClientCache() {
+  clearAppContextClientCache();
   clearClientAuthSessionCache();
   clientOrganizationsCache = undefined;
   clientOrganizationRoleCache.clear();
@@ -69,7 +72,7 @@ async function getCurrentSession(): Promise<Session | null> {
     return await getCurrentServerOrganizationSession();
   }
 
-  return await getCachedClientAuthSession();
+  return (await getCachedClientAppContext()).session;
 }
 
 export async function listOrganizations(): Promise<
@@ -86,6 +89,12 @@ export async function listOrganizations(): Promise<
     return await getCurrentServerOrganizations();
   }
 
+  const clientAppContext = await readFreshCachedClientAppContext();
+
+  if (clientAppContext?.organizations !== undefined) {
+    return clientAppContext.organizations;
+  }
+
   return await getCachedClientOrganizations();
 }
 
@@ -96,8 +105,7 @@ async function getCachedClientOrganizations(): Promise<
     return await clientOrganizationsCache.promise;
   }
 
-  const promise = (async () =>
-    readClientOrganizations(await authClient.organization.list()))();
+  const promise = listBetterAuthClientOrganizations();
 
   clientOrganizationsCache = createClientCacheEntry(promise);
 
@@ -110,6 +118,13 @@ async function getCachedClientOrganizations(): Promise<
 
     throw error;
   }
+}
+
+function listBetterAuthClientOrganizations(): Promise<
+  readonly OrganizationSummary[]
+> {
+  return (async () =>
+    readClientOrganizations(await authClient.organization.list()))();
 }
 
 export async function ensureActiveOrganizationId() {
