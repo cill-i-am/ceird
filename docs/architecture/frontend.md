@@ -186,28 +186,25 @@ Domain API access is contract-based:
 - `features/jobs/jobs-server-ssr.ts` reads request headers, forwards cookies and
   proxy headers, and calls the API from the server runtime.
 
-Organization and auth helpers call Better Auth endpoints directly because those
-routes are owned by Better Auth rather than the jobs `HttpApi` contract:
+The frontend has two deliberately separate API lanes.
+
+The app/auth lane owns shell identity and organization context. TanStack Start
+request middleware reads the authenticated request once, and app-owned server
+functions handle Better Auth operations that need server cookies or app shell
+state. This lane includes:
 
 - `lib/auth-client.ts`
 - `lib/auth-client.server.ts`
+- `features/auth/app-context-functions.ts`
+- `features/auth/app-context-middleware.ts`
 - `features/auth/server-session.ts`
 - `features/organizations/organization-server.ts`
 - `features/auth/sign-out.ts`
 
-The `/create-organization` onboarding route stays outside the app shell while
-the first workspace is created. The client submits only the team name to
-`features/organizations/organization-server.ts`; that server helper generates
-the Better Auth organization slug, forwards auth cookies from the Better Auth
-response, sets the new organization as active for the current session when
-Better Auth accepts the sync, decodes the created organization summary, and
-returns that summary to the client. The same onboarding page then offers an optional invite-members
-step before navigating into the app. Skipping or completing this step enters the
-active workspace; invite creation uses Better Auth's
-`authClient.organization.inviteMember` with the newly created organization ID.
-
-Client-side auth route guards reuse the app auth context snapshot for a short
-window through `features/auth/app-context-client-cache.ts`, so protected-route
+The app/auth lane may use short-lived browser caches for shell context only:
+session, active organization, organization list, and current role. Client-side
+auth route guards reuse the app auth context snapshot for a short window
+through `features/auth/app-context-client-cache.ts`, so protected-route
 navigation can share the same session and active-organization context read.
 Organization route guards prefer hydrated app/request context for session and
 organization-list reads, then fall back to Better Auth client organization APIs
@@ -219,6 +216,29 @@ organization-list cache, and member-role cache after sign-in, sign-up,
 active-organization changes, first organization creation, invitation acceptance,
 and sign-out so route transitions do not fan out repeated Better Auth requests
 while identity state changes still force a fresh read.
+
+The domain data lane calls the typed domain API directly for product data:
+jobs, sites, activity, comments, labels, and future ElectricSQL/TanStack DB
+synced product state. Keep these reads and writes outside app server functions.
+The API/domain layer remains the product authorization, validation, and sync
+boundary; the app shell must not proxy product data through app-owned
+server-function middleware just to reuse auth context.
+
+Route parents own shell context. The `/_app` parent establishes authenticated
+session context, and the `/_app/_org` parent establishes the active
+organization context. Child routes reuse parent route context and load only
+their route-specific product data through the domain data lane.
+
+The `/create-organization` onboarding route stays outside the app shell while
+the first workspace is created. The client submits only the team name to
+`features/organizations/organization-server.ts`; that server helper generates
+the Better Auth organization slug, forwards auth cookies from the Better Auth
+response, sets the new organization as active for the current session when
+Better Auth accepts the sync, decodes the created organization summary, and
+returns that summary to the client. The same onboarding page then offers an optional invite-members
+step before navigating into the app. Skipping or completing this step enters the
+active workspace; invite creation uses Better Auth's
+`authClient.organization.inviteMember` with the newly created organization ID.
 
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with

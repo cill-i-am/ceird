@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/no-array-sort */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, posix, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -56,6 +56,21 @@ const SITE_OR_LABEL_OWNED_JOBS_CORE_IMPORTS = new Set([
   "normalizeLabelName",
   "normalizeJobLabelName",
 ]);
+const PRODUCT_DOMAIN_FEATURE_PREFIXES = [
+  "features/jobs/",
+  "features/sites/",
+  "features/activity/",
+] as const;
+const APP_AUTH_SERVER_FUNCTION_LANE_MODULES = new Set([
+  "features/auth/app-context-functions",
+  "features/auth/app-context-middleware",
+  "features/auth/app-server-context",
+  "features/auth/auth-request-context.server",
+  "features/auth/server-session",
+  "features/auth/server-session-impl.server",
+  "features/organizations/organization-server",
+  "features/organizations/organization-server-impl.server",
+]);
 
 interface SourceFile {
   readonly filePath: string;
@@ -106,6 +121,56 @@ describe("app domain package boundaries", () => {
     }
 
     expect(violations).toStrictEqual([]);
+  });
+
+  it("keeps product domain features outside app auth server functions", () => {
+    const violations: string[] = [];
+
+    for (const { filePath, source } of SOURCE_FILES) {
+      if (!isProductDomainFeature(filePath)) {
+        continue;
+      }
+
+      violations.push(
+        ...findAppAuthServerFunctionLaneImportViolations(filePath, source)
+      );
+    }
+
+    expect(violations).toStrictEqual([]);
+  });
+
+  it("reports app auth server-function lane import violations", () => {
+    expect(
+      findAppAuthServerFunctionLaneImportViolations(
+        "features/jobs/example.ts",
+        `
+          import { getCurrentAppContext } from "#/features/auth/app-context-functions";
+          const organizationServer = import("../organizations/organization-server");
+        `
+      )
+    ).toStrictEqual([
+      "features/jobs/example.ts: #/features/auth/app-context-functions -> features/auth/app-context-functions",
+      "features/jobs/example.ts: ../organizations/organization-server -> features/organizations/organization-server",
+    ]);
+
+    expect(
+      findAppAuthServerFunctionLaneImportViolations(
+        "features/jobs/detail/example.ts",
+        `
+          import { getCurrentAppContext } from "../../auth/app-context-functions";
+          import { getCurrentAppContext as getAliasedAppContext } from "@/features/auth/app-context-functions";
+          import "@/features/auth/app-context-middleware";
+          import "../../auth/app-context-middleware";
+          const organizationServer = import("../../organizations/organization-server");
+        `
+      )
+    ).toStrictEqual([
+      "features/jobs/detail/example.ts: ../../auth/app-context-functions -> features/auth/app-context-functions",
+      "features/jobs/detail/example.ts: @/features/auth/app-context-functions -> features/auth/app-context-functions",
+      "features/jobs/detail/example.ts: @/features/auth/app-context-middleware -> features/auth/app-context-middleware",
+      "features/jobs/detail/example.ts: ../../auth/app-context-middleware -> features/auth/app-context-middleware",
+      "features/jobs/detail/example.ts: ../../organizations/organization-server -> features/organizations/organization-server",
+    ]);
   });
 });
 
@@ -188,6 +253,74 @@ function findJobsFeatureImportViolations(filePath: string, source: string) {
   }
 
   return violations;
+}
+
+function isProductDomainFeature(filePath: string) {
+  return PRODUCT_DOMAIN_FEATURE_PREFIXES.some((prefix) =>
+    filePath.startsWith(prefix)
+  );
+}
+
+function findAppAuthServerFunctionLaneImportViolations(
+  filePath: string,
+  source: string
+) {
+  const violations: string[] = [];
+  const importPattern =
+    /(?:from\s+["'](?<staticSpecifier>[^"']+)["']|import\s+["'](?<sideEffectSpecifier>[^"']+)["']|import\s*\(\s*["'](?<dynamicSpecifier>[^"']+)["']\s*\))/g;
+
+  for (const match of source.matchAll(importPattern)) {
+    const specifier =
+      match.groups?.staticSpecifier ??
+      match.groups?.sideEffectSpecifier ??
+      match.groups?.dynamicSpecifier;
+    const forbiddenTarget =
+      specifier === undefined
+        ? undefined
+        : getForbiddenAppAuthServerFunctionLaneTarget(filePath, specifier);
+
+    if (specifier !== undefined && forbiddenTarget !== undefined) {
+      violations.push(`${filePath}: ${specifier} -> ${forbiddenTarget}`);
+    }
+  }
+
+  return violations;
+}
+
+function getForbiddenAppAuthServerFunctionLaneTarget(
+  filePath: string,
+  specifier: string
+) {
+  const srcRelativeSpecifier = toSrcRelativeImportSpecifier(
+    filePath,
+    specifier
+  );
+
+  if (srcRelativeSpecifier === undefined) {
+    return undefined;
+  }
+
+  const resolvedTarget = stripTypeScriptExtension(srcRelativeSpecifier);
+
+  return APP_AUTH_SERVER_FUNCTION_LANE_MODULES.has(resolvedTarget)
+    ? resolvedTarget
+    : undefined;
+}
+
+function toSrcRelativeImportSpecifier(filePath: string, specifier: string) {
+  if (specifier.startsWith("#/") || specifier.startsWith("@/")) {
+    return specifier.slice(2);
+  }
+
+  if (!specifier.startsWith(".")) {
+    return undefined;
+  }
+
+  return posix.normalize(posix.join(posix.dirname(filePath), specifier));
+}
+
+function stripTypeScriptExtension(specifier: string) {
+  return specifier.replace(/\.(?:[cm]?ts|tsx)$/u, "");
 }
 
 function getSourceFiles(directory: string): readonly string[] {
