@@ -1,8 +1,5 @@
 import { readGlobalAppServerContext } from "./app-server-context";
-import {
-  readOptionalServerAuthSessionForRequest,
-  readOptionalServerAuthSessionFromHeaders,
-} from "./auth-request-context.server";
+import { readOptionalServerAuthSessionFromHeaders } from "./auth-request-context.server";
 
 export async function getCurrentServerSessionDirect() {
   const { getRequestHeader } = await import("@tanstack/react-start/server");
@@ -15,10 +12,4 @@ export async function getCurrentServerSessionDirect() {
   return await readOptionalServerAuthSessionFromHeaders((name) =>
     getRequestHeader(name)
   );
-}
-
-export async function readOptionalServerAuthSessionFromRequest(
-  request: Request
-) {
-  return await readOptionalServerAuthSessionForRequest(request);
 }

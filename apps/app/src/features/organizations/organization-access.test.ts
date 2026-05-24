@@ -6,6 +6,7 @@ import {
   clearAppContextClientCache,
   getCachedClientAppContext,
 } from "../auth/app-context-client-cache";
+import { decodeServerAuthSession } from "../auth/app-context-types";
 import {
   clearOrganizationAccessClientCache,
   ensureActiveOrganizationId,
@@ -63,7 +64,6 @@ function createAppContextSession(input?: {
       updatedAt: "2026-05-24T10:00:00.000Z",
       userId: "user_app_context",
       expiresAt: "2026-05-31T10:00:00.000Z",
-      token: `${id}-token`,
       activeOrganizationId: input?.activeOrganizationId,
     },
     user: {
@@ -500,26 +500,28 @@ describe("organization access helpers", () => {
     ]);
 
     await expect(
-      ensureActiveOrganizationIdForSession({
-        session: {
-          activeOrganizationId: serverOrganizationId,
-          createdAt: "2026-05-24T10:00:00.000Z",
-          expiresAt: "2026-05-31T10:00:00.000Z",
-          id: "session_server_context",
-          token: "session-server-context-token",
-          updatedAt: "2026-05-24T10:00:00.000Z",
-          userId: "user_server",
-        },
-        user: {
-          createdAt: "2026-05-24T10:00:00.000Z",
-          email: "server@example.com",
-          emailVerified: true,
-          id: "user_server",
-          image: null,
-          name: "Server User",
-          updatedAt: "2026-05-24T10:00:00.000Z",
-        },
-      })
+      ensureActiveOrganizationIdForSession(
+        decodeServerAuthSession({
+          session: {
+            activeOrganizationId: serverOrganizationId,
+            createdAt: "2026-05-24T10:00:00.000Z",
+            expiresAt: "2026-05-31T10:00:00.000Z",
+            id: "session_server_context",
+            token: "session-server-context-token",
+            updatedAt: "2026-05-24T10:00:00.000Z",
+            userId: "user_server",
+          },
+          user: {
+            createdAt: "2026-05-24T10:00:00.000Z",
+            email: "server@example.com",
+            emailVerified: true,
+            id: "user_server",
+            image: null,
+            name: "Server User",
+            updatedAt: "2026-05-24T10:00:00.000Z",
+          },
+        })
+      )
     ).resolves.toMatchObject({
       activeOrganization: {
         id: serverOrganizationId,
@@ -782,7 +784,6 @@ describe("organization access helpers", () => {
         updatedAt: "2026-04-04T17:08:12.497Z",
         userId: "user_123",
         expiresAt: "2026-04-11T17:08:12.497Z",
-        token: "session-token",
         ipAddress: "",
         userAgent: "curl/8.7.1",
       },
@@ -821,7 +822,6 @@ describe("organization access helpers", () => {
         updatedAt: "2026-04-04T17:08:12.497Z",
         userId: "user_123",
         expiresAt: "2026-04-11T17:08:12.497Z",
-        token: "session-token",
         ipAddress: "",
         userAgent: "curl/8.7.1",
       },
@@ -864,7 +864,6 @@ describe("organization access helpers", () => {
           updatedAt: "2026-04-04T17:08:12.497Z",
           userId: "user_123",
           expiresAt: "2026-04-11T17:08:12.497Z",
-          token: "session-token",
           ipAddress: "",
           userAgent: "curl/8.7.1",
         },

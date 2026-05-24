@@ -441,13 +441,54 @@ returns `null`.
 
 Rule:
 
-- SSR uses `getCurrentServerSession()`
-- browser runtime uses `authClient.getSession()`
+- SSR uses `getCurrentServerSession()` and the request-scoped app context when
+  TanStack Start middleware has already hydrated it
+- browser runtime uses `getCachedClientAppContext()`, which calls the
+  `getCurrentAppContext` server function and reuses the decoded app auth
+  snapshot briefly during route transitions
 
 This keeps auth decisions consistent across:
 
 - initial server render
 - client-side navigation after hydration
+
+### App Auth Context Snapshot
+
+The app shell has a narrow, schema-validated context boundary under
+`apps/app/src/features/auth`:
+
+- `app-context-types.ts` defines the `Effect/Schema` contracts for the server
+  auth session and app auth context snapshot, including branded session, user,
+  and organization IDs
+- `auth-request-context.server.ts` reads the current request cookies, forwards
+  the public host/protocol headers to Better Auth, and builds the snapshot
+- `app-context-middleware.ts` wires TanStack Start request middleware for app
+  routes and function middleware for app-owned auth/organization server
+  functions
+- `app-context-functions.ts` exposes the browser-readable
+  `getCurrentAppContext` server function
+- `app-context-client-cache.ts` and `app-context-client-cache-state.ts` keep a
+  short-lived browser promise cache for route guards without importing the
+  server-function path into auth mutation chunks
+
+Organization routes ask the snapshot to hydrate the organization list and the
+current active member role. The `_app` parent route reads that snapshot first,
+then `_app/_org` resolves the active organization and only falls back to Better
+Auth client organization APIs when the snapshot did not contain enough
+organization context.
+
+Rules:
+
+- app auth context is only for shell identity and organization context:
+  session, active organization, organization list, and current role
+- raw Better Auth session payloads are decoded server-side with the session
+  token present, then the token is stripped before the app context snapshot or
+  browser cache can observe the session
+- product data stays on the domain API lane rather than moving through app
+  server functions
+- route guards decode snapshot data with `Effect/Schema` before trusting it
+- sign-in, sign-up, sign-out, organization creation, invitation acceptance, and
+  active-organization switching clear the browser auth/organization caches
 
 ## Route Model
 
@@ -472,8 +513,9 @@ access policy.
 Behavior:
 
 - `/login` and `/signup`: if a session exists, redirect to `/`
-- `/login` and `/signup`: if session lookup fails unexpectedly, treat the user
-  as unauthenticated and allow the page to render
+- `/login` and `/signup`: if there is no session, render the public page
+- `/login` and `/signup`: if session lookup fails unexpectedly, let the failure
+  surface so broken auth infrastructure is observable
 - `/verify-email`: render the result route without gating it on session state
 - `/forgot-password` and `/reset-password`: render as public recovery routes
   without `redirectIfAuthenticated`
@@ -488,12 +530,12 @@ that guard.
 
 Design rule:
 
-- guest-only entry routes fail open on lookup failure
+- guest-only entry routes only continue for a positive no-session result
 - verification result routes stay public and should not block on the current
   session state
 - public recovery routes stay reachable regardless of session state
-- we prefer preserving access to public auth and recovery routes over blocking
-  the user due to a transient session-read problem
+- unexpected session-read failures should not be silently converted into
+  unauthenticated state
 - verification result and password recovery remain outside `/_app` because
   they are account lifecycle flows, not authenticated product flows
 
@@ -509,7 +551,8 @@ Behavior:
 
 - if a session exists, route loading continues
 - if no session exists, redirect to `/login`
-- if session lookup throws unexpectedly, also redirect to `/login`
+- if session lookup throws unexpectedly, let the failure surface so the route
+  does not mask auth infrastructure or schema drift as a normal login redirect
 
 This is implemented by
 `apps/app/src/features/auth/require-authenticated-session.ts`.
@@ -517,7 +560,9 @@ This is implemented by
 Design rule:
 
 - protected routes fail closed
-- infrastructure uncertainty is treated the same as unauthenticated access
+- explicit no-session results are treated as unauthenticated access
+- infrastructure uncertainty and malformed session payloads are observable
+  failures
 
 ### Email Verification Reminder
 
@@ -696,8 +741,10 @@ This is a deliberate anti-enumeration and UX decision.
 
 Rules:
 
-- protected session lookup failure -> redirect to `/login`
-- guest-route session lookup failure -> continue rendering guest page
+- protected no-session result -> redirect to `/login`
+- guest-route no-session result -> continue rendering guest page
+- unexpected session lookup failure -> surface the error instead of pretending
+  the user is signed out
 - sign-out failure -> keep the user in place and show a small error message
 
 ## Sign-Out Behavior
@@ -732,7 +779,8 @@ These are the important current rules we are following.
 - revoke existing sessions on successful password reset
 - use server-first session lookup for SSR-protected routes
 - fail closed for protected routes
-- fail open for guest-only routes
+- keep guest-only routes public only after a successful no-session lookup
+- surface unexpected auth lookup failures instead of swallowing them
 - normalize and validate auth form input before submission
 - avoid leaking raw auth backend errors into the UI
 

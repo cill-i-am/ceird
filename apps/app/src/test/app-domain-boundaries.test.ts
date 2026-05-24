@@ -62,6 +62,11 @@ const PRODUCT_DOMAIN_FEATURE_PREFIXES = [
   "features/sites/",
   "features/activity/",
 ] as const;
+const PRODUCT_DOMAIN_ROUTE_FILE_PREFIXES = [
+  "routes/_app._org.activity",
+  "routes/_app._org.jobs",
+  "routes/_app._org.sites",
+] as const;
 const APP_AUTH_SERVER_FUNCTION_LANE_MODULES = new Set([
   "features/auth/app-context-client-cache",
   "features/auth/app-context-client-cache-state",
@@ -122,7 +127,7 @@ describe("app domain package boundaries", () => {
     const violations: string[] = [];
 
     for (const { filePath, source } of getAppSourceFiles()) {
-      if (!isProductDomainFeature(filePath)) {
+      if (!isProductDomainSource(filePath)) {
         continue;
       }
 
@@ -169,6 +174,19 @@ describe("app domain package boundaries", () => {
       "features/jobs/detail/example.ts: @/features/auth/app-context-middleware -> features/auth/app-context-middleware",
       "features/jobs/detail/example.ts: ../../auth/app-context-middleware -> features/auth/app-context-middleware",
       "features/jobs/detail/example.ts: ../../organizations/organization-server -> features/organizations/organization-server",
+    ]);
+
+    expect(
+      findAppAuthServerFunctionLaneImportViolations(
+        "routes/_app._org.jobs.tsx",
+        `
+          import { getCurrentAppContext } from "#/features/auth/app-context-functions";
+          const organizationAccess = import("#/features/organizations/organization-access");
+        `
+      )
+    ).toStrictEqual([
+      "routes/_app._org.jobs.tsx: #/features/auth/app-context-functions -> features/auth/app-context-functions",
+      "routes/_app._org.jobs.tsx: #/features/organizations/organization-access -> features/organizations/organization-access",
     ]);
   });
 });
@@ -269,9 +287,14 @@ function findJobsFeatureImportViolations(filePath: string, source: string) {
   return violations;
 }
 
-function isProductDomainFeature(filePath: string) {
-  return PRODUCT_DOMAIN_FEATURE_PREFIXES.some((prefix) =>
-    filePath.startsWith(prefix)
+function isProductDomainSource(filePath: string) {
+  return (
+    PRODUCT_DOMAIN_FEATURE_PREFIXES.some((prefix) =>
+      filePath.startsWith(prefix)
+    ) ||
+    PRODUCT_DOMAIN_ROUTE_FILE_PREFIXES.some((prefix) =>
+      filePath.startsWith(prefix)
+    )
   );
 }
 

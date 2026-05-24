@@ -60,9 +60,10 @@ const getCurrentServerOrganizationMemberRoleFn = createServerFn({
   .handler(async ({ data }) => {
     const { getCurrentServerOrganizationMemberRoleDirect } =
       await import("./organization-server-impl.server");
-    const organizationId = decodeOrganizationId(String(data));
 
-    return await getCurrentServerOrganizationMemberRoleDirect(organizationId);
+    return await getCurrentServerOrganizationMemberRoleDirect(
+      decodeOrganizationId(data)
+    );
   });
 
 export async function getCurrentServerOrganizationMemberRole(
@@ -81,9 +82,10 @@ const setCurrentServerActiveOrganizationFn = createServerFn({
   .handler(async ({ data }) => {
     const { setCurrentServerActiveOrganizationDirect } =
       await import("./organization-server-impl.server");
-    const organizationId = decodeOrganizationId(String(data));
 
-    return await setCurrentServerActiveOrganizationDirect(organizationId);
+    return await setCurrentServerActiveOrganizationDirect(
+      decodeOrganizationId(data)
+    );
   });
 
 export async function setCurrentServerActiveOrganization(

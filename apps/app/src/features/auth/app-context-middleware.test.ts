@@ -1,4 +1,7 @@
+import { decodeOrganizationId } from "@ceird/identity-core";
+
 import {
+  loadRequestAppContextMiddlewareContext,
   optionalAuthFunctionMiddleware,
   organizationAdminFunctionMiddleware,
   organizationFunctionMiddleware,
@@ -10,29 +13,30 @@ import { decodeServerAuthSession } from "./app-context-types";
 import type { ServerAuthSession } from "./app-context-types";
 import { buildAppAuthContextSnapshotForRequest } from "./auth-request-context.server";
 
+const betterAuthSessionWithActiveOrganization = {
+  session: {
+    id: "session_123",
+    createdAt: "2026-04-04T17:08:12.497Z",
+    updatedAt: "2026-04-04T17:08:12.497Z",
+    userId: "user_123",
+    expiresAt: "2026-04-11T17:08:12.497Z",
+    token: "session-token",
+    ipAddress: "",
+    userAgent: "curl/8.7.1",
+    activeOrganizationId: "org_123",
+  },
+  user: {
+    id: "user_123",
+    name: "Taylor Example",
+    email: "taylor@example.com",
+    image: null,
+    emailVerified: false,
+    createdAt: "2026-04-04T17:08:12.488Z",
+    updatedAt: "2026-04-04T17:08:12.488Z",
+  },
+};
 const authSessionWithActiveOrganization: ServerAuthSession =
-  decodeServerAuthSession({
-    session: {
-      id: "session_123",
-      createdAt: "2026-04-04T17:08:12.497Z",
-      updatedAt: "2026-04-04T17:08:12.497Z",
-      userId: "user_123",
-      expiresAt: "2026-04-11T17:08:12.497Z",
-      token: "session-token",
-      ipAddress: "",
-      userAgent: "curl/8.7.1",
-      activeOrganizationId: "org_123",
-    },
-    user: {
-      id: "user_123",
-      name: "Taylor Example",
-      email: "taylor@example.com",
-      image: null,
-      emailVerified: false,
-      createdAt: "2026-04-04T17:08:12.488Z",
-      updatedAt: "2026-04-04T17:08:12.488Z",
-    },
-  });
+  decodeServerAuthSession(betterAuthSessionWithActiveOrganization);
 
 function buildAuthRequest() {
   return new Request("https://app.example.com/", {
@@ -51,6 +55,16 @@ function createDeferredResponse() {
       };
     }
   ).withResolvers<Response>();
+}
+
+function createBetterAuthSessionPayload(session: ServerAuthSession) {
+  return {
+    ...session,
+    session: {
+      ...session.session,
+      token: "session-token",
+    },
+  };
 }
 
 describe("app/auth server function middleware exports", () => {
@@ -110,6 +124,75 @@ describe("app context request middleware route selection", () => {
   );
 });
 
+describe("app context request middleware payload", () => {
+  let originalApiOrigin: string | undefined;
+
+  beforeEach(() => {
+    originalApiOrigin = process.env.API_ORIGIN;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    if (originalApiOrigin === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.API_ORIGIN;
+    } else {
+      process.env.API_ORIGIN = originalApiOrigin;
+    }
+  });
+
+  it("skips request context for routes outside the app/auth lane", async () => {
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/health",
+        request: buildAuthRequest(),
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it("builds an auth-only request context for public auth routes", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/login",
+        request: new Request("https://app.example.com/login"),
+      })
+    ).resolves.toStrictEqual({
+      authSession: null,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("builds an organization-hydrated request context for organization routes", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+    ];
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/jobs",
+        request: buildAuthRequest(),
+      })
+    ).resolves.toStrictEqual({
+      authSession: authSessionWithActiveOrganization,
+      currentOrganizationRole: "admin",
+      organizations,
+    });
+  });
+});
+
 describe("app auth context snapshot for request", () => {
   let originalApiOrigin: string | undefined;
 
@@ -153,7 +236,11 @@ describe("app auth context snapshot for request", () => {
     process.env.API_ORIGIN = "https://api.example.com";
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json(authSessionWithActiveOrganization))
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
       .mockResolvedValueOnce(Response.json(organizations))
       .mockResolvedValueOnce(Response.json({ role: "owner" }));
 
@@ -194,7 +281,11 @@ describe("app auth context snapshot for request", () => {
     process.env.API_ORIGIN = "https://api.example.com";
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json(authSessionWithActiveOrganization));
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      );
 
     await expect(
       buildAppAuthContextSnapshotForRequest(buildAuthRequest(), {
@@ -302,13 +393,13 @@ describe("app auth context snapshot for request", () => {
   });
 
   it("resolves a missing active organization from the first organization without fetching the session again", async () => {
-    const authSessionWithoutActiveOrganization = decodeServerAuthSession({
+    const authSessionWithoutActiveOrganization: ServerAuthSession = {
       ...authSessionWithActiveOrganization,
       session: {
         ...authSessionWithActiveOrganization.session,
         activeOrganizationId: null,
       },
-    });
+    };
     const organizations = [
       { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
       { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
@@ -346,13 +437,13 @@ describe("app auth context snapshot for request", () => {
   });
 
   it("resolves a stale active organization from the first organization and reads that role", async () => {
-    const authSessionWithStaleActiveOrganization = decodeServerAuthSession({
+    const authSessionWithStaleActiveOrganization: ServerAuthSession = {
       ...authSessionWithActiveOrganization,
       session: {
         ...authSessionWithActiveOrganization.session,
-        activeOrganizationId: "org_stale",
+        activeOrganizationId: decodeOrganizationId("org_stale"),
       },
-    });
+    };
     const organizations = [
       { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
       { id: "org_789", name: "Gamma Field Ops", slug: "gamma-field-ops" },
@@ -393,13 +484,13 @@ describe("app auth context snapshot for request", () => {
   });
 
   it("preserves default organization hydration behavior when active organization is missing", async () => {
-    const authSessionWithoutActiveOrganization = decodeServerAuthSession({
+    const authSessionWithoutActiveOrganization: ServerAuthSession = {
       ...authSessionWithActiveOrganization,
       session: {
         ...authSessionWithActiveOrganization.session,
         activeOrganizationId: null,
       },
-    });
+    };
     process.env.API_ORIGIN = "https://api.example.com";
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
@@ -418,7 +509,11 @@ describe("app auth context snapshot for request", () => {
   it("rejects when organization list lookup fails", async () => {
     process.env.API_ORIGIN = "https://api.example.com";
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json(authSessionWithActiveOrganization))
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
       .mockResolvedValueOnce(new Response("boom", { status: 503 }))
       .mockResolvedValueOnce(Response.json({ role: "owner" }));
 
@@ -435,7 +530,11 @@ describe("app auth context snapshot for request", () => {
     ];
     process.env.API_ORIGIN = "https://api.example.com";
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json(authSessionWithActiveOrganization))
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
       .mockResolvedValueOnce(Response.json(organizations))
       .mockResolvedValueOnce(new Response("boom", { status: 503 }));
 
@@ -466,7 +565,9 @@ describe("app auth context snapshot for request", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
-        Response.json(authSessionWithoutActiveOrganization)
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithoutActiveOrganization)
+        )
       );
 
     await expect(

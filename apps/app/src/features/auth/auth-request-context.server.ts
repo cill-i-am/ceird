@@ -27,11 +27,41 @@ export interface ServerAuthRequest {
   readonly forwardedHeaders: ReturnType<typeof readServerApiForwardedHeaders>;
 }
 
-export function getHeaderFromRequest(request: Request): RequestHeaderReader {
+interface AuthRequestErrorContext {
+  readonly cause?: unknown;
+  readonly endpoint: string;
+  readonly operation: string;
+  readonly organizationId?: OrganizationId | undefined;
+  readonly responsePreview?: string | undefined;
+  readonly status?: number | undefined;
+}
+
+class ServerAuthContextError extends Error {
+  readonly endpoint: string;
+  readonly operation: string;
+  readonly organizationId?: OrganizationId | undefined;
+  readonly responsePreview?: string | undefined;
+  readonly status?: number | undefined;
+
+  constructor(message: string, context: AuthRequestErrorContext) {
+    super(
+      message,
+      context.cause === undefined ? undefined : { cause: context.cause }
+    );
+    this.name = "ServerAuthContextError";
+    this.endpoint = context.endpoint;
+    this.operation = context.operation;
+    this.organizationId = context.organizationId;
+    this.responsePreview = context.responsePreview;
+    this.status = context.status;
+  }
+}
+
+function getHeaderFromRequest(request: Request): RequestHeaderReader {
   return (name) => request.headers.get(name) ?? undefined;
 }
 
-export function readOptionalServerAuthRequest(
+function readOptionalServerAuthRequest(
   getRequestHeader: RequestHeaderReader
 ): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
@@ -86,7 +116,7 @@ export function readOptionalStrictSessionAuthRequest(
   return buildServerAuthRequest(getRequestHeader, cookie, authBaseURL);
 }
 
-export async function readOptionalServerAuthSessionForRequest(
+async function readOptionalServerAuthSessionForRequest(
   request: Request
 ): Promise<ServerAuthSession | null> {
   return await readOptionalServerAuthSessionFromHeaders(
@@ -186,62 +216,135 @@ export async function buildAppAuthContextSnapshotForRequest(
 export async function readOptionalServerAuthSessionFromHeaders(
   getRequestHeader: RequestHeaderReader
 ): Promise<ServerAuthSession | null> {
-  const authRequest = readOptionalServerAuthRequest(getRequestHeader);
+  const cookie = getRequestHeader("cookie");
 
-  if (!authRequest) {
+  if (!cookie) {
+    return null;
+  }
+
+  const authBaseURL = resolveConfiguredServerAuthBaseURL();
+  const endpoint = "get-session";
+
+  if (!authBaseURL) {
+    throw new ServerAuthContextError(
+      "Cannot resolve the auth base URL for session lookup.",
+      {
+        endpoint,
+        operation: "session_lookup",
+      }
+    );
+  }
+
+  const authRequest = buildServerAuthRequest(
+    getRequestHeader,
+    cookie,
+    authBaseURL
+  );
+  const url = new URL(endpoint, `${authRequest.authBaseURL}/`);
+  const response = await fetch(url, {
+    headers: buildAuthReadHeaders(authRequest),
+  }).catch((error: unknown) => {
+    throw new ServerAuthContextError("Session lookup request failed.", {
+      cause: error,
+      endpoint,
+      operation: "session_lookup",
+    });
+  });
+
+  if (response.status === 401 || response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new ServerAuthContextError(
+      `Session lookup failed with status ${response.status}.`,
+      {
+        endpoint,
+        operation: "session_lookup",
+        responsePreview: await readSafeResponsePreview(response),
+        status: response.status,
+      }
+    );
+  }
+
+  const payload = (await response.json().catch((error: unknown) => {
+    throw new ServerAuthContextError("Session lookup returned invalid JSON.", {
+      cause: error,
+      endpoint,
+      operation: "session_lookup",
+    });
+  })) as unknown;
+
+  if (payload === null) {
     return null;
   }
 
   try {
-    const response = await fetch(
-      new URL("get-session", `${authRequest.authBaseURL}/`),
+    return decodeServerAuthSession(payload);
+  } catch (error) {
+    throw new ServerAuthContextError(
+      "Session lookup returned an invalid payload.",
       {
-        headers: buildAuthReadHeaders(authRequest),
+        cause: error,
+        endpoint,
+        operation: "session_lookup",
       }
     );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as unknown;
-
-    if (payload === null) {
-      return null;
-    }
-
-    return decodeServerAuthSession(payload);
-  } catch {
-    return null;
   }
 }
 
 export async function readServerOrganizations(
   authRequest: ServerAuthRequest
 ): Promise<readonly OrganizationSummary[]> {
+  const endpoint = "organization/list";
   const response = await fetch(
-    new URL("organization/list", `${authRequest.authBaseURL}/`),
+    new URL(endpoint, `${authRequest.authBaseURL}/`),
     {
       headers: buildAuthReadHeaders(authRequest),
     }
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Organization lookup failed with status ${response.status}.`
+    throw new ServerAuthContextError(
+      `Organization lookup failed with status ${response.status}.`,
+      {
+        endpoint,
+        operation: "organization_list",
+        responsePreview: await readSafeResponsePreview(response),
+        status: response.status,
+      }
     );
   }
 
-  const organizations = (await response.json()) as unknown;
+  const organizations = (await response.json().catch((error: unknown) => {
+    throw new ServerAuthContextError(
+      "Organization lookup returned invalid JSON.",
+      {
+        cause: error,
+        endpoint,
+        operation: "organization_list",
+      }
+    );
+  })) as unknown;
 
   if (!organizations) {
-    throw new Error("Organization lookup returned no data.");
+    throw new ServerAuthContextError("Organization lookup returned no data.", {
+      endpoint,
+      operation: "organization_list",
+    });
   }
 
   try {
     return decodeOrganizationSummaryList(organizations);
-  } catch {
-    throw new Error("Organization lookup returned an invalid payload.");
+  } catch (error) {
+    throw new ServerAuthContextError(
+      "Organization lookup returned an invalid payload.",
+      {
+        cause: error,
+        endpoint,
+        operation: "organization_list",
+      }
+    );
   }
 }
 
@@ -249,11 +352,10 @@ export async function readServerOrganizationMemberRole(
   authRequest: ServerAuthRequest,
   organizationId: OrganizationId
 ): Promise<OrganizationMemberRoleResponse> {
+  const endpoint = "organization/get-active-member-role";
   const response = await fetch(
     new URL(
-      `organization/get-active-member-role?organizationId=${encodeURIComponent(
-        organizationId
-      )}`,
+      `${endpoint}?organizationId=${encodeURIComponent(organizationId)}`,
       `${authRequest.authBaseURL}/`
     ),
     {
@@ -262,18 +364,41 @@ export async function readServerOrganizationMemberRole(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Organization member role lookup failed with status ${response.status}.`
+    throw new ServerAuthContextError(
+      `Organization member role lookup failed with status ${response.status}.`,
+      {
+        endpoint,
+        operation: "organization_member_role",
+        organizationId,
+        responsePreview: await readSafeResponsePreview(response),
+        status: response.status,
+      }
     );
   }
 
-  const role = (await response.json()) as unknown;
+  const role = (await response.json().catch((error: unknown) => {
+    throw new ServerAuthContextError(
+      "Organization member role lookup returned invalid JSON.",
+      {
+        cause: error,
+        endpoint,
+        operation: "organization_member_role",
+        organizationId,
+      }
+    );
+  })) as unknown;
 
   try {
     return decodeOrganizationMemberRoleResponse(role);
-  } catch {
-    throw new Error(
-      "Organization member role lookup returned an invalid payload."
+  } catch (error) {
+    throw new ServerAuthContextError(
+      "Organization member role lookup returned an invalid payload.",
+      {
+        cause: error,
+        endpoint,
+        operation: "organization_member_role",
+        organizationId,
+      }
     );
   }
 }
@@ -289,9 +414,28 @@ async function readCurrentOrganizationRole(
     );
 
     return memberRole.role;
-  } catch {
-    // Role is an optimization here; route-level guards still enforce access.
+  } catch (error) {
+    logServerAuthContextWarning(
+      "Organization member role hydration failed; continuing without optimized role context.",
+      {
+        cause: error,
+        operation: "organization_member_role",
+        organizationId,
+      }
+    );
   }
+}
+
+export async function readRequiredCurrentOrganizationRoleForRequest(
+  request: Request,
+  organizationId: OrganizationId
+) {
+  const memberRole = await readServerOrganizationMemberRole(
+    readRequiredServerAuthRequest(getHeaderFromRequest(request)),
+    organizationId
+  );
+
+  return memberRole.role;
 }
 
 function resolveActiveOrganizationId(
@@ -336,4 +480,40 @@ function buildServerAuthRequest(
     cookie: normalizeServerApiCookieHeader(cookie, authBaseURL),
     forwardedHeaders,
   };
+}
+
+async function readSafeResponsePreview(response: Response) {
+  try {
+    const bodyText = await response.text();
+    return bodyText.slice(0, 256);
+  } catch {
+    return "";
+  }
+}
+
+function logServerAuthContextWarning(
+  message: string,
+  context: Omit<AuthRequestErrorContext, "endpoint"> & {
+    readonly endpoint?: string | undefined;
+  }
+) {
+  console.warn(message, {
+    cause: formatUnknownCause(context.cause),
+    endpoint: context.endpoint,
+    operation: context.operation,
+    organizationId: context.organizationId,
+    status: context.status,
+  });
+}
+
+function formatUnknownCause(cause: unknown) {
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+
+  if (cause === undefined) {
+    return;
+  }
+
+  return String(cause);
 }

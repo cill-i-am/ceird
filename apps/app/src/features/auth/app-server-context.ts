@@ -30,7 +30,15 @@ export function readAppServerContext(input: unknown): AppServerContext {
       currentOrganizationRole: record.currentOrganizationRole,
       organizations: record.organizations,
     });
-  } catch {
+  } catch (error) {
+    console.warn("Invalid app server context discarded.", {
+      cause: formatUnknownCause(error),
+      fields: {
+        authSession: "authSession" in record,
+        currentOrganizationRole: "currentOrganizationRole" in record,
+        organizations: "organizations" in record,
+      },
+    });
     return {};
   }
 }
@@ -41,4 +49,12 @@ export function readGlobalAppServerContext(): AppServerContext {
   } catch {
     return {};
   }
+}
+
+function formatUnknownCause(cause: unknown) {
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+
+  return String(cause);
 }

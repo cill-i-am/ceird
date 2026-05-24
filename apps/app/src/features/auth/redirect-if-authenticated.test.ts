@@ -18,7 +18,7 @@ const {
         updatedAt: Date;
         userId: string;
         expiresAt: Date;
-        token: string;
+        token?: string;
         ipAddress?: string | null;
         userAgent?: string | null;
       };
@@ -99,7 +99,6 @@ describe("auth route redirect guard", () => {
           updatedAt: "2026-04-03T12:00:00.000Z",
           userId: "user_123",
           expiresAt: "2026-04-10T12:00:00.000Z",
-          token: "session-token",
         },
         user: {
           id: "user_123",
@@ -137,7 +136,6 @@ describe("auth route redirect guard", () => {
           updatedAt: "2026-04-03T12:00:00.000Z",
           userId: "user_123",
           expiresAt: "2026-04-10T12:00:00.000Z",
-          token: "session-token",
         },
         user: {
           id: "user_123",
@@ -188,7 +186,6 @@ describe("auth route redirect guard", () => {
           updatedAt: "2026-04-03T12:00:00.000Z",
           userId: "user_cached",
           expiresAt: "2026-04-10T12:00:00.000Z",
-          token: "session-token",
         },
         user: {
           id: "user_cached",
@@ -234,7 +231,6 @@ describe("auth route redirect guard", () => {
         updatedAt: new Date("2026-04-03T12:00:00.000Z"),
         userId: "user_123",
         expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-        token: "session-token",
       },
       user: {
         name: "Taylor Example",

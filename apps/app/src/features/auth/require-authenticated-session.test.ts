@@ -9,7 +9,7 @@ interface Session {
   updatedAt: Date;
   userId: string;
   expiresAt: Date;
-  token: string;
+  token?: string;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
@@ -118,7 +118,6 @@ describe("authenticated-session requirement", () => {
         updatedAt: new Date("2026-04-03T12:00:00.000Z"),
         userId: "user_123",
         expiresAt: new Date("2026-04-10T12:00:00.000Z"),
-        token: "session-token",
       },
       user: {
         name: "Taylor Example",
@@ -146,7 +145,6 @@ describe("authenticated-session requirement", () => {
         updatedAt: "2026-04-03T12:00:00.000Z",
         userId: "user_234",
         expiresAt: "2026-04-10T12:00:00.000Z",
-        token: "session-token-client",
       },
       user: {
         id: "user_234",
@@ -182,7 +180,6 @@ describe("authenticated-session requirement", () => {
         updatedAt: "2026-04-03T12:00:00.000Z",
         userId: "user_cached",
         expiresAt: "2026-04-10T12:00:00.000Z",
-        token: "session-token-cached",
       },
       user: {
         id: "user_cached",

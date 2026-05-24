@@ -143,7 +143,6 @@ describe("authenticated app route loader", () => {
               activeOrganizationId: "org_active",
               createdAt: "2026-05-24T10:00:00.000Z",
               expiresAt: "2026-05-31T10:00:00.000Z",
-              token: "session-token",
               updatedAt: "2026-05-24T10:00:00.000Z",
               userId: "user_123",
             },
@@ -169,7 +168,6 @@ describe("authenticated app route loader", () => {
           activeOrganizationId: "org_active",
           createdAt: "2026-05-24T10:00:00.000Z",
           expiresAt: "2026-05-31T10:00:00.000Z",
-          token: "session-token",
           updatedAt: "2026-05-24T10:00:00.000Z",
           userId: "user_123",
         },
@@ -183,6 +181,53 @@ describe("authenticated app route loader", () => {
           updatedAt: "2026-05-24T10:00:00.000Z",
         },
       },
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("passes TanStack Start server context into the route guard", async () => {
+    const { Route } = await import("./_app");
+    const { beforeLoad } = Route.options;
+
+    expect(beforeLoad).toBeDefined();
+    mockedIsServerEnvironment.mockReturnValue(true);
+
+    await expect(
+      beforeLoad?.({
+        context: {
+          authSession: null,
+        },
+        location: {
+          pathname: "/settings",
+        },
+        serverContext: {
+          authSession: {
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_active",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
+            user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
+              email: "taylor@example.com",
+              emailVerified: false,
+              id: "user_123",
+              image: null,
+              name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+            },
+          },
+          currentOrganizationRole: "admin",
+        },
+      } as never)
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "admin",
     });
     expect(mockedRequireSession).not.toHaveBeenCalled();
     expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();

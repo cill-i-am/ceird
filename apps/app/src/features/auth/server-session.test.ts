@@ -6,7 +6,7 @@ interface Session {
   updatedAt: string;
   userId: string;
   expiresAt: string;
-  token: string;
+  token?: string;
   ipAddress?: string | null;
   userAgent?: string | null;
   activeOrganizationId?: string | null;
@@ -97,6 +97,18 @@ describe("server session lookup", () => {
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
     };
+    const expectedSession = {
+      ...authSession,
+      session: {
+        id: authSession.session.id,
+        createdAt: authSession.session.createdAt,
+        updatedAt: authSession.session.updatedAt,
+        userId: authSession.session.userId,
+        expiresAt: authSession.session.expiresAt,
+        ipAddress: authSession.session.ipAddress,
+        userAgent: authSession.session.userAgent,
+      },
+    };
 
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
@@ -107,7 +119,9 @@ describe("server session lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(authSession));
 
-    await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
+    await expect(getCurrentServerSession()).resolves.toStrictEqual(
+      expectedSession
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("get-session", "https://api.example.com/api/auth/"),
       {
@@ -127,7 +141,6 @@ describe("server session lookup", () => {
         updatedAt: "2026-04-04T17:08:12.497Z",
         userId: "user_cached",
         expiresAt: "2026-04-11T17:08:12.497Z",
-        token: "cached-session-token",
         ipAddress: null,
         userAgent: "start/1.0",
         activeOrganizationId: "org_cached",
@@ -195,7 +208,7 @@ describe("server session lookup", () => {
     );
   }, 1000);
 
-  it("fails closed when the auth session payload is invalid", async () => {
+  it("throws when the auth session payload is invalid", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -209,10 +222,12 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(getCurrentServerSession()).rejects.toThrow(
+      "Session lookup returned an invalid payload."
+    );
   }, 1000);
 
-  it("fails closed when the auth session fetch rejects", async () => {
+  it("throws when the auth session fetch rejects", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -222,10 +237,12 @@ describe("server session lookup", () => {
       new Error("network unavailable")
     );
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(getCurrentServerSession()).rejects.toThrow(
+      "Session lookup request failed."
+    );
   }, 1000);
 
-  it("fails closed when the auth session response body is malformed JSON", async () => {
+  it("throws when the auth session response body is malformed JSON", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -239,10 +256,12 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(getCurrentServerSession()).rejects.toThrow(
+      "Session lookup returned invalid JSON."
+    );
   }, 1000);
 
-  it("fails closed when the auth session active organization id is invalid", async () => {
+  it("throws when the auth session active organization id is invalid", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -271,10 +290,12 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(getCurrentServerSession()).rejects.toThrow(
+      "Session lookup returned an invalid payload."
+    );
   }, 1000);
 
-  it("fails closed when the configured server API origin is missing", async () => {
+  it("throws when the configured server API origin is missing", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
     );
@@ -282,7 +303,9 @@ describe("server session lookup", () => {
     delete process.env.API_ORIGIN;
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(getCurrentServerSession()).rejects.toThrow(
+      "Cannot resolve the auth base URL for session lookup."
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   }, 1000);
 });

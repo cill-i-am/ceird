@@ -117,6 +117,45 @@ describe("organization active sync boundary", () => {
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
   });
 
+  it("hides children immediately when sync becomes required after mount", async () => {
+    const syncDeferred = promiseWithResolvers.withResolvers<undefined>();
+
+    mockedSynchronizeClientActiveOrganization.mockReturnValue(
+      syncDeferred.promise
+    );
+
+    const { rerender } = render(
+      <OrganizationActiveSyncBoundary
+        activeOrganizationSync={{
+          required: false,
+          targetOrganizationId: null,
+        }}
+      >
+        <div>Loaded app</div>
+      </OrganizationActiveSyncBoundary>
+    );
+
+    expect(screen.getByText("Loaded app")).toBeInTheDocument();
+
+    rerender(
+      <OrganizationActiveSyncBoundary
+        activeOrganizationSync={{
+          required: true,
+          targetOrganizationId: decodeOrganizationId("org_next"),
+        }}
+      >
+        <div>Loaded app</div>
+      </OrganizationActiveSyncBoundary>
+    );
+
+    expect(screen.getByText(/loading your organization/i)).toBeInTheDocument();
+    expect(screen.queryByText("Loaded app")).not.toBeInTheDocument();
+
+    syncDeferred.resolve();
+
+    await expect(screen.findByText("Loaded app")).resolves.toBeInTheDocument();
+  });
+
   it("synchronizes null active organization targets", async () => {
     render(
       <OrganizationActiveSyncBoundary

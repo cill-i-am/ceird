@@ -27,7 +27,6 @@ const authenticatedSnapshot = {
       updatedAt: "2026-05-24T10:00:00.000Z",
       userId: "user_123",
       expiresAt: "2026-05-31T10:00:00.000Z",
-      token: "session-token",
       activeOrganizationId: "org_123",
     },
     user: {

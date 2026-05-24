@@ -13,7 +13,6 @@ import { decodeServerAuthSession } from "../auth/app-context-types";
 import { readGlobalAppServerContext } from "../auth/app-server-context";
 import {
   buildAuthReadHeaders,
-  getHeaderFromRequest,
   readOptionalStrictSessionAuthRequest,
   readRequiredServerAuthRequest,
   readServerOrganizationMemberRole,
@@ -93,9 +92,7 @@ export async function getCurrentServerOrganizationSessionDirect(): Promise<Organ
   const cachedSession = readGlobalAppServerContext().authSession;
 
   if (cachedSession !== undefined) {
-    return cachedSession === null
-      ? null
-      : decodeOrganizationAccessSession(cachedSession);
+    return cachedSession;
   }
 
   const { getRequestHeader } = await import("@tanstack/react-start/server");
@@ -139,15 +136,6 @@ export async function getCurrentServerOrganizationsDirect() {
   return await readServerOrganizations(authRequest);
 }
 
-export async function getCurrentServerOrganizationsForRequest(
-  request: Request
-) {
-  const authRequest = readRequiredServerAuthRequest(
-    getHeaderFromRequest(request)
-  );
-  return await readServerOrganizations(authRequest);
-}
-
 export async function getCurrentServerOrganizationMemberRoleDirect(
   organizationId: OrganizationIdType
 ): Promise<OrganizationMemberRole> {
@@ -163,16 +151,6 @@ export async function getCurrentServerOrganizationMemberRoleDirect(
   const { getRequestHeader } = await import("@tanstack/react-start/server");
   const authRequest = readRequiredServerAuthRequest(getRequestHeader);
   return await readServerOrganizationMemberRole(authRequest, organizationId);
-}
-
-export async function getCurrentServerOrganizationMemberRoleForRequest(
-  request: Request,
-  organizationId: OrganizationIdType
-): Promise<OrganizationMemberRole> {
-  return await readServerOrganizationMemberRole(
-    readRequiredServerAuthRequest(getHeaderFromRequest(request)),
-    organizationId
-  );
 }
 
 export async function setCurrentServerActiveOrganizationDirect(

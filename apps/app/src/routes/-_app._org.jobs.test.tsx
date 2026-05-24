@@ -221,6 +221,32 @@ describe("jobs route loader", () => {
   );
 
   it(
+    "does not start jobs fetches when the organization role is missing",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { loadJobsRouteData } =
+        await import("#/features/jobs/jobs-route-loader");
+
+      await expect(
+        loadJobsRouteData({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: undefined,
+          currentUserId: userId,
+        })
+      ).rejects.toBeDefined();
+      expect(mockedListAllCurrentServerJobs).not.toHaveBeenCalled();
+      expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
+      expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
     "skips internal job options for external collaborators",
     {
       timeout: 10_000,

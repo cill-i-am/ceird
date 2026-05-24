@@ -1,4 +1,3 @@
-import type { AdministrativeOrganizationRole } from "@ceird/identity-core";
 import { createMiddleware } from "@tanstack/react-start";
 
 import {
@@ -13,37 +12,51 @@ export {
 
 export const requestAppContextMiddleware = createMiddleware().server(
   async ({ next, pathname, request }) => {
-    if (!shouldHydrateAuthContext(pathname)) {
+    const context = await loadRequestAppContextMiddlewareContext({
+      pathname,
+      request,
+    });
+
+    if (context === undefined) {
       return await next();
     }
 
-    const hydrateOrganizationContext =
-      shouldHydrateOrganizationContext(pathname);
-    const { buildAppAuthContextSnapshotForRequest } =
-      await import("./auth-request-context.server");
-    const snapshot = await buildAppAuthContextSnapshotForRequest(request, {
-      hydrateOrganizationContext,
-    });
-    const shouldIncludeOrganizationContext =
-      hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
-
-    if (shouldIncludeOrganizationContext && snapshot.organizations) {
-      return await next({
-        context: {
-          authSession: snapshot.session,
-          currentOrganizationRole: snapshot.currentOrganizationRole,
-          organizations: snapshot.organizations,
-        },
-      });
-    }
-
-    return await next({
-      context: {
-        authSession: snapshot.session,
-      },
-    });
+    return await next({ context });
   }
 );
+
+export async function loadRequestAppContextMiddlewareContext({
+  pathname,
+  request,
+}: {
+  readonly pathname: string;
+  readonly request: Request;
+}) {
+  if (!shouldHydrateAuthContext(pathname)) {
+    return;
+  }
+
+  const hydrateOrganizationContext = shouldHydrateOrganizationContext(pathname);
+  const { buildAppAuthContextSnapshotForRequest } =
+    await import("./auth-request-context.server");
+  const snapshot = await buildAppAuthContextSnapshotForRequest(request, {
+    hydrateOrganizationContext,
+  });
+  const shouldIncludeOrganizationContext =
+    hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
+
+  if (shouldIncludeOrganizationContext && snapshot.organizations) {
+    return {
+      authSession: snapshot.session,
+      currentOrganizationRole: snapshot.currentOrganizationRole,
+      organizations: snapshot.organizations,
+    };
+  }
+
+  return {
+    authSession: snapshot.session,
+  };
+}
 
 export const optionalAuthFunctionMiddleware = createMiddleware({
   type: "function",
@@ -116,7 +129,15 @@ export const organizationAdminFunctionMiddleware = createMiddleware({
     const { redirect } = await import("@tanstack/react-router");
     const { isAdministrativeOrganizationRole } =
       await import("@ceird/identity-core");
-    const { currentOrganizationRole } = context;
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const { readRequiredCurrentOrganizationRoleForRequest } =
+      await import("./auth-request-context.server");
+    const currentOrganizationRole =
+      context.currentOrganizationRole ??
+      (await readRequiredCurrentOrganizationRoleForRequest(
+        getRequest(),
+        context.activeOrganizationId
+      ));
 
     if (
       currentOrganizationRole === undefined ||
@@ -124,13 +145,11 @@ export const organizationAdminFunctionMiddleware = createMiddleware({
     ) {
       throw redirect({ to: "/" });
     }
-    const administrativeOrganizationRole =
-      currentOrganizationRole as AdministrativeOrganizationRole;
 
     return await next({
       context: {
         ...context,
-        currentOrganizationRole: administrativeOrganizationRole,
+        currentOrganizationRole,
       },
     });
   });

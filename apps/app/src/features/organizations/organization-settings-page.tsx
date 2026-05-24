@@ -44,6 +44,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
 
+import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import { OrganizationConfigurationProvider } from "./organization-configuration-state";
 import type { OrganizationQueryScope } from "./organization-query-scope";
 import { OrganizationRateCardSection } from "./organization-rate-card-section";
@@ -179,6 +180,7 @@ export function OrganizationSettingsPage({
       });
       savedOrganizationNameRef.current = result.data.name;
       setSuccessMessage("Organization updated.");
+      clearOrganizationAccessClientCache();
 
       try {
         await router.invalidate();

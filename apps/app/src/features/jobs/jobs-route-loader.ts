@@ -56,13 +56,13 @@ export async function loadJobsRouteData(
     };
   }
 
-  const listRequestStartedAt = Date.now();
-  const listPromise = listAllCurrentServerJobs({});
   const activeRole = requireOrganizationRouteContextRole(organizationAccess);
   const viewer = {
     role: activeRole,
     userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
   } satisfies JobsViewer;
+  const listRequestStartedAt = Date.now();
+  const listPromise = listAllCurrentServerJobs({});
   const internalOptionsPromise = canUseInternalJobOptions(viewer)
     ? getCurrentServerJobOptions()
     : undefined;

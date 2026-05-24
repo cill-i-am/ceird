@@ -11,10 +11,10 @@ import { requireAuthenticatedSession } from "#/features/auth/require-authenticat
 import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: ({ context, location }) =>
+  beforeLoad: ({ location, serverContext }) =>
     loadAuthenticatedAppRoute({
       pathname: location.pathname,
-      serverContext: context,
+      serverContext,
     }),
   component: AuthenticatedAppLayout,
 });

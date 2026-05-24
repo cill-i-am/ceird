@@ -71,7 +71,11 @@ function createAuthSession(overrides: Partial<Session> = {}): AuthSession {
 
 interface MockServerFnBuilder {
   handler: ReturnType<typeof vi.fn<() => MockServerFn>>;
-  inputValidator: ReturnType<typeof vi.fn<() => MockServerFnBuilder>>;
+  inputValidator: ReturnType<
+    typeof vi.fn<
+      (validator: (input: unknown) => unknown) => MockServerFnBuilder
+    >
+  >;
   middleware: ReturnType<
     typeof vi.fn<(middlewares: readonly unknown[]) => MockServerFnBuilder>
   >;
@@ -97,6 +101,7 @@ const {
   mockedSetResponseHeader,
 } = vi.hoisted(() => ({
   capturedCreateServerFns: [] as {
+    inputValidators: ((input: unknown) => unknown)[];
     middlewareCalls: (readonly unknown[])[];
     options: { method: string };
   }[],
@@ -104,6 +109,7 @@ const {
     (options: { method: string }) => MockServerFnBuilder
   >((options) => {
     const record = {
+      inputValidators: [] as ((input: unknown) => unknown)[],
       middlewareCalls: [] as (readonly unknown[])[],
       options,
     };
@@ -113,9 +119,12 @@ const {
     const builderReference: { current?: MockServerFnBuilder } = {};
     const builder = Object.assign(serverFunction, {
       handler: vi.fn<() => MockServerFn>(() => serverFunction),
-      inputValidator: vi.fn<() => MockServerFnBuilder>(() =>
-        readMockServerFnBuilder(builderReference)
-      ),
+      inputValidator: vi.fn<
+        (validator: (input: unknown) => unknown) => MockServerFnBuilder
+      >((validator) => {
+        record.inputValidators.push(validator);
+        return readMockServerFnBuilder(builderReference);
+      }),
       middleware: vi.fn<
         (middlewares: readonly unknown[]) => MockServerFnBuilder
       >((middlewares) => {
@@ -182,6 +191,33 @@ describe("server organization function middleware", () => {
     expect(capturedCreateServerFns[4]?.middlewareCalls).toContainEqual([
       organizationFunctionMiddleware,
     ]);
+  });
+
+  it("validates organization id inputs at the server-function boundary", async () => {
+    const {
+      getCurrentServerOrganizationMemberRole:
+        getCurrentServerOrganizationMemberRoleServerFn,
+      setCurrentServerActiveOrganization:
+        setCurrentServerActiveOrganizationServerFn,
+    } = await import("./organization-server");
+    const [roleValidator] = capturedCreateServerFns[3]?.inputValidators ?? [];
+    const [setActiveValidator] =
+      capturedCreateServerFns[4]?.inputValidators ?? [];
+
+    expect(getCurrentServerOrganizationMemberRoleServerFn).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
+      expect.any(Function)
+    );
+    expect(roleValidator?.("org_123")).toStrictEqual(
+      decodeOrganizationId("org_123")
+    );
+    expect(setActiveValidator?.("org_123")).toStrictEqual(
+      decodeOrganizationId("org_123")
+    );
+    expect(() => roleValidator?.("")).toThrow(/Expected/);
+    expect(() => setActiveValidator?.("")).toThrow(/Expected/);
   });
 });
 
@@ -265,9 +301,19 @@ describe("server organization lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(authSession));
 
-    await expect(getCurrentServerOrganizationSession()).resolves.toStrictEqual(
-      authSession
-    );
+    await expect(getCurrentServerOrganizationSession()).resolves.toStrictEqual({
+      ...authSession,
+      session: {
+        id: authSession.session.id,
+        activeOrganizationId: authSession.session.activeOrganizationId,
+        createdAt: authSession.session.createdAt,
+        expiresAt: authSession.session.expiresAt,
+        ipAddress: authSession.session.ipAddress,
+        updatedAt: authSession.session.updatedAt,
+        userAgent: authSession.session.userAgent,
+        userId: authSession.session.userId,
+      },
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("get-session", "https://api.example.com/api/auth/"),
       {
@@ -279,7 +325,7 @@ describe("server organization lookup", () => {
     );
   }, 1000);
 
-  it("returns the decoded strict session shape after validation", async () => {
+  it("returns the tokenless strict session shape after validation", async () => {
     const authSession = {
       session: {
         id: "session_123",
@@ -291,7 +337,6 @@ describe("server organization lookup", () => {
         ipAddress: "",
         userAgent: "curl/8.7.1",
         activeOrganizationId: "org_123",
-        extraSessionField: "keep-me",
       },
       user: {
         id: "user_123",
@@ -301,7 +346,6 @@ describe("server organization lookup", () => {
         emailVerified: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
-        extraUserField: "keep-me-too",
       },
     };
 
@@ -319,7 +363,6 @@ describe("server organization lookup", () => {
         updatedAt: "2026-04-04T17:08:12.497Z",
         userId: "user_123",
         expiresAt: "2026-04-11T17:08:12.497Z",
-        token: "session-token",
         ipAddress: "",
         userAgent: "curl/8.7.1",
         activeOrganizationId: "org_123",

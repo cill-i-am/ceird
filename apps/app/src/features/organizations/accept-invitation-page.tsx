@@ -1,4 +1,7 @@
-import { decodeOrganizationRole } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  decodeOrganizationRole,
+} from "@ceird/identity-core";
 import type { OrganizationRole } from "@ceird/identity-core";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
@@ -376,7 +379,9 @@ function useAcceptInvitationPageModel(
       return;
     }
 
-    const acceptedOrganizationId = result.data?.member.organizationId;
+    const acceptedOrganizationId = result.data?.member.organizationId
+      ? decodeOrganizationId(result.data.member.organizationId)
+      : undefined;
     clearOrganizationAccessClientCache();
 
     if (acceptedOrganizationId) {
