@@ -49,7 +49,7 @@ export function readRequiredServerAuthRequest(
 
   if (!cookie) {
     throw new Error(
-      "Cannot list organizations without the current auth cookie."
+      "Cannot read server auth context without the current auth cookie."
     );
   }
 
@@ -64,7 +64,7 @@ export function readRequiredServerAuthRequest(
   return buildServerAuthRequest(getRequestHeader, cookie, authBaseURL);
 }
 
-export function readOptionalCookieRequiredBaseServerAuthRequest(
+export function readOptionalStrictSessionAuthRequest(
   getRequestHeader: RequestHeaderReader
 ): ServerAuthRequest | null {
   const cookie = getRequestHeader("cookie");
@@ -101,24 +101,24 @@ export async function readOptionalServerAuthSessionFromHeaders(
     return null;
   }
 
-  const response = await fetch(
-    new URL("get-session", `${authRequest.authBaseURL}/`),
-    {
-      headers: buildAuthReadHeaders(authRequest),
-    }
-  );
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const payload = (await response.json()) as unknown;
-
-  if (payload === null) {
-    return null;
-  }
-
   try {
+    const response = await fetch(
+      new URL("get-session", `${authRequest.authBaseURL}/`),
+      {
+        headers: buildAuthReadHeaders(authRequest),
+      }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as unknown;
+
+    if (payload === null) {
+      return null;
+    }
+
     return decodeServerAuthSession(payload);
   } catch {
     return null;

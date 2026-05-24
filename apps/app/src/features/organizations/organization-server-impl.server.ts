@@ -1,7 +1,6 @@
 import {
   createOrganizationSlugFromName,
   decodeOrganizationSummary,
-  OrganizationId,
 } from "@ceird/identity-core";
 import type {
   CreateOrganizationNameInput,
@@ -9,21 +8,20 @@ import type {
   OrganizationMemberRoleResponse,
   OrganizationSummary,
 } from "@ceird/identity-core";
-import { Schema } from "effect";
 
+import { decodeServerAuthSession } from "../auth/app-context-types";
 import { readGlobalAppServerContext } from "../auth/app-server-context";
 import {
   buildAuthReadHeaders,
   getHeaderFromRequest,
-  readOptionalCookieRequiredBaseServerAuthRequest,
+  readOptionalStrictSessionAuthRequest,
   readRequiredServerAuthRequest,
   readServerOrganizationMemberRole,
   readServerOrganizations,
 } from "../auth/auth-request-context.server";
 import type { ServerAuthRequest } from "../auth/auth-request-context.server";
+import type { ServerAuthSession } from "../auth/server-session-types";
 
-const NullableString = Schema.NullOr(Schema.String);
-const NullableOrganizationId = Schema.NullOr(OrganizationId);
 const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
   "ORGANIZATION_ALREADY_EXISTS",
   "ORGANIZATION_SLUG_ALREADY_TAKEN",
@@ -31,33 +29,7 @@ const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
   "Organization slug already taken",
 ] as const;
 
-const OrganizationAccessSessionSchema = Schema.Struct({
-  session: Schema.Struct({
-    id: Schema.String,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-    userId: Schema.String,
-    expiresAt: Schema.String,
-    token: Schema.String,
-    ipAddress: Schema.optional(NullableString),
-    userAgent: Schema.optional(NullableString),
-    activeOrganizationId: Schema.optional(NullableOrganizationId),
-  }),
-  user: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.optional(NullableString),
-    emailVerified: Schema.Boolean,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-  }),
-});
-
-export type OrganizationAccessSession = Schema.Schema.Type<
-  typeof OrganizationAccessSessionSchema
->;
-
+export type OrganizationAccessSession = ServerAuthSession;
 export type OrganizationMemberRole = OrganizationMemberRoleResponse;
 
 export async function createCurrentServerOrganizationDirect(
@@ -127,8 +99,7 @@ export async function getCurrentServerOrganizationSessionDirect(): Promise<Organ
   }
 
   const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authRequest =
-    readOptionalCookieRequiredBaseServerAuthRequest(getRequestHeader);
+  const authRequest = readOptionalStrictSessionAuthRequest(getRequestHeader);
 
   if (!authRequest) {
     return null;
@@ -319,7 +290,7 @@ function decodeOrganizationAccessSession(
   session: unknown
 ): OrganizationAccessSession {
   try {
-    return Schema.decodeUnknownSync(OrganizationAccessSessionSchema)(session);
+    return decodeServerAuthSession(session);
   } catch {
     throw new Error("Session lookup returned an invalid payload.");
   }

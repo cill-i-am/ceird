@@ -286,6 +286,45 @@ describe("server organization lookup", () => {
     );
   }, 1000);
 
+  it("throws when strict session lookup returns an empty session token", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        session: {
+          id: "session_123",
+          createdAt: "2026-04-04T17:08:12.497Z",
+          updatedAt: "2026-04-04T17:08:12.497Z",
+          userId: "user_123",
+          expiresAt: "2026-04-11T17:08:12.497Z",
+          token: "",
+          activeOrganizationId: "org_123",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+          image: null,
+          emailVerified: false,
+          createdAt: "2026-04-04T17:08:12.488Z",
+          updatedAt: "2026-04-04T17:08:12.488Z",
+        },
+      })
+    );
+
+    const failure = await getCurrentServerOrganizationSession().catch(
+      (caughtError) => caughtError
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(
+      "Session lookup returned an invalid payload."
+    );
+  }, 1000);
+
   it("throws when strict organization lookup responds with a non-ok status", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined

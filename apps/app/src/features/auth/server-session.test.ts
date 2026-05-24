@@ -212,6 +212,36 @@ describe("server session lookup", () => {
     await expect(getCurrentServerSession()).resolves.toBeNull();
   }, 1000);
 
+  it("fails closed when the auth session fetch rejects", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("network unavailable")
+    );
+
+    await expect(getCurrentServerSession()).resolves.toBeNull();
+  }, 1000);
+
+  it("fails closed when the auth session response body is malformed JSON", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{", {
+        headers: {
+          "content-type": "application/json",
+        },
+      })
+    );
+
+    await expect(getCurrentServerSession()).resolves.toBeNull();
+  }, 1000);
+
   it("fails closed when the auth session active organization id is invalid", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
       name === "cookie" ? "better-auth.session_token=session-token" : undefined
