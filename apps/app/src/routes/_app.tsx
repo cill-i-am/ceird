@@ -3,6 +3,7 @@ import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
+import { shouldHydrateOrganizationContext } from "#/features/auth/app-context-route-selection";
 import { readAppServerContext } from "#/features/auth/app-server-context";
 import { getLoginNavigationTarget } from "#/features/auth/auth-navigation";
 import { AuthenticatedAppLayout } from "#/features/auth/authenticated-app-layout";
@@ -10,17 +11,25 @@ import { requireAuthenticatedSession } from "#/features/auth/require-authenticat
 import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: loadAuthenticatedAppRoute,
+  beforeLoad: ({ context, location }) =>
+    loadAuthenticatedAppRoute({
+      pathname: location.pathname,
+      serverContext: context,
+    }),
   component: AuthenticatedAppLayout,
 });
 
 export async function loadAuthenticatedAppRoute(input?: {
+  readonly pathname?: string | undefined;
   readonly serverContext?: unknown;
 }) {
   const serverContext = readAppServerContext(input?.serverContext);
+  const hydrateOrganizationContext =
+    input?.pathname !== undefined &&
+    shouldHydrateOrganizationContext(input.pathname);
   const clientAppContext =
     serverContext.authSession === undefined && !isServerEnvironment()
-      ? await getCachedClientAppContext()
+      ? await getCachedClientAppContext({ hydrateOrganizationContext })
       : undefined;
   const session = await getAuthenticatedRouteSession({
     clientAppContext,

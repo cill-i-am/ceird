@@ -7,57 +7,32 @@ import {
   shouldHydrateOrganizationContext,
 } from "./app-context-middleware";
 import { decodeServerAuthSession } from "./app-context-types";
+import type { ServerAuthSession } from "./app-context-types";
 import { buildAppAuthContextSnapshotForRequest } from "./auth-request-context.server";
 
-interface Session {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-  expiresAt: string;
-  token: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-  activeOrganizationId?: string | null;
-}
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  image?: string | null;
-  emailVerified: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AuthSession {
-  session: Session;
-  user: User;
-}
-
-const authSessionWithActiveOrganization: AuthSession = {
-  session: {
-    id: "session_123",
-    createdAt: "2026-04-04T17:08:12.497Z",
-    updatedAt: "2026-04-04T17:08:12.497Z",
-    userId: "user_123",
-    expiresAt: "2026-04-11T17:08:12.497Z",
-    token: "session-token",
-    ipAddress: "",
-    userAgent: "curl/8.7.1",
-    activeOrganizationId: "org_123",
-  },
-  user: {
-    id: "user_123",
-    name: "Taylor Example",
-    email: "taylor@example.com",
-    image: null,
-    emailVerified: false,
-    createdAt: "2026-04-04T17:08:12.488Z",
-    updatedAt: "2026-04-04T17:08:12.488Z",
-  },
-};
+const authSessionWithActiveOrganization: ServerAuthSession =
+  decodeServerAuthSession({
+    session: {
+      id: "session_123",
+      createdAt: "2026-04-04T17:08:12.497Z",
+      updatedAt: "2026-04-04T17:08:12.497Z",
+      userId: "user_123",
+      expiresAt: "2026-04-11T17:08:12.497Z",
+      token: "session-token",
+      ipAddress: "",
+      userAgent: "curl/8.7.1",
+      activeOrganizationId: "org_123",
+    },
+    user: {
+      id: "user_123",
+      name: "Taylor Example",
+      email: "taylor@example.com",
+      image: null,
+      emailVerified: false,
+      createdAt: "2026-04-04T17:08:12.488Z",
+      updatedAt: "2026-04-04T17:08:12.488Z",
+    },
+  });
 
 function buildAuthRequest() {
   return new Request("https://app.example.com/", {
@@ -244,9 +219,7 @@ describe("app auth context snapshot for request", () => {
     const organizations = [
       { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
     ];
-    const knownSession = decodeServerAuthSession(
-      authSessionWithActiveOrganization
-    );
+    const knownSession = authSessionWithActiveOrganization;
     process.env.API_ORIGIN = "https://api.example.com";
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -286,9 +259,7 @@ describe("app auth context snapshot for request", () => {
     const organizations = [
       { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
     ];
-    const knownSession = decodeServerAuthSession(
-      authSessionWithActiveOrganization
-    );
+    const knownSession = authSessionWithActiveOrganization;
     const organizationsDeferred = createDeferredResponse();
     const roleDeferred = createDeferredResponse();
     process.env.API_ORIGIN = "https://api.example.com";
@@ -390,6 +361,7 @@ describe("app auth context snapshot for request", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "external" }))
       .mockResolvedValueOnce(Response.json({ role: "admin" }));
 
     await expect(
@@ -411,7 +383,7 @@ describe("app auth context snapshot for request", () => {
       ),
       expect.anything()
     );
-    expect(fetchMock).not.toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       new URL(
         "organization/get-active-member-role?organizationId=org_stale",
         "https://api.example.com/api/auth/"
@@ -483,7 +455,7 @@ describe("app auth context snapshot for request", () => {
   });
 
   it("skips organization and role lookups when the session has no active organization", async () => {
-    const authSessionWithoutActiveOrganization: AuthSession = {
+    const authSessionWithoutActiveOrganization: ServerAuthSession = {
       ...authSessionWithActiveOrganization,
       session: {
         ...authSessionWithActiveOrganization.session,

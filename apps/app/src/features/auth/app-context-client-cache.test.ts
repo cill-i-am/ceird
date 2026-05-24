@@ -5,7 +5,7 @@ import {
 } from "./app-context-client-cache";
 
 const { mockedGetCurrentAppContext } = vi.hoisted(() => ({
-  mockedGetCurrentAppContext: vi.fn<() => Promise<unknown>>(),
+  mockedGetCurrentAppContext: vi.fn<(input?: unknown) => Promise<unknown>>(),
 }));
 
 vi.mock(import("./app-context-functions"), async (importActual) => {
@@ -43,6 +43,14 @@ const authenticatedSnapshot = {
   activeOrganizationId: "org_123",
 };
 
+const organizationHydratedSnapshot = {
+  ...authenticatedSnapshot,
+  currentOrganizationRole: "owner",
+  organizations: [
+    { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+  ],
+};
+
 const unauthenticatedSnapshot = {
   session: null,
   activeOrganizationId: null,
@@ -64,6 +72,29 @@ describe("app context client cache", () => {
       authenticatedSnapshot
     );
     expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+  });
+
+  it("keeps auth-only and organization-hydrated snapshots distinct", async () => {
+    mockedGetCurrentAppContext
+      .mockResolvedValueOnce(authenticatedSnapshot)
+      .mockResolvedValueOnce(organizationHydratedSnapshot);
+
+    await expect(getCachedClientAppContext()).resolves.toStrictEqual(
+      authenticatedSnapshot
+    );
+    await expect(
+      getCachedClientAppContext({ hydrateOrganizationContext: true })
+    ).resolves.toStrictEqual(organizationHydratedSnapshot);
+    await expect(getCachedClientAppContext()).resolves.toStrictEqual(
+      organizationHydratedSnapshot
+    );
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledTimes(2);
+    expect(mockedGetCurrentAppContext).toHaveBeenNthCalledWith(1, {
+      data: { hydrateOrganizationContext: false },
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenNthCalledWith(2, {
+      data: { hydrateOrganizationContext: true },
+    });
   });
 
   it("peeks only existing fresh snapshots without fetching", async () => {

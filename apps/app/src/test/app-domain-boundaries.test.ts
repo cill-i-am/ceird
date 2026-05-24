@@ -64,6 +64,7 @@ const PRODUCT_DOMAIN_FEATURE_PREFIXES = [
 ] as const;
 const APP_AUTH_SERVER_FUNCTION_LANE_MODULES = new Set([
   "features/auth/app-context-client-cache",
+  "features/auth/app-context-client-cache-state",
   "features/auth/app-context-functions",
   "features/auth/app-context-middleware",
   "features/auth/app-server-context",

@@ -1,71 +1,68 @@
+import {
+  clearAppContextClientCacheForPromise,
+  readFreshAppContextClientCache,
+  setAppContextClientCache,
+} from "./app-context-client-cache-state";
+import type { AppContextClientCacheScope } from "./app-context-client-cache-state";
 import { getCurrentAppContext } from "./app-context-functions";
 import type { AppAuthContextSnapshot } from "./app-context-types";
 import { decodeAppAuthContextSnapshot } from "./app-context-types";
 
-const APP_CONTEXT_CLIENT_CACHE_TTL_MS = 10_000;
+export { clearAppContextClientCache } from "./app-context-client-cache-state";
 
-interface AppContextClientCacheEntry {
-  readonly expiresAt: number;
-  readonly promise: Promise<AppAuthContextSnapshot>;
+export interface AppContextClientCacheOptions {
+  readonly hydrateOrganizationContext?: boolean | undefined;
 }
 
-let appContextClientCache: AppContextClientCacheEntry | undefined;
-
-export function clearAppContextClientCache() {
-  appContextClientCache = undefined;
+export function readFreshCachedClientAppContext(
+  options: AppContextClientCacheOptions = {}
+): Promise<AppAuthContextSnapshot> | undefined {
+  return readFreshAppContextClientCache(getCacheScope(options));
 }
 
-export function readFreshCachedClientAppContext():
-  | Promise<AppAuthContextSnapshot>
-  | undefined {
-  if (!isFreshAppContextClientCacheEntry(appContextClientCache)) {
-    return undefined;
+export async function getCachedClientAppContext(
+  options: AppContextClientCacheOptions = {}
+): Promise<AppAuthContextSnapshot> {
+  const cacheScope = getCacheScope(options);
+  const cachedSnapshot = readFreshAppContextClientCache(cacheScope);
+
+  if (cachedSnapshot) {
+    return await cachedSnapshot;
   }
 
-  return appContextClientCache.promise;
-}
+  const promise = fetchCurrentAppContext(options);
 
-export async function getCachedClientAppContext(): Promise<AppAuthContextSnapshot> {
-  if (isFreshAppContextClientCacheEntry(appContextClientCache)) {
-    return await appContextClientCache.promise;
-  }
-
-  const promise = (async () =>
-    decodeAppAuthContextSnapshot(await getCurrentAppContext()))();
-
-  appContextClientCache = createAppContextClientCacheEntry(promise);
+  setAppContextClientCache(cacheScope, promise);
 
   try {
     const snapshot = await promise;
 
-    if (
-      snapshot.session === null &&
-      appContextClientCache?.promise === promise
-    ) {
-      appContextClientCache = undefined;
+    if (snapshot.session === null) {
+      clearAppContextClientCacheForPromise(cacheScope, promise);
     }
 
     return snapshot;
   } catch (error) {
-    if (appContextClientCache?.promise === promise) {
-      appContextClientCache = undefined;
-    }
+    clearAppContextClientCacheForPromise(cacheScope, promise);
 
     throw error;
   }
 }
 
-function createAppContextClientCacheEntry(
-  promise: Promise<AppAuthContextSnapshot>
-): AppContextClientCacheEntry {
-  return {
-    expiresAt: Date.now() + APP_CONTEXT_CLIENT_CACHE_TTL_MS,
-    promise,
-  };
+function fetchCurrentAppContext(options: AppContextClientCacheOptions) {
+  return (async () =>
+    decodeAppAuthContextSnapshot(
+      await getCurrentAppContext({
+        data: {
+          hydrateOrganizationContext:
+            options.hydrateOrganizationContext === true,
+        },
+      })
+    ))();
 }
 
-function isFreshAppContextClientCacheEntry(
-  entry: AppContextClientCacheEntry | undefined
-): entry is AppContextClientCacheEntry {
-  return entry !== undefined && entry.expiresAt > Date.now();
+function getCacheScope(
+  options: AppContextClientCacheOptions
+): AppContextClientCacheScope {
+  return options.hydrateOrganizationContext === true ? "organization" : "auth";
 }

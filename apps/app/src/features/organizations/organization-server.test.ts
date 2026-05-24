@@ -43,6 +43,32 @@ interface AuthSession {
   user: User;
 }
 
+function createAuthSession(overrides: Partial<Session> = {}): AuthSession {
+  return {
+    session: {
+      id: "session_123",
+      createdAt: "2026-04-04T17:08:12.497Z",
+      updatedAt: "2026-04-04T17:08:12.497Z",
+      userId: "user_123",
+      expiresAt: "2026-04-11T17:08:12.497Z",
+      token: "session-token",
+      ipAddress: "",
+      userAgent: "curl/8.7.1",
+      activeOrganizationId: "org_123",
+      ...overrides,
+    },
+    user: {
+      id: "user_123",
+      name: "Taylor Example",
+      email: "taylor@example.com",
+      image: null,
+      emailVerified: false,
+      createdAt: "2026-04-04T17:08:12.488Z",
+      updatedAt: "2026-04-04T17:08:12.488Z",
+    },
+  };
+}
+
 interface MockServerFnBuilder {
   handler: ReturnType<typeof vi.fn<() => MockServerFn>>;
   inputValidator: ReturnType<typeof vi.fn<() => MockServerFnBuilder>>;
@@ -505,11 +531,7 @@ describe("server organization lookup", () => {
 
   it("returns the cached organization member role when it matches the active organization", async () => {
     mockedGetGlobalStartContext.mockReturnValue({
-      authSession: {
-        session: {
-          activeOrganizationId: "org_123",
-        },
-      },
+      authSession: createAuthSession(),
       currentOrganizationRole: "admin",
     });
     mockedGetRequestHeader.mockImplementation((name) =>

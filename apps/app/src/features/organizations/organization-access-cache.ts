@@ -4,21 +4,22 @@ import type {
   OrganizationSummary,
 } from "@ceird/identity-core";
 
-import { clearAppContextClientCache } from "../auth/app-context-client-cache";
+import {
+  createExpiringPromiseCacheEntry,
+  isFreshExpiringPromiseCacheEntry,
+} from "#/lib/expiring-promise-cache";
+import type { ExpiringPromiseCacheEntry } from "#/lib/expiring-promise-cache";
+
+import { clearAppContextClientCache } from "../auth/app-context-client-cache-state";
 
 const CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS = 10_000;
 
-interface ClientAccessCacheEntry<Value> {
-  readonly expiresAt: number;
-  readonly promise: Promise<Value>;
-}
-
 let clientOrganizationsCache:
-  | ClientAccessCacheEntry<readonly OrganizationSummary[]>
+  | ExpiringPromiseCacheEntry<readonly OrganizationSummary[]>
   | undefined;
 const clientOrganizationRoleCache = new Map<
   OrganizationId,
-  ClientAccessCacheEntry<OrganizationMemberRoleResponse>
+  ExpiringPromiseCacheEntry<OrganizationMemberRoleResponse>
 >();
 
 export function clearOrganizationAccessClientCache() {
@@ -30,7 +31,8 @@ export function clearOrganizationAccessClientCache() {
 export function readFreshClientOrganizationsCache():
   | Promise<readonly OrganizationSummary[]>
   | undefined {
-  if (!isFreshClientCacheEntry(clientOrganizationsCache)) {
+  if (!isFreshExpiringPromiseCacheEntry(clientOrganizationsCache)) {
+    clientOrganizationsCache = undefined;
     return undefined;
   }
 
@@ -40,7 +42,10 @@ export function readFreshClientOrganizationsCache():
 export function setClientOrganizationsCache(
   promise: Promise<readonly OrganizationSummary[]>
 ) {
-  clientOrganizationsCache = createClientCacheEntry(promise);
+  clientOrganizationsCache = createExpiringPromiseCacheEntry(
+    promise,
+    CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS
+  );
 }
 
 export function clearClientOrganizationsCacheForPromise(
@@ -56,7 +61,8 @@ export function readFreshClientOrganizationRoleCache(
 ): Promise<OrganizationMemberRoleResponse> | undefined {
   const cachedRole = clientOrganizationRoleCache.get(organizationId);
 
-  if (!isFreshClientCacheEntry(cachedRole)) {
+  if (!isFreshExpiringPromiseCacheEntry(cachedRole)) {
+    clientOrganizationRoleCache.delete(organizationId);
     return undefined;
   }
 
@@ -69,7 +75,10 @@ export function setClientOrganizationRoleCache(
 ) {
   clientOrganizationRoleCache.set(
     organizationId,
-    createClientCacheEntry(promise)
+    createExpiringPromiseCacheEntry(
+      promise,
+      CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS
+    )
   );
 }
 
@@ -80,19 +89,4 @@ export function clearClientOrganizationRoleCacheForPromise(
   if (clientOrganizationRoleCache.get(organizationId)?.promise === promise) {
     clientOrganizationRoleCache.delete(organizationId);
   }
-}
-
-function createClientCacheEntry<Value>(
-  promise: Promise<Value>
-): ClientAccessCacheEntry<Value> {
-  return {
-    expiresAt: Date.now() + CLIENT_ORGANIZATION_ACCESS_CACHE_TTL_MS,
-    promise,
-  };
-}
-
-function isFreshClientCacheEntry<Value>(
-  entry: ClientAccessCacheEntry<Value> | undefined
-): entry is ClientAccessCacheEntry<Value> {
-  return entry !== undefined && entry.expiresAt > Date.now();
 }

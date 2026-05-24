@@ -150,17 +150,30 @@ export async function buildAppAuthContextSnapshotForRequest(
     };
   }
 
-  const organizations = await readServerOrganizations(authRequest);
+  const organizationsPromise = readServerOrganizations(authRequest);
+  const activeOrganizationRolePromise = activeOrganizationId
+    ? readCurrentOrganizationRole(authRequest, activeOrganizationId)
+    : undefined;
+  const organizations = await organizationsPromise;
   const resolvedActiveOrganizationId = resolveActiveOrganizationId(
     activeOrganizationId,
     organizations
   );
-  const currentOrganizationRole = resolvedActiveOrganizationId
-    ? await readCurrentOrganizationRole(
-        authRequest,
-        resolvedActiveOrganizationId
-      )
-    : undefined;
+  const activeOrganizationRole =
+    activeOrganizationRolePromise === undefined
+      ? undefined
+      : await activeOrganizationRolePromise;
+  let currentOrganizationRole;
+
+  if (resolvedActiveOrganizationId !== null) {
+    currentOrganizationRole =
+      resolvedActiveOrganizationId === activeOrganizationId
+        ? activeOrganizationRole
+        : await readCurrentOrganizationRole(
+            authRequest,
+            resolvedActiveOrganizationId
+          );
+  }
 
   return {
     activeOrganizationId: resolvedActiveOrganizationId,

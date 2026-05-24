@@ -7,7 +7,8 @@ const {
   mockedIsServerEnvironment,
   mockedRequireSession,
 } = vi.hoisted(() => ({
-  mockedGetCachedClientAppContext: vi.fn<() => Promise<unknown>>(),
+  mockedGetCachedClientAppContext:
+    vi.fn<(options?: unknown) => Promise<unknown>>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<
     (organizationId: OrganizationId) => Promise<{
       role: "owner" | "admin" | "member" | "external";
@@ -137,11 +138,23 @@ describe("authenticated app route loader", () => {
       loadAuthenticatedAppRoute({
         serverContext: {
           authSession: {
-            session: { activeOrganizationId: "org_active" },
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_active",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              token: "session-token",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
             user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
               email: "taylor@example.com",
+              emailVerified: false,
               id: "user_123",
+              image: null,
               name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
             },
           },
           currentOrganizationRole: "owner",
@@ -151,11 +164,23 @@ describe("authenticated app route loader", () => {
       activeOrganizationId: "org_active",
       currentOrganizationRole: "owner",
       session: {
-        session: { activeOrganizationId: "org_active" },
+        session: {
+          id: "session_123",
+          activeOrganizationId: "org_active",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          token: "session-token",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+        },
         user: {
+          createdAt: "2026-05-24T10:00:00.000Z",
           email: "taylor@example.com",
+          emailVerified: false,
           id: "user_123",
+          image: null,
           name: "Taylor Example",
+          updatedAt: "2026-05-24T10:00:00.000Z",
         },
       },
     });
@@ -193,8 +218,42 @@ describe("authenticated app route loader", () => {
         },
       },
     });
-    expect(mockedGetCachedClientAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: false,
+    });
     expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("requests organization-hydrated browser context for organization route navigation", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCachedClientAppContext.mockResolvedValue({
+      session: {
+        session: { activeOrganizationId: "org_active" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "owner",
+      organizations: [
+        { id: "org_active", name: "Active Org", slug: "active-org" },
+      ],
+    });
+
+    await expect(
+      loadAuthenticatedAppRoute({ pathname: "/jobs" })
+    ).resolves.toMatchObject({
+      activeOrganizationId: "org_active",
+      currentOrganizationRole: "owner",
+    });
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: true,
+    });
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
   });
 
@@ -218,7 +277,9 @@ describe("authenticated app route loader", () => {
       },
     });
     await expect(result).rejects.toSatisfy(isRedirect);
-    expect(mockedGetCachedClientAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetCachedClientAppContext).toHaveBeenCalledWith({
+      hydrateOrganizationContext: false,
+    });
     expect(mockedRequireSession).not.toHaveBeenCalled();
   });
 

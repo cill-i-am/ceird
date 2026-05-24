@@ -12,7 +12,7 @@ const {
   mockedSignOut: vi.fn<() => Promise<{ success: boolean }>>(),
 }));
 
-vi.mock(import("./app-context-client-cache"), async (importActual) => {
+vi.mock(import("./app-context-client-cache-state"), async (importActual) => {
   const actual = await importActual();
 
   return {

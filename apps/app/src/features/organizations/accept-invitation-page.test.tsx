@@ -96,8 +96,6 @@ vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
 
   return {
     ...actual,
-    clearAppContextClientCache:
-      mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
     getCachedClientAppContext: (async () => {
       const sessionResponse = await mockedGetSession();
 
@@ -110,6 +108,19 @@ vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
     }) as typeof actual.getCachedClientAppContext,
   };
 });
+
+vi.mock(
+  import("../auth/app-context-client-cache-state"),
+  async (importActual) => {
+    const actual = await importActual();
+
+    return {
+      ...actual,
+      clearAppContextClientCache:
+        mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
+    };
+  }
+);
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
