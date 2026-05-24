@@ -10,8 +10,10 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
+
+import { renderAndFlushReact } from "#/test/react-render";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 type NavigateMock = (...args: unknown[]) => Promise<void>;
@@ -152,7 +154,7 @@ describe("job detail route", () => {
       const { JobsDetailRouteContent, JobsRouteContent } =
         await import("#/features/jobs/jobs-route-content");
 
-      render(
+      await renderAndFlushReact(
         <JobsRouteContent
           activeOrganizationId={organizationId}
           list={{

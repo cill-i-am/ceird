@@ -4,8 +4,10 @@ import type { JobListResponse, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
+
+import { renderAndFlushReact } from "#/test/react-render";
 
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
@@ -257,7 +259,7 @@ describe("sites route loader", () => {
       const { SitesRouteContent } =
         await import("#/features/sites/sites-route-content");
 
-      render(
+      await renderAndFlushReact(
         <SitesRouteContent
           activeOrganizationId={organizationId}
           options={{

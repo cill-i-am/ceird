@@ -9,10 +9,9 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 import {
-  fireEvent,
-  render,
-  screen,
   cleanup,
+  fireEvent,
+  screen,
   waitFor,
   within,
 } from "@testing-library/react";
@@ -20,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
+import { renderAndFlushReact } from "#/test/react-render";
 
 import { JobsPage } from "./jobs-page";
 import { JobsStateProvider } from "./jobs-state";
@@ -268,7 +268,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
       expect(screen.getByRole("heading", { name: "Jobs" })).toBeInTheDocument();
@@ -353,7 +353,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({ viewportWidth: 1280 });
+      await renderJobsPage({ viewportWidth: 1280 });
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
       expect(
@@ -379,7 +379,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({ viewportWidth: 1280 });
+      await renderJobsPage({ viewportWidth: 1280 });
 
       await user.click(
         within(getPrimaryQueuePanel()).getByRole("row", {
@@ -399,8 +399,8 @@ describe("jobs page", () => {
     {
       timeout: 10_000,
     },
-    () => {
-      renderJobsPage({ viewportWidth: 1280 });
+    async () => {
+      await renderJobsPage({ viewportWidth: 1280 });
 
       const link = within(getPrimaryQueuePanel()).getByRole("link", {
         name: /inspect boiler/i,
@@ -419,7 +419,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({ viewportWidth: 1279 });
+      await renderJobsPage({ viewportWidth: 1279 });
 
       expect(screen.getAllByTestId("jobs-queue-panel")).toHaveLength(1);
       expect(
@@ -448,7 +448,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({ withCommandBar: true, viewportWidth: 1280 });
+      await renderJobsPage({ withCommandBar: true, viewportWidth: 1280 });
 
       fireEvent.keyDown(window, { key: "k", metaKey: true });
 
@@ -512,7 +512,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
 
       expect(
         screen.getByRole("button", { name: /saved view: active jobs/i })
@@ -554,7 +554,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({
+      await renderJobsPage({
         viewer: {
           role: "owner",
           userId: memberOneId,
@@ -619,7 +619,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
 
       await chooseCommandFilter(user, /saved view/i, "Blocked");
       expect(
@@ -642,8 +642,8 @@ describe("jobs page", () => {
     }
   );
 
-  it("hides the create affordance for members", () => {
-    renderJobsPage({
+  it("hides the create affordance for members", async () => {
+    await renderJobsPage({
       viewer: {
         role: "member",
         userId: memberTwoId,
@@ -655,8 +655,8 @@ describe("jobs page", () => {
     ).not.toBeInTheDocument();
   }, 10_000);
 
-  it("uses first-run empty copy when the workspace has no jobs", () => {
-    renderJobsPage({
+  it("uses first-run empty copy when the workspace has no jobs", async () => {
+    await renderJobsPage({
       list: {
         items: [],
         nextCursor: undefined,
@@ -686,7 +686,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
 
       await chooseCommandFilter(
         user,
@@ -720,7 +720,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({
+      await renderJobsPage({
         viewer: {
           role: "external",
           userId: memberOneId,
@@ -775,7 +775,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
       await user.type(screen.getByLabelText("Search jobs"), "PO-4471");
@@ -797,7 +797,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
       const searchInput = screen.getByLabelText("Search jobs");
 
@@ -827,7 +827,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
       await chooseCommandFilter(user, /assignee filter/i, "Taylor Owner");
@@ -879,7 +879,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
       await chooseCommandFilter(
@@ -926,7 +926,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage({ viewportWidth: 1280 });
+      await renderJobsPage({ viewportWidth: 1280 });
       const desktopQueuePanel = getPrimaryQueuePanel();
 
       expect(
@@ -950,8 +950,8 @@ describe("jobs page", () => {
     }
   );
 
-  it("shows labels in the compact list layout", () => {
-    renderJobsPage({ viewportWidth: 720 });
+  it("shows labels in the compact list layout", async () => {
+    await renderJobsPage({ viewportWidth: 720 });
     const compactQueuePanel = getPrimaryQueuePanel();
 
     expect(
@@ -967,7 +967,7 @@ describe("jobs page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderJobsPage();
+      await renderJobsPage();
       const queuePanel = getPrimaryQueuePanel();
 
       await user.type(
@@ -1018,7 +1018,7 @@ function getPrimaryQueuePanel() {
   return queuePanel;
 }
 
-function renderJobsPage(options?: {
+async function renderJobsPage(options?: {
   readonly list?: JobListResponse;
   readonly viewer?: JobsViewer;
   readonly viewportWidth?: number;
@@ -1042,7 +1042,7 @@ function renderJobsPage(options?: {
     </JobsStateProvider>
   );
 
-  return render(
+  return await renderAndFlushReact(
     options?.withCommandBar ? (
       <CommandBarProvider>{page}</CommandBarProvider>
     ) : (

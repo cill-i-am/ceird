@@ -9,7 +9,6 @@ import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   act,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
@@ -18,6 +17,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
+import { renderAndFlushReact } from "#/test/react-render";
 
 import { SitesPage } from "./sites-page";
 import { SitesStateProvider } from "./sites-state";
@@ -124,8 +124,8 @@ describe("sites page", () => {
   it(
     "lists organization sites and exposes standalone creation to admins",
     { timeout: 10_000 },
-    () => {
-      renderSitesPage();
+    async () => {
+      await renderSitesPage();
 
       expect(
         screen.getByRole("heading", { name: "Sites" })
@@ -170,8 +170,8 @@ describe("sites page", () => {
   it(
     "hides standalone creation from organization members",
     { timeout: 10_000 },
-    () => {
-      renderSitesPage({ role: "member" });
+    async () => {
+      await renderSitesPage({ role: "member" });
 
       expect(
         screen.queryByRole("link", { name: /new site/i })
@@ -180,12 +180,12 @@ describe("sites page", () => {
     }
   );
 
-  it("mounts the mobile directory instead of the desktop table on mobile", () => {
+  it("mounts the mobile directory instead of the desktop table on mobile", async () => {
     act(() => {
       setViewportWidth(390);
     });
 
-    renderSitesPage();
+    await renderSitesPage();
 
     expect(screen.getByLabelText("Sites mobile directory")).toBeInTheDocument();
     expect(
@@ -196,8 +196,8 @@ describe("sites page", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens a site detail route when the row is clicked", () => {
-    renderSitesPage();
+  it("opens a site detail route when the row is clicked", async () => {
+    await renderSitesPage();
 
     fireEvent.click(screen.getByRole("row", { name: /docklands campus/i }));
 
@@ -210,7 +210,7 @@ describe("sites page", () => {
   it("filters sites by supported site text", async () => {
     const user = userEvent.setup();
 
-    renderSitesPage({ options: mixedSitesOptions });
+    await renderSitesPage({ options: mixedSitesOptions });
 
     await user.type(
       screen.getByRole("searchbox", { name: "Search sites" }),
@@ -225,7 +225,7 @@ describe("sites page", () => {
   it("filters sites by service area without exposing unsupported status fields", async () => {
     const user = userEvent.setup();
 
-    renderSitesPage({ options: mixedSitesOptions });
+    await renderSitesPage({ options: mixedSitesOptions });
 
     await user.selectOptions(
       screen.getByLabelText("Filter by service area"),
@@ -245,8 +245,8 @@ describe("sites page", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the empty state informational instead of duplicating creation", () => {
-    renderSitesPage({
+  it("keeps the empty state informational instead of duplicating creation", async () => {
+    await renderSitesPage({
       options: {
         ...options,
         sites: [],
@@ -266,7 +266,7 @@ describe("sites page", () => {
     async () => {
       const user = userEvent.setup();
 
-      renderSitesPage({ withCommandBar: true });
+      await renderSitesPage({ withCommandBar: true });
 
       fireEvent.keyDown(window, { key: "k", metaKey: true });
 
@@ -287,8 +287,8 @@ describe("sites page", () => {
     }
   );
 
-  it("opens site creation with the route hotkey", () => {
-    renderSitesPage();
+  it("opens site creation with the route hotkey", async () => {
+    await renderSitesPage();
 
     fireEvent.keyDown(document, { code: "KeyN", key: "n" });
 
@@ -299,7 +299,7 @@ describe("sites page", () => {
     "caps eager site entity commands in the command bar",
     { timeout: 10_000 },
     async () => {
-      renderSitesPage({
+      await renderSitesPage({
         options: {
           ...options,
           sites: Array.from({ length: 26 }, (_, index) => ({
@@ -345,7 +345,7 @@ function setViewportWidth(width: number) {
   window.dispatchEvent(new Event("resize"));
 }
 
-function renderSitesPage({
+async function renderSitesPage({
   options: pageOptions = options,
   role = "owner",
   withCommandBar = false,
@@ -366,7 +366,7 @@ function renderSitesPage({
     </HotkeysProvider>
   );
 
-  render(
+  await renderAndFlushReact(
     withCommandBar ? <CommandBarProvider>{page}</CommandBarProvider> : page
   );
 }

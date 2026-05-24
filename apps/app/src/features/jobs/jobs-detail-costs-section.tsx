@@ -164,6 +164,7 @@ export function JobCostsSection({
       costDescriptionRef.current?.focus();
     },
     {
+      conflictBehavior: "replace",
       enabled: canAddCostLine,
     }
   );
