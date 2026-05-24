@@ -36,6 +36,10 @@ a remembered summary.
 - `review-swarm`: read `/Users/cillianbarron/.codex/skills/review-swarm/SKILL.md`
   when the user or hook asks for Review Swarm, parallel review, or multi-angle
   diff review.
+- `ceird-auth-context-review`: read
+  `../ceird-auth-context-review/SKILL.md` when auth/session/organization
+  context, auth middleware, forwarded auth request data, app/API auth lanes, or
+  auth boundary tests changed.
 - `effect-review`: read `../effect-review/SKILL.md` for Effect services,
   repositories, errors, tests, observability, or Effect Atom code.
 - `effect-best-practices`: read `../effect-best-practices/SKILL.md` for any
@@ -59,6 +63,10 @@ Run the relevant checks for the touched code. Do not force database findings ont
   security/privacy, reliability/performance, and contract/test gaps. If
   sub-agents are not allowed in the current context, apply the same review roles
   locally.
+- **Ceird Auth Context Review:** follow the loaded
+  `ceird-auth-context-review` skill for session/org semantics, forwarded
+  request data, app/API auth lanes, Schema/branded ID boundaries, and auth
+  boundary tests.
 - **Effect Review:** follow the loaded `effect-review` skill for Effect
   services, repositories, layers, errors, tests, observability, and Effect Atom
   code.
