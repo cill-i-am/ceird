@@ -1,16 +1,12 @@
-import type {
-  OrganizationRole,
-  OrganizationSummary,
-} from "@ceird/identity-core";
 import { getGlobalStartContext } from "@tanstack/react-start";
 
-import type { ServerAuthSession } from "./server-session-types";
+import type { AppAuthContextSnapshot } from "./app-context-types";
 
-export interface AppServerContext {
-  readonly authSession?: ServerAuthSession | null | undefined;
-  readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly organizations?: readonly OrganizationSummary[] | undefined;
-}
+export type AppServerContext = Partial<
+  Pick<AppAuthContextSnapshot, "currentOrganizationRole" | "organizations">
+> & {
+  readonly authSession?: AppAuthContextSnapshot["session"] | undefined;
+};
 
 export function readAppServerContext(input: unknown): AppServerContext {
   return isAppServerContext(input) ? input : {};

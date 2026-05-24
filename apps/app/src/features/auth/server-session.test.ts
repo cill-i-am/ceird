@@ -9,6 +9,7 @@ interface Session {
   token: string;
   ipAddress?: string | null;
   userAgent?: string | null;
+  activeOrganizationId?: string | null;
 }
 
 interface User {
@@ -155,6 +156,38 @@ describe("server session lookup", () => {
       Response.json({
         session: {
           id: "session_123",
+        },
+      })
+    );
+
+    await expect(getCurrentServerSession()).resolves.toBeNull();
+  }, 1000);
+
+  it("fails closed when the auth session active organization id is invalid", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        session: {
+          id: "session_123",
+          createdAt: "2026-04-04T17:08:12.497Z",
+          updatedAt: "2026-04-04T17:08:12.497Z",
+          userId: "user_123",
+          expiresAt: "2026-04-11T17:08:12.497Z",
+          token: "session-token",
+          activeOrganizationId: "",
+        },
+        user: {
+          id: "user_123",
+          name: "Fallback User",
+          email: "fallback@example.com",
+          image: null,
+          emailVerified: false,
+          createdAt: "2026-04-04T17:08:12.488Z",
+          updatedAt: "2026-04-04T17:08:12.488Z",
         },
       })
     );

@@ -1,38 +1,12 @@
-import { Schema } from "effect";
-
 import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
 } from "#/lib/server-api-forwarded-headers";
 
+import { decodeServerAuthSession } from "./app-context-types";
 import { readGlobalAppServerContext } from "./app-server-context";
 import type { ServerAuthSession } from "./server-session-types";
-
-const NullableString = Schema.NullOr(Schema.String);
-
-const ServerAuthSessionSchema = Schema.Struct({
-  session: Schema.Struct({
-    id: Schema.String,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-    userId: Schema.String,
-    expiresAt: Schema.String,
-    token: Schema.String,
-    ipAddress: Schema.optional(NullableString),
-    userAgent: Schema.optional(NullableString),
-    activeOrganizationId: Schema.optional(NullableString),
-  }),
-  user: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.optional(NullableString),
-    emailVerified: Schema.Boolean,
-    createdAt: Schema.String,
-    updatedAt: Schema.String,
-  }),
-});
 
 export async function getCurrentServerSessionDirect() {
   const { getRequestHeader } = await import("@tanstack/react-start/server");
@@ -91,12 +65,14 @@ async function readOptionalServerAuthSessionFromHeaders(
     return null;
   }
 
-  return decodeServerAuthSession(payload);
+  return decodeOptionalServerAuthSession(payload);
 }
 
-function decodeServerAuthSession(payload: unknown): ServerAuthSession | null {
+function decodeOptionalServerAuthSession(
+  payload: unknown
+): ServerAuthSession | null {
   try {
-    return Schema.decodeUnknownSync(ServerAuthSessionSchema)(payload);
+    return decodeServerAuthSession(payload);
   } catch {
     return null;
   }
