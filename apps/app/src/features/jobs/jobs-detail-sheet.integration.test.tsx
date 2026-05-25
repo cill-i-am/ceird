@@ -12,13 +12,14 @@ import type {
 import type { LabelIdType } from "@ceird/labels-core";
 import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import type * as EffectPackage from "effect";
 import type { ComponentProps, ReactNode } from "react";
 
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
+import { renderAndFlushReact } from "#/test/react-render";
 
 import { JobsDetailSheet } from "./jobs-detail-sheet";
 import {
@@ -238,8 +239,8 @@ describe("jobs detail sheet integration", () => {
     {
       timeout: 10_000,
     },
-    () => {
-      renderDetailSheet(
+    async () => {
+      await renderDetailSheet(
         buildDetail({
           costs: undefined,
           activity: [],
@@ -287,7 +288,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
 
       await user.click(screen.getByRole("button", { name: /add label/i }));
       await user.click(screen.getByRole("option", { name: "Urgent" }));
@@ -323,7 +324,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
 
       await user.click(screen.getByRole("button", { name: /add label/i }));
       await user.type(screen.getByPlaceholderText("Search labels"), "Warranty");
@@ -367,7 +368,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet(
+      await renderDetailSheet(
         buildDetail({ labels: [buildLabel(urgentLabelId, "Urgent")] })
       );
 
@@ -406,7 +407,7 @@ describe("jobs detail sheet integration", () => {
       mockedListJobs.mockReturnValue(Effect.fail(new Error("refresh failed")));
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
 
       await openJobDetailPanel(user, /status/i);
       await user.selectOptions(
@@ -460,7 +461,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
       await openJobDetailPanel(user, /comment/i);
 
       await user.type(
@@ -499,7 +500,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet(
+      await renderDetailSheet(
         buildDetail({
           activity: [],
           costs: undefined,
@@ -559,7 +560,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
       await openJobDetailPanel(user, /visit/i);
 
       await user.clear(screen.getByLabelText("Visit date"));
@@ -610,7 +611,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
       await openJobDetailPanel(user, /cost/i);
 
       expect(screen.getByText("Cost total")).toBeInTheDocument();
@@ -656,7 +657,7 @@ describe("jobs detail sheet integration", () => {
       );
 
       const user = userEvent.setup();
-      renderDetailSheet();
+      await renderDetailSheet();
 
       await openJobDetailPanel(user, /site/i);
       await user.selectOptions(
@@ -682,7 +683,7 @@ describe("jobs detail sheet integration", () => {
   );
 });
 
-function renderDetailSheet(
+async function renderDetailSheet(
   detail: JobDetailResponse = buildDetail(),
   options: {
     readonly commandBar?: boolean;
@@ -776,7 +777,7 @@ function renderDetailSheet(
     </JobsStateProvider>
   );
 
-  return render(
+  return await renderAndFlushReact(
     options.commandBar ? (
       <CommandBarProvider>{content}</CommandBarProvider>
     ) : (

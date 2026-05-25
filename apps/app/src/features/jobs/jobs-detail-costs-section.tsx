@@ -28,7 +28,6 @@ import {
 } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Separator } from "#/components/ui/separator";
-import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import { DetailEmpty, DetailSection } from "./jobs-detail-section";
@@ -139,6 +138,7 @@ interface JobCostsSectionProps {
     input: AddJobCostLineInput
   ) => Promise<Exit.Exit<AddJobCostLineResponse, unknown>>;
   readonly canAddCostLine: boolean;
+  readonly costDescriptionRef: React.RefObject<HTMLInputElement | null>;
   readonly detail: JobDetailResponse;
   readonly mutationError: React.ReactNode;
   readonly waiting: boolean;
@@ -147,25 +147,15 @@ interface JobCostsSectionProps {
 export function JobCostsSection({
   addJobCostLine,
   canAddCostLine,
+  costDescriptionRef,
   detail,
   mutationError,
   waiting,
 }: JobCostsSectionProps) {
   const { costs } = detail;
-  const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const [costLineForm, dispatchCostLineForm] = React.useReducer(
     costLineFormReducer,
     initialCostLineFormState
-  );
-
-  useAppHotkey(
-    "jobDetailCost",
-    () => {
-      costDescriptionRef.current?.focus();
-    },
-    {
-      enabled: canAddCostLine,
-    }
   );
 
   async function handleAddCostLine() {

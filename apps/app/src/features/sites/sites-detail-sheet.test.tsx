@@ -6,14 +6,10 @@ import type {
   SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
+
+import { renderAndFlushReact } from "#/test/react-render";
 
 import { SitesDetailSheet } from "./sites-detail-sheet";
 import { SitesStateProvider } from "./sites-state";
@@ -65,8 +61,8 @@ describe("sites detail sheet", () => {
     mockedPathname.current = `/sites/${siteId}`;
   });
 
-  it("shows site location, notes, and related jobs in one overview", () => {
-    renderSiteDetailSheet();
+  it("shows site location, notes, and related jobs in one overview", async () => {
+    await renderSiteDetailSheet();
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
@@ -127,8 +123,8 @@ describe("sites detail sheet", () => {
     ).toBeInTheDocument();
   });
 
-  it("signals when the related jobs list is capped", () => {
-    renderSiteDetailSheet({ hasMoreRelatedJobs: true });
+  it("signals when the related jobs list is capped", async () => {
+    await renderSiteDetailSheet({ hasMoreRelatedJobs: true });
 
     const overview = screen.getByRole("region", {
       name: "Docklands Campus overview",
@@ -141,8 +137,8 @@ describe("sites detail sheet", () => {
     ).toBeInTheDocument();
   });
 
-  it("links the empty jobs state to the new job route for admins", () => {
-    renderSiteDetailSheet({ relatedJobs: [] });
+  it("links the empty jobs state to the new job route for admins", async () => {
+    await renderSiteDetailSheet({ relatedJobs: [] });
 
     const relatedJobsRegion = screen.getByRole("region", {
       name: "Related jobs",
@@ -153,8 +149,8 @@ describe("sites detail sheet", () => {
     ).toHaveAttribute("href", "/jobs/new");
   });
 
-  it("hides the empty jobs creation link from members", () => {
-    renderSiteDetailSheet({ relatedJobs: [], role: "member" });
+  it("hides the empty jobs creation link from members", async () => {
+    await renderSiteDetailSheet({ relatedJobs: [], role: "member" });
 
     const relatedJobsRegion = screen.getByRole("region", {
       name: "Related jobs",
@@ -164,8 +160,8 @@ describe("sites detail sheet", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("edits the site name inline from the drawer header", () => {
-    renderSiteDetailSheet();
+  it("edits the site name inline from the drawer header", async () => {
+    await renderSiteDetailSheet();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit site name" }));
 
@@ -183,7 +179,7 @@ describe("sites detail sheet", () => {
   });
 
   it("lets Vaul close the base route drawer before routing back", async () => {
-    renderSiteDetailSheet();
+    await renderSiteDetailSheet();
 
     fireEvent.click(screen.getByRole("button", { name: "Close site details" }));
 
@@ -198,7 +194,7 @@ describe("sites detail sheet", () => {
   });
 
   it("opens scoped editors for service area, notes, and location", async () => {
-    renderSiteDetailSheet();
+    await renderSiteDetailSheet();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit service area" }));
     expect(
@@ -245,7 +241,7 @@ describe("sites detail sheet", () => {
   });
 });
 
-function renderSiteDetailSheet({
+async function renderSiteDetailSheet({
   hasMoreRelatedJobs = false,
   options = siteOptions,
   relatedJobs: jobs = relatedJobs,
@@ -262,7 +258,7 @@ function renderSiteDetailSheet({
     throw new Error("Expected a site fixture.");
   }
 
-  render(
+  await renderAndFlushReact(
     <SitesStateProvider
       activeOrganizationId={organizationId}
       options={options}

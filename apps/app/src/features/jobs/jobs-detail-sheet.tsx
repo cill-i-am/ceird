@@ -260,6 +260,7 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const costDescriptionRef = React.useRef<HTMLInputElement>(null);
   const site =
     detail.site ??
     (detail.job.siteId ? lookup.siteById.get(detail.job.siteId) : undefined);
@@ -522,9 +523,20 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   useAppHotkey("jobDetailComment", () => setActivePanel("comments"), {
     enabled: canAddComment,
   });
-  useAppHotkey("jobDetailCost", () => setActivePanel("costs"), {
-    enabled: !isExternalViewer && canAddCostLine,
-  });
+  useAppHotkey(
+    "jobDetailCost",
+    () => {
+      if (activePanel === "costs") {
+        costDescriptionRef.current?.focus();
+        return;
+      }
+
+      setActivePanel("costs");
+    },
+    {
+      enabled: !isExternalViewer && canAddCostLine,
+    }
+  );
   useAppHotkey("jobDetailVisit", () => setActivePanel("visits"), {
     enabled: !isExternalViewer && canAddVisit,
   });
@@ -1157,6 +1169,7 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
           key={workItemId}
           addJobCostLine={addJobCostLine}
           canAddCostLine={canAddCostLine}
+          costDescriptionRef={costDescriptionRef}
           detail={detail}
           mutationError={renderMutationError(costLineResult)}
           waiting={costLineResult.waiting}

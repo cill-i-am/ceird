@@ -13,6 +13,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
+import { flushReactUpdates, renderAndFlushReact } from "#/test/react-render";
+
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
 const switchedOrganizationId = decodeOrganizationId("org_next");
@@ -29,12 +31,14 @@ const {
   mockedGetCurrentServerJobDetail,
   mockedGetCurrentServerJobOptions,
   mockedListAllCurrentServerJobs,
+  mockedNavigate,
 } = vi.hoisted(() => ({
   mockedEnsureActiveOrganizationId: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentOrganizationMemberRole: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerJobDetail: vi.fn<AsyncLoaderMock>(),
   mockedGetCurrentServerJobOptions: vi.fn<AsyncLoaderMock>(),
   mockedListAllCurrentServerJobs: vi.fn<AsyncLoaderMock>(),
+  mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -51,6 +55,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
   };
 });
 
@@ -468,6 +473,8 @@ describe("jobs route loader", () => {
       expect(
         within(queuePanel).getAllByText("Inspect boiler").length
       ).toBeGreaterThan(0);
+
+      await flushReactUpdates();
     }
   );
 
@@ -481,7 +488,7 @@ describe("jobs route loader", () => {
       const { JobsRouteContent } =
         await import("#/features/jobs/jobs-route-content");
 
-      render(
+      await renderAndFlushReact(
         <JobsRouteContent
           activeOrganizationId={organizationId}
           list={{

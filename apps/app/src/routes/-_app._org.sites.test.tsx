@@ -7,6 +7,8 @@ import { QueryClient } from "@tanstack/query-core";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
+import { flushReactUpdates } from "#/test/react-render";
+
 type AsyncLoaderMock = (...args: unknown[]) => Promise<unknown>;
 const organizationId = decodeOrganizationId("org_123");
 const userId = "user_123" as UserIdType;
@@ -288,6 +290,8 @@ describe("sites route loader", () => {
       expect(
         screen.getByRole("link", { name: "Docklands Campus" })
       ).toBeInTheDocument();
+
+      await flushReactUpdates();
     }
   );
 });
