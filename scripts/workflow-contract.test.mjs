@@ -581,6 +581,7 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     stagingDeployJob,
     /pnpm alchemy deploy --stage "\$STAGING_STAGE" --yes/
   );
+  assert.match(stagingDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
   assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
   assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
   assert.match(buildWorkflow, /cloudflare-state-store\.json/);
