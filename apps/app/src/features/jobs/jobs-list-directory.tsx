@@ -43,7 +43,7 @@ import {
   JOB_PRIORITY_LABELS as PRIORITY_LABELS,
   JOB_STATUS_LABELS as STATUS_LABELS,
 } from "./job-display";
-import { useJobsLookup } from "./jobs-state";
+import type { useJobsLookup } from "./jobs-state";
 
 type JobsLookup = ReturnType<typeof useJobsLookup>;
 

@@ -2,29 +2,28 @@ import { Button } from "#/components/ui/button";
 
 import type { JobDetailActionPanel } from "./jobs-detail-types";
 
+export interface JobDetailActionCapabilities {
+  readonly addComment: boolean;
+  readonly addCostLine: boolean;
+  readonly addVisit: boolean;
+  readonly manageCollaborators: boolean;
+  readonly manageSite: boolean;
+  readonly manageWorkflow: boolean;
+}
+
 export function JobDetailActionRail({
   activePanel,
-  canAddComment,
-  canAddCostLine,
-  canAddVisit,
-  canManageCollaborators,
-  canManageSite,
-  canManageWorkflow,
   collaboratorsCount,
   commentsCount,
+  capabilities,
   costLinesCount,
   onPanelChange,
   visitsCount,
 }: {
   readonly activePanel: JobDetailActionPanel | null;
-  readonly canAddComment: boolean;
-  readonly canAddCostLine: boolean;
-  readonly canAddVisit: boolean;
-  readonly canManageCollaborators: boolean;
-  readonly canManageSite: boolean;
-  readonly canManageWorkflow: boolean;
   readonly collaboratorsCount: number;
   readonly commentsCount: number;
+  readonly capabilities: JobDetailActionCapabilities;
   readonly costLinesCount: number;
   readonly onPanelChange: (panel: JobDetailActionPanel | null) => void;
   readonly visitsCount: number;
@@ -35,27 +34,27 @@ export function JobDetailActionRail({
     readonly value: number | undefined;
   }[] = [];
 
-  if (canManageWorkflow) {
+  if (capabilities.manageWorkflow) {
     actions.push({ label: "Status", panel: "workflow", value: undefined });
   }
 
-  if (canManageSite) {
+  if (capabilities.manageSite) {
     actions.push({ label: "Site", panel: "site", value: undefined });
   }
 
-  if (canAddComment || commentsCount > 0) {
+  if (capabilities.addComment || commentsCount > 0) {
     actions.push({ label: "Comment", panel: "comments", value: commentsCount });
   }
 
-  if (canAddCostLine || costLinesCount > 0) {
+  if (capabilities.addCostLine || costLinesCount > 0) {
     actions.push({ label: "Cost", panel: "costs", value: costLinesCount });
   }
 
-  if (canAddVisit || visitsCount > 0) {
+  if (capabilities.addVisit || visitsCount > 0) {
     actions.push({ label: "Visit", panel: "visits", value: visitsCount });
   }
 
-  if (canManageCollaborators || collaboratorsCount > 0) {
+  if (capabilities.manageCollaborators || collaboratorsCount > 0) {
     actions.push({
       label: "Collaborator",
       panel: "collaborators",

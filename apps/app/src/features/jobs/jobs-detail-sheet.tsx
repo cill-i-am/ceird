@@ -1253,12 +1253,14 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
 
             <JobDetailActionRail
               activePanel={activePanel}
-              canAddComment={canAddComment}
-              canAddCostLine={!isExternalViewer && canAddCostLine}
-              canAddVisit={!isExternalViewer && canAddVisit}
-              canManageCollaborators={canManageCollaborators}
-              canManageSite={!isExternalViewer}
-              canManageWorkflow={!isExternalViewer}
+              capabilities={{
+                addComment: canAddComment,
+                addCostLine: !isExternalViewer && canAddCostLine,
+                addVisit: !isExternalViewer && canAddVisit,
+                manageCollaborators: canManageCollaborators,
+                manageSite: !isExternalViewer,
+                manageWorkflow: !isExternalViewer,
+              }}
               commentsCount={detail.comments.length}
               collaboratorsCount={collaboratorsCount}
               costLinesCount={costLinesCount}

@@ -116,18 +116,29 @@ export function JobCollaboratorsSection({
   readonly updatingOrRemoving: boolean;
 }) {
   const collaboratorOptions = React.useMemo(() => {
-    const assignedUserIds = new Set(
-      collaborators
-        .map((collaborator) => collaborator.userId)
-        .filter((userId): userId is UserIdType => userId !== undefined)
-    );
+    const assignedUserIds = new Set<UserIdType>();
 
-    return externalMembers
-      .filter((member) => !assignedUserIds.has(member.userId))
-      .map((member) => ({
+    for (const collaborator of collaborators) {
+      if (collaborator.userId !== undefined) {
+        assignedUserIds.add(collaborator.userId);
+      }
+    }
+
+    const options: { readonly label: string; readonly value: UserIdType }[] =
+      [];
+
+    for (const member of externalMembers) {
+      if (assignedUserIds.has(member.userId)) {
+        continue;
+      }
+
+      options.push({
         label: member.name,
         value: member.userId,
-      }));
+      });
+    }
+
+    return options;
   }, [collaborators, externalMembers]);
   const collaboratorSelectionGroups = React.useMemo(
     () =>
@@ -275,13 +286,20 @@ function JobCollaboratorRow({
   }) => Promise<unknown>;
 }) {
   const name = externalMember?.name ?? "External collaborator";
-  const [roleLabel, setRoleLabel] = React.useState(collaborator.roleLabel);
-  const [accessLevel, setAccessLevel] =
-    React.useState<JobCollaboratorAccessLevel>(collaborator.accessLevel);
+  const [draft, dispatchDraft] = React.useReducer(
+    jobCollaboratorDraftReducer,
+    collaborator,
+    getJobCollaboratorDraft
+  );
 
   React.useEffect(() => {
-    setRoleLabel(collaborator.roleLabel);
-    setAccessLevel(collaborator.accessLevel);
+    dispatchDraft({
+      draft: {
+        accessLevel: collaborator.accessLevel,
+        roleLabel: collaborator.roleLabel,
+      },
+      type: "reset",
+    });
   }, [collaborator.accessLevel, collaborator.roleLabel]);
 
   return (
@@ -301,9 +319,14 @@ function JobCollaboratorRow({
             <FieldContent>
               <Input
                 id={`job-collaborator-role-${collaborator.id}`}
-                value={roleLabel}
+                value={draft.roleLabel}
                 disabled={disabled}
-                onChange={(event) => setRoleLabel(event.target.value)}
+                onChange={(event) =>
+                  dispatchDraft({
+                    roleLabel: event.target.value,
+                    type: "set-role-label",
+                  })
+                }
               />
             </FieldContent>
           </Field>
@@ -314,7 +337,7 @@ function JobCollaboratorRow({
             <FieldContent>
               <CommandSelect
                 id={`job-collaborator-access-${collaborator.id}`}
-                value={accessLevel}
+                value={draft.accessLevel}
                 placeholder="Choose access"
                 emptyText="No access levels available."
                 groups={accessLevelGroups}
@@ -324,7 +347,10 @@ function JobCollaboratorRow({
                     decodeOptionalJobCollaboratorAccessLevel(value);
 
                   if (nextAccessLevel !== undefined) {
-                    setAccessLevel(nextAccessLevel);
+                    dispatchDraft({
+                      accessLevel: nextAccessLevel,
+                      type: "set-access-level",
+                    });
                   }
                 }}
               />
@@ -335,13 +361,13 @@ function JobCollaboratorRow({
           <Button
             type="button"
             variant="secondary"
-            disabled={disabled || roleLabel.trim().length === 0}
+            disabled={disabled || draft.roleLabel.trim().length === 0}
             onClick={() =>
               updateCollaborator({
                 collaboratorId: collaborator.id,
                 input: {
-                  accessLevel,
-                  roleLabel: roleLabel.trim(),
+                  accessLevel: draft.accessLevel,
+                  roleLabel: draft.roleLabel.trim(),
                 },
               })
             }
@@ -360,6 +386,54 @@ function JobCollaboratorRow({
       </div>
     </li>
   );
+}
+
+interface JobCollaboratorDraft {
+  readonly accessLevel: JobCollaboratorAccessLevel;
+  readonly roleLabel: string;
+}
+
+type JobCollaboratorDraftAction =
+  | {
+      readonly draft: JobCollaboratorDraft;
+      readonly type: "reset";
+    }
+  | {
+      readonly roleLabel: string;
+      readonly type: "set-role-label";
+    }
+  | {
+      readonly accessLevel: JobCollaboratorAccessLevel;
+      readonly type: "set-access-level";
+    };
+
+function getJobCollaboratorDraft(
+  collaborator: JobCollaborator
+): JobCollaboratorDraft {
+  return {
+    accessLevel: collaborator.accessLevel,
+    roleLabel: collaborator.roleLabel,
+  };
+}
+
+function jobCollaboratorDraftReducer(
+  state: JobCollaboratorDraft,
+  action: JobCollaboratorDraftAction
+): JobCollaboratorDraft {
+  switch (action.type) {
+    case "reset": {
+      return action.draft;
+    }
+    case "set-access-level": {
+      return { ...state, accessLevel: action.accessLevel };
+    }
+    case "set-role-label": {
+      return { ...state, roleLabel: action.roleLabel };
+    }
+    default: {
+      return state;
+    }
+  }
 }
 
 function getCollaboratorAccessLevelGroups() {
