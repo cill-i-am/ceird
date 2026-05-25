@@ -361,20 +361,21 @@ function stripTypeScriptExtension(specifier: string) {
 }
 
 function getSourceFiles(directory: string): readonly string[] {
-  const appDirectory = resolve(directory, "..");
-  const trackedFiles = execFileSync("git", ["ls-files", "src"], {
-    cwd: appDirectory,
+  const repositoryRoot = resolve(directory, "..", "..", "..");
+  const sourcePrefix = "apps/app/src/";
+  const trackedFiles = execFileSync("git", ["ls-files", sourcePrefix], {
+    cwd: repositoryRoot,
     encoding: "utf8",
   });
 
   return trackedFiles
     .split("\n")
     .flatMap((filePath) => {
-      if (!filePath.startsWith("src/")) {
+      if (!filePath.startsWith(sourcePrefix)) {
         return [];
       }
 
-      const sourcePath = filePath.slice("src/".length);
+      const sourcePath = filePath.slice(sourcePrefix.length);
 
       return SOURCE_EXTENSIONS.has(getExtension(sourcePath))
         ? [sourcePath]

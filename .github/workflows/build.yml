@@ -6,7 +6,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
+  CEIRD_CLOUDFLARE: "1"
+  CEIRD_ZONE_NAME: ceird.app
   PNPM_CONFIG_OPTIONAL: "true"
 
 jobs:
@@ -133,17 +138,41 @@ jobs:
         if: steps.changes.outputs.react_app == 'true'
         run: pnpm --filter app react-doctor
 
-  e2e:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  tests:
+    name: Test ${{ matrix.name }}
     runs-on: ubuntu-latest
-    environment: main
-    needs:
-      - check-types
-    env:
-      PLAYWRIGHT_AGENT_URL: ${{ vars.PLAYWRIGHT_AGENT_URL }}
-      PLAYWRIGHT_API_URL: ${{ vars.PLAYWRIGHT_API_URL }}
-      PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL }}
-      PLAYWRIGHT_DATABASE_URL: ${{ secrets.PLAYWRIGHT_DATABASE_URL }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: agent
+            command: pnpm --filter agent test
+          - name: api
+            command: pnpm --filter api test
+          - name: app
+            command: pnpm --filter app test
+          - name: domain
+            command: pnpm --filter domain test
+          - name: mcp
+            command: pnpm --filter mcp test
+          - name: agents-core
+            command: pnpm --filter @ceird/agents-core test
+          - name: comments-core
+            command: pnpm --filter @ceird/comments-core test
+          - name: domain-core
+            command: pnpm --filter @ceird/domain-core test
+          - name: identity-core
+            command: pnpm --filter @ceird/identity-core test
+          - name: jobs-core
+            command: pnpm --filter @ceird/jobs-core test
+          - name: labels-core
+            command: pnpm --filter @ceird/labels-core test
+          - name: sites-core
+            command: pnpm --filter @ceird/sites-core test
+          - name: infra
+            command: pnpm run test:infra
+          - name: scripts
+            command: pnpm run test:scripts
 
     steps:
       - name: Checkout
@@ -168,11 +197,8 @@ jobs:
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
 
-      - name: Install Playwright browsers
-        run: pnpm --filter app exec playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        run: pnpm --filter app e2e
+      - name: Run tests
+        run: ${{ matrix.command }}
 
   build:
     runs-on: ubuntu-latest
@@ -181,6 +207,7 @@ jobs:
       - format
       - check-types
       - react-doctor
+      - tests
 
     steps:
       - name: Checkout
@@ -207,3 +234,414 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  staging-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    # Reuse the existing non-production deploy environment for credentials;
+    # STAGING_STAGE controls the actual Alchemy resources and hostnames.
+    environment: preview-deploy
+    needs:
+      - build
+    env:
+      PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
+      PLAYWRIGHT_API_URL: https://api.staging.ceird.app
+      PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
+      STAGING_STAGE: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Validate staging stage
+        run: |
+          set -euo pipefail
+          if [[ "$STAGING_STAGE" != "staging" ]]; then
+            echo "Refusing to deploy unexpected staging stage: $STAGING_STAGE"
+            exit 1
+          fi
+
+      - name: Restore Alchemy state store credentials
+        run: |
+          set -euo pipefail
+
+          credentials_dir="$HOME/.alchemy/credentials/default"
+          credentials_file="$credentials_dir/cloudflare-state-store.json"
+
+          mkdir -p "$credentials_dir"
+          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
+          chmod 600 "$credentials_file"
+
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const credentialsFile = path.join(
+            process.env.HOME,
+            ".alchemy",
+            "credentials",
+            "default",
+            "cloudflare-state-store.json"
+          );
+          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
+
+          if (
+            typeof credentials.url !== "string" ||
+            !credentials.url.startsWith("https://") ||
+            typeof credentials.authToken !== "string" ||
+            credentials.authToken.length === 0
+          ) {
+            throw new Error("Invalid Alchemy Cloudflare state store credentials");
+          }
+          NODE
+        env:
+          ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
+
+      - name: Deploy staging
+        run: pnpm alchemy deploy --stage "$STAGING_STAGE" --yes
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
+      - name: Wait for staging health
+        run: |
+          set -euo pipefail
+
+          wait_for_health() {
+            local url="$1"
+            local label="$2"
+
+            for attempt in {1..120}; do
+              if curl --fail --silent --show-error --max-time 10 "$url" >/dev/null; then
+                echo "$label is healthy"
+                return 0
+              fi
+
+              if [[ "$attempt" == "120" ]]; then
+                echo "$label did not become healthy at $url"
+                return 1
+              fi
+
+              echo "$label health check attempt $attempt failed; waiting for staging route and TLS propagation"
+              sleep 5
+            done
+          }
+
+          wait_for_auth_domain_forwarding() {
+            local label="API authenticated domain forwarding"
+
+            for attempt in {1..120}; do
+              local suffix
+              local cookie_jar
+              local signup_payload
+              local organization_payload
+
+              suffix="$(date +%s)-$RANDOM-$attempt"
+              cookie_jar="$(mktemp)"
+              signup_payload=$(printf '{"email":"staging-health-%s@example.com","password":"password123","name":"Staging Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+              organization_payload=$(printf '{"name":"Staging Health %s","slug":"staging-health-%s"}' "$suffix" "$suffix")
+
+              if curl --fail --silent --show-error --max-time 10 \
+                -c "$cookie_jar" \
+                -H "origin: $PLAYWRIGHT_BASE_URL" \
+                -H "content-type: application/json" \
+                --data "$signup_payload" \
+                "$PLAYWRIGHT_API_URL/api/auth/sign-up/email" >/dev/null \
+                && curl --fail --silent --show-error --max-time 10 \
+                  -b "$cookie_jar" \
+                  -H "origin: $PLAYWRIGHT_BASE_URL" \
+                  -H "accept: application/json" \
+                  "$PLAYWRIGHT_API_URL/api/auth/get-session" >/dev/null \
+                && curl --fail --silent --show-error --max-time 10 \
+                  -b "$cookie_jar" \
+                  -H "origin: $PLAYWRIGHT_BASE_URL" \
+                  -H "content-type: application/json" \
+                  --data "$organization_payload" \
+                  "$PLAYWRIGHT_API_URL/api/auth/organization/create" >/dev/null; then
+                rm -f "$cookie_jar"
+                echo "$label is healthy"
+                return 0
+              fi
+
+              rm -f "$cookie_jar"
+
+              if [[ "$attempt" == "120" ]]; then
+                echo "$label did not become healthy"
+                return 1
+              fi
+
+              echo "$label check attempt $attempt failed; waiting for service binding propagation"
+              sleep 5
+            done
+          }
+
+          wait_for_app_authenticated_navigation() {
+            local label="App authenticated navigation"
+
+            for attempt in {1..120}; do
+              local suffix
+              local cookie_jar
+              local signup_payload
+              local headers_file
+
+              suffix="$(date +%s)-$RANDOM-$attempt"
+              cookie_jar="$(mktemp)"
+              headers_file="$(mktemp)"
+              signup_payload=$(printf '{"email":"staging-app-health-%s@example.com","password":"password123","name":"Staging App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+
+              if curl --fail --silent --show-error --max-time 10 \
+                -c "$cookie_jar" \
+                -H "origin: $PLAYWRIGHT_BASE_URL" \
+                -H "content-type: application/json" \
+                --data "$signup_payload" \
+                "$PLAYWRIGHT_API_URL/api/auth/sign-up/email" >/dev/null \
+                && curl --silent --show-error --max-time 10 \
+                  -b "$cookie_jar" \
+                  -D "$headers_file" \
+                  -o /dev/null \
+                  "$PLAYWRIGHT_BASE_URL/" \
+                && grep -qi '^location: /create-organization' "$headers_file"; then
+                rm -f "$cookie_jar" "$headers_file"
+                echo "$label is healthy"
+                return 0
+              fi
+
+              rm -f "$cookie_jar" "$headers_file"
+
+              if [[ "$attempt" == "120" ]]; then
+                echo "$label did not become healthy"
+                return 1
+              fi
+
+              echo "$label check attempt $attempt failed; waiting for app/auth propagation"
+              sleep 5
+            done
+          }
+
+          wait_for_health "$PLAYWRIGHT_API_URL/health" "API"
+          wait_for_health "$PLAYWRIGHT_API_URL/api/auth/get-session" "API domain forwarding"
+          wait_for_auth_domain_forwarding
+          wait_for_health "$PLAYWRIGHT_AGENT_URL/health" "Agent"
+          wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
+          wait_for_app_authenticated_navigation
+
+  staging-e2e:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: E2E shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    environment: preview-deploy
+    needs:
+      - staging-deploy
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 1/3
+          - 2/3
+          - 3/3
+    env:
+      PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
+      PLAYWRIGHT_API_URL: https://api.staging.ceird.app
+      PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
+      STAGING_STAGE: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Validate staging stage
+        run: |
+          set -euo pipefail
+          if [[ "$STAGING_STAGE" != "staging" ]]; then
+            echo "Refusing to test unexpected staging stage: $STAGING_STAGE"
+            exit 1
+          fi
+
+      - name: Restore Alchemy state store credentials
+        run: |
+          set -euo pipefail
+
+          credentials_dir="$HOME/.alchemy/credentials/default"
+          credentials_file="$credentials_dir/cloudflare-state-store.json"
+
+          mkdir -p "$credentials_dir"
+          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
+          chmod 600 "$credentials_file"
+
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const credentialsFile = path.join(
+            process.env.HOME,
+            ".alchemy",
+            "credentials",
+            "default",
+            "cloudflare-state-store.json"
+          );
+          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
+
+          if (
+            typeof credentials.url !== "string" ||
+            !credentials.url.startsWith("https://") ||
+            typeof credentials.authToken !== "string" ||
+            credentials.authToken.length === 0
+          ) {
+            throw new Error("Invalid Alchemy Cloudflare state store credentials");
+          }
+          NODE
+        env:
+          ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
+
+      - name: Export Playwright database URL
+        run: |
+          set -euo pipefail
+          pnpm --silent alchemy state get ceird "$STAGING_STAGE" PostgresBranch --stage "$STAGING_STAGE" \
+            | node scripts/export-playwright-database-url.mjs
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
+      - name: Install Playwright browsers
+        run: pnpm --filter app exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --filter app e2e --shard=${{ matrix.shard }}
+
+  staging-destroy:
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.staging-deploy.result != 'skipped'
+    name: Destroy staging
+    runs-on: ubuntu-latest
+    environment: preview-deploy
+    needs:
+      - staging-deploy
+      - staging-e2e
+    env:
+      STAGING_STAGE: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Validate staging stage
+        run: |
+          set -euo pipefail
+          if [[ "$STAGING_STAGE" != "staging" ]]; then
+            echo "Refusing to destroy unexpected staging stage: $STAGING_STAGE"
+            exit 1
+          fi
+
+      - name: Restore Alchemy state store credentials
+        run: |
+          set -euo pipefail
+
+          credentials_dir="$HOME/.alchemy/credentials/default"
+          credentials_file="$credentials_dir/cloudflare-state-store.json"
+
+          mkdir -p "$credentials_dir"
+          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
+          chmod 600 "$credentials_file"
+
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const credentialsFile = path.join(
+            process.env.HOME,
+            ".alchemy",
+            "credentials",
+            "default",
+            "cloudflare-state-store.json"
+          );
+          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
+
+          if (
+            typeof credentials.url !== "string" ||
+            !credentials.url.startsWith("https://") ||
+            typeof credentials.authToken !== "string" ||
+            credentials.authToken.length === 0
+          ) {
+            throw new Error("Invalid Alchemy Cloudflare state store credentials");
+          }
+          NODE
+        env:
+          ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
+
+      - name: Destroy staging
+        run: pnpm alchemy destroy --stage "$STAGING_STAGE" --yes
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
