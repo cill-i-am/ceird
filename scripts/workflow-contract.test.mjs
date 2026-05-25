@@ -12,6 +12,18 @@ const repoRoot = path.resolve(
 const readJson = (relativePath) =>
   JSON.parse(readFileSync(path.join(repoRoot, relativePath), "utf8"));
 
+function getWorkflowJob(workflow, jobName) {
+  const escapedJobName = jobName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = workflow.match(
+    new RegExp(
+      `(?:^|\\n)  ${escapedJobName}:\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|\\n*$)`
+    )
+  );
+
+  assert.notEqual(match, null, `workflow should define ${jobName}`);
+  return match[0];
+}
+
 const activeTextFileExtensions = new Set([
   ".css",
   ".html",
@@ -514,6 +526,9 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     path.join(repoRoot, ".github/workflows/build.yml"),
     "utf8"
   );
+  const stagingDeployJob = getWorkflowJob(buildWorkflow, "staging-deploy");
+  const stagingE2eJob = getWorkflowJob(buildWorkflow, "staging-e2e");
+  const stagingDestroyJob = getWorkflowJob(buildWorkflow, "staging-destroy");
   const playwrightConfig = readFileSync(
     path.join(repoRoot, "apps/app/playwright.config.ts"),
     "utf8"
@@ -538,9 +553,11 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     buildWorkflow,
     /e2e:\n(?: {4}.*\n)* {4}environment: main/
   );
+  assert.match(stagingDeployJob, /needs:\n(?: {6}.*\n)* {6}- build/);
+  assert.match(stagingE2eJob, /needs:\n(?: {6}.*\n)* {6}- staging-deploy/);
   assert.match(
-    buildWorkflow,
-    /staging-e2e:\n(?: {4}.*\n)* {4}needs:\n(?: {6}.*\n)* {6}- build/
+    stagingDestroyJob,
+    /needs:\n(?: {6}.*\n)* {6}- staging-deploy\n {6}- staging-e2e/
   );
   assert.match(buildWorkflow, /environment: preview-deploy/);
   assert.match(
@@ -561,30 +578,45 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     /PLAYWRIGHT_AGENT_URL: https:\/\/agent\.staging\.ceird\.app/
   );
   assert.match(
-    buildWorkflow,
+    stagingDeployJob,
     /pnpm alchemy deploy --stage "\$STAGING_STAGE" --yes/
   );
   assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
   assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
   assert.match(buildWorkflow, /cloudflare-state-store\.json/);
   assert.doesNotMatch(
-    buildWorkflow,
-    /staging-e2e:[\s\S]*pnpm alchemy cloudflare bootstrap/
+    stagingDeployJob + stagingE2eJob + stagingDestroyJob,
+    /pnpm alchemy cloudflare bootstrap/
   );
   assert.match(
-    buildWorkflow,
+    stagingE2eJob,
     /pnpm --silent alchemy state get ceird "\$STAGING_STAGE" PostgresBranch --stage "\$STAGING_STAGE"/
   );
-  assert.match(buildWorkflow, /Wait for staging health/);
-  assert.match(buildWorkflow, /pnpm --filter app e2e/);
+  assert.match(stagingDeployJob, /Wait for staging health/);
+  assert.doesNotMatch(stagingDeployJob, /pnpm --filter app e2e/);
+  assert.match(stagingE2eJob, /strategy:\n {6}fail-fast: false/);
+  for (const shard of ["1/3", "2/3", "3/3"]) {
+    assert.match(
+      stagingE2eJob,
+      new RegExp(`- ${shard.replace("/", "\\/")}\\b`),
+      `staging e2e should run shard ${shard}`
+    );
+  }
   assert.match(
-    buildWorkflow,
+    stagingE2eJob,
+    /pnpm --filter app e2e --shard=\$\{\{ matrix\.shard \}\}/
+  );
+  assert.doesNotMatch(stagingE2eJob, /pnpm alchemy deploy/);
+  assert.doesNotMatch(stagingE2eJob, /pnpm alchemy destroy/);
+  assert.match(
+    stagingDestroyJob,
     /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
   );
   assert.match(
-    buildWorkflow,
+    stagingDestroyJob,
     /pnpm alchemy destroy --stage "\$STAGING_STAGE" --yes/
   );
+  assert.doesNotMatch(stagingDestroyJob, /pnpm --filter app e2e/);
   assert.doesNotMatch(readme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(appReadme, /PLAYWRIGHT_BASE_URL=<alchemy-app-url>/);
   assert.match(appReadme, /PLAYWRIGHT_AGENT_URL=<alchemy-agent-url>/);
