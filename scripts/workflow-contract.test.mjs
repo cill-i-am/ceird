@@ -177,6 +177,10 @@ test("Alchemy implementation helpers are root-owned, not a workspace package", (
     path.join(repoRoot, ".github/workflows/deploy-main.yml"),
     "utf8"
   );
+  const buildWorkflow = readFileSync(
+    path.join(repoRoot, ".github/workflows/build.yml"),
+    "utf8"
+  );
 
   assert.equal(existsSync(path.join(repoRoot, "infra")), true);
   assert.equal(existsSync(path.join(repoRoot, "packages/infra")), false);
@@ -198,7 +202,8 @@ test("Alchemy implementation helpers are root-owned, not a workspace package", (
   assert.match(stack, /from "\.\/infra\/cloudflare-stack\.ts"/);
   assert.match(workspace, /"packages\/\*"/);
   assert.doesNotMatch(workspace, /packages\/infra/);
-  assert.match(deployWorkflow, /run: pnpm run check-types:infra\b/);
+  assert.match(buildWorkflow, /run: pnpm check-types\b/);
+  assert.match(buildWorkflow, /command: pnpm run test:infra\b/);
   assert.doesNotMatch(deployWorkflow, /--filter @ceird\/infra/);
 });
 
@@ -256,11 +261,13 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.doesNotMatch(deployWorkflow, /ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /CEIRD_ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /AUTH_EMAIL_TRANSPORT:/);
-  assert.match(deployWorkflow, /run: pnpm --filter api check-types\b/);
-  assert.match(deployWorkflow, /run: pnpm --filter domain check-types\b/);
-  assert.match(deployWorkflow, /run: pnpm --filter mcp check-types\b/);
+  assert.match(deployWorkflow, /name: Build\n\s+run: pnpm build/);
   assert.match(deployWorkflow, /run: pnpm alchemy cloudflare bootstrap\b/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
+  assert.doesNotMatch(deployWorkflow, /pnpm --filter api check-types\b/);
+  assert.doesNotMatch(deployWorkflow, /pnpm --filter domain check-types\b/);
+  assert.doesNotMatch(deployWorkflow, /pnpm --filter mcp check-types\b/);
+  assert.doesNotMatch(deployWorkflow, /pnpm --filter .* test\b/);
 });
 
 test("Codex environment actions use the Alchemy-native workflow", () => {
@@ -502,7 +509,7 @@ test("manual Drizzle commands are documented as package-local fallbacks", () => 
   assert.doesNotMatch(dataLayerGuide, /infra\s+package/);
 });
 
-test("Playwright E2E defaults to an existing Alchemy stage", () => {
+test("main branch CI deploys staging before Playwright E2E", () => {
   const buildWorkflow = readFileSync(
     path.join(repoRoot, ".github/workflows/build.yml"),
     "utf8"
@@ -527,21 +534,103 @@ test("Playwright E2E defaults to an existing Alchemy stage", () => {
     buildWorkflow,
     /services:\n\s+postgres:|postgres:16|pnpm --filter (?:api|domain) db:migrate/
   );
-  assert.match(buildWorkflow, /e2e:\n(?: {4}.*\n)* {4}environment: main/);
+  assert.doesNotMatch(
+    buildWorkflow,
+    /e2e:\n(?: {4}.*\n)* {4}environment: main/
+  );
+  assert.match(
+    buildWorkflow,
+    /staging-e2e:\n(?: {4}.*\n)* {4}needs:\n(?: {6}.*\n)* {6}- build/
+  );
+  assert.match(buildWorkflow, /environment: preview-deploy/);
   assert.match(
     buildWorkflow,
     /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
   );
-  assert.match(buildWorkflow, /PLAYWRIGHT_BASE_URL:/);
-  assert.match(buildWorkflow, /PLAYWRIGHT_API_URL:/);
-  assert.match(buildWorkflow, /PLAYWRIGHT_AGENT_URL:/);
-  assert.match(buildWorkflow, /PLAYWRIGHT_DATABASE_URL:/);
+  assert.match(buildWorkflow, /STAGING_STAGE: staging/);
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_BASE_URL: https:\/\/app\.staging\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_API_URL: https:\/\/api\.staging\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_AGENT_URL: https:\/\/agent\.staging\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /pnpm alchemy deploy --stage "\$STAGING_STAGE" --yes/
+  );
+  assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
+  assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
+  assert.match(buildWorkflow, /cloudflare-state-store\.json/);
+  assert.doesNotMatch(
+    buildWorkflow,
+    /staging-e2e:[\s\S]*pnpm alchemy cloudflare bootstrap/
+  );
+  assert.match(
+    buildWorkflow,
+    /pnpm --silent alchemy state get ceird "\$STAGING_STAGE" PostgresBranch --stage "\$STAGING_STAGE"/
+  );
+  assert.match(buildWorkflow, /Wait for staging health/);
+  assert.match(buildWorkflow, /pnpm --filter app e2e/);
+  assert.match(
+    buildWorkflow,
+    /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
+  );
+  assert.match(
+    buildWorkflow,
+    /pnpm alchemy destroy --stage "\$STAGING_STAGE" --yes/
+  );
   assert.doesNotMatch(readme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(appReadme, /PLAYWRIGHT_BASE_URL=<alchemy-app-url>/);
   assert.match(appReadme, /PLAYWRIGHT_AGENT_URL=<alchemy-agent-url>/);
   assert.doesNotMatch(appReadme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.doesNotMatch(developmentGuide, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(developmentGuide, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1/);
+});
+
+test("build workflow runs static checks and tests before build in parallel", () => {
+  const buildWorkflow = readFileSync(
+    path.join(repoRoot, ".github/workflows/build.yml"),
+    "utf8"
+  );
+
+  assert.match(buildWorkflow, /lint:\n(?: {4}.*\n)* {4}runs-on:/);
+  assert.match(buildWorkflow, /format:\n(?: {4}.*\n)* {4}runs-on:/);
+  assert.match(buildWorkflow, /check-types:\n(?: {4}.*\n)* {4}runs-on:/);
+  assert.match(buildWorkflow, /react-doctor:\n(?: {4}.*\n)* {4}runs-on:/);
+  assert.match(buildWorkflow, /tests:\n(?: {4}.*\n)* {4}strategy:/);
+  for (const testName of [
+    "agent",
+    "api",
+    "app",
+    "domain",
+    "mcp",
+    "agents-core",
+    "comments-core",
+    "domain-core",
+    "identity-core",
+    "jobs-core",
+    "labels-core",
+    "sites-core",
+    "infra",
+    "scripts",
+  ]) {
+    assert.match(
+      buildWorkflow,
+      new RegExp(`name: ${testName}\\n\\s+command:`),
+      `build workflow should run ${testName} tests in the test matrix`
+    );
+  }
+  assert.match(
+    buildWorkflow,
+    /build:\n(?: {4}.*\n)* {4}needs:\n(?: {6}- (?:lint|format|check-types|react-doctor|tests)\n){5}/
+  );
+  assert.match(buildWorkflow, /run: pnpm build/);
 });
 
 test("preview workflow deploys same-repository PR stages for E2E", () => {
