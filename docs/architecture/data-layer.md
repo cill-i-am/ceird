@@ -140,6 +140,25 @@ explicit database probes. When a request materializes the database layer, it
 logs `db.initMs` and `db.preflightQuery: false` with the active request id when
 one is present.
 
+Domain database integration tests use
+`apps/domain/src/platform/database/test-database.ts` to create an isolated
+throwaway database from a configured base Postgres URL, apply the checked-in
+domain SQL migrations, and drop the throwaway database during cleanup. Normal
+workspace test runs keep these tests optional: when `API_TEST_DATABASE_URL`,
+`AUTH_TEST_DATABASE_URL`, `TEST_DATABASE_URL`, and `DATABASE_URL` are absent or
+unreachable, the integration cases skip instead of requiring cloud credentials.
+
+The root `pnpm test:domain:integration` command is the strict opt-in path for
+local and CI runs that have credentials. It either uses an explicit test
+database URL from the environment or reads the selected Alchemy stage's
+`PostgresBranch` state, then exports the URL to the domain test process as
+`API_TEST_DATABASE_URL`, `AUTH_TEST_DATABASE_URL`, and `TEST_DATABASE_URL` with
+`CEIRD_REQUIRE_TEST_DATABASE=1`. In strict mode, an unreachable database is a
+test failure rather than a skip. The helper keeps the configured database name
+as its admin connection instead of assuming a `/postgres` database, which keeps
+Neon stage URLs such as the `ceird` database usable for creating the isolated
+test databases.
+
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from
 the stage-specific `appliedMigrationsDir` before Hyperdrive and the domain

@@ -87,6 +87,35 @@ pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/identity-core test
 ```
 
+Domain integration tests that need Postgres skip cleanly during normal
+`pnpm test` runs when no reachable test database is configured. Use the explicit
+opt-in command when you want auth, HTTP, repository, migration, and
+request-scoped actor coverage to run against a real database and fail if the
+database cannot be reached:
+
+```bash
+pnpm test:domain:integration -- --stage codex-my-task
+```
+
+That command is read-only from Alchemy's perspective: it reads the selected
+stage's `PostgresBranch` state, extracts the Neon connection URI without
+printing it, sets `API_TEST_DATABASE_URL`, `AUTH_TEST_DATABASE_URL`, and
+`TEST_DATABASE_URL` for the child test process, and enables strict test database
+mode. It does not create, update, deploy, or destroy Alchemy resources. The
+stage must already exist and have its domain migrations applied.
+
+You can also point the same command at an explicit Postgres URL:
+
+```bash
+API_TEST_DATABASE_URL=postgresql://ceird:secret@example.neon.tech/ceird?sslmode=require pnpm test:domain:integration
+```
+
+Pass extra Vitest filters after a second `--`:
+
+```bash
+pnpm test:domain:integration -- --stage codex-my-task -- -t organization
+```
+
 Run Playwright E2E tests against an Alchemy stage:
 
 ```bash
@@ -172,28 +201,30 @@ to validate the migration path when needed.
 
 High-signal runtime variables:
 
-| Variable                               | Used by             | Purpose                                                           |
-| -------------------------------------- | ------------------- | ----------------------------------------------------------------- |
-| `DATABASE_URL`                         | domain              | App database connection string for package-local Node runs.       |
-| `API_TEST_DATABASE_URL`                | domain tests        | Base Postgres URL for domain integration tests.                   |
-| `TEST_DATABASE_URL`                    | test helpers        | Shared fallback base Postgres URL for integration tests.          |
-| `BETTER_AUTH_BASE_URL`                 | domain, app helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.     |
-| `BETTER_AUTH_SECRET`                   | domain              | Better Auth signing secret.                                       |
-| `AUTH_APP_ORIGIN`                      | domain              | Browser-visible app origin for redirects and auth email links.    |
-| `AUTH_EMAIL_FROM`                      | domain, infra       | Sender email address for auth emails.                             |
-| `AUTH_EMAIL_FROM_NAME`                 | domain, infra       | Sender display name.                                              |
-| `AUTH_RATE_LIMIT_ENABLED`              | domain              | Enables or disables Better Auth database-backed rate limits.      |
-| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | domain              | Timeout before abandoned Agent action runs can be failed.         |
-| `AGENT_INTERNAL_SECRET`                | domain, agent       | Internal shared secret for domain-owned Agent action calls.       |
-| `AGENT_MUTATION_TOOLS_ENABLED`         | agent               | Enables write/destructive Agent tools behind client confirmation. |
-| `API_ORIGIN`                           | app                 | Server-side API origin.                                           |
-| `VITE_API_ORIGIN`                      | app                 | Browser-exposed API origin.                                       |
-| `PLAYWRIGHT_BASE_URL`                  | E2E                 | Existing Alchemy app stage URL for Playwright tests.              |
-| `PLAYWRIGHT_API_URL`                   | E2E                 | Existing Alchemy API stage URL for Playwright API requests.       |
-| `PLAYWRIGHT_DATABASE_URL`              | E2E                 | Direct stage database URL for auth token handoff tests.           |
-| `ALCHEMY_STACK_NAME`                   | app, API, agent     | Alchemy-injected runtime stack name for Worker metadata.          |
-| `ALCHEMY_STAGE`                        | app, API, agent     | Alchemy-injected runtime stage for health checks and app config.  |
-| `GOOGLE_MAPS_API_KEY`                  | domain, infra       | Optional locally for live geocoding; required by deployed domain. |
+| Variable                               | Used by             | Purpose                                                                                            |
+| -------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                         | domain              | App database connection string for package-local Node runs.                                        |
+| `API_TEST_DATABASE_URL`                | domain tests        | Base Postgres URL for domain integration tests.                                                    |
+| `AUTH_TEST_DATABASE_URL`               | domain auth tests   | Optional auth-specific base Postgres URL for auth integration tests.                               |
+| `TEST_DATABASE_URL`                    | test helpers        | Shared fallback base Postgres URL for integration tests.                                           |
+| `CEIRD_REQUIRE_TEST_DATABASE`          | domain tests        | Forces database-backed integration tests to fail instead of skip when the database is unavailable. |
+| `BETTER_AUTH_BASE_URL`                 | domain, app helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.                                      |
+| `BETTER_AUTH_SECRET`                   | domain              | Better Auth signing secret.                                                                        |
+| `AUTH_APP_ORIGIN`                      | domain              | Browser-visible app origin for redirects and auth email links.                                     |
+| `AUTH_EMAIL_FROM`                      | domain, infra       | Sender email address for auth emails.                                                              |
+| `AUTH_EMAIL_FROM_NAME`                 | domain, infra       | Sender display name.                                                                               |
+| `AUTH_RATE_LIMIT_ENABLED`              | domain              | Enables or disables Better Auth database-backed rate limits.                                       |
+| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | domain              | Timeout before abandoned Agent action runs can be failed.                                          |
+| `AGENT_INTERNAL_SECRET`                | domain, agent       | Internal shared secret for domain-owned Agent action calls.                                        |
+| `AGENT_MUTATION_TOOLS_ENABLED`         | agent               | Enables write/destructive Agent tools behind client confirmation.                                  |
+| `API_ORIGIN`                           | app                 | Server-side API origin.                                                                            |
+| `VITE_API_ORIGIN`                      | app                 | Browser-exposed API origin.                                                                        |
+| `PLAYWRIGHT_BASE_URL`                  | E2E                 | Existing Alchemy app stage URL for Playwright tests.                                               |
+| `PLAYWRIGHT_API_URL`                   | E2E                 | Existing Alchemy API stage URL for Playwright API requests.                                        |
+| `PLAYWRIGHT_DATABASE_URL`              | E2E                 | Direct stage database URL for auth token handoff tests.                                            |
+| `ALCHEMY_STACK_NAME`                   | app, API, agent     | Alchemy-injected runtime stack name for Worker metadata.                                           |
+| `ALCHEMY_STAGE`                        | app, API, agent     | Alchemy-injected runtime stage for health checks and app config.                                   |
+| `GOOGLE_MAPS_API_KEY`                  | domain, infra       | Optional locally for live geocoding; required by deployed domain.                                  |
 
 Infrastructure deployment variables are documented in
 [Local Development And Infrastructure](architecture/local-development-and-infra.md).
@@ -201,8 +232,8 @@ Local Alchemy provider auth uses `pnpm alchemy login`; CI supplies
 `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and preview state-store
 credentials as GitHub secrets.
 
-When running domain database integration tests against a specific database, set
-`API_TEST_DATABASE_URL`:
+When running an individual domain database integration file against a specific
+database, set `API_TEST_DATABASE_URL`:
 
 ```bash
 API_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5443/ceird pnpm --filter domain test -- src/domains/jobs/http.integration.test.ts

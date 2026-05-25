@@ -15,6 +15,7 @@ export interface CreateTestDatabaseOptions {
 
 export interface TestDatabaseEnvironment {
   readonly API_TEST_DATABASE_URL?: string | undefined;
+  readonly CEIRD_REQUIRE_TEST_DATABASE?: string | undefined;
   readonly DATABASE_URL?: string | undefined;
   readonly TEST_DATABASE_URL?: string | undefined;
 }
@@ -32,8 +33,7 @@ export async function createTestDatabase(
   readonly url: string;
 }> {
   const baseUrl = new URL(resolveTestDatabaseBaseUrl(options));
-  const adminUrl = new URL(baseUrl);
-  adminUrl.pathname = "/postgres";
+  const adminUrl = new URL(resolveAdminDatabaseUrl(baseUrl.toString()));
 
   const databaseName = `${options.prefix ?? "app_test"}_${Date.now()}_${Math.random()
     .toString(16)
@@ -42,6 +42,14 @@ export async function createTestDatabase(
 
   if (!(await canConnect(adminPool))) {
     await adminPool.end();
+
+    if (isTestDatabaseRequired()) {
+      throw new Error(
+        `Integration test database is required but unavailable at ${formatDatabaseLocation(
+          adminUrl
+        )}. Check API_TEST_DATABASE_URL, TEST_DATABASE_URL, AUTH_TEST_DATABASE_URL, or the selected Alchemy stage.`
+      );
+    }
 
     return {
       cleanup: () => Promise.resolve(),
@@ -87,6 +95,24 @@ export function resolveTestDatabaseBaseUrl(
     environment.DATABASE_URL ??
     DEFAULT_APP_DATABASE_URL
   );
+}
+
+export function resolveAdminDatabaseUrl(baseUrl: string): string {
+  const adminUrl = new URL(baseUrl);
+
+  if (adminUrl.pathname === "" || adminUrl.pathname === "/") {
+    adminUrl.pathname = "/postgres";
+  }
+
+  return adminUrl.toString();
+}
+
+export function isTestDatabaseRequired(
+  environment: TestDatabaseEnvironment = process.env
+): boolean {
+  const value = environment.CEIRD_REQUIRE_TEST_DATABASE?.trim().toLowerCase();
+
+  return value === "1" || value === "true" || value === "yes";
 }
 
 export async function canConnect(pool: Pool): Promise<boolean> {
@@ -256,4 +282,10 @@ async function isFile(filePath: string): Promise<boolean> {
 
 function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function formatDatabaseLocation(url: URL): string {
+  const port = url.port.length === 0 ? "" : `:${url.port}`;
+
+  return `${url.protocol}//${url.hostname}${port}${url.pathname}`;
 }
