@@ -14,39 +14,13 @@ import {
 
 import { organization } from "../identity/authentication/schema.js";
 import { label } from "../labels/schema.js";
-import { generateServiceAreaId, generateSiteId } from "./id-generation.js";
+import { generateSiteId } from "./id-generation.js";
 
 const sitesTimestamp = (name: string) =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
 
 const archivedAtColumn = (name: string) =>
   timestamp(name, { withTimezone: true });
-
-export const serviceArea = pgTable(
-  "service_areas",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateServiceAreaId),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    description: text("description"),
-    slug: text("slug").notNull(),
-    createdAt: sitesTimestamp("created_at"),
-    updatedAt: sitesTimestamp("updated_at"),
-    archivedAt: archivedAtColumn("archived_at"),
-  },
-  (table) => [
-    uniqueIndex("service_areas_organization_slug_idx").on(
-      table.organizationId,
-      table.slug
-    ),
-    index("service_areas_organization_name_idx").on(
-      table.organizationId,
-      table.name
-    ),
-  ]
-);
 
 export const site = pgTable(
   "sites",
@@ -55,9 +29,6 @@ export const site = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    serviceAreaId: uuid("service_area_id").references(() => serviceArea.id, {
-      onDelete: "set null",
-    }),
     name: text("name").notNull(),
     addressLine1: text("address_line_1").notNull(),
     addressLine2: text("address_line_2"),
@@ -80,22 +51,9 @@ export const site = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
-    index("sites_organization_service_area_idx").on(
-      table.organizationId,
-      table.serviceAreaId
-    ),
-    index("sites_service_area_id_idx").on(table.serviceAreaId),
     uniqueIndex("sites_id_organization_idx").on(table.id, table.organizationId),
     index("sites_organization_active_name_idx")
       .on(table.organizationId, table.name.asc().nullsLast(), table.id)
-      .where(sql`${table.archivedAt} is null`),
-    index("sites_organization_service_area_active_name_idx")
-      .on(
-        table.organizationId,
-        table.serviceAreaId,
-        table.name.asc().nullsLast(),
-        table.id
-      )
       .where(sql`${table.archivedAt} is null`),
     check("sites_country_chk", sql`${table.country} in ('IE', 'GB')`),
     check(
@@ -161,7 +119,6 @@ export const siteLabel = pgTable(
 );
 
 export const sitesSchema = {
-  serviceArea,
   site,
   siteLabel,
 };

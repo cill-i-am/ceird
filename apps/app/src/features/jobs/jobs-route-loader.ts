@@ -5,7 +5,7 @@ import type {
   JobOptionsResponse,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
-import type { ServiceAreaOption, SiteOption } from "@ceird/sites-core";
+import type { SiteOption } from "@ceird/sites-core";
 import type { QueryClient } from "@tanstack/query-core";
 
 import {
@@ -29,7 +29,6 @@ const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
   contacts: [],
   labels: [],
   members: [],
-  serviceAreas: [],
   sites: [],
 };
 
@@ -121,10 +120,6 @@ function deriveExternalJobsScopedOptions(
 ): JobOptionsResponse {
   const contactsById = new Map<JobContactOption["id"], JobContactOption>();
   const labelsById = new Map<Label["id"], Label>();
-  const serviceAreasById = new Map<
-    ServiceAreaOption["id"],
-    ServiceAreaOption
-  >();
   const sitesById = new Map<SiteOption["id"], SiteOption>();
 
   for (const detail of details) {
@@ -134,15 +129,6 @@ function deriveExternalJobsScopedOptions(
 
     if (detail.site !== undefined) {
       sitesById.set(detail.site.id, detail.site);
-
-      const { serviceAreaId, serviceAreaName } = detail.site;
-
-      if (serviceAreaId !== undefined && serviceAreaName !== undefined) {
-        serviceAreasById.set(serviceAreaId, {
-          id: serviceAreaId,
-          name: serviceAreaName,
-        });
-      }
     }
 
     if (detail.contact !== undefined) {
@@ -160,7 +146,6 @@ function deriveExternalJobsScopedOptions(
     contacts: [...contactsById.values()],
     labels: [...labelsById.values()],
     members: [],
-    serviceAreas: [...serviceAreasById.values()],
     sites: [...sitesById.values()],
   };
 }

@@ -12,7 +12,6 @@ import {
 } from "#/features/jobs/jobs-server";
 import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-route-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
-import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
 
 export function loadOrganizationHomeRoute(context: {
   readonly activeOrganizationId: OrganizationId;
@@ -48,7 +47,6 @@ export async function loadOrganizationHomeDashboardRouteData(context: {
     jobs: jobs.items,
     jobMemberOptions,
     sites: {
-      serviceAreas: deriveServiceAreasFromSites(sites.items),
       sites: sites.items,
     },
   });

@@ -1,19 +1,19 @@
 # Sites Core
 
-`@ceird/sites-core` is the shared sites and service-area contract package. It
-is consumed by the domain HTTP handlers, the app's typed Effect HTTP client, and jobs
-contracts that need site IDs or site option DTOs.
+`@ceird/sites-core` is the shared sites contract package. It is consumed by the
+domain HTTP handlers, the app's typed Effect HTTP client, and jobs contracts
+that need site IDs or site option DTOs.
 
 ## Important Files
 
-| File              | Purpose                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/ids.ts`      | Branded site and service-area IDs.                                                                   |
-| `src/domain.ts`   | Runtime schemas for site coordinates, country, geocoding provider, and ISO datetime values.          |
-| `src/dto.ts`      | Site create/update inputs, site option DTOs, site options response, and service-area DTO schemas.    |
-| `src/errors.ts`   | Typed public site, service-area, geocoding, access-denied, and storage errors with HTTP annotations. |
-| `src/http-api.ts` | Effect `HttpApi` contract groups for sites and service areas.                                        |
-| `src/index.ts`    | Public package exports.                                                                              |
+| File              | Purpose                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `src/ids.ts`      | Branded site IDs.                                                                                 |
+| `src/domain.ts`   | Runtime schemas for site coordinates, country, geocoding provider, and ISO datetime values.       |
+| `src/dto.ts`      | Site create/update inputs, site option DTOs, comments, labels, and site options response schemas. |
+| `src/errors.ts`   | Typed public site, geocoding, access-denied, and storage errors with HTTP annotations.            |
+| `src/http-api.ts` | Effect `HttpApi` contract group for sites.                                                        |
+| `src/index.ts`    | Public package exports.                                                                           |
 
 ## Commands
 

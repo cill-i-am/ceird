@@ -1,27 +1,19 @@
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 import type { QueryClient } from "@tanstack/query-core";
 
-import {
-  getCurrentServerServiceAreas,
-  listAllCurrentServerSites,
-} from "#/features/api/app-api-server";
+import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import {
   assertOrganizationInternalRole,
   requireOrganizationRouteContextRole,
 } from "#/features/organizations/organization-route-access";
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
-import {
-  decodeOrganizationViewerUserId,
-  hasOrganizationElevatedAccess,
-} from "#/features/organizations/organization-viewer";
+import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
-import { deriveServiceAreasFromSites } from "#/features/sites/sites-options";
 import { seedRouteQueryData } from "#/lib/tanstack-db-query";
 
 import { organizationSitesQueryKey } from "./sites-query-keys";
 
 const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
-  serviceAreas: [],
   sites: [],
 };
 
@@ -49,16 +41,8 @@ export async function loadSitesRouteData(
   assertOrganizationInternalRole({ role: activeRole });
 
   const sitesRequestStartedAt = Date.now();
-  const [sites, serviceAreas] = await Promise.all([
-    listAllCurrentServerSites(),
-    hasOrganizationElevatedAccess(activeRole)
-      ? getCurrentServerServiceAreas()
-      : Promise.resolve({ items: [] }),
-  ]);
+  const sites = await listAllCurrentServerSites();
   const siteOptions = {
-    serviceAreas: hasOrganizationElevatedAccess(activeRole)
-      ? serviceAreas.items.map(({ id, name }) => ({ id, name }))
-      : deriveServiceAreasFromSites(sites.items),
     sites: sites.items,
   } satisfies SitesOptionsResponse;
   const viewer = {

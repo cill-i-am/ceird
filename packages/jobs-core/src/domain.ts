@@ -76,17 +76,6 @@ export type JobCollaboratorRoleLabel = Schema.Schema.Type<
   typeof JobCollaboratorRoleLabelSchema
 >;
 
-export const RATE_CARD_LINE_KINDS = [
-  "labour",
-  "callout",
-  "material_markup",
-  "custom",
-] as const;
-export const RateCardLineKindSchema = Schema.Literals(RATE_CARD_LINE_KINDS);
-export type RateCardLineKind = Schema.Schema.Type<
-  typeof RateCardLineKindSchema
->;
-
 export const JOB_ACTIVITY_EVENT_TYPES = [
   "job_created",
   "status_changed",
@@ -100,7 +89,6 @@ export const JOB_ACTIVITY_EVENT_TYPES = [
   "visit_logged",
   "label_added",
   "label_removed",
-  "cost_line_added",
 ] as const;
 export const JobActivityEventTypeSchema = Schema.Literals(
   JOB_ACTIVITY_EVENT_TYPES
@@ -124,13 +112,6 @@ export const JobTitleSchema = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
 );
 export type JobTitle = Schema.Schema.Type<typeof JobTitleSchema>;
-
-export const JobExternalReferenceSchema = Schema.Trim.pipe(
-  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(120))
-);
-export type JobExternalReference = Schema.Schema.Type<
-  typeof JobExternalReferenceSchema
->;
 
 export const ContactNameSchema = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
@@ -159,64 +140,6 @@ export const JobVisitNoteSchema = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
 );
 export type JobVisitNote = Schema.Schema.Type<typeof JobVisitNoteSchema>;
-
-export const JOB_COST_LINE_TYPES = ["labour", "material"] as const;
-export const JobCostLineTypeSchema = Schema.Literals(JOB_COST_LINE_TYPES);
-export type JobCostLineType = Schema.Schema.Type<typeof JobCostLineTypeSchema>;
-
-export const MAX_JOB_COST_LINE_QUANTITY = 9_999_999_999.99;
-export const MAX_JOB_COST_LINE_UNIT_PRICE_MINOR = 2_147_483_647;
-export const MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS = 10_000;
-
-export const JobCostLineDescriptionSchema = Schema.Trim.pipe(
-  Schema.check(Schema.isMinLength(1))
-);
-export type JobCostLineDescription = Schema.Schema.Type<
-  typeof JobCostLineDescriptionSchema
->;
-
-export const JobCostLineQuantitySchema = Schema.Number.pipe(
-  Schema.refine(
-    (value): value is number =>
-      value > 0 &&
-      Number.isFinite(value) &&
-      value <= MAX_JOB_COST_LINE_QUANTITY &&
-      /^\d+(?:\.\d{1,2})?$/.test(String(value)),
-    {
-      message: `Expected a positive finite quantity with at most two decimal places less than or equal to ${MAX_JOB_COST_LINE_QUANTITY}`,
-    }
-  )
-);
-export type JobCostLineQuantity = Schema.Schema.Type<
-  typeof JobCostLineQuantitySchema
->;
-
-export const JobCostLineUnitPriceMinorSchema = Schema.Int.pipe(
-  Schema.check(
-    Schema.isGreaterThanOrEqualTo(0),
-    Schema.isLessThanOrEqualTo(MAX_JOB_COST_LINE_UNIT_PRICE_MINOR)
-  )
-);
-export type JobCostLineUnitPriceMinor = Schema.Schema.Type<
-  typeof JobCostLineUnitPriceMinorSchema
->;
-
-export const JobCostLineTaxRateBasisPointsSchema = Schema.Int.pipe(
-  Schema.check(
-    Schema.isGreaterThanOrEqualTo(0),
-    Schema.isLessThanOrEqualTo(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
-  )
-);
-export type JobCostLineTaxRateBasisPoints = Schema.Schema.Type<
-  typeof JobCostLineTaxRateBasisPointsSchema
->;
-
-export const JobCostLineTotalMinorSchema = Schema.Int.pipe(
-  Schema.check(Schema.isGreaterThanOrEqualTo(0))
-);
-export type JobCostLineTotalMinor = Schema.Schema.Type<
-  typeof JobCostLineTotalMinorSchema
->;
 
 export const JobBlockedReasonSchema = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))

@@ -1,6 +1,5 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
-  ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
   SiteNotFoundError,
@@ -13,8 +12,6 @@ import {
 } from "effect/unstable/httpapi";
 
 import {
-  AddJobCostLineInputSchema,
-  AddJobCostLineResponseSchema,
   AddJobCommentInputSchema,
   AddJobCommentResponseSchema,
   AddJobVisitInputSchema,
@@ -23,8 +20,6 @@ import {
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
   CreateJobResponseSchema,
-  CreateRateCardInputSchema,
-  CreateRateCardResponseSchema,
   JobDetailResponseSchema,
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
@@ -37,13 +32,10 @@ import {
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   PatchJobResponseSchema,
-  RateCardListResponseSchema,
   ReopenJobResponseSchema,
   TransitionJobInputSchema,
   TransitionJobResponseSchema,
   UpdateJobCollaboratorInputSchema,
-  UpdateRateCardInputSchema,
-  UpdateRateCardResponseSchema,
 } from "./dto.js";
 import {
   BlockedReasonRequiredError,
@@ -51,7 +43,6 @@ import {
   CoordinatorMatchesAssigneeError,
   InvalidJobTransitionError,
   JobAccessDeniedError,
-  JobCostSummaryLimitExceededError,
   JobCollaboratorConflictError,
   JobCollaboratorNotFoundError,
   JobListCursorInvalidError,
@@ -59,10 +50,9 @@ import {
   JobStorageError,
   OrganizationActivityCursorInvalidError,
   OrganizationMemberNotFoundError,
-  RateCardNotFoundError,
   VisitDurationIncrementError,
 } from "./errors.js";
-import { JobCollaboratorId, RateCardId, WorkItemId } from "./ids.js";
+import { JobCollaboratorId, WorkItemId } from "./ids.js";
 
 const jobsGroup = HttpApiGroup.make("jobs")
   .add(
@@ -100,7 +90,6 @@ const jobsGroup = HttpApiGroup.make("jobs")
       success: CreateJobResponseSchema.pipe(HttpApiSchema.status("Created")),
       error: [
         JobAccessDeniedError,
-        ServiceAreaNotFoundError,
         SiteNotFoundError,
         SiteGeocodingFailedError,
         SiteGeocodingProviderError,
@@ -222,21 +211,6 @@ const jobsGroup = HttpApiGroup.make("jobs")
     )
   )
   .add(
-    HttpApiEndpoint.post("addJobCostLine", "/jobs/:workItemId/cost-lines", {
-      params: { workItemId: WorkItemId },
-      payload: AddJobCostLineInputSchema,
-      success: AddJobCostLineResponseSchema.pipe(
-        HttpApiSchema.status("Created")
-      ),
-      error: [
-        JobNotFoundError,
-        JobAccessDeniedError,
-        JobCostSummaryLimitExceededError,
-        JobStorageError,
-      ],
-    })
-  )
-  .add(
     HttpApiEndpoint.get(
       "listJobCollaborators",
       "/jobs/:workItemId/collaborators",
@@ -307,37 +281,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
 
 export const JobsApiGroup = jobsGroup;
 
-const rateCardsGroup = HttpApiGroup.make("rateCards")
-  .add(
-    HttpApiEndpoint.get("listRateCards", "/rate-cards", {
-      success: RateCardListResponseSchema,
-      error: [JobAccessDeniedError, JobStorageError],
-    })
-  )
-  .add(
-    HttpApiEndpoint.post("createRateCard", "/rate-cards", {
-      payload: CreateRateCardInputSchema,
-      success: CreateRateCardResponseSchema.pipe(
-        HttpApiSchema.status("Created")
-      ),
-      error: [JobAccessDeniedError, JobStorageError],
-    })
-  )
-  .add(
-    HttpApiEndpoint.patch("updateRateCard", "/rate-cards/:rateCardId", {
-      params: { rateCardId: RateCardId },
-      payload: UpdateRateCardInputSchema,
-      success: UpdateRateCardResponseSchema,
-      error: [JobAccessDeniedError, RateCardNotFoundError, JobStorageError],
-    })
-  );
-
-export const RateCardsApiGroup = rateCardsGroup;
-
-export const JobsApi = HttpApi.make("JobsApi")
-  .add(JobsApiGroup)
-  .add(RateCardsApiGroup);
+export const JobsApi = HttpApi.make("JobsApi").add(JobsApiGroup);
 
 export type JobsApiGroupType = typeof JobsApiGroup;
-export type RateCardsApiGroupType = typeof RateCardsApiGroup;
 export type JobsApiType = typeof JobsApi;

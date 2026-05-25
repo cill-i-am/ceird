@@ -3,7 +3,6 @@ import type { JobListResponse, WorkItemIdType } from "@ceird/jobs-core";
 import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
 import { SiteId } from "@ceird/sites-core";
 import type {
-  ServiceAreaIdType,
   SiteListCursorType,
   SiteIdType,
   SitesOptionsResponse,
@@ -48,12 +47,6 @@ const labelsResponse: LabelsResponse = {
 };
 
 const sitesOptionsResponse: SitesOptionsResponse = {
-  serviceAreas: [
-    {
-      id: "44444444-4444-4444-8444-444444444444" as ServiceAreaIdType,
-      name: "North",
-    },
-  ],
   sites: [],
 };
 

@@ -9,8 +9,6 @@ import {
 import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
 import {
   IsoDateTimeString as IsoDateTimeStringSchema,
-  ServiceAreaId as ServiceAreaIdSchema,
-  ServiceAreaNotFoundError,
   SiteId as SiteIdSchema,
   SiteListCursor as SiteListCursorSchema,
   SiteListCursorInvalidError,
@@ -20,7 +18,6 @@ import {
 } from "@ceird/sites-core";
 import type {
   IsoDateTimeStringType as IsoDateTimeString,
-  ServiceAreaIdType as ServiceAreaId,
   SiteCountry,
   SiteGeocodingProvider,
   SiteIdType as SiteId,
@@ -28,7 +25,15 @@ import type {
   SiteListQuery,
   SiteOption,
 } from "@ceird/sites-core";
-import { Layer, Context, Effect, Option, Schema } from "effect";
+import {
+  Array as Arr,
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  pipe,
+} from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
@@ -37,7 +42,6 @@ import {
   listSiteLabelsForOrganization,
   listSiteLabelsForSites,
 } from "./site-label-queries.js";
-export { ServiceAreasRepository } from "./service-areas-repository.js";
 
 interface IdRow {
   readonly id: string;
@@ -56,8 +60,6 @@ interface SiteOptionRow {
   readonly latitude: number;
   readonly longitude: number;
   readonly name: string;
-  readonly service_area_id: string | null;
-  readonly service_area_name: string | null;
   readonly town: string | null;
 }
 
@@ -65,7 +67,6 @@ interface SiteCursorState {
   readonly id: SiteId;
   readonly name: string;
   readonly organizationId: OrganizationId;
-  readonly serviceAreaId?: ServiceAreaId | undefined;
 }
 
 interface LabelRow {
@@ -101,7 +102,6 @@ export interface CreateSiteRecordInput {
   readonly longitude: number;
   readonly name: string;
   readonly organizationId: OrganizationId;
-  readonly serviceAreaId?: ServiceAreaId;
   readonly town?: string;
 }
 
@@ -117,7 +117,6 @@ export interface UpdateSiteRecordInput {
   readonly latitude: number;
   readonly longitude: number;
   readonly name: string;
-  readonly serviceAreaId?: ServiceAreaId;
   readonly town?: string;
 }
 
@@ -141,7 +140,6 @@ const decodeSiteCursorState = Schema.decodeUnknownSync(
     id: SiteIdSchema,
     name: Schema.String,
     organizationId: OrganizationIdSchema,
-    serviceAreaId: Schema.optional(ServiceAreaIdSchema),
   })
 );
 const decodeLabel = Schema.decodeUnknownSync(LabelSchema);
@@ -162,34 +160,6 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         ) => sql.withTransaction(effect)
       );
 
-      const ensureServiceAreaInOrganization = Effect.fn(
-        "SitesRepository.ensureServiceAreaInOrganization"
-      )(function* (
-        organizationId: OrganizationId,
-        serviceAreaId: ServiceAreaId
-      ) {
-        const rows = yield* sql<IdRow>`
-          select id
-          from service_areas
-          where organization_id = ${organizationId}
-            and id = ${serviceAreaId}
-            and archived_at is null
-          limit 1
-        `;
-
-        if (rows[0] === undefined) {
-          return yield* Effect.fail(
-            new ServiceAreaNotFoundError({
-              message: "Service area does not exist in the organization",
-              organizationId,
-              serviceAreaId,
-            })
-          );
-        }
-
-        return serviceAreaId;
-      });
-
       const findById = Effect.fn("SitesRepository.findById")(function* (
         organizationId: OrganizationId,
         siteId: SiteId
@@ -209,13 +179,6 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const create = Effect.fn("SitesRepository.create")(function* (
         input: CreateSiteRecordInput
       ) {
-        if (input.serviceAreaId !== undefined) {
-          yield* ensureServiceAreaInOrganization(
-            input.organizationId,
-            input.serviceAreaId
-          );
-        }
-
         const values = makeSiteValues(input, {
           id: generateSiteId(),
           organization_id: input.organizationId,
@@ -235,13 +198,6 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         siteId: SiteId,
         input: UpdateSiteRecordInput
       ) {
-        if (input.serviceAreaId !== undefined) {
-          yield* ensureServiceAreaInOrganization(
-            organizationId,
-            input.serviceAreaId
-          );
-        }
-
         const rows = yield* sql<IdRow>`
           update sites
           set ${sql.update({
@@ -280,11 +236,8 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
                 sites.latitude,
                 sites.longitude,
                 sites.name,
-                service_areas.id as service_area_id,
-                service_areas.name as service_area_name,
                 sites.town
               from sites
-              left join service_areas on service_areas.id = sites.service_area_id
               where sites.organization_id = ${organizationId}
                 and sites.archived_at is null
               order by sites.name asc nulls last, sites.id asc
@@ -294,11 +247,14 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           { concurrency: 2 }
         );
 
-        return rows.map((row) => {
-          const siteId = decodeSiteId(row.id);
+        return pipe(
+          rows,
+          Arr.map((row) => {
+            const siteId = decodeSiteId(row.id);
 
-          return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
-        });
+            return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+          })
+        );
       });
 
       const list = Effect.fn("SitesRepository.list")(function* (
@@ -311,10 +267,6 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           sql`sites.archived_at is null`,
         ];
 
-        if (query.serviceAreaId !== undefined) {
-          clauses.push(sql`sites.service_area_id = ${query.serviceAreaId}`);
-        }
-
         if (query.cursor !== undefined) {
           const encodedCursor = query.cursor;
           const cursor = yield* Effect.try({
@@ -326,10 +278,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
               }),
           });
 
-          if (
-            cursor.organizationId !== organizationId ||
-            cursor.serviceAreaId !== query.serviceAreaId
-          ) {
+          if (cursor.organizationId !== organizationId) {
             return yield* Effect.fail(
               new SiteListCursorInvalidError({
                 cursor: encodedCursor,
@@ -363,34 +312,36 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             sites.latitude,
             sites.longitude,
             sites.name,
-            service_areas.id as service_area_id,
-            service_areas.name as service_area_name,
             sites.town
           from sites
-          left join service_areas on service_areas.id = sites.service_area_id
           where ${sql.and(clauses)}
           order by sites.name asc nulls last, sites.id asc
           limit ${limit + 1}
         `;
 
-        const pageRows = rows.slice(0, limit);
+        const pageRows = Arr.take(rows, limit);
         const labelsBySiteId = yield* listSiteLabelsForSites(
           sql,
           organizationId,
-          pageRows.map((row) => decodeSiteId(row.id))
+          pipe(
+            pageRows,
+            Arr.map((row) => decodeSiteId(row.id))
+          )
         );
-        const items = pageRows.map((row) => {
-          const siteId = decodeSiteId(row.id);
+        const items = pipe(
+          pageRows,
+          Arr.map((row) => {
+            const siteId = decodeSiteId(row.id);
 
-          return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
-        });
+            return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+          })
+        );
         const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
         const nextCursor =
           nextCursorRow === undefined
             ? undefined
             : encodeSiteCursor(nextCursorRow, {
                 organizationId,
-                serviceAreaId: query.serviceAreaId,
               });
 
         return decodeSiteListResponse({ items, nextCursor });
@@ -412,11 +363,8 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
               sites.latitude,
               sites.longitude,
               sites.name,
-              service_areas.id as service_area_id,
-              service_areas.name as service_area_name,
               sites.town
             from sites
-            left join service_areas on service_areas.id = sites.service_area_id
             where sites.organization_id = ${organizationId}
               and sites.id = ${siteId}
               and sites.archived_at is null
@@ -443,7 +391,6 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
 
       return {
         create,
-        ensureServiceAreaInOrganization,
         findById,
         getOptionById,
         list,
@@ -699,7 +646,6 @@ function makeSiteValues(
     latitude: input.latitude,
     longitude: input.longitude,
     name: input.name,
-    service_area_id: input.serviceAreaId ?? null,
     town: input.town ?? null,
   };
 }
@@ -722,22 +668,19 @@ function mapSiteOptionRow(
     longitude: row.longitude,
     labels,
     name: row.name,
-    serviceAreaId: nullableToUndefined(row.service_area_id),
-    serviceAreaName: nullableToUndefined(row.service_area_name),
     town: nullableToUndefined(row.town),
   });
 }
 
 function encodeSiteCursor(
   row: Pick<SiteOptionRow, "id" | "name">,
-  state: Pick<SiteCursorState, "organizationId" | "serviceAreaId">
+  state: Pick<SiteCursorState, "organizationId">
 ) {
   return encodeJsonCursor(
     {
       id: decodeSiteId(row.id),
       name: row.name,
       organizationId: state.organizationId,
-      serviceAreaId: state.serviceAreaId,
     } satisfies SiteCursorState,
     decodeSiteListCursor
   );
@@ -747,7 +690,6 @@ function decodeSiteCursor(cursor: SiteListCursor): {
   readonly id: SiteId;
   readonly name: string;
   readonly organizationId: OrganizationId;
-  readonly serviceAreaId?: ServiceAreaId | undefined;
 } {
   const value = decodeJsonCursor(cursor, decodeSiteCursorState);
 
@@ -755,7 +697,6 @@ function decodeSiteCursor(cursor: SiteListCursor): {
     id: value.id,
     name: value.name,
     organizationId: value.organizationId,
-    serviceAreaId: value.serviceAreaId,
   };
 }
 

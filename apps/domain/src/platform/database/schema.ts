@@ -35,23 +35,15 @@ export {
 export {
   contact,
   jobsSchema,
-  rateCard,
-  rateCardLine,
   siteContact,
   workItem,
   workItemActivity,
   workItemCollaborator,
-  workItemCostLine,
   workItemLabel,
   workItemVisit,
 } from "../../domains/jobs/schema.js";
 export { label, labelsSchema } from "../../domains/labels/schema.js";
-export {
-  serviceArea,
-  site,
-  siteLabel,
-  sitesSchema,
-} from "../../domains/sites/schema.js";
+export { site, siteLabel, sitesSchema } from "../../domains/sites/schema.js";
 
 export const databaseSchema = {
   ...agentsSchema,

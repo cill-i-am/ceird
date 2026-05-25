@@ -55,7 +55,6 @@ const optionsResponse: JobOptionsResponse = {
       name: "Owner User",
     },
   ],
-  serviceAreas: [],
   sites: [],
 };
 

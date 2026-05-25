@@ -1,8 +1,5 @@
 "use client";
-import type {
-  ServiceAreaIdType,
-  SitesOptionsResponse,
-} from "@ceird/sites-core";
+import type { SitesOptionsResponse } from "@ceird/sites-core";
 import {
   Add01Icon,
   ArrowRight01Icon,
@@ -38,7 +35,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "#/components/ui/input-group";
-import { Select } from "#/components/ui/select";
 import {
   Table,
   TableBody,
@@ -73,7 +69,6 @@ interface SiteDirectoryViewItem {
 }
 
 type SitesMapFilter = "all" | "mapped" | "unmapped";
-type SitesServiceAreaFilter = "all" | "none" | ServiceAreaIdType;
 
 // Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
 // react-doctor-disable-next-line
@@ -91,8 +86,6 @@ export function SitesPage({
   const isMobile = useIsMobile();
   const [query, setQuery] = React.useState("");
   const [mapFilter, setMapFilter] = React.useState<SitesMapFilter>("all");
-  const [serviceAreaFilter, setServiceAreaFilter] =
-    React.useState<SitesServiceAreaFilter>("all");
   const siteDirectoryItems = React.useMemo<readonly SiteDirectoryViewItem[]>(
     () =>
       options.sites.map((site) => {
@@ -103,7 +96,7 @@ export function SitesPage({
           addressSummary,
           isMapped,
           searchText: normalizeSearchValue(
-            [site.name, addressSummary, site.serviceAreaName ?? ""].join(" ")
+            [site.name, addressSummary].join(" ")
           ),
           site,
         };
@@ -128,25 +121,18 @@ export function SitesPage({
   const filteredSiteItems = React.useMemo(() => {
     const normalizedQuery = normalizeSearchValue(query);
 
-    return siteDirectoryItems.filter(({ isMapped, searchText, site }) => {
+    return siteDirectoryItems.filter(({ isMapped, searchText }) => {
       const matchesQuery =
         normalizedQuery.length === 0 || searchText.includes(normalizedQuery);
       const matchesMap =
         mapFilter === "all" ||
         (mapFilter === "mapped" && isMapped) ||
         (mapFilter === "unmapped" && !isMapped);
-      const matchesServiceArea =
-        serviceAreaFilter === "all" ||
-        site.serviceAreaId === serviceAreaFilter ||
-        (serviceAreaFilter === "none" && !site.serviceAreaId);
 
-      return matchesQuery && matchesMap && matchesServiceArea;
+      return matchesQuery && matchesMap;
     });
-  }, [mapFilter, query, serviceAreaFilter, siteDirectoryItems]);
-  const hasFilters =
-    query.trim().length > 0 ||
-    mapFilter !== "all" ||
-    serviceAreaFilter !== "all";
+  }, [mapFilter, query, siteDirectoryItems]);
+  const hasFilters = query.trim().length > 0 || mapFilter !== "all";
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {
@@ -156,9 +142,7 @@ export function SitesPage({
         group: "Sites",
         icon: Location01Icon,
         id: `sites-open-${site.id}`,
-        keywords: [site.serviceAreaName, addressSummary].filter(
-          (value): value is string => typeof value === "string"
-        ),
+        keywords: [addressSummary],
         priority: 60,
         run: () =>
           navigate({
@@ -166,7 +150,7 @@ export function SitesPage({
             to: "/sites/$siteId",
           }),
         scope: "route",
-        subtitle: site.serviceAreaName ?? undefined,
+        subtitle: addressSummary,
         title: `Open ${site.name}`,
       }));
 
@@ -201,7 +185,6 @@ export function SitesPage({
   function clearFilters() {
     setQuery("");
     setMapFilter("all");
-    setServiceAreaFilter("all");
   }
 
   function openSite(siteId: SiteDirectoryItem["id"]) {
@@ -271,7 +254,7 @@ export function SitesPage({
             </h2>
 
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(12rem,1fr)_minmax(10rem,14rem)] xl:w-[min(34rem,100%)]">
+              <div className="grid min-w-0 gap-2 xl:w-[min(24rem,100%)]">
                 <InputGroup>
                   <InputGroupAddon>
                     <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
@@ -284,30 +267,6 @@ export function SitesPage({
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </InputGroup>
-
-                <label className="sr-only" htmlFor="sites-service-area-filter">
-                  Filter by service area
-                </label>
-                <Select
-                  id="sites-service-area-filter"
-                  value={serviceAreaFilter}
-                  onChange={(event) =>
-                    setServiceAreaFilter(
-                      parseSitesServiceAreaFilter(
-                        event.target.value,
-                        options.serviceAreas
-                      )
-                    )
-                  }
-                >
-                  <option value="all">All service areas</option>
-                  {options.serviceAreas.map((serviceArea) => (
-                    <option key={serviceArea.id} value={serviceArea.id}>
-                      {serviceArea.name}
-                    </option>
-                  ))}
-                  <option value="none">No service area</option>
-                </Select>
               </div>
 
               <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -364,8 +323,7 @@ export function SitesPage({
                   </EmptyMedia>
                   <EmptyTitle>No sites match these filters.</EmptyTitle>
                   <EmptyDescription>
-                    Clear filters or search for another site, address, or
-                    service area.
+                    Clear filters or search for another site or address.
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -380,7 +338,7 @@ export function SitesPage({
             </EmptyMedia>
             <EmptyTitle>No sites in this workspace.</EmptyTitle>
             <EmptyDescription>
-              Create a site to pin addresses, service areas, and job locations.
+              Create a site to pin addresses and job locations.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -417,7 +375,6 @@ function SitesDesktopDirectory({
       <TableHeader>
         <TableRow>
           <TableHead>Site</TableHead>
-          <TableHead>Service area</TableHead>
           <TableHead className="w-10">
             <span className="sr-only">Open</span>
           </TableHead>
@@ -428,8 +385,15 @@ function SitesDesktopDirectory({
           <TableRow
             key={site.id}
             aria-label={`Open ${site.name}`}
+            tabIndex={0}
             className="cursor-pointer"
             onClick={() => openSite(site.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openSite(site.id);
+              }
+            }}
           >
             <TableCell>
               <div className="flex min-w-0 items-center gap-2">
@@ -448,13 +412,6 @@ function SitesDesktopDirectory({
                   </p>
                 </div>
               </div>
-            </TableCell>
-            <TableCell>
-              {site.serviceAreaName ? (
-                <Badge variant="secondary">{site.serviceAreaName}</Badge>
-              ) : (
-                <span className="text-muted-foreground">No service area</span>
-              )}
             </TableCell>
             <TableCell className="text-right text-muted-foreground">
               <HugeiconsIcon
@@ -498,14 +455,6 @@ function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
             className="shrink-0 text-muted-foreground"
             aria-hidden
           />
-        </div>
-        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-medium">Service area</span>
-          {site.serviceAreaName ? (
-            <Badge variant="secondary">{site.serviceAreaName}</Badge>
-          ) : (
-            <span>No service area</span>
-          )}
         </div>
       </Link>
     </li>
@@ -575,17 +524,4 @@ function buildSiteAddressSummary(
 
 function normalizeSearchValue(value: string) {
   return value.trim().toLocaleLowerCase("en-IE");
-}
-
-function parseSitesServiceAreaFilter(
-  value: string,
-  serviceAreas: readonly { readonly id: ServiceAreaIdType }[]
-): SitesServiceAreaFilter {
-  if (value === "all" || value === "none") {
-    return value;
-  }
-
-  return serviceAreas.some((serviceArea) => serviceArea.id === value)
-    ? (value as ServiceAreaIdType)
-    : "all";
 }

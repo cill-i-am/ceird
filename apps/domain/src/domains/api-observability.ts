@@ -9,8 +9,6 @@ const FAILURE_DETAIL_KEYS = [
   "collaboratorId",
   "labelId",
   "organizationId",
-  "rateCardId",
-  "serviceAreaId",
   "siteId",
   "workItemId",
 ] as const;

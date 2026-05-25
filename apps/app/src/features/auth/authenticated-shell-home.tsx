@@ -323,7 +323,7 @@ function SitesWithActiveWork({
       : "No active site work.";
   const emptySitesDescription =
     dashboard.sites.stats.totalSites === 0
-      ? "Create sites so jobs have addresses, service areas, and map context."
+      ? "Create sites so jobs have addresses and map context."
       : "Sites with active jobs will appear here once work is underway.";
 
   if (dashboard.sites.items.length === 0) {
@@ -375,11 +375,6 @@ function HomeSiteRow({ site }: { readonly site: AuthenticatedHomeSiteItem }) {
         >
           {site.name}
         </Link>
-        {site.serviceAreaName ? (
-          <p className="text-xs text-muted-foreground">
-            {site.serviceAreaName}
-          </p>
-        ) : null}
       </div>
       <DashboardGridCell label="Active jobs">
         {site.activeJobCount === 1

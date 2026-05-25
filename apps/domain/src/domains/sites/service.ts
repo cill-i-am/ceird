@@ -3,9 +3,9 @@ import type {
   AddSiteCommentInput,
   AssignSiteLabelInput,
   CreateSiteInput,
-  ServiceAreaOption,
   SiteIdType as SiteId,
   SiteListQuery,
+  SiteOption,
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
@@ -13,19 +13,11 @@ import {
   SiteNotFoundError,
   SiteStorageError,
 } from "@ceird/sites-core";
-import {
-  Layer,
-  Context,
-  Array as EffectArray,
-  Effect,
-  HashMap,
-  Option,
-} from "effect";
+import { Layer, Context, Effect, Option } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
-  hasElevatedOrganizationAccess,
   isExternalOrganizationActor,
   OrganizationAuthorization,
 } from "../organizations/authorization.js";
@@ -37,7 +29,6 @@ import {
 } from "../organizations/errors.js";
 import { SiteGeocoder } from "./geocoder.js";
 import {
-  ServiceAreasRepository,
   SiteLabelAssignmentsRepository,
   SitesRepository,
 } from "./repositories.js";
@@ -53,7 +44,6 @@ export class SitesService extends Context.Service<SitesService>()(
     make: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
       const commentsRepository = yield* CommentsRepository;
-      const serviceAreasRepository = yield* ServiceAreasRepository;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
@@ -92,13 +82,6 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        if (input.serviceAreaId !== undefined) {
-          yield* Effect.annotateCurrentSpan(
-            "serviceAreaId",
-            input.serviceAreaId
-          );
-        }
-
         const geocodedLocation = yield* siteGeocoder.geocode(input);
 
         return yield* sitesRepository
@@ -117,7 +100,6 @@ export class SitesService extends Context.Service<SitesService>()(
                 longitude: geocodedLocation.longitude,
                 name: input.name,
                 organizationId: actor.organizationId,
-                serviceAreaId: input.serviceAreaId,
                 town: input.town,
               });
               yield* Effect.annotateCurrentSpan("siteId", siteId);
@@ -166,14 +148,21 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        if (input.serviceAreaId !== undefined) {
-          yield* Effect.annotateCurrentSpan(
-            "serviceAreaId",
-            input.serviceAreaId
+        const existingSite = yield* sitesRepository
+          .getOptionById(actor.organizationId, siteId)
+          .pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => failSiteNotFound(siteId),
+                onSome: Effect.succeed,
+              })
+            ),
+            Effect.catchTag("SqlError", failSitesStorageError)
           );
-        }
 
-        const geocodedLocation = yield* siteGeocoder.geocode(input);
+        const geocodedLocation = siteLocationMatchesInput(existingSite, input)
+          ? getGeocodedLocationFromSite(existingSite)
+          : yield* siteGeocoder.geocode(input);
 
         const site = yield* sitesRepository
           .withTransaction(
@@ -190,7 +179,6 @@ export class SitesService extends Context.Service<SitesService>()(
                 latitude: geocodedLocation.latitude,
                 longitude: geocodedLocation.longitude,
                 name: input.name,
-                serviceAreaId: input.serviceAreaId,
                 town: input.town,
               })
               .pipe(Effect.map(Option.getOrUndefined))
@@ -227,13 +215,6 @@ export class SitesService extends Context.Service<SitesService>()(
           query.cursor !== undefined
         );
 
-        if (query.serviceAreaId !== undefined) {
-          yield* Effect.annotateCurrentSpan(
-            "serviceAreaId",
-            query.serviceAreaId
-          );
-        }
-
         const result = yield* sitesRepository
           .list(actor.organizationId, query)
           .pipe(Effect.catchTag("SqlError", failSitesStorageError));
@@ -258,24 +239,11 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const [sites, serviceAreas] = hasElevatedOrganizationAccess(actor)
-          ? yield* Effect.all([
-              sitesRepository.listOptions(actor.organizationId),
-              serviceAreasRepository.listOptions(actor.organizationId),
-            ]).pipe(Effect.catchTag("SqlError", failSitesStorageError))
-          : yield* sitesRepository.listOptions(actor.organizationId).pipe(
-              Effect.map(
-                (siteOptions) =>
-                  [
-                    siteOptions,
-                    deriveServiceAreaOptionsFromSites(siteOptions),
-                  ] as const
-              ),
-              Effect.catchTag("SqlError", failSitesStorageError)
-            );
+        const sites = yield* sitesRepository
+          .listOptions(actor.organizationId)
+          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
 
         return {
-          serviceAreas,
           sites,
         } as const;
       });
@@ -458,7 +426,6 @@ export class SitesService extends Context.Service<SitesService>()(
         CommentsRepository.Default,
         CurrentOrganizationActor.Default,
         OrganizationAuthorization.Default,
-        ServiceAreasRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default
       )
@@ -580,34 +547,22 @@ function failSiteNotFound(siteId: SiteId) {
   );
 }
 
-function deriveServiceAreaOptionsFromSites(
-  sites: readonly {
-    readonly serviceAreaId?: ServiceAreaOption["id"] | undefined;
-    readonly serviceAreaName?: string | undefined;
-  }[]
-): readonly ServiceAreaOption[] {
-  const serviceAreasById = EffectArray.reduce(
-    sites,
-    HashMap.empty<ServiceAreaOption["id"], ServiceAreaOption>(),
-    (currentServiceAreasById, site) =>
-      site.serviceAreaId === undefined || site.serviceAreaName === undefined
-        ? currentServiceAreasById
-        : HashMap.set(currentServiceAreasById, site.serviceAreaId, {
-            id: site.serviceAreaId,
-            name: site.serviceAreaName,
-          })
+function siteLocationMatchesInput(site: SiteOption, input: UpdateSiteInput) {
+  return (
+    site.addressLine1 === input.addressLine1 &&
+    site.addressLine2 === input.addressLine2 &&
+    site.town === input.town &&
+    site.county === input.county &&
+    site.country === input.country &&
+    site.eircode === input.eircode
   );
-
-  return HashMap.toValues(serviceAreasById).toSorted(compareServiceAreaOptions);
 }
 
-function compareServiceAreaOptions(
-  left: ServiceAreaOption,
-  right: ServiceAreaOption
-): number {
-  const nameComparison = left.name.localeCompare(right.name);
-
-  return nameComparison === 0
-    ? left.id.localeCompare(right.id)
-    : nameComparison;
+function getGeocodedLocationFromSite(site: SiteOption) {
+  return {
+    geocodedAt: site.geocodedAt,
+    latitude: site.latitude,
+    longitude: site.longitude,
+    provider: site.geocodingProvider,
+  };
 }

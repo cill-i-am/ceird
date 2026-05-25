@@ -191,14 +191,14 @@ describe("TanStack DB collection helpers", () => {
         collection: {
           toArray: [
             {
-              $collectionId: "organization:org_123:service-areas",
+              $collectionId: "organization:org_123:labels",
               $key: "temp_123",
               $synced: false,
               id: "temp_123" as string,
               name: "Temporary optimistic row",
             },
             {
-              $collectionId: "organization:org_123:service-areas",
+              $collectionId: "organization:org_123:labels",
               $key: "srv_123",
               $synced: true,
               id: "srv_123" as string,

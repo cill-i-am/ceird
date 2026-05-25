@@ -2,13 +2,11 @@ import { LabelId } from "@ceird/labels-core/ids";
 import {
   AddSiteCommentInputSchema,
   AssignSiteLabelInputSchema,
-  CreateServiceAreaInputSchema,
   CreateSiteInputSchema,
   SiteListQuerySchema,
-  UpdateServiceAreaInputSchema,
   UpdateSiteInputSchema,
 } from "@ceird/sites-core/dto";
-import { ServiceAreaId, SiteId } from "@ceird/sites-core/ids";
+import { SiteId } from "@ceird/sites-core/ids";
 import { Schema } from "effect";
 
 import {
@@ -40,17 +38,12 @@ const RemoveSiteLabelActionInputSchema = Schema.Struct({
   siteId: SiteId,
 });
 
-const UpdateServiceAreaActionInputSchema = Schema.Struct({
-  input: UpdateServiceAreaInputSchema,
-  serviceAreaId: ServiceAreaId,
-});
-
 export const siteAgentActions = [
   defineAgentAction({
     confirmationPolicy: "none",
     display: {
       label: "List site options",
-      summary: "Read site and service area options.",
+      summary: "Read site options.",
       target: "sites",
     },
     inputSchema: EmptyAgentActionInputSchema,
@@ -70,7 +63,7 @@ export const siteAgentActions = [
     inputSchema: SiteListQuerySchema,
     executionStatus: "executable",
     kind: "read",
-    modelDescription: "List Ceird sites, optionally filtered by service area.",
+    modelDescription: "List Ceird sites.",
     modelName: "listSites",
     name: "ceird.sites.list",
   }),
@@ -157,50 +150,5 @@ export const siteAgentActions = [
     modelDescription: "Remove a label from a Ceird site.",
     modelName: "removeSiteLabel",
     name: "ceird.sites.remove_label",
-  }),
-] as const;
-
-export const serviceAreaAgentActions = [
-  defineAgentAction({
-    confirmationPolicy: "none",
-    display: {
-      label: "List service areas",
-      summary: "Read organization service areas.",
-      target: "service areas",
-    },
-    inputSchema: EmptyAgentActionInputSchema,
-    executionStatus: "executable",
-    kind: "read",
-    modelDescription: "List Ceird service areas.",
-    modelName: "listServiceAreas",
-    name: "ceird.service_areas.list",
-  }),
-  defineAgentAction({
-    confirmationPolicy: "confirm",
-    display: {
-      label: "Create service area",
-      summary: "Create a new service area.",
-      target: "service area",
-    },
-    inputSchema: CreateServiceAreaInputSchema,
-    executionStatus: "executable",
-    kind: "write",
-    modelDescription: "Create a Ceird service area.",
-    modelName: "createServiceArea",
-    name: "ceird.service_areas.create",
-  }),
-  defineAgentAction({
-    confirmationPolicy: "confirm",
-    display: {
-      label: "Update service area",
-      summary: "Update an existing service area.",
-      target: "service area",
-    },
-    inputSchema: UpdateServiceAreaActionInputSchema,
-    executionStatus: "executable",
-    kind: "write",
-    modelDescription: "Update a Ceird service area by ID.",
-    modelName: "updateServiceArea",
-    name: "ceird.service_areas.update",
   }),
 ] as const;

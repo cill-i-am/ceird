@@ -1,8 +1,5 @@
 "use client";
-import {
-  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
-  SITE_GEOCODING_FAILED_ERROR_TAG,
-} from "@ceird/sites-core";
+import { SITE_GEOCODING_FAILED_ERROR_TAG } from "@ceird/sites-core";
 import {
   Add01Icon,
   Cancel01Icon,
@@ -30,7 +27,6 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import {
   SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
-  buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   validateSiteCreateDraft,
@@ -43,7 +39,6 @@ import {
   getSitesAsyncErrorMessage,
   isSitesAsyncFailure,
   useCreateSiteMutation,
-  useSitesOptions,
 } from "./sites-state";
 
 export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
@@ -53,7 +48,6 @@ export function SitesCreateSheet() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const options = useSitesOptions();
   const [createResult, createSite] = useCreateSiteMutation();
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
@@ -67,11 +61,6 @@ export function SitesCreateSheet() {
   const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const serviceAreaGroups = React.useMemo(
-    () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
-    [options.serviceAreas]
-  );
-
   React.useEffect(() => {
     if (pathname === "/sites/new") {
       setOverlayOpen(true);
@@ -125,14 +114,14 @@ export function SitesCreateSheet() {
   );
 
   async function handleSubmit() {
-    const nextErrors = validateSiteCreateDraft(values, options.serviceAreas);
+    const nextErrors = validateSiteCreateDraft(values);
     setFieldErrors(nextErrors);
 
     if (hasSiteCreateFieldErrors(nextErrors)) {
       return;
     }
 
-    const payload = buildCreateSiteInputFromDraft(values, options.serviceAreas);
+    const payload = buildCreateSiteInputFromDraft(values);
     const exit = await createSite(payload);
 
     if (Exit.isSuccess(exit)) {
@@ -143,16 +132,6 @@ export function SitesCreateSheet() {
     }
 
     const failure = Cause.findErrorOption(exit.cause);
-
-    if (
-      Option.isSome(failure) &&
-      failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
-    ) {
-      setFieldErrors((current) => ({
-        ...current,
-        serviceAreaSelection: failure.value.message,
-      }));
-    }
 
     if (
       Option.isSome(failure) &&
@@ -185,7 +164,7 @@ export function SitesCreateSheet() {
             <div className="min-w-0">
               <DrawerTitle>New site</DrawerTitle>
               <DrawerDescription className="sr-only">
-                Add a site name, service area, address, and access notes.
+                Add a site name, address, and access notes.
               </DrawerDescription>
             </div>
             <DrawerClose asChild>
@@ -224,18 +203,7 @@ export function SitesCreateSheet() {
               draft={values}
               errors={fieldErrors}
               idPrefix="site"
-              serviceAreaGroups={serviceAreaGroups}
               onDraftChange={setValues}
-              onServiceAreaSelectionChange={(nextValue) => {
-                setFieldErrors((current) => ({
-                  ...current,
-                  serviceAreaSelection: undefined,
-                }));
-                setValues((current) => ({
-                  ...current,
-                  serviceAreaSelection: nextValue,
-                }));
-              }}
             />
           </div>
 
@@ -275,7 +243,6 @@ function isHandledCreateSiteError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    (error._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG ||
-      error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
+    error._tag === SITE_GEOCODING_FAILED_ERROR_TAG
   );
 }

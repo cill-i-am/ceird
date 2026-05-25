@@ -21,10 +21,7 @@ const schemaExportNames = [
   "oauthConsent",
   "oauthRefreshToken",
   "organization",
-  "rateCard",
-  "rateCardLine",
   "rateLimit",
-  "serviceArea",
   "session",
   "site",
   "siteComment",
@@ -37,7 +34,6 @@ const schemaExportNames = [
   "workItemActivity",
   "workItemCollaborator",
   "workItemComment",
-  "workItemCostLine",
   "workItemLabel",
   "workItemVisit",
 ] as const;
@@ -83,10 +79,7 @@ export const oauthClient = requireSchemaExport("oauthClient");
 export const oauthConsent = requireSchemaExport("oauthConsent");
 export const oauthRefreshToken = requireSchemaExport("oauthRefreshToken");
 export const organization = requireSchemaExport("organization");
-export const rateCard = requireSchemaExport("rateCard");
-export const rateCardLine = requireSchemaExport("rateCardLine");
 export const rateLimit = requireSchemaExport("rateLimit");
-export const serviceArea = requireSchemaExport("serviceArea");
 export const session = requireSchemaExport("session");
 export const site = requireSchemaExport("site");
 export const siteComment = requireSchemaExport("siteComment");
@@ -99,6 +92,5 @@ export const workItem = requireSchemaExport("workItem");
 export const workItemActivity = requireSchemaExport("workItemActivity");
 export const workItemCollaborator = requireSchemaExport("workItemCollaborator");
 export const workItemComment = requireSchemaExport("workItemComment");
-export const workItemCostLine = requireSchemaExport("workItemCostLine");
 export const workItemLabel = requireSchemaExport("workItemLabel");
 export const workItemVisit = requireSchemaExport("workItemVisit");

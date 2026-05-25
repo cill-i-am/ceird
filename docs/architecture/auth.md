@@ -170,8 +170,8 @@ Current Ceird MCP scopes are:
 
 - `ceird:read` for read-only labels, sites, jobs, and options tools
 - `ceird:write` for job comments and job-label assignment tools
-- `ceird:admin` for organization activity and rate-card tools; this scope also
-  satisfies read and write tool checks
+- `ceird:admin` for organization activity and administrative tools; this scope
+  also satisfies read and write tool checks
 
 Current rate-limit rules:
 

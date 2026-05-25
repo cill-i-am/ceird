@@ -3,9 +3,9 @@ import {
   AgentInternalApiGroup,
   AgentThreadsApiGroup,
 } from "@ceird/agents-core";
-import { JobsApiGroup, RateCardsApiGroup } from "@ceird/jobs-core";
+import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
-import { ServiceAreasApiGroup, SitesApiGroup } from "@ceird/sites-core";
+import { SitesApiGroup } from "@ceird/sites-core";
 import { Schema } from "effect";
 import {
   HttpApi,
@@ -25,7 +25,5 @@ export const AppApi = HttpApi.make("CeirdApi")
   .add(AgentThreadsApiGroup)
   .add(AgentInternalApiGroup)
   .add(JobsApiGroup)
-  .add(RateCardsApiGroup)
   .add(LabelsApiGroup)
-  .add(SitesApiGroup)
-  .add(ServiceAreasApiGroup);
+  .add(SitesApiGroup);

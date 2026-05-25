@@ -5,7 +5,6 @@ import type {
 } from "@ceird/jobs-core";
 import type { LabelsResponse } from "@ceird/labels-core";
 import type {
-  ServiceAreaListResponse,
   SiteListQuery,
   SiteListResponse,
   SiteOption,
@@ -118,16 +117,6 @@ export async function listAllCurrentServerSitesDirect(
     ensureSiteCursorProgress(page.nextCursor, seenCursors);
     cursor = page.nextCursor;
   }
-}
-
-export async function getCurrentServerServiceAreasDirect(): Promise<ServiceAreaListResponse> {
-  const request = await readServerAppApiRequestStrict();
-
-  return await runAppApiClient(
-    request,
-    "ServiceAreasServer.listServiceAreas",
-    (client) => client.serviceAreas.listServiceAreas()
-  );
 }
 
 export async function listAllCurrentServerJobsDirect(

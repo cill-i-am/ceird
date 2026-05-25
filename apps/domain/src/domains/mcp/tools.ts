@@ -9,12 +9,11 @@ import {
   WorkItemId,
 } from "@ceird/jobs-core";
 import { LabelId } from "@ceird/labels-core";
-import { ServiceAreaId, SiteId } from "@ceird/sites-core";
+import { SiteId } from "@ceird/sites-core";
 import { Context, Effect, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsService } from "../labels/service.js";
 import { SitesService } from "../sites/service.js";
@@ -68,11 +67,7 @@ export class McpToolRequestRuntime extends Context.Service<
   }
 >()("McpToolRequestRuntime") {}
 
-type McpToolDomainServices =
-  | ConfigurationService
-  | JobsService
-  | LabelsService
-  | SitesService;
+type McpToolDomainServices = JobsService | LabelsService | SitesService;
 type McpToolPassthroughServices = HttpServerRequest.HttpServerRequest;
 
 export class McpToolDomainRuntime extends Context.Service<
@@ -157,15 +152,6 @@ const JobsActivityListDefinition = {
   isReadonly: true,
 } as const satisfies McpToolDefinition<"ceird.jobs.activity.list">;
 
-const RateCardsListDefinition = {
-  name: "ceird.rate_cards.list",
-  description: "List rate cards for jobs configuration.",
-  requiredScope: "ceird:admin",
-  isAdminTool: true,
-  isDestructive: false,
-  isReadonly: true,
-} as const satisfies McpToolDefinition<"ceird.rate_cards.list">;
-
 const JobsAddCommentDefinition = {
   name: "ceird.jobs.add_comment",
   description: "Add a comment to a job.",
@@ -200,7 +186,6 @@ export const MCP_TOOL_DEFINITIONS = [
   JobsDetailDefinition,
   JobsOptionsDefinition,
   JobsActivityListDefinition,
-  RateCardsListDefinition,
   JobsAddCommentDefinition,
   JobsAssignLabelDefinition,
   JobsRemoveLabelDefinition,
@@ -256,7 +241,6 @@ const JobsListTool = Tool.make(JobsListDefinition.name, {
     labelId: Schema.optional(LabelId),
     limit: OptionalLimit,
     priority: OptionalString,
-    serviceAreaId: Schema.optional(ServiceAreaId),
     siteId: Schema.optional(SiteId),
     status: OptionalString,
   }),
@@ -300,15 +284,6 @@ const JobsActivityListTool = Tool.make(JobsActivityListDefinition.name, {
 })
   .annotate(Tool.Destructive, JobsActivityListDefinition.isDestructive)
   .annotate(Tool.Readonly, JobsActivityListDefinition.isReadonly);
-
-const RateCardsListTool = Tool.make(RateCardsListDefinition.name, {
-  description: RateCardsListDefinition.description,
-  failure: McpToolFailureSchema,
-  success: ToolOutputSchema,
-  dependencies: McpToolDependencies,
-})
-  .annotate(Tool.Destructive, RateCardsListDefinition.isDestructive)
-  .annotate(Tool.Readonly, RateCardsListDefinition.isReadonly);
 
 const JobsAddCommentTool = Tool.make(JobsAddCommentDefinition.name, {
   description: JobsAddCommentDefinition.description,
@@ -356,7 +331,6 @@ export const CeirdMcpToolkit = Toolkit.make(
   JobsDetailTool,
   JobsOptionsTool,
   JobsActivityListTool,
-  RateCardsListTool,
   JobsAddCommentTool,
   JobsAssignLabelTool,
   JobsRemoveLabelTool
@@ -400,10 +374,6 @@ export const CeirdMcpToolkitLayer = CeirdMcpToolkit.toLayer({
           Effect.flatMap((query) => JobsService.listOrganizationActivity(query))
         )
       )
-    ),
-  [RateCardsListDefinition.name]: () =>
-    authorizeAndRun(RateCardsListDefinition, () =>
-      runMcpDomainTool(ConfigurationService.listRateCards())
     ),
   [JobsAddCommentDefinition.name]: ({ body, workItemId }) =>
     authorizeAndRun(JobsAddCommentDefinition, () =>

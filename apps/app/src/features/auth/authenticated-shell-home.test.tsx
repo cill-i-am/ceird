@@ -257,7 +257,6 @@ describe("authenticated shell home", () => {
                   address: "1 North Wall Quay, Dublin",
                   id: "55555555-5555-4555-8555-555555555555" as SiteIdType,
                   name: "Apex House",
-                  serviceAreaName: "Dublin",
                   updatedAt: "2026-05-14T08:00:00.000Z",
                 },
               ],

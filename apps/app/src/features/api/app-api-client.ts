@@ -1,7 +1,7 @@
 import { AgentActionsApiGroup, AgentThreadsApiGroup } from "@ceird/agents-core";
-import { JobsApiGroup, RateCardsApiGroup } from "@ceird/jobs-core";
+import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
-import { ServiceAreasApiGroup, SitesApiGroup } from "@ceird/sites-core";
+import { SitesApiGroup } from "@ceird/sites-core";
 import { Cause, Effect, Exit, Layer } from "effect";
 import {
   FetchHttpClient,
@@ -23,9 +23,7 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(AgentThreadsApiGroup)
   .add(AgentActionsApiGroup)
   .add(JobsApiGroup)
-  .add(RateCardsApiGroup)
   .add(LabelsApiGroup)
-  .add(ServiceAreasApiGroup)
   .add(SitesApiGroup);
 
 const currentGlobalFetch: typeof globalThis.fetch = (input, init) =>
@@ -43,13 +41,13 @@ export interface AppApiClientOptions {
   readonly forwardedHeaders?: ServerApiForwardedHeaders | undefined;
 }
 
-export function resolveAppApiOrigin(
+function resolveAppApiOrigin(
   options: AppApiClientOptions = {}
 ): string | undefined {
   return resolveApiOrigin(options.requestOrigin, options.apiOrigin);
 }
 
-export function makeAppApiClient(options: AppApiClientOptions = {}) {
+function makeAppApiClient(options: AppApiClientOptions = {}) {
   const apiOrigin = resolveAppApiOrigin(options);
 
   if (!apiOrigin) {
@@ -76,11 +74,7 @@ export function makeBrowserAppApiClient(origin?: string | undefined) {
   return makeAppApiClient({ requestOrigin });
 }
 
-export function makeServerAppApiClient(options: AppApiClientOptions) {
-  return makeAppApiClient(options);
-}
-
-export const BrowserAppApiHttpClientLive = Layer.mergeAll(
+const BrowserAppApiHttpClientLive = Layer.mergeAll(
   AppApiHttpClientLive,
   Layer.succeed(FetchHttpClient.RequestInit, {
     credentials: "include" as const,

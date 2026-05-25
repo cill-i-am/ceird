@@ -10,7 +10,7 @@ infrastructure lives in `../infra` with the Alchemy stack entrypoint at
 | `domain-core`   | Shared private Domain Worker service-binding contract and client helpers.               |
 | `identity-core` | Shared organization IDs, role schemas, organization DTO schemas, and decoders.          |
 | `jobs-core`     | Shared job-owned IDs, domain schemas, DTOs, Effect HTTP API contract, and typed errors. |
-| `sites-core`    | Shared site/service-area IDs, schemas, DTOs, API groups, and typed public errors.       |
+| `sites-core`    | Shared site IDs, schemas, DTOs, API groups, and typed public errors.                    |
 | `labels-core`   | Shared organization label IDs, schemas, DTOs, API group, and typed public errors.       |
 
 Package contracts are documented in

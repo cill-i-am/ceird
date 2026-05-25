@@ -12,7 +12,6 @@ import {
 } from "@ceird/jobs-core";
 import type {
   AddJobCommentInput,
-  AddJobCostLineInput,
   AddJobVisitInput,
   AssignJobLabelInput,
   ContactIdType as ContactId,
@@ -37,28 +36,15 @@ import type {
   WorkItemIdType as WorkItemId,
 } from "@ceird/jobs-core";
 import type { LabelIdType as LabelId } from "@ceird/labels-core";
-import type {
-  ServiceAreaOption,
-  SiteIdType as SiteId,
-} from "@ceird/sites-core";
-import {
-  Layer,
-  Context,
-  Array as EffectArray,
-  Effect,
-  HashMap,
-  Option,
-} from "effect";
+import type { SiteIdType as SiteId } from "@ceird/sites-core";
+import { Layer, Context, Effect, Option } from "effect";
 
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import type { GeocodedSiteLocation } from "../sites/geocoder.js";
 import { SiteGeocoder } from "../sites/geocoder.js";
-import {
-  ServiceAreasRepository,
-  SitesRepository,
-} from "../sites/repositories.js";
+import { SitesRepository } from "../sites/repositories.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
@@ -91,7 +77,6 @@ export class JobsService extends Context.Service<JobsService>()(
         yield* JobLabelAssignmentsRepository;
       const labelsRepository = yield* LabelsRepository;
       const jobsRepository = yield* JobsRepository;
-      const serviceAreasRepository = yield* ServiceAreasRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const sitesRepository = yield* SitesRepository;
 
@@ -118,25 +103,6 @@ export class JobsService extends Context.Service<JobsService>()(
         const actor = yield* loadActor();
         yield* ensureCanViewOrganizationJobsData(actor, authorization);
 
-        if (hasElevatedAccess(actor)) {
-          const [members, sites, contacts, labels, serviceAreas] =
-            yield* Effect.all([
-              jobsRepository.listMemberOptions(actor.organizationId),
-              sitesRepository.listOptions(actor.organizationId),
-              contactsRepository.listOptions(actor.organizationId),
-              labelsRepository.list(actor.organizationId),
-              serviceAreasRepository.listOptions(actor.organizationId),
-            ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
-
-          return {
-            contacts,
-            labels,
-            members,
-            serviceAreas,
-            sites,
-          } as const;
-        }
-
         const [members, sites, contacts, labels] = yield* Effect.all([
           jobsRepository.listMemberOptions(actor.organizationId),
           sitesRepository.listOptions(actor.organizationId),
@@ -148,7 +114,6 @@ export class JobsService extends Context.Service<JobsService>()(
           contacts,
           labels,
           members,
-          serviceAreas: deriveServiceAreaOptionsFromSites(sites),
           sites,
         } as const;
       });
@@ -206,22 +171,6 @@ export class JobsService extends Context.Service<JobsService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        if (
-          input.site?.kind === "create" &&
-          input.site.input.serviceAreaId !== undefined
-        ) {
-          yield* Effect.annotateCurrentSpan(
-            "inlineSiteServiceAreaId",
-            input.site.input.serviceAreaId
-          );
-          yield* sitesRepository
-            .ensureServiceAreaInOrganization(
-              actor.organizationId,
-              input.site.input.serviceAreaId
-            )
-            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
-        }
-
         const geocodedSiteLocation =
           input.site?.kind === "create"
             ? yield* siteGeocoder.geocode(input.site.input).pipe(
@@ -267,7 +216,6 @@ export class JobsService extends Context.Service<JobsService>()(
               const job = yield* jobsRepository.create({
                 contactId,
                 createdByUserId: actor.userId,
-                externalReference: input.externalReference,
                 organizationId: actor.organizationId,
                 priority: input.priority,
                 siteId,
@@ -801,65 +749,6 @@ export class JobsService extends Context.Service<JobsService>()(
           );
       });
 
-      const addCostLine = Effect.fn("JobsService.addCostLine")(function* (
-        workItemId: WorkItemId,
-        input: AddJobCostLineInput
-      ) {
-        const actor = yield* loadActor(workItemId);
-
-        return yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const job = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
-
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
-
-              yield* authorization.ensureCanAddCostLine(actor, job);
-
-              const costLine = yield* jobsRepository.addCostLine({
-                authorUserId: actor.userId,
-                description: input.description,
-                organizationId: actor.organizationId,
-                quantity: input.quantity,
-                taxRateBasisPoints: input.taxRateBasisPoints,
-                type: input.type,
-                unitPriceMinor: input.unitPriceMinor,
-                workItemId,
-              });
-
-              yield* activityRecorder.recordCostLineAdded(actor, {
-                costLineId: costLine.id,
-                costLineType: costLine.type,
-                workItemId,
-              });
-
-              return costLine;
-            })
-          )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-      });
-
       const listCollaborators = Effect.fn("JobsService.listCollaborators")(
         function* (workItemId: WorkItemId) {
           const actor = yield* loadActor(workItemId);
@@ -940,7 +829,6 @@ export class JobsService extends Context.Service<JobsService>()(
 
       return {
         addComment,
-        addCostLine,
         addVisit,
         attachCollaborator,
         assignLabel,
@@ -1001,7 +889,6 @@ export class JobsService extends Context.Service<JobsService>()(
         JobsActivityRecorder.Default,
         JobsRepositoriesLive,
         LabelsRepository.Default,
-        ServiceAreasRepository.Default,
         SitesRepository.Default
       )
     )
@@ -1188,7 +1075,6 @@ function hasPatchChanges(input: PatchJobInput): boolean {
     input.assigneeId !== undefined ||
     input.contactId !== undefined ||
     input.coordinatorId !== undefined ||
-    input.externalReference !== undefined ||
     input.priority !== undefined ||
     input.siteId !== undefined ||
     input.title !== undefined
@@ -1248,45 +1134,8 @@ function resolveCreateSiteId(
     name: input.input.name,
     organizationId,
     longitude: geocodedLocation.longitude,
-    serviceAreaId: input.input.serviceAreaId,
     town: input.input.town,
   });
-}
-
-function hasElevatedAccess(actor: { readonly role: string }): boolean {
-  return actor.role === "owner" || actor.role === "admin";
-}
-
-function deriveServiceAreaOptionsFromSites(
-  sites: readonly {
-    readonly serviceAreaId?: ServiceAreaOption["id"] | undefined;
-    readonly serviceAreaName?: string | undefined;
-  }[]
-): readonly ServiceAreaOption[] {
-  const serviceAreasById = EffectArray.reduce(
-    sites,
-    HashMap.empty<ServiceAreaOption["id"], ServiceAreaOption>(),
-    (currentServiceAreasById, site) =>
-      site.serviceAreaId === undefined || site.serviceAreaName === undefined
-        ? currentServiceAreasById
-        : HashMap.set(currentServiceAreasById, site.serviceAreaId, {
-            id: site.serviceAreaId,
-            name: site.serviceAreaName,
-          })
-  );
-
-  return HashMap.toValues(serviceAreasById).toSorted(compareServiceAreaOptions);
-}
-
-function compareServiceAreaOptions(
-  left: ServiceAreaOption,
-  right: ServiceAreaOption
-): number {
-  const nameComparison = left.name.localeCompare(right.name);
-
-  return nameComparison === 0
-    ? left.id.localeCompare(right.id)
-    : nameComparison;
 }
 
 function resolvePatchedOptionalValue<Value>(

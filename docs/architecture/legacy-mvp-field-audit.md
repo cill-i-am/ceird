@@ -42,7 +42,7 @@ tasks.
 Recommended support:
 
 - internal work item id
-- optional external reference or case number
+- optional customer-facing case number
 - title or short summary
 - requestor or resident name
 - location / site
@@ -317,7 +317,7 @@ If we want a clean first implementation, the highest-signal minimum looks like:
 - comments / updates
 - activity events
 - work logs
-- material or cost line items
+- billing-oriented line items
 - configurable categories
 
 ## Suggested Defer List

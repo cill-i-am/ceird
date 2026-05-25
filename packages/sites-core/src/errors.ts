@@ -1,11 +1,10 @@
 /* oxlint-disable eslint/max-classes-per-file */
 
-import { OrganizationId } from "@ceird/identity-core";
 import type { LabelNotFoundError } from "@ceird/labels-core";
 import { Schema } from "effect";
 
 import { SiteCountrySchema } from "./domain.js";
-import { ServiceAreaId, SiteId } from "./ids.js";
+import { SiteId } from "./ids.js";
 
 export const SITE_ACCESS_DENIED_ERROR_TAG =
   "@ceird/sites-core/SiteAccessDeniedError" as const;
@@ -80,18 +79,6 @@ export class SiteGeocodingProviderError extends Schema.TaggedErrorClass<SiteGeoc
   { httpApiStatus: 503 }
 ) {}
 
-export const SERVICE_AREA_NOT_FOUND_ERROR_TAG =
-  "@ceird/sites-core/ServiceAreaNotFoundError" as const;
-export class ServiceAreaNotFoundError extends Schema.TaggedErrorClass<ServiceAreaNotFoundError>()(
-  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
-  {
-    message: Schema.String,
-    organizationId: OrganizationId,
-    serviceAreaId: ServiceAreaId,
-  },
-  { httpApiStatus: 404 }
-) {}
-
 export type SitesError =
   | SiteAccessDeniedError
   | SiteStorageError
@@ -99,5 +86,4 @@ export type SitesError =
   | SiteListCursorInvalidError
   | SiteGeocodingFailedError
   | SiteGeocodingProviderError
-  | LabelNotFoundError
-  | ServiceAreaNotFoundError;
+  | LabelNotFoundError;

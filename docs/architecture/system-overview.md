@@ -4,9 +4,8 @@
 
 Ceird is a job-tracking application for trades and construction teams. The
 current product surface includes authentication, organizations, members,
-invitations, jobs, sites, comments, labels, cost lines, collaborator access,
-service areas, rate cards, activity, settings, org/user/thread-scoped agents,
-and Alchemy-native local development.
+invitations, jobs, sites, comments, labels, collaborator access, activity,
+settings, org/user/thread-scoped agents, and Alchemy-native local development.
 
 The repository is still greenfield. Backward compatibility is not a constraint;
 clear APIs, strong type boundaries, and simple architecture matter more than
@@ -72,10 +71,10 @@ Jobs requests use a shared contract:
 
 1. `packages/jobs-core/src/http-api.ts` defines endpoint names, paths, payload
    schemas, response schemas, and typed errors.
-2. `apps/domain/src/domains/jobs/http.ts` binds that contract to `JobsService`,
-   `SitesService`, and `ConfigurationService`.
-3. `apps/app/src/features/jobs/jobs-client.ts` creates an Effect
-   `HttpApiClient` from the same `JobsApi` contract.
+2. `apps/domain/src/domains/jobs/http.ts` binds that contract to `JobsService`
+   and the site-aware lookup services it needs.
+3. `apps/app/src/features/api/app-api-client.ts` creates an Effect
+   `HttpApiClient` from the shared product API groups.
 4. Browser-side jobs state calls the client directly. Server-side route loading
    uses TanStack Start helpers that forward cookies and trusted proxy headers.
 5. Domain services resolve the current actor, authorize the action, call
@@ -119,10 +118,10 @@ The domain Worker exports a combined Drizzle schema from
   verifications, rate limits, organizations, members, and invitations.
 - `commentsSchema` contains shared comment rows and target ownership rows for
   jobs and sites.
-- `jobsSchema` contains rate cards, contacts, work items, activity, visits,
-  labels, collaborators, and cost lines.
-- `sitesSchema` contains sites and service areas. Site access notes remain on
-  the site record; site comments are separate internal collaboration records.
+- `jobsSchema` contains contacts, work items, activity, visits, labels, and
+  collaborators.
+- `sitesSchema` contains sites. Site access notes remain on the site record;
+  site comments are separate internal collaboration records.
 - `agentsSchema` contains agent threads and the agent action-run ledger.
 - `databaseSchema` merges authentication, comments, labels, sites, jobs, and
   agents for the full database runtime.

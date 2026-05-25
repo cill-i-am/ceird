@@ -3,12 +3,9 @@ import {
   JOB_ACTIVITY_EVENT_TYPES,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
-  JOB_COST_LINE_TYPES,
   JOB_KINDS,
   JOB_PRIORITIES,
   JOB_STATUSES,
-  MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS,
-  RATE_CARD_LINE_KINDS,
 } from "@ceird/jobs-core";
 import { sql } from "drizzle-orm";
 import {
@@ -19,7 +16,6 @@ import {
   index,
   integer,
   jsonb,
-  numeric,
   pgTable,
   primaryKey,
   text,
@@ -60,67 +56,6 @@ const collaboratorSubjectTypeValuesSql = sql.raw(
 );
 const collaboratorAccessLevelValuesSql = sql.raw(
   JOB_COLLABORATOR_ACCESS_LEVELS.map((value) => `'${value}'`).join(", ")
-);
-const rateCardLineKindValuesSql = sql.raw(
-  RATE_CARD_LINE_KINDS.map((value) => `'${value}'`).join(", ")
-);
-const costLineTypeValuesSql = sql.raw(
-  JOB_COST_LINE_TYPES.map((value) => `'${value}'`).join(", ")
-);
-const maxJobCostLineTaxRateBasisPointsSql = sql.raw(
-  String(MAX_JOB_COST_LINE_TAX_RATE_BASIS_POINTS)
-);
-
-export const rateCard = pgTable(
-  "rate_cards",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    createdAt: jobsTimestamp("created_at"),
-    updatedAt: jobsTimestamp("updated_at"),
-    archivedAt: archivedAtColumn("archived_at"),
-  },
-  (table) => [
-    index("rate_cards_organization_updated_at_idx").on(
-      table.organizationId,
-      table.updatedAt.desc(),
-      table.id.desc()
-    ),
-    uniqueIndex("rate_cards_organization_name_idx").on(
-      table.organizationId,
-      table.name
-    ),
-  ]
-);
-
-export const rateCardLine = pgTable(
-  "rate_card_lines",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    rateCardId: uuid("rate_card_id")
-      .notNull()
-      .references(() => rateCard.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(),
-    name: text("name").notNull(),
-    position: integer("position").notNull(),
-    unit: text("unit").notNull(),
-    value: numeric("value", { precision: 12, scale: 2 }).notNull(),
-  },
-  (table) => [
-    uniqueIndex("rate_card_lines_rate_card_position_unique_idx").on(
-      table.rateCardId,
-      table.position
-    ),
-    check("rate_card_lines_value_non_negative_chk", sql`${table.value} >= 0`),
-    check("rate_card_lines_position_positive_chk", sql`${table.position} > 0`),
-    check(
-      "rate_card_lines_kind_chk",
-      sql`${table.kind} in (${rateCardLineKindValuesSql})`
-    ),
-  ]
 );
 
 export const contact = pgTable(
@@ -193,7 +128,6 @@ export const workItem = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     title: text("title").notNull(),
-    externalReference: text("external_reference"),
     status: text("status").notNull(),
     priority: text("priority").notNull().default("none"),
     siteId: uuid("site_id"),
@@ -475,70 +409,12 @@ export const workItemVisit = pgTable(
   ]
 );
 
-export const workItemCostLine = pgTable(
-  "work_item_cost_lines",
-  {
-    id: uuid("id").primaryKey().$defaultFn(generateJobDomainUuid),
-    workItemId: uuid("work_item_id")
-      .notNull()
-      .references(() => workItem.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    authorUserId: text("author_user_id")
-      .notNull()
-      .references(() => user.id),
-    type: text("type").notNull(),
-    description: text("description").notNull(),
-    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
-    unitPriceMinor: integer("unit_price_minor").notNull(),
-    taxRateBasisPoints: integer("tax_rate_basis_points"),
-    createdAt: jobsTimestamp("created_at"),
-  },
-  (table) => [
-    check(
-      "work_item_cost_lines_type_chk",
-      sql`${table.type} in (${costLineTypeValuesSql})`
-    ),
-    check(
-      "work_item_cost_lines_quantity_positive_chk",
-      sql`${table.quantity} > 0`
-    ),
-    check(
-      "work_item_cost_lines_unit_price_non_negative_chk",
-      sql`${table.unitPriceMinor} >= 0`
-    ),
-    check(
-      "work_item_cost_lines_tax_rate_range_chk",
-      sql`${table.taxRateBasisPoints} is null or (${table.taxRateBasisPoints} >= 0 and ${table.taxRateBasisPoints} <= ${maxJobCostLineTaxRateBasisPointsSql})`
-    ),
-    foreignKey({
-      columns: [table.workItemId, table.organizationId],
-      foreignColumns: [workItem.id, workItem.organizationId],
-      name: "work_item_cost_lines_work_item_organization_fk",
-    }).onDelete("cascade"),
-    index("work_item_cost_lines_work_item_created_at_idx").on(
-      table.workItemId,
-      table.createdAt.desc(),
-      table.id.desc()
-    ),
-    index("work_item_cost_lines_organization_created_at_idx").on(
-      table.organizationId,
-      table.createdAt.desc(),
-      table.id.desc()
-    ),
-  ]
-);
-
 export const jobsSchema = {
   contact,
-  rateCard,
-  rateCardLine,
   siteContact,
   workItem,
   workItemActivity,
   workItemCollaborator,
-  workItemCostLine,
   workItemLabel,
   workItemVisit,
 };

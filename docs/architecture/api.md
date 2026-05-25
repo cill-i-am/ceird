@@ -167,9 +167,6 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.sites.comments.add`        | write       |
 | `ceird.sites.assign_label`        | write       |
 | `ceird.sites.remove_label`        | destructive |
-| `ceird.service_areas.list`        | read        |
-| `ceird.service_areas.create`      | write       |
-| `ceird.service_areas.update`      | write       |
 | `ceird.jobs.options`              | read        |
 | `ceird.jobs.list`                 | read        |
 | `ceird.jobs.detail`               | read        |
@@ -182,24 +179,15 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.jobs.visits.add`           | write       |
 | `ceird.jobs.assign_label`         | write       |
 | `ceird.jobs.remove_label`         | destructive |
-| `ceird.jobs.cost_lines.add`       | write       |
 | `ceird.jobs.collaborators.list`   | read        |
 | `ceird.jobs.collaborators.attach` | write       |
 | `ceird.jobs.collaborators.update` | write       |
 | `ceird.jobs.collaborators.detach` | destructive |
-| `ceird.rate_cards.list`           | read        |
-| `ceird.rate_cards.create`         | write       |
-| `ceird.rate_cards.update`         | write       |
 
 Read tools are available to the model by default. Write and destructive tools
 are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
 require the confirmation-capable chat client to approve the action outside the
 model prompt.
-
-Rate-card agent actions route through the same
-`ConfigurationService.listRateCards`, `ConfigurationService.createRateCard`,
-and `ConfigurationService.updateRateCard` methods used by the HTTP
-configuration API.
 
 Every action call includes a domain operation id. The domain action-run ledger
 stores `thread_id`, `action_name`, `operation_id`, status, input hash/size,
@@ -226,8 +214,8 @@ structured forwarding logs in the Cloudflare Worker adapter. Both paths record
 method, status, and redacted path only; query strings are not logged, and
 `/health` is skipped to keep probe noise out of operational logs. Typed domain
 HTTP handlers also wrap service calls with `observeApiOperation`, which adds an
-operation log span and emits structured fields when a jobs, rate-card, labels,
-sites, or service-area operation fails.
+operation log span and emits structured fields when a jobs, labels, sites, or
+organization activity operation fails.
 Storage failures and defects log at warning level, while expected typed domain
 failures log at info level. Those fields include the API domain, service,
 operation, failure tag, failure message, safe entity identifiers when present,
@@ -301,8 +289,8 @@ resource server validates the bearer token through Better Auth's OAuth Provider
 support before the request reaches the Effect AI router. Tool execution receives
 the verified request identity through an Effect request-runtime context, resolves
 the current organization actor from the token's Better Auth session id and
-subject, and then lets the existing labels, sites, jobs, and configuration
-authorization rules decide access.
+subject, and then lets the existing labels, sites, and jobs authorization rules
+decide access.
 
 Initial MCP tools:
 
@@ -314,7 +302,6 @@ Initial MCP tools:
 | `ceird.jobs.detail`        | `JobsService.getDetail`                | `ceird:read`  |
 | `ceird.jobs.options`       | `JobsService.getOptions`               | `ceird:read`  |
 | `ceird.jobs.activity.list` | `JobsService.listOrganizationActivity` | `ceird:admin` |
-| `ceird.rate_cards.list`    | `ConfigurationService.listRateCards`   | `ceird:admin` |
 | `ceird.jobs.add_comment`   | `JobsService.addComment`               | `ceird:write` |
 | `ceird.jobs.assign_label`  | `JobsService.assignLabel`              | `ceird:write` |
 | `ceird.jobs.remove_label`  | `JobsService.removeLabel`              | `ceird:write` |
@@ -333,17 +320,16 @@ label definitions are owned by their own API domains.
 
 Core files:
 
-| File                       | Responsibility                                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `http.ts`                  | Binds jobs and rate-card contract endpoints to Effect services and configures CORS.                                                      |
-| `service.ts`               | Main jobs use cases: list, create, patch, transition, reopen, comments, visits, job-label assignment, collaborators, costs, and options. |
-| `configuration-service.ts` | Rate-card configuration.                                                                                                                 |
-| `repositories.ts`          | SQL repository layer for jobs, contacts, rate cards, activity, members, and job-label assignment rows.                                   |
-| `authorization.ts`         | Role and access checks for jobs operations.                                                                                              |
-| `actor-access.ts`          | Actor resolution error mapping.                                                                                                          |
-| `activity-recorder.ts`     | Work item activity events.                                                                                                               |
-| `schema.ts`                | Jobs-owned Drizzle tables and relations, including job-label assignment rows. Job comments are stored through the comments domain.       |
-| `errors.ts`                | API-domain error helpers where needed.                                                                                                   |
+| File                   | Responsibility                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `http.ts`              | Binds jobs contract endpoints to Effect services and configures CORS.                                                              |
+| `service.ts`           | Main jobs use cases: list, create, patch, transition, reopen, comments, visits, job-label assignment, collaborators, and options.  |
+| `repositories.ts`      | SQL repository layer for jobs, contacts, activity, members, collaborators, and job-label assignment rows.                          |
+| `authorization.ts`     | Role and access checks for jobs operations.                                                                                        |
+| `actor-access.ts`      | Actor resolution error mapping.                                                                                                    |
+| `activity-recorder.ts` | Work item activity events.                                                                                                         |
+| `schema.ts`            | Jobs-owned Drizzle tables and relations, including job-label assignment rows. Job comments are stored through the comments domain. |
+| `errors.ts`            | API-domain error helpers where needed.                                                                                             |
 
 The jobs service flow is:
 
@@ -364,7 +350,7 @@ failures instead of defects.
 
 External organization members can have collaborator-style access to specific
 jobs. Elevated internal roles can manage organization-wide configuration such
-as labels, service areas, sites, and rate cards through the owning domain.
+as labels and sites through the owning domain.
 
 ## Comments Domain
 
@@ -408,14 +394,10 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `POST`   | `/jobs/:workItemId/visits`                        | `addJobVisit`                 |
 | `POST`   | `/jobs/:workItemId/labels`                        | `assignJobLabel`              |
 | `DELETE` | `/jobs/:workItemId/labels/:labelId`               | `removeJobLabel`              |
-| `POST`   | `/jobs/:workItemId/cost-lines`                    | `addJobCostLine`              |
 | `GET`    | `/jobs/:workItemId/collaborators`                 | `listJobCollaborators`        |
 | `POST`   | `/jobs/:workItemId/collaborators`                 | `attachJobCollaborator`       |
 | `PATCH`  | `/jobs/:workItemId/collaborators/:collaboratorId` | `updateJobCollaborator`       |
 | `DELETE` | `/jobs/:workItemId/collaborators/:collaboratorId` | `detachJobCollaborator`       |
-| `GET`    | `/rate-cards`                                     | `listRateCards`               |
-| `POST`   | `/rate-cards`                                     | `createRateCard`              |
-| `PATCH`  | `/rate-cards/:rateCardId`                         | `updateRateCard`              |
 
 ## Labels Domain
 
@@ -437,22 +419,20 @@ Core files:
 ## Sites Domain
 
 Sites live in `apps/domain/src/domains/sites` and are exposed through
-`@ceird/sites-core`. Sites and service areas are independent organization data
-that jobs can reference. Sites can also have internal comments through the
-comments domain. Site access notes remain a single structured field on the site
-itself for operational access instructions.
+`@ceird/sites-core`. Jobs can reference sites, and sites can have internal
+comments through the comments domain. Site access notes remain a single
+structured field on the site itself for operational access instructions.
 
 Core files:
 
-| File                       | Responsibility                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `http.ts`                  | Binds sites and service-area contract endpoints to Effect services and configures CORS.     |
-| `service.ts`               | Site list, create, update, options, internal comments, and site-label assignment use cases. |
-| `service-areas-service.ts` | Service-area list, create, and update use cases.                                            |
-| `repositories.ts`          | SQL repository layer for sites, service areas, and site-label assignment methods.           |
-| `schema.ts`                | Sites, service-area, and site-label assignment rows and relations.                          |
-| `geocoder.ts`              | Site geocoding capability plus development and Google provider layers.                      |
-| `id-generation.ts`         | Site and service-area ID generation.                                                        |
+| File               | Responsibility                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `http.ts`          | Binds sites contract endpoints to Effect services and configures CORS.                      |
+| `service.ts`       | Site list, create, update, options, internal comments, and site-label assignment use cases. |
+| `repositories.ts`  | SQL repository layer for sites and site-label assignment methods.                           |
+| `schema.ts`        | Sites and site-label assignment rows and relations.                                         |
+| `geocoder.ts`      | Site geocoding capability plus development and Google provider layers.                      |
+| `id-generation.ts` | Site ID generation.                                                                         |
 
 Site and job services depend on the `SiteGeocoder` capability, not on a
 provider-specific implementation. Runtime entrypoints choose the provider layer:
@@ -486,25 +466,21 @@ handlers live in `apps/domain/src/domains/labels/http.ts`.
 Endpoint definitions live in `packages/sites-core/src/http-api.ts`; API
 handlers live in `apps/domain/src/domains/sites/http.ts`.
 
-| Method   | Path                             | Handler name        |
-| -------- | -------------------------------- | ------------------- |
-| `GET`    | `/service-areas`                 | `listServiceAreas`  |
-| `POST`   | `/service-areas`                 | `createServiceArea` |
-| `PATCH`  | `/service-areas/:serviceAreaId`  | `updateServiceArea` |
-| `GET`    | `/sites`                         | `listSites`         |
-| `GET`    | `/sites/options`                 | `getSiteOptions`    |
-| `POST`   | `/sites`                         | `createSite`        |
-| `PATCH`  | `/sites/:siteId`                 | `updateSite`        |
-| `GET`    | `/sites/:siteId/comments`        | `listSiteComments`  |
-| `POST`   | `/sites/:siteId/comments`        | `addSiteComment`    |
-| `POST`   | `/sites/:siteId/labels`          | `assignSiteLabel`   |
-| `DELETE` | `/sites/:siteId/labels/:labelId` | `removeSiteLabel`   |
+| Method   | Path                             | Handler name       |
+| -------- | -------------------------------- | ------------------ |
+| `GET`    | `/sites`                         | `listSites`        |
+| `GET`    | `/sites/options`                 | `getSiteOptions`   |
+| `POST`   | `/sites`                         | `createSite`       |
+| `PATCH`  | `/sites/:siteId`                 | `updateSite`       |
+| `GET`    | `/sites/:siteId/comments`        | `listSiteComments` |
+| `POST`   | `/sites/:siteId/comments`        | `addSiteComment`   |
+| `POST`   | `/sites/:siteId/labels`          | `assignSiteLabel`  |
+| `DELETE` | `/sites/:siteId/labels/:labelId` | `removeSiteLabel`  |
 
-`GET /sites` is cursor-paginated with `cursor`, `limit`, and
-`serviceAreaId` query parameters. Responses return `{ items, nextCursor }` and
-use the stable directory order `name asc, id asc`. `GET /sites/options`
-provides bundled internal form support data for workflows that need service
-areas and sites together.
+`GET /sites` is cursor-paginated with `cursor` and `limit` query parameters.
+Responses return `{ items, nextCursor }` and use the stable directory order
+`name asc, id asc`. `GET /sites/options` provides bundled internal form support
+data for workflows that need site choices.
 
 ## Database
 

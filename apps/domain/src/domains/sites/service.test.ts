@@ -1,25 +1,13 @@
-import type { OrganizationId, UserId } from "@ceird/identity-core";
-import { LabelNotFoundError } from "@ceird/labels-core";
-import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
+import { OrganizationId, UserId } from "@ceird/identity-core";
 import {
-  SiteAccessDeniedError,
-  ServiceAreaNotFoundError,
-  SiteGeocodingFailedError,
-  SiteNotFoundError,
-  SiteStorageError,
+  CreateSiteInputSchema,
+  SiteId,
+  SiteOptionSchema,
+  SitesOptionsResponseSchema,
 } from "@ceird/sites-core";
-import type {
-  AddSiteCommentInput,
-  CreateSiteInput,
-  ServiceArea,
-  SiteComment,
-  SiteIdType as SiteId,
-  SiteOption as JobSiteOption,
-  SitesOptionsResponse,
-} from "@ceird/sites-core";
-import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
-import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 
 import { CommentsRepository } from "../comments/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -27,945 +15,180 @@ import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { SiteGeocoder } from "./geocoder.js";
 import {
-  ServiceAreasRepository,
   SiteLabelAssignmentsRepository,
   SitesRepository,
 } from "./repositories.js";
 import { SitesService } from "./service.js";
 
-const siteId = "22222222-2222-4222-8222-222222222222" as SiteId;
-const labelId = "11111111-1111-4111-8111-111111111111" as LabelId;
-const serviceAreaId = "33333333-3333-4333-8333-333333333333" as NonNullable<
-  JobSiteOption["serviceAreaId"]
->;
-const actorUserId = "44444444-4444-4444-8444-444444444444" as UserId;
-const commentId = "55555555-5555-4555-8555-555555555555" as SiteComment["id"];
-const geocodedAt = "2026-04-22T10:00:00.000Z";
-const commentedAt = "2026-04-22T11:00:00.000Z";
-const siteInput = {
-  addressLine1: "1 Custom House Quay",
-  country: "IE",
-  county: "Dublin",
-  eircode: "D01 X2X2",
-  name: "Docklands Campus",
-  serviceAreaId,
-  town: "Dublin",
-} satisfies CreateSiteInput;
-
-function makeSqlError(message: string) {
-  return new SqlError({
-    reason: new UnknownError({
-      cause: message,
-      message,
-    }),
-  });
+type ContextService<Service> = Service extends {
+  readonly Service: infer Shape;
 }
+  ? Shape
+  : never;
 
-function makeActor(
-  role: OrganizationActor["role"],
-  overrides: Partial<OrganizationActor> = {}
-): OrganizationActor {
-  return {
-    organizationId: "org_123" as OrganizationId,
-    role,
-    userId: actorUserId,
-    ...overrides,
-  };
-}
+const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeSiteId = Schema.decodeUnknownSync(SiteId);
+const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
+const decodeUserId = Schema.decodeUnknownSync(UserId);
 
-interface SitesServiceHarness {
-  readonly calls: {
-    assignLabel: number;
-    createSite: number;
-    addComment: number;
-    findById: number;
-    ensureServiceArea: number;
-    geocode: number;
-    getOptionById: number;
-    listComments: number;
-    listOptions: number;
-    listServiceAreas: number;
-    removeLabel: number;
-    withTransaction: number;
-  };
-  readonly layer: Layer.Layer<
-    SitesService | HttpServerRequest.HttpServerRequest
-  >;
-}
+const actor = {
+  organizationId: decodeOrganizationId("org_123"),
+  role: "admin",
+  userId: decodeUserId("user_admin"),
+} satisfies OrganizationActor;
 
-function makeHarness(
-  options: {
-    readonly actor?: OrganizationActor;
-    readonly assignLabelFailure?:
-      | LabelNotFoundError
-      | SiteNotFoundError
-      | SqlError;
-    readonly geocodingFailure?: SiteGeocodingFailedError;
-    readonly removeLabelFailure?:
-      | LabelNotFoundError
-      | SiteNotFoundError
-      | SqlError;
-    readonly serviceAreaFailure?: ServiceAreaNotFoundError;
-    readonly serviceAreaStorageFailure?: SqlError;
-    readonly siteExists?: boolean;
-  } = {}
-): SitesServiceHarness {
-  const actor = options.actor ?? makeActor("owner");
-  const calls = {
-    assignLabel: 0,
-    createSite: 0,
-    addComment: 0,
-    findById: 0,
-    ensureServiceArea: 0,
-    geocode: 0,
-    getOptionById: 0,
-    listComments: 0,
-    listOptions: 0,
-    listServiceAreas: 0,
-    removeLabel: 0,
-    withTransaction: 0,
-  };
-  let insideSiteWriteTransaction = false;
-  let siteHasLabel = false;
-  const organizationLabel: Label = {
-    createdAt: "2026-04-20T10:00:00.000Z",
-    id: labelId,
-    name: "Waiting on PO",
-    updatedAt: "2026-04-20T10:00:00.000Z",
-  };
-  const siteExists = options.siteExists ?? true;
-  const createdSiteOption: JobSiteOption = {
-    addressLine1: "1 Custom House Quay",
-    country: "IE",
-    county: "Dublin",
-    eircode: "D01 X2X2",
-    geocodedAt,
-    geocodingProvider: "stub",
-    id: siteId,
-    latitude: 53.3498,
-    labels: [],
-    longitude: -6.2603,
-    name: "Docklands Campus",
-    serviceAreaId,
-    serviceAreaName: "Dublin",
-    town: "Dublin",
-  };
-  const siteComment: SiteComment = {
-    authorName: "Actor User",
-    authorUserId: actor.userId,
-    body: "Gate code changed to 2468.",
-    createdAt: commentedAt,
-    id: commentId,
-    siteId,
-  };
-  const unexpected = (label: string) =>
-    Effect.die(new Error(`Unexpected repository call: ${label}`));
+describe("SitesService contracts", () => {
+  it("keeps site creation focused on location and access details", () => {
+    expect(
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
+        addressLine1: "  1 Custom House Quay  ",
+        country: "IE",
+        county: "  Dublin  ",
+        eircode: "  D01 X2X2  ",
+        name: "  Docklands Campus  ",
+      })
+    ).toStrictEqual({
+      addressLine1: "1 Custom House Quay",
+      country: "IE",
+      county: "Dublin",
+      eircode: "D01 X2X2",
+      name: "Docklands Campus",
+    });
 
-  const sitesRepository = SitesRepository.of({
-    create: (input: {
-      readonly addressLine1: string;
-      readonly country: string;
-      readonly county: string;
-      readonly eircode?: string;
-      readonly geocodedAt: string;
-      readonly geocodingProvider: string;
-      readonly latitude: number;
-      readonly longitude: number;
-      readonly name: string;
-      readonly organizationId: OrganizationId;
-      readonly serviceAreaId?: typeof serviceAreaId;
-      readonly town?: string;
-    }) =>
-      Effect.gen(function* () {
-        calls.createSite += 1;
-        expect(insideSiteWriteTransaction).toBeTruthy();
-        expect(input).toMatchObject({
-          addressLine1: "1 Custom House Quay",
-          country: "IE",
-          county: "Dublin",
-          eircode: "D01 X2X2",
-          geocodedAt,
-          geocodingProvider: "stub",
-          latitude: 53.3498,
-          longitude: -6.2603,
-          name: "Docklands Campus",
-          organizationId: actor.organizationId,
-          serviceAreaId,
-          town: "Dublin",
-        });
-
-        if (options.serviceAreaFailure !== undefined) {
-          return yield* Effect.fail(options.serviceAreaFailure);
-        }
-
-        if (options.serviceAreaStorageFailure !== undefined) {
-          return yield* Effect.fail(options.serviceAreaStorageFailure);
-        }
-
-        return siteId;
-      }),
-    ensureServiceAreaInOrganization: (
-      organizationId: OrganizationId,
-      requestedServiceAreaId: typeof serviceAreaId
-    ) =>
-      Effect.gen(function* () {
-        calls.ensureServiceArea += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedServiceAreaId).toBe(serviceAreaId);
-
-        if (options.serviceAreaFailure !== undefined) {
-          return yield* Effect.fail(options.serviceAreaFailure);
-        }
-
-        if (options.serviceAreaStorageFailure !== undefined) {
-          return yield* Effect.fail(options.serviceAreaStorageFailure);
-        }
-
-        return requestedServiceAreaId;
-      }),
-    findById: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
-      Effect.sync(() => {
-        calls.findById += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedSiteId).toBe(siteId);
-
-        return siteExists ? Option.some(siteId) : Option.none<SiteId>();
-      }),
-    getOptionById: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
-      Effect.sync(() => {
-        calls.getOptionById += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedSiteId).toBe(siteId);
-
-        return Option.some({
-          ...createdSiteOption,
-          labels: siteHasLabel ? [organizationLabel] : [],
-        });
-      }),
-    list: (organizationId: OrganizationId, _query: unknown) =>
-      Effect.sync(() => {
-        calls.listOptions += 1;
-        expect(organizationId).toBe(actor.organizationId);
-
-        return { items: [], nextCursor: undefined };
-      }),
-    listOptions: (organizationId: OrganizationId) =>
-      Effect.sync(() => {
-        calls.listOptions += 1;
-        expect(organizationId).toBe(actor.organizationId);
-
-        return [] satisfies readonly JobSiteOption[];
-      }),
-    update: (
-      _organizationId: OrganizationId,
-      _siteId: SiteId,
-      _input: unknown
-    ) => unexpected("sites.update"),
-    withTransaction: <Value, Error, Requirements>(
-      effect: Effect.Effect<Value, Error, Requirements>
-    ) =>
-      Effect.gen(function* () {
-        calls.withTransaction += 1;
-        insideSiteWriteTransaction = true;
-
-        return yield* effect.pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              insideSiteWriteTransaction = false;
-            })
-          )
-        );
-      }),
+    expect(() =>
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
+        addressLine1: "1 Custom House Quay",
+        country: "IE",
+        county: "Dublin",
+        eircode: "D01 X2X2",
+        name: "Docklands Campus",
+        removedField: "33333333-3333-4333-8333-333333333333",
+      })
+    ).toThrow(/[Uu]nexpected/);
   });
 
-  const commentsRepository = CommentsRepository.of({
-    addForSite: (input: {
-      readonly authorUserId: UserId;
-      readonly body: string;
-      readonly organizationId: OrganizationId;
-      readonly siteId: SiteId;
-    }) =>
-      Effect.sync(() => {
-        calls.addComment += 1;
-        expect(input).toStrictEqual({
-          authorUserId: actor.userId,
-          body: siteComment.body,
-          organizationId: actor.organizationId,
-          siteId,
-        });
-
-        return siteExists
-          ? Option.some(siteComment)
-          : Option.none<typeof siteComment>();
-      }),
-    addForWorkItem: (_input: unknown) => unexpected("comments.addForWorkItem"),
-    listForExistingSite: (
-      organizationId: OrganizationId,
-      requestedSiteId: SiteId
-    ) =>
-      Effect.sync(() => {
-        calls.listComments += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedSiteId).toBe(siteId);
-
-        return siteExists
-          ? Option.some([siteComment] satisfies readonly SiteComment[])
-          : Option.none<readonly SiteComment[]>();
-      }),
-    listForSite: (organizationId: OrganizationId, requestedSiteId: SiteId) =>
-      Effect.sync(() => {
-        calls.listComments += 1;
-        expect(organizationId).toBe(actor.organizationId);
-        expect(requestedSiteId).toBe(siteId);
-
-        return [siteComment] satisfies readonly SiteComment[];
-      }),
-    listForWorkItem: (_organizationId: OrganizationId, _workItemId: unknown) =>
-      unexpected("comments.listForWorkItem"),
-    withTransaction: <Value, Error, Requirements>(
-      effect: Effect.Effect<Value, Error, Requirements>
-    ) => effect,
+  it("accepts an empty site options response", () => {
+    expect(
+      Schema.decodeUnknownSync(SitesOptionsResponseSchema)({ sites: [] })
+    ).toStrictEqual({ sites: [] });
   });
 
-  const siteLabelAssignmentsRepository = SiteLabelAssignmentsRepository.of({
-    assignToSite: (input: {
-      readonly labelId: Label["id"];
-      readonly organizationId: OrganizationId;
-      readonly siteId: SiteId;
-    }) =>
+  it("reuses existing geocode metadata when an update keeps the location unchanged", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111111");
+    const existingSite = decodeSiteOption({
+      accessNotes: "Use north gate.",
+      addressLine1: "1 Custom House Quay",
+      country: "IE",
+      county: "Dublin",
+      eircode: "D01 X2X2",
+      geocodedAt: "2026-05-20T09:00:00.000Z",
+      geocodingProvider: "google",
+      id: siteId,
+      labels: [],
+      latitude: 53.348,
+      longitude: -6.246,
+      name: "Docklands Campus",
+    });
+    const updatedSite = {
+      ...existingSite,
+      accessNotes: "Use north gate. Reception has keys.",
+      name: "Docklands Campus North",
+    };
+    let geocodeCallCount = 0;
+    let updatedRecord:
+      | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
+      | undefined;
+
+    const result = await Effect.runPromise(
       Effect.gen(function* () {
-        calls.assignLabel += 1;
-        expect(input).toStrictEqual({
-          labelId,
-          organizationId: actor.organizationId,
-          siteId,
+        const sites = yield* SitesService;
+
+        return yield* sites.update(siteId, {
+          accessNotes: updatedSite.accessNotes,
+          addressLine1: existingSite.addressLine1,
+          country: existingSite.country,
+          county: existingSite.county,
+          eircode: existingSite.eircode,
+          name: updatedSite.name,
         });
+      }).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            geocode: () => {
+              geocodeCallCount += 1;
+              return Effect.die("SiteGeocoder.geocode should not be called");
+            },
+            getOptionById: () => Effect.succeed(Option.some(existingSite)),
+            update: (_organizationId, _siteId, input) => {
+              updatedRecord = input;
+              return Effect.succeed(Option.some(updatedSite));
+            },
+          })
+        )
+      )
+    );
 
-        if (options.assignLabelFailure !== undefined) {
-          return yield* Effect.fail(options.assignLabelFailure);
-        }
-
-        siteHasLabel = true;
-
-        return {
-          changed: true,
-          label: organizationLabel,
-        };
-      }),
-    removeFromSite: (input: {
-      readonly labelId: Label["id"];
-      readonly organizationId: OrganizationId;
-      readonly siteId: SiteId;
-    }) =>
-      Effect.gen(function* () {
-        calls.removeLabel += 1;
-        expect(input).toStrictEqual({
-          labelId,
-          organizationId: actor.organizationId,
-          siteId,
-        });
-
-        if (options.removeLabelFailure !== undefined) {
-          return yield* Effect.fail(options.removeLabelFailure);
-        }
-
-        siteHasLabel = false;
-
-        return {
-          changed: true,
-          label: organizationLabel,
-        };
-      }),
+    expect(result).toStrictEqual(updatedSite);
+    expect(geocodeCallCount).toBe(0);
+    expect(updatedRecord).toMatchObject({
+      geocodedAt: existingSite.geocodedAt,
+      geocodingProvider: existingSite.geocodingProvider,
+      latitude: existingSite.latitude,
+      longitude: existingSite.longitude,
+    });
   });
+});
 
-  const serviceAreasRepository = ServiceAreasRepository.of({
-    create: (_input: unknown) => unexpected("configuration.createServiceArea"),
-    list: (_organizationId: OrganizationId) =>
-      Effect.succeed([] satisfies readonly ServiceArea[]),
-    listOptions: (organizationId: OrganizationId) =>
-      Effect.sync(() => {
-        calls.listServiceAreas += 1;
-        expect(organizationId).toBe(actor.organizationId);
-
-        return [] satisfies SitesOptionsResponse["serviceAreas"];
-      }),
-    update: (
-      _organizationId: OrganizationId,
-      _serviceAreaId: typeof serviceAreaId,
-      _input: unknown
-    ) => unexpected("configuration.updateServiceArea"),
-  });
-
-  const siteGeocoder = {
-    geocode: (input: CreateSiteInput) =>
-      Effect.gen(function* () {
-        calls.geocode += 1;
-        expect(insideSiteWriteTransaction).toBeFalsy();
-        expect(input).toStrictEqual(siteInput);
-
-        if (options.geocodingFailure !== undefined) {
-          return yield* Effect.fail(options.geocodingFailure);
-        }
-
-        return {
-          geocodedAt,
-          latitude: 53.3498,
-          longitude: -6.2603,
-          provider: "stub" as const,
-        };
-      }),
-  };
-
-  const serviceLayer = Layer.provide(
-    SitesService.DefaultWithoutDependencies,
-    Layer.mergeAll(
-      Layer.succeed(
-        CurrentOrganizationActor,
-        CurrentOrganizationActor.of({
-          get: () => Effect.succeed(actor),
-        })
-      ),
-      Layer.succeed(CommentsRepository, commentsRepository),
-      Layer.succeed(SitesRepository, sitesRepository),
-      Layer.succeed(
-        SiteLabelAssignmentsRepository,
-        siteLabelAssignmentsRepository
-      ),
-      Layer.succeed(ServiceAreasRepository, serviceAreasRepository),
-      Layer.succeed(SiteGeocoder, siteGeocoder),
-      OrganizationAuthorization.Default
-    )
-  );
-
-  return {
-    calls,
-    layer: Layer.mergeAll(
-      serviceLayer,
-      Layer.succeed(
-        HttpServerRequest.HttpServerRequest,
-        {} as HttpServerRequest.HttpServerRequest
+function makeSitesServiceTestLayer(options: {
+  readonly geocode: ContextService<typeof SiteGeocoder>["geocode"];
+  readonly getOptionById: ContextService<
+    typeof SitesRepository
+  >["getOptionById"];
+  readonly update: ContextService<typeof SitesRepository>["update"];
+}) {
+  return Layer.mergeAll(
+    Layer.succeed(
+      CommentsRepository,
+      CommentsRepository.of({} as ContextService<typeof CommentsRepository>)
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(actor),
+      })
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
+    ),
+    Layer.succeed(
+      OrganizationAuthorization,
+      OrganizationAuthorization.of({
+        ensureCanCreateSite: () => Effect.void,
+      } as unknown as ContextService<typeof OrganizationAuthorization>)
+    ),
+    Layer.succeed(
+      SiteGeocoder,
+      SiteGeocoder.of({
+        geocode: options.geocode,
+      })
+    ),
+    Layer.succeed(
+      SiteLabelAssignmentsRepository,
+      SiteLabelAssignmentsRepository.of(
+        {} as ContextService<typeof SiteLabelAssignmentsRepository>
       )
     ),
-  };
-}
-
-function runSitesService<Value, Error>(
-  effect: Effect.Effect<
-    Value,
-    Error,
-    SitesService | HttpServerRequest.HttpServerRequest
-  >,
-  harness: SitesServiceHarness
-) {
-  return Effect.runPromise(effect.pipe(Effect.provide(harness.layer)));
-}
-
-function runSitesServiceExit<Value, Error>(
-  effect: Effect.Effect<
-    Value,
-    Error,
-    SitesService | HttpServerRequest.HttpServerRequest
-  >,
-  harness: SitesServiceHarness
-) {
-  return Effect.runPromiseExit(effect.pipe(Effect.provide(harness.layer)));
-}
-
-function getFailure<Value, Error>(exit: Exit.Exit<Value, Error>) {
-  return Exit.isFailure(exit)
-    ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
-    : undefined;
-}
-
-describe("sites service", () => {
-  it.each(["owner", "admin"] as const)(
-    "lets %s assign and remove labels from sites",
-    async (role) => {
-      const harness = makeHarness({ actor: makeActor(role) });
-
-      await expect(
-        runSitesService(
-          Effect.gen(function* () {
-            const sites = yield* SitesService;
-
-            const assigned = yield* sites.assignLabel(siteId, { labelId });
-            const removed = yield* sites.removeLabel(siteId, labelId);
-
-            return { assigned, removed };
-          }),
-          harness
-        )
-      ).resolves.toStrictEqual({
-        assigned: expect.objectContaining({
-          id: siteId,
-          labels: [
-            expect.objectContaining({ id: labelId, name: "Waiting on PO" }),
-          ],
-        }),
-        removed: expect.objectContaining({
-          id: siteId,
-          labels: [],
-        }),
-      });
-
-      expect(harness.calls.assignLabel).toBe(1);
-      expect(harness.calls.removeLabel).toBe(1);
-      expect(harness.calls.getOptionById).toBe(2);
-    },
-    10_000
+    Layer.succeed(
+      SitesRepository,
+      SitesRepository.of({
+        getOptionById: options.getOptionById,
+        update: options.update,
+        withTransaction: <Value, Error, Requirements>(
+          effect: Effect.Effect<Value, Error, Requirements>
+        ) => effect,
+      } as unknown as ContextService<typeof SitesRepository>)
+    )
   );
-
-  it("blocks external collaborators from assigning and removing site labels", async () => {
-    const harness = makeHarness({ actor: makeActor("external") });
-
-    const assignExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.assignLabel(siteId, { labelId });
-      }),
-      harness
-    );
-
-    const removeExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.removeLabel(siteId, labelId);
-      }),
-      harness
-    );
-
-    expect(getFailure(assignExit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(assignExit)).toMatchObject({
-      message: "Only organization owners and admins can manage labels",
-    });
-    expect(getFailure(removeExit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(removeExit)).toMatchObject({
-      message: "Only organization owners and admins can manage labels",
-    });
-    expect(harness.calls.assignLabel).toBe(0);
-    expect(harness.calls.removeLabel).toBe(0);
-    expect(harness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("propagates typed site label assignment failures without reloading the site", async () => {
-    const missingLabel = new LabelNotFoundError({
-      labelId,
-      message: "Label does not exist in the organization",
-    });
-    const missingSite = new SiteNotFoundError({
-      message: "Site does not exist in the organization",
-      siteId,
-    });
-
-    const assignMissingLabelHarness = makeHarness({
-      assignLabelFailure: missingLabel,
-    });
-    const assignMissingLabelExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.assignLabel(siteId, { labelId });
-      }),
-      assignMissingLabelHarness
-    );
-    expect(getFailure(assignMissingLabelExit)).toStrictEqual(missingLabel);
-    expect(assignMissingLabelHarness.calls.assignLabel).toBe(1);
-    expect(assignMissingLabelHarness.calls.getOptionById).toBe(0);
-
-    const assignMissingSiteHarness = makeHarness({
-      assignLabelFailure: missingSite,
-    });
-    const assignMissingSiteExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.assignLabel(siteId, { labelId });
-      }),
-      assignMissingSiteHarness
-    );
-    expect(getFailure(assignMissingSiteExit)).toStrictEqual(missingSite);
-    expect(assignMissingSiteHarness.calls.assignLabel).toBe(1);
-    expect(assignMissingSiteHarness.calls.getOptionById).toBe(0);
-
-    const removeMissingLabelHarness = makeHarness({
-      removeLabelFailure: missingLabel,
-    });
-    const removeMissingLabelExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.removeLabel(siteId, labelId);
-      }),
-      removeMissingLabelHarness
-    );
-    expect(getFailure(removeMissingLabelExit)).toStrictEqual(missingLabel);
-    expect(removeMissingLabelHarness.calls.removeLabel).toBe(1);
-    expect(removeMissingLabelHarness.calls.getOptionById).toBe(0);
-
-    const removeMissingSiteHarness = makeHarness({
-      removeLabelFailure: missingSite,
-    });
-    const removeMissingSiteExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.removeLabel(siteId, labelId);
-      }),
-      removeMissingSiteHarness
-    );
-    expect(getFailure(removeMissingSiteExit)).toStrictEqual(missingSite);
-    expect(removeMissingSiteHarness.calls.removeLabel).toBe(1);
-    expect(removeMissingSiteHarness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("maps site label assignment SQL failures without reloading the site", async () => {
-    const assignHarness = makeHarness({
-      assignLabelFailure: makeSqlError("database unavailable"),
-    });
-
-    const assignExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.assignLabel(siteId, { labelId });
-      }),
-      assignHarness
-    );
-    expect(getFailure(assignExit)).toBeInstanceOf(SiteStorageError);
-    expect(getFailure(assignExit)).toMatchObject({
-      cause: "database unavailable",
-      message: "Sites storage operation failed",
-    });
-    expect(assignHarness.calls.assignLabel).toBe(1);
-    expect(assignHarness.calls.getOptionById).toBe(0);
-
-    const removeHarness = makeHarness({
-      removeLabelFailure: makeSqlError("database unavailable"),
-    });
-
-    const removeExit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.removeLabel(siteId, labelId);
-      }),
-      removeHarness
-    );
-    expect(getFailure(removeExit)).toBeInstanceOf(SiteStorageError);
-    expect(getFailure(removeExit)).toMatchObject({
-      cause: "database unavailable",
-      message: "Sites storage operation failed",
-    });
-    expect(removeHarness.calls.removeLabel).toBe(1);
-    expect(removeHarness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("creates a standalone site and returns the created site option", async () => {
-    const harness = makeHarness();
-
-    await expect(
-      runSitesService(
-        Effect.gen(function* () {
-          const sites = yield* SitesService;
-
-          return yield* sites.create(siteInput);
-        }),
-        harness
-      )
-    ).resolves.toMatchObject({
-      id: siteId,
-      name: "Docklands Campus",
-      serviceAreaId,
-    });
-
-    expect(harness.calls.geocode).toBe(1);
-    expect(harness.calls.createSite).toBe(1);
-    expect(harness.calls.ensureServiceArea).toBe(0);
-    expect(harness.calls.getOptionById).toBe(1);
-    expect(harness.calls.withTransaction).toBe(1);
-  }, 10_000);
-
-  it("blocks organization members from creating standalone sites", async () => {
-    const harness = makeHarness({ actor: makeActor("member") });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.create(siteInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(exit)).toMatchObject({
-      message: "Only organization owners and admins can create sites",
-    });
-    expect(harness.calls.geocode).toBe(0);
-    expect(harness.calls.createSite).toBe(0);
-    expect(harness.calls.ensureServiceArea).toBe(0);
-    expect(harness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("denies external actors loading organization-wide site options", async () => {
-    const harness = makeHarness({ actor: makeActor("external") });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.getOptions();
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(exit)).toMatchObject({
-      message:
-        "External collaborators cannot view organization-wide site options",
-    });
-    expect(harness.calls.listOptions).toBe(0);
-    expect(harness.calls.listServiceAreas).toBe(0);
-  }, 10_000);
-
-  it("maps stale service areas from site creation", async () => {
-    const failure = new ServiceAreaNotFoundError({
-      message: "Service area does not exist in the organization",
-      organizationId: makeActor("owner").organizationId,
-      serviceAreaId,
-    });
-    const harness = makeHarness({ serviceAreaFailure: failure });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.create(siteInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toStrictEqual(failure);
-    expect(harness.calls.ensureServiceArea).toBe(0);
-    expect(harness.calls.geocode).toBe(1);
-    expect(harness.calls.createSite).toBe(1);
-    expect(harness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("maps service area validation storage failures from site creation", async () => {
-    const harness = makeHarness({
-      serviceAreaStorageFailure: makeSqlError("database unavailable"),
-    });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.create(siteInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteStorageError);
-    expect(getFailure(exit)).toMatchObject({
-      cause: "database unavailable",
-      message: "Sites storage operation failed",
-    });
-    expect(harness.calls.ensureServiceArea).toBe(0);
-    expect(harness.calls.geocode).toBe(1);
-    expect(harness.calls.createSite).toBe(1);
-    expect(harness.calls.getOptionById).toBe(0);
-  }, 10_000);
-
-  it("does not create a site when geocoding fails", async () => {
-    const failure = new SiteGeocodingFailedError({
-      country: "IE",
-      eircode: "D01 X2X2",
-      message: "We could not locate that site address.",
-    });
-    const harness = makeHarness({ geocodingFailure: failure });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.create(siteInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toStrictEqual(failure);
-    expect(harness.calls.ensureServiceArea).toBe(0);
-    expect(harness.calls.geocode).toBe(1);
-    expect(harness.calls.createSite).toBe(0);
-    expect(harness.calls.getOptionById).toBe(0);
-  }, 10_000);
-});
-
-describe("site comments service", () => {
-  const commentInput = {
-    body: "Gate code changed to 2468.",
-  } satisfies AddSiteCommentInput;
-
-  it("allows internal actors to list site comments", async () => {
-    const harness = makeHarness({ actor: makeActor("owner") });
-
-    await expect(
-      runSitesService(
-        Effect.gen(function* () {
-          const sites = yield* SitesService;
-
-          return yield* sites.listComments(siteId);
-        }),
-        harness
-      )
-    ).resolves.toMatchObject({
-      comments: [
-        {
-          body: "Gate code changed to 2468.",
-          siteId,
-        },
-      ],
-    });
-
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.listComments).toBe(1);
-  }, 10_000);
-
-  it("allows members to list site comments", async () => {
-    const harness = makeHarness({ actor: makeActor("member") });
-
-    await expect(
-      runSitesService(
-        Effect.gen(function* () {
-          const sites = yield* SitesService;
-
-          return yield* sites.listComments(siteId);
-        }),
-        harness
-      )
-    ).resolves.toMatchObject({
-      comments: [
-        {
-          body: "Gate code changed to 2468.",
-          siteId,
-        },
-      ],
-    });
-
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.listComments).toBe(1);
-  }, 10_000);
-
-  it("allows members to add site comments without site creation permission", async () => {
-    const harness = makeHarness({ actor: makeActor("member") });
-
-    await expect(
-      runSitesService(
-        Effect.gen(function* () {
-          const sites = yield* SitesService;
-
-          return yield* sites.addComment(siteId, commentInput);
-        }),
-        harness
-      )
-    ).resolves.toMatchObject({
-      body: "Gate code changed to 2468.",
-      siteId,
-    });
-
-    expect(harness.calls.withTransaction).toBe(0);
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.addComment).toBe(1);
-    expect(harness.calls.geocode).toBe(0);
-    expect(harness.calls.createSite).toBe(0);
-  }, 10_000);
-
-  it("denies external actors listing site comments", async () => {
-    const harness = makeHarness({ actor: makeActor("external") });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.listComments(siteId);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(exit)).toMatchObject({
-      message: "External collaborators cannot view organization-wide data",
-      siteId,
-    });
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.listComments).toBe(0);
-  }, 10_000);
-
-  it("denies external actors adding site comments", async () => {
-    const harness = makeHarness({ actor: makeActor("external") });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.addComment(siteId, commentInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteAccessDeniedError);
-    expect(getFailure(exit)).toMatchObject({
-      message: "External collaborators cannot view organization-wide data",
-      siteId,
-    });
-    expect(harness.calls.withTransaction).toBe(0);
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.addComment).toBe(0);
-  }, 10_000);
-
-  it("returns not found when listing comments for a missing site", async () => {
-    const harness = makeHarness({ siteExists: false });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.listComments(siteId);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteNotFoundError);
-    expect(getFailure(exit)).toMatchObject({
-      message: "Site does not exist",
-      siteId,
-    });
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.listComments).toBe(1);
-  }, 10_000);
-
-  it("returns not found when adding comments to a missing site", async () => {
-    const harness = makeHarness({ siteExists: false });
-
-    const exit = await runSitesServiceExit(
-      Effect.gen(function* () {
-        const sites = yield* SitesService;
-
-        return yield* sites.addComment(siteId, commentInput);
-      }),
-      harness
-    );
-
-    expect(getFailure(exit)).toBeInstanceOf(SiteNotFoundError);
-    expect(getFailure(exit)).toMatchObject({
-      message: "Site does not exist",
-      siteId,
-    });
-    expect(harness.calls.withTransaction).toBe(0);
-    expect(harness.calls.findById).toBe(0);
-    expect(harness.calls.addComment).toBe(1);
-  }, 10_000);
-});
+}

@@ -1,9 +1,9 @@
 /* oxlint-disable unicorn/no-array-sort */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, posix, resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 
 const APP_SRC_DIR = resolve(process.cwd(), "src");
 const THIS_FILE = "test/app-domain-boundaries.test.ts";
@@ -12,8 +12,6 @@ const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const SITE_OR_LABEL_OWNED_JOBS_CORE_IMPORTS = new Set([
   "CreateLabelInput",
   "CreateJobLabelInput",
-  "CreateServiceAreaInput",
-  "CreateServiceAreaResponse",
   "CreateSiteInput",
   "CreateSiteResponse",
   "Label",
@@ -25,18 +23,12 @@ const SITE_OR_LABEL_OWNED_JOBS_CORE_IMPORTS = new Set([
   "JobLabelsResponse",
   "JobSiteOption",
   "LabelsResponse",
-  "SERVICE_AREA_NOT_FOUND_ERROR_TAG",
   "SITE_ACCESS_DENIED_ERROR_TAG",
   "SITE_COUNTRIES",
   "SITE_GEOCODING_FAILED_ERROR_TAG",
   "SITE_GEOCODING_PROVIDERS",
   "SITE_NOT_FOUND_ERROR_TAG",
   "SITE_STORAGE_ERROR_TAG",
-  "ServiceArea",
-  "ServiceAreaIdType",
-  "ServiceAreaListResponse",
-  "ServiceAreaNotFoundError",
-  "ServiceAreaOption",
   "SiteCountry",
   "SiteDetail",
   "SiteGeocodingFailedError",
@@ -50,8 +42,6 @@ const SITE_OR_LABEL_OWNED_JOBS_CORE_IMPORTS = new Set([
   "SitesOptionsResponse",
   "UpdateLabelInput",
   "UpdateJobLabelInput",
-  "UpdateServiceAreaInput",
-  "UpdateServiceAreaResponse",
   "UpdateSiteInput",
   "UpdateSiteResponse",
   "normalizeLabelName",
@@ -205,7 +195,7 @@ function collectSourceFileViolations(
 
 function getAppSourceFiles() {
   sourceFilesCache ??= getSourceFiles(APP_SRC_DIR).flatMap((filePath) =>
-    filePath === THIS_FILE
+    filePath === THIS_FILE || !existsSync(join(APP_SRC_DIR, filePath))
       ? []
       : [
           {
@@ -259,7 +249,6 @@ function findJobsServerDomainHelperViolations(
     for (const importedName of getImportedNames(imports)) {
       if (
         importedName === "getCurrentServerLabels" ||
-        importedName === "getCurrentServerServiceAreas" ||
         importedName === "listAllCurrentServerSites" ||
         importedName === "listCurrentServerSites"
       ) {

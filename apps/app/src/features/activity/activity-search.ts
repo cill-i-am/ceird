@@ -18,7 +18,6 @@ const ACTIVITY_EVENT_TYPE_LOOKUP = {
   blocked_reason_changed: true,
   contact_changed: true,
   coordinator_changed: true,
-  cost_line_added: true,
   job_created: true,
   job_reopened: true,
   label_added: true,

@@ -2,8 +2,6 @@ import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
 import { LabelId, LabelNameSchema, LabelSchema } from "@ceird/labels-core";
 import {
   CreateSiteInputSchema,
-  ServiceAreaId,
-  ServiceAreaOptionSchema,
   SiteDetailSchema,
   SiteId,
   SiteOptionSchema,
@@ -22,28 +20,17 @@ import {
   JobCollaboratorAccessLevelSchema,
   JobCollaboratorRoleLabelSchema,
   JobCollaboratorSubjectTypeSchema,
-  JobCostLineDescriptionSchema,
-  JobCostLineQuantitySchema,
-  JobCostLineTaxRateBasisPointsSchema,
-  JobCostLineTotalMinorSchema,
-  JobCostLineTypeSchema,
-  JobCostLineUnitPriceMinorSchema,
-  JobExternalReferenceSchema,
   JobKindSchema,
   JobPrioritySchema,
   JobStatusSchema,
   JobTitleSchema,
   JobVisitNoteSchema,
-  RateCardLineKindSchema,
 } from "./domain.js";
 import {
   ActivityId,
   ContactId,
-  CostLineId,
   JobCollaboratorId,
   OrganizationId,
-  RateCardId,
-  RateCardLineId,
   UserId,
   VisitId,
   WorkItemId,
@@ -55,113 +42,10 @@ const JobVisitDurationMinutesSchema = Schema.Int.pipe(
 const NonEmptyTrimmedString = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
 );
-const ConfigurationNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.check(Schema.isMaxLength(120))
-);
-const RateCardLineNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.check(Schema.isMaxLength(120))
-);
-const RateCardLineUnitSchema = NonEmptyTrimmedString.pipe(
-  Schema.check(Schema.isMaxLength(40))
-);
-const RateCardLineValueSchema = Schema.Number.pipe(
-  Schema.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))
-);
-const RateCardLinePositionSchema = Schema.Int.pipe(
-  Schema.check(Schema.isGreaterThan(0))
-);
-
-function hasUniqueRateCardLinePositions(
-  lines: readonly { readonly position: number }[]
-) {
-  return new Set(lines.map((line) => line.position)).size === lines.length;
-}
-
 export const JobListCursor = Schema.String.pipe(
   Schema.brand("@ceird/jobs-core/JobListCursor")
 );
 export type JobListCursor = Schema.Schema.Type<typeof JobListCursor>;
-
-export const RateCardLineSchema = Schema.Struct({
-  id: RateCardLineId,
-  rateCardId: RateCardId,
-  kind: RateCardLineKindSchema,
-  name: RateCardLineNameSchema,
-  position: RateCardLinePositionSchema,
-  unit: RateCardLineUnitSchema,
-  value: RateCardLineValueSchema,
-});
-export type RateCardLine = Schema.Schema.Type<typeof RateCardLineSchema>;
-
-export const RateCardSchema = Schema.Struct({
-  id: RateCardId,
-  name: ConfigurationNameSchema,
-  lines: Schema.Array(RateCardLineSchema),
-  createdAt: IsoDateTimeString,
-  updatedAt: IsoDateTimeString,
-});
-export type RateCard = Schema.Schema.Type<typeof RateCardSchema>;
-
-export const RateCardLineInputSchema = Schema.Struct({
-  kind: RateCardLineKindSchema,
-  name: RateCardLineNameSchema,
-  position: RateCardLinePositionSchema,
-  unit: RateCardLineUnitSchema,
-  value: RateCardLineValueSchema,
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type RateCardLineInput = Schema.Schema.Type<
-  typeof RateCardLineInputSchema
->;
-
-const RateCardLineInputListSchema = Schema.Array(RateCardLineInputSchema).pipe(
-  Schema.check(Schema.isMaxLength(50)),
-  Schema.refine(
-    (lines): lines is readonly RateCardLineInput[] =>
-      hasUniqueRateCardLinePositions(lines),
-    {
-      message: "Rate card line positions must be unique",
-    }
-  )
-);
-
-export const CreateRateCardInputSchema = Schema.Struct({
-  name: ConfigurationNameSchema,
-  lines: RateCardLineInputListSchema,
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type CreateRateCardInput = Schema.Schema.Type<
-  typeof CreateRateCardInputSchema
->;
-
-export const CreateRateCardResponseSchema = RateCardSchema;
-export type CreateRateCardResponse = Schema.Schema.Type<
-  typeof CreateRateCardResponseSchema
->;
-
-export const UpdateRateCardInputSchema = Schema.Struct({
-  name: Schema.optional(ConfigurationNameSchema),
-  lines: Schema.optional(RateCardLineInputListSchema),
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type UpdateRateCardInput = Schema.Schema.Type<
-  typeof UpdateRateCardInputSchema
->;
-
-export const UpdateRateCardResponseSchema = RateCardSchema;
-export type UpdateRateCardResponse = Schema.Schema.Type<
-  typeof UpdateRateCardResponseSchema
->;
-
-export const RateCardListResponseSchema = Schema.Struct({
-  items: Schema.Array(RateCardSchema),
-});
-export type RateCardListResponse = Schema.Schema.Type<
-  typeof RateCardListResponseSchema
->;
 
 export const JobSchema = Schema.Struct({
   id: WorkItemId,
@@ -170,7 +54,6 @@ export const JobSchema = Schema.Struct({
   status: JobStatusSchema,
   priority: JobPrioritySchema,
   labels: Schema.Array(LabelSchema),
-  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -191,7 +74,6 @@ export const JobListItemSchema = Schema.Struct({
   status: JobStatusSchema,
   priority: JobPrioritySchema,
   labels: Schema.Array(LabelSchema),
-  externalReference: Schema.optional(JobExternalReferenceSchema),
   siteId: Schema.optional(SiteId),
   contactId: Schema.optional(ContactId),
   assigneeId: Schema.optional(UserId),
@@ -289,12 +171,6 @@ export const JobActivityLabelRemovedPayloadSchema = Schema.Struct({
   labelName: LabelNameSchema,
 });
 
-export const JobActivityCostLineAddedPayloadSchema = Schema.Struct({
-  eventType: Schema.Literal("cost_line_added"),
-  costLineId: CostLineId,
-  costLineType: JobCostLineTypeSchema,
-});
-
 export const JobActivityPayloadSchema = Schema.Union([
   JobActivityJobCreatedPayloadSchema,
   JobActivityStatusChangedPayloadSchema,
@@ -308,7 +184,6 @@ export const JobActivityPayloadSchema = Schema.Union([
   JobActivityVisitLoggedPayloadSchema,
   JobActivityLabelAddedPayloadSchema,
   JobActivityLabelRemovedPayloadSchema,
-  JobActivityCostLineAddedPayloadSchema,
 ]);
 export type JobActivityPayload = Schema.Schema.Type<
   typeof JobActivityPayloadSchema
@@ -406,25 +281,6 @@ export const JobVisitSchema = Schema.Struct({
 });
 export type JobVisit = Schema.Schema.Type<typeof JobVisitSchema>;
 
-export const JobCostLineSchema = Schema.Struct({
-  id: CostLineId,
-  workItemId: WorkItemId,
-  authorUserId: UserId,
-  type: JobCostLineTypeSchema,
-  description: JobCostLineDescriptionSchema,
-  quantity: JobCostLineQuantitySchema,
-  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
-  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
-  lineTotalMinor: JobCostLineTotalMinorSchema,
-  createdAt: IsoDateTimeString,
-});
-export type JobCostLine = Schema.Schema.Type<typeof JobCostLineSchema>;
-
-export const JobCostSummarySchema = Schema.Struct({
-  subtotalMinor: JobCostLineTotalMinorSchema,
-});
-export type JobCostSummary = Schema.Schema.Type<typeof JobCostSummarySchema>;
-
 export const JobListQuerySchema = Schema.Struct({
   cursor: Schema.optional(JobListCursor),
   limit: Schema.optional(
@@ -442,7 +298,8 @@ export const JobListQuerySchema = Schema.Struct({
   priority: Schema.optional(JobPrioritySchema),
   siteId: Schema.optional(SiteId),
   labelId: Schema.optional(LabelId),
-  serviceAreaId: Schema.optional(ServiceAreaId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type JobListQuery = Schema.Schema.Type<typeof JobListQuerySchema>;
 
@@ -501,10 +358,11 @@ export type CreateJobContactInput = Schema.Schema.Type<
 
 export const CreateJobInputSchema = Schema.Struct({
   title: JobTitleSchema,
-  externalReference: Schema.optional(JobExternalReferenceSchema),
   priority: Schema.optional(JobPrioritySchema),
   site: Schema.optional(CreateJobSiteInputSchema),
   contact: Schema.optional(CreateJobContactInputSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type CreateJobInput = Schema.Schema.Type<typeof CreateJobInputSchema>;
 
@@ -515,12 +373,13 @@ export type CreateJobResponse = Schema.Schema.Type<
 
 export const PatchJobInputSchema = Schema.Struct({
   title: Schema.optional(JobTitleSchema),
-  externalReference: Schema.optional(Schema.NullOr(JobExternalReferenceSchema)),
   priority: Schema.optional(JobPrioritySchema),
   siteId: Schema.optional(Schema.NullOr(SiteId)),
   contactId: Schema.optional(Schema.NullOr(ContactId)),
   assigneeId: Schema.optional(Schema.NullOr(UserId)),
   coordinatorId: Schema.optional(Schema.NullOr(UserId)),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type PatchJobInput = Schema.Schema.Type<typeof PatchJobInputSchema>;
 
@@ -622,90 +481,6 @@ export type AssignJobLabelInput = Schema.Schema.Type<
   typeof AssignJobLabelInputSchema
 >;
 
-const AddJobCostLineInputBaseSchema = Schema.Struct({
-  type: JobCostLineTypeSchema,
-  description: JobCostLineDescriptionSchema,
-  quantity: JobCostLineQuantitySchema,
-  unitPriceMinor: JobCostLineUnitPriceMinorSchema,
-  taxRateBasisPoints: Schema.optional(JobCostLineTaxRateBasisPointsSchema),
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-
-export const AddJobCostLineInputSchema = AddJobCostLineInputBaseSchema.pipe(
-  Schema.refine(
-    (
-      input
-    ): input is Schema.Schema.Type<typeof AddJobCostLineInputBaseSchema> =>
-      Number.isSafeInteger(
-        calculateJobCostLineTotalMinor({
-          quantity: input.quantity,
-          unitPriceMinor: input.unitPriceMinor,
-        })
-      ),
-    {
-      message: "Expected a safe integer line total",
-    }
-  )
-).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type AddJobCostLineInput = Schema.Schema.Type<
-  typeof AddJobCostLineInputSchema
->;
-
-export const AddJobCostLineResponseSchema = JobCostLineSchema;
-export type AddJobCostLineResponse = Schema.Schema.Type<
-  typeof AddJobCostLineResponseSchema
->;
-
-export function calculateJobCostLineTotalMinor(input: {
-  readonly quantity: number;
-  readonly unitPriceMinor: number;
-}): number {
-  const quantityParts = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(input.quantity));
-
-  if (!quantityParts) {
-    return Number.NaN;
-  }
-
-  const quantityHundredths =
-    Number(quantityParts[1]) * 100 +
-    Number((quantityParts[2] ?? "").padEnd(2, "0"));
-
-  if (
-    !Number.isSafeInteger(quantityHundredths) ||
-    !Number.isSafeInteger(input.unitPriceMinor)
-  ) {
-    return Number.NaN;
-  }
-
-  const totalHundredthMinor =
-    BigInt(quantityHundredths) * BigInt(input.unitPriceMinor);
-  const roundedTotalMinor =
-    totalHundredthMinor / 100n + (totalHundredthMinor % 100n >= 50n ? 1n : 0n);
-
-  return Number(roundedTotalMinor);
-}
-
-export function calculateJobCostSummary(
-  costLines: readonly Pick<JobCostLine, "lineTotalMinor">[]
-): JobCostSummary {
-  let subtotalMinor = 0;
-
-  for (const costLine of costLines) {
-    subtotalMinor += costLine.lineTotalMinor;
-
-    if (!Number.isSafeInteger(subtotalMinor)) {
-      throw new RangeError("Expected a safe integer job cost subtotal");
-    }
-  }
-
-  return {
-    subtotalMinor,
-  };
-}
-
 export const JobContactDetailSchema = Schema.Struct({
   id: ContactId,
   name: ContactNameSchema,
@@ -731,12 +506,6 @@ export const JobDetailSchema = Schema.Struct({
   comments: Schema.Array(JobCommentSchema),
   activity: Schema.Array(JobActivitySchema),
   visits: Schema.Array(JobVisitSchema),
-  costs: Schema.optional(
-    Schema.Struct({
-      lines: Schema.Array(JobCostLineSchema),
-      summary: JobCostSummarySchema,
-    })
-  ),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -776,7 +545,6 @@ export type JobContactOption = Schema.Schema.Type<
 
 export const JobOptionsResponseSchema = Schema.Struct({
   members: Schema.Array(JobMemberOptionSchema),
-  serviceAreas: Schema.Array(ServiceAreaOptionSchema),
   sites: Schema.Array(SiteOptionSchema),
   contacts: Schema.Array(JobContactOptionSchema),
   labels: Schema.Array(LabelSchema),

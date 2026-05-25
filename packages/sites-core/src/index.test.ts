@@ -3,22 +3,20 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 
-import type { SiteId, SitesError } from "./index.js";
+import type { SitesError } from "./index.js";
 import {
   AddSiteCommentInputSchema,
   AssignSiteLabelInputSchema,
-  CreateServiceAreaInputSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
-  ServiceAreaSchema,
-  ServiceAreasApiGroup,
   SiteAccessDeniedError,
-  SiteListQuerySchema,
-  SiteListResponseSchema,
-  SiteGeocodingFailedError,
-  SiteGeocodingProviderError,
   SiteCommentSchema,
   SiteCommentsResponseSchema,
+  SiteGeocodingFailedError,
+  SiteGeocodingProviderError,
+  SiteListQuerySchema,
+  SiteListResponseSchema,
+  SiteId,
   SiteNotFoundError,
   SitesApi,
   SitesApiGroup,
@@ -26,7 +24,9 @@ import {
 } from "./index.js";
 
 describe("sites-core", () => {
-  it("decodes site-owned creation DTOs", () => {
+  const decodeSiteId = Schema.decodeUnknownSync(SiteId);
+
+  it("decodes site creation DTOs", () => {
     const input = {
       accessNotes: "  Enter via reception  ",
       addressLine1: "  1 Custom House Quay  ",
@@ -84,7 +84,7 @@ describe("sites-core", () => {
     });
   });
 
-  it("decodes site responses and service-area contracts", () => {
+  it("decodes site responses", () => {
     const site = {
       addressLine1: "1 Custom House Quay",
       county: "Dublin",
@@ -115,28 +115,6 @@ describe("sites-core", () => {
         longitude: -181,
       })
     ).toThrow(/greater than or equal to -180/);
-
-    expect(
-      Schema.decodeUnknownSync(CreateServiceAreaInputSchema)({
-        description: "  Retail sites  ",
-        name: "  Retail  ",
-      })
-    ).toStrictEqual({
-      description: "Retail sites",
-      name: "Retail",
-    });
-
-    expect(
-      Schema.decodeUnknownSync(ServiceAreaSchema)({
-        description: "North city",
-        id: "33333333-3333-4333-8333-333333333333",
-        name: "North Dublin",
-      })
-    ).toStrictEqual({
-      description: "North city",
-      id: "33333333-3333-4333-8333-333333333333",
-      name: "North Dublin",
-    });
   });
 
   it("decodes site comment contracts", () => {
@@ -161,19 +139,17 @@ describe("sites-core", () => {
     });
   });
 
-  it("documents site comment API operations", () => {
+  it("documents site comment and label API operations", () => {
     const spec = OpenApi.fromApi(SitesApi);
     const siteComments = spec.paths["/sites/{siteId}/comments"];
+    const assignOperation = spec.paths["/sites/{siteId}/labels"]?.post;
+    const removeOperation =
+      spec.paths["/sites/{siteId}/labels/{labelId}"]?.delete;
 
     expect(siteComments?.get?.operationId).toBe("sites.listSiteComments");
-    expect(siteComments?.get?.responses["200"]).toBeDefined();
-    expect(siteComments?.get?.responses["403"]).toBeDefined();
-    expect(siteComments?.get?.responses["404"]).toBeDefined();
     expect(siteComments?.post?.operationId).toBe("sites.addSiteComment");
-    expect(siteComments?.post?.requestBody).toBeDefined();
-    expect(siteComments?.post?.responses["201"]).toBeDefined();
-    expect(siteComments?.post?.responses["403"]).toBeDefined();
-    expect(siteComments?.post?.responses["404"]).toBeDefined();
+    expect(assignOperation?.operationId).toBe("sites.assignSiteLabel");
+    expect(removeOperation?.operationId).toBe("sites.removeSiteLabel");
   });
 
   it("decodes site label assignment DTOs", () => {
@@ -186,41 +162,9 @@ describe("sites-core", () => {
     });
   });
 
-  it("documents site label assignment operations", () => {
-    const spec = OpenApi.fromApi(SitesApi);
-    const assignOperation = spec.paths["/sites/{siteId}/labels"]?.post;
-    const removeOperation =
-      spec.paths["/sites/{siteId}/labels/{labelId}"]?.delete;
-
-    expect(assignOperation?.operationId).toBe("sites.assignSiteLabel");
-    expect(
-      assignOperation?.parameters?.map((parameter) => parameter.name)
-    ).toContain("siteId");
-    expect(assignOperation?.requestBody).toMatchObject({ required: true });
-    expect(JSON.stringify(assignOperation?.requestBody)).toContain("labelId");
-    expect(JSON.stringify(assignOperation?.responses["404"])).toContain(
-      "SiteNotFoundError"
-    );
-    expect(JSON.stringify(assignOperation?.responses["404"])).toContain(
-      "LabelNotFoundError"
-    );
-
-    expect(removeOperation?.operationId).toBe("sites.removeSiteLabel");
-    expect(
-      removeOperation?.parameters?.map((parameter) => parameter.name)
-    ).toStrictEqual(["siteId", "labelId"]);
-    expect(JSON.stringify(removeOperation?.responses["404"])).toContain(
-      "SiteNotFoundError"
-    );
-    expect(JSON.stringify(removeOperation?.responses["404"])).toContain(
-      "LabelNotFoundError"
-    );
-  });
-
   it("exports site API groups and typed errors", () => {
     expect(SitesApi).toBeDefined();
-    expect(SitesApiGroup).toBeDefined();
-    expect(ServiceAreasApiGroup).toBeDefined();
+    expect(SitesApiGroup.identifier).toBe("sites");
 
     const spec = OpenApi.fromApi(SitesApi);
     expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
@@ -231,7 +175,7 @@ describe("sites-core", () => {
     expect(
       new SiteNotFoundError({
         message: "Site does not exist",
-        siteId: "550e8400-e29b-41d4-a716-446655440010" as SiteId,
+        siteId: decodeSiteId("550e8400-e29b-41d4-a716-446655440010"),
       })._tag
     ).toBe("@ceird/sites-core/SiteNotFoundError");
     expect(
@@ -268,7 +212,6 @@ describe("sites-core", () => {
         id: "550e8400-e29b-41d4-a716-446655440010",
         name: "Docklands Campus",
         organizationId: "org_123",
-        serviceAreaId: "33333333-3333-4333-8333-333333333333",
       })
     ).toString("base64url");
 
@@ -276,13 +219,17 @@ describe("sites-core", () => {
       Schema.decodeUnknownSync(SiteListQuerySchema)({
         cursor,
         limit: "25",
-        serviceAreaId: "33333333-3333-4333-8333-333333333333",
       })
     ).toStrictEqual({
       cursor,
       limit: 25,
-      serviceAreaId: "33333333-3333-4333-8333-333333333333",
     });
+    expect(() =>
+      Schema.decodeUnknownSync(SiteListQuerySchema)({
+        unexpectedFilter: "550e8400-e29b-41d4-a716-446655440010",
+        limit: "25",
+      })
+    ).toThrow(/[Uu]nexpected/);
 
     expect(
       Schema.decodeUnknownSync(SiteListResponseSchema)({

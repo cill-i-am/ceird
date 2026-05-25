@@ -10,23 +10,17 @@ import {
   AddSiteCommentInputSchema,
   AddSiteCommentResponseSchema,
   AssignSiteLabelInputSchema,
-  CreateServiceAreaInputSchema,
-  CreateServiceAreaResponseSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
-  ServiceAreaListResponseSchema,
   SiteCommentsResponseSchema,
   SiteDetailSchema,
   SiteListQuerySchema,
   SiteListResponseSchema,
   SitesOptionsResponseSchema,
-  UpdateServiceAreaInputSchema,
-  UpdateServiceAreaResponseSchema,
   UpdateSiteInputSchema,
   UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
-  ServiceAreaNotFoundError,
   SiteAccessDeniedError,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
@@ -34,7 +28,7 @@ import {
   SiteNotFoundError,
   SiteStorageError,
 } from "./errors.js";
-import { ServiceAreaId, SiteId } from "./ids.js";
+import { SiteId } from "./ids.js";
 
 const sitesGroup = HttpApiGroup.make("sites")
   .add(
@@ -60,7 +54,6 @@ const sitesGroup = HttpApiGroup.make("sites")
       success: CreateSiteResponseSchema.pipe(HttpApiSchema.status("Created")),
       error: [
         SiteAccessDeniedError,
-        ServiceAreaNotFoundError,
         SiteGeocodingFailedError,
         SiteGeocodingProviderError,
         SiteStorageError,
@@ -74,7 +67,6 @@ const sitesGroup = HttpApiGroup.make("sites")
       success: UpdateSiteResponseSchema,
       error: [
         SiteAccessDeniedError,
-        ServiceAreaNotFoundError,
         SiteNotFoundError,
         SiteGeocodingFailedError,
         SiteGeocodingProviderError,
@@ -131,45 +123,7 @@ const sitesGroup = HttpApiGroup.make("sites")
 
 export const SitesApiGroup = sitesGroup;
 
-const serviceAreasGroup = HttpApiGroup.make("serviceAreas")
-  .add(
-    HttpApiEndpoint.get("listServiceAreas", "/service-areas", {
-      success: ServiceAreaListResponseSchema,
-      error: [SiteAccessDeniedError, SiteStorageError],
-    })
-  )
-  .add(
-    HttpApiEndpoint.post("createServiceArea", "/service-areas", {
-      payload: CreateServiceAreaInputSchema,
-      success: CreateServiceAreaResponseSchema.pipe(
-        HttpApiSchema.status("Created")
-      ),
-      error: [SiteAccessDeniedError, SiteStorageError],
-    })
-  )
-  .add(
-    HttpApiEndpoint.patch(
-      "updateServiceArea",
-      "/service-areas/:serviceAreaId",
-      {
-        params: { serviceAreaId: ServiceAreaId },
-        payload: UpdateServiceAreaInputSchema,
-        success: UpdateServiceAreaResponseSchema,
-        error: [
-          SiteAccessDeniedError,
-          ServiceAreaNotFoundError,
-          SiteStorageError,
-        ],
-      }
-    )
-  );
+export const SitesApi = HttpApi.make("SitesApi").add(SitesApiGroup);
 
-export const ServiceAreasApiGroup = serviceAreasGroup;
-
-export const SitesApi = HttpApi.make("SitesApi")
-  .add(SitesApiGroup)
-  .add(ServiceAreasApiGroup);
-
-export type ServiceAreasApiGroupType = typeof ServiceAreasApiGroup;
 export type SitesApiGroupType = typeof SitesApiGroup;
 export type SitesApiType = typeof SitesApi;

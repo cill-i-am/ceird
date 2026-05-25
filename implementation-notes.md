@@ -41,7 +41,7 @@
 
 - Planned first refactor: add a small shared TanStack DB helper for stripping virtual props, then switch route-scoped collection hooks from manual subscriptions to `useLiveQuery`.
 - Added `src/lib/tanstack-db-collection.ts` to centralize virtual prop stripping.
-- Switched jobs, sites, site comments, service areas, and rate cards collection hooks from manual `subscribeChanges()` wiring to React DB `useLiveQuery` query-builder subscriptions.
+- Switched product collection hooks from manual `subscribeChanges()` wiring to React DB `useLiveQuery` query-builder subscriptions.
 - Removed manual cleanup of local-only source collections because derived live queries own their own cleanup and warn when a source is cleaned while still subscribed.
 - Updated `docs/architecture/frontend.md` with the Start-loader plus route-scoped TanStack DB pattern and the `useLiveQuery` subscription/lifecycle rule.
 - Tightened the root infra test script from `vitest run infra` to `vitest run --dir infra`. The old command hung during root discovery with the large local `opensrc/` source tree present; constraining Vitest's directory makes the existing infra suite collect and complete.
@@ -96,15 +96,15 @@
 ### Simplify Pass Updates
 
 - `OrganizationSettingsPage` now receives the router-scoped `QueryClient` from the settings route instead of letting organization configuration create a private fallback client in production.
-- Jobs, sites, service areas, rate cards, and site comments now share collection helpers for stripping TanStack DB virtual props, replacing synced data, and guarding stale query responses after concurrent local writes.
+- Jobs, sites, labels, and site comments now share collection helpers for stripping TanStack DB virtual props, replacing synced data, and guarding stale query responses after concurrent local writes.
 - Query Collection fetchers no longer unconditionally merge fetched rows with collection rows. The merge is limited to requests that overlap a local write, which keeps optimistic/server-confirmed changes from being clobbered by older responses without keeping deleted server rows alive forever.
-- Organization service-area and rate-card collections use disabled Query observers plus explicit section loads. This keeps the existing error/loading UI and prevents duplicate initial list requests from `useLiveQuery` plus the mounted tab effects.
+- Organization configuration collections use disabled Query observers plus explicit section loads. This keeps the existing error/loading UI and prevents duplicate initial list requests from `useLiveQuery` plus the mounted tab effects.
 - Organization update mutations fall back to a direct typed HTTP update plus `writeUpsert` if the local row is missing, because `createOptimisticAction` does not call `mutationFn` when `onMutate` records no collection mutation.
 - Site comment collections are no longer dropped from the store blindly during options replacement. Inactive collections for removed sites are explicitly cleaned up, while active comment collections stay reusable until their subscribers detach.
 
 ### Verification Updates
 
-- `pnpm --filter app test -- src/features/organizations/organization-service-areas-section.test.tsx src/features/organizations/organization-rate-card-section.test.tsx`
+- `pnpm --filter app test -- src/features/organizations`
 - `pnpm --filter app check-types`
 - `pnpm --filter app test -- src/features/sites/sites-state.integration.test.tsx src/features/sites/sites-page.test.tsx src/features/sites/sites-detail-sheet.test.tsx src/routes/-_app._org.sites.test.tsx`
 - `pnpm --filter app test -- src/features/jobs/jobs-state.test.ts src/features/jobs/jobs-create-sheet.integration.test.tsx src/features/jobs/jobs-detail-sheet.integration.test.tsx src/features/jobs/jobs-page.test.tsx src/routes/-_app._org.jobs.test.tsx`
@@ -130,7 +130,7 @@
 - Full collection replacements now use Query Collection `utils.writeBatch` so
   delete plus upsert reconciliation is atomic to subscribers and updates the
   Query cache once.
-- Query keys for jobs, sites, site comments, service areas, and rate cards now
+- Query keys for jobs, sites, site comments, and labels now
   include organization plus viewer role/user when available. This prevents a
   router-scoped QueryClient from reusing scoped data across role or session
   changes.
@@ -142,7 +142,7 @@
   into an error state. Route-scoped Query Collections now set a short native
   `gcTime` and inactive comment collections are removed from the provider
   registry without forcing `cleanup()`.
-- Organization service-area and rate-card update actions now return the current
+- Organization configuration update actions now return the current
   collection row for no-op edits before creating an optimistic action. This
   avoids TanStack DB's documented behavior where an action with no recorded
   collection mutation completes without calling `mutationFn`.
@@ -158,9 +158,7 @@
 - `pnpm lint`
 - `pnpm check-types`
 - `pnpm --filter app check-types`
-- `pnpm --filter app test -- src/lib/tanstack-db-collection.test.ts src/lib/tanstack-db-query.test.ts src/routes/-_app._org.jobs.test.tsx src/routes/-_app._org.sites.test.tsx src/features/organizations/organization-service-areas-section.test.tsx src/features/organizations/organization-rate-card-section.test.tsx src/features/sites/sites-state.integration.test.tsx src/features/sites/sites-page.test.tsx src/features/jobs/jobs-state.test.ts src/features/jobs/jobs-page.test.tsx`
-- `pnpm --filter app test -- src/features/organizations/organization-rate-card-section.test.tsx -t "ignores in-flight rate card updates"`
-- `pnpm --filter app test -- src/features/organizations/organization-rate-card-section.test.tsx`
+- `pnpm --filter app test -- src/lib/tanstack-db-collection.test.ts src/lib/tanstack-db-query.test.ts src/routes/-_app._org.jobs.test.tsx src/routes/-_app._org.sites.test.tsx src/features/organizations src/features/sites/sites-state.integration.test.tsx src/features/sites/sites-page.test.tsx src/features/jobs/jobs-state.test.ts src/features/jobs/jobs-page.test.tsx`
 - `pnpm test`
 
 ---
@@ -192,7 +190,7 @@
   loader DTOs as the SSR/hydration-render source, strips TanStack DB virtual
   props, and subscribes on the first client commit so disabled Query
   Collections can still be manually `refetch()`ed by mounted section effects.
-- Jobs, sites, site comments, service areas, and rate cards now use this helper
+- Jobs, sites, labels, and site comments now use this helper
   for simple whole-collection reads. Future `useLiveQuery` usage should be
   limited to client-only derived DB queries unless React DB adds an SSR
   `getServerSnapshot` path.
@@ -216,7 +214,7 @@
 - Direct Playwright API signups failed with `MISSING_OR_NULL_ORIGIN`. The auth
   layer is correctly requiring a trusted browser origin for credentialed auth
   mutations, so E2E setup signups now send `Origin: APP_ORIGIN`.
-- The organization settings flow could edit an optimistic service-area row
+- The organization settings flow could edit an optimistic configuration row
   before the create response swapped in the canonical row, causing the edit
   input to detach during Playwright fill. The E2E now waits for the service
   area create response before editing the canonical row.
@@ -233,8 +231,8 @@
   - `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 pnpm --filter app e2e`: `22 passed`.
 - Focused repair checks:
   - `pnpm --filter app check-types`
-  - `pnpm --filter app test -- src/features/organizations/organization-rate-card-section.test.tsx src/features/organizations/organization-service-areas-section.test.tsx src/features/jobs/jobs-state.test.ts src/features/sites/sites-state.integration.test.tsx src/routes/-_app._org.jobs.test.tsx src/routes/-_app._org.sites.test.tsx`
-  - `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 pnpm --filter app exec playwright test --project=chromium e2e/auth.test.ts e2e/organization-settings.test.ts --grep "signup creates|service areas and rate cards"`
+  - `pnpm --filter app test -- src/features/organizations src/features/jobs/jobs-state.test.ts src/features/sites/sites-state.integration.test.tsx src/routes/-_app._org.jobs.test.tsx src/routes/-_app._org.sites.test.tsx`
+  - `PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 pnpm --filter app exec playwright test --project=chromium e2e/auth.test.ts e2e/organization-settings.test.ts --grep "signup creates|organization settings"`
   - `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5439/postgres pnpm --filter domain exec vitest run src/platform/database/test-database.test.ts src/domains/identity/authentication/authentication.test.ts src/domains/identity/authentication/authentication.integration.test.ts src/domains/persistence.integration.test.ts src/domains/http.integration.test.ts`: `74 passed`.
 
 ---

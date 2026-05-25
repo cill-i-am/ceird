@@ -9,8 +9,6 @@ import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
 import { loadJobsRouteData } from "#/features/jobs/jobs-route-loader";
 import { decodeJobsSearch } from "#/features/jobs/jobs-search";
 
-export { decodeJobsSearch };
-
 export const Route = createFileRoute("/_app/_org/jobs")({
   staticData: {
     breadcrumb: {

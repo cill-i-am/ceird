@@ -10,20 +10,16 @@ import type {
 import { Effect, Option, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 
-import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import type { SitesRepository } from "../sites/repositories.js";
-import { ServiceAreasRepository } from "../sites/repositories.js";
 import { SitesService } from "../sites/service.js";
 
 type DomainAgentActionRequirements =
-  | ConfigurationService
   | LabelsRepository
   | OrganizationAuthorization
-  | ServiceAreasRepository
   | SitesRepository
   | JobsService
   | SitesService
@@ -223,101 +219,6 @@ const domainAgentActions = [
       }),
   }),
   defineDomainAgentAction({
-    name: "ceird.service_areas.list",
-    execute: (actor, input) =>
-      Effect.gen(function* () {
-        yield* decodeActionInput("ceird.service_areas.list", input);
-        const organizationAuthorization = yield* OrganizationAuthorization;
-        const serviceAreasRepository = yield* ServiceAreasRepository;
-
-        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
-        const serviceAreas = yield* serviceAreasRepository.list(
-          actor.organizationId
-        );
-
-        return { items: serviceAreas } as const;
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.service_areas.create",
-    execute: (actor, input) =>
-      Effect.gen(function* () {
-        const payload = yield* decodeActionInput(
-          "ceird.service_areas.create",
-          input
-        );
-        const organizationAuthorization = yield* OrganizationAuthorization;
-        const serviceAreasRepository = yield* ServiceAreasRepository;
-
-        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
-
-        return yield* serviceAreasRepository.create({
-          description: payload.description,
-          name: payload.name,
-          organizationId: actor.organizationId,
-        });
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.service_areas.update",
-    execute: (actor, input) =>
-      Effect.gen(function* () {
-        const payload = yield* decodeActionInput(
-          "ceird.service_areas.update",
-          input
-        );
-        const organizationAuthorization = yield* OrganizationAuthorization;
-        const serviceAreasRepository = yield* ServiceAreasRepository;
-
-        yield* organizationAuthorization.ensureCanManageConfiguration(actor);
-
-        return yield* serviceAreasRepository.update(
-          actor.organizationId,
-          payload.serviceAreaId,
-          payload.input
-        );
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.rate_cards.list",
-    execute: (_actor, input) =>
-      Effect.gen(function* () {
-        yield* decodeActionInput("ceird.rate_cards.list", input);
-        const configurationService = yield* ConfigurationService;
-
-        return yield* configurationService.listRateCards();
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.rate_cards.create",
-    execute: (_actor, input) =>
-      Effect.gen(function* () {
-        const payload = yield* decodeActionInput(
-          "ceird.rate_cards.create",
-          input
-        );
-        const configurationService = yield* ConfigurationService;
-
-        return yield* configurationService.createRateCard(payload);
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.rate_cards.update",
-    execute: (_actor, input) =>
-      Effect.gen(function* () {
-        const payload = yield* decodeActionInput(
-          "ceird.rate_cards.update",
-          input
-        );
-        const configurationService = yield* ConfigurationService;
-
-        return yield* configurationService.updateRateCard(
-          payload.rateCardId,
-          payload.input
-        );
-      }),
-  }),
-  defineDomainAgentAction({
     name: "ceird.jobs.options",
     execute: (_actor, input) =>
       Effect.gen(function* () {
@@ -459,22 +360,6 @@ const domainAgentActions = [
         return yield* jobsService.removeLabel(
           payload.workItemId,
           payload.labelId
-        );
-      }),
-  }),
-  defineDomainAgentAction({
-    name: "ceird.jobs.cost_lines.add",
-    execute: (_actor, input) =>
-      Effect.gen(function* () {
-        const payload = yield* decodeActionInput(
-          "ceird.jobs.cost_lines.add",
-          input
-        );
-        const jobsService = yield* JobsService;
-
-        return yield* jobsService.addCostLine(
-          payload.workItemId,
-          payload.input
         );
       }),
   }),

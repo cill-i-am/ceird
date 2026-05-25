@@ -41,7 +41,6 @@ describe("domain Worker boundaries", () => {
     expect(jobsSources).not.toMatch(/\bjob_labels\b/);
     expect(jobsSources).not.toMatch(/pgTable\(\s*"labels"/);
     expect(jobsSources).not.toMatch(/pgTable\(\s*"sites"/);
-    expect(jobsSources).not.toMatch(/pgTable\(\s*"service_areas"/);
   });
 
   it("keeps sites code free of organization label CRUD ownership", async () => {

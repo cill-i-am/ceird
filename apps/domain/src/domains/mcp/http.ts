@@ -9,7 +9,6 @@ import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
-import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsRepositoriesLive } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
@@ -17,7 +16,6 @@ import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { SiteGeocoder } from "../sites/geocoder.js";
 import {
-  ServiceAreasRepository,
   SiteLabelAssignmentsRepository,
   SitesRepository,
 } from "../sites/repositories.js";
@@ -683,7 +681,6 @@ function makeMcpToolLayer<ERuntime>(
   const domainServiceLayer = Layer.mergeAll(
     LabelsService.DefaultWithoutDependencies,
     JobsService.DefaultWithoutDependencies,
-    ConfigurationService.DefaultWithoutDependencies,
     SitesService.DefaultWithoutDependencies
   ).pipe(
     Layer.provide(
@@ -694,7 +691,6 @@ function makeMcpToolLayer<ERuntime>(
         JobsActivityRecorder.Default,
         JobsRepositoriesLive,
         CommentsRepository.Default,
-        ServiceAreasRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
         makeCurrentOrganizationActorFromMcpSessionLayer(session)

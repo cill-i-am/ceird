@@ -141,9 +141,6 @@ describe("@ceird/agents-core", () => {
       "ceird.sites.comments.add",
       "ceird.sites.assign_label",
       "ceird.sites.remove_label",
-      "ceird.service_areas.list",
-      "ceird.service_areas.create",
-      "ceird.service_areas.update",
       "ceird.jobs.list",
       "ceird.jobs.detail",
       "ceird.jobs.options",
@@ -156,14 +153,10 @@ describe("@ceird/agents-core", () => {
       "ceird.jobs.visits.add",
       "ceird.jobs.assign_label",
       "ceird.jobs.remove_label",
-      "ceird.jobs.cost_lines.add",
       "ceird.jobs.collaborators.list",
       "ceird.jobs.collaborators.attach",
       "ceird.jobs.collaborators.update",
       "ceird.jobs.collaborators.detach",
-      "ceird.rate_cards.list",
-      "ceird.rate_cards.create",
-      "ceird.rate_cards.update",
     ]);
     expect(
       AGENT_EXECUTABLE_ACTIONS.every(

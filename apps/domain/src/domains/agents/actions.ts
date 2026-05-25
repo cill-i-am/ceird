@@ -13,13 +13,11 @@ import {
   JOB_ACCESS_DENIED_ERROR_TAG,
   JOB_COLLABORATOR_CONFLICT_ERROR_TAG,
   JOB_COLLABORATOR_NOT_FOUND_ERROR_TAG,
-  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   JOB_LIST_CURSOR_INVALID_ERROR_TAG,
   JOB_NOT_FOUND_ERROR_TAG,
   JOB_STORAGE_ERROR_TAG,
   ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
-  RATE_CARD_NOT_FOUND_ERROR_TAG,
   VISIT_DURATION_INCREMENT_ERROR_TAG,
   WorkItemId,
 } from "@ceird/jobs-core";
@@ -29,7 +27,6 @@ import {
   LABEL_NOT_FOUND_ERROR_TAG,
 } from "@ceird/labels-core";
 import {
-  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SITE_ACCESS_DENIED_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
   SITE_GEOCODING_PROVIDER_ERROR_TAG,
@@ -43,13 +40,11 @@ import type { HttpServerRequest } from "effect/unstable/http";
 import { CommentsRepository } from "../comments/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
-import { ConfigurationService } from "../jobs/configuration-service.js";
 import { WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG } from "../jobs/errors.js";
 import {
   ContactsRepository,
   JobLabelAssignmentsRepository,
   JobsRepository,
-  RateCardsRepository,
 } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
@@ -60,7 +55,6 @@ import { ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG } from "../organizations/er
 import { SiteGeocoder } from "../sites/geocoder.js";
 import type { SiteGeocoderImplementation } from "../sites/geocoder.js";
 import {
-  ServiceAreasRepository,
   SiteLabelAssignmentsRepository,
   SitesRepository,
 } from "../sites/repositories.js";
@@ -81,7 +75,6 @@ const REJECTED_ERROR_TAGS = [
   JOB_NOT_FOUND_ERROR_TAG,
   JOB_LIST_CURSOR_INVALID_ERROR_TAG,
   ORGANIZATION_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
-  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
   INVALID_JOB_TRANSITION_ERROR_TAG,
   BLOCKED_REASON_REQUIRED_ERROR_TAG,
   COORDINATOR_MATCHES_ASSIGNEE_ERROR_TAG,
@@ -91,10 +84,8 @@ const REJECTED_ERROR_TAGS = [
   CONTACT_NOT_FOUND_ERROR_TAG,
   ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
   WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-  RATE_CARD_NOT_FOUND_ERROR_TAG,
   LABEL_NOT_FOUND_ERROR_TAG,
   LABEL_NAME_CONFLICT_ERROR_TAG,
-  SERVICE_AREA_NOT_FOUND_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_LIST_CURSOR_INVALID_ERROR_TAG,
   SITE_GEOCODING_FAILED_ERROR_TAG,
@@ -115,8 +106,6 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const jobsRepository = yield* JobsRepository;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
-      const rateCardsRepository = yield* RateCardsRepository;
-      const serviceAreasRepository = yield* ServiceAreasRepository;
       const siteGeocoder = yield* SiteGeocoder;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
@@ -149,8 +138,6 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   jobsRepository,
                   labelsRepository,
                   organizationAuthorization,
-                  rateCardsRepository,
-                  serviceAreasRepository,
                   siteGeocoder,
                   siteLabelAssignmentsRepository,
                   sitesRepository,
@@ -184,8 +171,6 @@ export class AgentActions extends Context.Service<AgentActions>()(
         JobsRepository.Default,
         LabelsRepository.Default,
         OrganizationAuthorization.Default,
-        RateCardsRepository.Default,
-        ServiceAreasRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default
       )
@@ -197,9 +182,6 @@ interface SitesServiceLayerDependencies {
   readonly commentsRepository: Context.Service.Shape<typeof CommentsRepository>;
   readonly organizationAuthorization: Context.Service.Shape<
     typeof OrganizationAuthorization
-  >;
-  readonly serviceAreasRepository: Context.Service.Shape<
-    typeof ServiceAreasRepository
   >;
   readonly siteGeocoder: SiteGeocoderImplementation;
   readonly siteLabelAssignmentsRepository: Context.Service.Shape<
@@ -219,25 +201,13 @@ interface JobsServiceLayerDependencies {
   readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
   readonly jobsRepository: Context.Service.Shape<typeof JobsRepository>;
   readonly labelsRepository: Context.Service.Shape<typeof LabelsRepository>;
-  readonly serviceAreasRepository: Context.Service.Shape<
-    typeof ServiceAreasRepository
-  >;
   readonly siteGeocoder: SiteGeocoderImplementation;
   readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
 }
 
-interface ConfigurationServiceLayerDependencies {
-  readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
-  readonly rateCardsRepository: Context.Service.Shape<
-    typeof RateCardsRepository
-  >;
-}
-
 type AgentActionRequirements =
-  | ConfigurationService
   | LabelsRepository
   | OrganizationAuthorization
-  | ServiceAreasRepository
   | SitesRepository
   | JobsService
   | SitesService
@@ -251,17 +221,12 @@ type DirectAgentActionRequirements =
   | JobsRepository
   | LabelsRepository
   | OrganizationAuthorization
-  | RateCardsRepository
-  | ServiceAreasRepository
   | SiteLabelAssignmentsRepository
   | SitesRepository
   | HttpServerRequest.HttpServerRequest;
 
 interface ActionServiceDependencies
-  extends
-    SitesServiceLayerDependencies,
-    JobsServiceLayerDependencies,
-    ConfigurationServiceLayerDependencies {}
+  extends SitesServiceLayerDependencies, JobsServiceLayerDependencies {}
 
 function provideActionServices(
   action: Effect.Effect<unknown, unknown, AgentActionRequirements>,
@@ -290,12 +255,6 @@ function provideDerivedActionService(
   if (name.startsWith("ceird.sites.")) {
     return action.pipe(
       Effect.provide(makeSitesServiceLayer(actor, dependencies))
-    ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
-  }
-
-  if (name.startsWith("ceird.rate_cards.")) {
-    return action.pipe(
-      Effect.provide(makeConfigurationServiceLayer(actor, dependencies))
     ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
   }
 
@@ -328,14 +287,6 @@ function provideDirectActionServices(
       dependencies.organizationAuthorization
     ),
     Effect.provideService(
-      RateCardsRepository,
-      dependencies.rateCardsRepository
-    ),
-    Effect.provideService(
-      ServiceAreasRepository,
-      dependencies.serviceAreasRepository
-    ),
-    Effect.provideService(
       SiteLabelAssignmentsRepository,
       dependencies.siteLabelAssignmentsRepository
     ),
@@ -365,10 +316,6 @@ function makeJobsServiceLayer(
       Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
       Layer.succeed(JobsRepository, dependencies.jobsRepository),
       Layer.succeed(LabelsRepository, dependencies.labelsRepository),
-      Layer.succeed(
-        ServiceAreasRepository,
-        dependencies.serviceAreasRepository
-      ),
       Layer.succeed(SiteGeocoder, dependencies.siteGeocoder),
       Layer.succeed(SitesRepository, dependencies.sitesRepository)
     )
@@ -393,35 +340,12 @@ function makeSitesServiceLayer(
         OrganizationAuthorization,
         dependencies.organizationAuthorization
       ),
-      Layer.succeed(
-        ServiceAreasRepository,
-        dependencies.serviceAreasRepository
-      ),
       Layer.succeed(SiteGeocoder, dependencies.siteGeocoder),
       Layer.succeed(
         SiteLabelAssignmentsRepository,
         dependencies.siteLabelAssignmentsRepository
       ),
       Layer.succeed(SitesRepository, dependencies.sitesRepository)
-    )
-  );
-}
-
-function makeConfigurationServiceLayer(
-  actor: OrganizationActor,
-  dependencies: ConfigurationServiceLayerDependencies
-) {
-  return Layer.provide(
-    ConfigurationService.DefaultWithoutDependencies,
-    Layer.mergeAll(
-      Layer.succeed(
-        CurrentOrganizationActor,
-        CurrentOrganizationActor.of({
-          get: () => Effect.succeed(actor),
-        })
-      ),
-      Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
-      Layer.succeed(RateCardsRepository, dependencies.rateCardsRepository)
     )
   );
 }
@@ -463,6 +387,7 @@ function mapActionError(
   if (isTaggedWithAny(error, REJECTED_ERROR_TAGS)) {
     return new AgentActionRejectedError({
       actionName,
+      cause: formatUnknownCause(error),
       message: getStringProperty(error, "message") ?? "Agent action failed",
       workItemId: getWorkItemIdProperty(error, "workItemId"),
     });
@@ -470,6 +395,7 @@ function mapActionError(
 
   return new AgentActionRejectedError({
     actionName,
+    cause: formatUnknownCause(error),
     message: "Agent action failed",
   });
 }
