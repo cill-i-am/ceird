@@ -114,7 +114,15 @@ Current config decisions:
 - `OAUTH_ISSUER_URL` is optional; when omitted OAuth/OIDC issuer metadata
   defaults to `BETTER_AUTH_BASE_URL`; explicit issuer URLs are canonicalized to
   match Better Auth discovery metadata before token signing uses them
-- trusted origins are restricted to known local and configured app origins
+- trusted origins are restricted to known local origins, the configured app
+  origin, and explicit `AUTH_TRUSTED_ORIGINS` entries such as tenant wildcard
+  patterns (`https://*--pr-123.ceird.app`)
+- `AUTH_COOKIE_PREFIX` can set Better Auth's cookie prefix for stage-isolated
+  cookie names
+- `AUTH_COOKIE_DOMAIN`, when provided, is the authoritative cross-subdomain
+  cookie parent and takes precedence over app/API-derived cookie sharing
+- explicit cookie domains are validated as parent domains of the configured
+  auth/app hosts; they cannot include schemes, ports, paths, or wildcards
 - canonical deployed app/API sibling domains share the configured parent cookie
   domain, for example `app.ceird.app` and `api.ceird.app` use `ceird.app`
 - nested stage domains share only their stage parent, for example

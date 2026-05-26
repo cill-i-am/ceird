@@ -27,8 +27,20 @@ export const CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES = [
   "ceird:read",
 ] as const satisfies readonly CeirdOAuthScope[];
 const TrustedOriginPattern = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::\d+)?$/i)),
+  Schema.check(
+    Schema.isPattern(
+      /^https?:\/\/(?:[a-z0-9-]+|\*[a-z0-9-]*)(?:\.(?:[a-z0-9-]+|\*[a-z0-9-]*))*(?::\d+)?$/i
+    )
+  ),
   Schema.brand("TrustedOriginPattern")
+);
+const CookieDomain = Schema.String.pipe(
+  Schema.check(
+    Schema.isPattern(
+      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
+    )
+  ),
+  Schema.brand("CookieDomain")
 );
 
 export type TrustedOriginPattern = Schema.Schema.Type<
@@ -37,9 +49,20 @@ export type TrustedOriginPattern = Schema.Schema.Type<
 
 const decodeTrustedOriginPattern =
   Schema.decodeUnknownSync(TrustedOriginPattern);
+const decodeCookieDomain = Schema.decodeUnknownSync(CookieDomain);
 
 function makeTrustedOriginPattern(value: string): TrustedOriginPattern {
   return decodeTrustedOriginPattern(value);
+}
+
+function makeCookieDomain(value: string): string {
+  try {
+    return decodeCookieDomain(value);
+  } catch {
+    throw new Error(
+      "AUTH_COOKIE_DOMAIN must be a valid parent domain without protocol, path, port, or wildcard"
+    );
+  }
 }
 
 export function matchesTrustedOrigin(
@@ -124,11 +147,14 @@ function normalizeOAuthIssuerUrl(value: string) {
 export interface AuthenticationEnvironment {
   readonly appOrigin?: string | undefined;
   readonly baseUrl: string;
+  readonly cookieDomain?: string | undefined;
+  readonly cookiePrefix?: string | undefined;
   readonly mcpResourceUrl?: string | undefined;
   readonly oauthIssuerUrl?: string | undefined;
   readonly secret: string;
   readonly databaseUrl: string;
   readonly rateLimitEnabled?: boolean | undefined;
+  readonly trustedOrigins?: readonly string[] | undefined;
 }
 
 export interface AuthenticationConfig {
@@ -140,6 +166,7 @@ export interface AuthenticationConfig {
   readonly databaseUrl: string;
   readonly advanced?: {
     readonly trustedProxyHeaders: true;
+    readonly cookiePrefix?: string;
     readonly crossSubDomainCookies?: {
       readonly enabled: true;
       readonly domain: string;
@@ -265,6 +292,39 @@ function findSharedDomain(firstHostname: string, secondHostname: string) {
   return sharedLabels.length >= 2 ? sharedLabels.join(".") : undefined;
 }
 
+function hostnameMatchesCookieDomain(hostname: string, domain: string) {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function resolveExplicitCookieDomain(
+  environment: Pick<
+    AuthenticationEnvironment,
+    "appOrigin" | "baseUrl" | "cookieDomain"
+  >
+) {
+  if (!environment.cookieDomain) {
+    return undefined;
+  }
+
+  const cookieDomain = makeCookieDomain(environment.cookieDomain);
+  const base = readOriginParts(environment.baseUrl);
+  const app = readOriginParts(environment.appOrigin);
+
+  if (!base || !hostnameMatchesCookieDomain(base.hostname, cookieDomain)) {
+    throw new Error(
+      "AUTH_COOKIE_DOMAIN must match the BETTER_AUTH_BASE_URL hostname"
+    );
+  }
+
+  if (app && !hostnameMatchesCookieDomain(app.hostname, cookieDomain)) {
+    throw new Error(
+      "AUTH_COOKIE_DOMAIN must match the AUTH_APP_ORIGIN hostname"
+    );
+  }
+
+  return cookieDomain;
+}
+
 export function resolveCrossSubDomainCookieDomain(
   environment: Pick<AuthenticationEnvironment, "appOrigin" | "baseUrl">
 ): string | undefined {
@@ -288,7 +348,7 @@ export function resolveCrossSubDomainCookieDomain(
 }
 
 export function makeAuthenticationTrustedOrigins(
-  environment: Pick<AuthenticationEnvironment, "appOrigin">
+  environment: Pick<AuthenticationEnvironment, "appOrigin" | "trustedOrigins">
 ): TrustedOriginPattern[] {
   const trustedOrigins = new Set<TrustedOriginPattern>(
     DEFAULT_LOCAL_APP_ORIGINS
@@ -302,6 +362,10 @@ export function makeAuthenticationTrustedOrigins(
     } catch {
       // Ignore malformed AUTH_APP_ORIGIN values and keep the default trusted origins.
     }
+  }
+
+  for (const trustedOrigin of environment.trustedOrigins ?? []) {
+    trustedOrigins.add(makeTrustedOriginPattern(trustedOrigin));
   }
 
   return [...trustedOrigins];
@@ -318,6 +382,7 @@ export function makeAuthenticationConfig(
   environment: AuthenticationEnvironment
 ): AuthenticationConfig {
   const crossSubDomainCookieDomain =
+    resolveExplicitCookieDomain(environment) ??
     resolveCrossSubDomainCookieDomain(environment);
   const mcpResourceUrl =
     environment.mcpResourceUrl ?? makeDefaultMcpResourceUrl(environment);
@@ -334,6 +399,11 @@ export function makeAuthenticationConfig(
     databaseUrl: environment.databaseUrl,
     advanced: {
       trustedProxyHeaders: true,
+      ...(environment.cookiePrefix
+        ? {
+            cookiePrefix: environment.cookiePrefix,
+          }
+        : {}),
       ...(crossSubDomainCookieDomain
         ? {
             crossSubDomainCookies: {
@@ -393,6 +463,26 @@ export function makeAuthenticationConfig(
   };
 }
 
+function trimOptionalConfigValue(value: Option.Option<string>) {
+  return pipe(
+    value,
+    Option.map((nextValue) => nextValue.trim()),
+    Option.filter((nextValue) => nextValue.length > 0),
+    Option.getOrUndefined
+  );
+}
+
+function parseCommaDelimitedConfigList(value: Option.Option<string>) {
+  const rawValue = Option.getOrUndefined(value);
+
+  return rawValue === undefined
+    ? undefined
+    : rawValue
+        .split(",")
+        .map((nextValue) => nextValue.trim())
+        .filter((nextValue) => nextValue.length > 0);
+}
+
 export const loadAuthenticationConfig = Effect.gen(
   function* loadAuthenticationConfig() {
     const baseUrl = yield* authenticationBaseUrlConfig;
@@ -402,6 +492,18 @@ export const loadAuthenticationConfig = Effect.gen(
     );
     const mcpResourceUrl = yield* authenticationMcpResourceUrlConfig;
     const oauthIssuerUrl = yield* oauthIssuerUrlConfig;
+    const cookiePrefix = yield* pipe(
+      Config.string("AUTH_COOKIE_PREFIX"),
+      Config.option
+    );
+    const cookieDomain = yield* pipe(
+      Config.string("AUTH_COOKIE_DOMAIN"),
+      Config.option
+    );
+    const trustedOrigins = yield* pipe(
+      Config.string("AUTH_TRUSTED_ORIGINS"),
+      Config.option
+    );
     const secret = yield* Config.schema(
       Schema.String.pipe(
         Schema.refine((value): value is string => value.length >= 32, {
@@ -418,11 +520,14 @@ export const loadAuthenticationConfig = Effect.gen(
     return makeAuthenticationConfig({
       appOrigin: Option.getOrUndefined(appOrigin),
       baseUrl,
+      cookieDomain: trimOptionalConfigValue(cookieDomain),
+      cookiePrefix: trimOptionalConfigValue(cookiePrefix),
       mcpResourceUrl: Option.getOrUndefined(mcpResourceUrl),
       oauthIssuerUrl: Option.getOrUndefined(oauthIssuerUrl),
       secret,
       databaseUrl,
       rateLimitEnabled,
+      trustedOrigins: parseCommaDelimitedConfigList(trustedOrigins),
     });
   }
 );

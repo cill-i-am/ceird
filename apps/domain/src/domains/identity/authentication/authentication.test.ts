@@ -292,6 +292,78 @@ describe("makeAuthenticationConfig()", () => {
     ).toContain("http://127.0.0.1:4304");
   }, 10_000);
 
+  it("adds configured tenant trusted origins to the trusted origin allowlist", () => {
+    const config = makeAuthenticationConfig({
+      appOrigin: "https://app.pr-123.ceird.app",
+      baseUrl: "https://api.pr-123.ceird.app/api/auth",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      trustedOrigins: ["https://*--pr-123.ceird.app"],
+    });
+
+    expect(config.trustedOrigins).toContain("https://*--pr-123.ceird.app");
+    expect(
+      matchesTrustedOrigin(
+        "https://acme-field-ops--pr-123.ceird.app",
+        config.trustedOrigins
+      )
+    ).toBeTruthy();
+  }, 10_000);
+
+  it("validates configured trusted origins as http or https origin patterns", () => {
+    expect(
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: [
+          "https://*--pr-123.ceird.app",
+          "https://*.ceird.app",
+          "http://localhost:3000",
+        ],
+      })
+    ).toStrictEqual(
+      expect.arrayContaining([
+        "https://*--pr-123.ceird.app",
+        "https://*.ceird.app",
+        "http://localhost:3000",
+      ])
+    );
+    expect(() =>
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: ["ftp://*--pr-123.ceird.app"],
+      })
+    ).toThrow();
+    expect(() =>
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: ["https://tenant.ceird.app/path"],
+      })
+    ).toThrow();
+  }, 10_000);
+
+  it("reflects configured cookie prefixes in the Better Auth advanced config", () => {
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3001",
+      cookiePrefix: "ceird-pr-123",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+
+    expect(config.advanced?.cookiePrefix).toBe("ceird-pr-123");
+  }, 10_000);
+
+  it("uses explicit cookie domains to share cookies across system and tenant hosts", () => {
+    const config = makeAuthenticationConfig({
+      appOrigin: "https://app.pr-123.ceird.app",
+      baseUrl: "https://api.pr-123.ceird.app/api/auth",
+      cookieDomain: "ceird.app",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+
+    expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
+      enabled: true,
+      domain: "ceird.app",
+    });
+  }, 10_000);
+
   it("requires BETTER_AUTH_BASE_URL when loading auth config", async () => {
     await withEnvironment(
       {
@@ -302,6 +374,53 @@ describe("makeAuthenticationConfig()", () => {
         const result = loadAuthenticationConfigForTest(provider);
 
         await expect(result).rejects.toThrow(/BETTER_AUTH_BASE_URL/);
+      }
+    );
+  }, 10_000);
+
+  it("loads configured tenant trusted origins and cookie settings", async () => {
+    await withEnvironment(
+      {
+        AUTH_APP_ORIGIN: "https://app.pr-123.ceird.app",
+        AUTH_COOKIE_DOMAIN: "ceird.app",
+        AUTH_COOKIE_PREFIX: "ceird-pr-123",
+        AUTH_TRUSTED_ORIGINS:
+          " https://*--pr-123.ceird.app, ,https://app.ceird.app ",
+        BETTER_AUTH_BASE_URL: "https://api.pr-123.ceird.app/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
+
+        expect(config.trustedOrigins).toStrictEqual(
+          expect.arrayContaining([
+            "https://app.pr-123.ceird.app",
+            "https://*--pr-123.ceird.app",
+            "https://app.ceird.app",
+          ])
+        );
+        expect(config.advanced?.cookiePrefix).toBe("ceird-pr-123");
+        expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
+          enabled: true,
+          domain: "ceird.app",
+        });
+      }
+    );
+  }, 10_000);
+
+  it("rejects invalid configured cookie domains", async () => {
+    await withEnvironment(
+      {
+        AUTH_COOKIE_DOMAIN: "https://ceird.app/path",
+        BETTER_AUTH_BASE_URL: "https://api.pr-123.ceird.app/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const result = loadAuthenticationConfigForTest(provider);
+
+        await expect(result).rejects.toThrow(/AUTH_COOKIE_DOMAIN/);
       }
     );
   }, 10_000);

@@ -26,6 +26,7 @@ export interface DomainWorkerStageConfig {
   readonly mcpAuthorizedAppCacheTtlSeconds?: number | undefined;
   readonly mcpHostname: string;
   readonly stage?: string | undefined;
+  readonly tenantBaseDomain: string;
   readonly tenantTrustedOriginPattern: string | undefined;
 }
 
@@ -55,6 +56,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly AGENT_ACTION_RUN_STALE_AFTER_SECONDS: string;
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
+  readonly AUTH_COOKIE_DOMAIN: string;
   readonly AUTH_COOKIE_PREFIX: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
@@ -104,6 +106,7 @@ export function makeDomainWorkerEnv(input: {
     ),
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AUTH_APP_ORIGIN: authAppOrigin,
+    AUTH_COOKIE_DOMAIN: input.config.tenantBaseDomain,
     AUTH_COOKIE_PREFIX: input.config.authCookiePrefix,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
