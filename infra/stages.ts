@@ -249,8 +249,11 @@ export function loadInfraStageConfig(stageInput: string) {
     );
     const tenantBaseDomain = zoneName;
     const tenantHostMode = resolveTenantHostMode({
+      agentHostname,
       appHostname,
+      apiHostname,
       identity,
+      mcpHostname,
       zoneName,
     });
     const tenantStageAlias =
@@ -474,13 +477,19 @@ function makeAuthCookiePrefix(identity: AlchemyStageIdentity) {
 }
 
 function resolveTenantHostMode(input: {
+  readonly agentHostname: string;
   readonly appHostname: string;
+  readonly apiHostname: string;
   readonly identity: AlchemyStageIdentity;
+  readonly mcpHostname: string;
   readonly zoneName: string;
 }): TenantHostMode {
   if (
     input.identity.isProduction &&
-    input.appHostname === `app.${input.zoneName}`
+    input.agentHostname === `agent.${input.zoneName}` &&
+    input.apiHostname === `api.${input.zoneName}` &&
+    input.appHostname === `app.${input.zoneName}` &&
+    input.mcpHostname === `mcp.${input.zoneName}`
   ) {
     return "production";
   }
@@ -500,8 +509,6 @@ function makeTenantRoutePattern(input: {
   if (input.mode === "stage" && input.stageAlias) {
     return `*--${input.stageAlias}.${input.zoneName}/*`;
   }
-
-  return undefined;
 }
 
 function makeTenantTrustedOriginPattern(input: {
@@ -516,6 +523,4 @@ function makeTenantTrustedOriginPattern(input: {
   if (input.mode === "stage" && input.stageAlias) {
     return `https://*--${input.stageAlias}.${input.zoneName}`;
   }
-
-  return undefined;
 }

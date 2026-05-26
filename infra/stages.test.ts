@@ -194,6 +194,32 @@ describe("Alchemy stage identity", () => {
     expect(config.authCookiePrefix).toBe("ceird-main");
   });
 
+  it("keeps partial canonical production host overrides in staged tenant mode", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_APP_HOSTNAME: "app.ceird.app",
+                CEIRD_ZONE_NAME: "ceird.app",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.apiHostname).toBe("api.main.ceird.app");
+    expect(config.agentHostname).toBe("agent.main.ceird.app");
+    expect(config.mcpHostname).toBe("mcp.main.ceird.app");
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantRoutePattern).toBe("*--main.ceird.app/*");
+    expect(config.tenantTrustedOriginPattern).toBe("https://*--main.ceird.app");
+  });
+
   it("keeps local main-stage defaults in staged tenant mode", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("main").pipe(
@@ -207,6 +233,21 @@ describe("Alchemy stage identity", () => {
     expect(config.tenantRoutePattern).toBe("*--main.example.com/*");
     expect(config.tenantTrustedOriginPattern).toBe(
       "https://*--main.example.com"
+    );
+  });
+
+  it("derives tenant host aliases for staging stages", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("staging").pipe(
+        Effect.provide(ConfigProvider.layer(makeConfigProvider()))
+      )
+    );
+
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantStageAlias).toBe("staging");
+    expect(config.tenantRoutePattern).toBe("*--staging.example.com/*");
+    expect(config.tenantTrustedOriginPattern).toBe(
+      "https://*--staging.example.com"
     );
   });
 
@@ -235,6 +276,9 @@ describe("Alchemy stage identity", () => {
     expect(
       `example-org--${config.tenantStageAlias}.example.com`.split(".")[0]
     ).toHaveLength(27);
+    expect(
+      `${"a".repeat(40)}--${config.tenantStageAlias}`.length
+    ).toBeLessThanOrEqual(63);
   });
 
   it("disables auth rate limits by default for PR preview stages", () => {
