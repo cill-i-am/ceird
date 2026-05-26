@@ -95,8 +95,9 @@ workflows.
 
 ## API And Data Shape
 
-The shared site create/update contract should accept a location payload rather
-than individual required address fields:
+The shared site create/update contract should accept an optional location
+payload rather than individual required address fields. Omitted location means
+the site is saved as `unverified` with no map-ready coordinates:
 
 ```ts
 type SiteLocationInput =
@@ -113,6 +114,12 @@ type SiteLocationInput =
       rawInput: string;
       country?: "IE" | "GB";
     };
+
+type CreateSiteInput = {
+  name: string;
+  location?: SiteLocationInput;
+  accessNotes?: string;
+};
 ```
 
 For `google_place`, the domain should call Google Place Details server-side with
@@ -136,6 +143,9 @@ For `manual`, the domain should store:
 - no coordinates;
 - provider fields left empty;
 - location status `unverified`.
+
+For omitted location, the domain should store no original user input, no
+coordinates, no provider fields, and location status `unverified`.
 
 Site response DTOs should expose:
 
