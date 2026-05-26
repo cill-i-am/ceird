@@ -1,3 +1,4 @@
+import { Unowned } from "alchemy/AdoptPolicy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -35,6 +36,16 @@ export interface TenantWorkerRouteAttributes {
   readonly zoneId: string;
 }
 
+interface CloudflareTenantDnsRecordPayload {
+  readonly comment?: string;
+  readonly content: "192.0.2.0";
+  readonly name: "*";
+  readonly proxied: true;
+  readonly tags?: readonly string[];
+  readonly ttl: 1;
+  readonly type: "A";
+}
+
 export type TenantWildcardDnsRecord = ResourceShape<
   "Ceird.CloudflareTenantWildcardDnsRecord",
   TenantWildcardDnsRecordProps,
@@ -63,6 +74,24 @@ export function makeCloudflareTenantDnsRecordPayload(_zoneName: string) {
     ttl: 1,
     type: "A",
   } as const;
+}
+
+const tenantWildcardDnsRecordComment =
+  "Managed by Ceird Alchemy tenant routing.";
+const tenantWildcardDnsRecordTags = [
+  "app:ceird",
+  "managed_by:alchemy",
+  "purpose:tenant-wildcard",
+] as const;
+
+function makeManagedCloudflareTenantDnsRecordPayload(
+  zoneName: string
+): CloudflareTenantDnsRecordPayload {
+  return {
+    ...makeCloudflareTenantDnsRecordPayload(zoneName),
+    comment: tenantWildcardDnsRecordComment,
+    tags: tenantWildcardDnsRecordTags,
+  };
 }
 
 export function makeCloudflareTenantWorkerRoutePayload(
@@ -155,10 +184,12 @@ interface CloudflareZoneResult {
 }
 
 interface CloudflareDnsRecordResult {
+  readonly comment?: string | null;
   readonly content?: string | null;
   readonly id: string;
   readonly name?: string | null;
   readonly proxied?: boolean | null;
+  readonly tags?: readonly string[] | null;
   readonly ttl?: number | null;
   readonly type?: string | null;
 }
@@ -248,11 +279,16 @@ export const TenantWildcardDnsRecordProvider = () =>
             return;
           }
 
-          return {
+          const attributes = {
             recordId: record.id,
             zoneId,
             zoneName,
           };
+
+          return output?.recordId === undefined &&
+            !isManagedTenantWildcardDnsRecord(record, zoneName)
+            ? Unowned(attributes)
+            : attributes;
         }),
         reconcile: Effect.fn("TenantWildcardDnsRecord.reconcile")(function* ({
           news,
@@ -263,7 +299,9 @@ export const TenantWildcardDnsRecordProvider = () =>
             client,
             zoneName: news.zoneName,
           });
-          const payload = makeCloudflareTenantDnsRecordPayload(news.zoneName);
+          const payload = makeManagedCloudflareTenantDnsRecordPayload(
+            news.zoneName
+          );
           const savedRecord =
             output?.recordId === undefined
               ? undefined
@@ -279,6 +317,18 @@ export const TenantWildcardDnsRecordProvider = () =>
               zoneId,
               zoneName: news.zoneName,
             }));
+          if (
+            savedRecord === undefined &&
+            existingRecord !== undefined &&
+            !isManagedTenantWildcardDnsRecord(existingRecord, news.zoneName)
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Cloudflare wildcard DNS record "${existingRecord.name ?? "*"}" already exists in zone "${news.zoneName}" but is not managed by Ceird Alchemy tenant routing. Delete or tag the record before deploying tenant routing.`
+              )
+            );
+          }
+
           const record =
             existingRecord === undefined
               ? yield* createCloudflareDnsRecord({ client, payload, zoneId })
@@ -295,28 +345,10 @@ export const TenantWildcardDnsRecordProvider = () =>
             zoneName: news.zoneName,
           };
         }),
-        delete: Effect.fn("TenantWildcardDnsRecord.delete")(function* ({
-          output,
-        }) {
-          const client = yield* makeCloudflareTenantRoutingClient();
-          const record = yield* readCloudflareDnsRecord({
-            client,
-            recordId: output.recordId,
-            zoneId: output.zoneId,
-          });
-
-          if (
-            !record ||
-            !isManagedTenantWildcardDnsRecord(record, output.zoneName)
-          ) {
-            return;
-          }
-
-          yield* deleteCloudflareDnsRecord({
-            client,
-            recordId: record.id,
-            zoneId: output.zoneId,
-          });
+        delete: Effect.fn("TenantWildcardDnsRecord.delete")(function () {
+          // The wildcard DNS record is zone-global and shared by all stages.
+          // Stage destroy must not remove it out from under other previews.
+          return Effect.void;
         }),
       })
     )
@@ -362,9 +394,15 @@ export const TenantWorkerRouteProvider = () =>
                   zoneId,
                 });
 
-          return route === undefined
-            ? undefined
-            : makeTenantWorkerRouteAttributes({ route, zoneId });
+          if (route === undefined) {
+            return;
+          }
+
+          const attributes = makeTenantWorkerRouteAttributes({ route, zoneId });
+
+          return output?.routeId === undefined
+            ? Unowned(attributes)
+            : attributes;
         }),
         reconcile: Effect.fn("TenantWorkerRoute.reconcile")(function* ({
           news,
@@ -392,15 +430,25 @@ export const TenantWorkerRouteProvider = () =>
                   routeId: output.routeId,
                   zoneId,
                 });
-          const existingRoute =
-            savedRoute ??
-            (yield* findCloudflareWorkerRoute({
+
+          if (savedRoute === undefined) {
+            const conflictingRoute = yield* findCloudflareWorkerRoute({
               client,
               pattern: news.pattern,
               zoneId,
-            }));
+            });
+
+            if (conflictingRoute !== undefined) {
+              return yield* Effect.fail(
+                new Error(
+                  `Cloudflare Worker route "${news.pattern}" already exists in zone "${news.zoneName}" but is not managed by this Alchemy resource. Delete it or run with explicit adoption before deploying tenant routing.`
+                )
+              );
+            }
+          }
+
           const route =
-            existingRoute === undefined
+            savedRoute === undefined
               ? yield* createCloudflareWorkerRoute({
                   client,
                   payload,
@@ -409,7 +457,7 @@ export const TenantWorkerRouteProvider = () =>
               : yield* updateCloudflareWorkerRoute({
                   client,
                   payload,
-                  routeId: existingRoute.id,
+                  routeId: savedRoute.id,
                   zoneId,
                 });
 
@@ -630,7 +678,7 @@ function readCloudflareDnsRecord(input: {
 
 function createCloudflareDnsRecord(input: {
   readonly client: CloudflareTenantRoutingClient;
-  readonly payload: ReturnType<typeof makeCloudflareTenantDnsRecordPayload>;
+  readonly payload: CloudflareTenantDnsRecordPayload;
   readonly zoneId: string;
 }) {
   return cloudflareApiRequest<
@@ -645,7 +693,7 @@ function createCloudflareDnsRecord(input: {
 
 function updateCloudflareDnsRecord(input: {
   readonly client: CloudflareTenantRoutingClient;
-  readonly payload: ReturnType<typeof makeCloudflareTenantDnsRecordPayload>;
+  readonly payload: CloudflareTenantDnsRecordPayload;
   readonly recordId: string;
   readonly zoneId: string;
 }) {
@@ -657,20 +705,6 @@ function updateCloudflareDnsRecord(input: {
     method: "PUT",
     path: `/zones/${input.zoneId}/dns_records/${input.recordId}`,
   }).pipe(Effect.flatMap(requireCloudflareResult("update DNS record")));
-}
-
-function deleteCloudflareDnsRecord(input: {
-  readonly client: CloudflareTenantRoutingClient;
-  readonly recordId: string;
-  readonly zoneId: string;
-}) {
-  return catchCloudflareNotFound(
-    cloudflareApiRequest<CloudflareItemResponse<Record<string, never>>>({
-      credentials: input.client.credentials,
-      method: "DELETE",
-      path: `/zones/${input.zoneId}/dns_records/${input.recordId}`,
-    })
-  ).pipe(Effect.asVoid);
 }
 
 function isTenantWildcardDnsRecord(
@@ -687,13 +721,11 @@ function isManagedTenantWildcardDnsRecord(
   record: CloudflareDnsRecordResult,
   zoneName: string
 ) {
-  const payload = makeCloudflareTenantDnsRecordPayload(zoneName);
+  const recordTags = record.tags ?? [];
 
   return (
     isTenantWildcardDnsRecord(record, zoneName) &&
-    record.content === payload.content &&
-    record.proxied === payload.proxied &&
-    record.ttl === payload.ttl
+    tenantWildcardDnsRecordTags.every((tag) => recordTags.includes(tag))
   );
 }
 
