@@ -21,6 +21,8 @@ const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const providerResourceNamePattern = /^[a-z0-9-]+$/;
 
+export type TenantHostMode = "disabled" | "production" | "stage";
+
 export const DomainName = Schema.NonEmptyString.check(
   Schema.isPattern(domainNamePattern, {
     message:
@@ -55,6 +57,7 @@ export interface InfraStageConfig {
   readonly apiHostname: DomainName;
   readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
+  readonly authCookiePrefix: string;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authRateLimitEnabled: boolean;
@@ -73,6 +76,12 @@ export interface InfraStageConfig {
   readonly neonPgVersion: NeonPgVersion;
   readonly neonRegion: NeonRegion;
   readonly neonRoleName: string;
+  readonly tenantBaseDomain: DomainName;
+  readonly tenantHostMode: TenantHostMode;
+  readonly tenantReservedHostnames: readonly DomainName[];
+  readonly tenantRoutePattern: string | undefined;
+  readonly tenantStageAlias: string | undefined;
+  readonly tenantTrustedOriginPattern: string | undefined;
 }
 
 export interface AlchemyStageIdentityInput {
@@ -238,6 +247,31 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(defaultMcpHostname),
       Config.mapOrFail(decodeDomainName)
     );
+    const tenantBaseDomain = zoneName;
+    const tenantHostMode = resolveTenantHostMode({
+      appHostname,
+      identity,
+      zoneName,
+    });
+    const tenantStageAlias =
+      tenantHostMode === "stage" ? makeTenantStageAlias(identity) : undefined;
+    const tenantRoutePattern = makeTenantRoutePattern({
+      mode: tenantHostMode,
+      stageAlias: tenantStageAlias,
+      zoneName,
+    });
+    const tenantTrustedOriginPattern = makeTenantTrustedOriginPattern({
+      mode: tenantHostMode,
+      stageAlias: tenantStageAlias,
+      zoneName,
+    });
+    const tenantReservedHostnames = [
+      appHostname,
+      apiHostname,
+      agentHostname,
+      mcpHostname,
+    ];
+    const authCookiePrefix = makeAuthCookiePrefix(identity);
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
       Config.mapOrFail(decodeAuthEmailFrom)
     );
@@ -333,6 +367,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       agentHostname,
       mcpHostname,
+      authCookiePrefix,
       authEmailFrom,
       authEmailFromName,
       authRateLimitEnabled,
@@ -351,6 +386,12 @@ export function loadInfraStageConfig(stageInput: string) {
       neonPgVersion,
       neonRegion,
       neonRoleName,
+      tenantBaseDomain,
+      tenantHostMode,
+      tenantReservedHostnames,
+      tenantRoutePattern,
+      tenantStageAlias,
+      tenantTrustedOriginPattern,
     } satisfies InfraStageConfig;
   });
 }
@@ -411,4 +452,70 @@ function makeStageSlug(value: string) {
     .replaceAll(/-+$/g, "");
 
   return `${prefix}-${hash}`;
+}
+
+const maxTenantStageAliasLength = 14;
+
+function makeTenantStageAlias(identity: AlchemyStageIdentity) {
+  if (identity.stageSlug.length <= maxTenantStageAliasLength) {
+    return identity.stageSlug;
+  }
+
+  const hash = createHash("sha256")
+    .update(identity.stage)
+    .digest("hex")
+    .slice(0, 12);
+
+  return `s-${hash}`;
+}
+
+function makeAuthCookiePrefix(identity: AlchemyStageIdentity) {
+  return `ceird-${identity.stageSlug}`.slice(0, 48);
+}
+
+function resolveTenantHostMode(input: {
+  readonly appHostname: string;
+  readonly identity: AlchemyStageIdentity;
+  readonly zoneName: string;
+}): TenantHostMode {
+  if (
+    input.identity.isProduction &&
+    input.appHostname === `app.${input.zoneName}`
+  ) {
+    return "production";
+  }
+
+  return "stage";
+}
+
+function makeTenantRoutePattern(input: {
+  readonly mode: TenantHostMode;
+  readonly stageAlias: string | undefined;
+  readonly zoneName: string;
+}) {
+  if (input.mode === "production") {
+    return `*.${input.zoneName}/*`;
+  }
+
+  if (input.mode === "stage" && input.stageAlias) {
+    return `*--${input.stageAlias}.${input.zoneName}/*`;
+  }
+
+  return undefined;
+}
+
+function makeTenantTrustedOriginPattern(input: {
+  readonly mode: TenantHostMode;
+  readonly stageAlias: string | undefined;
+  readonly zoneName: string;
+}) {
+  if (input.mode === "production") {
+    return `https://*.${input.zoneName}`;
+  }
+
+  if (input.mode === "stage" && input.stageAlias) {
+    return `https://*--${input.stageAlias}.${input.zoneName}`;
+  }
+
+  return undefined;
 }
