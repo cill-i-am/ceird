@@ -166,6 +166,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const app = yield* makeAppWorker({
     agentOrigin,
     apiOrigin,
+    config: input.config,
     hostname: input.config.appHostname,
     name: resourceName(input.config, "app"),
   });

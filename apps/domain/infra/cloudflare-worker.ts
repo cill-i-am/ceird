@@ -17,6 +17,7 @@ export interface DomainWorkerStageConfig {
   readonly agentActionRunStaleAfterSeconds: number;
   readonly apiHostname: string;
   readonly appHostname: string;
+  readonly authCookiePrefix: string;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authRateLimitEnabled: boolean;
@@ -25,6 +26,7 @@ export interface DomainWorkerStageConfig {
   readonly mcpAuthorizedAppCacheTtlSeconds?: number | undefined;
   readonly mcpHostname: string;
   readonly stage?: string | undefined;
+  readonly tenantTrustedOriginPattern: string | undefined;
 }
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
@@ -53,9 +55,11 @@ export interface DomainWorkerConfiguredEnv {
   readonly AGENT_ACTION_RUN_STALE_AFTER_SECONDS: string;
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
+  readonly AUTH_COOKIE_PREFIX: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
   readonly AUTH_RATE_LIMIT_ENABLED: "false" | "true";
+  readonly AUTH_TRUSTED_ORIGINS: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
@@ -85,19 +89,28 @@ export function makeDomainWorkerEnv(input: {
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
 }): DomainWorkerConfiguredEnv {
+  const authAppOrigin = `https://${input.config.appHostname}`;
   const betterAuthBaseUrl = `https://${input.config.apiHostname}/api/auth`;
+  const authTrustedOrigins = [
+    authAppOrigin,
+    input.config.tenantTrustedOriginPattern,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(",");
 
   return {
     AGENT_ACTION_RUN_STALE_AFTER_SECONDS: String(
       input.config.agentActionRunStaleAfterSeconds
     ),
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
-    AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
+    AUTH_APP_ORIGIN: authAppOrigin,
+    AUTH_COOKIE_PREFIX: input.config.authCookiePrefix,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
     AUTH_RATE_LIMIT_ENABLED: input.config.authRateLimitEnabled
       ? "true"
       : "false",
+    AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     BETTER_AUTH_BASE_URL: betterAuthBaseUrl,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,

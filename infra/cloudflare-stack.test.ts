@@ -68,6 +68,7 @@ import {
   ceirdWorkerObservability,
 } from "./cloudflare-worker-defaults.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
+import type { InfraStageConfig } from "./stages.ts";
 
 type AssertTrue<Value extends true> = Value;
 type HasSameKeys<Type, Expected> = [
@@ -154,9 +155,11 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
     | "AGENT_INTERNAL_SECRET"
     | "AUTH_APP_ORIGIN"
+    | "AUTH_COOKIE_PREFIX"
     | "AUTH_EMAIL_FROM"
     | "AUTH_EMAIL_FROM_NAME"
     | "AUTH_RATE_LIMIT_ENABLED"
+    | "AUTH_TRUSTED_ORIGINS"
     | "BETTER_AUTH_BASE_URL"
     | "BETTER_AUTH_SECRET"
     | "GOOGLE_MAPS_API_KEY"
@@ -280,6 +283,25 @@ const cloudflareStackOutputsIncludeTenantRouting: AssertTrue<
 > = true;
 
 describe("Cloudflare stack", () => {
+  const previewTenantConfig = {
+    ...configWithoutCloudflareBootstrapSecrets,
+    agentHostname: "agent.pr-123.example.com",
+    apiHostname: "api.pr-123.example.com",
+    appHostname: "app.pr-123.example.com",
+    authCookiePrefix: "ceird-pr-123",
+    mcpHostname: "mcp.pr-123.example.com",
+    stage: "pr-123",
+    tenantReservedHostnames: [
+      "app.pr-123.example.com",
+      "api.pr-123.example.com",
+      "agent.pr-123.example.com",
+      "mcp.pr-123.example.com",
+    ],
+    tenantRoutePattern: "*--pr-123.example.com/*",
+    tenantStageAlias: "pr-123",
+    tenantTrustedOriginPattern: "https://*--pr-123.example.com",
+  } satisfies InfraStageConfig;
+
   it("lets Alchemy own runtime stage injection for Worker env vars", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
@@ -297,6 +319,7 @@ describe("Cloudflare stack", () => {
     const appEnv = makeAppWorkerEnv({
       agentOrigin: "https://agent.example.com",
       apiOrigin: "https://api.example.com",
+      config: configWithoutCloudflareBootstrapSecrets,
     });
 
     expect(apiEnv).not.toHaveProperty("ALCHEMY_STAGE");
@@ -309,8 +332,11 @@ describe("Cloudflare stack", () => {
       AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "900",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AUTH_APP_ORIGIN: "https://app.example.com",
+      AUTH_COOKIE_PREFIX: "ceird-main",
       AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_RATE_LIMIT_ENABLED: "true",
+      AUTH_TRUSTED_ORIGINS:
+        "https://app.example.com,https://*--main.example.com",
       BETTER_AUTH_BASE_URL: "https://api.example.com/api/auth",
       MCP_RESOURCE_URL: "https://mcp.example.com/mcp",
       NODE_ENV: "production",
@@ -328,9 +354,64 @@ describe("Cloudflare stack", () => {
       AGENT_ORIGIN: "https://agent.example.com",
       API_ORIGIN: "https://api.example.com",
       CEIRD_CLOUDFLARE: "1",
+      SYSTEM_APP_ORIGIN: "https://app.example.com",
+      TENANT_BASE_DOMAIN: "example.com",
+      TENANT_HOST_MODE: "stage",
+      TENANT_RESERVED_HOSTNAMES:
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+      TENANT_STAGE_ALIAS: "main",
       VITE_AGENT_ORIGIN: "https://agent.example.com",
       VITE_API_ORIGIN: "https://api.example.com",
+      VITE_SYSTEM_APP_ORIGIN: "https://app.example.com",
+      VITE_TENANT_BASE_DOMAIN: "example.com",
+      VITE_TENANT_HOST_MODE: "stage",
+      VITE_TENANT_RESERVED_HOSTNAMES:
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+      VITE_TENANT_STAGE_ALIAS: "main",
     });
+  });
+
+  it("passes tenant host config to app and auth domain Workers", () => {
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const agentInternalSecret = Redacted.make("agent-secret");
+    const appEnv = makeAppWorkerEnv({
+      agentOrigin: "https://agent.pr-123.example.com",
+      apiOrigin: "https://api.pr-123.example.com",
+      config: previewTenantConfig,
+    });
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret,
+      betterAuthSecret,
+      config: previewTenantConfig,
+    });
+    const agentEnv = makeAgentWorkerEnv({
+      agentInternalSecret,
+      config: previewTenantConfig,
+    });
+
+    expect(appEnv.SYSTEM_APP_ORIGIN).toBe("https://app.pr-123.example.com");
+    expect(appEnv.TENANT_BASE_DOMAIN).toBe("example.com");
+    expect(appEnv.TENANT_HOST_MODE).toBe("stage");
+    expect(appEnv.TENANT_RESERVED_HOSTNAMES).toBe(
+      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com"
+    );
+    expect(appEnv.TENANT_STAGE_ALIAS).toBe("pr-123");
+    expect(appEnv.VITE_SYSTEM_APP_ORIGIN).toBe(
+      "https://app.pr-123.example.com"
+    );
+    expect(appEnv.VITE_TENANT_BASE_DOMAIN).toBe("example.com");
+    expect(appEnv.VITE_TENANT_HOST_MODE).toBe("stage");
+    expect(appEnv.VITE_TENANT_RESERVED_HOSTNAMES).toBe(
+      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com"
+    );
+    expect(appEnv.VITE_TENANT_STAGE_ALIAS).toBe("pr-123");
+    expect(domainEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
+    expect(domainEnv.AUTH_COOKIE_PREFIX).toBe("ceird-pr-123");
+    expect(domainEnv.AUTH_TRUSTED_ORIGINS.split(",")).toStrictEqual([
+      "https://app.pr-123.example.com",
+      "https://*--pr-123.example.com",
+    ]);
+    expect(agentEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
   });
 
   it("passes disabled auth rate limits through to preview domain Workers", () => {
@@ -396,13 +477,26 @@ describe("Cloudflare stack", () => {
       makeAppWorkerEnv({
         agentOrigin: "https://agent.stage.example.com",
         apiOrigin: "https://api.stage.example.com",
+        config: configWithoutCloudflareBootstrapSecrets,
       })
     ).toStrictEqual({
       AGENT_ORIGIN: "https://agent.stage.example.com",
       API_ORIGIN: "https://api.stage.example.com",
       CEIRD_CLOUDFLARE: "1",
+      SYSTEM_APP_ORIGIN: "https://app.example.com",
+      TENANT_BASE_DOMAIN: "example.com",
+      TENANT_HOST_MODE: "stage",
+      TENANT_RESERVED_HOSTNAMES:
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+      TENANT_STAGE_ALIAS: "main",
       VITE_AGENT_ORIGIN: "https://agent.stage.example.com",
       VITE_API_ORIGIN: "https://api.stage.example.com",
+      VITE_SYSTEM_APP_ORIGIN: "https://app.example.com",
+      VITE_TENANT_BASE_DOMAIN: "example.com",
+      VITE_TENANT_HOST_MODE: "stage",
+      VITE_TENANT_RESERVED_HOSTNAMES:
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+      VITE_TENANT_STAGE_ALIAS: "main",
     });
   });
 

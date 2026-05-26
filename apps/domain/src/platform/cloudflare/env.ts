@@ -12,9 +12,11 @@ export interface DomainWorkerConfigEnv {
   readonly AGENT_ACTION_RUN_STALE_AFTER_SECONDS?: string;
   readonly AGENT_INTERNAL_SECRET: string;
   readonly AUTH_APP_ORIGIN: string;
+  readonly AUTH_COOKIE_PREFIX?: string;
   readonly AUTH_EMAIL_FROM: string;
   readonly AUTH_EMAIL_FROM_NAME?: string;
   readonly AUTH_RATE_LIMIT_ENABLED?: string;
+  readonly AUTH_TRUSTED_ORIGINS?: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
   readonly GOOGLE_MAPS_API_KEY: string;
@@ -37,9 +39,11 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
         env.AGENT_ACTION_RUN_STALE_AFTER_SECONDS,
       AGENT_INTERNAL_SECRET: env.AGENT_INTERNAL_SECRET,
       AUTH_APP_ORIGIN: env.AUTH_APP_ORIGIN,
+      AUTH_COOKIE_PREFIX: env.AUTH_COOKIE_PREFIX,
       AUTH_EMAIL_FROM: env.AUTH_EMAIL_FROM,
       AUTH_EMAIL_FROM_NAME: env.AUTH_EMAIL_FROM_NAME,
       AUTH_RATE_LIMIT_ENABLED: env.AUTH_RATE_LIMIT_ENABLED,
+      AUTH_TRUSTED_ORIGINS: env.AUTH_TRUSTED_ORIGINS,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
