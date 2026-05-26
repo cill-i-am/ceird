@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource as ResourceShape } from "alchemy/Resource";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 
 export interface TenantWorkerRoutePayloadInput {
@@ -200,15 +201,15 @@ class CloudflareTenantRoutingApiError extends Error {
 export const TenantWildcardDnsRecordProvider = () =>
   Provider.effect(
     TenantWildcardDnsRecord,
-    Effect.gen(function* () {
-      return TenantWildcardDnsRecord.Provider.of({
+    Effect.succeed(
+      TenantWildcardDnsRecord.Provider.of({
         stables: ["recordId", "zoneId"],
         diff: Effect.fn("TenantWildcardDnsRecord.diff")(function* ({
           news,
           output,
         }) {
           if (!output || !isResolved(news)) {
-            return undefined;
+            return;
           }
 
           const client = yield* makeCloudflareTenantRoutingClient();
@@ -220,8 +221,6 @@ export const TenantWildcardDnsRecordProvider = () =>
           if (zoneId !== output.zoneId) {
             return { action: "replace" } as const;
           }
-
-          return undefined;
         }),
         read: Effect.fn("TenantWildcardDnsRecord.read")(function* ({
           olds,
@@ -246,7 +245,7 @@ export const TenantWildcardDnsRecordProvider = () =>
                 });
 
           if (!record) {
-            return undefined;
+            return;
           }
 
           return {
@@ -319,19 +318,19 @@ export const TenantWildcardDnsRecordProvider = () =>
             zoneId: output.zoneId,
           });
         }),
-      });
-    })
+      })
+    )
   );
 
 export const TenantWorkerRouteProvider = () =>
   Provider.effect(
     TenantWorkerRoute,
-    Effect.gen(function* () {
-      return TenantWorkerRoute.Provider.of({
+    Effect.succeed(
+      TenantWorkerRoute.Provider.of({
         stables: ["routeId", "zoneId"],
         diff: Effect.fn("TenantWorkerRoute.diff")(function* ({ news, output }) {
           if (!output || !isResolved(news)) {
-            return undefined;
+            return;
           }
 
           const client = yield* makeCloudflareTenantRoutingClient();
@@ -343,11 +342,9 @@ export const TenantWorkerRouteProvider = () =>
           if (zoneId !== output.zoneId) {
             return { action: "replace" } as const;
           }
-
-          return undefined;
         }),
         read: Effect.fn("TenantWorkerRoute.read")(function* ({ olds, output }) {
-          const zoneName = olds.zoneName;
+          const { zoneName } = olds;
           const client = yield* makeCloudflareTenantRoutingClient();
           const zoneId =
             output?.zoneId ??
@@ -426,8 +423,8 @@ export const TenantWorkerRouteProvider = () =>
             zoneId: output.zoneId,
           });
         }),
-      });
-    })
+      })
+    )
   );
 
 function makeCloudflareTenantRoutingClient() {
@@ -475,19 +472,28 @@ function makeCloudflareAuthHeaders(
   credentials: CloudflareApiCredentials
 ): Record<string, string> {
   switch (credentials.type) {
-    case "apiKey":
+    case "apiKey": {
       return {
         "X-Auth-Email": credentials.email,
         "X-Auth-Key": Redacted.value(credentials.apiKey),
       };
-    case "apiToken":
+    }
+    case "apiToken": {
       return {
         Authorization: `Bearer ${Redacted.value(credentials.apiToken)}`,
       };
-    case "oauth":
+    }
+    case "oauth": {
       return {
         Authorization: `Bearer ${Redacted.value(credentials.accessToken)}`,
       };
+    }
+    default: {
+      const unsupportedCredentials: never = credentials;
+      throw new Error(
+        `Unsupported Cloudflare credential type: ${JSON.stringify(unsupportedCredentials)}.`
+      );
+    }
   }
 }
 
@@ -536,13 +542,13 @@ function cloudflareApiRequest<T extends CloudflareBaseResponse>(
 function catchCloudflareNotFound<A>(
   effect: Effect.Effect<A, Error>
 ): Effect.Effect<A | undefined, Error> {
-  return effect.pipe(
-    Effect.catch((error: Error) =>
+  return Effect.matchEffect(effect, {
+    onFailure: (error) =>
       error instanceof CloudflareTenantRoutingApiError && error.status === 404
-        ? Effect.succeed(undefined)
-        : Effect.fail(error)
-    )
-  );
+        ? Effect.succeed(Option.none<A>())
+        : Effect.fail(error),
+    onSuccess: (value) => Effect.succeed(Option.some(value)),
+  }).pipe(Effect.map(Option.getOrUndefined));
 }
 
 function resolveCloudflareZoneId(input: {
@@ -605,8 +611,6 @@ function findCloudflareTenantDnsRecord(input: {
         return record;
       }
     }
-
-    return undefined;
   });
 }
 
@@ -794,5 +798,5 @@ function makeTenantWorkerRouteAttributes(input: {
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
