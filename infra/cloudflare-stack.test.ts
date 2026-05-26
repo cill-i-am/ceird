@@ -269,6 +269,15 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
     ? true
     : false
 > = true;
+const cloudflareStackOutputsIncludeTenantRouting: AssertTrue<
+  CloudflareStackResources extends {
+    readonly tenantReservedHostBypassRoutePatterns: readonly Input<string>[];
+    readonly tenantRoutePattern: Input<string> | undefined;
+    readonly tenantWildcardDnsRecordId: Input<string> | undefined;
+  }
+    ? true
+    : false
+> = true;
 
 describe("Cloudflare stack", () => {
   it("lets Alchemy own runtime stage injection for Worker env vars", () => {
@@ -598,5 +607,6 @@ describe("Cloudflare stack", () => {
     expect(appContractSatisfiesStackEnv).toBeTruthy();
     expect(appWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(cloudflareStackOutputsIncludeCanonicalOrigins).toBeTruthy();
+    expect(cloudflareStackOutputsIncludeTenantRouting).toBeTruthy();
   });
 });
