@@ -8,11 +8,13 @@ import * as Redacted from "effect/Redacted";
 import {
   makeCloudflareTenantDnsRecordPayload,
   makeCloudflareTenantWorkerRoutePayload,
-  type TenantWildcardDnsRecord,
   TenantWildcardDnsRecordProvider,
-  type TenantWorkerRoute,
   TenantWorkerRouteProvider,
   validateTenantRoutePattern,
+} from "./cloudflare-tenant-routing.ts";
+import type {
+  TenantWildcardDnsRecord,
+  TenantWorkerRoute,
 } from "./cloudflare-tenant-routing.ts";
 
 const cloudflareApiBaseUrl = "https://cloudflare.test/client/v4";
@@ -27,28 +29,32 @@ function makeCloudflareFetchMock(
   handler: (request: CloudflareTestRequest) => unknown
 ) {
   const requests: CloudflareTestRequest[] = [];
-  const fetchMock = vi.fn(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
-      );
-      const method =
-        init?.method ?? (input instanceof Request ? input.method : "GET");
-      const body =
-        typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-      const request = { body, method, url };
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(getRequestUrl(input));
+    const method =
+      init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body =
+      typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    const request = { body, method, url };
 
-      requests.push(request);
+    requests.push(request);
 
-      return Response.json(handler(request));
-    }
-  );
+    return Promise.resolve(Response.json(handler(request)));
+  });
 
   return { fetchMock, requests };
+}
+
+function getRequestUrl(input: RequestInfo | URL) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
 }
 
 async function runTenantRoutingEffect<A, Error, Requirements>(
@@ -163,7 +169,7 @@ describe("Cloudflare tenant routing", () => {
       }
 
       expect(request.url.pathname).toBe("/client/v4/zones/zone-id/dns_records");
-      expect(request.url.searchParams.get("name")).toBe("*.ceird.app");
+      expect(request.url.searchParams.get("name.exact")).toBe("*.ceird.app");
 
       return {
         result: [
@@ -187,8 +193,11 @@ describe("Cloudflare tenant routing", () => {
         const provider = yield* findProviderByType<TenantWildcardDnsRecord>(
           "Ceird.CloudflareTenantWildcardDnsRecord"
         );
+        if (!provider.read) {
+          return yield* Effect.die("Tenant wildcard DNS provider needs read.");
+        }
 
-        return yield* provider.read!({
+        return yield* provider.read({
           id: "TenantWildcardDnsRecord",
           instanceId: "instance-id",
           olds: { zoneName: "ceird.app" },
@@ -307,8 +316,12 @@ describe("Cloudflare tenant routing", () => {
     );
     requests.splice(0);
 
+    if (!provider.delete) {
+      throw new Error("Tenant wildcard DNS provider needs delete.");
+    }
+
     await runTenantRoutingEffect(
-      provider.delete!({
+      provider.delete({
         bindings: [],
         id: "TenantWildcardDnsRecord",
         instanceId: "instance-id",
@@ -353,8 +366,11 @@ describe("Cloudflare tenant routing", () => {
         const provider = yield* findProviderByType<TenantWorkerRoute>(
           "Ceird.CloudflareTenantWorkerRoute"
         );
+        if (!provider.read) {
+          return yield* Effect.die("Tenant Worker route provider needs read.");
+        }
 
-        return yield* provider.read!({
+        return yield* provider.read({
           id: "TenantWorkerRoute",
           instanceId: "instance-id",
           olds: {

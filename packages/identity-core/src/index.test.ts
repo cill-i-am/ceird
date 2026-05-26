@@ -65,7 +65,7 @@ describe("organization slug generation", () => {
         name: "Acme Field Ops",
         slug: "a".repeat(41),
       })
-    ).toThrow();
+    ).toThrow(/Expected/);
   }, 1000);
 
   it("appends retry suffixes without exceeding the tenant-safe maximum", () => {
@@ -95,7 +95,7 @@ describe("organization summary boundary", () => {
         name: "Acme Field Ops",
         slug: "a".repeat(41),
       })
-    ).toThrow();
+    ).toThrow(/Expected/);
   }, 1000);
 });
 

@@ -640,7 +640,8 @@ function findCloudflareTenantDnsRecord(input: {
 
     for (const name of candidateNames) {
       const params = new URLSearchParams({
-        name,
+        match: "all",
+        "name.exact": name,
         per_page: "100",
         type: "A",
       });
