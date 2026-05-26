@@ -2,8 +2,6 @@
 import type {
   AddJobCommentInput,
   AddJobCommentResponse,
-  AddJobCostLineInput,
-  AddJobCostLineResponse,
   AddJobVisitInput,
   AddJobVisitResponse,
   AssignJobLabelInput,
@@ -38,7 +36,6 @@ import {
 import type { JobsAsyncResult } from "./jobs-state";
 
 type JobsDetailMutationKey =
-  | "addCostLine"
   | "addComment"
   | "addVisit"
   | "assignLabel"
@@ -92,10 +89,6 @@ type JobsDetailStateAction =
       readonly visit: AddJobVisitResponse;
     }
   | {
-      readonly costLine: AddJobCostLineResponse;
-      readonly type: "insert-cost-line";
-    }
-  | {
       readonly key: JobsDetailMutationKey;
       readonly result: JobsAsyncResult;
       readonly type: "set-result";
@@ -105,9 +98,6 @@ export interface JobsDetailStateContextValue {
   readonly addJobComment: (
     input: AddJobCommentInput
   ) => Promise<Exit.Exit<AddJobCommentResponse, AppApiError>>;
-  readonly addJobCostLine: (
-    input: AddJobCostLineInput
-  ) => Promise<Exit.Exit<AddJobCostLineResponse, AppApiError>>;
   readonly addJobVisit: (
     input: AddJobVisitInput
   ) => Promise<Exit.Exit<AddJobVisitResponse, AppApiError>>;
@@ -162,7 +152,6 @@ const waitingJobsDetailAsyncResult: JobsAsyncResult = {
 
 const initialJobsDetailMutationResults: JobsDetailMutationResults = {
   addComment: idleJobsDetailAsyncResult,
-  addCostLine: idleJobsDetailAsyncResult,
   addVisit: idleJobsDetailAsyncResult,
   assignLabel: idleJobsDetailAsyncResult,
   attachCollaborator: idleJobsDetailAsyncResult,
@@ -357,25 +346,6 @@ export function JobsDetailStateProvider({
     [refreshDetailIfPossible, runMutation, workItemId]
   );
 
-  const addJobCostLine = React.useCallback(
-    (input: AddJobCostLineInput) =>
-      runMutation(
-        "addCostLine",
-        withMinimumMutationPendingDurationEffect(
-          addBrowserJobCostLine(workItemId, input)
-        ),
-        async (costLine) => {
-          detailRef.current = insertJobCostLine(detailRef.current, costLine);
-          dispatch({
-            costLine,
-            type: "insert-cost-line",
-          });
-          await refreshDetailIfPossible();
-        }
-      ),
-    [refreshDetailIfPossible, runMutation, workItemId]
-  );
-
   const assignJobLabel = React.useCallback(
     (input: AssignJobLabelInput) =>
       runMutation(
@@ -481,7 +451,6 @@ export function JobsDetailStateProvider({
   const value = React.useMemo<JobsDetailStateContextValue>(
     () => ({
       addJobComment,
-      addJobCostLine,
       addJobVisit,
       assignJobLabel,
       attachCollaborator,
@@ -499,7 +468,6 @@ export function JobsDetailStateProvider({
     }),
     [
       addJobComment,
-      addJobCostLine,
       addJobVisit,
       assignJobLabel,
       attachCollaborator,
@@ -592,13 +560,6 @@ function jobsDetailStateReducer(
       return {
         ...state,
         detail: insertJobVisit(state.detail, action.visit),
-      };
-    }
-
-    case "insert-cost-line": {
-      return {
-        ...state,
-        detail: insertJobCostLine(state.detail, action.costLine),
       };
     }
 
@@ -714,18 +675,6 @@ function assignBrowserJobLabel(
   );
 }
 
-function addBrowserJobCostLine(
-  workItemId: WorkItemIdType,
-  input: AddJobCostLineInput
-) {
-  return runBrowserAppApiRequest("JobsBrowser.addJobCostLine", (client) =>
-    client.jobs.addJobCostLine({
-      params: { workItemId },
-      payload: input,
-    })
-  );
-}
-
 function listBrowserJobCollaborators(workItemId: WorkItemIdType) {
   return runBrowserAppApiRequest("JobsBrowser.listJobCollaborators", (client) =>
     client.jobs.listJobCollaborators({
@@ -832,36 +781,6 @@ function insertJobVisit(
         ? String(right.id).localeCompare(String(left.id))
         : dateOrder;
     }),
-  };
-}
-
-function insertJobCostLine(
-  currentDetail: JobDetailResponse,
-  costLine: AddJobCostLineResponse
-): JobDetailResponse {
-  const currentCostLines = currentDetail.costs?.lines ?? [];
-  const costLines = [
-    costLine,
-    ...currentCostLines.filter((current) => current.id !== costLine.id),
-  ].sort((left, right) => {
-    const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
-
-    return createdAtOrder === 0
-      ? String(right.id).localeCompare(String(left.id))
-      : createdAtOrder;
-  });
-
-  return {
-    ...currentDetail,
-    costs: {
-      lines: costLines,
-      summary: {
-        subtotalMinor: costLines.reduce(
-          (subtotal, current) => subtotal + current.lineTotalMinor,
-          0
-        ),
-      },
-    },
   };
 }
 

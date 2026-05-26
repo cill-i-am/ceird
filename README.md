@@ -56,8 +56,8 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `apps/mcp`               | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
 | `packages/agents-core`   | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
 | `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                            |
-| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, rate-card contract, job assignment endpoints, and typed job errors.                      |
-| `packages/sites-core`    | Shared site and service-area IDs, schemas, DTOs, API contract groups, and typed site/service-area errors.                          |
+| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, job assignment endpoints, and typed job errors.                                          |
+| `packages/sites-core`    | Shared site IDs, schemas, DTOs, API contract groups, and typed site errors.                                                        |
 | `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                         |
 | `infra`                  | Root Alchemy v2 stage orchestration helpers for shared Cloudflare resources, Hyperdrive, Neon Postgres, and queues.                |
 | `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                             |
@@ -111,13 +111,13 @@ runtime schema boundaries.
 
 The private domain Worker keeps domain behavior in Effect services. The
 identity domain wires Better Auth, organization membership, invitation preview,
-and auth email delivery. The jobs domain owns job workflows, rate cards,
-job-label assignment, contacts, and activity recording. Sites and organization
-labels have their own domain services, repositories, schemas, and `HttpApi`
-contracts. The agents domain owns agent thread records, connection grants, and
-the action-run ledger used for idempotent mutating agent actions. The public
-API, MCP, and Agent Workers are protocol/runtime adapters over that shared
-capability surface.
+and auth email delivery. The jobs domain owns job workflows, contacts,
+collaborators, visits, comments, job-label assignment, and activity recording.
+Sites and organization labels have their own domain services, repositories,
+schemas, and `HttpApi` contracts. The agents domain owns agent thread records,
+connection grants, and the action-run ledger used for idempotent mutating agent
+actions. The public API, MCP, and Agent Workers are protocol/runtime adapters
+over that shared capability surface.
 
 Local multi-service development and production infrastructure are both described
 in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Queues,

@@ -25,16 +25,6 @@ export const WorkItemId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type WorkItemId = Schema.Schema.Type<typeof WorkItemId>;
 
-export const RateCardId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("@ceird/jobs-core/RateCardId")
-);
-export type RateCardId = Schema.Schema.Type<typeof RateCardId>;
-
-export const RateCardLineId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("@ceird/jobs-core/RateCardLineId")
-);
-export type RateCardLineId = Schema.Schema.Type<typeof RateCardLineId>;
-
 export const ContactId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("@ceird/jobs-core/ContactId")
 );
@@ -54,8 +44,3 @@ export const JobCollaboratorId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("@ceird/jobs-core/JobCollaboratorId")
 );
 export type JobCollaboratorId = Schema.Schema.Type<typeof JobCollaboratorId>;
-
-export const CostLineId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("@ceird/jobs-core/CostLineId")
-);
-export type CostLineId = Schema.Schema.Type<typeof CostLineId>;

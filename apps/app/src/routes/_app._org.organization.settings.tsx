@@ -1,6 +1,5 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
-import * as React from "react";
 
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
@@ -37,30 +36,17 @@ export function assertSettingsRouteAccess(context: SettingsRouteContext) {
 }
 
 function SettingsRoute() {
-  const { activeOrganization, currentOrganizationRole, currentUserId } =
-    useRouteContext({ from: "/_app/_org" });
-  const { queryClient } = Route.useRouteContext();
+  const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
   const { organizationLabels } = Route.useLoaderData();
 
   if (!activeOrganization) {
     throw new Error("Organization settings require an active organization.");
   }
 
-  const queryScope = React.useMemo(
-    () => ({
-      organizationId: activeOrganization.id,
-      role: currentOrganizationRole,
-      userId: currentUserId,
-    }),
-    [activeOrganization.id, currentOrganizationRole, currentUserId]
-  );
-
   return (
     <OrganizationSettingsPage
       organizationLabels={organizationLabels}
       organization={activeOrganization}
-      queryScope={queryScope}
-      queryClient={queryClient}
     />
   );
 }

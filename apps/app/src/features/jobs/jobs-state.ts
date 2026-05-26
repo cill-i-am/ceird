@@ -16,7 +16,7 @@ import type {
 } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
-import type { ServiceAreaIdType, SiteIdType } from "@ceird/sites-core";
+import type { SiteIdType } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { createCollection } from "@tanstack/react-db";
@@ -59,7 +59,6 @@ export interface JobsListFilters {
   readonly labelId: LabelIdType | "all";
   readonly priority: JobPriority | "all";
   readonly query: string;
-  readonly serviceAreaId: ServiceAreaIdType | "all";
   readonly siteId: SiteIdType | "all";
   readonly status: JobsStatusFilter;
 }
@@ -70,12 +69,7 @@ export interface JobsListState {
   readonly organizationId: OrganizationId | null;
 }
 
-export interface JobsOptionsState {
-  readonly data: JobOptionsResponse;
-  readonly organizationId: OrganizationId | null;
-}
-
-export interface JobsNotice {
+interface JobsNotice {
   readonly kind: "created";
   readonly title: string;
 }
@@ -166,21 +160,17 @@ export const defaultJobsListFilters: JobsListFilters = {
   labelId: "all",
   priority: "all",
   query: "",
-  serviceAreaId: "all",
   siteId: "all",
   status: "active",
 };
 
-export function buildJobsLookup(options: JobOptionsResponse) {
+function buildJobsLookup(options: JobOptionsResponse) {
   return {
     contactById: new Map(
       options.contacts.map((contact) => [contact.id, contact])
     ),
     memberById: new Map(options.members.map((member) => [member.id, member])),
     labelById: new Map(options.labels.map((label) => [label.id, label])),
-    serviceAreaById: new Map(
-      options.serviceAreas.map((serviceArea) => [serviceArea.id, serviceArea])
-    ),
     siteById: new Map(options.sites.map((site) => [site.id, site])),
   };
 }
@@ -418,18 +408,6 @@ export function useJobsOptions(): JobOptionsResponse {
   return useJobsStateContext().options;
 }
 
-export function useJobsOptionsState(): JobsOptionsState {
-  const { options, store } = useJobsStateContext();
-
-  return React.useMemo(
-    () => ({
-      data: options,
-      organizationId: store.organizationIdRef.current,
-    }),
-    [options, store.organizationIdRef]
-  );
-}
-
 export function useJobsLookup() {
   const options = useJobsOptions();
 
@@ -450,14 +428,6 @@ export function useCreateJobMutation() {
   const { createJob, createJobResult } = useJobsStateContext();
 
   return [createJobResult, createJob] as const;
-}
-
-export function useReplaceJobsListState() {
-  return useJobsStateContext().replaceJobsListState;
-}
-
-export function useReplaceJobsOptionsState() {
-  return useJobsStateContext().replaceJobsOptionsState;
 }
 
 export function useUpsertJobsListItem() {
@@ -898,8 +868,7 @@ function matchesVisibleJob(
     matchesOptionalFilter(item.priority, filters.priority) &&
     matchesLabelFilter(item, filters) &&
     matchesSiteFilter(item, filters) &&
-    matchesQueryFilter(item, normalizedQuery, lookup) &&
-    matchesServiceAreaFilter(item, filters.serviceAreaId, lookup.siteById)
+    matchesQueryFilter(item, normalizedQuery, lookup)
   );
 }
 
@@ -934,11 +903,7 @@ function buildJobSearchText(item: JobListItem, lookup: VisibleJobsLookup) {
   return [
     item.title,
     item.kind,
-    item.externalReference ?? "",
     siteName ?? "",
-    item.siteId === undefined
-      ? ""
-      : (lookup.siteById.get(item.siteId)?.serviceAreaName ?? ""),
     contact?.name ?? "",
     contact?.email ?? "",
     contact?.phone ?? "",
@@ -947,30 +912,12 @@ function buildJobSearchText(item: JobListItem, lookup: VisibleJobsLookup) {
     .toLowerCase();
 }
 
-function matchesServiceAreaFilter(
-  item: JobListItem,
-  serviceAreaFilter: JobsListFilters["serviceAreaId"],
-  siteById: VisibleJobsLookup["siteById"]
-) {
-  if (serviceAreaFilter === "all") {
-    return true;
-  }
-
-  const serviceAreaId =
-    item.siteId === undefined
-      ? undefined
-      : siteById.get(item.siteId)?.serviceAreaId;
-
-  return serviceAreaId === serviceAreaFilter;
-}
-
 type JobListItemSource = Pick<
   Job | CreateJobResponse,
   | "assigneeId"
   | "contactId"
   | "coordinatorId"
   | "createdAt"
-  | "externalReference"
   | "id"
   | "kind"
   | "labels"
@@ -987,7 +934,6 @@ export function toJobListItem(job: JobListItemSource): JobListItem {
     contactId: job.contactId,
     coordinatorId: job.coordinatorId,
     createdAt: job.createdAt,
-    externalReference: job.externalReference,
     id: job.id,
     kind: job.kind,
     labels: job.labels,
@@ -999,7 +945,7 @@ export function toJobListItem(job: JobListItemSource): JobListItem {
   };
 }
 
-export function upsertJobListItem(
+function upsertJobListItem(
   items: readonly JobListItem[],
   job: JobListItemSource
 ) {

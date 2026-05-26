@@ -1,23 +1,16 @@
 import {
   AddJobCommentInputSchema,
-  AddJobCostLineInputSchema,
   AddJobVisitInputSchema,
   AssignJobLabelInputSchema,
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
-  CreateRateCardInputSchema,
   JobListQuerySchema,
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   TransitionJobInputSchema,
   UpdateJobCollaboratorInputSchema,
-  UpdateRateCardInputSchema,
 } from "@ceird/jobs-core/dto";
-import {
-  JobCollaboratorId,
-  RateCardId,
-  WorkItemId,
-} from "@ceird/jobs-core/ids";
+import { JobCollaboratorId, WorkItemId } from "@ceird/jobs-core/ids";
 import { LabelId } from "@ceird/labels-core/ids";
 import { Schema } from "effect";
 
@@ -74,11 +67,6 @@ const JobCollaboratorPathInputSchema = Schema.Struct({
   workItemId: WorkItemId,
 });
 
-const UpdateRateCardActionInputSchema = Schema.Struct({
-  input: UpdateRateCardInputSchema,
-  rateCardId: RateCardId,
-});
-
 export const jobAgentActions = [
   defineAgentAction({
     confirmationPolicy: "none",
@@ -120,7 +108,7 @@ export const jobAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "List job form options such as members, labels, sites, contacts, and service areas.",
+      "List job form options such as members, labels, sites, and contacts.",
     modelName: "getJobOptions",
     name: "ceird.jobs.options",
   }),
@@ -251,20 +239,6 @@ export const jobAgentActions = [
     name: "ceird.jobs.remove_label",
   }),
   defineAgentAction({
-    confirmationPolicy: "confirm",
-    display: {
-      label: "Add job cost",
-      summary: "Add a cost line to a job.",
-      target: "job",
-    },
-    inputSchema: JobNestedInputSchema(AddJobCostLineInputSchema),
-    executionStatus: "executable",
-    kind: "write",
-    modelDescription: "Add a cost line to a Ceird job.",
-    modelName: "addJobCostLine",
-    name: "ceird.jobs.cost_lines.add",
-  }),
-  defineAgentAction({
     confirmationPolicy: "none",
     display: {
       label: "List job collaborators",
@@ -319,50 +293,5 @@ export const jobAgentActions = [
     modelDescription: "Detach a collaborator from a Ceird job.",
     modelName: "detachJobCollaborator",
     name: "ceird.jobs.collaborators.detach",
-  }),
-] as const;
-
-export const rateCardAgentActions = [
-  defineAgentAction({
-    confirmationPolicy: "none",
-    display: {
-      label: "List rate cards",
-      summary: "Read organization rate cards.",
-      target: "rate cards",
-    },
-    inputSchema: EmptyAgentActionInputSchema,
-    executionStatus: "executable",
-    kind: "read",
-    modelDescription: "List Ceird rate cards.",
-    modelName: "listRateCards",
-    name: "ceird.rate_cards.list",
-  }),
-  defineAgentAction({
-    confirmationPolicy: "confirm",
-    display: {
-      label: "Create rate card",
-      summary: "Create a new rate card.",
-      target: "rate card",
-    },
-    inputSchema: CreateRateCardInputSchema,
-    executionStatus: "executable",
-    kind: "write",
-    modelDescription: "Create a Ceird rate card.",
-    modelName: "createRateCard",
-    name: "ceird.rate_cards.create",
-  }),
-  defineAgentAction({
-    confirmationPolicy: "confirm",
-    display: {
-      label: "Update rate card",
-      summary: "Update an existing rate card.",
-      target: "rate card",
-    },
-    inputSchema: UpdateRateCardActionInputSchema,
-    executionStatus: "executable",
-    kind: "write",
-    modelDescription: "Update a Ceird rate card by ID.",
-    modelName: "updateRateCard",
-    name: "ceird.rate_cards.update",
   }),
 ] as const;

@@ -5,7 +5,6 @@ import type {
 } from "@ceird/jobs-core";
 import type { LabelsResponse } from "@ceird/labels-core";
 import type {
-  ServiceAreaListResponse,
   SiteListQuery,
   SiteListResponse,
   SiteOption,
@@ -41,14 +40,6 @@ const listAllCurrentServerSitesIsomorphic = createIsomorphicFn()
   })
   .client((query: SiteListQuery = {}) => listAllCurrentBrowserSites(query));
 
-const getCurrentServerServiceAreasIsomorphic = createIsomorphicFn()
-  .server(async () => {
-    const { getCurrentServerServiceAreasDirect } =
-      await importAppApiServerSsr();
-    return await getCurrentServerServiceAreasDirect();
-  })
-  .client(() => getCurrentBrowserServiceAreas());
-
 const listAllCurrentServerJobsIsomorphic = createIsomorphicFn()
   .server(async (query: JobListQuery = {}) => {
     const { listAllCurrentServerJobsDirect } = await importAppApiServerSsr();
@@ -73,13 +64,6 @@ function runBrowserAppApiClient<Response>(
 async function getCurrentBrowserLabels(): Promise<LabelsResponse> {
   return await runBrowserAppApiClient("LabelsClient.listLabels", (client) =>
     client.labels.listLabels()
-  );
-}
-
-async function getCurrentBrowserServiceAreas(): Promise<ServiceAreaListResponse> {
-  return await runBrowserAppApiClient(
-    "ServiceAreasClient.listServiceAreas",
-    (client) => client.serviceAreas.listServiceAreas()
   );
 }
 
@@ -182,10 +166,6 @@ export function listAllCurrentServerSites(
   query: SiteListQuery = {}
 ): Promise<SiteListResponse> {
   return listAllCurrentServerSitesIsomorphic(query);
-}
-
-export function getCurrentServerServiceAreas(): Promise<ServiceAreaListResponse> {
-  return getCurrentServerServiceAreasIsomorphic();
 }
 
 export function listAllCurrentServerJobs(

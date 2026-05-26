@@ -9,73 +9,14 @@ import {
   SiteLatitudeSchema,
   SiteLongitudeSchema,
 } from "./domain.js";
-import { ServiceAreaId, SiteId } from "./ids.js";
+import { SiteId } from "./ids.js";
 
 const NonEmptyTrimmedString = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
 );
-const ConfigurationNameSchema = NonEmptyTrimmedString.pipe(
-  Schema.check(Schema.isMaxLength(120))
-);
-const ConfigurationDescriptionSchema = NonEmptyTrimmedString.pipe(
-  Schema.check(Schema.isMaxLength(500))
-);
-
-export const ServiceAreaSchema = Schema.Struct({
-  id: ServiceAreaId,
-  name: ConfigurationNameSchema,
-  description: Schema.optional(ConfigurationDescriptionSchema),
-});
-export type ServiceArea = Schema.Schema.Type<typeof ServiceAreaSchema>;
-
-export const ServiceAreaOptionSchema = Schema.Struct({
-  id: ServiceAreaId,
-  name: ConfigurationNameSchema,
-});
-export type ServiceAreaOption = Schema.Schema.Type<
-  typeof ServiceAreaOptionSchema
->;
-
-export const CreateServiceAreaInputSchema = Schema.Struct({
-  name: ConfigurationNameSchema,
-  description: Schema.optional(ConfigurationDescriptionSchema),
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type CreateServiceAreaInput = Schema.Schema.Type<
-  typeof CreateServiceAreaInputSchema
->;
-
-export const CreateServiceAreaResponseSchema = ServiceAreaSchema;
-export type CreateServiceAreaResponse = Schema.Schema.Type<
-  typeof CreateServiceAreaResponseSchema
->;
-
-export const UpdateServiceAreaInputSchema = Schema.Struct({
-  name: Schema.optional(ConfigurationNameSchema),
-  description: Schema.optional(Schema.NullOr(ConfigurationDescriptionSchema)),
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-export type UpdateServiceAreaInput = Schema.Schema.Type<
-  typeof UpdateServiceAreaInputSchema
->;
-
-export const UpdateServiceAreaResponseSchema = ServiceAreaSchema;
-export type UpdateServiceAreaResponse = Schema.Schema.Type<
-  typeof UpdateServiceAreaResponseSchema
->;
-
-export const ServiceAreaListResponseSchema = Schema.Struct({
-  items: Schema.Array(ServiceAreaSchema),
-});
-export type ServiceAreaListResponse = Schema.Schema.Type<
-  typeof ServiceAreaListResponseSchema
->;
 
 const CreateSiteInputBaseSchema = Schema.Struct({
   name: NonEmptyTrimmedString,
-  serviceAreaId: Schema.optional(ServiceAreaId),
   addressLine1: NonEmptyTrimmedString,
   addressLine2: Schema.optional(NonEmptyTrimmedString),
   town: Schema.optional(NonEmptyTrimmedString),
@@ -103,8 +44,6 @@ export type CreateSiteInput = Schema.Schema.Type<typeof CreateSiteInputSchema>;
 export const SiteOptionSchema = Schema.Struct({
   id: SiteId,
   name: Schema.String,
-  serviceAreaId: Schema.optional(ServiceAreaId),
-  serviceAreaName: Schema.optional(Schema.String),
   addressLine1: Schema.String,
   addressLine2: Schema.optional(Schema.String),
   town: Schema.optional(Schema.String),
@@ -163,7 +102,8 @@ export const SiteListQuerySchema = Schema.Struct({
       )
     )
   ),
-  serviceAreaId: Schema.optional(ServiceAreaId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type SiteListQuery = Schema.Schema.Type<typeof SiteListQuerySchema>;
 
@@ -198,7 +138,6 @@ export type AssignSiteLabelInput = Schema.Schema.Type<
 >;
 
 export const SitesOptionsResponseSchema = Schema.Struct({
-  serviceAreas: Schema.Array(ServiceAreaOptionSchema),
   sites: Schema.Array(SiteOptionSchema),
 });
 export type SitesOptionsResponse = Schema.Schema.Type<

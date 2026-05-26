@@ -1,24 +1,11 @@
 "use client";
-import type {
-  CreateSiteInput,
-  ServiceAreaOption,
-  SiteCountry,
-} from "@ceird/sites-core";
+import type { CreateSiteInput, SiteCountry } from "@ceird/sites-core";
 
-import {
-  CommandSelect,
-  ResponsiveCommandSelect,
-} from "#/components/ui/command-select";
-import type {
-  CommandSelectGroup,
-  CommandSelectProps,
-} from "#/components/ui/command-select";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 
-export const SITE_CREATE_NONE_VALUE = "__none__";
 const DEFAULT_SITE_COUNTRY = "IE" satisfies SiteCountry;
 
 export interface SiteCreateDraft {
@@ -26,10 +13,9 @@ export interface SiteCreateDraft {
   readonly addressLine1: string;
   readonly addressLine2: string;
   readonly county: string;
-  readonly country: typeof DEFAULT_SITE_COUNTRY;
+  readonly country: SiteCountry;
   readonly eircode: string;
   readonly name: string;
-  readonly serviceAreaSelection: string;
   readonly town: string;
 }
 
@@ -38,7 +24,6 @@ export interface SiteCreateFieldErrors {
   readonly county?: string;
   readonly eircode?: string;
   readonly name?: string;
-  readonly serviceAreaSelection?: string;
 }
 
 type SiteCreateDraftPatch = Partial<SiteCreateDraft>;
@@ -58,30 +43,11 @@ export const defaultSiteCreateDraft: SiteCreateDraft = {
   country: DEFAULT_SITE_COUNTRY,
   eircode: "",
   name: "",
-  serviceAreaSelection: SITE_CREATE_NONE_VALUE,
   town: "",
 };
 
-export function buildSiteServiceAreaSelectionGroups(
-  serviceAreas: readonly { readonly id: string; readonly name: string }[]
-) {
-  return [
-    {
-      label: "Service area",
-      options: [
-        { label: "No service area", value: SITE_CREATE_NONE_VALUE },
-        ...serviceAreas.map((serviceArea) => ({
-          label: serviceArea.name,
-          value: serviceArea.id,
-        })),
-      ],
-    },
-  ] satisfies readonly CommandSelectGroup[];
-}
-
 export function validateSiteCreateDraft(
   values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[],
   options: {
     readonly nameRequiredMessage?: string;
   } = {}
@@ -92,15 +58,13 @@ export function validateSiteCreateDraft(
         ? "Add address line 1."
         : undefined,
     county: values.county.trim().length === 0 ? "Add county." : undefined,
-    eircode: values.eircode.trim().length === 0 ? "Add Eircode." : undefined,
+    eircode:
+      values.country === "IE" && values.eircode.trim().length === 0
+        ? "Add Eircode."
+        : undefined,
     name:
       values.name.trim().length === 0
         ? (options.nameRequiredMessage ?? "Add a site name before creating it.")
-        : undefined,
-    serviceAreaSelection:
-      values.serviceAreaSelection !== SITE_CREATE_NONE_VALUE &&
-      findSelectedServiceArea(values, serviceAreas) === undefined
-        ? "Pick an available service area, or choose no service area."
         : undefined,
   };
 }
@@ -110,21 +74,22 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 }
 
 export function buildCreateSiteInputFromDraft(
-  values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[]
+  values: SiteCreateDraft
 ): CreateSiteInput {
-  const selectedServiceArea = findSelectedServiceArea(values, serviceAreas);
+  const accessNotes = toOptionalTrimmedString(values.accessNotes);
+  const addressLine2 = toOptionalTrimmedString(values.addressLine2);
+  const eircode = toOptionalTrimmedString(values.eircode);
+  const town = toOptionalTrimmedString(values.town);
 
   return {
-    accessNotes: toOptionalTrimmedString(values.accessNotes),
     addressLine1: values.addressLine1.trim(),
-    addressLine2: toOptionalTrimmedString(values.addressLine2),
     county: values.county.trim(),
     country: values.country,
-    eircode: values.eircode.trim(),
     name: values.name.trim(),
-    serviceAreaId: selectedServiceArea?.id,
-    town: toOptionalTrimmedString(values.town),
+    ...(accessNotes === undefined ? {} : { accessNotes }),
+    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    ...(eircode === undefined ? {} : { eircode }),
+    ...(town === undefined ? {} : { town }),
   };
 }
 
@@ -139,8 +104,6 @@ interface SiteCreateDrawerFieldsProps {
   readonly errors: SiteCreateFieldErrors;
   readonly idPrefix: string;
   readonly onDraftChange: (draft: SiteCreateDraft) => void;
-  readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
-  readonly serviceAreaGroups: readonly CommandSelectGroup[];
 }
 
 export function SiteCreateDrawerFields({
@@ -148,8 +111,6 @@ export function SiteCreateDrawerFields({
   errors,
   idPrefix,
   onDraftChange,
-  onServiceAreaSelectionChange,
-  serviceAreaGroups,
 }: SiteCreateDrawerFieldsProps) {
   const updateDraft = (patch: Partial<SiteCreateDraft>) => {
     onDraftChange({
@@ -168,15 +129,6 @@ export function SiteCreateDrawerFields({
             idPrefix={idPrefix}
             placeholder="e.g. Riverside Apartments"
             onDraftPatch={updateDraft}
-          />
-          <SiteServiceAreaField
-            draft={draft}
-            errors={errors}
-            idPrefix={idPrefix}
-            placeholder="Select service area"
-            serviceAreaGroups={serviceAreaGroups}
-            onDraftPatch={updateDraft}
-            onServiceAreaSelectionChange={onServiceAreaSelectionChange}
           />
         </FieldGroup>
       </SiteCreateSection>
@@ -255,116 +207,6 @@ function SiteNameField({
       />
     </AuthFormField>
   );
-}
-
-interface SiteServiceAreaFieldProps extends SiteCreateFieldSectionProps {
-  readonly onServiceAreaSelectionChange?: (nextValue: string) => void;
-  readonly placeholder?: string;
-  readonly serviceAreaGroups: readonly CommandSelectGroup[];
-}
-
-function SiteServiceAreaField({
-  draft,
-  errors,
-  idPrefix,
-  onDraftPatch,
-  onServiceAreaSelectionChange,
-  placeholder,
-  serviceAreaGroups,
-}: SiteServiceAreaFieldProps) {
-  const selectProps = buildSiteServiceAreaSelectProps({
-    draft,
-    errors,
-    idPrefix,
-    onDraftPatch,
-    onServiceAreaSelectionChange,
-    placeholder,
-    serviceAreaGroups,
-  });
-
-  return (
-    <SiteServiceAreaFieldFrame
-      idPrefix={idPrefix}
-      errorText={errors.serviceAreaSelection}
-    >
-      <CommandSelect {...selectProps} />
-    </SiteServiceAreaFieldFrame>
-  );
-}
-
-export function SiteNestedServiceAreaField({
-  draft,
-  errors,
-  idPrefix,
-  onDraftPatch,
-  onServiceAreaSelectionChange,
-  placeholder,
-  serviceAreaGroups,
-}: SiteServiceAreaFieldProps) {
-  const selectProps = buildSiteServiceAreaSelectProps({
-    draft,
-    errors,
-    idPrefix,
-    onDraftPatch,
-    onServiceAreaSelectionChange,
-    placeholder,
-    serviceAreaGroups,
-  });
-
-  return (
-    <SiteServiceAreaFieldFrame
-      idPrefix={idPrefix}
-      errorText={errors.serviceAreaSelection}
-    >
-      <ResponsiveCommandSelect
-        {...selectProps}
-        drawerTitle="Choose service area"
-        nestedDrawer
-      />
-    </SiteServiceAreaFieldFrame>
-  );
-}
-
-function SiteServiceAreaFieldFrame({
-  children,
-  errorText,
-  idPrefix,
-}: {
-  readonly children: React.ReactNode;
-  readonly errorText: string | undefined;
-  readonly idPrefix: string;
-}) {
-  return (
-    <AuthFormField
-      label="Service area"
-      htmlFor={`${idPrefix}-service-area`}
-      errorText={errorText}
-    >
-      {children}
-    </AuthFormField>
-  );
-}
-
-function buildSiteServiceAreaSelectProps({
-  draft,
-  errors,
-  idPrefix,
-  onDraftPatch,
-  onServiceAreaSelectionChange,
-  placeholder = "Pick service area",
-  serviceAreaGroups,
-}: SiteServiceAreaFieldProps): CommandSelectProps {
-  return {
-    ariaInvalid: errors.serviceAreaSelection ? true : undefined,
-    emptyText: "No service areas found.",
-    groups: serviceAreaGroups,
-    id: `${idPrefix}-service-area`,
-    onValueChange:
-      onServiceAreaSelectionChange ??
-      ((nextValue) => onDraftPatch({ serviceAreaSelection: nextValue })),
-    placeholder,
-    value: draft.serviceAreaSelection,
-  };
 }
 
 interface SiteAddressFieldPlaceholders {
@@ -482,18 +324,5 @@ export function SiteAccessNotesField({
         onChange={(event) => onDraftPatch({ accessNotes: event.target.value })}
       />
     </AuthFormField>
-  );
-}
-
-function findSelectedServiceArea(
-  values: SiteCreateDraft,
-  serviceAreas: readonly ServiceAreaOption[]
-) {
-  if (values.serviceAreaSelection === SITE_CREATE_NONE_VALUE) {
-    return;
-  }
-
-  return serviceAreas.find(
-    (serviceArea) => serviceArea.id === values.serviceAreaSelection
   );
 }

@@ -4,7 +4,6 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
 import { DomainCorsLive } from "../http-cors.js";
-import { ConfigurationService } from "./configuration-service.js";
 import { JobsService } from "./service.js";
 
 const observeJobsOperation = (operation: string) =>
@@ -12,13 +11,6 @@ const observeJobsOperation = (operation: string) =>
     domain: "jobs",
     operation,
     service: "JobsService",
-  });
-
-const observeRateCardsOperation = (operation: string) =>
-  observeApiOperation({
-    domain: "rateCards",
-    operation,
-    service: "ConfigurationService",
   });
 
 const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
@@ -90,11 +82,6 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
           .removeLabel(params.workItemId, params.labelId)
           .pipe(observeJobsOperation("removeJobLabel"))
       )
-      .handle("addJobCostLine", ({ params, payload }) =>
-        jobsService
-          .addCostLine(params.workItemId, payload)
-          .pipe(observeJobsOperation("addJobCostLine"))
-      )
       .handle("listJobCollaborators", ({ params }) =>
         jobsService
           .listCollaborators(params.workItemId)
@@ -118,38 +105,7 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
   })
 );
 
-const RateCardsHandlersLive = HttpApiBuilder.group(
-  AppApi,
-  "rateCards",
-  (handlers) =>
-    Effect.gen(function* () {
-      const configurationService = yield* ConfigurationService;
-
-      return handlers
-        .handle("listRateCards", () =>
-          configurationService
-            .listRateCards()
-            .pipe(observeRateCardsOperation("listRateCards"))
-        )
-        .handle("createRateCard", ({ payload }) =>
-          configurationService
-            .createRateCard(payload)
-            .pipe(observeRateCardsOperation("createRateCard"))
-        )
-        .handle("updateRateCard", ({ params, payload }) =>
-          configurationService
-            .updateRateCard(params.rateCardId, payload)
-            .pipe(observeRateCardsOperation("updateRateCard"))
-        );
-    })
-);
-
 export const JobsHttpLive = Layer.mergeAll(
   DomainCorsLive,
-  JobsHandlersLive,
-  RateCardsHandlersLive
-).pipe(
-  Layer.provide(
-    Layer.mergeAll(JobsService.Default, ConfigurationService.Default)
-  )
-);
+  JobsHandlersLive
+).pipe(Layer.provide(JobsService.Default));

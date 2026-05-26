@@ -30,7 +30,7 @@ Current visible routes:
 | `/jobs/new`                        | `_app._org.jobs.new.tsx`              | New job flow.                                                  |
 | `/jobs/$jobId`                     | `_app._org.jobs.$jobId.tsx`           | Job detail route.                                              |
 | `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                          |
-| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings, service areas, rate cards, and labels.  |
+| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                              |
 | `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                    |
 | `/sites/new`                       | `_app._org.sites.new.tsx`             | New site flow.                                                 |
 | `/sites/$siteId`                   | `_app._org.sites.$siteId.tsx`         | Site detail route.                                             |
@@ -151,16 +151,16 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 
 ## Feature Folders
 
-| Folder                   | Responsibility                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `features/auth`          | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                                   |
-| `features/organizations` | Organization onboarding, active organization sync, settings, members, invitations, role access, service areas, rate cards, and labels.                                                                                                                                                                                                             |
-| `features/jobs`          | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, visits, and cost lines.                                                                                                                                                                       |
-| `features/sites`         | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, service area, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
-| `features/activity`      | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                                  |
-| `features/settings`      | User settings page schemas, search, and UI.                                                                                                                                                                                                                                                                                                        |
-| `features/command-bar`   | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                         |
-| `features/agent`         | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                              |
+| Folder                   | Responsibility                                                                                                                                                                                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `features/auth`          | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                     |
+| `features/organizations` | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                          |
+| `features/jobs`          | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                     |
+| `features/sites`         | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
+| `features/activity`      | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                    |
+| `features/settings`      | User settings page schemas, search, and UI.                                                                                                                                                                                                                                                                                          |
+| `features/command-bar`   | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                           |
+| `features/agent`         | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                |
 
 Shared app components live in `src/components`. shadcn-style primitives live in
 `src/components/ui`. Hotkey infrastructure lives in `src/hotkeys`.
@@ -174,12 +174,12 @@ Domain API access is contract-based:
 - `features/agent/agent-client.ts` uses that app-wide client to list/create
   user threads and authorize Agent Worker connections for the current active
   organization.
-- `features/jobs/jobs-client.ts` builds a composed Effect `HttpApiClient` from
-  jobs, labels, sites, service-area, and rate-card API groups exported by
-  `@ceird/jobs-core`, `@ceird/labels-core`, and `@ceird/sites-core`.
-  App code imports site-owned DTOs from `@ceird/sites-core` and
-  organization-label DTOs from `@ceird/labels-core`; `@ceird/jobs-core` only
-  supplies job-owned DTOs and the job-label assignment contract.
+- `features/api/app-api-client.ts` builds a composed Effect `HttpApiClient`
+  from jobs, labels, sites, agent, and activity-facing API groups exported by
+  the shared core packages. App code imports site-owned DTOs from
+  `@ceird/sites-core` and organization-label DTOs from `@ceird/labels-core`;
+  `@ceird/jobs-core` only supplies job-owned DTOs and the job-label assignment
+  contract.
 - `features/jobs/jobs-server.ts` exposes isomorphic helpers. On the server it
   imports `jobs-server-ssr.ts`; in the browser it calls the same API through
   `fetch`.
@@ -274,8 +274,7 @@ example:
 - `features/settings/user-settings-schemas.ts`
 
 UI state for API-backed feature workflows is kept in focused state modules such
-as `jobs-state.ts`, `jobs-detail-state.ts`, `sites-state.ts`, and
-`organization-configuration-state.ts`.
+as `jobs-state.ts`, `jobs-detail-state.ts`, and `sites-state.ts`.
 
 New API-backed feature state should prefer TanStack DB Query Collections for
 reactive client-side entity state. TanStack Start route loaders remain the
@@ -293,11 +292,6 @@ shared Effect schemas through
 Effect HTTP client for server reads and writes. The current migrated slices
 are:
 
-- `features/organizations/organization-configuration-state.tsx`, which keeps
-  service areas and rate cards in route-scoped Query Collections while
-  preserving pending/error mutation state for the existing UI. Create flows use
-  TanStack DB optimistic actions with temporary rows because the server
-  generates canonical IDs.
 - `features/sites/sites-state.ts`, which keeps route-loaded site options and
   per-site comments in scoped Query Collections, including server-confirmed
   comment state and organization-switch guards for in-flight mutations.

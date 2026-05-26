@@ -5,10 +5,10 @@ import {
   AgentInstanceName,
 } from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
-import { describe, expect, it } from "@effect/vitest";
+import { beforeEach, describe, expect, it } from "@effect/vitest";
 import type { ToolExecutionOptions } from "ai";
 import { Schema } from "effect";
-import { beforeEach, vi } from "vitest";
+import { vi } from "vitest";
 
 import type { runDomainAction as runDomainActionFunction } from "./domain-client.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
@@ -52,11 +52,7 @@ describe("Ceird Agent tools", () => {
       expectedReadModelNames
     );
     expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
-      expect.arrayContaining(["listServiceAreas"])
-    );
-    expect(Object.keys(createCeirdTools(makeEnv(), agentInstanceName))).toEqual(
       expect.arrayContaining([
-        "listRateCards",
         "listSites",
         "listSiteComments",
         "listOrganizationActivity",
@@ -88,19 +84,14 @@ describe("Ceird Agent tools", () => {
         "addSiteComment",
         "assignSiteLabel",
         "removeSiteLabel",
-        "createServiceArea",
-        "updateServiceArea",
         "createJob",
         "updateJob",
         "transitionJob",
         "reopenJob",
         "addJobVisit",
-        "addJobCostLine",
         "attachJobCollaborator",
         "updateJobCollaborator",
         "detachJobCollaborator",
-        "createRateCard",
-        "updateRateCard",
       ])
     );
   });
@@ -125,19 +116,14 @@ describe("Ceird Agent tools", () => {
         "addSiteComment",
         "assignSiteLabel",
         "removeSiteLabel",
-        "createServiceArea",
-        "updateServiceArea",
         "createJob",
         "updateJob",
         "transitionJob",
         "reopenJob",
         "addJobVisit",
-        "addJobCostLine",
         "attachJobCollaborator",
         "updateJobCollaborator",
         "detachJobCollaborator",
-        "createRateCard",
-        "updateRateCard",
       ])
     );
     expect(Object.keys(tools)).not.toEqual(

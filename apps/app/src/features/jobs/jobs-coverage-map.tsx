@@ -219,11 +219,6 @@ function JobsMapSiteRailItem({ group }: { readonly group: MappedSiteGroup }) {
             >
               {group.site.name ?? "Mapped site"}
             </Link>
-            {group.site.serviceAreaName ? (
-              <p className="truncate text-xs text-muted-foreground">
-                {group.site.serviceAreaName}
-              </p>
-            ) : null}
           </div>
           <Badge variant="secondary">
             {group.jobs.length} job
@@ -311,11 +306,6 @@ function MapViewport({
                 <p className="font-medium">
                   {group.site.name ?? "Mapped site"}
                 </p>
-                {group.site.serviceAreaName ? (
-                  <p className="text-sm text-muted-foreground">
-                    {group.site.serviceAreaName}
-                  </p>
-                ) : null}
               </div>
             </div>
           ))}

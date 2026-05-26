@@ -1,9 +1,9 @@
 import type {
   ActivityIdType,
-  CostLineIdType,
   OrganizationActivityItem,
   OrganizationActivityListResponse,
   UserIdType,
+  VisitIdType,
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import type { LabelIdType } from "@ceird/labels-core";
@@ -52,13 +52,12 @@ const mixedActivity = {
       actorId: taylorUserId,
       actorName: "Taylor Owner",
       createdAt: "2026-04-26T08:00:00.000Z",
-      eventType: "cost_line_added",
-      id: "activity_cost_line_added" as ActivityIdType,
+      eventType: "visit_logged",
+      id: "activity_visit_logged" as ActivityIdType,
       jobTitle: "Replace pump",
       payload: {
-        costLineId: "33333333-3333-4333-8333-333333333333" as CostLineIdType,
-        costLineType: "material",
-        eventType: "cost_line_added",
+        eventType: "visit_logged",
+        visitId: "33333333-3333-4333-8333-333333333333" as VisitIdType,
       },
       workItemId: "33333333-3333-4333-8333-333333333333" as WorkItemIdType,
     }),
@@ -144,7 +143,7 @@ describe("organization activity page", () => {
       ).toBeInTheDocument();
       expect(
         screen.queryByText(
-          "Audit trail for job changes, visits, labels, and costs."
+          "Audit trail for job changes, visits, labels, and comments."
         )
       ).not.toBeInTheDocument();
       expect(screen.getByText("1 event shown")).toBeInTheDocument();
@@ -199,11 +198,11 @@ describe("organization activity page", () => {
 
       await user.selectOptions(
         screen.getByLabelText("Event type"),
-        "cost_line_added"
+        "visit_logged"
       );
 
       expect(onSearchChange).toHaveBeenCalledWith({
-        eventType: "cost_line_added",
+        eventType: "visit_logged",
       });
 
       rerender(
@@ -222,19 +221,15 @@ describe("organization activity page", () => {
               },
             ],
           }}
-          search={{ eventType: "cost_line_added" }}
+          search={{ eventType: "visit_logged" }}
         />
       );
 
-      expect(screen.getByLabelText("Event type")).toHaveValue(
-        "cost_line_added"
-      );
+      expect(screen.getByLabelText("Event type")).toHaveValue("visit_logged");
       expect(screen.getByText("1 of 3 events shown")).toBeInTheDocument();
+      expect(screen.getByText("Event type: Visit logged")).toBeInTheDocument();
       expect(
-        screen.getByText("Event type: Cost line added")
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("Taylor Owner added a material cost line.")
+        screen.getByText("Taylor Owner logged a visit.")
       ).toBeInTheDocument();
       expect(
         screen.queryByText("Taylor Owner created the job.")
@@ -249,22 +244,22 @@ describe("organization activity page", () => {
     {
       hiddenSummary: "Jordan Admin added the Urgent label.",
       search: { actorUserId: taylorUserId },
-      visibleSummary: "Taylor Owner added a material cost line.",
+      visibleSummary: "Taylor Owner logged a visit.",
     },
     {
-      hiddenSummary: "Taylor Owner added a material cost line.",
+      hiddenSummary: "Taylor Owner logged a visit.",
       search: { fromDate: "2026-04-27" },
       visibleSummary: "Taylor Owner created the job.",
     },
     {
       hiddenSummary: "Taylor Owner created the job.",
       search: { toDate: "2026-04-27" },
-      visibleSummary: "Taylor Owner added a material cost line.",
+      visibleSummary: "Taylor Owner logged a visit.",
     },
     {
       hiddenSummary: "Taylor Owner created the job.",
       search: { jobTitle: "pump" },
-      visibleSummary: "Taylor Owner added a material cost line.",
+      visibleSummary: "Taylor Owner logged a visit.",
     },
   ] satisfies {
     hiddenSummary: string;
@@ -374,12 +369,14 @@ describe("organization activity page", () => {
               },
             ],
           }}
-          search={{ eventType: "visit_logged" }}
+          search={{ eventType: "status_changed" }}
         />
       );
 
       expect(screen.getByText("0 of 3 events shown")).toBeInTheDocument();
-      expect(screen.getByText("Event type: Visit logged")).toBeInTheDocument();
+      expect(
+        screen.getByText("Event type: Status changed")
+      ).toBeInTheDocument();
       expect(
         screen.getByText("No events match these filters.")
       ).toBeInTheDocument();
@@ -388,7 +385,7 @@ describe("organization activity page", () => {
           "Clear filters or adjust the actor, event, date, or job title to widen the audit trail."
         )
       ).toBeInTheDocument();
-      expect(screen.getByLabelText("Event type")).toHaveValue("visit_logged");
+      expect(screen.getByLabelText("Event type")).toHaveValue("status_changed");
 
       await user.click(screen.getByRole("button", { name: "Clear filters" }));
 

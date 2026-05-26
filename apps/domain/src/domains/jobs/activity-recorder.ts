@@ -1,9 +1,7 @@
 /* oxlint-disable unicorn/no-array-method-this-argument */
 import type {
-  CostLineId as CostLineIdType,
   Job,
   JobActivityPayload,
-  JobCostLineType,
   VisitIdType as VisitId,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
@@ -144,30 +142,7 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
         });
       });
 
-      const recordCostLineAdded = Effect.fn(
-        "JobsActivityRecorder.recordCostLineAdded"
-      )(function* (
-        actor: OrganizationActor,
-        input: {
-          readonly costLineId: CostLineIdType;
-          readonly costLineType: JobCostLineType;
-          readonly workItemId: Job["id"];
-        }
-      ) {
-        yield* repository.addActivity({
-          actorUserId: actor.userId,
-          organizationId: actor.organizationId,
-          payload: {
-            costLineId: input.costLineId,
-            costLineType: input.costLineType,
-            eventType: "cost_line_added",
-          },
-          workItemId: input.workItemId,
-        });
-      });
-
       return {
-        recordCostLineAdded,
         recordCreated,
         recordLabelAssigned,
         recordLabelRemoved,

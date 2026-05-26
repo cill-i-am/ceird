@@ -4,7 +4,6 @@ import {
   ContactEmailSchema,
   ContactNameSchema,
   ContactNotesSchema,
-  JobExternalReferenceSchema,
 } from "@ceird/jobs-core";
 import type {
   ContactIdType,
@@ -16,11 +15,7 @@ import {
   SITE_GEOCODING_FAILED_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
 } from "@ceird/sites-core";
-import type {
-  ServiceAreaOption,
-  SiteIdType,
-  SiteOption,
-} from "@ceird/sites-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import {
   Add01Icon,
   AlertSquareIcon,
@@ -78,7 +73,6 @@ import { AuthFormField } from "#/features/auth/auth-form-field";
 import {
   SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
-  buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   toOptionalTrimmedString,
@@ -136,7 +130,6 @@ interface JobsCreateFormState {
   readonly contactNotes: string;
   readonly contactPhone: string;
   readonly contactSelection: string;
-  readonly externalReference: string;
   readonly priority: JobPriority;
   readonly siteDraft: SiteCreateDraft;
   readonly siteSelection: string;
@@ -147,7 +140,6 @@ interface JobsCreateFieldErrors {
   readonly contactEmail?: string;
   readonly contactName?: string;
   readonly contactNotes?: string;
-  readonly externalReference?: string;
   readonly site?: SiteCreateFieldErrors;
   readonly siteSelection?: string;
   readonly title?: string;
@@ -156,9 +148,6 @@ interface JobsCreateFieldErrors {
 const decodeContactEmail = Schema.decodeUnknownSync(ContactEmailSchema);
 const decodeContactName = Schema.decodeUnknownSync(ContactNameSchema);
 const decodeContactNotes = Schema.decodeUnknownSync(ContactNotesSchema);
-const decodeJobExternalReference = Schema.decodeUnknownSync(
-  JobExternalReferenceSchema
-);
 
 const defaultFormState: JobsCreateFormState = {
   contactEmail: "",
@@ -166,7 +155,6 @@ const defaultFormState: JobsCreateFormState = {
   contactNotes: "",
   contactPhone: "",
   contactSelection: NONE_VALUE,
-  externalReference: "",
   priority: "none",
   siteDraft: defaultSiteCreateDraft,
   siteSelection: NONE_VALUE,
@@ -175,15 +163,21 @@ const defaultFormState: JobsCreateFormState = {
 
 // The create sheet keeps one local draft so validation and inline site/contact creation stay atomic.
 // react-doctor-disable-next-line
-export function JobsCreateSheet() {
+export function JobsCreateSheet({
+  initialSiteId,
+}: {
+  readonly initialSiteId?: SiteIdType;
+} = {}) {
   const navigate = useNavigate({ from: "/jobs/new" });
   const options = useJobsOptions();
   const [createResult, createJob] = useCreateJobMutation();
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
     {}
   );
-  const [values, setValues] =
-    React.useState<JobsCreateFormState>(defaultFormState);
+  const [values, setValues] = React.useState<JobsCreateFormState>({
+    ...defaultFormState,
+    siteSelection: initialSiteId ?? defaultFormState.siteSelection,
+  });
   const [overlayOpen, setOverlayOpen] = React.useState(true);
   const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
   const navigateAfterCloseRef = React.useRef(false);
@@ -199,9 +193,6 @@ export function JobsCreateSheet() {
       : resolveSelectedOptionId(options.sites, values.siteSelection);
   const contactGroups = deriveContactsForSite(options.contacts, selectedSiteId);
   const prioritySelectionGroups = buildPrioritySelectionGroups();
-  const siteServiceAreaSelectionGroups = buildSiteServiceAreaSelectionGroups(
-    options.serviceAreas
-  );
   const siteSelectionGroups = buildSiteSelectionGroups(options.sites);
   const contactSelectionGroups = buildContactSelectionGroups(contactGroups);
   const showInlineSiteSummary =
@@ -270,7 +261,7 @@ export function JobsCreateSheet() {
   }
 
   async function handleSubmit() {
-    const nextErrors = validate(values, options.serviceAreas);
+    const nextErrors = validate(values);
     setFieldErrors(nextErrors);
 
     if (hasFieldErrors(nextErrors)) {
@@ -304,11 +295,7 @@ export function JobsCreateSheet() {
       return;
     }
 
-    const payload = buildCreateJobInput(
-      values,
-      selectionIds,
-      options.serviceAreas
-    );
+    const payload = buildCreateJobInput(values, selectionIds);
     const exit = await createJob(payload);
 
     if (Exit.isSuccess(exit)) {
@@ -424,27 +411,6 @@ export function JobsCreateSheet() {
                     setValues((current) => ({
                       ...current,
                       priority: nextValue as JobPriority,
-                    }))
-                  }
-                />
-              </AuthFormField>
-
-              <AuthFormField
-                label="External reference"
-                htmlFor="job-external-reference"
-                errorText={fieldErrors.externalReference}
-              >
-                <Input
-                  id="job-external-reference"
-                  value={values.externalReference}
-                  placeholder="e.g. CLAIM-2026-0042"
-                  aria-invalid={
-                    Boolean(fieldErrors.externalReference) || undefined
-                  }
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      externalReference: event.target.value,
                     }))
                   }
                 />
@@ -644,7 +610,7 @@ export function JobsCreateSheet() {
               <div className="min-w-0">
                 <DrawerTitle>New site</DrawerTitle>
                 <DrawerDescription className="sr-only">
-                  Add a site name, service area, address, and access notes.
+                  Add a site name, address, and access notes.
                 </DrawerDescription>
               </div>
               <Button
@@ -664,29 +630,12 @@ export function JobsCreateSheet() {
               draft={values.siteDraft}
               errors={fieldErrors.site ?? {}}
               idPrefix="new-site"
-              serviceAreaGroups={siteServiceAreaSelectionGroups}
               onDraftChange={(siteDraft) =>
                 setValues((current) => ({
                   ...current,
                   siteDraft,
                 }))
               }
-              onServiceAreaSelectionChange={(nextValue) => {
-                setFieldErrors((current) => ({
-                  ...current,
-                  site: {
-                    ...current.site,
-                    serviceAreaSelection: undefined,
-                  },
-                }));
-                setValues((current) => ({
-                  ...current,
-                  siteDraft: {
-                    ...current.siteDraft,
-                    serviceAreaSelection: nextValue,
-                  },
-                }));
-              }}
             />
           </div>
 
@@ -939,8 +888,7 @@ function ResponsiveCreateOverlay({
             <div className="min-w-0">
               <DrawerTitle>New job</DrawerTitle>
               <DrawerDescription className="sr-only">
-                Add a job title, priority, site, contact, and external
-                reference.
+                Add a job title, priority, site, and contact.
               </DrawerDescription>
             </div>
             <DrawerClose asChild>
@@ -1048,14 +996,11 @@ function buildContactSelectionGroups(
   return groups;
 }
 
-function validate(
-  values: JobsCreateFormState,
-  serviceAreas: readonly ServiceAreaOption[]
-): JobsCreateFieldErrors {
+function validate(values: JobsCreateFormState): JobsCreateFieldErrors {
   const validateInlineSite = values.siteSelection === INLINE_CREATE_VALUE;
   const validateInlineContact = values.contactSelection === INLINE_CREATE_VALUE;
   const siteErrors = validateInlineSite
-    ? validateSiteCreateDraft(values.siteDraft, serviceAreas, {
+    ? validateSiteCreateDraft(values.siteDraft, {
         nameRequiredMessage: "Add the site name or pick an existing site.",
       })
     : undefined;
@@ -1080,11 +1025,6 @@ function validate(
           "Use 2,000 characters or fewer."
         )
       : undefined,
-    externalReference: validateOptionalBoundaryField(
-      values.externalReference,
-      decodeJobExternalReference,
-      "Use 120 characters or fewer."
-    ),
     site:
       siteErrors && hasSiteCreateFieldErrors(siteErrors)
         ? siteErrors
@@ -1105,7 +1045,6 @@ function hasFieldErrors(errors: JobsCreateFieldErrors) {
     errors.contactEmail !== undefined ||
     errors.contactName !== undefined ||
     errors.contactNotes !== undefined ||
-    errors.externalReference !== undefined ||
     errors.siteSelection !== undefined ||
     errors.title !== undefined ||
     (errors.site !== undefined && hasSiteCreateFieldErrors(errors.site))
@@ -1169,14 +1108,12 @@ function isHandledCreateJobError(error: unknown) {
 
 function buildCreateJobInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceAreaOption[]
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput {
   return {
     contact: resolveCreateJobContactInput(values, selectionIds),
-    externalReference: toOptionalTrimmedString(values.externalReference),
     priority: values.priority === "none" ? undefined : values.priority,
-    site: resolveCreateJobSiteInput(values, selectionIds, serviceAreas),
+    site: resolveCreateJobSiteInput(values, selectionIds),
     title: values.title.trim(),
   };
 }
@@ -1216,8 +1153,7 @@ function resolveCreateJobContactInput(
 
 function resolveCreateJobSiteInput(
   values: JobsCreateFormState,
-  selectionIds: JobsCreateSelectionIds,
-  serviceAreas: readonly ServiceAreaOption[]
+  selectionIds: JobsCreateSelectionIds
 ): CreateJobInput["site"] {
   if (values.siteSelection === NONE_VALUE) {
     return undefined;
@@ -1226,7 +1162,7 @@ function resolveCreateJobSiteInput(
   if (values.siteSelection === INLINE_CREATE_VALUE) {
     return {
       kind: "create",
-      input: buildCreateSiteInputFromDraft(values.siteDraft, serviceAreas),
+      input: buildCreateSiteInputFromDraft(values.siteDraft),
     };
   }
 

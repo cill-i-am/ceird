@@ -63,12 +63,6 @@ const detailResponse: JobDetailResponse = {
   },
   comments: [],
   activity: [],
-  costs: {
-    lines: [],
-    summary: {
-      subtotalMinor: 0,
-    },
-  },
   viewerAccess: {
     canComment: true,
     visibility: "internal",
@@ -106,7 +100,6 @@ const siteWithLabelResponse: CreateSiteResponse = {
 };
 
 const siteOptionsResponse: SitesOptionsResponse = {
-  serviceAreas: [],
   sites: [createSiteResponse],
 };
 

@@ -6,17 +6,15 @@ import {
   AgentActionKindSchema,
 } from "./action-registry.js";
 import type { AgentActionSpec } from "./action-registry.js";
-import { jobAgentActions, rateCardAgentActions } from "./actions/jobs.js";
+import { jobAgentActions } from "./actions/jobs.js";
 import { labelAgentActions } from "./actions/labels.js";
 import { organizationAgentActions } from "./actions/organization.js";
-import { serviceAreaAgentActions, siteAgentActions } from "./actions/sites.js";
+import { siteAgentActions } from "./actions/sites.js";
 
 export const AGENT_ACTIONS = [
   ...labelAgentActions,
   ...siteAgentActions,
-  ...serviceAreaAgentActions,
   ...jobAgentActions,
-  ...rateCardAgentActions,
   ...organizationAgentActions,
 ] as const;
 

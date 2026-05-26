@@ -89,17 +89,15 @@ Path: `packages/jobs-core`
 
 Exports the shared jobs contract:
 
-- branded IDs for jobs, contacts, rate cards, visits, collaborators, cost
-  lines, activity, users, and organizations
+- branded IDs for jobs, contacts, visits, collaborators, activity, users, and
+  organizations
 - domain literals and schemas for job kind, status, priority, collaborator
-  access, rate-card line kind, cost line fields, visits, and
-  activity event types
+  access, visits, and activity event types
 - job comment DTOs extended from `@ceird/comments-core`
 - DTO schemas and inferred DTO types
-- cost summary helpers
 - typed `Schema.TaggedError` classes with HTTP status annotations
-- `JobsApi`, an Effect `HttpApi` contract for jobs, rate cards, job label
-  assignment, collaborators, visits, comments, costs, and activity
+- `JobsApi`, an Effect `HttpApi` contract for jobs, job label assignment,
+  collaborators, visits, comments, and activity
 
 Subpath exports `@ceird/jobs-core/ids` and `@ceird/jobs-core/dto` are available
 for runtimes, such as the Agent Worker, that need schemas without pulling in the
@@ -113,18 +111,17 @@ out of this package.
 
 Path: `packages/sites-core`
 
-Exports the shared sites and service-area contract:
+Exports the shared sites contract:
 
-- `SiteId` and `ServiceAreaId`
+- `SiteId`
 - site country, geocoding provider, latitude, and longitude schemas
 - site create/update inputs, rich site option/detail DTOs, site options response,
   and cursor-paginated site list request/response DTOs
 - site comment DTOs extended from `@ceird/comments-core`
 - site label assignment inputs and endpoints; this package depends on
   `@ceird/labels-core` for label IDs and schemas
-- service-area create/update/list DTOs
-- typed site, service-area, access-denied, storage, and geocoding errors
-- `SitesApi`, `SitesApiGroup`, and `ServiceAreasApiGroup`
+- typed site, access-denied, storage, and geocoding errors
+- `SitesApi` and `SitesApiGroup`
 
 Subpath exports `@ceird/sites-core/ids` and `@ceird/sites-core/dto` are
 available for schema-only consumers that should not bundle HTTP API groups.

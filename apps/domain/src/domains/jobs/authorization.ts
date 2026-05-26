@@ -61,17 +61,6 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
               )
             );
 
-      const ensureCanManageConfiguration = (
-        actor: OrganizationActor
-      ): JobAuthorizationCheck =>
-        hasElevatedAccess(actor)
-          ? Effect.void
-          : Effect.fail(
-              makeAccessDenied(
-                "Only organization owners and admins can manage job configuration"
-              )
-            );
-
       const ensureCanViewOrganizationActivity = (
         actor: OrganizationActor
       ): JobAuthorizationCheck =>
@@ -132,14 +121,14 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
           return Effect.void;
         }
 
-        return grant === undefined
-          ? Effect.fail(
+        return grant?.accessLevel === "comment"
+          ? Effect.void
+          : Effect.fail(
               makeAccessDenied(
-                "External collaborators need job access to comment on jobs",
+                "External collaborators need comment access to comment on jobs",
                 workItemId
               )
-            )
-          : Effect.void;
+            );
       };
 
       const ensureCanAddVisit = (
@@ -152,20 +141,6 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
           : Effect.fail(
               makeAccessDenied(
                 "Members can only log visits on jobs assigned to them",
-                job.id
-              )
-            );
-
-      const ensureCanAddCostLine = (
-        actor: OrganizationActor,
-        job: Job
-      ): JobAuthorizationCheck =>
-        hasElevatedAccess(actor) ||
-        (isInternalActor(actor) && job.assigneeId === actor.userId)
-          ? Effect.void
-          : Effect.fail(
-              makeAccessDenied(
-                "Members can only add cost lines on jobs assigned to them",
                 job.id
               )
             );
@@ -224,12 +199,10 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
             );
 
       return {
-        ensureCanAddCostLine,
         ensureCanAddVisit,
         ensureCanAssignLabels,
         ensureCanComment,
         ensureCanCreate,
-        ensureCanManageConfiguration,
         ensureCanManageCollaborators,
         ensureCanPatch,
         ensureCanReopen,
@@ -241,12 +214,6 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
     }),
   }
 ) {
-  static readonly ensureCanAddCostLine = (
-    ...args: Parameters<
-      Context.Service.Shape<typeof JobsAuthorization>["ensureCanAddCostLine"]
-    >
-  ) =>
-    JobsAuthorization.use((service) => service.ensureCanAddCostLine(...args));
   static readonly ensureCanAddVisit = (
     ...args: Parameters<
       Context.Service.Shape<typeof JobsAuthorization>["ensureCanAddVisit"]
@@ -277,16 +244,6 @@ export class JobsAuthorization extends Context.Service<JobsAuthorization>()(
   ) =>
     JobsAuthorization.use((service) =>
       service.ensureCanManageCollaborators(...args)
-    );
-  static readonly ensureCanManageConfiguration = (
-    ...args: Parameters<
-      Context.Service.Shape<
-        typeof JobsAuthorization
-      >["ensureCanManageConfiguration"]
-    >
-  ) =>
-    JobsAuthorization.use((service) =>
-      service.ensureCanManageConfiguration(...args)
     );
   static readonly ensureCanPatch = (
     ...args: Parameters<

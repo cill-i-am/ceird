@@ -9,7 +9,6 @@ export interface SiteLocationLike {
   readonly latitude?: number;
   readonly longitude?: number;
   readonly name?: string;
-  readonly serviceAreaName?: string;
   readonly town?: string;
 }
 

@@ -79,7 +79,6 @@ describe("jobs coverage map", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Depot",
-                serviceAreaName: "North",
               },
             ],
             [
@@ -139,7 +138,6 @@ describe("jobs coverage map", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Depot",
-                serviceAreaName: "North",
               },
             ],
           ])
@@ -187,7 +185,6 @@ describe("jobs coverage map", () => {
                 latitude: 53.3498,
                 longitude: -6.2603,
                 name: "Depot",
-                serviceAreaName: "North",
               },
             ],
           ])

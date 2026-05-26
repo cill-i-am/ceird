@@ -5,7 +5,6 @@ import type {
   LabelNotFoundError,
 } from "@ceird/labels-core";
 import type {
-  ServiceAreaNotFoundError,
   SiteGeocodingFailedError,
   SiteGeocodingProviderError,
   SiteNotFoundError,
@@ -17,7 +16,6 @@ import {
   ContactId,
   JobCollaboratorId,
   OrganizationId,
-  RateCardId,
   UserId,
   VisitId,
   WorkItemId,
@@ -76,17 +74,6 @@ export class JobStorageError extends Schema.TaggedErrorClass<JobStorageError>()(
     cause: Schema.optional(Schema.String),
   },
   { httpApiStatus: 503 }
-) {}
-
-export const JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG =
-  "@ceird/jobs-core/JobCostSummaryLimitExceededError" as const;
-export class JobCostSummaryLimitExceededError extends Schema.TaggedErrorClass<JobCostSummaryLimitExceededError>()(
-  JOB_COST_SUMMARY_LIMIT_EXCEEDED_ERROR_TAG,
-  {
-    message: Schema.String,
-    workItemId: WorkItemId,
-  },
-  { httpApiStatus: 422 }
 ) {}
 
 export const INVALID_JOB_TRANSITION_ERROR_TAG =
@@ -185,25 +172,12 @@ export class OrganizationMemberNotFoundError extends Schema.TaggedErrorClass<Org
   { httpApiStatus: 404 }
 ) {}
 
-export const RATE_CARD_NOT_FOUND_ERROR_TAG =
-  "@ceird/jobs-core/RateCardNotFoundError" as const;
-export class RateCardNotFoundError extends Schema.TaggedErrorClass<RateCardNotFoundError>()(
-  RATE_CARD_NOT_FOUND_ERROR_TAG,
-  {
-    message: Schema.String,
-    organizationId: OrganizationId,
-    rateCardId: RateCardId,
-  },
-  { httpApiStatus: 404 }
-) {}
-
 export type JobsError =
   | JobNotFoundError
   | JobAccessDeniedError
   | JobListCursorInvalidError
   | OrganizationActivityCursorInvalidError
   | JobStorageError
-  | JobCostSummaryLimitExceededError
   | InvalidJobTransitionError
   | BlockedReasonRequiredError
   | CoordinatorMatchesAssigneeError
@@ -216,6 +190,4 @@ export type JobsError =
   | SiteGeocodingFailedError
   | SiteGeocodingProviderError
   | ContactNotFoundError
-  | OrganizationMemberNotFoundError
-  | ServiceAreaNotFoundError
-  | RateCardNotFoundError;
+  | OrganizationMemberNotFoundError;

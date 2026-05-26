@@ -30,7 +30,6 @@ import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import { createBrowserLabel } from "#/features/labels/labels-state";
 import type { OrganizationQueryScope } from "#/features/organizations/organization-query-scope";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
-import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
@@ -53,8 +52,6 @@ import {
 
 type SitesCollection = ReturnType<typeof makeSitesCollection>;
 type SiteCommentsCollection = ReturnType<typeof makeSiteCommentsCollection>;
-
-const EMPTY_SITE_COMMENTS: readonly SiteComment[] = [];
 
 interface SitesNotice {
   readonly kind: "created" | "updated";
@@ -112,7 +109,6 @@ interface SitesStateContextValue {
     organizationId: OrganizationId,
     response: SitesOptionsResponse
   ) => Promise<void>;
-  readonly serviceAreas: SitesOptionsResponse["serviceAreas"];
   readonly store: SitesStateStore;
   readonly updateSite: (
     siteId: SiteIdType,
@@ -126,7 +122,6 @@ interface SitesStateContextValue {
 interface SitesState {
   readonly createSiteResult: SitesAsyncResult;
   readonly notice: SitesNotice | null;
-  readonly serviceAreas: SitesOptionsResponse["serviceAreas"];
   readonly updateSiteResults: Readonly<
     Partial<Record<SiteIdType, SitesAsyncResult>>
   >;
@@ -145,10 +140,6 @@ type SitesStateAction =
       readonly result: SitesAsyncResult;
       readonly siteId: SiteIdType;
       readonly type: "set-update-site-result";
-    }
-  | {
-      readonly serviceAreas: SitesOptionsResponse["serviceAreas"];
-      readonly type: "replace-options-state";
     };
 
 const SitesStateContext = React.createContext<SitesStateContextValue | null>(
@@ -200,10 +191,9 @@ export function SitesStateProvider({
   const [state, dispatch] = React.useReducer(sitesStateReducer, {
     createSiteResult: idleSitesAsyncResult,
     notice: null,
-    serviceAreas: options.serviceAreas,
     updateSiteResults: {},
   } satisfies SitesState);
-  const { createSiteResult, notice, serviceAreas, updateSiteResults } = state;
+  const { createSiteResult, notice, updateSiteResults } = state;
 
   React.useEffect(() => {
     organizationIdRef.current = activeOrganizationId;
@@ -217,10 +207,6 @@ export function SitesStateProvider({
       pruneInactiveSiteCommentCollections(store, response.sites);
       store.initialCommentsBySiteId.clear();
       await replaceSites(store, response.sites);
-      dispatch({
-        serviceAreas: response.serviceAreas,
-        type: "replace-options-state",
-      });
     },
     [organizationIdRef, store]
   );
@@ -383,7 +369,6 @@ export function SitesStateProvider({
       refreshSiteComments,
       removeSiteLabel,
       replaceSitesOptionsState,
-      serviceAreas,
       store,
       updateSite,
       updateSiteResults,
@@ -399,7 +384,6 @@ export function SitesStateProvider({
       refreshSiteComments,
       removeSiteLabel,
       replaceSitesOptionsState,
-      serviceAreas,
       store,
       updateSite,
       updateSiteResults,
@@ -410,15 +394,14 @@ export function SitesStateProvider({
 }
 
 export function useSitesOptions(): SitesOptionsResponse {
-  const { serviceAreas, store } = useSitesStateContext();
+  const { store } = useSitesStateContext();
   const sites = useSitesCollectionItems(store);
 
   return React.useMemo(
     () => ({
-      serviceAreas,
       sites: sortSiteOptions(sites),
     }),
-    [serviceAreas, sites]
+    [sites]
   );
 }
 
@@ -444,64 +427,6 @@ export function useUpdateSiteMutation(siteId: SiteIdType) {
       [siteId, updateSite]
     ),
   ] as const;
-}
-
-export function useSiteComments(siteId: SiteIdType) {
-  const { store } = useSitesStateContext();
-  const comments = useSiteCommentCollectionItems(store, siteId);
-
-  return React.useMemo(() => sortSiteComments(comments), [comments]);
-}
-
-export function useRefreshSiteCommentsMutation(siteId: SiteIdType) {
-  const { refreshSiteComments } = useSitesStateContext();
-
-  return React.useCallback(
-    () => refreshSiteComments(siteId),
-    [refreshSiteComments, siteId]
-  );
-}
-
-export function useAddSiteCommentMutation(siteId: SiteIdType) {
-  const { addSiteComment } = useSitesStateContext();
-
-  return React.useCallback(
-    (input: AddSiteCommentInput) => addSiteComment(siteId, input),
-    [addSiteComment, siteId]
-  );
-}
-
-export function useAssignSiteLabelMutation(siteId: SiteIdType) {
-  const { assignSiteLabel } = useSitesStateContext();
-
-  return React.useCallback(
-    (input: AssignSiteLabelInput) => assignSiteLabel(siteId, input),
-    [assignSiteLabel, siteId]
-  );
-}
-
-export function useCreateAndAssignSiteLabelMutation(siteId: SiteIdType) {
-  const { createAndAssignSiteLabel } = useSitesStateContext();
-
-  return React.useCallback(
-    (input: CreateLabelInput) => createAndAssignSiteLabel(siteId, input),
-    [createAndAssignSiteLabel, siteId]
-  );
-}
-
-export function useRemoveSiteLabelMutation(siteId: SiteIdType) {
-  const { removeSiteLabel } = useSitesStateContext();
-
-  return React.useCallback(
-    (labelId: LabelIdType) => removeSiteLabel(siteId, labelId),
-    [removeSiteLabel, siteId]
-  );
-}
-
-export function useReplaceSitesOptionsState() {
-  const { replaceSitesOptionsState } = useSitesStateContext();
-
-  return replaceSitesOptionsState;
 }
 
 export function isSitesAsyncFailure(result: SitesAsyncResult): boolean {
@@ -648,13 +573,6 @@ function sitesStateReducer(
   action: SitesStateAction
 ): SitesState {
   switch (action.type) {
-    case "replace-options-state": {
-      return {
-        ...state,
-        serviceAreas: action.serviceAreas,
-      };
-    }
-
     case "set-create-site-result": {
       return {
         ...state,
@@ -692,23 +610,6 @@ function useSitesCollectionItems(
   return useHydratedCollectionItems(
     store.sites,
     store.fallbackSitesRef.current
-  );
-}
-
-function useSiteCommentCollectionItems(
-  store: SitesStateStore,
-  siteId: SiteIdType
-): readonly SiteComment[] {
-  const isHydrated = useIsHydrated();
-  const collection = React.useMemo(
-    () =>
-      isHydrated ? getOrCreateSiteCommentsCollection(store, siteId) : null,
-    [isHydrated, siteId, store]
-  );
-
-  return useHydratedCollectionItems(
-    collection,
-    store.initialCommentsBySiteId.get(siteId) ?? EMPTY_SITE_COMMENTS
   );
 }
 

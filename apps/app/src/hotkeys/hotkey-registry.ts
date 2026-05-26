@@ -335,18 +335,18 @@ export const HOTKEYS = {
     label: "Focus comment",
     scope: "job-detail",
   },
-  jobDetailCost: {
-    group: "Job drawer",
-    hotkey: "X",
-    id: "jobDetailCost",
-    label: "Focus cost line",
-    scope: "job-detail",
-  },
   jobDetailVisit: {
     group: "Job drawer",
     hotkey: "V",
     id: "jobDetailVisit",
     label: "Focus visit note or date",
+    scope: "job-detail",
+  },
+  jobDetailCollaborators: {
+    group: "Job drawer",
+    hotkey: "E",
+    id: "jobDetailCollaborators",
+    label: "Focus collaborators",
     scope: "job-detail",
   },
   jobDetailSite: {

@@ -2,7 +2,6 @@ import type { Context } from "effect";
 import { Effect, Layer, Stream } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { ConfigurationService } from "../jobs/configuration-service.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsService } from "../labels/service.js";
 import { SitesService } from "../sites/service.js";
@@ -19,6 +18,7 @@ import {
 describe("mcp tools registry metadata", () => {
   it("registers exact unique tool names", () => {
     const names = MCP_TOOL_REGISTRATIONS.map((tool) => tool.name);
+
     expect(names).toStrictEqual([
       "ceird.labels.list",
       "ceird.sites.options",
@@ -26,7 +26,6 @@ describe("mcp tools registry metadata", () => {
       "ceird.jobs.detail",
       "ceird.jobs.options",
       "ceird.jobs.activity.list",
-      "ceird.rate_cards.list",
       "ceird.jobs.add_comment",
       "ceird.jobs.assign_label",
       "ceird.jobs.remove_label",
@@ -52,16 +51,6 @@ describe("mcp tools registry metadata", () => {
     expect(byName.get("ceird.labels.list")).toBe("ceird:read");
     expect(byName.get("ceird.jobs.add_comment")).toBe("ceird:write");
     expect(byName.get("ceird.jobs.activity.list")).toBe("ceird:admin");
-  });
-
-  it("marks risky tools as admin tools", () => {
-    const byName = new Map(
-      MCP_TOOL_REGISTRATIONS.map((tool) => [tool.name, tool.isAdminTool])
-    );
-
-    expect(byName.get("ceird.jobs.activity.list")).toBeTruthy();
-    expect(byName.get("ceird.rate_cards.list")).toBeTruthy();
-    expect(byName.get("ceird.jobs.list")).toBeFalsy();
   });
 });
 
@@ -110,36 +99,13 @@ describe("effect ai mcp toolkit", () => {
     expect(labelsCalled).toBeTruthy();
     expect(result?.encodedResult).toStrictEqual({ ok: true });
   });
-
-  it("fails before calling the domain service when scope is insufficient", async () => {
-    let rateCardsCalled = false;
-
-    await expect(
-      runToolkitTool(
-        "ceird.rate_cards.list",
-        {},
-        {
-          scopes: ["ceird:read"],
-        },
-        makeTestToolServicesLayer({
-          listRateCards: () => {
-            rateCardsCalled = true;
-            return Effect.succeed({ items: [] });
-          },
-        })
-      )
-    ).rejects.toThrow("Forbidden: missing ceird:admin scope");
-    expect(rateCardsCalled).toBeFalsy();
-  });
 });
 
 function runToolkitTool(
   name: keyof typeof CeirdMcpToolkit.tools,
   params: unknown,
   runtime: ContextRuntime,
-  servicesLayer: Layer.Layer<
-    ConfigurationService | JobsService | LabelsService | SitesService
-  >
+  servicesLayer: Layer.Layer<JobsService | LabelsService | SitesService>
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -176,7 +142,6 @@ interface ContextRuntime {
 
 function makeTestToolServicesLayer(options: {
   readonly labelsList?: () => Effect.Effect<unknown>;
-  readonly listRateCards?: () => Effect.Effect<unknown>;
 }) {
   return Layer.mergeAll(
     Layer.succeed(
@@ -184,14 +149,6 @@ function makeTestToolServicesLayer(options: {
       LabelsService.of({
         list: options.labelsList ?? notImplementedToolService("Labels.list"),
       } as unknown as Context.Service.Shape<typeof LabelsService>)
-    ),
-    Layer.succeed(
-      ConfigurationService,
-      ConfigurationService.of({
-        listRateCards:
-          options.listRateCards ??
-          notImplementedToolService("Configuration.listRateCards"),
-      } as unknown as Context.Service.Shape<typeof ConfigurationService>)
     ),
     Layer.succeed(
       JobsService,

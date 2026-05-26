@@ -1,6 +1,5 @@
 "use client";
 import type { JobListItem, JobPriority, JobStatus } from "@ceird/jobs-core";
-import { SERVICE_AREA_NOT_FOUND_ERROR_TAG } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import {
   ArrowUpRight01Icon,
@@ -10,13 +9,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Cause, Exit, Option } from "effect";
+import { Exit } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
-import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
   DrawerClose,
   DrawerContent,
@@ -41,12 +39,9 @@ import { SiteLocationMapPreview } from "#/features/sites/site-location-map-previ
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
-  SITE_CREATE_NONE_VALUE,
   SiteAccessNotesField,
   SiteAddressFields,
-  SiteNestedServiceAreaField,
   buildCreateSiteInputFromDraft,
-  buildSiteServiceAreaSelectionGroups,
   defaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   validateSiteCreateDraft,
@@ -92,7 +87,7 @@ const RELATED_JOB_STATUS_LABELS = {
   new: "New",
   triaged: "Triaged",
 } satisfies Record<JobStatus, string>;
-type SiteDetailEditor = "location" | "notes" | "service-area";
+type SiteDetailEditor = "location" | "notes";
 
 export function SitesDetailSheet({
   hasMoreRelatedJobs = false,
@@ -114,10 +109,6 @@ export function SitesDetailSheet({
   );
   const [updateResult, updateSite] = useUpdateSiteMutation(siteId);
   const canEdit = hasOrganizationElevatedAccess(viewer.role);
-  const serviceAreaGroups = React.useMemo(
-    () => buildSiteServiceAreaSelectionGroups(options.serviceAreas),
-    [options.serviceAreas]
-  );
   const [values, setValues] = React.useState<SitesCreateFormState>(() =>
     currentSite ? buildFormStateFromSite(currentSite) : defaultSiteCreateDraft
   );
@@ -191,36 +182,19 @@ export function SitesDetailSheet({
       return false;
     }
 
-    const nextErrors = validateSiteCreateDraft(
-      nextValues,
-      options.serviceAreas
-    );
+    const nextErrors = validateSiteCreateDraft(nextValues);
     setFieldErrors(nextErrors);
 
     if (hasSiteCreateFieldErrors(nextErrors)) {
       return false;
     }
 
-    const exit = await updateSite(
-      buildCreateSiteInputFromDraft(nextValues, options.serviceAreas)
-    );
+    const exit = await updateSite(buildCreateSiteInputFromDraft(nextValues));
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
       onSuccess?.();
       return true;
-    }
-
-    const failure = Cause.findErrorOption(exit.cause);
-
-    if (
-      Option.isSome(failure) &&
-      failure.value._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
-    ) {
-      setFieldErrors((current) => ({
-        ...current,
-        serviceAreaSelection: failure.value.message,
-      }));
     }
 
     return false;
@@ -339,8 +313,7 @@ export function SitesDetailSheet({
         >
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {isSitesAsyncFailure(updateResult) &&
-              !isServiceAreaNotFoundError(updateResult.error) ? (
+              {isSitesAsyncFailure(updateResult) ? (
                 <Alert variant="destructive" className="mx-5 mt-4 sm:mx-6">
                   <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
                   <AlertTitle>We couldn&apos;t update that site.</AlertTitle>
@@ -364,6 +337,7 @@ export function SitesDetailSheet({
                     canCreateJobs={canEdit}
                     hasMoreJobs={hasMoreRelatedJobs}
                     jobs={relatedJobs}
+                    siteId={siteId}
                   />
                 </div>
               </section>
@@ -374,7 +348,6 @@ export function SitesDetailSheet({
             activeEditor={activeEditor}
             fieldErrors={fieldErrors}
             onSubmit={handleEditorSubmit}
-            serviceAreaGroups={serviceAreaGroups}
             setFieldErrors={setFieldErrors}
             setValues={setValues}
             values={values}
@@ -577,29 +550,6 @@ function SiteDetailsCard({
         </div>
       </div>
 
-      <div className="group/site-service-area border-t px-4 py-3">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <SummaryItem
-            label="Service area"
-            value={site.serviceAreaName ?? "No service area"}
-          />
-          {canEdit ? (
-            <DrawerTrigger asChild>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                aria-label="Edit service area"
-                className="opacity-0 transition-opacity group-hover/site-service-area:opacity-100 focus-visible:opacity-100"
-                onClick={() => onOpenEditor("service-area")}
-              >
-                Edit
-              </Button>
-            </DrawerTrigger>
-          ) : null}
-        </div>
-      </div>
-
       <div className="group/site-notes border-t p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-medium text-foreground">Notes summary</h3>
@@ -645,7 +595,6 @@ function SiteDetailEditorDrawer({
   activeEditor,
   fieldErrors,
   onSubmit,
-  serviceAreaGroups,
   setFieldErrors,
   setValues,
   values,
@@ -654,7 +603,6 @@ function SiteDetailEditorDrawer({
   readonly activeEditor: SiteDetailEditor | null;
   readonly fieldErrors: SitesCreateFieldErrors;
   readonly onSubmit: () => Promise<boolean>;
-  readonly serviceAreaGroups: readonly CommandSelectGroup[];
   readonly setFieldErrors: React.Dispatch<
     React.SetStateAction<SitesCreateFieldErrors>
   >;
@@ -730,16 +678,6 @@ function SiteDetailEditorDrawer({
         </DrawerHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
-          {activeEditor === "service-area" ? (
-            <SiteNestedServiceAreaField
-              draft={values}
-              errors={fieldErrors}
-              idPrefix="site-detail-editor"
-              serviceAreaGroups={serviceAreaGroups}
-              onDraftPatch={updateDraft}
-            />
-          ) : null}
-
           {activeEditor === "notes" ? (
             <SiteAccessNotesField
               draft={values}
@@ -792,13 +730,6 @@ function getSiteDetailEditorCopy(editor: SiteDetailEditor) {
         title: "Edit notes summary",
       };
     }
-    case "service-area": {
-      return {
-        description: "Assign this site to the operational area that owns it.",
-        saveLabel: "Save service area",
-        title: "Edit service area",
-      };
-    }
     default: {
       const exhaustiveEditor: never = editor;
 
@@ -807,31 +738,16 @@ function getSiteDetailEditorCopy(editor: SiteDetailEditor) {
   }
 }
 
-function SummaryItem({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <p className="text-xs font-medium text-muted-foreground uppercase">
-        {label}
-      </p>
-      <div className="text-sm leading-6 text-foreground">{value}</div>
-    </div>
-  );
-}
-
 function SiteRelatedJobs({
   canCreateJobs,
   hasMoreJobs,
   jobs,
+  siteId,
 }: {
   readonly canCreateJobs: boolean;
   readonly hasMoreJobs: boolean;
   readonly jobs: readonly JobListItem[];
+  readonly siteId: SiteIdType;
 }) {
   if (jobs.length === 0) {
     return (
@@ -856,6 +772,7 @@ function SiteRelatedJobs({
             {canCreateJobs ? (
               <Link
                 to="/jobs/new"
+                search={{ siteId }}
                 className={buttonVariants({
                   size: "sm",
                   variant: "outline",
@@ -966,7 +883,6 @@ const SITE_DETAIL_PATCH_ERROR_FIELDS = [
   "county",
   "eircode",
   "name",
-  "serviceAreaSelection",
 ] as const satisfies readonly (keyof SitesCreateFieldErrors)[];
 
 function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {
@@ -975,19 +891,9 @@ function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {
     addressLine1: site.addressLine1 ?? "",
     addressLine2: site.addressLine2 ?? "",
     county: site.county ?? "",
-    country: "IE",
+    country: site.country,
     eircode: site.eircode ?? "",
     name: site.name,
-    serviceAreaSelection: site.serviceAreaId ?? SITE_CREATE_NONE_VALUE,
     town: site.town ?? "",
   };
-}
-
-function isServiceAreaNotFoundError(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === SERVICE_AREA_NOT_FOUND_ERROR_TAG
-  );
 }

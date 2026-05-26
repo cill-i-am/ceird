@@ -70,7 +70,6 @@ export interface AuthenticatedHomeSiteItem {
   readonly address: string;
   readonly id: SiteIdType;
   readonly name: string;
-  readonly serviceAreaName?: string | undefined;
   readonly updatedAt: string;
 }
 
@@ -180,7 +179,6 @@ export function buildAuthenticatedHomeDashboard({
           address: buildSiteAddressLines(site).join(", "),
           id: site.id,
           name: site.name,
-          serviceAreaName: site.serviceAreaName,
           updatedAt: formatJobDateTime(site.geocodedAt),
         }))
         .filter((site) => site.activeJobCount > 0)

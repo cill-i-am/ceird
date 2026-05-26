@@ -14,7 +14,6 @@ describe("authenticated shell home dashboard model", () => {
     const inactiveSiteId = decodeSiteId("11111111-1111-4111-8111-111111111111");
     const activeSiteId = decodeSiteId("22222222-2222-4222-8222-222222222222");
     const sites: SitesOptionsResponse = {
-      serviceAreas: [],
       sites: [
         buildSiteOption(inactiveSiteId, "Inactive first"),
         buildSiteOption(activeSiteId, "Active second"),

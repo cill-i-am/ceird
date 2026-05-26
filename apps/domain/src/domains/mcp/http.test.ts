@@ -528,7 +528,7 @@ describe("mcp http handler", () => {
           method: "tools/call",
           params: {
             arguments: {},
-            name: "ceird.rate_cards.list",
+            name: "ceird.jobs.activity.list",
           },
         }),
       })

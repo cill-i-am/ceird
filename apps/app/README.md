@@ -34,23 +34,23 @@ you intentionally want Playwright to start the package-local app/API fallback.
 
 ## Important Paths
 
-| Path                         | Purpose                                                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `src/routes`                 | TanStack Router file routes.                                                                                              |
-| `src/routeTree.gen.ts`       | Generated route tree; do not edit manually.                                                                               |
-| `src/features/auth`          | Auth forms, route guards, redirects, and session helpers.                                                                 |
-| `src/features/jobs`          | Jobs list/detail/create flows, jobs client, state, maps, labels, costs, comments, visits, and collaborators.              |
-| `src/features/organizations` | Organization onboarding, members, invitations, settings, service areas, rate cards, labels, and active organization sync. |
-| `src/features/sites`         | Sites list, create flow, detail sheet, and state.                                                                         |
-| `src/features/activity`      | Organization activity feed.                                                                                               |
-| `src/features/settings`      | User settings.                                                                                                            |
-| `src/features/command-bar`   | Command palette and global actions.                                                                                       |
-| `src/components`             | Shared app components.                                                                                                    |
-| `src/components/ui`          | shadcn-style UI primitives.                                                                                               |
-| `src/hotkeys`                | Shared hotkey registry, route hotkeys, keycap UI, and shortcuts help overlay.                                             |
-| `src/lib`                    | API origin, auth client, and server forwarding helpers.                                                                   |
-| `infra/cloudflare-vite.ts`   | App-owned Alchemy Cloudflare Vite declaration and deployed env contract.                                                  |
-| `e2e`                        | Playwright tests and page objects.                                                                                        |
+| Path                         | Purpose                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/routes`                 | TanStack Router file routes.                                                                          |
+| `src/routeTree.gen.ts`       | Generated route tree; do not edit manually.                                                           |
+| `src/features/auth`          | Auth forms, route guards, redirects, and session helpers.                                             |
+| `src/features/jobs`          | Jobs list/detail/create flows, jobs client, state, maps, labels, comments, visits, and collaborators. |
+| `src/features/organizations` | Organization onboarding, members, invitations, settings, labels, and active organization sync.        |
+| `src/features/sites`         | Sites list, create flow, detail sheet, and state.                                                     |
+| `src/features/activity`      | Organization activity feed.                                                                           |
+| `src/features/settings`      | User settings.                                                                                        |
+| `src/features/command-bar`   | Command palette and global actions.                                                                   |
+| `src/components`             | Shared app components.                                                                                |
+| `src/components/ui`          | shadcn-style UI primitives.                                                                           |
+| `src/hotkeys`                | Shared hotkey registry, route hotkeys, keycap UI, and shortcuts help overlay.                         |
+| `src/lib`                    | API origin, auth client, and server forwarding helpers.                                               |
+| `infra/cloudflare-vite.ts`   | App-owned Alchemy Cloudflare Vite declaration and deployed env contract.                              |
+| `e2e`                        | Playwright tests and page objects.                                                                    |
 
 ## Architecture
 

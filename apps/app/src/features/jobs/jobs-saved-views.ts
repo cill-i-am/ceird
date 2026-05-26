@@ -29,7 +29,6 @@ const JOBS_LIST_FILTER_EQUALITY_FIELDS = {
   labelId: true,
   priority: true,
   query: true,
-  serviceAreaId: true,
   siteId: true,
   status: true,
 } satisfies Record<keyof JobsListFilters, true>;

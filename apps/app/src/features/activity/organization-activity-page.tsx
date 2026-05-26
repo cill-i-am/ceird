@@ -39,7 +39,6 @@ const EVENT_TYPE_LABELS: Record<JobActivityEventType, string> = {
   blocked_reason_changed: "Blocked reason changed",
   contact_changed: "Contact changed",
   coordinator_changed: "Coordinator changed",
-  cost_line_added: "Cost line added",
   job_created: "Job created",
   job_reopened: "Job reopened",
   label_added: "Label added",
