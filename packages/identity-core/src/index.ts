@@ -92,22 +92,6 @@ export type OrganizationMemberRoleResponse = Schema.Schema.Type<
   typeof OrganizationMemberRoleResponseSchema
 >;
 
-export const OrganizationSummarySchema = Schema.Struct({
-  id: OrganizationId,
-  name: Schema.String,
-  slug: Schema.String,
-});
-export type OrganizationSummary = Schema.Schema.Type<
-  typeof OrganizationSummarySchema
->;
-
-export const OrganizationSummaryListSchema = Schema.Array(
-  OrganizationSummarySchema
-);
-export type OrganizationSummaryList = Schema.Schema.Type<
-  typeof OrganizationSummaryListSchema
->;
-
 export const OrganizationNameSchema = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(ORGANIZATION_NAME_MIN_LENGTH))
 );
@@ -132,6 +116,37 @@ export function createOrganizationSlugFromName(name: string): string {
 
   return slug || DEFAULT_ORGANIZATION_SLUG_PREFIX;
 }
+
+export function appendOrganizationSlugSuffix(
+  baseSlug: string,
+  suffix: string
+): string {
+  const suffixSlug = createOrganizationSlugFromName(suffix)
+    .slice(0, ORGANIZATION_SLUG_MAX_LENGTH - 2)
+    .replaceAll(/^-+|-+$/g, "");
+  const baseMaxLength = ORGANIZATION_SLUG_MAX_LENGTH - suffixSlug.length - 1;
+  const truncatedBaseSlug = createOrganizationSlugFromName(baseSlug)
+    .slice(0, baseMaxLength)
+    .replaceAll(/-+$/g, "");
+
+  return `${truncatedBaseSlug}-${suffixSlug}`;
+}
+
+export const OrganizationSummarySchema = Schema.Struct({
+  id: OrganizationId,
+  name: Schema.String,
+  slug: OrganizationSlugSchema,
+});
+export type OrganizationSummary = Schema.Schema.Type<
+  typeof OrganizationSummarySchema
+>;
+
+export const OrganizationSummaryListSchema = Schema.Array(
+  OrganizationSummarySchema
+);
+export type OrganizationSummaryList = Schema.Schema.Type<
+  typeof OrganizationSummaryListSchema
+>;
 
 export const CreateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,

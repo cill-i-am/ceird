@@ -1,12 +1,15 @@
 import {
+  appendOrganizationSlugSuffix,
   createOrganizationSlugFromName,
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
   decodeInvitationId,
+  decodeOrganizationSummary,
   decodeOrganizationRole,
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  ORGANIZATION_SLUG_MAX_LENGTH,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
   ORGANIZATION_SLUG_PATTERN,
@@ -59,6 +62,36 @@ describe("organization slug generation", () => {
   it("rejects organization slugs longer than the tenant-safe maximum", () => {
     expect(() =>
       decodeCreateOrganizationInput({
+        name: "Acme Field Ops",
+        slug: "a".repeat(41),
+      })
+    ).toThrow();
+  }, 1000);
+
+  it("appends retry suffixes without exceeding the tenant-safe maximum", () => {
+    const slug = appendOrganizationSlugSuffix("a".repeat(40), "retry123");
+
+    expect(slug).toBe(`${"a".repeat(31)}-retry123`);
+    expect(slug).toHaveLength(ORGANIZATION_SLUG_MAX_LENGTH);
+    expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+
+  it("trims trailing hyphens before appending retry suffixes", () => {
+    const slug = appendOrganizationSlugSuffix(
+      `${"a".repeat(31)}-${"b".repeat(8)}`,
+      "retry123"
+    );
+
+    expect(slug).toBe(`${"a".repeat(31)}-retry123`);
+    expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+});
+
+describe("organization summary boundary", () => {
+  it("rejects summaries with slugs outside the organization slug contract", () => {
+    expect(() =>
+      decodeOrganizationSummary({
+        id: "org_123",
         name: "Acme Field Ops",
         slug: "a".repeat(41),
       })

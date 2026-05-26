@@ -443,9 +443,16 @@ describe("auth schema", () => {
 
   it("stores a database-level slug format check in the organization migration", async () => {
     const migrationSql = await readMigrationSql("0003_organizations.sql");
+    const slugLengthMigrationSql = await readMigrationSql(
+      "20260526215020_organization_slug_length"
+    );
 
     expect(migrationSql).toContain("organization_slug_format_chk");
     expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
+    expect(slugLengthMigrationSql).toContain("organization_slug_format_chk");
+    expect(slugLengthMigrationSql).toContain(
+      'char_length("organization"."slug") <= 40'
+    );
   }, 10_000);
 
   it("preserves the /api/auth prefix when mounting auth routes", async () => {
