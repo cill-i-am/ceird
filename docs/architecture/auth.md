@@ -497,6 +497,18 @@ Rules:
 - sign-in, sign-up, sign-out, organization creation, invitation acceptance, and
   active-organization switching clear the browser auth/organization caches
 
+### Organization Slug Contract
+
+Organization slugs are generated and validated by `@ceird/identity-core`.
+The shared slug contract caps slugs at 40 characters so tenant DNS labels can
+fit `{slug}--{tenantStageAlias}` within the 63-character DNS label limit.
+
+Domain persistence enforces the same contract on the Better Auth organization
+table: `organization_slug_format_chk` checks the slug format and the 40-character
+maximum length. App-owned organization creation retry logic also uses the shared
+identity-core suffix helper, which truncates the base slug before appending a
+random suffix so conflict retries remain inside the shared slug contract.
+
 ## Route Model
 
 The route split is intentionally simple:
