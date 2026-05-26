@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { ORGANIZATION_ROLES } from "@ceird/identity-core";
+import {
+  ORGANIZATION_ROLES,
+  ORGANIZATION_SLUG_MAX_LENGTH,
+} from "@ceird/identity-core";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -43,7 +46,7 @@ export const organization = pgTable(
     uniqueIndex("organization_slug_idx").on(table.slug),
     check(
       "organization_slug_format_chk",
-      sql`${table.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`
+      sql`${table.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(${table.slug}) <= ${ORGANIZATION_SLUG_MAX_LENGTH}`
     ),
   ]
 );

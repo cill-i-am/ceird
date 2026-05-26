@@ -49,11 +49,20 @@ describe("organization slug generation", () => {
     expect(createOrganizationSlugFromName("!!")).toBe("team");
   }, 1000);
 
-  it("keeps truncated slugs inside the slug pattern", () => {
+  it("keeps truncated slugs short enough for tenant stage host labels", () => {
     const slug = createOrganizationSlugFromName(`${"a".repeat(63)} & Beta`);
 
-    expect(slug).toBe("a".repeat(63));
+    expect(slug).toBe("a".repeat(40));
     expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+
+  it("rejects organization slugs longer than the tenant-safe maximum", () => {
+    expect(() =>
+      decodeCreateOrganizationInput({
+        name: "Acme Field Ops",
+        slug: "a".repeat(41),
+      })
+    ).toThrow();
   }, 1000);
 });
 

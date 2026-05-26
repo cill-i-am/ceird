@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
+export const ORGANIZATION_SLUG_MAX_LENGTH = 40;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const DEFAULT_ORGANIZATION_SLUG_PREFIX = "team";
 const ISO_DATE_TIME_UTC_PATTERN =
@@ -114,6 +115,7 @@ export const OrganizationNameSchema = Schema.Trim.pipe(
 export const OrganizationSlugSchema = Schema.Trim.pipe(
   Schema.check(
     Schema.isMinLength(2),
+    Schema.isMaxLength(ORGANIZATION_SLUG_MAX_LENGTH),
     Schema.isPattern(ORGANIZATION_SLUG_PATTERN)
   )
 );
@@ -125,7 +127,7 @@ export function createOrganizationSlugFromName(name: string): string {
     .replaceAll(/['’]/g, "")
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 64)
+    .slice(0, ORGANIZATION_SLUG_MAX_LENGTH)
     .replaceAll(/^-+|-+$/g, "");
 
   return slug || DEFAULT_ORGANIZATION_SLUG_PREFIX;
