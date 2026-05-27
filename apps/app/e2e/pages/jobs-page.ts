@@ -60,7 +60,9 @@ export class JobsCreateSheet {
   readonly title: Locator;
   readonly priority: Locator;
   readonly site: Locator;
+  readonly siteDialog: Locator;
   readonly siteLocation: Locator;
+  readonly siteLocationStatus: Locator;
   readonly siteName: Locator;
   readonly contact: Locator;
   readonly contactName: Locator;
@@ -78,9 +80,10 @@ export class JobsCreateSheet {
     this.title = this.root.getByLabel("Title");
     this.priority = this.root.getByLabel("Priority", { exact: true });
     this.site = this.root.getByLabel("Site");
-    const siteDialog = page.getByRole("dialog", { name: "New site" });
-    this.siteLocation = siteDialog.getByLabel("Location");
-    this.siteName = siteDialog.getByLabel("Site name");
+    this.siteDialog = page.getByRole("dialog", { name: "New site" });
+    this.siteLocation = this.siteDialog.getByLabel("Location");
+    this.siteLocationStatus = this.siteDialog.getByRole("status");
+    this.siteName = this.siteDialog.getByLabel("Site name");
     this.contact = this.root.getByLabel("Contact");
     this.contactName = page.getByPlaceholder("Contact");
     this.submit = this.root.getByRole("button", { name: "Create job" });
@@ -123,10 +126,10 @@ export class JobsCreateSheet {
   }
 
   async closeSiteDialog() {
-    await this.page
-      .getByRole("dialog", { name: "New site" })
+    await this.siteDialog
       .getByRole("button", { name: "Close site details" })
       .click();
+    await expect(this.siteDialog).toBeHidden();
   }
 }
 
