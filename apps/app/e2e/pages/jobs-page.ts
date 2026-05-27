@@ -185,9 +185,9 @@ export class JobDetailSheet {
       expect(this.page).toHaveURL(/\/jobs\/.+$/, {
         timeout: JOBS_ROUTE_TIMEOUT_MS,
       }),
-      expect(
-        this.page.getByRole("heading", { level: 2, name: title })
-      ).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
+      expect(this.root.getByText(title, { exact: true })).toBeVisible({
+        timeout: JOBS_ROUTE_TIMEOUT_MS,
+      }),
     ]);
   }
 
