@@ -1,3 +1,4 @@
+import { RESERVED_ORGANIZATION_SLUGS } from "@ceird/identity-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -33,16 +34,34 @@ describe("tenant host parsing", () => {
   });
 
   it("does not parse or build tenant hosts from reserved organization slugs", () => {
-    const config = {
+    const productionConfig = {
       baseDomain: "ceird.app",
       hostMode: "production" as const,
       reservedHostnames: [],
     };
+    const stageConfig = {
+      baseDomain: "ceird.app",
+      hostMode: "stage" as const,
+      reservedHostnames: [],
+      stageAlias: "pr-123",
+    };
 
-    expect(parseTenantHost("api.ceird.app", config)).toStrictEqual({
-      kind: "system",
-    });
-    expect(buildOrganizationTenantOrigin("api", config)).toBeUndefined();
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(
+        parseTenantHost(`${slug}.ceird.app`, productionConfig)
+      ).toStrictEqual({
+        kind: "system",
+      });
+      expect(
+        parseTenantHost(`${slug}--pr-123.ceird.app`, stageConfig)
+      ).toStrictEqual({
+        kind: "system",
+      });
+      expect(
+        buildOrganizationTenantOrigin(slug, productionConfig)
+      ).toBeUndefined();
+      expect(buildOrganizationTenantOrigin(slug, stageConfig)).toBeUndefined();
+    }
   });
 
   it("parses stage tenant hosts", () => {

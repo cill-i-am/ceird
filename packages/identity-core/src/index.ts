@@ -115,6 +115,15 @@ export const OrganizationSlugSchema = Schema.Trim.pipe(
     }
   )
 );
+export type OrganizationSlug = Schema.Schema.Type<
+  typeof OrganizationSlugSchema
+>;
+
+const isOrganizationSlugValue = Schema.is(OrganizationSlugSchema);
+
+export function isOrganizationSlug(value: unknown): value is OrganizationSlug {
+  return isOrganizationSlugValue(value);
+}
 
 export function isReservedOrganizationSlug(value: string): boolean {
   return (RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(value);

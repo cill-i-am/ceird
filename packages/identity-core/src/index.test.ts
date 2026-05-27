@@ -9,6 +9,7 @@ import {
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  isOrganizationSlug,
   ORGANIZATION_SLUG_MAX_LENGTH,
   RESERVED_ORGANIZATION_SLUGS,
   isReservedOrganizationSlug,
@@ -66,11 +67,23 @@ describe("organization slug generation", () => {
   }, 1000);
 
   it("avoids slugs reserved for system hosts when generating from names", () => {
-    expect(createOrganizationSlugFromName("API")).toBe("api-org");
-    expect(createOrganizationSlugFromName("App")).toBe("app-org");
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(createOrganizationSlugFromName(slug.toUpperCase())).toBe(
+        `${slug}-org`
+      );
+      expect(isReservedOrganizationSlug(slug)).toBeTruthy();
+    }
+  }, 1000);
+
+  it("classifies organization slugs through the shared predicate", () => {
+    expect(isOrganizationSlug("acme-field-ops")).toBeTruthy();
+    expect(isOrganizationSlug("Acme Field Ops")).toBeFalsy();
+    expect(isOrganizationSlug("a")).toBeFalsy();
+    expect(isOrganizationSlug("a".repeat(41))).toBeFalsy();
 
     for (const slug of RESERVED_ORGANIZATION_SLUGS) {
-      expect(isReservedOrganizationSlug(slug)).toBeTruthy();
+      expect(isOrganizationSlug(slug)).toBeFalsy();
+      expect(isOrganizationSlug(`${slug}-org`)).toBeTruthy();
     }
   }, 1000);
 
