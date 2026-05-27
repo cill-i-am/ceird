@@ -41,7 +41,6 @@ interface CloudflareTenantDnsRecordPayload {
   readonly content: "192.0.2.0";
   readonly name: "*";
   readonly proxied: true;
-  readonly tags?: readonly string[];
   readonly ttl: 1;
   readonly type: "A";
 }
@@ -78,11 +77,6 @@ export function makeCloudflareTenantDnsRecordPayload(_zoneName: string) {
 
 const tenantWildcardDnsRecordComment =
   "Managed by Ceird Alchemy tenant routing.";
-const tenantWildcardDnsRecordTags = [
-  "app:ceird",
-  "managed_by:alchemy",
-  "purpose:tenant-wildcard",
-] as const;
 
 function makeManagedCloudflareTenantDnsRecordPayload(
   zoneName: string
@@ -90,7 +84,6 @@ function makeManagedCloudflareTenantDnsRecordPayload(
   return {
     ...makeCloudflareTenantDnsRecordPayload(zoneName),
     comment: tenantWildcardDnsRecordComment,
-    tags: tenantWildcardDnsRecordTags,
   };
 }
 
@@ -333,7 +326,7 @@ export const TenantWildcardDnsRecordProvider = () =>
           ) {
             return yield* Effect.fail(
               new Error(
-                `Cloudflare wildcard DNS record "${existingRecord.name ?? "*"}" already exists in zone "${news.zoneName}" but is not managed by Ceird Alchemy tenant routing. Delete or tag the record before deploying tenant routing.`
+                `Cloudflare wildcard DNS record "${existingRecord.name ?? "*"}" already exists in zone "${news.zoneName}" but is not managed by Ceird Alchemy tenant routing. Delete or adopt the record before deploying tenant routing.`
               )
             );
           }
@@ -758,11 +751,9 @@ function isManagedTenantWildcardDnsRecord(
   record: CloudflareDnsRecordResult,
   zoneName: string
 ) {
-  const recordTags = record.tags ?? [];
-
   return (
     isTenantWildcardDnsRecord(record, zoneName) &&
-    tenantWildcardDnsRecordTags.every((tag) => recordTags.includes(tag))
+    record.comment === tenantWildcardDnsRecordComment
   );
 }
 

@@ -178,7 +178,6 @@ describe("Cloudflare tenant routing", () => {
             id: "dns-foreign",
             name: "*.ceird.app",
             proxied: false,
-            tags: [],
             ttl: 1,
             type: "A",
           },
@@ -229,7 +228,6 @@ describe("Cloudflare tenant routing", () => {
             id: "dns-foreign",
             name: "*.ceird.app",
             proxied: false,
-            tags: [],
             ttl: 1,
             type: "A",
           },
@@ -278,10 +276,10 @@ describe("Cloudflare tenant routing", () => {
       expect(request.method).toBe("POST");
       expect(request.url.pathname).toBe("/client/v4/zones/zone-id/dns_records");
       expect(request.body).toMatchObject({
+        comment: "Managed by Ceird Alchemy tenant routing.",
         content: "192.0.2.0",
         name: "*",
         proxied: true,
-        tags: ["app:ceird", "managed_by:alchemy", "purpose:tenant-wildcard"],
         ttl: 1,
         type: "A",
       });

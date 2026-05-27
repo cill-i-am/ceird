@@ -1,7 +1,7 @@
 import { isOrganizationSlug } from "@ceird/identity-core";
 import type { OrganizationSlug } from "@ceird/identity-core";
 
-export type TenantHostMode = "disabled" | "production" | "stage";
+type TenantHostMode = "disabled" | "production" | "stage";
 
 export interface TenantHostConfig {
   readonly baseDomain: string;

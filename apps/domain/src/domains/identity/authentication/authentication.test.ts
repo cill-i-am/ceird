@@ -579,10 +579,14 @@ describe("auth schema", () => {
     expect(migrationSql).toContain("organization_slug_format_chk");
     expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
     expect(slugLengthMigrationSql).toContain("organization_slug_format_chk");
+    expect(slugLengthMigrationSql).toContain("organization_slug_backfill");
     expect(slugLengthMigrationSql).toContain(
       'char_length("organization"."slug") <= 40'
     );
     expect(slugReservedMigrationSql).toContain("organization_slug_format_chk");
+    expect(slugReservedMigrationSql).toContain(
+      `"slug" = "slug" || '-' || substr(md5("id"), 1, 12)`
+    );
     expect(slugReservedMigrationSql).toContain(
       `"slug" not in ('app', 'api', 'agent', 'mcp')`
     );
