@@ -61,7 +61,8 @@ export async function loadRequestAppContextMiddlewareContext({
   }
 
   return {
-    ...(snapshot.activeOrganizationId
+    ...(snapshot.activeOrganizationId !== null ||
+    snapshot.requestedOrganizationSlug
       ? { activeOrganizationId: snapshot.activeOrganizationId }
       : {}),
     authSession: snapshot.session,

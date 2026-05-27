@@ -40,10 +40,15 @@ export async function loadAuthenticatedAppRoute(input?: {
       ? (serverContext.activeOrganizationId ??
         decodeActiveOrganizationIdFromSession(session))
       : clientAppContext.activeOrganizationId;
-  const currentOrganizationRole =
-    serverContext.currentOrganizationRole ??
-    clientAppContext?.currentOrganizationRole ??
-    (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId));
+  const canUseActiveOrganizationRole = activeOrganizationIdMatchesSession(
+    activeOrganizationId,
+    session
+  );
+  const currentOrganizationRole = canUseActiveOrganizationRole
+    ? (serverContext.currentOrganizationRole ??
+      clientAppContext?.currentOrganizationRole ??
+      (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId)))
+    : undefined;
 
   return { activeOrganizationId, currentOrganizationRole, session };
 }
@@ -97,6 +102,15 @@ function decodeActiveOrganizationIdFromSession(
   return session.session.activeOrganizationId
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
+}
+
+function activeOrganizationIdMatchesSession(
+  activeOrganizationId: OrganizationId | null,
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>>
+) {
+  return (
+    activeOrganizationId === decodeActiveOrganizationIdFromSession(session)
+  );
 }
 
 async function resolveCurrentOrganizationRoleOrUndefined(

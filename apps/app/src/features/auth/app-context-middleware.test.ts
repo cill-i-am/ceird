@@ -256,16 +256,94 @@ describe("app context request middleware payload", () => {
         )
       )
       .mockResolvedValueOnce(Response.json(organizations))
-      .mockResolvedValueOnce(Response.json({ role: "external" }))
       .mockResolvedValueOnce(Response.json({ role: "admin" }));
 
     await expect(
       loadRequestAppContextMiddlewareContext({
         pathname: "/jobs",
-        request: new Request("https://app.pr-123.ceird.app/jobs", {
+        request: new Request("https://beta-field-ops--pr-123.ceird.app/jobs", {
           headers: {
             cookie: "better-auth.session_token=session-token",
-            host: "app.pr-123.ceird.app",
+            host: "beta-field-ops--pr-123.ceird.app",
+          },
+        }),
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_456",
+      authSession: authSessionWithActiveOrganization,
+      currentOrganizationRole: "admin",
+      organizations,
+      requestedOrganizationSlug: "beta-field-ops",
+    });
+  });
+
+  it("ignores spoofed forwarded tenant hosts on public system hosts", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+    ];
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "owner" }));
+
+    const context = await loadRequestAppContextMiddlewareContext({
+      pathname: "/jobs",
+      request: new Request("https://app.pr-123.ceird.app/jobs", {
+        headers: {
+          cookie: "better-auth.session_token=session-token",
+          host: "app.pr-123.ceird.app",
+          "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
+        },
+      }),
+    });
+
+    expect(context).toStrictEqual({
+      activeOrganizationId: "org_123",
+      authSession: authSessionWithActiveOrganization,
+      currentOrganizationRole: "owner",
+      organizations,
+    });
+    expect(context).not.toHaveProperty("requestedOrganizationSlug");
+  });
+
+  it("honors forwarded tenant hosts from trusted local proxy hosts", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+    ];
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/jobs",
+        request: new Request("http://127.0.0.1:4173/jobs", {
+          headers: {
+            cookie: "better-auth.session_token=session-token",
+            host: "127.0.0.1:4173",
             "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
           },
         }),
@@ -277,6 +355,44 @@ describe("app context request middleware payload", () => {
       organizations,
       requestedOrganizationSlug: "beta-field-ops",
     });
+  });
+
+  it("fails closed when the requested tenant slug is not accessible", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+    ];
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "owner" }));
+
+    const context = await loadRequestAppContextMiddlewareContext({
+      pathname: "/jobs",
+      request: new Request("https://gamma-field-ops--pr-123.ceird.app/jobs", {
+        headers: {
+          cookie: "better-auth.session_token=session-token",
+          host: "gamma-field-ops--pr-123.ceird.app",
+        },
+      }),
+    });
+
+    expect(context).toStrictEqual({
+      activeOrganizationId: null,
+      authSession: authSessionWithActiveOrganization,
+      requestedOrganizationSlug: "gamma-field-ops",
+    });
+    expect(context).not.toHaveProperty("currentOrganizationRole");
+    expect(context).not.toHaveProperty("organizations");
   });
 
   it.each([
@@ -624,15 +740,13 @@ describe("app auth context snapshot for request", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json(organizations))
-      .mockResolvedValueOnce(Response.json({ role: "external" }))
       .mockResolvedValueOnce(Response.json({ role: "admin" }));
 
     const snapshot = await buildAppAuthContextSnapshotForRequest(
-      new Request("https://app.pr-123.ceird.app/jobs", {
+      new Request("https://beta-field-ops--pr-123.ceird.app/jobs", {
         headers: {
           cookie: "better-auth.session_token=session-token",
-          host: "app.pr-123.ceird.app",
-          "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
+          host: "beta-field-ops--pr-123.ceird.app",
         },
       }),
       {

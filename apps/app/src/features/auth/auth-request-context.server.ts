@@ -13,6 +13,7 @@ import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
+  readTrustedRequestHost,
 } from "#/lib/server-api-forwarded-headers";
 import {
   parseTenantHost,
@@ -188,39 +189,12 @@ export async function buildAppAuthContextSnapshotForRequest(
     };
   }
 
-  const organizationsPromise = readServerOrganizations(authRequest);
-  const activeOrganizationRolePromise = activeOrganizationId
-    ? readCurrentOrganizationRole(authRequest, activeOrganizationId)
-    : undefined;
-  const organizations = await organizationsPromise;
-  const resolvedActiveOrganizationId = resolveActiveOrganizationId(
+  return await resolveActiveOrganizationContextFromList({
     activeOrganizationId,
-    organizations,
-    requestedOrganizationSlug
-  );
-  const activeOrganizationRole =
-    activeOrganizationRolePromise === undefined
-      ? undefined
-      : await activeOrganizationRolePromise;
-  let currentOrganizationRole;
-
-  if (resolvedActiveOrganizationId !== null) {
-    currentOrganizationRole =
-      resolvedActiveOrganizationId === activeOrganizationId
-        ? activeOrganizationRole
-        : await readCurrentOrganizationRole(
-            authRequest,
-            resolvedActiveOrganizationId
-          );
-  }
-
-  return {
-    activeOrganizationId: resolvedActiveOrganizationId,
-    currentOrganizationRole,
-    organizations,
-    ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
+    authRequest,
+    requestedOrganizationSlug,
     session,
-  };
+  });
 }
 
 export async function readOptionalServerAuthSessionFromHeaders(
@@ -461,6 +435,8 @@ function resolveActiveOrganizationId(
     if (requestedOrganization) {
       return requestedOrganization.id;
     }
+
+    return null;
   }
 
   if (!activeOrganizationId) {
@@ -476,9 +452,79 @@ function resolveActiveOrganizationId(
   );
 }
 
+async function resolveActiveOrganizationContextFromList({
+  activeOrganizationId,
+  authRequest,
+  requestedOrganizationSlug,
+  session,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly authRequest: ServerAuthRequest;
+  readonly requestedOrganizationSlug: string | undefined;
+  readonly session: ServerAuthSession;
+}): Promise<AppAuthContextSnapshot> {
+  const organizationsPromise = readServerOrganizations(authRequest);
+  const activeOrganizationRolePromise =
+    activeOrganizationId && !requestedOrganizationSlug
+      ? readCurrentOrganizationRole(authRequest, activeOrganizationId)
+      : undefined;
+  const organizations = await organizationsPromise;
+  const resolvedActiveOrganizationId = resolveActiveOrganizationId(
+    activeOrganizationId,
+    organizations,
+    requestedOrganizationSlug
+  );
+  const currentOrganizationRole = await resolveActiveOrganizationRole({
+    activeOrganizationId,
+    activeOrganizationRolePromise,
+    authRequest,
+    resolvedActiveOrganizationId,
+  });
+
+  return {
+    activeOrganizationId: resolvedActiveOrganizationId,
+    currentOrganizationRole,
+    organizations,
+    ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
+    session,
+  };
+}
+
+async function resolveActiveOrganizationRole({
+  activeOrganizationId,
+  activeOrganizationRolePromise,
+  authRequest,
+  resolvedActiveOrganizationId,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly activeOrganizationRolePromise:
+    | Promise<OrganizationMemberRoleResponse["role"] | undefined>
+    | undefined;
+  readonly authRequest: ServerAuthRequest;
+  readonly resolvedActiveOrganizationId: OrganizationId | null;
+}) {
+  if (resolvedActiveOrganizationId === null) {
+    return;
+  }
+
+  if (
+    resolvedActiveOrganizationId === activeOrganizationId &&
+    activeOrganizationRolePromise !== undefined
+  ) {
+    return await activeOrganizationRolePromise;
+  }
+
+  return await readCurrentOrganizationRole(
+    authRequest,
+    resolvedActiveOrganizationId
+  );
+}
+
 function readRequestedOrganizationSlug(request: Request) {
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const host = readTrustedRequestHost({
+    forwardedHost: request.headers.get("x-forwarded-host") ?? undefined,
+    host: request.headers.get("host") ?? undefined,
+  });
 
   if (!host) {
     return;

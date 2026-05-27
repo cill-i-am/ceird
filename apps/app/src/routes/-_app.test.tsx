@@ -187,6 +187,95 @@ describe("authenticated app route loader", () => {
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
   });
 
+  it("suppresses server context role while route active organization is stale against the session", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(true);
+
+    await expect(
+      loadAuthenticatedAppRoute({
+        serverContext: {
+          activeOrganizationId: "org_route",
+          authSession: {
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_session",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
+            user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
+              email: "taylor@example.com",
+              emailVerified: false,
+              id: "user_123",
+              image: null,
+              name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+            },
+          },
+          currentOrganizationRole: "owner",
+        },
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_route",
+      currentOrganizationRole: undefined,
+      session: {
+        session: {
+          id: "session_123",
+          activeOrganizationId: "org_session",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-05-24T10:00:00.000Z",
+          email: "taylor@example.com",
+          emailVerified: false,
+          id: "user_123",
+          image: null,
+          name: "Taylor Example",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+        },
+      },
+    });
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("suppresses browser app context role while route active organization is stale against the session", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCachedClientAppContext.mockResolvedValue({
+      session: {
+        session: { activeOrganizationId: "org_session" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+      activeOrganizationId: "org_route",
+      currentOrganizationRole: "admin",
+    });
+
+    await expect(loadAuthenticatedAppRoute()).resolves.toStrictEqual({
+      activeOrganizationId: "org_route",
+      currentOrganizationRole: undefined,
+      session: {
+        session: { activeOrganizationId: "org_session" },
+        user: {
+          email: "taylor@example.com",
+          id: "user_123",
+          name: "Taylor Example",
+        },
+      },
+    });
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
   it("passes TanStack Start server context into the route guard", async () => {
     const { Route } = await import("./_app");
     const { beforeLoad } = Route.options;

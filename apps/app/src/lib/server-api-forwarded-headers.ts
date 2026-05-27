@@ -28,10 +28,7 @@ function readCurrentRequestOrigin(input: {
   readonly forwardedProto: string | undefined;
 }): string | undefined {
   const trustsForwardedHost = isTrustedForwardingHost(input.host);
-  const host =
-    trustsForwardedHost && input.forwardedHost
-      ? input.forwardedHost
-      : input.host;
+  const host = readTrustedRequestHost(input);
 
   if (!host) {
     return undefined;
@@ -45,6 +42,15 @@ function readCurrentRequestOrigin(input: {
       : publicHostProtocol(host);
 
   return `${protocol}://${host}`;
+}
+
+export function readTrustedRequestHost(input: {
+  readonly forwardedHost: string | undefined;
+  readonly host: string | undefined;
+}): string | undefined {
+  return isTrustedForwardingHost(input.host) && input.forwardedHost
+    ? input.forwardedHost
+    : input.host;
 }
 
 function publicHostProtocol(host: string): "http" | "https" {
