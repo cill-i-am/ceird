@@ -8,21 +8,31 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   buildCreateSiteInputFromDraft,
   buildUpdateSiteInputFromDraft,
+  createDefaultSiteCreateDraft,
   createSiteCreateDraftFromSite,
-  defaultSiteCreateDraft,
   siteCreateDraftLocationEqualsSite,
   validateSiteCreateDraft,
 } from "./site-create-form";
 
+function createDraft(
+  patch: Partial<ReturnType<typeof createDefaultSiteCreateDraft>>
+) {
+  return {
+    ...createDefaultSiteCreateDraft(),
+    ...patch,
+  };
+}
+
 describe("site create form helpers", () => {
   it("builds manual unverified location input from typed text", () => {
     expect(
-      buildCreateSiteInputFromDraft({
-        ...defaultSiteCreateDraft,
-        country: "GB",
-        locationInput: "  10 Downing Street  ",
-        name: "  London Depot  ",
-      })
+      buildCreateSiteInputFromDraft(
+        createDraft({
+          country: "GB",
+          locationInput: "  10 Downing Street  ",
+          name: "  London Depot  ",
+        })
+      )
     ).toStrictEqual({
       location: {
         country: "GB",
@@ -36,11 +46,10 @@ describe("site create form helpers", () => {
   it("can omit location when preserving an existing site location", () => {
     expect(
       buildCreateSiteInputFromDraft(
-        {
-          ...defaultSiteCreateDraft,
+        createDraft({
           locationInput: "Dublin Port",
           name: "Docklands Campus",
-        },
+        }),
         { includeLocation: false }
       )
     ).toStrictEqual({
@@ -50,19 +59,20 @@ describe("site create form helpers", () => {
 
   it("builds selected Google location input with the session token", () => {
     expect(
-      buildCreateSiteInputFromDraft({
-        ...defaultSiteCreateDraft,
-        locationInput: "Dublin Port",
-        locationSelection: {
-          displayText: "Dublin Port",
-          placeId: "ChIJabc" as GooglePlaceIdType,
-          rawInput: "dub port",
-          secondaryText: "Dublin, Ireland",
-          sessionToken:
-            "550e8400-e29b-41d4-a716-446655440000" as GooglePlacesSessionTokenType,
-        },
-        name: "Dublin Port",
-      })
+      buildCreateSiteInputFromDraft(
+        createDraft({
+          locationInput: "Dublin Port",
+          locationSelection: {
+            displayText: "Dublin Port",
+            placeId: "ChIJabc" as GooglePlaceIdType,
+            rawInput: "dub port",
+            secondaryText: "Dublin, Ireland",
+            sessionToken:
+              "550e8400-e29b-41d4-a716-446655440000" as GooglePlacesSessionTokenType,
+          },
+          name: "Dublin Port",
+        })
+      )
     ).toStrictEqual({
       location: {
         displayText: "Dublin Port",
@@ -79,11 +89,10 @@ describe("site create form helpers", () => {
   it("can explicitly clear a location on site update", () => {
     expect(
       buildUpdateSiteInputFromDraft(
-        {
-          ...defaultSiteCreateDraft,
+        createDraft({
           locationInput: "   ",
           name: "Docklands Campus",
-        },
+        }),
         { clearEmptyLocation: true }
       )
     ).toStrictEqual({
@@ -155,21 +164,23 @@ describe("site create form helpers", () => {
 
   it("requires only the site name", () => {
     expect(
-      validateSiteCreateDraft({
-        ...defaultSiteCreateDraft,
-        locationInput: "10 Downing Street",
-        name: "London Depot",
-      })
+      validateSiteCreateDraft(
+        createDraft({
+          locationInput: "10 Downing Street",
+          name: "London Depot",
+        })
+      )
     ).toStrictEqual({
       name: undefined,
     });
 
     expect(
-      validateSiteCreateDraft({
-        ...defaultSiteCreateDraft,
-        locationInput: "North Wall",
-        name: "",
-      }).name
+      validateSiteCreateDraft(
+        createDraft({
+          locationInput: "North Wall",
+          name: "",
+        })
+      ).name
     ).toBe("Add a site name before creating it.");
   });
 });

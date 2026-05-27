@@ -71,9 +71,6 @@ export function createDefaultSiteCreateDraft(): SiteCreateDraft {
   };
 }
 
-export const defaultSiteCreateDraft: SiteCreateDraft =
-  createDefaultSiteCreateDraft();
-
 export function createSiteCreateDraftFromSite(
   site: SiteOption
 ): SiteCreateDraft {
