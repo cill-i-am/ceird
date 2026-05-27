@@ -26,6 +26,10 @@ import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
+import {
+  buildOrganizationTenantUrl,
+  readTenantHostConfigFromEnv,
+} from "#/lib/tenant-host";
 import { cn } from "#/lib/utils";
 
 import { clearOrganizationAccessClientCache } from "./organization-access-cache";
@@ -102,7 +106,12 @@ export function OrganizationOnboardingPage() {
           <InviteMembersStep
             organization={createdOrganization}
             isHydrated={isHydrated}
-            onContinue={() => navigate({ to: "/" })}
+            onContinue={() =>
+              continueToCreatedOrganization({
+                navigate,
+                organization: createdOrganization,
+              })
+            }
           />
         ) : (
           <EntrySurfaceCard
@@ -174,6 +183,27 @@ export function OrganizationOnboardingPage() {
       </EntryShell>
     </main>
   );
+}
+
+async function continueToCreatedOrganization({
+  navigate,
+  organization,
+}: {
+  readonly navigate: (options: { readonly to: "/" }) => Promise<void>;
+  readonly organization: OrganizationSummary;
+}) {
+  const tenantUrl = buildOrganizationTenantUrl(
+    organization.slug,
+    "/",
+    readTenantHostConfigFromEnv()
+  );
+
+  if (tenantUrl && tenantUrl !== window.location.href) {
+    window.location.assign(tenantUrl);
+    return;
+  }
+
+  await navigate({ to: "/" });
 }
 
 function InviteMembersStep({
