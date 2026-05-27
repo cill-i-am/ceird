@@ -92,13 +92,14 @@ const RELATED_JOB_STATUS_LABELS = {
 } satisfies Record<JobStatus, string>;
 type SiteDetailEditor = "location" | "notes";
 
+// The detail sheet owns the editable site draft while the provider-backed option can refresh underneath it.
+// react-doctor-disable-next-line
 export function SitesDetailSheet({
   hasMoreRelatedJobs = false,
   initialSite,
   relatedJobs = EMPTY_RELATED_JOBS,
   siteId,
   viewer,
-  // The detail sheet owns the editable site draft while the provider-backed option can refresh underneath it.
   // react-doctor-disable-next-line
 }: SitesDetailSheetProps) {
   const navigate = useNavigate({ from: "/sites/$siteId" });

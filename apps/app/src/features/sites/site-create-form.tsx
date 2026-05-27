@@ -508,7 +508,7 @@ function SiteLocationStatus({
         aria-live="polite"
         className="text-xs text-muted-foreground"
       >
-        Searching...
+        Searching…
       </p>
     );
   }
@@ -568,33 +568,32 @@ function useSiteLocationAutocomplete(
   }
 ) {
   const trimmedInput = input.input.trim();
-  const [state, setState] = React.useState<{
-    readonly searchFailed: boolean;
-    readonly suggestions: readonly SiteLocationSuggestion[];
-    readonly waiting: boolean;
-  }>({
-    searchFailed: false,
-    suggestions: [],
-    waiting: false,
-  });
+  const [state, dispatch] = React.useReducer(
+    siteLocationAutocompleteReducer,
+    INITIAL_SITE_LOCATION_AUTOCOMPLETE_STATE
+  );
 
   React.useEffect(() => {
     if (
       !input.enabled ||
       trimmedInput.length < LOCATION_AUTOCOMPLETE_MIN_LENGTH
     ) {
-      setState({ searchFailed: false, suggestions: [], waiting: false });
+      dispatch({ type: "reset" });
       return;
     }
 
     let active = true;
-    setState((current) => ({ ...current, searchFailed: false, waiting: true }));
+    dispatch({ type: "start" });
 
     const timeout = window.setTimeout(() => {
       void runAutocompleteRequest();
     }, LOCATION_AUTOCOMPLETE_DEBOUNCE_MS);
 
     async function runAutocompleteRequest() {
+      if (!active) {
+        return;
+      }
+
       const exit = await Effect.runPromiseExit(
         autocompleteBrowserSiteLocation({
           country: input.country,
@@ -603,24 +602,16 @@ function useSiteLocationAutocomplete(
         })
       );
 
-      if (!active) {
-        return;
-      }
-
       if (Exit.isSuccess(exit)) {
-        setState({
-          searchFailed: false,
-          suggestions: exit.value.suggestions,
-          waiting: false,
-        });
+        if (active) {
+          dispatch({ suggestions: exit.value.suggestions, type: "success" });
+        }
         return;
       }
 
-      setState({
-        searchFailed: true,
-        suggestions: [],
-        waiting: false,
-      });
+      if (active) {
+        dispatch({ type: "failure" });
+      }
     }
 
     return () => {
@@ -630,6 +621,65 @@ function useSiteLocationAutocomplete(
   }, [input.country, input.enabled, input.sessionToken, trimmedInput]);
 
   return state;
+}
+
+interface SiteLocationAutocompleteState {
+  readonly searchFailed: boolean;
+  readonly suggestions: readonly SiteLocationSuggestion[];
+  readonly waiting: boolean;
+}
+
+type SiteLocationAutocompleteAction =
+  | { readonly type: "failure" }
+  | { readonly type: "reset" }
+  | {
+      readonly suggestions: readonly SiteLocationSuggestion[];
+      readonly type: "success";
+    }
+  | { readonly type: "start" };
+
+const INITIAL_SITE_LOCATION_AUTOCOMPLETE_STATE: SiteLocationAutocompleteState =
+  {
+    searchFailed: false,
+    suggestions: [],
+    waiting: false,
+  };
+
+function siteLocationAutocompleteReducer(
+  state: SiteLocationAutocompleteState,
+  action: SiteLocationAutocompleteAction
+): SiteLocationAutocompleteState {
+  switch (action.type) {
+    case "failure": {
+      return {
+        searchFailed: true,
+        suggestions: [],
+        waiting: false,
+      };
+    }
+    case "reset": {
+      return INITIAL_SITE_LOCATION_AUTOCOMPLETE_STATE;
+    }
+    case "start": {
+      return {
+        ...state,
+        searchFailed: false,
+        waiting: true,
+      };
+    }
+    case "success": {
+      return {
+        searchFailed: false,
+        suggestions: action.suggestions,
+        waiting: false,
+      };
+    }
+    default: {
+      const exhaustiveAction: never = action;
+
+      return exhaustiveAction;
+    }
+  }
 }
 
 function autocompleteBrowserSiteLocation(input: SiteLocationAutocompleteInput) {
