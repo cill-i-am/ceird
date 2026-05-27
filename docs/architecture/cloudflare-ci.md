@@ -40,6 +40,32 @@ Resource names are derived from the Alchemy stage, for example
 from older stage naming schemes should be handled intentionally before the
 corresponding native-stage deploy, rather than adopted accidentally.
 
+## Host Model
+
+Ceird has two public hostname classes:
+
+- system hosts are neutral service entrypoints owned by the stage, such as
+  `app.<stage>.ceird.app`, `api.<stage>.ceird.app`,
+  `agent.<stage>.ceird.app`, and `mcp.<stage>.ceird.app`
+- tenant hosts are organization entrypoints served by the app Worker
+
+Production pins the system hosts to the exact custom domains `app.ceird.app`,
+`api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app`. Production tenant hosts
+use `{orgSlug}.ceird.app`. Non-production tenant hosts use
+`{orgSlug}--{tenantStageAlias}.ceird.app`, for example
+`example-co--staging.ceird.app` or `example-co--pr-123.ceird.app`. This keeps
+dynamic tenants as first-level `ceird.app` labels so they stay inside the zone's
+wildcard DNS and Universal SSL coverage.
+
+Alchemy owns the stage route that sends tenant host traffic to the app Worker:
+production uses `*.ceird.app/*`, while non-production stages use
+`*--{tenantStageAlias}.ceird.app/*`. The wildcard DNS record for `*.ceird.app`
+is global/shared and is adopted or updated by the stack, not duplicated per PR.
+When a PR stage is destroyed, Alchemy removes that PR's Worker route; the shared
+wildcard DNS remains. Production also creates bypass routes for the reserved
+system hostnames so the production tenant wildcard cannot capture
+`app.ceird.app`, `api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
+
 ## GitHub Secrets And Variables
 
 Create a GitHub environment named `main` for production deploys and main-stage

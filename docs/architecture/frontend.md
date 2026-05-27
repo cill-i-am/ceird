@@ -82,6 +82,13 @@ list and set-active client APIs through
 and organization-owned data together. If Better Auth accepts the switch but the
 router refresh fails, the app reloads to avoid showing stale organization data
 against the new active session.
+When tenant hosts are enabled, the switcher sets the Better Auth active
+organization and then navigates the browser to that organization's tenant host
+while preserving the current path. Production tenant URLs are
+`https://{orgSlug}.ceird.app`; non-production tenant URLs are
+`https://{orgSlug}--{tenantStageAlias}.ceird.app`. If tenant mode is disabled,
+or the computed tenant URL matches the current page, switching falls back to the
+same-router invalidation path.
 TanStack Start request middleware wired from
 `apps/app/src/features/auth/app-context-middleware.ts` hydrates auth request
 context once for routes that need it. Organization pages also prefetch the
@@ -94,6 +101,14 @@ routes reuse that parent session through
 state. Internal guard redirects use typed router targets so client-side
 navigation and SSR stay on the same route transition path; raw `href` redirects
 are reserved for external or intentionally document-level navigation.
+Tenant host parsing lives in `apps/app/src/lib/tenant-host.ts`. The parser
+treats configured system hosts as neutral, ignores hosts outside the tenant base
+domain, and resolves only valid organization slugs from the first DNS label.
+Server request context prefers the organization requested by a tenant host over
+the session's active organization, then synchronizes the Better Auth active
+organization after route resolution. Package-local Vite/Playwright servers run
+with tenant mode disabled by default, so `127.0.0.1:4173` and
+`127.0.0.1:3001` keep the regular neutral-host behavior.
 
 Authenticated layout and navigation live under:
 

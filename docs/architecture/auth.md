@@ -131,6 +131,29 @@ Current config decisions:
   `api-main.ceird.app` keep host-scoped cookies because sharing `ceird.app`
   would leak cookies across unrelated stages
 
+### Tenant Hosts And Auth
+
+Auth entry routes stay on the neutral app host for each stage. Login, signup,
+password reset, email verification, OAuth consent, invitation acceptance, and
+organization creation are app routes on `app.ceird.app`,
+`app.<stage>.ceird.app`, or `app.pr-<number>.ceird.app`; tenant hosts are for
+authenticated organization context, not for owning the auth entry flow.
+
+Better Auth accepts tenant browser origins through `AUTH_TRUSTED_ORIGINS`,
+which infra derives from the stage tenant route pattern. Production trusts
+`https://*.ceird.app`; non-production stages trust
+`https://*--{tenantStageAlias}.ceird.app`. The neutral app origin is still
+trusted explicitly.
+
+Cookies are shared only inside the intended stage boundary. Production uses the
+`ceird.app` parent cookie domain so `app.ceird.app`, `api.ceird.app`, and
+production tenant hosts can share the session. Nested stage hosts use their
+stage parent, such as `pr-123.ceird.app`, when the app/API system hosts are
+siblings under that parent. Better Auth cookie names also receive the
+stage-specific `AUTH_COOKIE_PREFIX` (`ceird-main`, `ceird-pr-123`, or a
+branch-derived prefix), so sessions from one stage do not collide with sessions
+from another stage even when hostnames share the same apex domain.
+
 Current OAuth/OIDC discovery endpoints provided by Better Auth under the auth
 base path:
 

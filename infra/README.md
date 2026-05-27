@@ -43,13 +43,26 @@ to the adopted `ceird-production-postgres` Hyperdrive name; non-parent stages
 use stage-scoped names unless `CEIRD_HYPERDRIVE_NAME` is set.
 
 The root stack outputs `app`, `api`, `mcp`, and `agent` as stage HTTPS origins
-derived from the reconciled public Cloudflare Worker domains. The configured
-app/API/MCP/Agent hostnames are used as fallbacks while the domain lists are
-resolving. Use `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
-`CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` only for an intentional
-canonical domain cutover; the main deploy workflow sets them to
-`app.ceird.app`, `api.ceird.app`, `mcp.ceird.app`, and `agent.ceird.app` for
-production.
+derived from the reconciled public Cloudflare Worker domains. It also outputs
+tenant routing details: `tenantRoutePattern`,
+`tenantWildcardDnsRecordId`, and
+`tenantReservedHostBypassRoutePatterns`. The configured app/API/MCP/Agent
+hostnames are used as fallbacks while the domain lists are resolving. Use
+`CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`, `CEIRD_MCP_HOSTNAME`, and
+`CEIRD_AGENT_HOSTNAME` only for an intentional canonical domain cutover; the
+main deploy workflow sets them to the exact production system custom domains
+`app.ceird.app`, `api.ceird.app`, `mcp.ceird.app`, and `agent.ceird.app`.
+
+Tenant hosts are app Worker routes, not Cloudflare custom domains per
+organization. Production tenants use `{orgSlug}.ceird.app`; non-production
+tenants use `{orgSlug}--{tenantStageAlias}.ceird.app`. The stack manages one
+shared wildcard DNS record for `*.ceird.app` and one Alchemy-owned Worker route
+for the active tenant pattern, such as `*.ceird.app/*` in production or
+`*--pr-123.ceird.app/*` for a PR preview. Destroying a PR stage removes that
+stage route but leaves the shared wildcard DNS record in place. Production adds
+reserved-host bypass routes with no script for `app.ceird.app`,
+`api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app` so the tenant wildcard
+does not intercept system traffic.
 Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
 and passed through the app-owned Worker env module; the root stack does not own
 those runtime defaults. Worker compatibility flags and observability settings
