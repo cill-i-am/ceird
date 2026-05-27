@@ -1,5 +1,5 @@
 "use client";
-import { SITE_GEOCODING_FAILED_ERROR_TAG } from "@ceird/sites-core";
+import { SITE_LOCATION_RESOLUTION_ERROR_TAG } from "@ceird/sites-core";
 import {
   Add01Icon,
   Cancel01Icon,
@@ -27,7 +27,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import {
   SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
-  defaultSiteCreateDraft,
+  createDefaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   validateSiteCreateDraft,
 } from "./site-create-form";
@@ -52,8 +52,8 @@ export function SitesCreateSheet() {
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
   );
-  const [values, setValues] = React.useState<SiteCreateDraft>(
-    defaultSiteCreateDraft
+  const [values, setValues] = React.useState<SiteCreateDraft>(() =>
+    createDefaultSiteCreateDraft()
   );
   const [overlayOpen, setOverlayOpen] = React.useState(false);
   const navigateAfterCloseRef = React.useRef(false);
@@ -80,7 +80,7 @@ export function SitesCreateSheet() {
     }
 
     if (resetAfterCloseRef.current) {
-      setValues(defaultSiteCreateDraft);
+      setValues(createDefaultSiteCreateDraft());
       resetAfterCloseRef.current = false;
     }
 
@@ -135,11 +135,11 @@ export function SitesCreateSheet() {
 
     if (
       Option.isSome(failure) &&
-      failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+      failure.value._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
         ...current,
-        eircode: failure.value.message,
+        location: failure.value.message,
       }));
     }
   }
@@ -243,6 +243,6 @@ function isHandledCreateSiteError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    error._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+    error._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
   );
 }

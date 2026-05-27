@@ -11,12 +11,12 @@ import type {
   CloudflareEmailBindingMessage,
   CloudflareEmailBindingSendResult,
 } from "./domains/identity/authentication/cloudflare-email-binding-auth-email-transport.js";
-import { SiteGeocoder } from "./domains/sites/geocoder.js";
+import { SiteLocationProvider } from "./domains/sites/location-provider.js";
 import type { DomainWorkerEnv } from "./platform/cloudflare/env.js";
 import { domainWorkerEnvConfigMap } from "./platform/cloudflare/env.js";
 import {
   disposeDomainWorkerHandler,
-  DomainWorkerSiteGeocoderLive,
+  DomainWorkerSiteLocationProviderLive,
   getDomainWorkerMcpAuthorizedAppCache,
   handleWorkerFetch,
   handleWorkerQueue,
@@ -147,18 +147,18 @@ describe("worker queue auth email delivery", () => {
         Effect.provide(runtimeLayers.baseLive)
       )
     );
-    const geocoderRuntime = await Effect.runPromise(
+    const locationProviderRuntime = await Effect.runPromise(
       Effect.gen(function* () {
-        return yield* SiteGeocoder;
+        return yield* SiteLocationProvider;
       }).pipe(
-        Effect.provide(runtimeLayers.siteGeocoderLive),
+        Effect.provide(runtimeLayers.siteLocationProviderLive),
         Effect.provide(runtimeLayers.baseLive),
         effectEither
       )
     );
 
     expect(baseUrl).toBe(env.BETTER_AUTH_BASE_URL);
-    expect(geocoderRuntime._tag).toBe("Right");
+    expect(locationProviderRuntime._tag).toBe("Right");
     expect(runtimeLayers.authenticationLive).toBeDefined();
     expect(runtimeLayers.databaseRuntimeLive).toBeDefined();
   }, 10_000);
@@ -351,12 +351,12 @@ describe("worker queue auth email delivery", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses the Google geocoder layer with Worker environment config", async () => {
+  it("uses the Google Places location provider with Worker environment config", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        return yield* SiteGeocoder;
+        return yield* SiteLocationProvider;
       }).pipe(
-        Effect.provide(DomainWorkerSiteGeocoderLive),
+        Effect.provide(DomainWorkerSiteLocationProviderLive),
         Effect.provide(
           ConfigProvider.layer(
             configProviderFromMap(domainWorkerEnvConfigMap(makeEnv()))

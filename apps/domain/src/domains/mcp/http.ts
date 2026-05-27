@@ -14,7 +14,7 @@ import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
-import { SiteGeocoder } from "../sites/geocoder.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
 import {
   SiteLabelAssignmentsRepository,
   SitesRepository,
@@ -40,10 +40,13 @@ const OAUTH_PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 const MCP_DISPOSAL_URL_WITH_QUERY_PATTERN = /\bhttps?:\/\/[^\s<>()"']+/g;
 const MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN =
   /\b(token|code|secret|password|key)=([^&\s<>()"']+)/gi;
+const MCP_DISPOSAL_SECRET_LIKE_ASSIGNMENT_PATTERN =
+  /(["']?(?:access_token|refresh_token|client_secret|token|code|secret|password|key)["']?\s*[:=]\s*["']?)([^"',\s}&]+)/gi;
+const MCP_DISPOSAL_BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 type McpPath = `/${string}`;
 
 type McpBaseLayer = Layer.Layer<never, never, never>;
-type McpRuntimeServices = SqlClient.SqlClient | SiteGeocoder;
+type McpRuntimeServices = SqlClient.SqlClient | SiteLocationProvider;
 interface McpLayerOptions<ERuntime> {
   readonly baseLive?: McpBaseLayer | undefined;
   readonly authorizedAppCache?: McpAuthorizedAppCache | undefined;
@@ -652,7 +655,9 @@ function sanitizeMcpDisposalFailureMessage(message: string) {
     .replaceAll(MCP_DISPOSAL_URL_WITH_QUERY_PATTERN, (value) =>
       sanitizeMcpDisposalFailureUrl(value)
     )
-    .replaceAll(MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]");
+    .replaceAll(MCP_DISPOSAL_SECRET_LIKE_ASSIGNMENT_PATTERN, "$1[redacted]")
+    .replaceAll(MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
+    .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]");
 }
 
 function sanitizeMcpDisposalFailureUrl(value: string) {
@@ -667,10 +672,9 @@ function sanitizeMcpDisposalFailureUrl(value: string) {
     url.password = "";
     return url.toString();
   } catch {
-    return value.replaceAll(
-      MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN,
-      "$1=[redacted]"
-    );
+    return value
+      .replaceAll(MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
+      .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]");
   }
 }
 
@@ -707,9 +711,9 @@ const MissingMcpRuntimeLive = Layer.mergeAll(
     Effect.die(new Error("MCP runtime is missing SqlClient; pass runtimeLive"))
   ),
   Layer.effect(
-    SiteGeocoder,
+    SiteLocationProvider,
     Effect.die(
-      new Error("MCP runtime is missing SiteGeocoder; pass runtimeLive")
+      new Error("MCP runtime is missing SiteLocationProvider; pass runtimeLive")
     )
   )
 );

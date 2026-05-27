@@ -5,8 +5,8 @@ import type {
   LabelNotFoundError,
 } from "@ceird/labels-core";
 import type {
-  SiteGeocodingFailedError,
-  SiteGeocodingProviderError,
+  SiteLocationProviderError,
+  SiteLocationResolutionError,
   SiteNotFoundError,
 } from "@ceird/sites-core";
 import { Schema } from "effect";
@@ -187,7 +187,7 @@ export type JobsError =
   | JobCollaboratorNotFoundError
   | JobCollaboratorConflictError
   | SiteNotFoundError
-  | SiteGeocodingFailedError
-  | SiteGeocodingProviderError
+  | SiteLocationProviderError
+  | SiteLocationResolutionError
   | ContactNotFoundError
   | OrganizationMemberNotFoundError;

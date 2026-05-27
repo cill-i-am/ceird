@@ -179,7 +179,10 @@ export function buildAuthenticatedHomeDashboard({
           address: buildSiteAddressLines(site).join(", "),
           id: site.id,
           name: site.name,
-          updatedAt: formatJobDateTime(site.geocodedAt),
+          updatedAt:
+            site.locationResolvedAt === undefined
+              ? "Unverified location"
+              : formatJobDateTime(site.locationResolvedAt),
         }))
         .filter((site) => site.activeJobCount > 0)
         .toSorted((left, right) => {

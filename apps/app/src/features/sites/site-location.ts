@@ -4,11 +4,16 @@ export interface SiteLocationLike {
   readonly addressLine1?: string;
   readonly addressLine2?: string;
   readonly county?: string;
+  readonly displayLocation?: string;
   readonly eircode?: string;
   readonly accessNotes?: string;
+  readonly formattedAddress?: string;
+  readonly hasUsableCoordinates?: boolean;
   readonly latitude?: number;
+  readonly locationStatus?: string;
   readonly longitude?: number;
   readonly name?: string;
+  readonly rawLocationInput?: string;
   readonly town?: string;
 }
 
@@ -30,6 +35,7 @@ export function hasSiteCoordinates(
   return (
     site !== undefined &&
     site !== null &&
+    site.hasUsableCoordinates === true &&
     typeof site.latitude === "number" &&
     Number.isFinite(site.latitude) &&
     typeof site.longitude === "number" &&
@@ -46,8 +52,15 @@ export function buildSiteAddressLines(
 
   const primary = compactLocationParts([site.addressLine1, site.addressLine2]);
   const locality = compactLocationParts([site.town, site.county, site.eircode]);
+  const fallback =
+    site.displayLocation || site.formattedAddress || site.rawLocationInput;
+  const lines = [primary, locality].filter((value) => value.length > 0);
 
-  return [primary, locality].filter((value) => value.length > 0);
+  if (lines.length > 0) {
+    return lines;
+  }
+
+  return fallback ? [fallback] : [];
 }
 
 export function buildGoogleMapsUrl(site: SiteLocationLike | null | undefined) {
@@ -57,7 +70,10 @@ export function buildGoogleMapsUrl(site: SiteLocationLike | null | undefined) {
 
   const query = hasSiteCoordinates(site)
     ? `${site.latitude},${site.longitude}`
-    : compactLocationParts([
+    : site.displayLocation ||
+      site.formattedAddress ||
+      site.rawLocationInput ||
+      compactLocationParts([
         site.name,
         site.addressLine1,
         site.addressLine2,

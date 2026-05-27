@@ -1,7 +1,10 @@
 import { WorkItemId } from "@ceird/jobs-core";
 import type { JobListItem, JobMemberOptionsResponse } from "@ceird/jobs-core";
 import { SiteId } from "@ceird/sites-core";
-import type { SitesOptionsResponse } from "@ceird/sites-core";
+import type {
+  GooglePlaceIdType,
+  SitesOptionsResponse,
+} from "@ceird/sites-core";
 import { Schema } from "effect";
 
 import { buildAuthenticatedHomeDashboard } from "./authenticated-shell-home-dashboard";
@@ -60,12 +63,17 @@ function buildSiteOption(
     addressLine1: "1 North Wall Quay",
     country: "IE",
     county: "Dublin",
+    displayLocation: "1 North Wall Quay, Dublin, D01 X2X2",
     eircode: "D01 X2X2",
-    geocodedAt: "2026-04-23T10:00:00.000Z",
-    geocodingProvider: "stub",
+    formattedAddress: "1 North Wall Quay, Dublin, D01 X2X2, Ireland",
+    googlePlaceId: "ChIJnorthwall" as GooglePlaceIdType,
+    hasUsableCoordinates: true,
     id,
     labels: [],
     latitude: 53.3498,
+    locationProvider: "google_places",
+    locationResolvedAt: "2026-04-23T10:00:00.000Z",
+    locationStatus: "google_resolved",
     longitude: -6.2603,
     name,
   };

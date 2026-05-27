@@ -114,20 +114,24 @@ Path: `packages/sites-core`
 Exports the shared sites contract:
 
 - `SiteId`
-- site country, geocoding provider, latitude, and longitude schemas
+- site country, location status/provider, Google place, latitude, and longitude
+  schemas
 - site create/update inputs, rich site option/detail DTOs, site options response,
   and cursor-paginated site list request/response DTOs
+- Google Places autocomplete and place-details request/response DTOs
 - site comment DTOs extended from `@ceird/comments-core`
 - site label assignment inputs and endpoints; this package depends on
   `@ceird/labels-core` for label IDs and schemas
-- typed site, access-denied, storage, and geocoding errors
+- typed site, access-denied, storage, location provider, and location resolution
+  errors
 - `SitesApi` and `SitesApiGroup`
 
 Subpath exports `@ceird/sites-core/ids` and `@ceird/sites-core/dto` are
 available for schema-only consumers that should not bundle HTTP API groups.
 
-Sites are independent shared organization data. Keep geocoding, SQL
-repositories, authorization, and React state in the domain Worker or app.
+Sites are independent shared organization data. Keep Google Places provider
+calls, future Address Validation integration, SQL repositories, authorization,
+and React state in the domain Worker or app.
 
 ## `@ceird/labels-core`
 

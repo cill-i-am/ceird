@@ -6,14 +6,14 @@ that need site IDs or site option DTOs.
 
 ## Important Files
 
-| File              | Purpose                                                                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------- |
-| `src/ids.ts`      | Branded site IDs.                                                                                 |
-| `src/domain.ts`   | Runtime schemas for site coordinates, country, geocoding provider, and ISO datetime values.       |
-| `src/dto.ts`      | Site create/update inputs, site option DTOs, comments, labels, and site options response schemas. |
-| `src/errors.ts`   | Typed public site, geocoding, access-denied, and storage errors with HTTP annotations.            |
-| `src/http-api.ts` | Effect `HttpApi` contract group for sites.                                                        |
-| `src/index.ts`    | Public package exports.                                                                           |
+| File              | Purpose                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `src/ids.ts`      | Branded site IDs.                                                                                                            |
+| `src/domain.ts`   | Runtime schemas for site coordinates, country, location status/provider, Google place IDs, and ISO datetime values.          |
+| `src/dto.ts`      | Site create/update inputs, site option DTOs, Google Places lookup DTOs, comments, labels, and site options response schemas. |
+| `src/errors.ts`   | Typed public site, location provider/resolution, access-denied, and storage errors with HTTP annotations.                    |
+| `src/http-api.ts` | Effect `HttpApi` contract group for sites.                                                                                   |
+| `src/index.ts`    | Public package exports.                                                                                                      |
 
 ## Commands
 
@@ -26,5 +26,6 @@ pnpm --filter @ceird/sites-core build
 ## Boundary
 
 Put site-owned runtime schemas, DTOs, branded IDs, HTTP contract pieces, and
-public typed errors here. Keep geocoding, SQL repositories, authorization, and
-React state in `apps/domain` or `apps/app`.
+public typed errors here. Keep Google Places provider calls, future Address
+Validation integration, SQL repositories, authorization, and React state in
+`apps/domain` or `apps/app`.

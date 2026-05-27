@@ -1,28 +1,53 @@
 "use client";
-import type { CreateSiteInput, SiteCountry } from "@ceird/sites-core";
+import type {
+  CreateSiteInput,
+  GooglePlaceIdType,
+  GooglePlacesSessionTokenType,
+  SiteCountry,
+  SiteLocationAutocompleteInput,
+  SiteLocationInput,
+  SiteLocationSuggestion,
+  SiteOption,
+  UpdateSiteInput,
+} from "@ceird/sites-core";
+import {
+  CheckmarkCircle02Icon,
+  Location01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Effect, Exit } from "effect";
+import * as React from "react";
 
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import { AuthFormField } from "#/features/auth/auth-form-field";
+import { cn } from "#/lib/utils";
 
 const DEFAULT_SITE_COUNTRY = "IE" satisfies SiteCountry;
+const LOCATION_AUTOCOMPLETE_DEBOUNCE_MS = 250;
+const LOCATION_AUTOCOMPLETE_MIN_LENGTH = 3;
+
+export interface SiteCreateLocationSelection {
+  readonly displayText: string;
+  readonly placeId: GooglePlaceIdType;
+  readonly rawInput: string;
+  readonly secondaryText?: string;
+  readonly sessionToken: GooglePlacesSessionTokenType;
+}
 
 export interface SiteCreateDraft {
   readonly accessNotes: string;
-  readonly addressLine1: string;
-  readonly addressLine2: string;
-  readonly county: string;
   readonly country: SiteCountry;
-  readonly eircode: string;
+  readonly locationInput: string;
+  readonly locationSelection: SiteCreateLocationSelection | null;
+  readonly locationSessionToken: GooglePlacesSessionTokenType;
   readonly name: string;
-  readonly town: string;
 }
 
 export interface SiteCreateFieldErrors {
-  readonly addressLine1?: string;
-  readonly county?: string;
-  readonly eircode?: string;
+  readonly location?: string;
   readonly name?: string;
 }
 
@@ -35,16 +60,68 @@ interface SiteCreateFieldSectionProps {
   readonly onDraftPatch: (patch: SiteCreateDraftPatch) => void;
 }
 
-export const defaultSiteCreateDraft: SiteCreateDraft = {
-  accessNotes: "",
-  addressLine1: "",
-  addressLine2: "",
-  county: "",
-  country: DEFAULT_SITE_COUNTRY,
-  eircode: "",
-  name: "",
-  town: "",
-};
+export function createDefaultSiteCreateDraft(): SiteCreateDraft {
+  return {
+    accessNotes: "",
+    country: DEFAULT_SITE_COUNTRY,
+    locationInput: "",
+    locationSelection: null,
+    locationSessionToken: createGooglePlacesSessionToken(),
+    name: "",
+  };
+}
+
+export const defaultSiteCreateDraft: SiteCreateDraft =
+  createDefaultSiteCreateDraft();
+
+export function createSiteCreateDraftFromSite(
+  site: SiteOption
+): SiteCreateDraft {
+  const baseDraft = createDefaultSiteCreateDraft();
+  const locationInput =
+    site.displayLocation ||
+    site.formattedAddress ||
+    site.rawLocationInput ||
+    "";
+  const googleLocationSelection =
+    site.googlePlaceId === undefined || locationInput.length === 0
+      ? null
+      : {
+          displayText: locationInput,
+          placeId: site.googlePlaceId,
+          rawInput: site.rawLocationInput ?? locationInput,
+          sessionToken: baseDraft.locationSessionToken,
+          ...(site.formattedAddress === undefined
+            ? {}
+            : { secondaryText: site.formattedAddress }),
+        };
+
+  return {
+    accessNotes: site.accessNotes ?? "",
+    country: site.country ?? baseDraft.country,
+    locationInput,
+    locationSelection: googleLocationSelection,
+    locationSessionToken: baseDraft.locationSessionToken,
+    name: site.name,
+  };
+}
+
+export function siteCreateDraftLocationEqualsSite(
+  draft: SiteCreateDraft,
+  site: SiteOption
+) {
+  const siteDraft = createSiteCreateDraftFromSite(site);
+
+  return (
+    toOptionalTrimmedString(draft.locationInput) ===
+      toOptionalTrimmedString(siteDraft.locationInput) &&
+    draft.country === siteDraft.country &&
+    locationSelectionsEqual(
+      draft.locationSelection,
+      siteDraft.locationSelection
+    )
+  );
+}
 
 export function validateSiteCreateDraft(
   values: SiteCreateDraft,
@@ -53,15 +130,6 @@ export function validateSiteCreateDraft(
   } = {}
 ): SiteCreateFieldErrors {
   return {
-    addressLine1:
-      values.addressLine1.trim().length === 0
-        ? "Add address line 1."
-        : undefined,
-    county: values.county.trim().length === 0 ? "Add county." : undefined,
-    eircode:
-      values.country === "IE" && values.eircode.trim().length === 0
-        ? "Add Eircode."
-        : undefined,
     name:
       values.name.trim().length === 0
         ? (options.nameRequiredMessage ?? "Add a site name before creating it.")
@@ -74,22 +142,35 @@ export function hasSiteCreateFieldErrors(errors: SiteCreateFieldErrors) {
 }
 
 export function buildCreateSiteInputFromDraft(
-  values: SiteCreateDraft
+  values: SiteCreateDraft,
+  options: { readonly includeLocation?: boolean } = {}
 ): CreateSiteInput {
   const accessNotes = toOptionalTrimmedString(values.accessNotes);
-  const addressLine2 = toOptionalTrimmedString(values.addressLine2);
-  const eircode = toOptionalTrimmedString(values.eircode);
-  const town = toOptionalTrimmedString(values.town);
+  const name = values.name.trim();
+  const location = buildLocationInputFromDraft(values, options);
 
   return {
-    addressLine1: values.addressLine1.trim(),
-    county: values.county.trim(),
-    country: values.country,
-    name: values.name.trim(),
+    name,
     ...(accessNotes === undefined ? {} : { accessNotes }),
-    ...(addressLine2 === undefined ? {} : { addressLine2 }),
-    ...(eircode === undefined ? {} : { eircode }),
-    ...(town === undefined ? {} : { town }),
+    ...(location === undefined || location === null ? {} : { location }),
+  };
+}
+
+export function buildUpdateSiteInputFromDraft(
+  values: SiteCreateDraft,
+  options: {
+    readonly clearEmptyLocation?: boolean;
+    readonly includeLocation?: boolean;
+  } = {}
+): UpdateSiteInput {
+  const accessNotes = toOptionalTrimmedString(values.accessNotes);
+  const name = values.name.trim();
+  const location = buildLocationInputFromDraft(values, options);
+
+  return {
+    name,
+    ...(accessNotes === undefined ? {} : { accessNotes }),
+    ...(location === undefined ? {} : { location }),
   };
 }
 
@@ -139,13 +220,7 @@ export function SiteCreateDrawerFields({
           draft={draft}
           errors={errors}
           idPrefix={idPrefix}
-          placeholders={{
-            addressLine1: "e.g. 42 North Road",
-            addressLine2: "Building, floor, unit",
-            county: "Dublin",
-            eircode: "D01 F5P2",
-            town: "Dublin",
-          }}
+          placeholder="Search an address, Eircode, town, or landmark"
           onDraftPatch={updateDraft}
         />
       </SiteCreateSection>
@@ -209,96 +284,256 @@ function SiteNameField({
   );
 }
 
-interface SiteAddressFieldPlaceholders {
-  readonly addressLine1?: string;
-  readonly addressLine2?: string;
-  readonly county?: string;
-  readonly eircode?: string;
-  readonly town?: string;
-}
-
 export function SiteAddressFields({
   className,
   draft,
   errors,
   idPrefix,
   onDraftPatch,
-  placeholders,
+  placeholder,
 }: SiteCreateFieldSectionProps & {
   readonly className?: string;
-  readonly placeholders?: SiteAddressFieldPlaceholders;
+  readonly placeholder?: string;
 }) {
   return (
     <FieldGroup className={className}>
-      <AuthFormField
-        label="Address line 1"
-        htmlFor={`${idPrefix}-address-line-1`}
-        errorText={errors.addressLine1}
-      >
-        <Input
-          id={`${idPrefix}-address-line-1`}
-          value={draft.addressLine1}
-          aria-invalid={Boolean(errors.addressLine1) || undefined}
-          placeholder={placeholders?.addressLine1}
-          onChange={(event) =>
-            onDraftPatch({ addressLine1: event.target.value })
-          }
-        />
-      </AuthFormField>
-
-      <AuthFormField
-        label="Address line 2"
-        htmlFor={`${idPrefix}-address-line-2`}
-      >
-        <Input
-          id={`${idPrefix}-address-line-2`}
-          value={draft.addressLine2}
-          placeholder={placeholders?.addressLine2}
-          onChange={(event) =>
-            onDraftPatch({ addressLine2: event.target.value })
-          }
-        />
-      </AuthFormField>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <AuthFormField label="Town" htmlFor={`${idPrefix}-town`}>
-          <Input
-            id={`${idPrefix}-town`}
-            value={draft.town}
-            placeholder={placeholders?.town}
-            onChange={(event) => onDraftPatch({ town: event.target.value })}
-          />
-        </AuthFormField>
-
-        <AuthFormField
-          label="County"
-          htmlFor={`${idPrefix}-county`}
-          errorText={errors.county}
-        >
-          <Input
-            id={`${idPrefix}-county`}
-            value={draft.county}
-            aria-invalid={Boolean(errors.county) || undefined}
-            placeholder={placeholders?.county}
-            onChange={(event) => onDraftPatch({ county: event.target.value })}
-          />
-        </AuthFormField>
-      </div>
-
-      <AuthFormField
-        label="Eircode"
-        htmlFor={`${idPrefix}-eircode`}
-        errorText={errors.eircode}
-      >
-        <Input
-          id={`${idPrefix}-eircode`}
-          value={draft.eircode}
-          aria-invalid={Boolean(errors.eircode) || undefined}
-          placeholder={placeholders?.eircode}
-          onChange={(event) => onDraftPatch({ eircode: event.target.value })}
-        />
-      </AuthFormField>
+      <SiteLocationSearchField
+        draft={draft}
+        errors={errors}
+        idPrefix={idPrefix}
+        placeholder={placeholder}
+        onDraftPatch={onDraftPatch}
+      />
     </FieldGroup>
+  );
+}
+
+function SiteLocationSearchField({
+  draft,
+  errors,
+  idPrefix,
+  onDraftPatch,
+  placeholder,
+}: SiteCreateFieldSectionProps & {
+  readonly placeholder?: string;
+}) {
+  const trimmedInput = draft.locationInput.trim();
+  const selected =
+    draft.locationSelection !== null &&
+    draft.locationSelection.displayText.trim() === trimmedInput;
+  const { searchFailed, suggestions, waiting } = useSiteLocationAutocomplete({
+    country: draft.country,
+    enabled: !selected,
+    input: draft.locationInput,
+    sessionToken: draft.locationSessionToken,
+  });
+  const listboxId = `${idPrefix}-location-suggestions`;
+  const [dismissedSuggestionInput, setDismissedSuggestionInput] =
+    React.useState<string | null>(null);
+  const visibleSuggestions =
+    dismissedSuggestionInput === trimmedInput ? [] : suggestions;
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(-1);
+  const activeSuggestion =
+    activeSuggestionIndex >= 0
+      ? visibleSuggestions[activeSuggestionIndex]
+      : undefined;
+
+  React.useEffect(() => {
+    setActiveSuggestionIndex(visibleSuggestions.length > 0 ? 0 : -1);
+  }, [visibleSuggestions.length, trimmedInput]);
+
+  function selectSuggestion(suggestion: SiteLocationSuggestion) {
+    onDraftPatch({
+      locationInput: suggestion.displayText,
+      locationSelection: {
+        displayText: suggestion.displayText,
+        placeId: suggestion.placeId,
+        rawInput: draft.locationInput,
+        sessionToken: draft.locationSessionToken,
+        ...(suggestion.secondaryText === undefined
+          ? {}
+          : { secondaryText: suggestion.secondaryText }),
+      },
+    });
+    setActiveSuggestionIndex(-1);
+    setDismissedSuggestionInput(null);
+  }
+
+  return (
+    <AuthFormField
+      label="Location"
+      htmlFor={`${idPrefix}-location`}
+      errorText={errors.location}
+    >
+      <div className="flex flex-col gap-2">
+        <div className="relative">
+          <Input
+            id={`${idPrefix}-location`}
+            value={draft.locationInput}
+            role="combobox"
+            aria-activedescendant={
+              activeSuggestion === undefined
+                ? undefined
+                : `${listboxId}-${activeSuggestionIndex}`
+            }
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-expanded={visibleSuggestions.length > 0}
+            aria-invalid={Boolean(errors.location) || undefined}
+            autoComplete="street-address"
+            placeholder={placeholder}
+            onChange={(event) => {
+              setDismissedSuggestionInput(null);
+              onDraftPatch({
+                locationInput: event.target.value,
+                locationSelection: null,
+              });
+            }}
+            onKeyDown={(event) => {
+              if (visibleSuggestions.length === 0) {
+                return;
+              }
+
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveSuggestionIndex((current) =>
+                  current >= visibleSuggestions.length - 1 ? 0 : current + 1
+                );
+              }
+
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveSuggestionIndex((current) =>
+                  current <= 0 ? visibleSuggestions.length - 1 : current - 1
+                );
+              }
+
+              if (event.key === "Enter" && activeSuggestion !== undefined) {
+                event.preventDefault();
+                selectSuggestion(activeSuggestion);
+              }
+
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDismissedSuggestionInput(trimmedInput);
+                setActiveSuggestionIndex(-1);
+              }
+            }}
+          />
+          {visibleSuggestions.length > 0 ? (
+            <div
+              id={listboxId}
+              role="listbox"
+              className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            >
+              {visibleSuggestions.map((suggestion, index) => (
+                <button
+                  key={suggestion.placeId}
+                  id={`${listboxId}-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeSuggestionIndex}
+                  className={cn(
+                    "flex w-full items-start gap-2 rounded-sm px-2.5 py-2 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
+                    index === activeSuggestionIndex &&
+                      "bg-accent text-accent-foreground"
+                  )}
+                  onMouseEnter={() => setActiveSuggestionIndex(index)}
+                  onClick={() => selectSuggestion(suggestion)}
+                >
+                  <HugeiconsIcon
+                    icon={Location01Icon}
+                    strokeWidth={2}
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {suggestion.displayText}
+                    </span>
+                    {suggestion.secondaryText ? (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {suggestion.secondaryText}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <SiteLocationStatus
+          inputLength={trimmedInput.length}
+          searchFailed={searchFailed}
+          selected={selected}
+          waiting={waiting}
+        />
+      </div>
+    </AuthFormField>
+  );
+}
+
+function SiteLocationStatus({
+  inputLength,
+  searchFailed,
+  selected,
+  waiting,
+}: {
+  readonly inputLength: number;
+  readonly searchFailed: boolean;
+  readonly selected: boolean;
+  readonly waiting: boolean;
+}) {
+  if (selected) {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"
+      >
+        <HugeiconsIcon
+          icon={CheckmarkCircle02Icon}
+          strokeWidth={2}
+          className="size-3.5"
+        />
+        Google location
+      </p>
+    );
+  }
+
+  if (waiting) {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        className="text-xs text-muted-foreground"
+      >
+        Searching...
+      </p>
+    );
+  }
+
+  if (searchFailed && inputLength >= LOCATION_AUTOCOMPLETE_MIN_LENGTH) {
+    return (
+      <p role="status" aria-live="polite" className="text-xs text-amber-700">
+        Location lookup unavailable. Save as unverified location.
+      </p>
+    );
+  }
+
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "text-xs",
+        inputLength === 0
+          ? "text-muted-foreground"
+          : "font-medium text-amber-700"
+      )}
+    >
+      {inputLength === 0 ? "No location" : "Unverified location"}
+    </p>
   );
 }
 
@@ -324,5 +559,151 @@ export function SiteAccessNotesField({
         onChange={(event) => onDraftPatch({ accessNotes: event.target.value })}
       />
     </AuthFormField>
+  );
+}
+
+function useSiteLocationAutocomplete(
+  input: SiteLocationAutocompleteInput & {
+    readonly enabled: boolean;
+  }
+) {
+  const trimmedInput = input.input.trim();
+  const [state, setState] = React.useState<{
+    readonly searchFailed: boolean;
+    readonly suggestions: readonly SiteLocationSuggestion[];
+    readonly waiting: boolean;
+  }>({
+    searchFailed: false,
+    suggestions: [],
+    waiting: false,
+  });
+
+  React.useEffect(() => {
+    if (
+      !input.enabled ||
+      trimmedInput.length < LOCATION_AUTOCOMPLETE_MIN_LENGTH
+    ) {
+      setState({ searchFailed: false, suggestions: [], waiting: false });
+      return;
+    }
+
+    let active = true;
+    setState((current) => ({ ...current, searchFailed: false, waiting: true }));
+
+    const timeout = window.setTimeout(() => {
+      void runAutocompleteRequest();
+    }, LOCATION_AUTOCOMPLETE_DEBOUNCE_MS);
+
+    async function runAutocompleteRequest() {
+      const exit = await Effect.runPromiseExit(
+        autocompleteBrowserSiteLocation({
+          country: input.country,
+          input: trimmedInput,
+          sessionToken: input.sessionToken,
+        })
+      );
+
+      if (!active) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setState({
+          searchFailed: false,
+          suggestions: exit.value.suggestions,
+          waiting: false,
+        });
+        return;
+      }
+
+      setState({
+        searchFailed: true,
+        suggestions: [],
+        waiting: false,
+      });
+    }
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [input.country, input.enabled, input.sessionToken, trimmedInput]);
+
+  return state;
+}
+
+function autocompleteBrowserSiteLocation(input: SiteLocationAutocompleteInput) {
+  return runBrowserAppApiRequest(
+    "SitesBrowser.autocompleteSiteLocation",
+    (client) =>
+      client.sites.autocompleteSiteLocation({
+        payload: input,
+      })
+  );
+}
+
+function buildLocationInputFromDraft(
+  values: SiteCreateDraft,
+  options: {
+    readonly clearEmptyLocation?: boolean;
+    readonly includeLocation?: boolean;
+  }
+): SiteLocationInput | null | undefined {
+  if (options.includeLocation === false) {
+    return undefined;
+  }
+
+  const rawInput = toOptionalTrimmedString(values.locationInput);
+
+  if (rawInput === undefined) {
+    return options.clearEmptyLocation === true ? null : undefined;
+  }
+
+  const selection = values.locationSelection;
+
+  if (selection !== null && selection.displayText.trim() === rawInput) {
+    const selectedRawInput =
+      toOptionalTrimmedString(selection.rawInput) ?? rawInput;
+
+    return {
+      displayText: selection.displayText,
+      kind: "google_place",
+      placeId: selection.placeId,
+      rawInput: selectedRawInput,
+      sessionToken: selection.sessionToken,
+      ...(selection.secondaryText === undefined
+        ? {}
+        : { secondaryText: selection.secondaryText }),
+    };
+  }
+
+  return {
+    country: values.country,
+    kind: "manual",
+    rawInput,
+  };
+}
+
+function createGooglePlacesSessionToken(): GooglePlacesSessionTokenType {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID() as GooglePlacesSessionTokenType;
+  }
+
+  return "00000000-0000-4000-8000-000000000000" as GooglePlacesSessionTokenType;
+}
+
+function locationSelectionsEqual(
+  left: SiteCreateLocationSelection | null,
+  right: SiteCreateLocationSelection | null
+) {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return (
+    left.displayText === right.displayText &&
+    left.placeId === right.placeId &&
+    left.rawInput === right.rawInput &&
+    left.secondaryText === right.secondaryText
   );
 }

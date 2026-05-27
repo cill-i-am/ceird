@@ -15,10 +15,11 @@ describe("domain Worker boundaries", () => {
     expect(domains).toContain("sites/service.ts");
     expect(domains).toContain("sites/repositories.ts");
     expect(domains).toContain("sites/schema.ts");
-    expect(domains).toContain("sites/geocoder.ts");
+    expect(domains).toContain("sites/location-provider.ts");
+    expect(domains).toContain("sites/location-resolution.ts");
     expect(domains).not.toContain("jobs/sites-service.ts");
-    expect(domains).not.toContain("jobs/site-geocoder.ts");
-    expect(domains).not.toContain("jobs/site-geocoding-config.ts");
+    expect(domains).not.toContain("jobs/site-location-provider.ts");
+    expect(domains).not.toContain("jobs/site-location-config.ts");
   });
 
   it("keeps labels implementation in the labels domain", async () => {

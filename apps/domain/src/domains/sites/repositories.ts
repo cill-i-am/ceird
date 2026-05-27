@@ -14,15 +14,19 @@ import {
   SiteListCursorInvalidError,
   SiteListResponseSchema,
   SiteNotFoundError,
-  SiteOptionSchema,
 } from "@ceird/sites-core";
 import type {
+  GoogleAddressComponent,
+  GooglePlaceIdType,
   IsoDateTimeStringType as IsoDateTimeString,
   SiteCountry,
-  SiteGeocodingProvider,
   SiteIdType as SiteId,
+  SiteLatitude,
   SiteListCursorType as SiteListCursor,
   SiteListQuery,
+  SiteLocationProviderType,
+  SiteLocationStatusType,
+  SiteLongitude,
   SiteOption,
 } from "@ceird/sites-core";
 import {
@@ -42,25 +46,11 @@ import {
   listSiteLabelsForOrganization,
   listSiteLabelsForSites,
 } from "./site-label-queries.js";
+import type { SiteOptionRow } from "./site-option-row.js";
+import { mapSiteOptionRow } from "./site-option-row.js";
 
 interface IdRow {
   readonly id: string;
-}
-
-interface SiteOptionRow {
-  readonly access_notes: string | null;
-  readonly address_line_1: string;
-  readonly address_line_2: string | null;
-  readonly country: string;
-  readonly county: string;
-  readonly eircode: string | null;
-  readonly geocoded_at: Date;
-  readonly geocoding_provider: string;
-  readonly id: string;
-  readonly latitude: number;
-  readonly longitude: number;
-  readonly name: string;
-  readonly town: string | null;
 }
 
 interface SiteCursorState {
@@ -89,35 +79,37 @@ interface LabelRemovalRow extends LabelRow {
   readonly site_id: string | null;
 }
 
-export interface CreateSiteRecordInput {
+interface SiteRecordBaseWriteFields {
   readonly accessNotes?: string;
-  readonly addressLine1: string;
-  readonly addressLine2?: string;
-  readonly country: SiteCountry;
-  readonly county: string;
-  readonly eircode?: string;
-  readonly geocodedAt: IsoDateTimeString;
-  readonly geocodingProvider: SiteGeocodingProvider;
-  readonly latitude: number;
-  readonly longitude: number;
   readonly name: string;
-  readonly organizationId: OrganizationId;
+}
+
+interface SiteLocationRecordWriteFields {
+  readonly addressComponents?: readonly GoogleAddressComponent[];
+  readonly addressLine1?: string;
+  readonly addressLine2?: string;
+  readonly country?: SiteCountry;
+  readonly county?: string;
+  readonly displayLocation: string;
+  readonly eircode?: string;
+  readonly formattedAddress?: string;
+  readonly googlePlaceId?: GooglePlaceIdType;
+  readonly latitude?: SiteLatitude;
+  readonly locationProvider?: SiteLocationProviderType;
+  readonly locationResolvedAt?: IsoDateTimeString;
+  readonly locationStatus: SiteLocationStatusType;
+  readonly longitude?: SiteLongitude;
+  readonly rawLocationInput?: string;
   readonly town?: string;
 }
 
-export interface UpdateSiteRecordInput {
-  readonly accessNotes?: string;
-  readonly addressLine1: string;
-  readonly addressLine2?: string;
-  readonly country: SiteCountry;
-  readonly county: string;
-  readonly eircode?: string;
-  readonly geocodedAt: IsoDateTimeString;
-  readonly geocodingProvider: SiteGeocodingProvider;
-  readonly latitude: number;
-  readonly longitude: number;
-  readonly name: string;
-  readonly town?: string;
+export interface CreateSiteRecordInput
+  extends SiteRecordBaseWriteFields, SiteLocationRecordWriteFields {
+  readonly organizationId: OrganizationId;
+}
+
+export interface UpdateSiteRecordInput extends SiteRecordBaseWriteFields {
+  readonly location?: SiteLocationRecordWriteFields;
 }
 
 export interface AssignSiteLabelRecordInput {
@@ -134,7 +126,6 @@ export interface SiteLabelAssignmentResult {
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeSiteListCursor = Schema.decodeUnknownSync(SiteListCursorSchema);
 const decodeSiteListResponse = Schema.decodeUnknownSync(SiteListResponseSchema);
-const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeSiteCursorState = Schema.decodeUnknownSync(
   Schema.Struct({
     id: SiteIdSchema,
@@ -179,10 +170,12 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const create = Effect.fn("SitesRepository.create")(function* (
         input: CreateSiteRecordInput
       ) {
-        const values = makeSiteValues(input, {
+        const values = {
+          ...makeSiteBaseValues(input),
+          ...makeSiteLocationValues(input),
           id: generateSiteId(),
           organization_id: input.organizationId,
-        });
+        };
 
         const rows = yield* sql<IdRow>`
           insert into sites ${sql.insert(values).returning("id")}
@@ -201,7 +194,10 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         const rows = yield* sql<IdRow>`
           update sites
           set ${sql.update({
-            ...makeSiteValues(input, {}),
+            ...makeSiteBaseValues(input),
+            ...(input.location === undefined
+              ? {}
+              : makeSiteLocationValues(input.location)),
             updated_at: new Date(),
           })}
           where organization_id = ${organizationId}
@@ -225,17 +221,23 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             sql<SiteOptionRow>`
               select
                 sites.access_notes,
+                sites.address_components,
                 sites.address_line_1,
                 sites.address_line_2,
                 sites.country,
                 sites.county,
+                sites.display_location,
                 sites.eircode,
-                sites.geocoded_at,
-                sites.geocoding_provider,
+                sites.formatted_address,
+                sites.google_place_id,
                 sites.id,
                 sites.latitude,
+                sites.location_provider,
+                sites.location_resolved_at,
+                sites.location_status,
                 sites.longitude,
                 sites.name,
+                sites.raw_location_input,
                 sites.town
               from sites
               where sites.organization_id = ${organizationId}
@@ -301,17 +303,23 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         const rows = yield* sql<SiteOptionRow>`
           select
             sites.access_notes,
+            sites.address_components,
             sites.address_line_1,
             sites.address_line_2,
             sites.country,
             sites.county,
+            sites.display_location,
             sites.eircode,
-            sites.geocoded_at,
-            sites.geocoding_provider,
+            sites.formatted_address,
+            sites.google_place_id,
             sites.id,
             sites.latitude,
+            sites.location_provider,
+            sites.location_resolved_at,
+            sites.location_status,
             sites.longitude,
             sites.name,
+            sites.raw_location_input,
             sites.town
           from sites
           where ${sql.and(clauses)}
@@ -352,17 +360,23 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           const rows = yield* sql<SiteOptionRow>`
             select
               sites.access_notes,
+              sites.address_components,
               sites.address_line_1,
               sites.address_line_2,
               sites.country,
               sites.county,
+              sites.display_location,
               sites.eircode,
-              sites.geocoded_at,
-              sites.geocoding_provider,
+              sites.formatted_address,
+              sites.google_place_id,
               sites.id,
               sites.latitude,
+              sites.location_provider,
+              sites.location_resolved_at,
+              sites.location_status,
               sites.longitude,
               sites.name,
+              sites.raw_location_input,
               sites.town
             from sites
             where sites.organization_id = ${organizationId}
@@ -629,47 +643,35 @@ export class SiteLabelAssignmentsRepository extends Context.Service<SiteLabelAss
     SiteLabelAssignmentsRepository.DefaultWithoutDependencies;
 }
 
-function makeSiteValues(
-  input: CreateSiteRecordInput | UpdateSiteRecordInput,
-  base: Record<string, unknown>
-): Record<string, unknown> {
+function makeSiteBaseValues(input: SiteRecordBaseWriteFields) {
   return {
-    ...base,
     access_notes: input.accessNotes ?? null,
-    address_line_1: input.addressLine1,
-    address_line_2: input.addressLine2 ?? null,
-    country: input.country,
-    county: input.county,
-    eircode: input.eircode ?? null,
-    geocoded_at: isoDateTimeStringToDate(input.geocodedAt),
-    geocoding_provider: input.geocodingProvider,
-    latitude: input.latitude,
-    longitude: input.longitude,
     name: input.name,
-    town: input.town ?? null,
   };
 }
 
-function mapSiteOptionRow(
-  row: SiteOptionRow,
-  labels: readonly Label[] = []
-): SiteOption {
-  return decodeSiteOption({
-    accessNotes: nullableToUndefined(row.access_notes),
-    addressLine1: row.address_line_1,
-    addressLine2: nullableToUndefined(row.address_line_2),
-    country: row.country,
-    county: row.county,
-    eircode: nullableToUndefined(row.eircode),
-    geocodedAt: row.geocoded_at.toISOString(),
-    geocodingProvider: row.geocoding_provider,
-    id: row.id,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    labels,
-    name: row.name,
-    town: nullableToUndefined(row.town),
-  });
+function makeSiteLocationValues(input: SiteLocationRecordWriteFields) {
+  return {
+    address_components: input.addressComponents ?? null,
+    address_line_1: input.addressLine1 ?? null,
+    address_line_2: input.addressLine2 ?? null,
+    country: input.country ?? null,
+    county: input.county ?? null,
+    display_location: input.displayLocation,
+    eircode: input.eircode ?? null,
+    formatted_address: input.formattedAddress ?? null,
+    google_place_id: input.googlePlaceId ?? null,
+    latitude: input.latitude ?? null,
+    location_provider: input.locationProvider ?? null,
+    location_resolved_at:
+      input.locationResolvedAt === undefined
+        ? null
+        : isoDateTimeStringToDate(input.locationResolvedAt),
+    location_status: input.locationStatus,
+    longitude: input.longitude ?? null,
+    raw_location_input: input.rawLocationInput ?? null,
+    town: input.town ?? null,
+  };
 }
 
 function encodeSiteCursor(
@@ -711,10 +713,6 @@ function mapLabelRow(row: LabelRow): Label {
 
 function isoDateTimeStringToDate(value: IsoDateTimeString): Date {
   return new Date(decodeIsoDateTimeString(value));
-}
-
-function nullableToUndefined<Value>(value: Value | null): Value | undefined {
-  return value === null ? undefined : value;
 }
 
 function getRequiredRow<Value>(

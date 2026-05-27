@@ -86,7 +86,7 @@ Common local and Alchemy variables include:
 | `BETTER_AUTH_BASE_URL`                 | API auth URL.                                                                        |
 | `BETTER_AUTH_SECRET`                   | Stable local auth secret for package-local domain runs.                              |
 | `DATABASE_URL`                         | Package-local domain database URL.                                                   |
-| `GOOGLE_MAPS_API_KEY`                  | Optional local Google geocoding key for site creation.                               |
+| `GOOGLE_MAPS_API_KEY`                  | Optional local Google Places key for site autocomplete and place details.            |
 | `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | Agent action ledger stale-running recovery window.                                   |
 | `AGENT_INTERNAL_SECRET`                | Internal domain/Agent shared secret for package-local runs.                          |
 | `AGENT_ORIGIN`                         | Server-side app Agent Worker origin.                                                 |
@@ -97,7 +97,8 @@ Package-local domain runs use deterministic development auth email delivery. Tha
 local transport is separate from deployed Worker email delivery, which uses the
 Cloudflare Email Worker binding declared by the Alchemy stack.
 The Google Maps key is optional for package-local domain startup; when it is
-missing or blank, the domain uses deterministic development geocoding.
+missing or blank, the domain uses deterministic development location
+autocomplete and place details.
 
 Package-local Playwright runs set `AGENT_INTERNAL_SECRET` so the domain app can
 mount its Agent HTTP groups even when a test begins with auth or product
@@ -162,14 +163,14 @@ declarations against the runtime contracts in each app's
 The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
-queue scheduling, email binding delivery, and site geocoding are composed from
-Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
+queue scheduling, email binding delivery, and Google Places site location
+resolution are composed from Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
 modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
 batch.
 The domain Worker is also configured with Better Auth env vars, MCP resource
-metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
+metadata, optional MCP authorized-app cache sizing, Google Maps Places
 credentials, observability logs, and traces.
 Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
 origins for deployed Alchemy stages. Every stage, including `main`, defaults to

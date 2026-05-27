@@ -17,6 +17,7 @@ import {
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type {
   CreateSiteResponse,
+  GooglePlaceIdType,
   SiteIdType,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
@@ -74,12 +75,17 @@ const createSiteResponse: CreateSiteResponse = {
   addressLine1: "1 Custom House Quay",
   county: "Dublin",
   country: "IE",
+  displayLocation: "1 Custom House Quay, Dublin, D01 X2X2",
   eircode: "D01 X2X2",
-  geocodedAt: "2026-04-27T10:00:00.000Z",
-  geocodingProvider: "stub",
+  formattedAddress: "1 Custom House Quay, Dublin, D01 X2X2, Ireland",
+  googlePlaceId: "ChIJdocklands" as GooglePlaceIdType,
+  hasUsableCoordinates: true,
   id: "33333333-3333-4333-8333-333333333333" as SiteIdType,
   labels: [],
   latitude: 53.3498,
+  locationProvider: "google_places",
+  locationResolvedAt: "2026-04-27T10:00:00.000Z",
+  locationStatus: "google_resolved",
   longitude: -6.2603,
   name: "Docklands Campus",
   town: "Dublin",
@@ -211,12 +217,12 @@ describe("app API client", () => {
         (client) =>
           client.sites.createSite({
             payload: {
-              addressLine1: "1 Custom House Quay",
-              country: "IE",
-              county: "Dublin",
-              eircode: "D01 X2X2",
+              location: {
+                country: "IE",
+                kind: "manual",
+                rawInput: "1 Custom House Quay, Dublin D01 X2X2",
+              },
               name: "Docklands Campus",
-              town: "Dublin",
             },
           })
       )

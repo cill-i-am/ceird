@@ -1,49 +1,175 @@
+import type {
+  GooglePlaceIdType,
+  GooglePlacesSessionTokenType,
+  SiteIdType,
+} from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 
 import {
   buildCreateSiteInputFromDraft,
+  buildUpdateSiteInputFromDraft,
+  createSiteCreateDraftFromSite,
   defaultSiteCreateDraft,
+  siteCreateDraftLocationEqualsSite,
   validateSiteCreateDraft,
 } from "./site-create-form";
 
 describe("site create form helpers", () => {
-  it("omits blank Eircode values for non-Irish sites", () => {
+  it("builds manual unverified location input from typed text", () => {
     expect(
       buildCreateSiteInputFromDraft({
         ...defaultSiteCreateDraft,
-        addressLine1: "  10 Downing Street  ",
         country: "GB",
-        county: "  Greater London  ",
-        eircode: "   ",
+        locationInput: "  10 Downing Street  ",
         name: "  London Depot  ",
       })
     ).toStrictEqual({
-      addressLine1: "10 Downing Street",
-      country: "GB",
-      county: "Greater London",
+      location: {
+        country: "GB",
+        kind: "manual",
+        rawInput: "10 Downing Street",
+      },
       name: "London Depot",
     });
   });
 
-  it("keeps Eircode required only for Irish sites", () => {
+  it("can omit location when preserving an existing site location", () => {
+    expect(
+      buildCreateSiteInputFromDraft(
+        {
+          ...defaultSiteCreateDraft,
+          locationInput: "Dublin Port",
+          name: "Docklands Campus",
+        },
+        { includeLocation: false }
+      )
+    ).toStrictEqual({
+      name: "Docklands Campus",
+    });
+  });
+
+  it("builds selected Google location input with the session token", () => {
+    expect(
+      buildCreateSiteInputFromDraft({
+        ...defaultSiteCreateDraft,
+        locationInput: "Dublin Port",
+        locationSelection: {
+          displayText: "Dublin Port",
+          placeId: "ChIJabc" as GooglePlaceIdType,
+          rawInput: "dub port",
+          secondaryText: "Dublin, Ireland",
+          sessionToken:
+            "550e8400-e29b-41d4-a716-446655440000" as GooglePlacesSessionTokenType,
+        },
+        name: "Dublin Port",
+      })
+    ).toStrictEqual({
+      location: {
+        displayText: "Dublin Port",
+        kind: "google_place",
+        placeId: "ChIJabc",
+        rawInput: "dub port",
+        secondaryText: "Dublin, Ireland",
+        sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+      },
+      name: "Dublin Port",
+    });
+  });
+
+  it("can explicitly clear a location on site update", () => {
+    expect(
+      buildUpdateSiteInputFromDraft(
+        {
+          ...defaultSiteCreateDraft,
+          locationInput: "   ",
+          name: "Docklands Campus",
+        },
+        { clearEmptyLocation: true }
+      )
+    ).toStrictEqual({
+      location: null,
+      name: "Docklands Campus",
+    });
+  });
+
+  it("hydrates site location drafts and detects unchanged Google locations", () => {
+    const siteDraft = createSiteCreateDraftFromSite({
+      displayLocation: "Dublin Port",
+      formattedAddress: "Dublin Port, Dublin, Ireland",
+      googlePlaceId: "ChIJabc" as GooglePlaceIdType,
+      hasUsableCoordinates: true,
+      id: "550e8400-e29b-41d4-a716-446655440010" as SiteIdType,
+      labels: [],
+      latitude: 53.3478,
+      locationProvider: "google_places",
+      locationResolvedAt: "2026-05-26T08:00:00.000Z",
+      locationStatus: "google_resolved",
+      longitude: -6.1956,
+      name: "Dublin Port",
+      rawLocationInput: "dub port",
+    });
+
+    expect(siteDraft.locationSelection).toMatchObject({
+      displayText: "Dublin Port",
+      placeId: "ChIJabc",
+      rawInput: "dub port",
+    });
+    expect(
+      siteCreateDraftLocationEqualsSite(siteDraft, {
+        displayLocation: "Dublin Port",
+        formattedAddress: "Dublin Port, Dublin, Ireland",
+        googlePlaceId: "ChIJabc" as GooglePlaceIdType,
+        hasUsableCoordinates: true,
+        id: "550e8400-e29b-41d4-a716-446655440010" as SiteIdType,
+        labels: [],
+        latitude: 53.3478,
+        locationProvider: "google_places",
+        locationResolvedAt: "2026-05-26T08:00:00.000Z",
+        locationStatus: "google_resolved",
+        longitude: -6.1956,
+        name: "Dublin Port",
+        rawLocationInput: "dub port",
+      })
+    ).toBe(true);
+    expect(
+      siteCreateDraftLocationEqualsSite(
+        { ...siteDraft, locationSelection: null },
+        {
+          displayLocation: "Dublin Port",
+          formattedAddress: "Dublin Port, Dublin, Ireland",
+          googlePlaceId: "ChIJabc" as GooglePlaceIdType,
+          hasUsableCoordinates: true,
+          id: "550e8400-e29b-41d4-a716-446655440010" as SiteIdType,
+          labels: [],
+          latitude: 53.3478,
+          locationProvider: "google_places",
+          locationResolvedAt: "2026-05-26T08:00:00.000Z",
+          locationStatus: "google_resolved",
+          longitude: -6.1956,
+          name: "Dublin Port",
+          rawLocationInput: "dub port",
+        }
+      )
+    ).toBe(false);
+  });
+
+  it("requires only the site name", () => {
     expect(
       validateSiteCreateDraft({
         ...defaultSiteCreateDraft,
-        addressLine1: "10 Downing Street",
-        country: "GB",
-        county: "Greater London",
+        locationInput: "10 Downing Street",
         name: "London Depot",
-      }).eircode
-    ).toBeUndefined();
+      })
+    ).toStrictEqual({
+      name: undefined,
+    });
 
     expect(
       validateSiteCreateDraft({
         ...defaultSiteCreateDraft,
-        addressLine1: "1 Custom House Quay",
-        country: "IE",
-        county: "Dublin",
-        name: "Docklands Campus",
-      }).eircode
-    ).toBe("Add Eircode.");
+        locationInput: "North Wall",
+        name: "",
+      }).name
+    ).toBe("Add a site name before creating it.");
   });
 });

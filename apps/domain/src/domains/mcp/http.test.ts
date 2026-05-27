@@ -1,5 +1,5 @@
 import type { mcpHandler as betterAuthMcpHandler } from "@better-auth/oauth-provider";
-import { beforeEach, expect } from "@effect/vitest";
+import { beforeEach, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { vi } from "vitest";
@@ -10,7 +10,7 @@ import {
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
 import { makeAuthenticationConfig } from "../identity/authentication/config.js";
-import { SiteGeocoder } from "../sites/geocoder.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
 import { loadMcpAuthorizedAppCacheOptions } from "./cache-config.js";
 import {
   disposeMcpAuthorizedAppCache,
@@ -49,7 +49,7 @@ describe("mcp http handler", () => {
       authConfig,
       runtimeLive: Layer.mergeAll(
         makeSuccessfulLabelListSqlLayer(),
-        SiteGeocoder.Development
+        SiteLocationProvider.Development
       ),
     });
 
@@ -103,7 +103,7 @@ describe("mcp http handler", () => {
       authConfig,
       runtimeLive: Layer.mergeAll(
         makeSuccessfulLabelListSqlLayer(),
-        SiteGeocoder.Development
+        SiteLocationProvider.Development
       ),
     });
 
@@ -197,7 +197,7 @@ describe("mcp http handler", () => {
       authConfig,
       runtimeLive: Layer.mergeAll(
         makeSuccessfulLabelListSqlLayer(),
-        SiteGeocoder.Development
+        SiteLocationProvider.Development
       ),
     });
 
@@ -254,7 +254,7 @@ describe("mcp http handler", () => {
       authConfig,
       runtimeLive: Layer.mergeAll(
         makeSuccessfulLabelListSqlLayer(),
-        SiteGeocoder.Development
+        SiteLocationProvider.Development
       ),
     });
 
@@ -314,7 +314,7 @@ describe("mcp http handler", () => {
     const authorizedAppCache = makeMcpAuthorizedAppCache();
     const runtimeLive = Layer.mergeAll(
       makeSuccessfulLabelListSqlLayer(),
-      SiteGeocoder.Development
+      SiteLocationProvider.Development
     );
 
     try {
@@ -430,7 +430,10 @@ describe("mcp http handler", () => {
           })
       )
     );
-    const runtimeLive = Layer.mergeAll(sqlLayer, SiteGeocoder.Development);
+    const runtimeLive = Layer.mergeAll(
+      sqlLayer,
+      SiteLocationProvider.Development
+    );
 
     try {
       const initializeHandler = makeMcpWebHandler({
@@ -514,7 +517,7 @@ describe("mcp http handler", () => {
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
         ),
-        SiteGeocoder.Development
+        SiteLocationProvider.Development
       ),
     });
 
@@ -714,7 +717,7 @@ describe("mcp http handler", () => {
     const authorizedAppCache = makeMcpAuthorizedAppCache();
     const runtimeLive = Layer.mergeAll(
       makeSuccessfulLabelListSqlLayer(),
-      SiteGeocoder.Development
+      SiteLocationProvider.Development
     );
 
     try {

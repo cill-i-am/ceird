@@ -14,7 +14,7 @@ import { HttpServerRequest } from "effect/unstable/http";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
-import { SiteGeocoder } from "../sites/geocoder.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
 import { SitesRepository } from "../sites/repositories.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { JobsAuthorization } from "./authorization.js";
@@ -246,8 +246,8 @@ function makeJobsServiceTestLayer(options: {
       LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
     ),
     Layer.succeed(
-      SiteGeocoder,
-      SiteGeocoder.of({} as ContextService<typeof SiteGeocoder>)
+      SiteLocationProvider,
+      SiteLocationProvider.of({} as ContextService<typeof SiteLocationProvider>)
     ),
     Layer.succeed(
       SitesRepository,

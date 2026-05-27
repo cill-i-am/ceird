@@ -1,6 +1,7 @@
 "use client";
 import type { JobListItem, JobPriority, JobStatus } from "@ceird/jobs-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
+import { SITE_LOCATION_RESOLUTION_ERROR_TAG } from "@ceird/sites-core";
 import {
   ArrowUpRight01Icon,
   Cancel01Icon,
@@ -9,7 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Exit } from "effect";
+import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -41,9 +42,11 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import {
   SiteAccessNotesField,
   SiteAddressFields,
-  buildCreateSiteInputFromDraft,
-  defaultSiteCreateDraft,
+  buildUpdateSiteInputFromDraft,
+  createDefaultSiteCreateDraft,
+  createSiteCreateDraftFromSite,
   hasSiteCreateFieldErrors,
+  siteCreateDraftLocationEqualsSite,
   validateSiteCreateDraft,
 } from "./site-create-form";
 import type {
@@ -110,7 +113,9 @@ export function SitesDetailSheet({
   const [updateResult, updateSite] = useUpdateSiteMutation(siteId);
   const canEdit = hasOrganizationElevatedAccess(viewer.role);
   const [values, setValues] = React.useState<SitesCreateFormState>(() =>
-    currentSite ? buildFormStateFromSite(currentSite) : defaultSiteCreateDraft
+    currentSite
+      ? createSiteCreateDraftFromSite(currentSite)
+      : createDefaultSiteCreateDraft()
   );
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
@@ -127,7 +132,7 @@ export function SitesDetailSheet({
   // react-doctor-disable-next-line
   React.useEffect(() => {
     if (currentSite) {
-      setValues(buildFormStateFromSite(currentSite));
+      setValues(createSiteCreateDraftFromSite(currentSite));
       setNameDraft(currentSite.name);
       setFieldErrors({});
     }
@@ -155,7 +160,7 @@ export function SitesDetailSheet({
       return;
     }
 
-    setValues(buildFormStateFromSite(currentSite));
+    setValues(createSiteCreateDraftFromSite(currentSite));
     setFieldErrors({});
     setActiveEditor(editor);
     setEditorOpen(true);
@@ -163,20 +168,24 @@ export function SitesDetailSheet({
 
   const resetEditorAfterClose = React.useCallback(() => {
     if (!currentSite) {
-      setValues(defaultSiteCreateDraft);
+      setValues(createDefaultSiteCreateDraft());
       setFieldErrors({});
       setActiveEditor(null);
       return;
     }
 
-    setValues(buildFormStateFromSite(currentSite));
+    setValues(createSiteCreateDraftFromSite(currentSite));
     setFieldErrors({});
     setActiveEditor(null);
   }, [currentSite]);
 
   async function submitSiteDraft(
     nextValues: SitesCreateFormState,
-    onSuccess?: () => void
+    onSuccess?: () => void,
+    buildOptions: {
+      readonly clearEmptyLocation?: boolean;
+      readonly includeLocation?: boolean;
+    } = {}
   ) {
     if (!canEdit) {
       return false;
@@ -189,7 +198,9 @@ export function SitesDetailSheet({
       return false;
     }
 
-    const exit = await updateSite(buildCreateSiteInputFromDraft(nextValues));
+    const exit = await updateSite(
+      buildUpdateSiteInputFromDraft(nextValues, buildOptions)
+    );
 
     if (Exit.isSuccess(exit)) {
       setFieldErrors({});
@@ -197,11 +208,31 @@ export function SitesDetailSheet({
       return true;
     }
 
+    const failure = Cause.findErrorOption(exit.cause);
+
+    if (
+      Option.isSome(failure) &&
+      failure.value._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
+    ) {
+      setFieldErrors((current) => ({
+        ...current,
+        location: failure.value.message,
+      }));
+    }
+
     return false;
   }
 
   async function handleEditorSubmit() {
-    return await submitSiteDraft(values);
+    const includeLocation =
+      activeEditor === "location" &&
+      (currentSite === null ||
+        !siteCreateDraftLocationEqualsSite(values, currentSite));
+
+    return await submitSiteDraft(values, undefined, {
+      clearEmptyLocation: activeEditor === "location",
+      includeLocation,
+    });
   }
 
   async function handleNameSubmit() {
@@ -210,14 +241,25 @@ export function SitesDetailSheet({
     }
 
     const nextValues = {
-      ...buildFormStateFromSite(currentSite),
+      ...createSiteCreateDraftFromSite(currentSite),
       name: nameDraft,
     };
 
-    await submitSiteDraft(nextValues, () => {
-      setIsEditingName(false);
-    });
+    await submitSiteDraft(
+      nextValues,
+      () => {
+        setIsEditingName(false);
+      },
+      { includeLocation: false }
+    );
   }
+
+  const activeEditorUpdateError =
+    activeEditor !== null &&
+    isSitesAsyncFailure(updateResult) &&
+    !isHandledUpdateSiteError(updateResult.error)
+      ? getSitesAsyncErrorMessage(updateResult.error)
+      : undefined;
 
   if (!currentSite) {
     return (
@@ -346,6 +388,7 @@ export function SitesDetailSheet({
 
           <SiteDetailEditorDrawer
             activeEditor={activeEditor}
+            formError={activeEditorUpdateError}
             fieldErrors={fieldErrors}
             onSubmit={handleEditorSubmit}
             setFieldErrors={setFieldErrors}
@@ -594,6 +637,7 @@ function SiteDetailsCard({
 function SiteDetailEditorDrawer({
   activeEditor,
   fieldErrors,
+  formError,
   onSubmit,
   setFieldErrors,
   setValues,
@@ -602,6 +646,7 @@ function SiteDetailEditorDrawer({
 }: {
   readonly activeEditor: SiteDetailEditor | null;
   readonly fieldErrors: SitesCreateFieldErrors;
+  readonly formError: string | undefined;
   readonly onSubmit: () => Promise<boolean>;
   readonly setFieldErrors: React.Dispatch<
     React.SetStateAction<SitesCreateFieldErrors>
@@ -678,6 +723,14 @@ function SiteDetailEditorDrawer({
         </DrawerHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
+          {formError ? (
+            <Alert variant="destructive">
+              <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
+              <AlertTitle>We couldn&apos;t update that site.</AlertTitle>
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          ) : null}
+
           {activeEditor === "notes" ? (
             <SiteAccessNotesField
               draft={values}
@@ -879,21 +932,15 @@ function clearSiteFieldErrorsForPatch(
 }
 
 const SITE_DETAIL_PATCH_ERROR_FIELDS = [
-  "addressLine1",
-  "county",
-  "eircode",
+  "location",
   "name",
 ] as const satisfies readonly (keyof SitesCreateFieldErrors)[];
 
-function buildFormStateFromSite(site: SiteOption): SitesCreateFormState {
-  return {
-    accessNotes: site.accessNotes ?? "",
-    addressLine1: site.addressLine1 ?? "",
-    addressLine2: site.addressLine2 ?? "",
-    county: site.county ?? "",
-    country: site.country,
-    eircode: site.eircode ?? "",
-    name: site.name,
-    town: site.town ?? "",
-  };
+function isHandledUpdateSiteError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
+  );
 }
