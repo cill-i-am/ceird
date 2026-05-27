@@ -100,7 +100,12 @@ vi.mock(import("sonner"), async (importActual) => {
 });
 
 describe("organization onboarding page", () => {
+  let originalLocation: Location;
+  let assignedUrl: string | undefined;
+
   beforeEach(() => {
+    originalLocation = window.location;
+    assignedUrl = undefined;
     mockedNavigate.mockResolvedValue();
     mockedCreateOrganization.mockResolvedValue({
       id: "org_123",
@@ -115,11 +120,26 @@ describe("organization onboarding page", () => {
     });
     mockedToastSuccess.mockClear();
     mockedClearAppContextClientCache.mockClear();
+    vi.unstubAllEnvs();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        assign: (url: string) => {
+          assignedUrl = url;
+        },
+      },
+    });
   });
 
   afterEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
     vi.clearAllMocks();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("creates the team and continues to the invite step", async () => {
@@ -337,6 +357,46 @@ describe("organization onboarding page", () => {
         to: "/",
       });
     });
+  }, 10_000);
+
+  it("continues to the created organization's tenant root when tenant hosts are enabled", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+    await screen.findByRole("heading", { name: "Invite members" });
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    await waitFor(() => {
+      expect(assignedUrl).toBe("https://acme-field-ops--pr-123.ceird.app/");
+    });
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("keeps local root navigation when no tenant URL can be built", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "disabled");
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+    await screen.findByRole("heading", { name: "Invite members" });
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+    expect(assignedUrl).toBeUndefined();
   }, 10_000);
 
   it("shows an inline error when sending an invite fails", async () => {

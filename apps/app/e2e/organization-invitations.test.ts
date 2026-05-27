@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 
+import { appendOrganizationSlugSuffix } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
@@ -42,7 +43,7 @@ function createTestEmail(prefix: string): string {
 }
 
 function createTestSlug(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
+  return appendOrganizationSlugSuffix(prefix, randomUUID().slice(0, 12));
 }
 
 function createForwardedFor() {
@@ -56,7 +57,7 @@ function createForwardedFor() {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
-  await expect(page).toHaveURL(`${APP_ORIGIN}/`, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(

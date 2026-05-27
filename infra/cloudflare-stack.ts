@@ -11,6 +11,10 @@ import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
 import { makeMcpWorker } from "../apps/mcp/infra/cloudflare-worker.ts";
+import {
+  TenantWildcardDnsRecord,
+  TenantWorkerRoute,
+} from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
 import { resourceName } from "./stages.ts";
@@ -162,6 +166,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const app = yield* makeAppWorker({
     agentOrigin,
     apiOrigin,
+    config: input.config,
     hostname: input.config.appHostname,
     name: resourceName(input.config, "app"),
   });
@@ -174,6 +179,34 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       })
     )
   );
+
+  const tenantWildcardDnsRecord =
+    input.config.tenantRoutePattern === undefined
+      ? undefined
+      : yield* TenantWildcardDnsRecord("TenantWildcardDnsRecord", {
+          zoneName: input.config.zoneName,
+        });
+  const tenantRoute =
+    input.config.tenantRoutePattern === undefined
+      ? undefined
+      : yield* TenantWorkerRoute("TenantWorkerRoute", {
+          pattern: input.config.tenantRoutePattern,
+          scriptName: app.workerName,
+          zoneName: input.config.zoneName,
+        });
+  const tenantReservedHostBypassRoutes =
+    input.config.tenantRoutePattern === undefined ||
+    input.config.tenantHostMode !== "production"
+      ? []
+      : yield* Effect.all(
+          input.config.tenantReservedHostnames.map((hostname, index) =>
+            TenantWorkerRoute(`TenantReservedHostBypassRoute${index}`, {
+              pattern: `${hostname}/*`,
+              scriptName: undefined,
+              zoneName: input.config.zoneName,
+            })
+          )
+        );
 
   return {
     api,
@@ -188,5 +221,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     domain,
     mcp,
     mcpOrigin,
+    tenantReservedHostBypassRoutePatterns: tenantReservedHostBypassRoutes.map(
+      (route) => route.pattern
+    ),
+    tenantRoutePattern: tenantRoute?.pattern,
+    tenantWildcardDnsRecordId: tenantWildcardDnsRecord?.recordId,
   } as const;
 });

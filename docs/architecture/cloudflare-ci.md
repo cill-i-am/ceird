@@ -40,6 +40,42 @@ Resource names are derived from the Alchemy stage, for example
 from older stage naming schemes should be handled intentionally before the
 corresponding native-stage deploy, rather than adopted accidentally.
 
+## Host Model
+
+Ceird has two public hostname classes:
+
+- system hosts are neutral service entrypoints owned by the stage, such as
+  `app.<stage>.ceird.app`, `api.<stage>.ceird.app`,
+  `agent.<stage>.ceird.app`, and `mcp.<stage>.ceird.app`
+- tenant hosts are organization entrypoints served by the app Worker
+
+Production pins the system hosts to the exact custom domains `app.ceird.app`,
+`api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app`. Production tenant hosts
+use `{orgSlug}.ceird.app`. Non-production tenant hosts use
+`{orgSlug}--{tenantStageAlias}.ceird.app`, for example
+`example-co--staging.ceird.app` or `example-co--pr-123.ceird.app`. This keeps
+dynamic tenants as first-level `ceird.app` labels so they stay inside the zone's
+wildcard DNS and Universal SSL coverage. Organization slugs cannot be `app`,
+`api`, `agent`, or `mcp`, so production tenant URLs cannot collide with system
+hostnames.
+
+Alchemy owns the stage route that sends tenant host traffic to the app Worker:
+production uses `*.ceird.app/*`, while non-production stages use
+`*--{tenantStageAlias}.ceird.app/*`. The wildcard DNS record for `*.ceird.app`
+is global/shared and is not duplicated per PR. The stack will maintain an
+existing Ceird-managed tenant wildcard record, but it deliberately fails instead
+of silently adopting an unmanaged `*.ceird.app` record; operators must delete,
+tag, or explicitly adopt that record before reconciliation. When a PR stage is
+destroyed, Alchemy removes that PR's Worker route; the shared wildcard DNS
+remains. Production also creates bypass routes for the reserved system hostnames
+so the production tenant wildcard cannot capture `app.ceird.app`,
+`api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
+
+Preview cleanup also runs a direct Cloudflare Worker-route cleanup fallback for
+the known `*--pr-<number>.ceird.app/*` pattern after `alchemy destroy`. This
+covers previews created from PR code that declared tenant-route resources before
+that same stack shape reaches the repository default branch.
+
 ## GitHub Secrets And Variables
 
 Create a GitHub environment named `main` for production deploys and main-stage
@@ -190,6 +226,12 @@ Preview resources persist for the lifetime of the pull request. That means each
 open PR consumes Cloudflare Worker routes, queues, Hyperdrive configs, and a
 Neon branch until it is closed. Watch provider quotas if many same-repository
 PRs are open at once.
+
+Preview auth cookies are scoped to the shared `ceird.app` apex because preview
+tenant hosts use `org--pr-123.ceird.app` while the neutral app host uses
+`app.pr-123.ceird.app`. Stage-specific Better Auth cookie prefixes such as
+`ceird-pr-123` prevent preview Workers from accepting production sessions even
+when browsers send multiple stage-prefixed cookies under the same apex.
 
 ## Main Workflow
 

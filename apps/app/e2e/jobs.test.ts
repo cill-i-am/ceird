@@ -6,9 +6,9 @@ import type { Page } from "@playwright/test";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { JobDetailSheet, JobsCreateSheet, JobsPage } from "./pages/jobs-page";
 import { SignupPage } from "./pages/signup-page";
-import { APP_ORIGIN } from "./test-urls";
 
 const JOBS_FLOW_TIMEOUT_MS = 240_000;
+const JOB_ACTIVITY_TIMEOUT_MS = 30_000;
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
 function createTestEmail(prefix: string): string {
@@ -32,7 +32,7 @@ async function signUpAndCreateOrganization(page: Page) {
   await createOrganizationPage.submit.click();
   await createOrganizationPage.skipInviteStep();
 
-  await expect(page).toHaveURL(`${APP_ORIGIN}/`, {
+  await expect(page).toHaveURL(/\/$/, {
     timeout: WORKSPACE_HOME_TIMEOUT_MS,
   });
   await expect(page.getByRole("main", { name: "Workspace home" })).toBeVisible({
@@ -111,13 +111,16 @@ test.describe("jobs flow", () => {
 
     await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("In progress");
+    const inProgressResponse = waitForJobTransitionResponse(page);
     await detailSheet.applyStatusChange.click();
+    const inProgressResult = await inProgressResponse;
+    expect(inProgressResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
     await expect(
       detailSheet.root.getByText(/changed status from New to In progress/)
-    ).toBeVisible();
+    ).toBeVisible({ timeout: JOB_ACTIVITY_TIMEOUT_MS });
 
     await detailSheet.openPanel("Visit");
     await detailSheet.visitDate.fill("2026-04-24");
@@ -129,10 +132,13 @@ test.describe("jobs flow", () => {
 
     await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("Completed");
+    const completedResponse = waitForJobTransitionResponse(page);
     await detailSheet.applyStatusChange.click();
+    const completedResult = await completedResponse;
+    expect(completedResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText(/changed status from In progress to Completed/)
-    ).toBeVisible();
+    ).toBeVisible({ timeout: JOB_ACTIVITY_TIMEOUT_MS });
     if (!(await detailSheet.reopenJob.isVisible())) {
       await detailSheet.openPanel("Status");
     }
@@ -150,8 +156,32 @@ test.describe("jobs flow", () => {
 });
 
 async function runCommandBarAction(page: Page, label: string) {
-  await page.keyboard.press("ControlOrMeta+K");
+  const commandBar = page.getByRole("dialog", { name: "Command bar" });
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await page.keyboard.press("ControlOrMeta+K");
+
+    try {
+      await expect(commandBar).toBeVisible({
+        timeout: 1000,
+      });
+      break;
+    } catch {
+      // Retry until the client-side command hotkey has hydrated.
+    }
+  }
+
+  await expect(commandBar).toBeVisible();
   const option = page.getByRole("option", { exact: true, name: label });
   await option.click();
   await expect(option).toBeHidden();
+}
+
+function waitForJobTransitionResponse(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /^\/jobs\/[^/]+\/transitions$/.test(new URL(response.url()).pathname),
+    { timeout: JOB_ACTIVITY_TIMEOUT_MS }
+  );
 }

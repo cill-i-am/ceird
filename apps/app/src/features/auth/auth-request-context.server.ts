@@ -6,6 +6,7 @@ import {
 import type {
   OrganizationId,
   OrganizationMemberRoleResponse,
+  OrganizationSlug,
   OrganizationSummary,
 } from "@ceird/identity-core";
 
@@ -13,7 +14,12 @@ import { resolveConfiguredServerAuthBaseURL } from "#/lib/auth-client.server";
 import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
+  readTrustedRequestHost,
 } from "#/lib/server-api-forwarded-headers";
+import {
+  parseTenantHost,
+  readTenantHostConfigFromEnv,
+} from "#/lib/tenant-host";
 
 import { decodeServerAuthSession } from "./app-context-types";
 import type { AppAuthContextSnapshot } from "./app-context-types";
@@ -139,14 +145,21 @@ export async function buildAppAuthContextSnapshotForRequest(
   const activeOrganizationId = session?.session.activeOrganizationId
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
+  const requestedOrganizationSlug = readRequestedOrganizationSlug(request);
+  const unresolvedTenantActiveOrganizationId =
+    requestedOrganizationSlug && !options.resolveActiveOrganizationFromList
+      ? null
+      : activeOrganizationId;
 
   if (
     !session ||
     !options.hydrateOrganizationContext ||
+    (requestedOrganizationSlug && !options.resolveActiveOrganizationFromList) ||
     (!options.resolveActiveOrganizationFromList && !activeOrganizationId)
   ) {
     return {
-      activeOrganizationId,
+      activeOrganizationId: unresolvedTenantActiveOrganizationId,
+      ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
       session,
     };
   }
@@ -162,7 +175,8 @@ export async function buildAppAuthContextSnapshotForRequest(
   if (!options.resolveActiveOrganizationFromList) {
     if (!activeOrganizationId) {
       return {
-        activeOrganizationId,
+        activeOrganizationId: unresolvedTenantActiveOrganizationId,
+        ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
         session,
       };
     }
@@ -173,44 +187,20 @@ export async function buildAppAuthContextSnapshotForRequest(
     ]);
 
     return {
-      activeOrganizationId,
+      activeOrganizationId: unresolvedTenantActiveOrganizationId,
       currentOrganizationRole,
       organizations,
+      ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
       session,
     };
   }
 
-  const organizationsPromise = readServerOrganizations(authRequest);
-  const activeOrganizationRolePromise = activeOrganizationId
-    ? readCurrentOrganizationRole(authRequest, activeOrganizationId)
-    : undefined;
-  const organizations = await organizationsPromise;
-  const resolvedActiveOrganizationId = resolveActiveOrganizationId(
+  return await resolveActiveOrganizationContextFromList({
     activeOrganizationId,
-    organizations
-  );
-  const activeOrganizationRole =
-    activeOrganizationRolePromise === undefined
-      ? undefined
-      : await activeOrganizationRolePromise;
-  let currentOrganizationRole;
-
-  if (resolvedActiveOrganizationId !== null) {
-    currentOrganizationRole =
-      resolvedActiveOrganizationId === activeOrganizationId
-        ? activeOrganizationRole
-        : await readCurrentOrganizationRole(
-            authRequest,
-            resolvedActiveOrganizationId
-          );
-  }
-
-  return {
-    activeOrganizationId: resolvedActiveOrganizationId,
-    currentOrganizationRole,
-    organizations,
+    authRequest,
+    requestedOrganizationSlug,
     session,
-  };
+  });
 }
 
 export async function readOptionalServerAuthSessionFromHeaders(
@@ -440,8 +430,21 @@ export async function readRequiredCurrentOrganizationRoleForRequest(
 
 function resolveActiveOrganizationId(
   activeOrganizationId: OrganizationId | null,
-  organizations: readonly OrganizationSummary[]
+  organizations: readonly OrganizationSummary[],
+  requestedOrganizationSlug?: OrganizationSlug | undefined
 ): OrganizationId | null {
+  if (requestedOrganizationSlug) {
+    const requestedOrganization = organizations.find(
+      (organization) => organization.slug === requestedOrganizationSlug
+    );
+
+    if (requestedOrganization) {
+      return requestedOrganization.id;
+    }
+
+    return null;
+  }
+
   if (!activeOrganizationId) {
     return organizations[0]?.id ?? null;
   }
@@ -453,6 +456,114 @@ function resolveActiveOrganizationId(
     organizations[0]?.id ??
     null
   );
+}
+
+async function resolveActiveOrganizationContextFromList({
+  activeOrganizationId,
+  authRequest,
+  requestedOrganizationSlug,
+  session,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly authRequest: ServerAuthRequest;
+  readonly requestedOrganizationSlug: OrganizationSlug | undefined;
+  readonly session: ServerAuthSession;
+}): Promise<AppAuthContextSnapshot> {
+  const organizationsPromise = readServerOrganizations(authRequest);
+  const activeOrganizationRolePromise =
+    activeOrganizationId && !requestedOrganizationSlug
+      ? readCurrentOrganizationRole(authRequest, activeOrganizationId)
+      : undefined;
+  const organizations = await organizationsPromise;
+  const resolvedActiveOrganizationId = resolveActiveOrganizationId(
+    activeOrganizationId,
+    organizations,
+    requestedOrganizationSlug
+  );
+  const currentOrganizationRole = await resolveActiveOrganizationRole({
+    activeOrganizationId,
+    activeOrganizationRolePromise,
+    authRequest,
+    resolvedActiveOrganizationId,
+  });
+
+  return {
+    activeOrganizationId: resolvedActiveOrganizationId,
+    currentOrganizationRole,
+    organizations,
+    ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
+    session,
+  };
+}
+
+async function resolveActiveOrganizationRole({
+  activeOrganizationId,
+  activeOrganizationRolePromise,
+  authRequest,
+  resolvedActiveOrganizationId,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly activeOrganizationRolePromise:
+    | Promise<OrganizationMemberRoleResponse["role"] | undefined>
+    | undefined;
+  readonly authRequest: ServerAuthRequest;
+  readonly resolvedActiveOrganizationId: OrganizationId | null;
+}) {
+  if (resolvedActiveOrganizationId === null) {
+    return;
+  }
+
+  if (
+    resolvedActiveOrganizationId === activeOrganizationId &&
+    activeOrganizationRolePromise !== undefined
+  ) {
+    return await activeOrganizationRolePromise;
+  }
+
+  return await readCurrentOrganizationRole(
+    authRequest,
+    resolvedActiveOrganizationId
+  );
+}
+
+function readRequestedOrganizationSlug(request: Request) {
+  const host = readTrustedRequestHost({
+    forwardedHost: request.headers.get("x-forwarded-host") ?? undefined,
+    host: request.headers.get("host") ?? undefined,
+  });
+
+  if (!host) {
+    return;
+  }
+
+  const resolution = parseTenantHost(
+    stripValidPort(host),
+    readTenantHostConfigFromEnv()
+  );
+
+  return resolution.kind === "tenant" ? resolution.organizationSlug : undefined;
+}
+
+function stripValidPort(host: string) {
+  const portSeparatorIndex = host.lastIndexOf(":");
+
+  if (portSeparatorIndex === -1) {
+    return host;
+  }
+
+  const port = host.slice(portSeparatorIndex + 1);
+
+  if (!/^\d+$/u.test(port)) {
+    return host;
+  }
+
+  const portNumber = Number(port);
+
+  if (portNumber < 1 || portNumber > 65_535) {
+    return host;
+  }
+
+  return host.slice(0, portSeparatorIndex);
 }
 
 export function buildAuthReadHeaders(authRequest: ServerAuthRequest) {

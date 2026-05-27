@@ -2,7 +2,7 @@ import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as React from "react";
 import { use } from "react";
@@ -318,14 +318,57 @@ function renderSwitcher(
 }
 
 describe("organization switcher", () => {
+  let originalLocation: Location;
+  let assignedUrl: string | undefined;
+
   beforeEach(() => {
+    originalLocation = window.location;
+    assignedUrl = undefined;
     mockedListOrganizations.mockReset();
     mockedRadioCancel.mockReset();
     mockedReloadAfterActiveOrganizationRefreshFailure.mockReset();
     mockedSetActiveOrganization.mockReset();
     mockedRouterInvalidate.mockReset();
     mockedSidebarState.isMobile = false;
+    vi.unstubAllEnvs();
+    setTestLocation({
+      hash: "#activity",
+      pathname: "/jobs/42",
+      search: "?tab=notes",
+    });
   });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+    vi.unstubAllEnvs();
+  });
+
+  function setTestLocation({
+    hash = "",
+    pathname,
+    search = "",
+  }: {
+    readonly hash?: string;
+    readonly pathname: string;
+    readonly search?: string;
+  }) {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        assign: (url: string) => {
+          assignedUrl = url;
+        },
+        hash,
+        href: `https://app.pr-123.ceird.app${pathname}${search}${hash}`,
+        pathname,
+        search,
+      },
+    });
+  }
 
   it("shows a loading state while organizations are loading", async () => {
     const loadingOrganizations =
@@ -475,6 +518,162 @@ describe("organization switcher", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("switches active organization before navigating to the target tenant URL", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    expect(assignedUrl).toBe(
+      "https://beta--pr-123.ceird.app/jobs/42?tab=notes#activity"
+    );
+    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("waits for active organization switching before navigating to the target tenant URL", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    const activeOrganizationSwitch = promiseWithResolvers.withResolvers<null>();
+
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockImplementation(async () => {
+      await activeOrganizationSwitch.promise;
+    });
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    expect(assignedUrl).toBeUndefined();
+
+    act(() => {
+      activeOrganizationSwitch.resolve(null);
+    });
+
+    await waitFor(() => {
+      expect(assignedUrl).toBe(
+        "https://beta--pr-123.ceird.app/jobs/42?tab=notes#activity"
+      );
+    });
+  });
+
+  it("uses the tenant root when switching from auth-only paths", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    setTestLocation({ pathname: "/settings" });
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(assignedUrl).toBe("https://beta--pr-123.ceird.app/");
+    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to router invalidation when tenant hosts are disabled", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "disabled");
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(assignedUrl).toBeUndefined();
+    expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
+  });
+
+  it("falls back to router invalidation when no tenant URL can be built", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "bad/stage");
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+    mockedSetActiveOrganization.mockResolvedValue();
+    mockedRouterInvalidate.mockResolvedValue();
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /beta builds/i })
+    );
+
+    expect(assignedUrl).toBeUndefined();
+    expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
+  });
+
   it("uses provided organizations without loading the list again", async () => {
     const organizations = [
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
@@ -618,6 +817,37 @@ describe("organization switcher", () => {
 
     expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("navigates the already active organization to its tenant URL", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    expect(screen.getByText("Current")).toBeVisible();
+
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /acme field ops/i })
+    );
+
+    expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
+    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+    expect(assignedUrl).toBe(
+      "https://acme--pr-123.ceird.app/jobs/42?tab=notes#activity"
+    );
   });
 
   it("opens the switcher with G O when multiple organizations are available", async () => {

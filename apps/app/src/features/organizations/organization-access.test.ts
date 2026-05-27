@@ -354,6 +354,70 @@ describe("organization access helpers", () => {
     expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
+  it("syncs Better Auth toward the route-resolved active organization from app context", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_123" }),
+      activeOrganizationId: "org_456",
+      organizations: [
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+        { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+      ],
+      requestedOrganizationSlug: "beta-field-ops",
+    });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run")
+    );
+
+    await expect(ensureActiveOrganizationId()).resolves.toMatchObject({
+      activeOrganization: {
+        id: "org_456",
+        name: "Beta Field Ops",
+        slug: "beta-field-ops",
+      },
+      activeOrganizationId: "org_456",
+      activeOrganizationSync: {
+        required: true,
+        targetOrganizationId: "org_456",
+      },
+      session: {
+        session: {
+          activeOrganizationId: "org_123",
+        },
+      },
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("does not fall back to the session organization when app context explicitly resolves no active organization", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_123" }),
+      activeOrganizationId: null,
+      organizations: [
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      ],
+      requestedOrganizationSlug: "gamma-field-ops",
+    });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run")
+    );
+
+    const result = ensureActiveOrganizationId();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/create-organization" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
   it("sets the client active organization through Better Auth", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
 
@@ -1066,6 +1130,60 @@ describe("organization access helpers", () => {
     });
     mockedGetClientOrganizations.mockResolvedValue({
       data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+      error: null,
+    });
+
+    const result = redirectIfOrganizationReady();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("allows onboarding to settle when tenant context explicitly resolves no active organization", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_123" }),
+      activeOrganizationId: null,
+      organizations: [
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      ],
+      requestedOrganizationSlug: "gamma-field-ops",
+    });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run")
+    );
+
+    await expect(redirectIfOrganizationReady()).resolves.toStrictEqual({
+      activeOrganizationSync: {
+        required: true,
+        targetOrganizationId: null,
+      },
+    });
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
+  it("redirects neutral-host onboarding users away when they have organizations", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {},
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetClientOrganizations.mockResolvedValue({
+      data: [
+        { id: "org_existing", name: "Existing Org", slug: "existing-org" },
+      ],
       error: null,
     });
 

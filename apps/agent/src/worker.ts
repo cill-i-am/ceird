@@ -125,8 +125,7 @@ function makeCorsHeaders(
 
   if (
     origin === null ||
-    env.AUTH_APP_ORIGIN === undefined ||
-    origin !== env.AUTH_APP_ORIGIN
+    !matchesTrustedOrigin(origin, getTrustedOrigins(env))
   ) {
     return undefined;
   }
@@ -148,4 +147,39 @@ function makeCorsHeaders(
   }
 
   return headers;
+}
+
+function getTrustedOrigins(env: AgentWorkerEnv): readonly string[] {
+  const origins = new Set<string>();
+
+  for (const origin of (env.AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)) {
+    origins.add(origin);
+  }
+
+  if (env.AUTH_APP_ORIGIN !== undefined) {
+    origins.add(env.AUTH_APP_ORIGIN);
+  }
+
+  return [...origins];
+}
+
+function matchesTrustedOrigin(
+  origin: string,
+  trustedOrigins: readonly string[]
+) {
+  return trustedOrigins.some((pattern) => {
+    if (!pattern.includes("*") && !pattern.includes("?")) {
+      return pattern === origin;
+    }
+
+    const escapedPattern = pattern.replaceAll(/[.+^${}()|[\]\\]/g, "\\$&");
+    const matcher = escapedPattern
+      .replaceAll("*", "[^.]+")
+      .replaceAll("?", "[^.]");
+
+    return new RegExp(`^${matcher}$`).test(origin);
+  });
 }

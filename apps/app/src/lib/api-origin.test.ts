@@ -24,6 +24,15 @@ describe("api origin resolution", () => {
     ).toBe("http://127.0.0.1:4301");
   }, 1000);
 
+  it("uses explicit API origin for tenant hosts", () => {
+    expect(
+      resolveApiOrigin(
+        "https://acme-field-ops--pr-123.ceird.app",
+        "https://api.pr-123.ceird.app"
+      )
+    ).toBe("https://api.pr-123.ceird.app");
+  }, 1000);
+
   it("does not infer API origins from removed sandbox worktree aliases", () => {
     expect(
       resolveApiOrigin("https://agent-one.app.ceird.localhost:1355")

@@ -54,6 +54,8 @@ Path: `packages/identity-core`
 Exports shared identity and organization primitives:
 
 - `OrganizationId`
+- organization slug schema, generation, retry suffixing, reserved system slug
+  checks, and the shared `isOrganizationSlug` predicate
 - organization role literals and role subsets
 - role helpers such as `isAdministrativeOrganizationRole`,
   `isInternalOrganizationRole`, and `isExternalOrganizationRole`

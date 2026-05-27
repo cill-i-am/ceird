@@ -41,20 +41,34 @@ export async function loadRequestAppContextMiddlewareContext({
     await import("./auth-request-context.server");
   const snapshot = await buildAppAuthContextSnapshotForRequest(request, {
     hydrateOrganizationContext,
+    resolveActiveOrganizationFromList: hydrateOrganizationContext,
   });
   const shouldIncludeOrganizationContext =
     hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
 
   if (shouldIncludeOrganizationContext && snapshot.organizations) {
     return {
+      ...(snapshot.activeOrganizationId
+        ? { activeOrganizationId: snapshot.activeOrganizationId }
+        : {}),
       authSession: snapshot.session,
       currentOrganizationRole: snapshot.currentOrganizationRole,
       organizations: snapshot.organizations,
+      ...(snapshot.requestedOrganizationSlug
+        ? { requestedOrganizationSlug: snapshot.requestedOrganizationSlug }
+        : {}),
     };
   }
 
   return {
+    ...(snapshot.activeOrganizationId !== null ||
+    snapshot.requestedOrganizationSlug
+      ? { activeOrganizationId: snapshot.activeOrganizationId }
+      : {}),
     authSession: snapshot.session,
+    ...(snapshot.requestedOrganizationSlug
+      ? { requestedOrganizationSlug: snapshot.requestedOrganizationSlug }
+      : {}),
   };
 }
 

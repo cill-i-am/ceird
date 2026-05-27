@@ -1,8 +1,15 @@
 import { Schema } from "effect";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
+export const ORGANIZATION_SLUG_MAX_LENGTH = 40;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const DEFAULT_ORGANIZATION_SLUG_PREFIX = "team";
+export const RESERVED_ORGANIZATION_SLUGS = [
+  "app",
+  "api",
+  "agent",
+  "mcp",
+] as const;
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
@@ -91,10 +98,85 @@ export type OrganizationMemberRoleResponse = Schema.Schema.Type<
   typeof OrganizationMemberRoleResponseSchema
 >;
 
+export const OrganizationNameSchema = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(ORGANIZATION_NAME_MIN_LENGTH))
+);
+
+export const OrganizationSlugSchema = Schema.Trim.pipe(
+  Schema.check(
+    Schema.isMinLength(2),
+    Schema.isMaxLength(ORGANIZATION_SLUG_MAX_LENGTH),
+    Schema.isPattern(ORGANIZATION_SLUG_PATTERN)
+  ),
+  Schema.refine(
+    (value): value is string => !isReservedOrganizationSlug(value),
+    {
+      message: "Organization slug is reserved for a system host",
+    }
+  )
+);
+export type OrganizationSlug = Schema.Schema.Type<
+  typeof OrganizationSlugSchema
+>;
+
+const isOrganizationSlugValue = Schema.is(OrganizationSlugSchema);
+
+export function isOrganizationSlug(value: unknown): value is OrganizationSlug {
+  return isOrganizationSlugValue(value);
+}
+
+export function decodeOrganizationSlug(input: unknown): OrganizationSlug {
+  return Schema.decodeUnknownSync(OrganizationSlugSchema)(input);
+}
+
+export function isReservedOrganizationSlug(value: string): boolean {
+  return (RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(value);
+}
+
+function avoidReservedOrganizationSlug(slug: string): string {
+  if (!isReservedOrganizationSlug(slug)) {
+    return slug;
+  }
+
+  return `${slug}-org`;
+}
+
+function createRawOrganizationSlugFromName(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replaceAll(/['’]/g, "")
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, ORGANIZATION_SLUG_MAX_LENGTH)
+      .replaceAll(/^-+|-+$/g, "") || DEFAULT_ORGANIZATION_SLUG_PREFIX
+  );
+}
+
+export function createOrganizationSlugFromName(name: string): string {
+  return avoidReservedOrganizationSlug(createRawOrganizationSlugFromName(name));
+}
+
+export function appendOrganizationSlugSuffix(
+  baseSlug: string,
+  suffix: string
+): string {
+  const suffixSlug = createRawOrganizationSlugFromName(suffix)
+    .slice(0, ORGANIZATION_SLUG_MAX_LENGTH - 2)
+    .replaceAll(/^-+|-+$/g, "");
+  const baseMaxLength = ORGANIZATION_SLUG_MAX_LENGTH - suffixSlug.length - 1;
+  const truncatedBaseSlug = createRawOrganizationSlugFromName(baseSlug)
+    .slice(0, baseMaxLength)
+    .replaceAll(/-+$/g, "");
+
+  return avoidReservedOrganizationSlug(`${truncatedBaseSlug}-${suffixSlug}`);
+}
+
 export const OrganizationSummarySchema = Schema.Struct({
   id: OrganizationId,
   name: Schema.String,
-  slug: Schema.String,
+  slug: OrganizationSlugSchema,
 });
 export type OrganizationSummary = Schema.Schema.Type<
   typeof OrganizationSummarySchema
@@ -106,30 +188,6 @@ export const OrganizationSummaryListSchema = Schema.Array(
 export type OrganizationSummaryList = Schema.Schema.Type<
   typeof OrganizationSummaryListSchema
 >;
-
-export const OrganizationNameSchema = Schema.Trim.pipe(
-  Schema.check(Schema.isMinLength(ORGANIZATION_NAME_MIN_LENGTH))
-);
-
-export const OrganizationSlugSchema = Schema.Trim.pipe(
-  Schema.check(
-    Schema.isMinLength(2),
-    Schema.isPattern(ORGANIZATION_SLUG_PATTERN)
-  )
-);
-
-export function createOrganizationSlugFromName(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replaceAll(/['’]/g, "")
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 64)
-    .replaceAll(/^-+|-+$/g, "");
-
-  return slug || DEFAULT_ORGANIZATION_SLUG_PREFIX;
-}
 
 export const CreateOrganizationInputSchema = Schema.Struct({
   name: OrganizationNameSchema,
