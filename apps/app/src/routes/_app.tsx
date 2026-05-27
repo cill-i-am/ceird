@@ -37,8 +37,7 @@ export async function loadAuthenticatedAppRoute(input?: {
   });
   const activeOrganizationId =
     clientAppContext === undefined
-      ? (serverContext.activeOrganizationId ??
-        decodeActiveOrganizationIdFromSession(session))
+      ? resolveServerContextActiveOrganizationId(serverContext, session)
       : clientAppContext.activeOrganizationId;
   const canUseActiveOrganizationRole = activeOrganizationIdMatchesSession(
     activeOrganizationId,
@@ -102,6 +101,15 @@ function decodeActiveOrganizationIdFromSession(
   return session.session.activeOrganizationId
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
+}
+
+function resolveServerContextActiveOrganizationId(
+  serverContext: ReturnType<typeof readAppServerContext>,
+  session: Awaited<ReturnType<typeof requireAuthenticatedSession>>
+) {
+  return serverContext.activeOrganizationId === undefined
+    ? decodeActiveOrganizationIdFromSession(session)
+    : (serverContext.activeOrganizationId ?? null);
 }
 
 function activeOrganizationIdMatchesSession(

@@ -133,7 +133,7 @@ export async function ensureActiveOrganizationIdForSession(session: Session) {
     organizations,
   } = await resolveOrganizationAccessState(session);
 
-  if (!activeOrganizationId) {
+  if (!activeOrganizationId || !activeOrganization) {
     throw redirect({ to: "/create-organization" });
   }
 
@@ -194,12 +194,20 @@ async function resolveOrganizationAccessState(session: Session) {
   const currentActiveOrganizationId = decodeNullableOrganizationId(
     session.session.activeOrganizationId
   );
-  const routeResolvedActiveOrganizationId =
+  const routeResolvedActiveOrganization =
     await readRouteResolvedActiveOrganizationId();
-  const activeOrganization = resolveCurrentOrganization(
-    routeResolvedActiveOrganizationId ?? currentActiveOrganizationId,
-    organizations
-  );
+  const requestedActiveOrganizationId =
+    routeResolvedActiveOrganization.kind === "resolved"
+      ? routeResolvedActiveOrganization.activeOrganizationId
+      : currentActiveOrganizationId;
+  const activeOrganization =
+    routeResolvedActiveOrganization.kind === "resolved" &&
+    requestedActiveOrganizationId === null
+      ? null
+      : resolveCurrentOrganization(
+          requestedActiveOrganizationId,
+          organizations
+        );
   const activeOrganizationId = activeOrganization?.id ?? null;
 
   return {
@@ -213,21 +221,45 @@ async function resolveOrganizationAccessState(session: Session) {
   };
 }
 
-async function readRouteResolvedActiveOrganizationId(): Promise<OrganizationIdType | null> {
-  const serverContextActiveOrganizationId =
-    readGlobalAppServerContext().activeOrganizationId;
+type RouteResolvedActiveOrganization =
+  | {
+      readonly activeOrganizationId: OrganizationIdType | null;
+      readonly kind: "resolved";
+    }
+  | { readonly kind: "none" };
 
-  if (serverContextActiveOrganizationId !== undefined) {
-    return serverContextActiveOrganizationId;
+async function readRouteResolvedActiveOrganizationId(): Promise<RouteResolvedActiveOrganization> {
+  const serverContext = readGlobalAppServerContext();
+
+  if (
+    serverContext.activeOrganizationId !== undefined &&
+    (serverContext.activeOrganizationId !== null ||
+      serverContext.requestedOrganizationSlug !== undefined)
+  ) {
+    return {
+      activeOrganizationId: serverContext.activeOrganizationId ?? null,
+      kind: "resolved",
+    };
   }
 
   if (isServerEnvironment()) {
-    return null;
+    return { kind: "none" };
   }
 
   const clientAppContext = await readFreshCachedClientAppContext();
 
-  return clientAppContext?.activeOrganizationId ?? null;
+  if (
+    clientAppContext &&
+    (clientAppContext.activeOrganizationId !== null ||
+      clientAppContext.requestedOrganizationSlug !== undefined)
+  ) {
+    return {
+      activeOrganizationId: clientAppContext.activeOrganizationId,
+      kind: "resolved",
+    };
+  }
+
+  return { kind: "none" };
 }
 
 export async function getCurrentOrganizationMemberRole(

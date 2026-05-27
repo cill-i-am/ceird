@@ -244,6 +244,63 @@ describe("authenticated app route loader", () => {
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
   });
 
+  it("preserves explicit null server context active organization instead of falling back to the session", async () => {
+    const { loadAuthenticatedAppRoute } = await import("./_app");
+
+    mockedIsServerEnvironment.mockReturnValue(true);
+
+    await expect(
+      loadAuthenticatedAppRoute({
+        serverContext: {
+          activeOrganizationId: null,
+          authSession: {
+            session: {
+              id: "session_123",
+              activeOrganizationId: "org_session",
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
+            user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
+              email: "taylor@example.com",
+              emailVerified: false,
+              id: "user_123",
+              image: null,
+              name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+            },
+          },
+          currentOrganizationRole: "owner",
+        },
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: null,
+      currentOrganizationRole: undefined,
+      session: {
+        session: {
+          id: "session_123",
+          activeOrganizationId: "org_session",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-05-24T10:00:00.000Z",
+          email: "taylor@example.com",
+          emailVerified: false,
+          id: "user_123",
+          image: null,
+          name: "Taylor Example",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+        },
+      },
+    });
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
   it("suppresses browser app context role while route active organization is stale against the session", async () => {
     const { loadAuthenticatedAppRoute } = await import("./_app");
 

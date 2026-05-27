@@ -392,6 +392,32 @@ describe("organization access helpers", () => {
     expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
   }, 1000);
 
+  it("does not fall back to the session organization when app context explicitly resolves no active organization", async () => {
+    mockedIsServerEnvironment.mockReturnValue(false);
+    mockedGetCurrentAppContext.mockResolvedValue({
+      session: createAppContextSession({ activeOrganizationId: "org_123" }),
+      activeOrganizationId: null,
+      organizations: [
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      ],
+      requestedOrganizationSlug: "gamma-field-ops",
+    });
+    mockedGetSession.mockRejectedValue(
+      new Error("Raw Better Auth session cache should not run")
+    );
+
+    const result = ensureActiveOrganizationId();
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/create-organization" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedGetCurrentAppContext).toHaveBeenCalledOnce();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedGetClientOrganizations).not.toHaveBeenCalled();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
   it("sets the client active organization through Better Auth", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
 
