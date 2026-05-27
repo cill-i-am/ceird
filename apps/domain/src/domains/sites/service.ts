@@ -30,6 +30,7 @@ import {
   ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
 } from "../organizations/errors.js";
+import { formatStorageErrorCause } from "../storage-error-cause.js";
 import { SiteLocationProvider } from "./location-provider.js";
 import {
   resolveCreateSiteLocation,
@@ -534,7 +535,7 @@ function failSitesStorageError(
 
   return Effect.fail(
     new SiteStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: formatStorageErrorCause(error),
       message: "Sites storage operation failed",
       ...siteContext,
     })

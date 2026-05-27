@@ -650,9 +650,12 @@ function makeSiteBaseValues(input: SiteRecordBaseWriteFields) {
   };
 }
 
-function makeSiteLocationValues(input: SiteLocationRecordWriteFields) {
+export function makeSiteLocationValues(input: SiteLocationRecordWriteFields) {
   return {
-    address_components: input.addressComponents ?? null,
+    address_components:
+      input.addressComponents === undefined
+        ? null
+        : JSON.stringify(input.addressComponents),
     address_line_1: input.addressLine1 ?? null,
     address_line_2: input.addressLine2 ?? null,
     country: input.country ?? null,

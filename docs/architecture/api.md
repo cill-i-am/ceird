@@ -219,7 +219,10 @@ organization activity operation fails.
 Storage failures and defects log at warning level, while expected typed domain
 failures log at info level. Those fields include the API domain, service,
 operation, failure tag, failure message, safe entity identifiers when present,
-and failure cause when present.
+and failure cause when present. Storage failure causes are formatted at the
+domain boundary so nested SQL driver details such as Postgres error code,
+constraint, detail, and routine remain searchable in Cloudflare Observability
+without logging full query payloads or secret URL parameters.
 
 Cloudflare API requests carry an `x-request-id` header. The public API Worker
 accepts a caller-provided value or generates one, forwards it through the

@@ -99,4 +99,53 @@ describe("API operation observability", () => {
       },
     ]);
   });
+
+  it("logs sanitized nested storage failure causes for Cloudflare search", async () => {
+    const { logger, logs } = captureLogs();
+    const postgresCause = {
+      code: "22P02",
+      detail: 'Expected ":", but found "}".',
+      message: "invalid input syntax for type json",
+      routine: "json_errsave_error",
+    };
+    const failure = {
+      _tag: "SiteStorageError",
+      cause:
+        'SqlError: Failed to execute statement; Postgres 22P02: invalid input syntax for type json; detail: Expected ":", but found "}".; routine: json_errsave_error',
+      message: "Sites storage operation failed",
+      siteId: "11111111-1111-4111-8111-111111111111",
+      postgresCause,
+    };
+
+    await Effect.fail(failure).pipe(
+      observeApiOperation({
+        domain: "sites",
+        operation: "createSite",
+        service: "SitesService",
+      }),
+      Effect.exit,
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(logs).toStrictEqual([
+      {
+        annotations: {
+          apiDomain: "sites",
+          apiFailureCause:
+            'SqlError: Failed to execute statement; Postgres 22P02: invalid input syntax for type json; detail: Expected ":", but found "}".; routine: json_errsave_error',
+          apiFailureDetails: {
+            siteId: "11111111-1111-4111-8111-111111111111",
+          },
+          apiFailureMessage: "Sites storage operation failed",
+          apiFailureTag: "SiteStorageError",
+          apiOperation: "createSite",
+          apiService: "SitesService",
+        },
+        level: "WARN",
+        message: ["API domain operation failed"],
+      },
+    ]);
+  });
 });

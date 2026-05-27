@@ -15,6 +15,7 @@ import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
 import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { formatStorageErrorCause } from "../storage-error-cause.js";
 import { LabelsRepository } from "./repositories.js";
 
 export class LabelsService extends Context.Service<LabelsService>()(
@@ -158,7 +159,7 @@ function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
 function failLabelStorage(error: unknown) {
   return Effect.fail(
     new LabelStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: formatStorageErrorCause(error),
       message: "Label storage operation failed",
     })
   );

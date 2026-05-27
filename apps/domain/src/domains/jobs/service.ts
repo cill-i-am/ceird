@@ -46,6 +46,7 @@ import { SiteLocationProvider } from "../sites/location-provider.js";
 import type { ResolvedSiteLocationRecord } from "../sites/location-resolution.js";
 import { resolveCreateSiteLocation } from "../sites/location-resolution.js";
 import { SitesRepository } from "../sites/repositories.js";
+import { formatStorageErrorCause } from "../storage-error-cause.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
 import { JobsAuthorization } from "./authorization.js";
@@ -1043,7 +1044,7 @@ function ensureCanViewOrganizationJobsData(
 
 function makeJobsStorageError(error: unknown): JobStorageError {
   return new JobStorageError({
-    cause: error instanceof Error ? error.message : String(error),
+    cause: formatStorageErrorCause(error),
     message: "Jobs storage operation failed",
   });
 }
