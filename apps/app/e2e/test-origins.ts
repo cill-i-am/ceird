@@ -40,3 +40,5 @@ export const AGENT_ORIGIN = readPlaywrightOrigin(
   "PLAYWRIGHT_AGENT_URL",
   DEFAULT_AGENT_ORIGIN
 );
+
+export const TENANT_ORIGIN = readOptionalEnv("PLAYWRIGHT_TENANT_URL");

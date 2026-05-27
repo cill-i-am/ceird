@@ -248,6 +248,7 @@ jobs:
       PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
       PLAYWRIGHT_API_URL: https://api.staging.ceird.app
       PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
+      PLAYWRIGHT_TENANT_URL: https://staging-tenant-health--staging.ceird.app
       STAGING_STAGE: staging
 
     steps:
@@ -469,6 +470,7 @@ jobs:
       PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
       PLAYWRIGHT_API_URL: https://api.staging.ceird.app
       PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
+      PLAYWRIGHT_TENANT_URL: https://staging-tenant-health--staging.ceird.app
       STAGING_STAGE: staging
 
     steps:
