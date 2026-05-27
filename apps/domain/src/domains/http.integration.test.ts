@@ -1,7 +1,18 @@
 import { randomUUID } from "node:crypto";
 
+import { JobOptionsResponseSchema } from "@ceird/jobs-core";
+import { SiteOptionSchema } from "@ceird/sites-core";
+import { NodeHttpServer } from "@effect/platform-node";
 import { afterAll, describe, expect, it } from "@effect/vitest";
-import { OpenApi } from "effect/unstable/httpapi";
+import { Effect, Layer, Schema } from "effect";
+import { HttpRouter } from "effect/unstable/http";
+import {
+  HttpApi,
+  HttpApiBuilder,
+  HttpApiEndpoint,
+  HttpApiGroup,
+  OpenApi,
+} from "effect/unstable/httpapi";
 import type { Pool } from "pg";
 
 import { AppApi } from "../http-api.js";
@@ -30,6 +41,63 @@ describe("domain HTTP API", () => {
     expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
     expect(spec.paths["/labels"]?.get?.operationId).toBe("labels.listLabels");
+  });
+
+  it("serves job options with an unverified site location", async () => {
+    const group = HttpApiGroup.make("test").add(
+      HttpApiEndpoint.get("options", "/options", {
+        success: JobOptionsResponseSchema,
+      })
+    );
+    const api = HttpApi.make("TestApi").add(group);
+    const site = Schema.decodeUnknownSync(SiteOptionSchema)({
+      displayLocation: "D1",
+      googlePlaceId: undefined,
+      hasUsableCoordinates: false,
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      labels: [],
+      latitude: undefined,
+      locationProvider: undefined,
+      locationResolvedAt: undefined,
+      locationStatus: "unverified",
+      longitude: undefined,
+      name: "D1",
+      rawLocationInput: "D1",
+    });
+    const handlers = HttpApiBuilder.group(api, "test", (builder) =>
+      builder.handle("options", () =>
+        Effect.succeed({
+          contacts: [],
+          labels: [],
+          members: [],
+          sites: [site],
+        })
+      )
+    );
+    const layer = HttpApiBuilder.layer(api).pipe(
+      Layer.provide(handlers),
+      Layer.provide(NodeHttpServer.layerHttpServices)
+    );
+    const handler = HttpRouter.toWebHandler(layer, { disableLogger: true });
+
+    try {
+      const response = await handler.handler(
+        new Request("http://127.0.0.1/options")
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        sites: [
+          {
+            displayLocation: "D1",
+            hasUsableCoordinates: false,
+            locationStatus: "unverified",
+          },
+        ],
+      });
+    } finally {
+      await handler.dispose();
+    }
   });
 
   it("fails closed until a request has a session, active organization, and membership", async (context: {

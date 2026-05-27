@@ -253,10 +253,9 @@ export type SiteLocationPlaceDetailsResponse = Schema.Schema.Type<
 function isSiteOptionLocationConsistent(
   site: Schema.Schema.Type<typeof SiteOptionBaseSchema>
 ) {
-  const hasLatitude = site.latitude !== undefined;
-  const hasLongitude = site.longitude !== undefined;
-  const hasCoordinatePair =
-    site.latitude !== undefined && site.longitude !== undefined;
+  const hasLatitude = isPresent(site.latitude);
+  const hasLongitude = isPresent(site.longitude);
+  const hasCoordinatePair = hasLatitude && hasLongitude;
   const coordinateStatusIsUsable = isUsableCoordinateStatus(
     site.locationStatus
   );
@@ -282,10 +281,16 @@ function isSiteOptionLocationConsistent(
 
   return (
     hasCoordinatePair &&
-    site.googlePlaceId !== undefined &&
-    site.locationProvider !== undefined &&
-    site.locationResolvedAt !== undefined
+    isPresent(site.googlePlaceId) &&
+    isPresent(site.locationProvider) &&
+    isPresent(site.locationResolvedAt)
   );
+}
+
+function isPresent<Value>(
+  value: Value | null | undefined
+): value is NonNullable<Value> {
+  return value !== null && value !== undefined;
 }
 
 function isUsableCoordinateStatus(
