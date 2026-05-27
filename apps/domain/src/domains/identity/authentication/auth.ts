@@ -78,12 +78,7 @@ const ADMINISTRATIVE_ORGANIZATION_ENDPOINT_PATHS = [
   "/organization/list-members",
 ] as const;
 const ORGANIZATION_UPDATE_INPUT_FIELDS = new Set(["name"]);
-const SESSION_COOKIE_NAMES = [
-  "better-auth.session_token",
-  "__Secure-better-auth.session_token",
-  "__Host-better-auth.session_token",
-  "better-auth-session_token",
-] as const;
+const DEFAULT_BETTER_AUTH_COOKIE_PREFIX = "better-auth";
 
 type AuthEmailFailureReporter = (error: unknown) => void;
 type AuthEmailPromiseSender<Input> = (input: Input) => Promise<void>;
@@ -554,7 +549,11 @@ export function createAuthentication(options: {
     },
   });
 
-  auth.handler = withAuthenticationAuthorizationGuards(auth.handler, database);
+  auth.handler = withAuthenticationAuthorizationGuards(
+    auth.handler,
+    database,
+    authConfig.advanced?.cookiePrefix
+  );
 
   return auth as CeirdAuthentication;
 }
@@ -728,13 +727,15 @@ function appendVaryHeader(headers: Headers, value: string) {
 
 function withAuthenticationAuthorizationGuards(
   handler: (request: Request) => Promise<Response>,
-  database: NodePgDatabase
+  database: NodePgDatabase,
+  cookiePrefix?: string
 ) {
   return async (request: Request) => {
     if (isAdministrativeOrganizationEndpointRequest(request)) {
       const access = await resolveAdministrativeOrganizationEndpointAccess(
         database,
-        request
+        request,
+        cookiePrefix
       );
 
       if (access === "nonAdministrative") {
@@ -767,10 +768,12 @@ function isAdministrativeOrganizationEndpointRequest(request: Request) {
 
 async function resolveAdministrativeOrganizationEndpointAccess(
   database: NodePgDatabase,
-  request: Request
+  request: Request,
+  cookiePrefix?: string
 ): Promise<"administrative" | "nonAdministrative" | "unknown"> {
   const sessionToken = extractBetterAuthSessionToken(
-    request.headers.get("cookie")
+    request.headers.get("cookie"),
+    { cookiePrefix }
   );
 
   if (sessionToken === undefined) {
@@ -863,10 +866,17 @@ async function resolveAdministrativeOrganizationTargetId(
     : decodeIdentityBoundaryValue(organizationId, decodeOrganizationId);
 }
 
-function extractBetterAuthSessionToken(cookieHeader: string | null) {
+export function extractBetterAuthSessionToken(
+  cookieHeader: string | null,
+  options: { readonly cookiePrefix?: string | undefined } = {}
+) {
   if (cookieHeader === null) {
     return;
   }
+
+  const sessionCookieNames = makeBetterAuthSessionCookieNames(
+    options.cookiePrefix
+  );
 
   for (const cookie of cookieHeader.split(";")) {
     const separatorIndex = cookie.indexOf("=");
@@ -877,7 +887,7 @@ function extractBetterAuthSessionToken(cookieHeader: string | null) {
 
     const name = cookie.slice(0, separatorIndex).trim();
 
-    if (!isBetterAuthSessionCookieName(name)) {
+    if (!sessionCookieNames.has(name)) {
       continue;
     }
 
@@ -892,13 +902,22 @@ function extractBetterAuthSessionToken(cookieHeader: string | null) {
   }
 }
 
-function isBetterAuthSessionCookieName(name: string) {
-  return (
-    SESSION_COOKIE_NAMES.includes(
-      name as (typeof SESSION_COOKIE_NAMES)[number]
-    ) ||
-    name.endsWith("better-auth.session_token") ||
-    name.endsWith("better-auth-session_token")
+function makeBetterAuthSessionCookieNames(cookiePrefix?: string) {
+  const prefix =
+    cookiePrefix && cookiePrefix.length > 0
+      ? cookiePrefix
+      : DEFAULT_BETTER_AUTH_COOKIE_PREFIX;
+  const bareCookieNames = [
+    `${prefix}.session_token`,
+    `${prefix}-session_token`,
+  ];
+
+  return new Set(
+    bareCookieNames.flatMap((cookieName) => [
+      cookieName,
+      `__Secure-${cookieName}`,
+      `__Host-${cookieName}`,
+    ])
   );
 }
 

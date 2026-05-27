@@ -18,6 +18,7 @@ import {
 } from "./auth-observability.js";
 import {
   createAuthentication,
+  extractBetterAuthSessionToken,
   makeEmailFailureReporter,
   makeAuthenticationWebHandler,
   maskInvitationEmail,
@@ -330,12 +331,12 @@ describe("makeAuthenticationConfig()", () => {
       makeAuthenticationTrustedOrigins({
         trustedOrigins: ["ftp://*--pr-123.ceird.app"],
       })
-    ).toThrow();
+    ).toThrow(Error);
     expect(() =>
       makeAuthenticationTrustedOrigins({
         trustedOrigins: ["https://tenant.ceird.app/path"],
       })
-    ).toThrow();
+    ).toThrow(Error);
   }, 10_000);
 
   it("reflects configured cookie prefixes in the Better Auth advanced config", () => {
@@ -708,6 +709,26 @@ describe("createAuthentication()", () => {
     expect(delegatedUrl).toBe(
       "https://api.ceird.example/api/auth/sign-up/email"
     );
+  }, 10_000);
+
+  it("extracts configured Better Auth session cookies for authorization guards", () => {
+    expect(
+      extractBetterAuthSessionToken(
+        "other=value; __Secure-ceird-pr-123.session_token=session-1.signature",
+        { cookiePrefix: "ceird-pr-123" }
+      )
+    ).toBe("session-1");
+    expect(
+      extractBetterAuthSessionToken(
+        "__Secure-better-auth.session_token=session-1.signature",
+        { cookiePrefix: "ceird-pr-123" }
+      )
+    ).toBeUndefined();
+    expect(
+      extractBetterAuthSessionToken(
+        "better-auth.session_token=session-2.signature"
+      )
+    ).toBe("session-2");
   }, 10_000);
 
   it("records Better Auth handler timing in the active request observation", async () => {

@@ -303,7 +303,7 @@ function resolveExplicitCookieDomain(
   >
 ) {
   if (!environment.cookieDomain) {
-    return undefined;
+    return;
   }
 
   const cookieDomain = makeCookieDomain(environment.cookieDomain);
@@ -341,7 +341,7 @@ export function resolveCrossSubDomainCookieDomain(
     isLocalhostDomain(base.hostname) ||
     isLocalhostDomain(app.hostname)
   ) {
-    return undefined;
+    return;
   }
 
   return findSharedDomain(base.hostname, app.hostname);
