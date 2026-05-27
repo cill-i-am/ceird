@@ -19,6 +19,10 @@ export type TenantHostResolution =
 
 const ORGANIZATION_SLUG_MIN_LENGTH = 2;
 const VALID_HOST_PATTERN = /^[a-z0-9.-]+$/;
+const DNS_LABEL_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const DNS_LABEL_MAX_LENGTH = 63;
+const ASCII_UNIT_SEPARATOR_CODE_POINT = 31;
+const ASCII_DELETE_CODE_POINT = 127;
 
 export function parseTenantHost(
   hostname: string,
@@ -74,10 +78,9 @@ function readStageOrganizationSlug(
   label: string,
   stageAlias: string | undefined
 ) {
-  const normalizedStageAlias =
-    typeof stageAlias === "string" ? stageAlias.trim().toLowerCase() : "";
+  const normalizedStageAlias = normalizeStageAlias(stageAlias);
 
-  if (!normalizedStageAlias) {
+  if (normalizedStageAlias === undefined) {
     return;
   }
 
@@ -109,12 +112,9 @@ export function buildOrganizationTenantOrigin(
   }
 
   if (config.hostMode === "stage") {
-    const normalizedStageAlias =
-      typeof config.stageAlias === "string"
-        ? config.stageAlias.trim().toLowerCase()
-        : "";
+    const normalizedStageAlias = normalizeStageAlias(config.stageAlias);
 
-    if (normalizedStageAlias) {
+    if (normalizedStageAlias !== undefined) {
       return `https://${organizationSlug}--${normalizedStageAlias}.${baseDomain}`;
     }
   }
@@ -134,11 +134,22 @@ export function buildOrganizationTenantUrl(
     return;
   }
 
-  if (!path.startsWith("/") || path.startsWith("//")) {
+  if (
+    !path.startsWith("/") ||
+    path.startsWith("//") ||
+    path.includes("\\") ||
+    hasControlCharacter(path)
+  ) {
     return;
   }
 
-  return new URL(path, origin).toString();
+  const url = new URL(path, origin);
+
+  if (url.origin !== origin) {
+    return;
+  }
+
+  return url.toString();
 }
 
 export function readTenantHostConfigFromEnv(): TenantHostConfig {
@@ -193,6 +204,34 @@ function decodeTenantHostMode(value: string | undefined): TenantHostMode {
   return value === "production" || value === "stage" || value === "disabled"
     ? value
     : "disabled";
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return (
+      codePoint !== undefined &&
+      (codePoint <= ASCII_UNIT_SEPARATOR_CODE_POINT ||
+        codePoint === ASCII_DELETE_CODE_POINT)
+    );
+  });
+}
+
+function normalizeStageAlias(
+  stageAlias: string | undefined
+): string | undefined {
+  const normalized =
+    typeof stageAlias === "string" ? stageAlias.trim().toLowerCase() : "";
+
+  if (
+    normalized.length === 0 ||
+    normalized.length > DNS_LABEL_MAX_LENGTH ||
+    !DNS_LABEL_PATTERN.test(normalized)
+  ) {
+    return;
+  }
+
+  return normalized;
 }
 
 function isOrganizationSlug(value: string | undefined): value is string {

@@ -213,6 +213,46 @@ describe("tenant host parsing", () => {
     expect(
       buildOrganizationTenantUrl("acme-field-ops", "relative/path", config)
     ).toBeUndefined();
+    expect(
+      buildOrganizationTenantUrl(
+        "acme-field-ops",
+        "/\\evil.example/path",
+        config
+      )
+    ).toBeUndefined();
+    expect(
+      buildOrganizationTenantUrl(
+        "acme-field-ops",
+        "/\\/evil.example/path",
+        config
+      )
+    ).toBeUndefined();
+  });
+
+  it("does not parse or build stage hosts with invalid stage aliases", () => {
+    for (const stageAlias of [
+      "bad/segment",
+      "-bad",
+      "bad-",
+      "",
+      "a".repeat(64),
+    ]) {
+      const config = {
+        baseDomain: "ceird.app",
+        hostMode: "stage" as const,
+        reservedHostnames: [],
+        stageAlias,
+      };
+
+      expect(
+        parseTenantHost("acme-field-ops--bad.ceird.app", config)
+      ).toStrictEqual({
+        kind: "system",
+      });
+      expect(
+        buildOrganizationTenantOrigin("acme-field-ops", config)
+      ).toBeUndefined();
+    }
   });
 
   it("does not build tenant origins when disabled", () => {
