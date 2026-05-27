@@ -80,9 +80,12 @@ Common local and Alchemy variables include:
 | `ALCHEMY_STACK_NAME`                   | Alchemy-injected runtime stack name for Worker metadata.                             |
 | `ALCHEMY_STAGE`                        | Alchemy-injected runtime stage for Worker health checks.                             |
 | `AUTH_APP_ORIGIN`                      | Browser app origin used by auth redirects and emails.                                |
+| `AUTH_COOKIE_DOMAIN`                   | Optional parent domain for sharing auth cookies across system and tenant hosts.      |
+| `AUTH_COOKIE_PREFIX`                   | Optional Better Auth cookie prefix, usually stage-derived in Alchemy.                |
 | `AUTH_EMAIL_FROM`                      | Sender address for auth emails.                                                      |
 | `AUTH_EMAIL_FROM_NAME`                 | Sender display name.                                                                 |
 | `AUTH_RATE_LIMIT_ENABLED`              | Disables auth rate limiting for local and PR-preview E2E.                            |
+| `AUTH_TRUSTED_ORIGINS`                 | Optional comma-delimited auth CORS/trusted-origin additions, including tenant hosts. |
 | `BETTER_AUTH_BASE_URL`                 | API auth URL.                                                                        |
 | `BETTER_AUTH_SECRET`                   | Stable local auth secret for package-local domain runs.                              |
 | `DATABASE_URL`                         | Package-local domain database URL.                                                   |
@@ -139,7 +142,10 @@ Cloudflare invocation URL logging while the query-token fallback exists. It
 binds native Workers AI directly and does not provision an account-level AI
 Gateway resource. Browser clients should prefer bearer connect tokens; when the
 query-token fallback is used, the Agent Worker strips it before routing into the
-Agents SDK runtime.
+Agents SDK runtime. Its browser CORS allowlist is derived from the neutral app
+origin plus the tenant wildcard origin pattern, so Agent SDK HTTP/WebSocket
+traffic continues to work after an authenticated user is redirected onto an
+organization tenant host.
 
 The Agent Worker bundle currently depends on packages that ship only a
 `main` entry even though the Alchemy Cloudflare Rolldown plugin resolves Worker
@@ -168,14 +174,17 @@ modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
 batch.
-The domain Worker is also configured with Better Auth env vars, MCP resource
-metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
-credentials, observability logs, and traces.
-Better Auth derives cross-subdomain cookies from the configured HTTPS app/API
-origins for deployed Alchemy stages. Every stage, including `main`, defaults to
-`app.<stage>.<zone>`, `api.<stage>.<zone>`, `mcp.<stage>.<zone>`, and
-`agent.<stage>.<zone>`, so each stage can share auth cookies only within its own
-`<stage>.<zone>` parent without relying on local sandbox host aliases.
+The domain and Agent Workers are also configured with trusted app-origin env
+vars; the domain Worker additionally receives Better Auth env vars, MCP
+resource metadata, optional MCP authorized-app cache sizing, Google Maps
+geocoding credentials, observability logs, and traces. Alchemy injects
+`AUTH_TRUSTED_ORIGINS` from the system app origin plus the tenant wildcard
+origin pattern, while keeping `AUTH_APP_ORIGIN` as the neutral system app origin
+for redirects and emails. Deployed Alchemy stages inject `AUTH_COOKIE_DOMAIN`
+from the tenant base domain so system and tenant hosts under `ceird.app` share a
+session after organization creation or switching. Preview and branch stages rely
+on the stage-derived `AUTH_COOKIE_PREFIX` to prevent accepting another stage's
+session cookies under the shared apex.
 Canonical `app.<zone>`, `api.<zone>`, `mcp.<zone>`, and `agent.<zone>`
 hostnames require explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
 `CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` overrides after any existing

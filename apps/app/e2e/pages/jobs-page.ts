@@ -2,7 +2,6 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
-import { APP_ORIGIN } from "../test-urls";
 import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
 const JOBS_ROUTE_TIMEOUT_MS = 30_000;
@@ -30,7 +29,7 @@ export class JobsPage {
 
   async expectLoaded() {
     await Promise.all([
-      expect(this.page).toHaveURL(`${APP_ORIGIN}/jobs`, {
+      expect(this.page).toHaveURL(/\/jobs$/, {
         timeout: JOBS_ROUTE_TIMEOUT_MS,
       }),
       expect(this.page.getByRole("dialog", { name: "New job" })).toBeHidden({

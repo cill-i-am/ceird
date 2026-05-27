@@ -10,6 +10,8 @@ export const configWithoutCloudflareBootstrapSecrets = {
   agentHostname: "agent.example.com",
   apiHostname: "api.example.com",
   appHostname: "app.example.com",
+  authCookieDomain: "example.com",
+  authCookiePrefix: "ceird-main",
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",
   authRateLimitEnabled: true,
@@ -32,6 +34,17 @@ export const configWithoutCloudflareBootstrapSecrets = {
   neonRoleName: "ceird",
   mcpHostname: "mcp.example.com",
   stage: "main",
+  tenantBaseDomain: "example.com",
+  tenantHostMode: "stage",
+  tenantReservedHostnames: [
+    "app.example.com",
+    "api.example.com",
+    "agent.example.com",
+    "mcp.example.com",
+  ],
+  tenantRoutePattern: "*--main.example.com/*",
+  tenantStageAlias: "main",
+  tenantTrustedOriginPattern: "https://*--main.example.com",
   zoneName: "example.com",
 } satisfies InfraStageConfig;
 

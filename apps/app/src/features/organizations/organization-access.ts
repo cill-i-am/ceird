@@ -5,6 +5,7 @@ import {
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
+  OrganizationSlug,
   OrganizationSummary,
 } from "@ceird/identity-core";
 import { redirect } from "@tanstack/react-router";
@@ -133,7 +134,7 @@ export async function ensureActiveOrganizationIdForSession(session: Session) {
     organizations,
   } = await resolveOrganizationAccessState(session);
 
-  if (!activeOrganizationId) {
+  if (!activeOrganizationId || !activeOrganization) {
     throw redirect({ to: "/create-organization" });
   }
 
@@ -173,14 +174,21 @@ export async function redirectIfOrganizationReady() {
     throw redirect(getLoginNavigationTarget());
   }
 
-  const { activeOrganizationId, activeOrganizationSync, organizations } =
-    await resolveOrganizationAccessState(session);
+  const {
+    activeOrganizationId,
+    activeOrganizationSync,
+    organizations,
+    routeResolvedNoAccessibleRequestedOrganization,
+  } = await resolveOrganizationAccessState(session);
 
   if (activeOrganizationId) {
     throw redirect({ to: "/" });
   }
 
-  if (organizations.length > 0) {
+  if (
+    organizations.length > 0 &&
+    !routeResolvedNoAccessibleRequestedOrganization
+  ) {
     throw redirect({ to: "/" });
   }
 
@@ -194,10 +202,20 @@ async function resolveOrganizationAccessState(session: Session) {
   const currentActiveOrganizationId = decodeNullableOrganizationId(
     session.session.activeOrganizationId
   );
-  const activeOrganization = resolveCurrentOrganization(
-    currentActiveOrganizationId,
-    organizations
-  );
+  const routeResolvedActiveOrganization =
+    await readRouteResolvedActiveOrganizationId();
+  const requestedActiveOrganizationId =
+    routeResolvedActiveOrganization.kind === "resolved"
+      ? routeResolvedActiveOrganization.activeOrganizationId
+      : currentActiveOrganizationId;
+  const activeOrganization =
+    routeResolvedActiveOrganization.kind === "resolved" &&
+    requestedActiveOrganizationId === null
+      ? null
+      : resolveCurrentOrganization(
+          requestedActiveOrganizationId,
+          organizations
+        );
   const activeOrganizationId = activeOrganization?.id ?? null;
 
   return {
@@ -208,7 +226,55 @@ async function resolveOrganizationAccessState(session: Session) {
       activeOrganizationId
     ),
     organizations,
+    routeResolvedNoAccessibleRequestedOrganization:
+      routeResolvedActiveOrganization.kind === "resolved" &&
+      routeResolvedActiveOrganization.activeOrganizationId === null &&
+      routeResolvedActiveOrganization.requestedOrganizationSlug !== undefined,
   };
+}
+
+type RouteResolvedActiveOrganization =
+  | {
+      readonly activeOrganizationId: OrganizationIdType | null;
+      readonly kind: "resolved";
+      readonly requestedOrganizationSlug: OrganizationSlug | undefined;
+    }
+  | { readonly kind: "none" };
+
+async function readRouteResolvedActiveOrganizationId(): Promise<RouteResolvedActiveOrganization> {
+  const serverContext = readGlobalAppServerContext();
+
+  if (
+    serverContext.activeOrganizationId !== undefined &&
+    (serverContext.activeOrganizationId !== null ||
+      serverContext.requestedOrganizationSlug !== undefined)
+  ) {
+    return {
+      activeOrganizationId: serverContext.activeOrganizationId ?? null,
+      kind: "resolved",
+      requestedOrganizationSlug: serverContext.requestedOrganizationSlug,
+    };
+  }
+
+  if (isServerEnvironment()) {
+    return { kind: "none" };
+  }
+
+  const clientAppContext = await readFreshCachedClientAppContext();
+
+  if (
+    clientAppContext &&
+    (clientAppContext.activeOrganizationId !== null ||
+      clientAppContext.requestedOrganizationSlug !== undefined)
+  ) {
+    return {
+      activeOrganizationId: clientAppContext.activeOrganizationId,
+      kind: "resolved",
+      requestedOrganizationSlug: clientAppContext.requestedOrganizationSlug,
+    };
+  }
+
+  return { kind: "none" };
 }
 
 export async function getCurrentOrganizationMemberRole(

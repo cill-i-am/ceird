@@ -92,6 +92,58 @@ describe("Agent Worker adapter", () => {
     await expect(response.text()).resolves.toBe("[]");
   });
 
+  it("allows tenant origins declared in the trusted origin patterns", async () => {
+    routeAgentRequest.mockResolvedValue(
+      await fetch("data:application/json,%5B%5D")
+    );
+    const env = makeEnv({
+      trustedOrigins:
+        "https://app.pr-123.example.com,https://*--pr-123.example.com",
+    });
+    const token = await signAgentConnectToken({
+      agentInstanceName,
+      secret: "agent-secret",
+      ttlSeconds: 60,
+    });
+    const url = new URL(makeAgentUrl("ceird-agent", token));
+    url.pathname += "/get-messages";
+    const response = await fetchWorker(
+      new Request(url, {
+        headers: { origin: "https://acme-field-ops--pr-123.example.com" },
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://acme-field-ops--pr-123.example.com"
+    );
+  });
+
+  it("does not add browser CORS headers for untrusted origins", async () => {
+    routeAgentRequest.mockResolvedValue(
+      await fetch("data:application/json,%5B%5D")
+    );
+    const env = makeEnv({
+      trustedOrigins:
+        "https://app.pr-123.example.com,https://*--pr-123.example.com",
+    });
+    const token = await signAgentConnectToken({
+      agentInstanceName,
+      secret: "agent-secret",
+      ttlSeconds: 60,
+    });
+    const response = await fetchWorker(
+      new Request(makeAgentUrl("ceird-agent", token), {
+        headers: { origin: "https://evil.example.net" },
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
   it("answers browser preflight before agent authorization", async () => {
     const response = await fetchWorker(
       new Request(
@@ -178,10 +230,17 @@ function makeAgentUrl(routeName: "CeirdAgent" | "ceird-agent", token: string) {
   return `https://agent.example.com/agents/${routeName}/${encodeURIComponent(agentInstanceName)}?token=${token}`;
 }
 
-function makeEnv(): AgentWorkerEnv {
+function makeEnv(
+  options: {
+    readonly trustedOrigins?: string | undefined;
+  } = {}
+): AgentWorkerEnv {
   return {
     AGENT_INTERNAL_SECRET: "agent-secret",
     AUTH_APP_ORIGIN: "https://app.example.com",
+    ...(options.trustedOrigins === undefined
+      ? {}
+      : { AUTH_TRUSTED_ORIGINS: options.trustedOrigins }),
     AI: {} as Ai,
     CeirdAgent: {} as DurableObjectNamespace,
     DOMAIN: {} as DomainServiceBinding,

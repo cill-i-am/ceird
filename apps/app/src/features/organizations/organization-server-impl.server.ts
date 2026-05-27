@@ -1,4 +1,5 @@
 import {
+  appendOrganizationSlugSuffix,
   createOrganizationSlugFromName,
   decodeOrganizationSummary,
 } from "@ceird/identity-core";
@@ -47,9 +48,13 @@ export async function createCurrentServerOrganizationDirect(
   }
 
   if (await isOrganizationSlugConflictResponse(response)) {
+    const retrySlug = appendOrganizationSlugSuffix(
+      baseSlug,
+      crypto.randomUUID().slice(0, 8)
+    );
     const retryResponse = await postCreateOrganization(authRequest, {
       name: input.name,
-      slug: `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`,
+      slug: retrySlug,
     });
 
     if (retryResponse.ok) {

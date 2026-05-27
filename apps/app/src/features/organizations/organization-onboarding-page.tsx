@@ -26,6 +26,10 @@ import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
+import {
+  buildOrganizationTenantUrl,
+  readTenantHostConfigFromEnv,
+} from "#/lib/tenant-host";
 import { cn } from "#/lib/utils";
 
 import { clearOrganizationAccessClientCache } from "./organization-access-cache";
@@ -102,7 +106,12 @@ export function OrganizationOnboardingPage() {
           <InviteMembersStep
             organization={createdOrganization}
             isHydrated={isHydrated}
-            onContinue={() => navigate({ to: "/" })}
+            onContinue={() =>
+              continueToCreatedOrganization({
+                navigate,
+                organization: createdOrganization,
+              })
+            }
           />
         ) : (
           <EntrySurfaceCard
@@ -174,6 +183,27 @@ export function OrganizationOnboardingPage() {
       </EntryShell>
     </main>
   );
+}
+
+async function continueToCreatedOrganization({
+  navigate,
+  organization,
+}: {
+  readonly navigate: (options: { readonly to: "/" }) => Promise<void>;
+  readonly organization: OrganizationSummary;
+}) {
+  const tenantUrl = buildOrganizationTenantUrl(
+    organization.slug,
+    "/",
+    readTenantHostConfigFromEnv()
+  );
+
+  if (tenantUrl && tenantUrl !== window.location.href) {
+    window.location.assign(tenantUrl);
+    return;
+  }
+
+  await navigate({ to: "/" });
 }
 
 function InviteMembersStep({
@@ -422,17 +452,18 @@ function WorkspaceSetupStep({
     <Tooltip>
       <TooltipTrigger
         render={
-          <span
-            aria-hidden="true"
+          <button
+            type="button"
             aria-label={accessibleLabel}
             title={tooltipText}
             className={cn(
-              "relative z-10 flex size-4 shrink-0 cursor-help items-center justify-center rounded-full ring-1 transition-[background-color,color,box-shadow,transform] duration-200 motion-reduce:transition-none",
+              "relative z-10 flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border-0 p-0 ring-1 transition-[background-color,color,box-shadow,transform] duration-200 motion-reduce:transition-none",
               getSetupStepMarkerClassName(state)
             )}
           />
         }
       >
+        <span className="sr-only">{accessibleLabel}</span>
         {state === "complete" ? (
           <HugeiconsIcon
             icon={CheckmarkCircle02Icon}

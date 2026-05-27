@@ -1,3 +1,5 @@
+import { isOrganizationSlug } from "@ceird/identity-core";
+
 export const DEFAULT_APP_ORIGIN = "http://127.0.0.1:4173";
 export const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
 export const DEFAULT_AGENT_ORIGIN = DEFAULT_APP_ORIGIN;
@@ -9,6 +11,35 @@ export const readOptionalEnv = (name: string) => {
   const value = process.env[name]?.trim();
   return value && value.length > 0 ? value : undefined;
 };
+
+export function deriveTenantOrganizationSlug(tenantOrigin: string) {
+  let tenantUrl: URL;
+
+  try {
+    tenantUrl = new URL(tenantOrigin);
+  } catch {
+    throw new Error("PLAYWRIGHT_TENANT_URL must be an absolute tenant URL.");
+  }
+
+  if (tenantUrl.protocol !== "https:" && tenantUrl.protocol !== "http:") {
+    throw new Error("PLAYWRIGHT_TENANT_URL must use an http or https origin.");
+  }
+
+  const [tenantLabel] = tenantUrl.hostname.toLowerCase().split(".");
+  const stageSeparatorIndex = tenantLabel?.lastIndexOf("--") ?? -1;
+  const organizationSlug =
+    stageSeparatorIndex === -1
+      ? tenantLabel
+      : tenantLabel?.slice(0, stageSeparatorIndex);
+
+  if (!isOrganizationSlug(organizationSlug)) {
+    throw new Error(
+      `PLAYWRIGHT_TENANT_URL must start with a tenant organization slug; received ${tenantOrigin}.`
+    );
+  }
+
+  return organizationSlug;
+}
 
 const readPlaywrightOrigin = (name: string, packageLocalFallback: string) => {
   const value = readOptionalEnv(name);
@@ -40,3 +71,5 @@ export const AGENT_ORIGIN = readPlaywrightOrigin(
   "PLAYWRIGHT_AGENT_URL",
   DEFAULT_AGENT_ORIGIN
 );
+
+export const TENANT_ORIGIN = readOptionalEnv("PLAYWRIGHT_TENANT_URL");

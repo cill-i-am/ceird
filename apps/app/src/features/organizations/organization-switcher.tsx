@@ -27,10 +27,15 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
+import { shouldHydrateOrganizationContext } from "#/features/auth/app-context-route-selection";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyId } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
+import {
+  buildOrganizationTenantUrl,
+  readTenantHostConfigFromEnv,
+} from "#/lib/tenant-host";
 
 import {
   listOrganizations,
@@ -96,8 +101,22 @@ export function OrganizationSwitcher({
     activeOrganization?.id ?? fallbackActiveOrganizationId;
 
   const handleSwitchOrganization = React.useCallback(
-    async (nextOrganizationId: OrganizationId) => {
+    async (nextOrganization: OrganizationSummary) => {
+      const nextOrganizationId = nextOrganization.id;
+
       if (currentActiveOrganizationId === nextOrganizationId) {
+        const tenantUrl = buildOrganizationTenantUrl(
+          nextOrganization.slug,
+          getCurrentLocationPath(),
+          readTenantHostConfigFromEnv()
+        );
+
+        if (tenantUrl && tenantUrl !== window.location.href) {
+          window.location.assign(tenantUrl);
+          return;
+        }
+
+        setOpen(false);
         return;
       }
 
@@ -114,6 +133,17 @@ export function OrganizationSwitcher({
           organizationId: nextOrganizationId,
         });
 
+        return;
+      }
+
+      const tenantUrl = buildOrganizationTenantUrl(
+        nextOrganization.slug,
+        getCurrentLocationPath(),
+        readTenantHostConfigFromEnv()
+      );
+
+      if (tenantUrl && tenantUrl !== window.location.href) {
+        window.location.assign(tenantUrl);
         return;
       }
 
@@ -209,6 +239,14 @@ export function OrganizationSwitcher({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function getCurrentLocationPath() {
+  if (!shouldHydrateOrganizationContext(window.location.pathname)) {
+    return "/";
+  }
+
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
 function useOrganizationListState(
@@ -349,7 +387,7 @@ function OrganizationSwitcherListContent({
   readonly listState: ListState;
   readonly switchState: SwitchState;
   readonly onRetry: () => void;
-  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+  readonly onSwitchOrganization: (organization: OrganizationSummary) => void;
 }) {
   if (listState.status === "loading") {
     return (
@@ -421,7 +459,7 @@ function OrganizationSwitcherListContent({
             return;
           }
 
-          onSwitchOrganization(selectedOrganization.id);
+          onSwitchOrganization(selectedOrganization);
         }}
       >
         {listState.organizations.map((organization, index) => (
@@ -433,15 +471,12 @@ function OrganizationSwitcherListContent({
           >
             <OrganizationMenuIcon />
             <span className="min-w-0 flex-1 truncate">{organization.name}</span>
-            {switchState.status === "switching" &&
-            switchState.organizationId === organization.id ? (
-              <DotMatrixButtonLoader />
-            ) : (
-              <OrganizationMenuShortcut
-                index={index}
-                name={organization.name}
-              />
-            )}
+            <OrganizationMenuTrailing
+              activeOrganizationId={activeOrganizationId}
+              index={index}
+              organization={organization}
+              switchState={switchState}
+            />
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
@@ -470,6 +505,38 @@ function OrganizationSwitcherListContent({
   );
 }
 
+function OrganizationMenuTrailing({
+  activeOrganizationId,
+  index,
+  organization,
+  switchState,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly index: number;
+  readonly organization: OrganizationSummary;
+  readonly switchState: SwitchState;
+}) {
+  if (
+    switchState.status === "switching" &&
+    switchState.organizationId === organization.id
+  ) {
+    return <DotMatrixButtonLoader />;
+  }
+
+  if (organization.id === activeOrganizationId) {
+    return (
+      <Badge
+        variant="secondary"
+        className="ml-auto h-6 px-2 text-[0.6875rem] leading-none text-muted-foreground"
+      >
+        Current
+      </Badge>
+    );
+  }
+
+  return <OrganizationMenuShortcut index={index} name={organization.name} />;
+}
+
 function OrganizationSwitchHotkeys({
   activeOrganizationId,
   enabled,
@@ -479,7 +546,7 @@ function OrganizationSwitchHotkeys({
   readonly activeOrganizationId: OrganizationId | null;
   readonly enabled: boolean;
   readonly organizations: readonly OrganizationSummary[];
-  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+  readonly onSwitchOrganization: (organization: OrganizationSummary) => void;
 }) {
   return (
     <>
@@ -512,7 +579,7 @@ function OrganizationSwitchHotkey({
   readonly enabled: boolean;
   readonly hotkeyId: HotkeyId;
   readonly organization: OrganizationSummary;
-  readonly onSwitchOrganization: (organizationId: OrganizationId) => void;
+  readonly onSwitchOrganization: (organization: OrganizationSummary) => void;
 }) {
   useAppHotkey(
     hotkeyId,
@@ -521,7 +588,7 @@ function OrganizationSwitchHotkey({
         return;
       }
 
-      onSwitchOrganization(organization.id);
+      onSwitchOrganization(organization);
     },
     { enabled, ignoreInputs: true }
   );

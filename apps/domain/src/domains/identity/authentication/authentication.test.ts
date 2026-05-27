@@ -18,6 +18,7 @@ import {
 } from "./auth-observability.js";
 import {
   createAuthentication,
+  extractBetterAuthSessionToken,
   makeEmailFailureReporter,
   makeAuthenticationWebHandler,
   maskInvitationEmail,
@@ -292,6 +293,84 @@ describe("makeAuthenticationConfig()", () => {
     ).toContain("http://127.0.0.1:4304");
   }, 10_000);
 
+  it("adds configured tenant trusted origins to the trusted origin allowlist", () => {
+    const config = makeAuthenticationConfig({
+      appOrigin: "https://app.pr-123.ceird.app",
+      baseUrl: "https://api.pr-123.ceird.app/api/auth",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      trustedOrigins: ["https://*--pr-123.ceird.app"],
+    });
+
+    expect(config.trustedOrigins).toContain("https://*--pr-123.ceird.app");
+    expect(
+      matchesTrustedOrigin(
+        "https://acme-field-ops--pr-123.ceird.app",
+        config.trustedOrigins
+      )
+    ).toBeTruthy();
+    expect(
+      matchesTrustedOrigin(
+        "https://nested.acme-field-ops--pr-123.ceird.app",
+        config.trustedOrigins
+      )
+    ).toBeFalsy();
+  }, 10_000);
+
+  it("validates configured trusted origins as http or https origin patterns", () => {
+    expect(
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: [
+          "https://*--pr-123.ceird.app",
+          "https://*.ceird.app",
+          "http://localhost:3000",
+        ],
+      })
+    ).toStrictEqual(
+      expect.arrayContaining([
+        "https://*--pr-123.ceird.app",
+        "https://*.ceird.app",
+        "http://localhost:3000",
+      ])
+    );
+    expect(() =>
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: ["ftp://*--pr-123.ceird.app"],
+      })
+    ).toThrow(Error);
+    expect(() =>
+      makeAuthenticationTrustedOrigins({
+        trustedOrigins: ["https://tenant.ceird.app/path"],
+      })
+    ).toThrow(Error);
+  }, 10_000);
+
+  it("reflects configured cookie prefixes in the Better Auth advanced config", () => {
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3001",
+      cookiePrefix: "ceird-pr-123",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+
+    expect(config.advanced?.cookiePrefix).toBe("ceird-pr-123");
+  }, 10_000);
+
+  it("uses explicit cookie domains to share cookies across system and tenant hosts", () => {
+    const config = makeAuthenticationConfig({
+      appOrigin: "https://app.pr-123.ceird.app",
+      baseUrl: "https://api.pr-123.ceird.app/api/auth",
+      cookieDomain: "ceird.app",
+      secret: "super-secret-value",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+
+    expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
+      enabled: true,
+      domain: "ceird.app",
+    });
+  }, 10_000);
+
   it("requires BETTER_AUTH_BASE_URL when loading auth config", async () => {
     await withEnvironment(
       {
@@ -302,6 +381,53 @@ describe("makeAuthenticationConfig()", () => {
         const result = loadAuthenticationConfigForTest(provider);
 
         await expect(result).rejects.toThrow(/BETTER_AUTH_BASE_URL/);
+      }
+    );
+  }, 10_000);
+
+  it("loads configured tenant trusted origins and cookie settings", async () => {
+    await withEnvironment(
+      {
+        AUTH_APP_ORIGIN: "https://app.pr-123.ceird.app",
+        AUTH_COOKIE_DOMAIN: "ceird.app",
+        AUTH_COOKIE_PREFIX: "ceird-pr-123",
+        AUTH_TRUSTED_ORIGINS:
+          " https://*--pr-123.ceird.app, ,https://app.ceird.app ",
+        BETTER_AUTH_BASE_URL: "https://api.pr-123.ceird.app/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
+
+        expect(config.trustedOrigins).toStrictEqual(
+          expect.arrayContaining([
+            "https://app.pr-123.ceird.app",
+            "https://*--pr-123.ceird.app",
+            "https://app.ceird.app",
+          ])
+        );
+        expect(config.advanced?.cookiePrefix).toBe("ceird-pr-123");
+        expect(config.advanced?.crossSubDomainCookies).toStrictEqual({
+          enabled: true,
+          domain: "ceird.app",
+        });
+      }
+    );
+  }, 10_000);
+
+  it("rejects invalid configured cookie domains", async () => {
+    await withEnvironment(
+      {
+        AUTH_COOKIE_DOMAIN: "https://ceird.app/path",
+        BETTER_AUTH_BASE_URL: "https://api.pr-123.ceird.app/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const result = loadAuthenticationConfigForTest(provider);
+
+        await expect(result).rejects.toThrow(/AUTH_COOKIE_DOMAIN/);
       }
     );
   }, 10_000);
@@ -443,9 +569,27 @@ describe("auth schema", () => {
 
   it("stores a database-level slug format check in the organization migration", async () => {
     const migrationSql = await readMigrationSql("0003_organizations.sql");
+    const slugLengthMigrationSql = await readMigrationSql(
+      "20260526215020_organization_slug_length"
+    );
+    const slugReservedMigrationSql = await readMigrationSql(
+      "20260527030012_organization_slug_reserved"
+    );
 
     expect(migrationSql).toContain("organization_slug_format_chk");
     expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
+    expect(slugLengthMigrationSql).toContain("organization_slug_format_chk");
+    expect(slugLengthMigrationSql).toContain("organization_slug_backfill");
+    expect(slugLengthMigrationSql).toContain(
+      'char_length("organization"."slug") <= 40'
+    );
+    expect(slugReservedMigrationSql).toContain("organization_slug_format_chk");
+    expect(slugReservedMigrationSql).toContain(
+      `"slug" = "slug" || '-' || substr(md5("id"), 1, 12)`
+    );
+    expect(slugReservedMigrationSql).toContain(
+      `"slug" not in ('app', 'api', 'agent', 'mcp')`
+    );
   }, 10_000);
 
   it("preserves the /api/auth prefix when mounting auth routes", async () => {
@@ -584,6 +728,26 @@ describe("createAuthentication()", () => {
     );
   }, 10_000);
 
+  it("extracts configured Better Auth session cookies for authorization guards", () => {
+    expect(
+      extractBetterAuthSessionToken(
+        "other=value; __Secure-ceird-pr-123.session_token=session-1.signature",
+        { cookiePrefix: "ceird-pr-123" }
+      )
+    ).toBe("session-1");
+    expect(
+      extractBetterAuthSessionToken(
+        "__Secure-better-auth.session_token=session-1.signature",
+        { cookiePrefix: "ceird-pr-123" }
+      )
+    ).toBeUndefined();
+    expect(
+      extractBetterAuthSessionToken(
+        "better-auth.session_token=session-2.signature"
+      )
+    ).toBe("session-2");
+  }, 10_000);
+
   it("records Better Auth handler timing in the active request observation", async () => {
     const auth = {
       api: {
@@ -679,6 +843,38 @@ describe("createAuthentication()", () => {
     expect(delegated).toBeFalsy();
   });
 
+  it("matches tenant wildcard origins at the auth CORS boundary", async () => {
+    const handler = withAuthenticationCors(
+      () => Promise.resolve(Response.json({ delegated: true })),
+      ["https://*--pr-123.ceird.app"]
+    );
+
+    const acceptedResponse = await handler(
+      new Request("https://api.pr-123.ceird.app/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-method": "POST",
+          origin: "https://acme-field-ops--pr-123.ceird.app",
+        },
+      })
+    );
+    const rejectedResponse = await handler(
+      new Request("https://api.pr-123.ceird.app/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-method": "POST",
+          origin: "https://app.pr-123.ceird.app",
+        },
+      })
+    );
+
+    expect(acceptedResponse.status).toBe(204);
+    expect(acceptedResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://acme-field-ops--pr-123.ceird.app"
+    );
+    expect(rejectedResponse.status).toBe(403);
+  });
+
   it("runs default email failure reports with the captured Effect context", async () => {
     const { logger, logs } = captureLogs();
 
@@ -705,6 +901,37 @@ describe("createAuthentication()", () => {
     );
     expect(serializedLogs).toContain("Password reset email delivery failed");
     expect(serializedLogs).toContain("delivery failed");
+  });
+
+  it("redacts sensitive values from email failure reports", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyEmailFailureReporterRedaction() {
+      const runtimeContext = yield* Effect.context<never>();
+      const reportFailure = makeEmailFailureReporter(
+        "Verification email delivery failed",
+        runtimeContext
+      );
+
+      reportFailure(
+        new Error(
+          "delivery to person@example.com failed at https://example.com/reset?token=secret"
+        )
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await Effect.runPromise(Effect.yieldNow);
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("[redacted-email]");
+    expect(serializedLogs).toContain("[redacted-url]");
+    expect(serializedLogs).not.toContain("person@example.com");
+    expect(serializedLogs).not.toContain("token=secret");
   });
 
   it("configures organization invitation delivery through the Better Auth organization plugin", async () => {
@@ -1282,9 +1509,19 @@ describe("createAuthentication()", () => {
       app: matchesTrustedOrigin("https://preview.app.ceird.example.com", [
         "https://*.app.ceird.example.com",
       ]),
+      nested: matchesTrustedOrigin(
+        "https://nested.preview.app.ceird.example.com",
+        ["https://*.app.ceird.example.com"]
+      ),
+      productionStageHost: matchesTrustedOrigin(
+        "https://app.pr-123.ceird.app",
+        ["https://*.ceird.app"]
+      ),
     }).toStrictEqual({
       api: false,
       app: true,
+      nested: false,
+      productionStageHost: false,
     });
   }, 10_000);
 });

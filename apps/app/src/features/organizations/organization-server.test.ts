@@ -1,4 +1,7 @@
-import { decodeOrganizationId } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  ORGANIZATION_SLUG_MAX_LENGTH,
+} from "@ceird/identity-core";
 
 import {
   createCurrentServerOrganizationDirect,
@@ -745,6 +748,11 @@ describe("server organization lookup", () => {
           name: "Acme Field Ops",
           slug: "acme-field-ops-retry",
         })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+        })
       );
 
     await expect(
@@ -765,6 +773,57 @@ describe("server organization lookup", () => {
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toMatch(
       /"slug":"acme-field-ops-[a-z0-9-]+"/
     );
+  }, 1000);
+
+  it("keeps duplicate organization retry slugs tenant-safe when the base slug is max length", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            code: "ORGANIZATION_ALREADY_EXISTS",
+            message: "Organization already exists",
+          },
+          { status: 400 }
+        )
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "org_123",
+          name: "A".repeat(40),
+          slug: `${"a".repeat(31)}-retry123`,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+        })
+      );
+
+    const randomUuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("retry123-0000-4000-8000-000000000000");
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "A".repeat(40) })
+    ).resolves.toStrictEqual({
+      id: "org_123",
+      name: "A".repeat(40),
+      slug: `${"a".repeat(31)}-retry123`,
+    });
+
+    const retryBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body)
+    ) as { slug: string };
+
+    expect(retryBody.slug).toBe(`${"a".repeat(31)}-retry123`);
+    expect(retryBody.slug).toHaveLength(ORGANIZATION_SLUG_MAX_LENGTH);
+    randomUuidSpy.mockRestore();
   }, 1000);
 
   it("reports the retry status when organization slug conflict recovery fails", async () => {

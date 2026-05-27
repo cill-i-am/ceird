@@ -1,12 +1,19 @@
 import {
+  appendOrganizationSlugSuffix,
   createOrganizationSlugFromName,
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
   decodeInvitationId,
+  decodeOrganizationSummary,
   decodeOrganizationRole,
+  decodeOrganizationSlug,
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  isOrganizationSlug,
+  ORGANIZATION_SLUG_MAX_LENGTH,
+  RESERVED_ORGANIZATION_SLUGS,
+  isReservedOrganizationSlug,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
   ORGANIZATION_SLUG_PATTERN,
@@ -33,6 +40,17 @@ describe("createOrganizationInputSchema", () => {
       })
     ).toThrow(/Expected/);
   }, 1000);
+
+  it("rejects slugs reserved for system hosts", () => {
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(() =>
+        decodeCreateOrganizationInput({
+          name: "Reserved Host",
+          slug,
+        })
+      ).toThrow(/reserved/);
+    }
+  }, 1000);
 });
 
 describe("organization slug generation", () => {
@@ -49,11 +67,76 @@ describe("organization slug generation", () => {
     expect(createOrganizationSlugFromName("!!")).toBe("team");
   }, 1000);
 
-  it("keeps truncated slugs inside the slug pattern", () => {
+  it("avoids slugs reserved for system hosts when generating from names", () => {
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(createOrganizationSlugFromName(slug.toUpperCase())).toBe(
+        `${slug}-org`
+      );
+      expect(isReservedOrganizationSlug(slug)).toBeTruthy();
+    }
+  }, 1000);
+
+  it("classifies organization slugs through the shared predicate", () => {
+    expect(isOrganizationSlug("acme-field-ops")).toBeTruthy();
+    expect(isOrganizationSlug("Acme Field Ops")).toBeFalsy();
+    expect(isOrganizationSlug("a")).toBeFalsy();
+    expect(isOrganizationSlug("a".repeat(41))).toBeFalsy();
+
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(isOrganizationSlug(slug)).toBeFalsy();
+      expect(isOrganizationSlug(`${slug}-org`)).toBeTruthy();
+    }
+  }, 1000);
+
+  it("decodes organization slugs through the shared boundary helper", () => {
+    expect(decodeOrganizationSlug("  acme-field-ops  ")).toBe("acme-field-ops");
+    expect(() => decodeOrganizationSlug("app")).toThrow(/reserved/);
+  }, 1000);
+
+  it("keeps truncated slugs short enough for tenant stage host labels", () => {
     const slug = createOrganizationSlugFromName(`${"a".repeat(63)} & Beta`);
 
-    expect(slug).toBe("a".repeat(63));
+    expect(slug).toBe("a".repeat(40));
     expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+
+  it("rejects organization slugs longer than the tenant-safe maximum", () => {
+    expect(() =>
+      decodeCreateOrganizationInput({
+        name: "Acme Field Ops",
+        slug: "a".repeat(41),
+      })
+    ).toThrow(/Expected/);
+  }, 1000);
+
+  it("appends retry suffixes without exceeding the tenant-safe maximum", () => {
+    const slug = appendOrganizationSlugSuffix("a".repeat(40), "retry123");
+
+    expect(slug).toBe(`${"a".repeat(31)}-retry123`);
+    expect(slug).toHaveLength(ORGANIZATION_SLUG_MAX_LENGTH);
+    expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+
+  it("trims trailing hyphens before appending retry suffixes", () => {
+    const slug = appendOrganizationSlugSuffix(
+      `${"a".repeat(31)}-${"b".repeat(8)}`,
+      "retry123"
+    );
+
+    expect(slug).toBe(`${"a".repeat(31)}-retry123`);
+    expect(slug).toMatch(ORGANIZATION_SLUG_PATTERN);
+  }, 1000);
+});
+
+describe("organization summary boundary", () => {
+  it("rejects summaries with slugs outside the organization slug contract", () => {
+    expect(() =>
+      decodeOrganizationSummary({
+        id: "org_123",
+        name: "Acme Field Ops",
+        slug: "a".repeat(41),
+      })
+    ).toThrow(/Expected/);
   }, 1000);
 });
 

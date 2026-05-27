@@ -1,7 +1,6 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
-import { APP_ORIGIN } from "../test-urls";
 import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
 export class MembersPage {
@@ -38,7 +37,7 @@ export class MembersPage {
 
   async expectLoaded() {
     await Promise.all([
-      expect(this.page).toHaveURL(`${APP_ORIGIN}/members`),
+      expect(this.page).toHaveURL(/\/members$/),
       expect(this.heading).toBeVisible(),
     ]);
   }

@@ -165,6 +165,126 @@ describe("Alchemy stage identity", () => {
     expect(config.neonParentBranchProtected).toBeFalsy();
   });
 
+  it("uses production tenant hosts only when main is on the canonical app host", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_APP_HOSTNAME: "app.ceird.app",
+                CEIRD_API_HOSTNAME: "api.ceird.app",
+                CEIRD_AGENT_HOSTNAME: "agent.ceird.app",
+                CEIRD_MCP_HOSTNAME: "mcp.ceird.app",
+                CEIRD_ZONE_NAME: "ceird.app",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.tenantHostMode).toBe("production");
+    expect(config.tenantBaseDomain).toBe("ceird.app");
+    expect(config.tenantStageAlias).toBeUndefined();
+    expect(config.tenantRoutePattern).toBe("*.ceird.app/*");
+    expect(config.tenantTrustedOriginPattern).toBe("https://*.ceird.app");
+    expect(config.authCookiePrefix).toBe("ceird-main");
+    expect(config.authCookieDomain).toBe("ceird.app");
+  });
+
+  it("keeps partial canonical production host overrides in staged tenant mode", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_APP_HOSTNAME: "app.ceird.app",
+                CEIRD_ZONE_NAME: "ceird.app",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.apiHostname).toBe("api.main.ceird.app");
+    expect(config.agentHostname).toBe("agent.main.ceird.app");
+    expect(config.mcpHostname).toBe("mcp.main.ceird.app");
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantRoutePattern).toBe("*--main.ceird.app/*");
+    expect(config.tenantTrustedOriginPattern).toBe("https://*--main.ceird.app");
+    expect(config.authCookieDomain).toBe("ceird.app");
+  });
+
+  it("keeps local main-stage defaults in staged tenant mode", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(ConfigProvider.layer(makeConfigProvider()))
+      )
+    );
+
+    expect(config.appHostname).toBe("app.main.example.com");
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantStageAlias).toBe("main");
+    expect(config.tenantRoutePattern).toBe("*--main.example.com/*");
+    expect(config.tenantTrustedOriginPattern).toBe(
+      "https://*--main.example.com"
+    );
+    expect(config.authCookieDomain).toBe("example.com");
+  });
+
+  it("derives tenant host aliases for staging stages", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("staging").pipe(
+        Effect.provide(ConfigProvider.layer(makeConfigProvider()))
+      )
+    );
+
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantStageAlias).toBe("staging");
+    expect(config.tenantRoutePattern).toBe("*--staging.example.com/*");
+    expect(config.tenantTrustedOriginPattern).toBe(
+      "https://*--staging.example.com"
+    );
+  });
+
+  it("derives tenant host aliases for PR previews", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("pr-123").pipe(
+        Effect.provide(ConfigProvider.layer(makeConfigProvider()))
+      )
+    );
+
+    expect(config.tenantHostMode).toBe("stage");
+    expect(config.tenantStageAlias).toBe("pr-123");
+    expect(config.tenantRoutePattern).toBe("*--pr-123.example.com/*");
+    expect(config.authCookiePrefix).toBe("ceird-pr-123");
+    expect(config.authCookieDomain).toBe("example.com");
+  });
+
+  it("uses a short deterministic tenant alias for long branch stages", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig(
+        "feature/this-stage-name-is-way-too-long-for-tenant-hosts"
+      ).pipe(Effect.provide(ConfigProvider.layer(makeConfigProvider())))
+    );
+
+    expect(config.tenantStageAlias).toMatch(/^s-[a-f0-9]{12}$/);
+    expect(config.tenantStageAlias?.length).toBeLessThanOrEqual(14);
+    expect(
+      `example-org--${config.tenantStageAlias}.example.com`.split(".")[0]
+    ).toHaveLength(27);
+    expect(
+      `${"a".repeat(40)}--${config.tenantStageAlias}`.length
+    ).toBeLessThanOrEqual(63);
+  });
+
   it("disables auth rate limits by default for PR preview stages", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("pr-104").pipe(

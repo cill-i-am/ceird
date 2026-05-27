@@ -114,14 +114,48 @@ Current config decisions:
 - `OAUTH_ISSUER_URL` is optional; when omitted OAuth/OIDC issuer metadata
   defaults to `BETTER_AUTH_BASE_URL`; explicit issuer URLs are canonicalized to
   match Better Auth discovery metadata before token signing uses them
-- trusted origins are restricted to known local and configured app origins
+- trusted origins are restricted to known local origins, the configured app
+  origin, and explicit `AUTH_TRUSTED_ORIGINS` entries such as tenant wildcard
+  patterns (`https://*--pr-123.ceird.app`)
+- `AUTH_COOKIE_PREFIX` can set Better Auth's cookie prefix for stage-isolated
+  cookie names
+- `AUTH_COOKIE_DOMAIN`, when provided, is the authoritative cross-subdomain
+  cookie parent and takes precedence over app/API-derived cookie sharing
+- explicit cookie domains are validated as parent domains of the configured
+  auth/app hosts; they cannot include schemes, ports, paths, or wildcards
 - canonical deployed app/API sibling domains share the configured parent cookie
   domain, for example `app.ceird.app` and `api.ceird.app` use `ceird.app`
-- nested stage domains share only their stage parent, for example
-  `app.main.ceird.app` and `api.main.ceird.app` use `main.ceird.app`
-- legacy stage-prefixed sibling hosts such as `app-main.ceird.app` and
-  `api-main.ceird.app` keep host-scoped cookies because sharing `ceird.app`
-  would leak cookies across unrelated stages
+- Alchemy sets the cookie domain to the tenant base domain, normally
+  `ceird.app`, so neutral app/API hosts and tenant hosts share the same session
+  in both production and non-production stages
+- deployed stages isolate Better Auth cookie names with the stage-specific
+  `AUTH_COOKIE_PREFIX`
+- package-local localhost development keeps host-scoped cookies because tenant
+  hosts are disabled there
+
+### Tenant Hosts And Auth
+
+Auth entry routes stay on the neutral app host for each stage. Login, signup,
+password reset, email verification, OAuth consent, invitation acceptance, and
+organization creation are app routes on `app.ceird.app`,
+`app.<stage>.ceird.app`, or `app.pr-<number>.ceird.app`; tenant hosts are for
+authenticated organization context, not for owning the auth entry flow.
+
+Better Auth accepts tenant browser origins through `AUTH_TRUSTED_ORIGINS`,
+which infra derives from the stage tenant route pattern. Production trusts
+`https://*.ceird.app`; non-production stages trust
+`https://*--{tenantStageAlias}.ceird.app`. The neutral app origin is still
+trusted explicitly.
+
+Cookies are scoped to the tenant base domain for deployed Alchemy stages.
+Production uses `ceird.app`; a PR preview also uses `ceird.app` because its
+tenant host shape is `org--pr-123.ceird.app`, which cannot share cookies with
+`app.pr-123.ceird.app` through the narrower `pr-123.ceird.app` parent. Better
+Auth cookie names stay isolated with the stage-specific `AUTH_COOKIE_PREFIX`
+(`ceird-main`, `ceird-pr-123`, or a branch-derived prefix), so preview Workers
+do not accept production sessions even though browsers may send multiple
+stage-prefixed cookies under the shared apex. Package-local localhost
+development keeps tenant hosts disabled and uses host-scoped cookies.
 
 Current OAuth/OIDC discovery endpoints provided by Better Auth under the auth
 base path:
@@ -496,6 +530,22 @@ Rules:
 - route guards decode snapshot data with `Effect/Schema` before trusting it
 - sign-in, sign-up, sign-out, organization creation, invitation acceptance, and
   active-organization switching clear the browser auth/organization caches
+
+### Organization Slug Contract
+
+Organization slugs are generated and validated by `@ceird/identity-core`.
+The shared slug contract caps slugs at 40 characters so tenant DNS labels can
+fit `{slug}--{tenantStageAlias}` within the 63-character DNS label limit, and
+rejects `app`, `api`, `agent`, and `mcp` because those labels are reserved for
+Ceird system hosts. Generated slugs for organizations with those names receive
+an `-org` suffix before creation.
+
+Domain persistence enforces the same contract on the Better Auth organization
+table: `organization_slug_format_chk` checks the slug format and the 40-character
+maximum length, and rejects reserved system labels. App-owned organization
+creation retry logic also uses the shared identity-core suffix helper, which
+truncates the base slug before appending a random suffix so conflict retries
+remain inside the shared slug contract.
 
 ## Route Model
 

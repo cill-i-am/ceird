@@ -77,6 +77,10 @@ export function OrganizationSettingsPage({
     null
   );
   const savedOrganizationNameRef = React.useRef(organization.name);
+  const [organizationFormDefaults, setOrganizationFormDefaults] =
+    React.useState(() => ({
+      name: organization.name,
+    }));
   const [labels, setLabels] = React.useState(() =>
     sortOrganizationLabels(organizationLabels)
   );
@@ -107,9 +111,7 @@ export function OrganizationSettingsPage({
   const previousLabelsKeyRef = React.useRef(organizationLabelsKey);
 
   const form = useForm({
-    defaultValues: {
-      name: organization.name,
-    },
+    defaultValues: organizationFormDefaults,
     validators: {
       onSubmit: Schema.toStandardSchemaV1(organizationSettingsSchema),
     },
@@ -122,9 +124,12 @@ export function OrganizationSettingsPage({
       const input = decodeUpdateOrganizationInput(value);
 
       if (input.name === savedOrganizationNameRef.current) {
-        formApi.reset({
+        const savedOrganizationValues = {
           name: savedOrganizationNameRef.current,
-        });
+        };
+
+        setOrganizationFormDefaults(savedOrganizationValues);
+        formApi.reset(savedOrganizationValues);
         return;
       }
 
@@ -165,20 +170,30 @@ export function OrganizationSettingsPage({
         return;
       }
 
-      formApi.reset({
-        name: result.data.name,
-      });
-      savedOrganizationNameRef.current = result.data.name;
-      setSuccessMessage("Organization updated.");
       clearOrganizationAccessClientCache();
+      let nextSuccessMessage =
+        "Organization updated. Refresh the page if the old name still appears elsewhere.";
 
       try {
         await router.invalidate();
+        nextSuccessMessage = "Organization updated.";
       } catch {
-        setSuccessMessage(
-          "Organization updated. Refresh the page if the old name still appears elsewhere."
-        );
+        // Keep the local form in sync with the accepted mutation even when a
+        // follow-up route refresh fails.
       }
+
+      if (latestOrganizationIdRef.current !== actionOrganizationId) {
+        return;
+      }
+
+      const updatedOrganizationValues = {
+        name: input.name,
+      };
+
+      setOrganizationFormDefaults(updatedOrganizationValues);
+      formApi.reset(updatedOrganizationValues);
+      savedOrganizationNameRef.current = input.name;
+      setSuccessMessage(nextSuccessMessage);
     },
   });
 
@@ -219,9 +234,12 @@ export function OrganizationSettingsPage({
     }
 
     if (isNewOrganization || form.state.isDefaultValue) {
-      form.reset({
+      const nextOrganizationValues = {
         name: organization.name,
-      });
+      };
+
+      setOrganizationFormDefaults(nextOrganizationValues);
+      form.reset(nextOrganizationValues);
     }
   }, [
     form,

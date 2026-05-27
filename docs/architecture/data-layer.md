@@ -133,12 +133,15 @@ receives `DOMAIN`, the `CeirdAgent` Durable Object namespace, Workers AI, and
 the same internal agent secret used by the domain Worker. Package-local Node
 runtimes still read `DATABASE_URL`.
 
-The domain database layer creates request-scoped Postgres pools and Drizzle
-clients from the configured URL. Normal request handling does not run a
-standalone `select 1` preflight query; health checks and diagnostics should own
-explicit database probes. When a request materializes the database layer, it
-logs `db.initMs` and `db.preflightQuery: false` with the active request id when
-one is present.
+The domain database layer creates Postgres pools and Drizzle clients from the
+configured URL. In the Worker path these pools are scoped to the request handler
+and are capped at one client with connection, query, statement, and idle
+transaction timeouts, so Worker concurrency does not fan out beyond the
+conservative Hyperdrive origin connection limit. Normal request handling does
+not run a standalone `select 1` preflight query; health checks and diagnostics
+should own explicit database probes. When a request materializes the database
+layer, it logs `db.initMs` and `db.preflightQuery: false` with the active request
+id when one is present.
 
 Domain database integration tests use
 `apps/domain/src/platform/database/test-database.ts` to create an isolated

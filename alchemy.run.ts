@@ -11,6 +11,10 @@ import {
   makeCloudflareHyperdrive,
   makeCloudflareStack,
 } from "./infra/cloudflare-stack.ts";
+import {
+  TenantWildcardDnsRecordProvider,
+  TenantWorkerRouteProvider,
+} from "./infra/cloudflare-tenant-routing.ts";
 import { legacyDrizzleMigrationsProvider } from "./infra/legacy-alchemy.ts";
 import { makeNeonPostgresResources } from "./infra/neon.ts";
 import { loadInfraStageConfig } from "./infra/stages.ts";
@@ -23,7 +27,9 @@ const providers = (() => {
     cloudflareProviders,
     DrizzleProviders.providers(),
     legacyDrizzleMigrationsProvider,
-    Neon.providers()
+    Neon.providers(),
+    TenantWildcardDnsRecordProvider(),
+    TenantWorkerRouteProvider()
   ).pipe(Layer.orDie) as Layer.Layer<unknown, never, StackServices>;
 })();
 
@@ -67,6 +73,10 @@ export default Alchemy.Stack(
       hyperdrive: cloudflareStack.database.name,
       mcp: cloudflareStack.mcpOrigin,
       neonDatabase: database.databaseName,
+      tenantReservedHostBypassRoutePatterns:
+        cloudflareStack.tenantReservedHostBypassRoutePatterns,
+      tenantRoutePattern: cloudflareStack.tenantRoutePattern,
+      tenantWildcardDnsRecordId: cloudflareStack.tenantWildcardDnsRecordId,
     } as const;
   }).pipe(
     Effect.withSpan("InfraStack.deploy", {
