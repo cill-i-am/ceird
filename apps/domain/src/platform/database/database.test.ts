@@ -54,7 +54,14 @@ describe("shared app database effect layers", () => {
 
       expect(database.pool).toBe(pool);
       expect(PoolMock).toHaveBeenCalledWith({
+        application_name: "ceird-domain",
         connectionString: SHARED_POOL_DATABASE_URL,
+        connectionTimeoutMillis: 5000,
+        idle_in_transaction_session_timeout: 10_000,
+        idleTimeoutMillis: 5000,
+        max: 1,
+        query_timeout: 30_000,
+        statement_timeout: 30_000,
       });
       expect(pool.query).not.toHaveBeenCalled();
     } finally {
