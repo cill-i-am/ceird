@@ -81,9 +81,10 @@ test.describe("jobs flow", () => {
     await createSheet.choosePriorityOption("High");
     await createSheet.chooseSiteOption("Create a new site");
     await createSheet.siteName.fill(siteName);
-    await createSheet.siteAddressLine1.fill("1 Custom House Quay");
-    await createSheet.siteCounty.fill("Dublin");
-    await createSheet.siteEircode.fill("D01 W2R1");
+    await createSheet.siteLocation.fill("D1");
+    await expect(createSheet.siteLocationStatus).toContainText(
+      "Unverified location"
+    );
     await createSheet.closeSiteDialog();
     await createSheet.createInlineContact(contactName);
     await createSheet.submit.click();

@@ -28,9 +28,9 @@ import {
 } from "@ceird/labels-core";
 import {
   SITE_ACCESS_DENIED_ERROR_TAG,
-  SITE_GEOCODING_FAILED_ERROR_TAG,
-  SITE_GEOCODING_PROVIDER_ERROR_TAG,
   SITE_LIST_CURSOR_INVALID_ERROR_TAG,
+  SITE_LOCATION_PROVIDER_ERROR_TAG,
+  SITE_LOCATION_RESOLUTION_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
 } from "@ceird/sites-core";
@@ -52,8 +52,8 @@ import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG } from "../organizations/errors.js";
-import { SiteGeocoder } from "../sites/geocoder.js";
-import type { SiteGeocoderImplementation } from "../sites/geocoder.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
+import type { SiteLocationProviderImplementation } from "../sites/location-provider.js";
 import {
   SiteLabelAssignmentsRepository,
   SitesRepository,
@@ -69,7 +69,7 @@ const ACCESS_DENIED_ERROR_TAGS = [
 const STORAGE_ERROR_TAGS = [
   JOB_STORAGE_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
-  SITE_GEOCODING_PROVIDER_ERROR_TAG,
+  SITE_LOCATION_PROVIDER_ERROR_TAG,
 ] as const;
 const REJECTED_ERROR_TAGS = [
   JOB_NOT_FOUND_ERROR_TAG,
@@ -88,7 +88,7 @@ const REJECTED_ERROR_TAGS = [
   LABEL_NAME_CONFLICT_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
   SITE_LIST_CURSOR_INVALID_ERROR_TAG,
-  SITE_GEOCODING_FAILED_ERROR_TAG,
+  SITE_LOCATION_RESOLUTION_ERROR_TAG,
 ] as const;
 const isAgentActionName = Schema.is(AgentActionNameSchema);
 const isWorkItemId = Schema.is(WorkItemId);
@@ -106,7 +106,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const jobsRepository = yield* JobsRepository;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
-      const siteGeocoder = yield* SiteGeocoder;
+      const siteLocationProvider = yield* SiteLocationProvider;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
       const sitesRepository = yield* SitesRepository;
@@ -138,7 +138,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   jobsRepository,
                   labelsRepository,
                   organizationAuthorization,
-                  siteGeocoder,
+                  siteLocationProvider,
                   siteLabelAssignmentsRepository,
                   sitesRepository,
                 }
@@ -183,7 +183,7 @@ interface SitesServiceLayerDependencies {
   readonly organizationAuthorization: Context.Service.Shape<
     typeof OrganizationAuthorization
   >;
-  readonly siteGeocoder: SiteGeocoderImplementation;
+  readonly siteLocationProvider: SiteLocationProviderImplementation;
   readonly siteLabelAssignmentsRepository: Context.Service.Shape<
     typeof SiteLabelAssignmentsRepository
   >;
@@ -201,7 +201,7 @@ interface JobsServiceLayerDependencies {
   readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
   readonly jobsRepository: Context.Service.Shape<typeof JobsRepository>;
   readonly labelsRepository: Context.Service.Shape<typeof LabelsRepository>;
-  readonly siteGeocoder: SiteGeocoderImplementation;
+  readonly siteLocationProvider: SiteLocationProviderImplementation;
   readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
 }
 
@@ -316,7 +316,7 @@ function makeJobsServiceLayer(
       Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
       Layer.succeed(JobsRepository, dependencies.jobsRepository),
       Layer.succeed(LabelsRepository, dependencies.labelsRepository),
-      Layer.succeed(SiteGeocoder, dependencies.siteGeocoder),
+      Layer.succeed(SiteLocationProvider, dependencies.siteLocationProvider),
       Layer.succeed(SitesRepository, dependencies.sitesRepository)
     )
   );
@@ -340,7 +340,7 @@ function makeSitesServiceLayer(
         OrganizationAuthorization,
         dependencies.organizationAuthorization
       ),
-      Layer.succeed(SiteGeocoder, dependencies.siteGeocoder),
+      Layer.succeed(SiteLocationProvider, dependencies.siteLocationProvider),
       Layer.succeed(
         SiteLabelAssignmentsRepository,
         dependencies.siteLabelAssignmentsRepository

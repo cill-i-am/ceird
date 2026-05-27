@@ -43,8 +43,12 @@ export const listSiteLabelsForSites: (
       labels.name,
       labels.updated_at
     from site_labels
-    join labels on labels.id = site_labels.label_id
-    join sites on sites.id = site_labels.site_id
+    join labels
+      on labels.id = site_labels.label_id
+      and labels.organization_id = site_labels.organization_id
+    join sites
+      on sites.id = site_labels.site_id
+      and sites.organization_id = site_labels.organization_id
     where site_labels.organization_id = ${organizationId}
       and labels.organization_id = ${organizationId}
       and sites.organization_id = ${organizationId}
@@ -70,8 +74,12 @@ export const listSiteLabelsForOrganization: (
       labels.name,
       labels.updated_at
     from site_labels
-    join labels on labels.id = site_labels.label_id
-    join sites on sites.id = site_labels.site_id
+    join labels
+      on labels.id = site_labels.label_id
+      and labels.organization_id = site_labels.organization_id
+    join sites
+      on sites.id = site_labels.site_id
+      and sites.organization_id = site_labels.organization_id
     where site_labels.organization_id = ${organizationId}
       and labels.organization_id = ${organizationId}
       and sites.organization_id = ${organizationId}

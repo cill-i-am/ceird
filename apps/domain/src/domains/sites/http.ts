@@ -24,6 +24,16 @@ const SitesHandlersLive = HttpApiBuilder.group(AppApi, "sites", (handlers) =>
       .handle("listSites", ({ query }) =>
         sitesService.list(query).pipe(observeSitesOperation("listSites"))
       )
+      .handle("autocompleteSiteLocation", ({ payload }) =>
+        sitesService
+          .autocompleteLocation(payload)
+          .pipe(observeSitesOperation("autocompleteSiteLocation"))
+      )
+      .handle("getSiteLocationPlaceDetails", ({ payload }) =>
+        sitesService
+          .getLocationPlaceDetails(payload)
+          .pipe(observeSitesOperation("getSiteLocationPlaceDetails"))
+      )
       .handle("createSite", ({ payload }) =>
         sitesService.create(payload).pipe(observeSitesOperation("createSite"))
       )

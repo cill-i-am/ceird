@@ -3,7 +3,11 @@
 import type { LabelNotFoundError } from "@ceird/labels-core";
 import { Schema } from "effect";
 
-import { SiteCountrySchema } from "./domain.js";
+import {
+  GooglePlaceId,
+  SiteCountrySchema,
+  SiteLocationProviderSchema,
+} from "./domain.js";
 import { SiteId } from "./ids.js";
 
 export const SITE_ACCESS_DENIED_ERROR_TAG =
@@ -51,30 +55,56 @@ export class SiteListCursorInvalidError extends Schema.TaggedErrorClass<SiteList
   { httpApiStatus: 400 }
 ) {}
 
-export const SITE_GEOCODING_FAILED_ERROR_TAG =
-  "@ceird/sites-core/SiteGeocodingFailedError" as const;
-export class SiteGeocodingFailedError extends Schema.TaggedErrorClass<SiteGeocodingFailedError>()(
-  SITE_GEOCODING_FAILED_ERROR_TAG,
+export const SITE_LOCATION_RESOLUTION_ERROR_TAG =
+  "@ceird/sites-core/SiteLocationResolutionError" as const;
+export const SITE_LOCATION_PROVIDER_OPERATIONS = [
+  "autocomplete",
+  "place_details",
+] as const;
+export const SiteLocationProviderOperationSchema = Schema.Literals(
+  SITE_LOCATION_PROVIDER_OPERATIONS
+);
+export type SiteLocationProviderOperation = Schema.Schema.Type<
+  typeof SiteLocationProviderOperationSchema
+>;
+export class SiteLocationResolutionError extends Schema.TaggedErrorClass<SiteLocationResolutionError>()(
+  SITE_LOCATION_RESOLUTION_ERROR_TAG,
   {
     message: Schema.String,
-    country: SiteCountrySchema,
-    eircode: Schema.optional(Schema.String),
+    operation: Schema.optional(SiteLocationProviderOperationSchema),
+    placeId: Schema.optional(GooglePlaceId),
+    provider: Schema.optional(SiteLocationProviderSchema),
   },
   { httpApiStatus: 422 }
 ) {}
 
-export const SITE_GEOCODING_PROVIDER_ERROR_TAG =
-  "@ceird/sites-core/SiteGeocodingProviderError" as const;
-export class SiteGeocodingProviderError extends Schema.TaggedErrorClass<SiteGeocodingProviderError>()(
-  SITE_GEOCODING_PROVIDER_ERROR_TAG,
+export const SITE_LOCATION_PROVIDER_ERROR_TAG =
+  "@ceird/sites-core/SiteLocationProviderError" as const;
+export const SITE_LOCATION_PROVIDER_ERROR_REASONS = [
+  "fetch_failed",
+  "http_error",
+  "json_decode_failed",
+  "request_timeout",
+  "response_parse_failed",
+] as const;
+export const SiteLocationProviderErrorReasonSchema = Schema.Literals(
+  SITE_LOCATION_PROVIDER_ERROR_REASONS
+);
+export type SiteLocationProviderErrorReason = Schema.Schema.Type<
+  typeof SiteLocationProviderErrorReasonSchema
+>;
+export class SiteLocationProviderError extends Schema.TaggedErrorClass<SiteLocationProviderError>()(
+  SITE_LOCATION_PROVIDER_ERROR_TAG,
   {
     message: Schema.String,
-    country: SiteCountrySchema,
-    eircode: Schema.optional(Schema.String),
+    country: Schema.optional(SiteCountrySchema),
     httpStatus: Schema.optional(Schema.Int),
+    operation: SiteLocationProviderOperationSchema,
+    placeId: Schema.optional(GooglePlaceId),
+    provider: SiteLocationProviderSchema,
     providerMessage: Schema.optional(Schema.String),
     providerStatus: Schema.optional(Schema.String),
-    reason: Schema.String,
+    reason: SiteLocationProviderErrorReasonSchema,
   },
   { httpApiStatus: 503 }
 ) {}
@@ -84,6 +114,6 @@ export type SitesError =
   | SiteStorageError
   | SiteNotFoundError
   | SiteListCursorInvalidError
-  | SiteGeocodingFailedError
-  | SiteGeocodingProviderError
+  | SiteLocationResolutionError
+  | SiteLocationProviderError
   | LabelNotFoundError;

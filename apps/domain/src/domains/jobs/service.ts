@@ -42,8 +42,9 @@ import { Layer, Context, Effect, Option } from "effect";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
-import type { GeocodedSiteLocation } from "../sites/geocoder.js";
-import { SiteGeocoder } from "../sites/geocoder.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
+import type { ResolvedSiteLocationRecord } from "../sites/location-resolution.js";
+import { resolveCreateSiteLocation } from "../sites/location-resolution.js";
 import { SitesRepository } from "../sites/repositories.js";
 import { JobsActivityRecorder } from "./activity-recorder.js";
 import { mapActorResolutionErrorsToAccessDenied } from "./actor-access.js";
@@ -64,6 +65,19 @@ type ContactsRepositoryService = Context.Service.Shape<
 type JobsAuthorizationService = Context.Service.Shape<typeof JobsAuthorization>;
 type JobsRepositoryService = Context.Service.Shape<typeof JobsRepository>;
 type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
+type CreateJobSiteResolution =
+  | {
+      readonly kind: "none";
+    }
+  | {
+      readonly kind: "existing";
+      readonly siteId: SiteId;
+    }
+  | {
+      readonly input: Extract<CreateJobSiteInput, { kind: "create" }>["input"];
+      readonly kind: "create";
+      readonly location: ResolvedSiteLocationRecord;
+    };
 
 export class JobsService extends Context.Service<JobsService>()(
   "@ceird/domains/jobs/JobsService",
@@ -77,7 +91,7 @@ export class JobsService extends Context.Service<JobsService>()(
         yield* JobLabelAssignmentsRepository;
       const labelsRepository = yield* LabelsRepository;
       const jobsRepository = yield* JobsRepository;
-      const siteGeocoder = yield* SiteGeocoder;
+      const siteLocationProvider = yield* SiteLocationProvider;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("JobsService.loadActor")(function* (
@@ -171,33 +185,18 @@ export class JobsService extends Context.Service<JobsService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const geocodedSiteLocation =
-          input.site?.kind === "create"
-            ? yield* siteGeocoder.geocode(input.site.input).pipe(
-                Effect.tap((location) =>
-                  Effect.annotateCurrentSpan(
-                    "inlineSiteGeocodingProvider",
-                    location.provider
-                  )
-                ),
-                Effect.withSpan("JobsService.create.geocodeInlineSite", {
-                  attributes: {
-                    organizationId: actor.organizationId,
-                    siteCountry: input.site.input.country,
-                    siteCreation: "inline",
-                  },
-                })
-              )
-            : undefined;
+        const siteResolution = yield* resolveCreateJobSite(
+          input.site,
+          siteLocationProvider
+        );
 
         return yield* jobsRepository
           .withTransaction(
             Effect.gen(function* () {
-              const siteId = yield* resolveCreateSiteId(
+              const siteId = yield* createResolvedJobSite(
                 actor.organizationId,
-                input.site,
-                sitesRepository,
-                geocodedSiteLocation
+                siteResolution,
+                sitesRepository
               );
               const contactId = yield* resolveCreateContactId(
                 actor.organizationId,
@@ -1103,38 +1102,53 @@ function resolveCreateContactId(
   });
 }
 
-function resolveCreateSiteId(
-  organizationId: OrganizationId,
+function resolveCreateJobSite(
   input: CreateJobSiteInput | undefined,
-  sitesRepository: SitesRepositoryService,
-  geocodedLocation: GeocodedSiteLocation | undefined
+  siteLocationProvider: Context.Service.Shape<typeof SiteLocationProvider>
 ) {
   if (input === undefined) {
-    return Effect.succeed<SiteId | undefined>(input);
+    return Effect.succeed({ kind: "none" } satisfies CreateJobSiteResolution);
   }
 
   if (input.kind === "existing") {
-    return Effect.succeed<SiteId | undefined>(input.siteId);
+    return Effect.succeed({
+      kind: "existing",
+      siteId: input.siteId,
+    } satisfies CreateJobSiteResolution);
   }
 
-  if (geocodedLocation === undefined) {
-    return Effect.die(new Error("Inline site creation was not geocoded"));
+  return Effect.gen(function* () {
+    const location = yield* resolveCreateSiteLocation(
+      input.input.location,
+      siteLocationProvider
+    );
+
+    return {
+      input: input.input,
+      kind: "create",
+      location,
+    } satisfies CreateJobSiteResolution;
+  });
+}
+
+function createResolvedJobSite(
+  organizationId: OrganizationId,
+  resolution: CreateJobSiteResolution,
+  sitesRepository: SitesRepositoryService
+) {
+  if (resolution.kind === "none") {
+    return Effect.sync((): SiteId | undefined => undefined);
+  }
+
+  if (resolution.kind === "existing") {
+    return Effect.succeed<SiteId | undefined>(resolution.siteId);
   }
 
   return sitesRepository.create({
-    accessNotes: input.input.accessNotes,
-    addressLine1: input.input.addressLine1,
-    addressLine2: input.input.addressLine2,
-    country: input.input.country,
-    county: input.input.county,
-    eircode: input.input.eircode,
-    geocodedAt: geocodedLocation.geocodedAt,
-    geocodingProvider: geocodedLocation.provider,
-    latitude: geocodedLocation.latitude,
-    name: input.input.name,
+    ...resolution.location,
+    accessNotes: resolution.input.accessNotes,
+    name: resolution.input.name,
     organizationId,
-    longitude: geocodedLocation.longitude,
-    town: input.input.town,
   });
 }
 

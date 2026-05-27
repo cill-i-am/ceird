@@ -136,7 +136,7 @@ function JobsMapSiteRail({
         <section className="flex min-h-0 flex-col">
           <div className="border-b px-3 py-2">
             <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Needs location
+              Unverified location
             </h2>
           </div>
           <ul className="flex min-h-0 flex-col overflow-y-auto">

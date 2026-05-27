@@ -67,11 +67,7 @@ import {
   LabelSchema,
 } from "@ceird/labels-core";
 import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
-import {
-  SiteId as SiteIdSchema,
-  SiteNotFoundError,
-  SiteOptionSchema,
-} from "@ceird/sites-core";
+import { SiteId as SiteIdSchema, SiteNotFoundError } from "@ceird/sites-core";
 import type { SiteIdType as SiteId, SiteOption } from "@ceird/sites-core";
 import {
   Array as Arr,
@@ -89,6 +85,8 @@ import type { SqlError } from "effect/unstable/sql";
 import { CommentsRepository } from "../comments/repository.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { listSiteLabelsForSites } from "../sites/site-label-queries.js";
+import type { SiteOptionRow } from "../sites/site-option-row.js";
+import { mapSiteOptionRow } from "../sites/site-option-row.js";
 import { WorkItemOrganizationMismatchError } from "./errors.js";
 import {
   generateActivityId,
@@ -198,22 +196,6 @@ interface JobMemberOptionRow {
   readonly email: string;
   readonly id: string;
   readonly name: string | null;
-}
-
-interface SiteOptionRow {
-  readonly access_notes: string | null;
-  readonly address_line_1: string;
-  readonly address_line_2: string | null;
-  readonly country: string;
-  readonly county: string;
-  readonly eircode: string | null;
-  readonly geocoded_at: Date;
-  readonly geocoding_provider: string;
-  readonly id: string;
-  readonly latitude: number;
-  readonly longitude: number;
-  readonly name: string;
-  readonly town: string | null;
 }
 
 interface JobContactOptionRow {
@@ -370,7 +352,6 @@ const decodeJobMemberOption = Schema.decodeUnknownSync(JobMemberOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
 const decodeJobContactOption = Schema.decodeUnknownSync(JobContactOptionSchema);
 const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
-const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
@@ -732,9 +713,14 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
             labels.name,
             labels.updated_at
           from work_item_labels
-          join labels on labels.id = work_item_labels.label_id
-          join work_items on work_items.id = work_item_labels.work_item_id
-          where labels.organization_id = ${organizationId}
+          join labels
+            on labels.id = work_item_labels.label_id
+            and labels.organization_id = work_item_labels.organization_id
+          join work_items
+            on work_items.id = work_item_labels.work_item_id
+            and work_items.organization_id = work_item_labels.organization_id
+          where work_item_labels.organization_id = ${organizationId}
+            and labels.organization_id = ${organizationId}
             and work_items.organization_id = ${organizationId}
             and work_item_labels.work_item_id in ${sql.in(workItemIds)}
             and labels.archived_at is null
@@ -784,14 +770,19 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           query.labelId === undefined
             ? sql``
             : sql`
-              join work_item_labels as filter_work_item_labels on filter_work_item_labels.work_item_id = work_items.id
-              join labels as filter_labels on filter_labels.id = filter_work_item_labels.label_id
+              join work_item_labels as filter_work_item_labels
+                on filter_work_item_labels.work_item_id = work_items.id
+                and filter_work_item_labels.organization_id = work_items.organization_id
+              join labels as filter_labels
+                on filter_labels.id = filter_work_item_labels.label_id
+                and filter_labels.organization_id = filter_work_item_labels.organization_id
             `;
         if (query.labelId !== undefined) {
           clauses.push(
             sql`filter_work_item_labels.organization_id = ${organizationId}`
           );
           clauses.push(sql`filter_labels.id = ${query.labelId}`);
+          clauses.push(sql`filter_labels.organization_id = ${organizationId}`);
           clauses.push(sql`filter_labels.archived_at is null`);
         }
 
@@ -966,7 +957,9 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
             "user".name as actor_name,
             "user".email as actor_email
           from work_item_activity
-          join work_items on work_items.id = work_item_activity.work_item_id
+          join work_items
+            on work_items.id = work_item_activity.work_item_id
+            and work_items.organization_id = work_item_activity.organization_id
           left join "user" on "user".id = work_item_activity.actor_user_id
           where ${sql.and(clauses)}
           order by work_item_activity.created_at desc, work_item_activity.id desc
@@ -1362,17 +1355,23 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           const rows = yield* sql<SiteOptionRow>`
           select
             sites.access_notes,
+            sites.address_components,
             sites.address_line_1,
             sites.address_line_2,
             sites.country,
             sites.county,
+            sites.display_location,
             sites.eircode,
-            sites.geocoded_at,
-            sites.geocoding_provider,
+            sites.formatted_address,
+            sites.google_place_id,
             sites.id,
             sites.latitude,
+            sites.location_provider,
+            sites.location_resolved_at,
+            sites.location_status,
             sites.longitude,
             sites.name,
+            sites.raw_location_input,
             sites.town
           from sites
           where sites.organization_id = ${organizationId}
@@ -2221,28 +2220,6 @@ function mapJobExternalMemberOptionRow(
   };
 }
 
-function mapSiteOptionRow(
-  row: SiteOptionRow,
-  labels: readonly Label[] = []
-): SiteOption {
-  return decodeSiteOption({
-    accessNotes: nullableToUndefined(row.access_notes),
-    addressLine1: row.address_line_1,
-    addressLine2: nullableToUndefined(row.address_line_2),
-    country: row.country,
-    county: row.county,
-    eircode: nullableToUndefined(row.eircode),
-    geocodedAt: dateToIsoString(row.geocoded_at),
-    geocodingProvider: row.geocoding_provider,
-    id: row.id,
-    labels,
-    name: row.name,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    town: nullableToUndefined(row.town),
-  });
-}
-
 function mapJobContactOptions(
   rows: readonly JobContactOptionRow[]
 ): readonly JobContactOption[] {
@@ -2379,12 +2356,10 @@ function decodeOrganizationActivityCursorValue(
   return decodeJsonCursor(cursor, decodeOrganizationActivityCursorState);
 }
 
-function nullableToUndefined<Value>(value: Value | null): Value | undefined {
+function nullableToUndefined<Value>(
+  value: Value | null | undefined
+): Value | undefined {
   return value === null ? undefined : value;
-}
-
-function dateToIsoString(value: Date): string {
-  return value.toISOString();
 }
 
 function normalizeOptionName(value: string | null, fallback: string): string {

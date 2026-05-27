@@ -75,8 +75,10 @@ describe("jobs coverage map", () => {
             [
               depotSiteId,
               {
+                hasUsableCoordinates: true,
                 id: depotSiteId,
                 latitude: 53.3498,
+                locationStatus: "google_resolved",
                 longitude: -6.2603,
                 name: "Depot",
               },
@@ -109,7 +111,7 @@ describe("jobs coverage map", () => {
       screen.getByRole("link", { name: "Await switchgear" })
     ).toBeInTheDocument();
     expect(screen.getByText(/1 unmapped/i)).toBeInTheDocument();
-    expect(screen.getByText(/needs location/i)).toBeInTheDocument();
+    expect(screen.getByText(/unverified location/i)).toBeInTheDocument();
     expect(screen.getByText("Check classroom snag")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /maps/i })).toHaveAttribute(
       "href",
@@ -134,8 +136,10 @@ describe("jobs coverage map", () => {
             [
               depotSiteId,
               {
+                hasUsableCoordinates: true,
                 id: depotSiteId,
                 latitude: 53.3498,
+                locationStatus: "google_resolved",
                 longitude: -6.2603,
                 name: "Depot",
               },
@@ -160,7 +164,7 @@ describe("jobs coverage map", () => {
       screen.getByRole("link", { name: "Replace plant room valve" })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: /needs location/i })
+      screen.queryByRole("heading", { name: /unverified location/i })
     ).not.toBeInTheDocument();
   }, 5000);
 
@@ -181,8 +185,10 @@ describe("jobs coverage map", () => {
             [
               depotSiteId,
               {
+                hasUsableCoordinates: true,
                 id: depotSiteId,
                 latitude: 53.3498,
+                locationStatus: "google_resolved",
                 longitude: -6.2603,
                 name: "Depot",
               },

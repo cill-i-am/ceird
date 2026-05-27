@@ -12,7 +12,7 @@ import type {
   JobPriority,
 } from "@ceird/jobs-core";
 import {
-  SITE_GEOCODING_FAILED_ERROR_TAG,
+  SITE_LOCATION_RESOLUTION_ERROR_TAG,
   SITE_NOT_FOUND_ERROR_TAG,
 } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
@@ -73,7 +73,7 @@ import { AuthFormField } from "#/features/auth/auth-form-field";
 import {
   SiteCreateDrawerFields,
   buildCreateSiteInputFromDraft,
-  defaultSiteCreateDraft,
+  createDefaultSiteCreateDraft,
   hasSiteCreateFieldErrors,
   toOptionalTrimmedString,
   validateSiteCreateDraft,
@@ -149,17 +149,21 @@ const decodeContactEmail = Schema.decodeUnknownSync(ContactEmailSchema);
 const decodeContactName = Schema.decodeUnknownSync(ContactNameSchema);
 const decodeContactNotes = Schema.decodeUnknownSync(ContactNotesSchema);
 
-const defaultFormState: JobsCreateFormState = {
-  contactEmail: "",
-  contactName: "",
-  contactNotes: "",
-  contactPhone: "",
-  contactSelection: NONE_VALUE,
-  priority: "none",
-  siteDraft: defaultSiteCreateDraft,
-  siteSelection: NONE_VALUE,
-  title: "",
-};
+function createDefaultJobsFormState(
+  initialSiteId?: SiteIdType
+): JobsCreateFormState {
+  return {
+    contactEmail: "",
+    contactName: "",
+    contactNotes: "",
+    contactPhone: "",
+    contactSelection: NONE_VALUE,
+    priority: "none",
+    siteDraft: createDefaultSiteCreateDraft(),
+    siteSelection: initialSiteId ?? NONE_VALUE,
+    title: "",
+  };
+}
 
 // The create sheet keeps one local draft so validation and inline site/contact creation stay atomic.
 // react-doctor-disable-next-line
@@ -174,10 +178,9 @@ export function JobsCreateSheet({
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
     {}
   );
-  const [values, setValues] = React.useState<JobsCreateFormState>({
-    ...defaultFormState,
-    siteSelection: initialSiteId ?? defaultFormState.siteSelection,
-  });
+  const [values, setValues] = React.useState<JobsCreateFormState>(() =>
+    createDefaultJobsFormState(initialSiteId)
+  );
   const [overlayOpen, setOverlayOpen] = React.useState(true);
   const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
   const navigateAfterCloseRef = React.useRef(false);
@@ -236,7 +239,7 @@ export function JobsCreateSheet({
     }
 
     if (resetAfterCloseRef.current) {
-      setValues(defaultFormState);
+      setValues(createDefaultJobsFormState());
       resetAfterCloseRef.current = false;
     }
 
@@ -330,13 +333,13 @@ export function JobsCreateSheet({
 
     if (
       Option.isSome(failure) &&
-      failure.value._tag === SITE_GEOCODING_FAILED_ERROR_TAG
+      failure.value._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
     ) {
       setFieldErrors((current) => ({
         ...current,
         site: {
           ...current.site,
-          eircode: failure.value.message,
+          location: failure.value.message,
         },
       }));
       setSiteDrawerOpen(true);
@@ -1102,7 +1105,7 @@ function isHandledCreateJobError(error: unknown) {
     "_tag" in error &&
     (error._tag === SITE_NOT_FOUND_ERROR_TAG ||
       error._tag === CONTACT_NOT_FOUND_ERROR_TAG ||
-      error._tag === SITE_GEOCODING_FAILED_ERROR_TAG)
+      error._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG)
   );
 }
 

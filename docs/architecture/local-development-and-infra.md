@@ -89,7 +89,7 @@ Common local and Alchemy variables include:
 | `BETTER_AUTH_BASE_URL`                 | API auth URL.                                                                        |
 | `BETTER_AUTH_SECRET`                   | Stable local auth secret for package-local domain runs.                              |
 | `DATABASE_URL`                         | Package-local domain database URL.                                                   |
-| `GOOGLE_MAPS_API_KEY`                  | Optional local Google geocoding key for site creation.                               |
+| `GOOGLE_MAPS_API_KEY`                  | Optional local Google Places key for site autocomplete and place details.            |
 | `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | Agent action ledger stale-running recovery window.                                   |
 | `AGENT_INTERNAL_SECRET`                | Internal domain/Agent shared secret for package-local runs.                          |
 | `AGENT_ORIGIN`                         | Server-side app Agent Worker origin.                                                 |
@@ -100,7 +100,8 @@ Package-local domain runs use deterministic development auth email delivery. Tha
 local transport is separate from deployed Worker email delivery, which uses the
 Cloudflare Email Worker binding declared by the Alchemy stack.
 The Google Maps key is optional for package-local domain startup; when it is
-missing or blank, the domain uses deterministic development geocoding.
+missing or blank, the domain uses deterministic development location
+autocomplete and place details.
 
 Package-local Playwright runs set `AGENT_INTERNAL_SECRET` so the domain app can
 mount its Agent HTTP groups even when a test begins with auth or product
@@ -168,23 +169,25 @@ declarations against the runtime contracts in each app's
 The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
-queue scheduling, email binding delivery, and site geocoding are composed from
-Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
+queue scheduling, email binding delivery, and Google Places site location
+resolution are composed from Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
 modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
 batch.
 The domain and Agent Workers are also configured with trusted app-origin env
 vars; the domain Worker additionally receives Better Auth env vars, MCP
-resource metadata, optional MCP authorized-app cache sizing, Google Maps
-geocoding credentials, observability logs, and traces. Alchemy injects
+resource metadata, optional MCP authorized-app cache sizing, Google Maps Places
+credentials, observability logs, and traces. Alchemy injects
 `AUTH_TRUSTED_ORIGINS` from the system app origin plus the tenant wildcard
 origin pattern, while keeping `AUTH_APP_ORIGIN` as the neutral system app origin
-for redirects and emails. Deployed Alchemy stages inject `AUTH_COOKIE_DOMAIN`
-from the tenant base domain so system and tenant hosts under `ceird.app` share a
-session after organization creation or switching. Preview and branch stages rely
-on the stage-derived `AUTH_COOKIE_PREFIX` to prevent accepting another stage's
-session cookies under the shared apex.
+for redirects and emails. Every stage, including `main`, defaults to
+`app.<stage>.<zone>`, `api.<stage>.<zone>`, `mcp.<stage>.<zone>`, and
+`agent.<stage>.<zone>`. Deployed Alchemy stages inject `AUTH_COOKIE_DOMAIN` from
+the tenant base domain so system and tenant hosts share a session after
+organization creation or switching, while preview and branch stages rely on the
+stage-derived `AUTH_COOKIE_PREFIX` to prevent accepting another stage's session
+cookies under the shared apex.
 Canonical `app.<zone>`, `api.<zone>`, `mcp.<zone>`, and `agent.<zone>`
 hostnames require explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
 `CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` overrides after any existing

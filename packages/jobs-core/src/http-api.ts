@@ -1,7 +1,7 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
-  SiteGeocodingFailedError,
-  SiteGeocodingProviderError,
+  SiteLocationProviderError,
+  SiteLocationResolutionError,
   SiteNotFoundError,
 } from "@ceird/sites-core";
 import {
@@ -91,8 +91,8 @@ const jobsGroup = HttpApiGroup.make("jobs")
       error: [
         JobAccessDeniedError,
         SiteNotFoundError,
-        SiteGeocodingFailedError,
-        SiteGeocodingProviderError,
+        SiteLocationProviderError,
+        SiteLocationResolutionError,
         ContactNotFoundError,
         JobStorageError,
       ],

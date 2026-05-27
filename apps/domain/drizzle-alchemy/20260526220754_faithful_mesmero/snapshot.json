@@ -1,8 +1,8 @@
 {
-  "dialect": "postgres",
-  "id": "56e77a03-df29-4ade-a398-a94868fc9e8e",
-  "prevIds": ["154534a8-402a-4337-bbec-924be303bf82"],
   "version": "8",
+  "dialect": "postgres",
+  "id": "c0c29aa4-fa3f-4785-8fd9-9ac1a78576f0",
+  "prevIds": ["70686116-bd00-4db1-9e6a-70b7ae470008"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -5286,7 +5286,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "account_user_id_user_id_fkey",
+      "name": "account_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "account"
@@ -5338,7 +5338,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "comments_organization_id_organization_id_fkey",
+      "name": "comments_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "comments"
@@ -5351,7 +5351,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "comments_author_user_id_user_id_fkey",
+      "name": "comments_author_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "comments"
@@ -5364,7 +5364,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "comments_updated_by_user_id_user_id_fkey",
+      "name": "comments_updated_by_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "comments"
@@ -5377,7 +5377,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "contacts_organization_id_organization_id_fkey",
+      "name": "contacts_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "contacts"
@@ -5390,7 +5390,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "invitation_organization_id_organization_id_fkey",
+      "name": "invitation_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "invitation"
@@ -5403,7 +5403,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "invitation_inviter_id_user_id_fkey",
+      "name": "invitation_inviter_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "invitation"
@@ -5416,7 +5416,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "labels_organization_id_organization_id_fkey",
+      "name": "labels_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "labels"
@@ -5429,7 +5429,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "member_organization_id_organization_id_fkey",
+      "name": "member_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "member"
@@ -5442,7 +5442,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "member_user_id_user_id_fkey",
+      "name": "member_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "member"
@@ -5455,7 +5455,7 @@
       "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_access_token_client_id_oauth_client_client_id_fkey",
+      "name": "oauth_access_token_client_id_oauth_client_client_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_access_token"
@@ -5468,7 +5468,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "oauth_access_token_session_id_session_id_fkey",
+      "name": "oauth_access_token_session_id_session_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_access_token"
@@ -5481,7 +5481,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_access_token_user_id_user_id_fkey",
+      "name": "oauth_access_token_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_access_token"
@@ -5494,7 +5494,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_access_token_refresh_id_oauth_refresh_token_id_fkey",
+      "name": "oauth_access_token_refresh_id_oauth_refresh_token_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_access_token"
@@ -5507,7 +5507,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_client_user_id_user_id_fkey",
+      "name": "oauth_client_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_client"
@@ -5520,7 +5520,7 @@
       "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_consent_client_id_oauth_client_client_id_fkey",
+      "name": "oauth_consent_client_id_oauth_client_client_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_consent"
@@ -5533,7 +5533,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_consent_user_id_user_id_fkey",
+      "name": "oauth_consent_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_consent"
@@ -5546,7 +5546,7 @@
       "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_refresh_token_client_id_oauth_client_client_id_fkey",
+      "name": "oauth_refresh_token_client_id_oauth_client_client_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_refresh_token"
@@ -5559,7 +5559,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "oauth_refresh_token_session_id_session_id_fkey",
+      "name": "oauth_refresh_token_session_id_session_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_refresh_token"
@@ -5572,7 +5572,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "oauth_refresh_token_user_id_user_id_fkey",
+      "name": "oauth_refresh_token_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_refresh_token"
@@ -5585,7 +5585,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "session_active_organization_id_organization_id_fkey",
+      "name": "session_active_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "session"
@@ -5598,7 +5598,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "session_user_id_user_id_fkey",
+      "name": "session_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "session"
@@ -5611,7 +5611,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "sites_organization_id_organization_id_fkey",
+      "name": "sites_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "sites"
@@ -5650,7 +5650,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "site_contacts_organization_id_organization_id_fkey",
+      "name": "site_contacts_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "site_contacts"
@@ -5689,7 +5689,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "site_labels_organization_id_organization_id_fkey",
+      "name": "site_labels_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "site_labels"
@@ -5728,7 +5728,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_items_organization_id_organization_id_fkey",
+      "name": "work_items_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_items"
@@ -5741,7 +5741,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "work_items_assignee_id_user_id_fkey",
+      "name": "work_items_assignee_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_items"
@@ -5754,7 +5754,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "work_items_coordinator_id_user_id_fkey",
+      "name": "work_items_coordinator_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_items"
@@ -5767,7 +5767,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "work_items_completed_by_user_id_user_id_fkey",
+      "name": "work_items_completed_by_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_items"
@@ -5780,7 +5780,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "work_items_created_by_user_id_user_id_fkey",
+      "name": "work_items_created_by_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_items"
@@ -5819,7 +5819,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_item_activity_organization_id_organization_id_fkey",
+      "name": "work_item_activity_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_activity"
@@ -5832,7 +5832,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "work_item_activity_actor_user_id_user_id_fkey",
+      "name": "work_item_activity_actor_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_activity"
@@ -5858,7 +5858,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_item_collaborators_organization_id_organization_id_fkey",
+      "name": "work_item_collaborators_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_collaborators"
@@ -5871,7 +5871,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_item_collaborators_user_id_user_id_fkey",
+      "name": "work_item_collaborators_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_collaborators"
@@ -5884,7 +5884,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "work_item_collaborators_created_by_user_id_user_id_fkey",
+      "name": "work_item_collaborators_created_by_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_collaborators"
@@ -5949,7 +5949,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_item_labels_organization_id_organization_id_fkey",
+      "name": "work_item_labels_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_labels"
@@ -5988,7 +5988,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "work_item_visits_organization_id_organization_id_fkey",
+      "name": "work_item_visits_organization_id_organization_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_visits"
@@ -6001,7 +6001,7 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "work_item_visits_author_user_id_user_id_fkey",
+      "name": "work_item_visits_author_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_visits"
@@ -6022,7 +6022,7 @@
     {
       "columns": ["site_id", "contact_id"],
       "nameExplicit": false,
-      "name": "site_contacts_pkey",
+      "name": "site_contacts_site_id_contact_id_pk",
       "entityType": "pks",
       "schema": "public",
       "table": "site_contacts"
@@ -6030,7 +6030,7 @@
     {
       "columns": ["site_id", "label_id"],
       "nameExplicit": false,
-      "name": "site_labels_pkey",
+      "name": "site_labels_site_id_label_id_pk",
       "entityType": "pks",
       "schema": "public",
       "table": "site_labels"
@@ -6038,7 +6038,7 @@
     {
       "columns": ["work_item_id", "label_id"],
       "nameExplicit": false,
-      "name": "work_item_labels_pkey",
+      "name": "work_item_labels_work_item_id_label_id_pk",
       "entityType": "pks",
       "schema": "public",
       "table": "work_item_labels"
@@ -6247,7 +6247,7 @@
       "nameExplicit": false,
       "columns": ["token"],
       "nullsNotDistinct": false,
-      "name": "oauth_access_token_token_key",
+      "name": "oauth_access_token_token_unique",
       "schema": "public",
       "table": "oauth_access_token",
       "entityType": "uniques"
@@ -6256,7 +6256,7 @@
       "nameExplicit": false,
       "columns": ["client_id"],
       "nullsNotDistinct": false,
-      "name": "oauth_client_client_id_key",
+      "name": "oauth_client_client_id_unique",
       "schema": "public",
       "table": "oauth_client",
       "entityType": "uniques"
@@ -6265,7 +6265,7 @@
       "nameExplicit": false,
       "columns": ["token"],
       "nullsNotDistinct": false,
-      "name": "oauth_refresh_token_token_key",
+      "name": "oauth_refresh_token_token_unique",
       "schema": "public",
       "table": "oauth_refresh_token",
       "entityType": "uniques"
@@ -6274,7 +6274,7 @@
       "nameExplicit": false,
       "columns": ["token"],
       "nullsNotDistinct": false,
-      "name": "session_token_key",
+      "name": "session_token_unique",
       "schema": "public",
       "table": "session",
       "entityType": "uniques"
@@ -6283,7 +6283,7 @@
       "nameExplicit": false,
       "columns": ["email"],
       "nullsNotDistinct": false,
-      "name": "user_email_key",
+      "name": "user_email_unique",
       "schema": "public",
       "table": "user",
       "entityType": "uniques"
@@ -6387,7 +6387,7 @@
       "table": "member"
     },
     {
-      "value": "\"slug\" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(\"slug\") <= 40 and \"slug\" not in ('app', 'api', 'agent', 'mcp')",
+      "value": "\"slug\" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'",
       "name": "organization_slug_format_chk",
       "entityType": "checks",
       "schema": "public",

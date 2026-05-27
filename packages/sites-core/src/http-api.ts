@@ -16,15 +16,19 @@ import {
   SiteDetailSchema,
   SiteListQuerySchema,
   SiteListResponseSchema,
+  SiteLocationAutocompleteInputSchema,
+  SiteLocationAutocompleteResponseSchema,
+  SiteLocationPlaceDetailsInputSchema,
+  SiteLocationPlaceDetailsResponseSchema,
   SitesOptionsResponseSchema,
   UpdateSiteInputSchema,
   UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
   SiteAccessDeniedError,
-  SiteGeocodingFailedError,
-  SiteGeocodingProviderError,
   SiteListCursorInvalidError,
+  SiteLocationProviderError,
+  SiteLocationResolutionError,
   SiteNotFoundError,
   SiteStorageError,
 } from "./errors.js";
@@ -49,13 +53,44 @@ const sitesGroup = HttpApiGroup.make("sites")
     })
   )
   .add(
+    HttpApiEndpoint.post(
+      "autocompleteSiteLocation",
+      "/sites/location/autocomplete",
+      {
+        payload: SiteLocationAutocompleteInputSchema,
+        success: SiteLocationAutocompleteResponseSchema,
+        error: [
+          SiteAccessDeniedError,
+          SiteLocationProviderError,
+          SiteStorageError,
+        ],
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "getSiteLocationPlaceDetails",
+      "/sites/location/place-details",
+      {
+        payload: SiteLocationPlaceDetailsInputSchema,
+        success: SiteLocationPlaceDetailsResponseSchema,
+        error: [
+          SiteAccessDeniedError,
+          SiteLocationProviderError,
+          SiteLocationResolutionError,
+          SiteStorageError,
+        ],
+      }
+    )
+  )
+  .add(
     HttpApiEndpoint.post("createSite", "/sites", {
       payload: CreateSiteInputSchema,
       success: CreateSiteResponseSchema.pipe(HttpApiSchema.status("Created")),
       error: [
         SiteAccessDeniedError,
-        SiteGeocodingFailedError,
-        SiteGeocodingProviderError,
+        SiteLocationProviderError,
+        SiteLocationResolutionError,
         SiteStorageError,
       ],
     })
@@ -68,8 +103,8 @@ const sitesGroup = HttpApiGroup.make("sites")
       error: [
         SiteAccessDeniedError,
         SiteNotFoundError,
-        SiteGeocodingFailedError,
-        SiteGeocodingProviderError,
+        SiteLocationProviderError,
+        SiteLocationResolutionError,
         SiteStorageError,
       ],
     })

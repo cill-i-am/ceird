@@ -4,8 +4,11 @@ import type {
   AssignSiteLabelInput,
   CreateSiteInput,
   SiteIdType as SiteId,
-  SiteListQuery,
   SiteOption,
+  SiteListQuery,
+  SiteLocationInput,
+  SiteLocationAutocompleteInput,
+  SiteLocationPlaceDetailsInput,
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
@@ -27,7 +30,11 @@ import {
   ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
 } from "../organizations/errors.js";
-import { SiteGeocoder } from "./geocoder.js";
+import { SiteLocationProvider } from "./location-provider.js";
+import {
+  resolveCreateSiteLocation,
+  resolveUpdateSiteLocation,
+} from "./location-resolution.js";
 import {
   SiteLabelAssignmentsRepository,
   SitesRepository,
@@ -47,7 +54,7 @@ export class SitesService extends Context.Service<SitesService>()(
       const currentOrganizationActor = yield* CurrentOrganizationActor;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
-      const siteGeocoder = yield* SiteGeocoder;
+      const siteLocationProvider = yield* SiteLocationProvider;
       const sitesRepository = yield* SitesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
@@ -82,25 +89,19 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const geocodedLocation = yield* siteGeocoder.geocode(input);
+        const location = yield* resolveCreateSiteLocation(
+          input.location,
+          siteLocationProvider
+        );
 
         return yield* sitesRepository
           .withTransaction(
             Effect.gen(function* () {
               const siteId = yield* sitesRepository.create({
+                ...location,
                 accessNotes: input.accessNotes,
-                addressLine1: input.addressLine1,
-                addressLine2: input.addressLine2,
-                country: input.country,
-                county: input.county,
-                eircode: input.eircode,
-                geocodedAt: geocodedLocation.geocodedAt,
-                geocodingProvider: geocodedLocation.provider,
-                latitude: geocodedLocation.latitude,
-                longitude: geocodedLocation.longitude,
                 name: input.name,
                 organizationId: actor.organizationId,
-                town: input.town,
               });
               yield* Effect.annotateCurrentSpan("siteId", siteId);
 
@@ -160,26 +161,23 @@ export class SitesService extends Context.Service<SitesService>()(
             Effect.catchTag("SqlError", failSitesStorageError)
           );
 
-        const geocodedLocation = siteLocationMatchesInput(existingSite, input)
-          ? getGeocodedLocationFromSite(existingSite)
-          : yield* siteGeocoder.geocode(input);
+        const location =
+          input.location === undefined ||
+          (input.location !== null &&
+            siteLocationInputMatchesExistingSite(input.location, existingSite))
+            ? undefined
+            : yield* resolveUpdateSiteLocation(
+                input.location,
+                siteLocationProvider
+              );
 
         const site = yield* sitesRepository
           .withTransaction(
             sitesRepository
               .update(actor.organizationId, siteId, {
                 accessNotes: input.accessNotes,
-                addressLine1: input.addressLine1,
-                addressLine2: input.addressLine2,
-                country: input.country,
-                county: input.county,
-                eircode: input.eircode,
-                geocodedAt: geocodedLocation.geocodedAt,
-                geocodingProvider: geocodedLocation.provider,
-                latitude: geocodedLocation.latitude,
-                longitude: geocodedLocation.longitude,
+                ...(location === undefined ? {} : { location }),
                 name: input.name,
-                town: input.town,
               })
               .pipe(Effect.map(Option.getOrUndefined))
           )
@@ -246,6 +244,47 @@ export class SitesService extends Context.Service<SitesService>()(
         return {
           sites,
         } as const;
+      });
+
+      const autocompleteLocation = Effect.fn(
+        "SitesService.autocompleteLocation"
+      )(function* (input: SiteLocationAutocompleteInput) {
+        const actor = yield* loadActor();
+        yield* ensureCanUseSiteLocationProvider(actor, authorization);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("action", "autocompleteLocation");
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        return yield* siteLocationProvider.autocomplete(input);
+      });
+
+      const getLocationPlaceDetails = Effect.fn(
+        "SitesService.getLocationPlaceDetails"
+      )(function* (input: SiteLocationPlaceDetailsInput) {
+        const actor = yield* loadActor();
+        yield* ensureCanUseSiteLocationProvider(actor, authorization);
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("action", "getLocationPlaceDetails");
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+
+        const location = yield* siteLocationProvider.resolvePlace(input);
+
+        return {
+          addressComponents: [...location.addressComponents],
+          displayLocation: location.displayLocation,
+          formattedAddress: location.formattedAddress,
+          googlePlaceId: location.googlePlaceId,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        };
       });
 
       const listComments = Effect.fn("SitesService.listComments")(function* (
@@ -401,7 +440,9 @@ export class SitesService extends Context.Service<SitesService>()(
       return {
         addComment,
         assignLabel,
+        autocompleteLocation,
         create,
+        getLocationPlaceDetails,
         getOptions,
         list,
         listComments,
@@ -464,6 +505,26 @@ const loadSiteDetailOrFail = Effect.fn("SitesService.loadSiteDetailOrFail")(
   }
 );
 
+function siteLocationInputMatchesExistingSite(
+  input: SiteLocationInput,
+  site: SiteOption
+) {
+  if (input.kind === "manual") {
+    return (
+      site.locationStatus === "unverified" &&
+      site.rawLocationInput === input.rawInput &&
+      site.country === input.country &&
+      site.googlePlaceId === undefined
+    );
+  }
+
+  return (
+    site.googlePlaceId === input.placeId &&
+    site.displayLocation === input.displayText &&
+    site.rawLocationInput === input.rawInput
+  );
+}
+
 function failSitesStorageError(
   error: unknown,
   context: { readonly siteId?: SiteId } = {}
@@ -519,6 +580,20 @@ function ensureCanUseSiteComments(
     );
 }
 
+function ensureCanUseSiteLocationProvider(
+  actor: OrganizationActor,
+  authorization: OrganizationAuthorizationService
+) {
+  return authorization
+    .ensureCanCreateSite(actor)
+    .pipe(
+      Effect.catchTag(
+        ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+        failSiteAccessDenied
+      )
+    );
+}
+
 const mapSitesActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new SiteAccessDeniedError({ message })
 );
@@ -545,24 +620,4 @@ function failSiteNotFound(siteId: SiteId) {
       siteId,
     })
   );
-}
-
-function siteLocationMatchesInput(site: SiteOption, input: UpdateSiteInput) {
-  return (
-    site.addressLine1 === input.addressLine1 &&
-    site.addressLine2 === input.addressLine2 &&
-    site.town === input.town &&
-    site.county === input.county &&
-    site.country === input.country &&
-    site.eircode === input.eircode
-  );
-}
-
-function getGeocodedLocationFromSite(site: SiteOption) {
-  return {
-    geocodedAt: site.geocodedAt,
-    latitude: site.latitude,
-    longitude: site.longitude,
-    provider: site.geocodingProvider,
-  };
 }

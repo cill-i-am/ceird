@@ -149,17 +149,22 @@ describe("jobs-core", () => {
 
   it("decodes job detail with viewer access and selected site detail", () => {
     const site = {
+      displayLocation: "Docklands Campus",
+      formattedAddress: "1 Custom House Quay, Dublin, Ireland",
+      googlePlaceId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+      hasUsableCoordinates: true,
       id: "550e8400-e29b-41d4-a716-446655440010",
+      latitude: 53.3498,
+      locationProvider: "google_places",
+      locationResolvedAt: "2026-04-22T10:00:00.000Z",
+      locationStatus: "google_resolved",
+      longitude: -6.2603,
       name: "Docklands Campus",
       addressLine1: "1 Custom House Quay",
       county: "Dublin",
       country: "IE",
       eircode: "D01 X2X2",
       labels: [],
-      latitude: 53.3498,
-      longitude: -6.2603,
-      geocodingProvider: "google",
-      geocodedAt: "2026-04-22T10:00:00.000Z",
     };
     const detail = {
       activity: [],
@@ -206,12 +211,12 @@ describe("jobs-core", () => {
         site: {
           kind: "create",
           input: {
+            location: {
+              country: "IE",
+              kind: "manual",
+              rawInput: "  near the old quarry gate  ",
+            },
             name: "  Example Site  ",
-            addressLine1: "  1 Custom House Quay  ",
-            town: "  Dublin  ",
-            county: "  Dublin  ",
-            country: "IE",
-            eircode: "  D01 X2X2  ",
           },
         },
         contact: {
@@ -225,12 +230,12 @@ describe("jobs-core", () => {
       site: {
         kind: "create",
         input: {
+          location: {
+            country: "IE",
+            kind: "manual",
+            rawInput: "near the old quarry gate",
+          },
           name: "Example Site",
-          addressLine1: "1 Custom House Quay",
-          town: "Dublin",
-          county: "Dublin",
-          country: "IE",
-          eircode: "D01 X2X2",
         },
       },
       contact: {

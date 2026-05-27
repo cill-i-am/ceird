@@ -9,89 +9,161 @@ import {
   AssignSiteLabelInputSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
+  GooglePlaceId,
   SiteAccessDeniedError,
   SiteCommentSchema,
   SiteCommentsResponseSchema,
-  SiteGeocodingFailedError,
-  SiteGeocodingProviderError,
   SiteListQuerySchema,
   SiteListResponseSchema,
+  SiteLocationAutocompleteInputSchema,
+  SiteLocationPlaceDetailsInputSchema,
+  SiteLocationProviderError,
+  SiteLocationResolutionError,
   SiteId,
   SiteNotFoundError,
+  SiteOptionSchema,
   SitesApi,
   SitesApiGroup,
   SiteStorageError,
+  UpdateSiteInputSchema,
 } from "./index.js";
 
 describe("sites-core", () => {
+  const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
   const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 
   it("decodes site creation DTOs", () => {
-    const input = {
-      accessNotes: "  Enter via reception  ",
-      addressLine1: "  1 Custom House Quay  ",
-      addressLine2: "  North Dock  ",
-      county: "  Dublin  ",
-      country: "IE",
-      eircode: "  D01 X2X2  ",
-      name: "  Docklands Campus  ",
-      town: "  Dublin  ",
-    };
+    expect(
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
+        name: "  North Gate Works  ",
+      })
+    ).toStrictEqual({
+      name: "North Gate Works",
+    });
 
     expect(
-      Schema.decodeUnknownSync(CreateSiteInputSchema)(input)
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
+        accessNotes: "  Enter beside the old quarry gate  ",
+        location: {
+          country: "IE",
+          kind: "manual",
+          rawInput: "  near the old quarry gate  ",
+        },
+        name: "  Road entrance  ",
+      })
     ).toStrictEqual({
-      accessNotes: "Enter via reception",
-      addressLine1: "1 Custom House Quay",
-      addressLine2: "North Dock",
-      county: "Dublin",
-      country: "IE",
-      eircode: "D01 X2X2",
-      name: "Docklands Campus",
-      town: "Dublin",
+      accessNotes: "Enter beside the old quarry gate",
+      location: {
+        country: "IE",
+        kind: "manual",
+        rawInput: "near the old quarry gate",
+      },
+      name: "Road entrance",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(CreateSiteInputSchema)({
+        location: {
+          displayText: "Dublin Port",
+          kind: "google_place",
+          placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+          rawInput: "dub port",
+          secondaryText: "Dublin, Ireland",
+          sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+        },
+        name: "Dublin Port",
+      })
+    ).toMatchObject({
+      location: {
+        kind: "google_place",
+        placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+      },
     });
 
     expect(() =>
       Schema.decodeUnknownSync(CreateSiteInputSchema)({
-        ...input,
-        latitude: 53.3498,
+        location: {
+          displayText: "Dublin Port",
+          kind: "google_place",
+          latitude: 53.3498,
+          placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+          rawInput: "dub port",
+          sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+        },
+        name: "Dublin Port",
       })
     ).toThrow(/[Uu]nexpected/);
   });
 
-  it("requires Eircodes only for Irish sites", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(CreateSiteInputSchema)({
-        addressLine1: "1 Custom House Quay",
-        country: "IE",
-        county: "Dublin",
-        name: "Docklands Campus",
-      })
-    ).toThrow(/Irish sites require an Eircode/);
-
+  it("decodes site location lookup inputs", () => {
     expect(
-      Schema.decodeUnknownSync(CreateSiteInputSchema)({
-        addressLine1: "10 Downing Street",
-        country: "GB",
-        county: "Greater London",
-        name: "London Depot",
+      Schema.decodeUnknownSync(SiteLocationAutocompleteInputSchema)({
+        country: "IE",
+        input: "  dub port  ",
+        sessionToken: "550e8400-e29b-41d4-a716-446655440000",
       })
     ).toStrictEqual({
-      addressLine1: "10 Downing Street",
-      country: "GB",
-      county: "Greater London",
-      name: "London Depot",
+      country: "IE",
+      input: "dub port",
+      sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(SiteLocationPlaceDetailsInputSchema)({
+        placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+        rawInput: "  dub port  ",
+        sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+      })
+    ).toStrictEqual({
+      placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+      rawInput: "dub port",
+      sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(SiteLocationPlaceDetailsInputSchema)({
+        placeId: "places/ChIJN1t_tDeuEmsRUsoyG83frY4",
+        rawInput: "dub port",
+        sessionToken: "550e8400-e29b-41d4-a716-446655440000",
+      })
+    ).toThrow(/single URL path segment/);
+  });
+
+  it("decodes explicit site location clearing on update", () => {
+    expect(
+      Schema.decodeUnknownSync(UpdateSiteInputSchema)({
+        location: null,
+        name: "Docklands Campus",
+      })
+    ).toStrictEqual({
+      location: null,
+      name: "Docklands Campus",
     });
   });
 
   it("decodes site responses", () => {
-    const site = {
-      addressLine1: "1 Custom House Quay",
-      county: "Dublin",
+    const unverifiedSite = {
+      displayLocation: "near the old quarry gate",
+      hasUsableCoordinates: false,
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      labels: [],
+      locationStatus: "unverified",
+      name: "Road entrance",
+      rawLocationInput: "near the old quarry gate",
+    };
+    const resolvedSite = {
+      addressComponents: [
+        {
+          languageCode: "en",
+          longText: "Dublin",
+          shortText: "Dublin",
+          types: ["locality", "political"],
+        },
+      ],
       country: "IE",
-      eircode: "D01 X2X2",
-      geocodedAt: "2026-04-22T10:00:00.000Z",
-      geocodingProvider: "google",
+      displayLocation: "Dublin Port",
+      formattedAddress: "Dublin Port, Dublin, Ireland",
+      googlePlaceId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+      hasUsableCoordinates: true,
       id: "550e8400-e29b-41d4-a716-446655440010",
       labels: [
         {
@@ -101,20 +173,54 @@ describe("sites-core", () => {
           updatedAt: "2026-05-16T10:05:00.000Z",
         },
       ],
-      latitude: 53.3498,
-      longitude: -6.2603,
-      name: "Docklands Campus",
+      latitude: 53.3478,
+      locationProvider: "google_places",
+      locationResolvedAt: "2026-05-26T08:00:00.000Z",
+      locationStatus: "google_resolved",
+      longitude: -6.1956,
+      name: "Dublin Port",
+      rawLocationInput: "dub port",
     };
 
     expect(
-      Schema.decodeUnknownSync(CreateSiteResponseSchema)(site)
-    ).toStrictEqual(site);
+      Schema.decodeUnknownSync(SiteOptionSchema)(unverifiedSite)
+    ).toStrictEqual(unverifiedSite);
+    expect(
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)(resolvedSite)
+    ).toStrictEqual(resolvedSite);
     expect(() =>
       Schema.decodeUnknownSync(CreateSiteResponseSchema)({
-        ...site,
+        ...resolvedSite,
         longitude: -181,
       })
     ).toThrow(/greater than or equal to -180/);
+    expect(() =>
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
+        ...resolvedSite,
+        hasUsableCoordinates: false,
+      })
+    ).toThrow(/location fields are inconsistent/);
+    expect(() =>
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
+        ...resolvedSite,
+        googlePlaceId: undefined,
+      })
+    ).toThrow(/location fields are inconsistent/);
+    expect(() =>
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
+        ...unverifiedSite,
+        hasUsableCoordinates: false,
+        latitude: 53.3498,
+        longitude: -6.2603,
+      })
+    ).toThrow(/location fields are inconsistent/);
+    expect(() =>
+      Schema.decodeUnknownSync(CreateSiteResponseSchema)({
+        ...unverifiedSite,
+        hasUsableCoordinates: false,
+        latitude: 53.3498,
+      })
+    ).toThrow(/location fields are inconsistent/);
   });
 
   it("decodes site comment contracts", () => {
@@ -142,10 +248,20 @@ describe("sites-core", () => {
   it("documents site comment and label API operations", () => {
     const spec = OpenApi.fromApi(SitesApi);
     const siteComments = spec.paths["/sites/{siteId}/comments"];
+    const autocompleteOperation =
+      spec.paths["/sites/location/autocomplete"]?.post;
+    const placeDetailsOperation =
+      spec.paths["/sites/location/place-details"]?.post;
     const assignOperation = spec.paths["/sites/{siteId}/labels"]?.post;
     const removeOperation =
       spec.paths["/sites/{siteId}/labels/{labelId}"]?.delete;
 
+    expect(autocompleteOperation?.operationId).toBe(
+      "sites.autocompleteSiteLocation"
+    );
+    expect(placeDetailsOperation?.operationId).toBe(
+      "sites.getSiteLocationPlaceDetails"
+    );
     expect(siteComments?.get?.operationId).toBe("sites.listSiteComments");
     expect(siteComments?.post?.operationId).toBe("sites.addSiteComment");
     expect(assignOperation?.operationId).toBe("sites.assignSiteLabel");
@@ -179,21 +295,22 @@ describe("sites-core", () => {
       })._tag
     ).toBe("@ceird/sites-core/SiteNotFoundError");
     expect(
-      new SiteGeocodingFailedError({
-        country: "IE",
-        eircode: "D01 X2X2",
-        message: "Could not geocode site",
+      new SiteLocationResolutionError({
+        message: "Location could not be resolved",
+        operation: "place_details",
+        placeId: decodeGooglePlaceId("ChIJmissing"),
+        provider: "google_places",
       })._tag
-    ).toBe("@ceird/sites-core/SiteGeocodingFailedError");
+    ).toBe("@ceird/sites-core/SiteLocationResolutionError");
     expect(
-      new SiteGeocodingProviderError({
-        country: "IE",
-        eircode: "D01 X2X2",
-        message: "Site geocoding provider failed",
+      new SiteLocationProviderError({
+        message: "Location provider failed",
+        operation: "autocomplete",
+        provider: "google_places",
         providerStatus: "REQUEST_DENIED",
-        reason: "provider_status_not_ok",
+        reason: "http_error",
       })._tag
-    ).toBe("@ceird/sites-core/SiteGeocodingProviderError");
+    ).toBe("@ceird/sites-core/SiteLocationProviderError");
     expect(new SiteAccessDeniedError({ message: "No access" })._tag).toBe(
       "@ceird/sites-core/SiteAccessDeniedError"
     );
@@ -235,17 +352,17 @@ describe("sites-core", () => {
       Schema.decodeUnknownSync(SiteListResponseSchema)({
         items: [
           {
-            addressLine1: "1 Custom House Quay",
-            county: "Dublin",
-            country: "IE",
-            eircode: "D01 X2X2",
-            geocodedAt: "2026-04-22T10:00:00.000Z",
-            geocodingProvider: "google",
+            displayLocation: "Dublin Port",
+            hasUsableCoordinates: true,
             id: "550e8400-e29b-41d4-a716-446655440010",
             labels: [],
             latitude: 53.3498,
+            googlePlaceId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+            locationProvider: "google_places",
+            locationResolvedAt: "2026-05-26T08:00:00.000Z",
+            locationStatus: "google_resolved",
             longitude: -6.2603,
-            name: "Docklands Campus",
+            name: "Dublin Port",
           },
         ],
         nextCursor: cursor,
@@ -253,7 +370,7 @@ describe("sites-core", () => {
     ).toMatchObject({
       items: [
         {
-          name: "Docklands Campus",
+          name: "Dublin Port",
         },
       ],
       nextCursor: cursor,

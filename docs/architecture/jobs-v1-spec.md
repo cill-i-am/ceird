@@ -13,7 +13,7 @@ Jobs V1 includes:
 
 - organization-scoped jobs
 - organization-scoped sites
-- site locations with geocoded coordinates
+- site locations with optional Google-resolved coordinates
 - job and site comments
 - organization labels assignable to jobs and sites
 - job status, priority, assignee, coordinator, contact, visits, and activity
@@ -52,15 +52,18 @@ queries by organization id before returning product data.
 Sites are reusable organization records. They own:
 
 - name
-- structured address
+- Google-resolved or unverified location text
 - optional access notes
-- geocoded latitude and longitude
+- optional latitude and longitude when the location has usable coordinates
 - comments
 - labels
 
-Sites are the place where location quality matters. Create and update flows send
-address data to the domain worker, the domain geocodes server-side, and the app
-renders stored coordinates on maps.
+Sites are the place where location quality matters. Create and update flows can
+send no location, manual location text, or a Google place selection to the
+domain worker. Google place selections resolve server-side through Google
+Places; manual or empty locations are saved as `Unverified Location`. Maps and
+future radius queries include only sites with `hasUsableCoordinates`, and
+excluded jobs should be grouped under `Unverified Location`.
 
 ### Jobs
 

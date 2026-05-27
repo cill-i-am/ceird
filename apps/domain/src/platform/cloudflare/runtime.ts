@@ -39,7 +39,7 @@ import type { McpAuthorizedAppCacheOptions } from "../../domains/mcp/cache-confi
 import { loadMcpAuthorizedAppCacheOptions } from "../../domains/mcp/cache-config.js";
 import type { McpAuthorizedAppCache } from "../../domains/mcp/http.js";
 import { makeMcpAuthorizedAppCache } from "../../domains/mcp/http.js";
-import { SiteGeocoder } from "../../domains/sites/geocoder.js";
+import { SiteLocationProvider } from "../../domains/sites/location-provider.js";
 import { makeApiWebHandler } from "../../server.js";
 import {
   makeAppDatabaseLive,
@@ -81,7 +81,7 @@ export function makeWorkerBaseLive(env: DomainWorkerEnv) {
   );
 }
 
-export const DomainWorkerSiteGeocoderLive = SiteGeocoder.Google;
+export const DomainWorkerSiteLocationProviderLive = SiteLocationProvider.Google;
 
 export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
   return Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
@@ -142,7 +142,7 @@ export function makeDomainWorkerRuntimeLayers(env: DomainWorkerEnv) {
     authenticationLive,
     baseLive,
     databaseRuntimeLive,
-    siteGeocoderLive: DomainWorkerSiteGeocoderLive,
+    siteLocationProviderLive: DomainWorkerSiteLocationProviderLive,
   };
 }
 
@@ -151,14 +151,14 @@ function makeDomainWorkerHandler(env: DomainWorkerEnv) {
     authenticationLive,
     baseLive,
     databaseRuntimeLive,
-    siteGeocoderLive,
+    siteLocationProviderLive,
   } = makeDomainWorkerRuntimeLayers(env);
 
   return makeApiWebHandler({
     authenticationLive,
     baseLive,
     databaseRuntimeLive,
-    siteGeocoderLive,
+    siteLocationProviderLive,
     mcpAuthorizedAppCache: getDomainWorkerMcpAuthorizedAppCache(baseLive),
   });
 }
@@ -587,7 +587,9 @@ function requestPathname(url: string) {
 }
 
 function serializeFailureCause(cause: unknown) {
-  return cause instanceof Error ? cause.message : String(cause);
+  return sanitizeProviderErrorMessage(
+    cause instanceof Error ? cause.message : String(cause)
+  );
 }
 
 function withRequestIdHeader(request: Request, requestId: string) {

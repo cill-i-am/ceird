@@ -24,21 +24,21 @@ through Workers AI, and executes Ceird actions by calling the private
 
 ## Entry Points
 
-| Workspace     | File/path                        | Purpose                                                                                  |
-| ------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
-| `apps/api`    | `src/index.ts`                   | Node development entrypoint for the public adapter.                                      |
-| `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.              |
-| `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                    |
-| `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                |
-| `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.         |
-| `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.       |
-| `apps/agent`  | `src/tools.ts`                   | AI SDK tool adapter derived from executable shared action registry metadata.             |
-| `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.             |
-| `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.        |
-| `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                  |
-| `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, geocoder, and runtime layer composition. |
-| `apps/domain` | `src/platform/database`          | Database runtime, schema barrel, config, errors, and test helpers.                       |
-| `apps/mcp`    | `src/worker.ts`                  | Public MCP adapter Worker at `mcp.<stage>.ceird.app` that forwards to `DOMAIN`.          |
+| Workspace     | File/path                        | Purpose                                                                                                |
+| ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/api`    | `src/index.ts`                   | Node development entrypoint for the public adapter.                                                    |
+| `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.                            |
+| `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                                  |
+| `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                              |
+| `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.                       |
+| `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.                     |
+| `apps/agent`  | `src/tools.ts`                   | AI SDK tool adapter derived from executable shared action registry metadata.                           |
+| `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.                           |
+| `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.                      |
+| `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                                |
+| `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, Google Places location, and runtime layer composition. |
+| `apps/domain` | `src/platform/database`          | Database runtime, schema barrel, config, errors, and test helpers.                                     |
+| `apps/mcp`    | `src/worker.ts`                  | Public MCP adapter Worker at `mcp.<stage>.ceird.app` that forwards to `DOMAIN`.                        |
 
 Public system endpoints are defined in `apps/api/src/server.ts`:
 
@@ -53,10 +53,10 @@ the private domain service binding is unavailable. The single Effect-threaded do
 boundary for product behavior lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`: it installs the Worker config
 provider, builds the Hyperdrive-backed database layer, wires Better Auth
-background tasks through `context.waitUntil`, uses the Google site geocoder
-layer, and composes auth queue delivery with the Cloudflare email binding
-transport. Keeping this runtime boundary private lets multiple clients share the
-same domain execution and audit path.
+background tasks through `context.waitUntil`, uses the Google Places site
+location provider layer, and composes auth queue delivery with the Cloudflare
+email binding transport. Keeping this runtime boundary private lets multiple
+clients share the same domain execution and audit path.
 The health handler reads `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` through the
 same Effect config path and includes both values in its response, falling back
 to `local` for package-local Node runs.
@@ -425,29 +425,40 @@ structured field on the site itself for operational access instructions.
 
 Core files:
 
-| File               | Responsibility                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| `http.ts`          | Binds sites contract endpoints to Effect services and configures CORS.                      |
-| `service.ts`       | Site list, create, update, options, internal comments, and site-label assignment use cases. |
-| `repositories.ts`  | SQL repository layer for sites and site-label assignment methods.                           |
-| `schema.ts`        | Sites and site-label assignment rows and relations.                                         |
-| `geocoder.ts`      | Site geocoding capability plus development and Google provider layers.                      |
-| `id-generation.ts` | Site ID generation.                                                                         |
+| File                     | Responsibility                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `http.ts`                | Binds sites contract endpoints to Effect services and configures CORS.                      |
+| `service.ts`             | Site list, create, update, options, internal comments, and site-label assignment use cases. |
+| `repositories.ts`        | SQL repository layer for sites and site-label assignment methods.                           |
+| `schema.ts`              | Sites and site-label assignment rows and relations.                                         |
+| `location-provider.ts`   | Google Places autocomplete/place-details capability plus development and Google layers.     |
+| `location-resolution.ts` | Maps omitted, manual, and Google place inputs into persisted site location records.         |
+| `id-generation.ts`       | Site ID generation.                                                                         |
 
-Site and job services depend on the `SiteGeocoder` capability, not on a
+Site and job services depend on the `SiteLocationProvider` capability, not on a
 provider-specific implementation. Runtime entrypoints choose the provider layer:
-package-local Node composition uses `SiteGeocoder.Local`, which selects Google
-when `GOOGLE_MAPS_API_KEY` is present and falls back to deterministic
-development coordinates when it is absent. The Cloudflare Worker composition
-uses `SiteGeocoder.Google`, so deployed domain startup fails fast without the
-Google Maps key. Environment variables configure provider credentials; they do
-not select provider topology. Address-level misses return the user-correctable
-geocoding failure contract, while upstream Google/configuration failures return
-the provider failure contract so deployed misconfiguration fails visibly.
-Site creation, site updates, and inline site creation during job creation
-geocode before opening the write transaction. That keeps provider latency and
-provider failures outside Postgres transactions; the subsequent site/job writes
-still use their normal domain-owned transaction boundaries.
+package-local Node composition uses `SiteLocationProvider.Local`, which selects
+Google Places when `GOOGLE_MAPS_API_KEY` is present and falls back to
+deterministic development suggestions/details when it is absent. The Cloudflare
+Worker composition uses `SiteLocationProvider.Google`, so deployed domain
+startup fails fast without the Google Maps key. Environment variables configure
+provider credentials; they do not select provider topology.
+
+Site creation accepts omitted, manual, or Google place locations. Omitted and
+manual locations are persisted as `unverified` so partial addresses can be saved
+without blocking the workflow. Google place inputs are resolved through Places
+place details before opening the write transaction; provider latency and
+provider failures stay outside Postgres transactions. The app stores Google's
+raw `placeId` value; the provider constructs Place Details URLs as
+`/v1/places/{placeId}` at the HTTP boundary and forwards the autocomplete
+session token to Place Details to keep Google billing session-aware. Site updates
+preserve the existing location when `location` is omitted and explicitly clear it
+when `location: null` is sent. This design intentionally keeps
+Google place IDs, address components, formatted addresses, and
+unverified/manual raw input in the site record so Google Address Validation can
+be added later as a stricter validation step without redesigning the API shape.
+Unverified rows must not expose usable coordinates; maps and future radius
+queries should trust `hasUsableCoordinates`, not latitude/longitude alone.
 
 ## Labels API Endpoints
 
@@ -466,16 +477,18 @@ handlers live in `apps/domain/src/domains/labels/http.ts`.
 Endpoint definitions live in `packages/sites-core/src/http-api.ts`; API
 handlers live in `apps/domain/src/domains/sites/http.ts`.
 
-| Method   | Path                             | Handler name       |
-| -------- | -------------------------------- | ------------------ |
-| `GET`    | `/sites`                         | `listSites`        |
-| `GET`    | `/sites/options`                 | `getSiteOptions`   |
-| `POST`   | `/sites`                         | `createSite`       |
-| `PATCH`  | `/sites/:siteId`                 | `updateSite`       |
-| `GET`    | `/sites/:siteId/comments`        | `listSiteComments` |
-| `POST`   | `/sites/:siteId/comments`        | `addSiteComment`   |
-| `POST`   | `/sites/:siteId/labels`          | `assignSiteLabel`  |
-| `DELETE` | `/sites/:siteId/labels/:labelId` | `removeSiteLabel`  |
+| Method   | Path                             | Handler name                  |
+| -------- | -------------------------------- | ----------------------------- |
+| `GET`    | `/sites`                         | `listSites`                   |
+| `GET`    | `/sites/options`                 | `getSiteOptions`              |
+| `POST`   | `/sites/location/autocomplete`   | `autocompleteSiteLocation`    |
+| `POST`   | `/sites/location/place-details`  | `getSiteLocationPlaceDetails` |
+| `POST`   | `/sites`                         | `createSite`                  |
+| `PATCH`  | `/sites/:siteId`                 | `updateSite`                  |
+| `GET`    | `/sites/:siteId/comments`        | `listSiteComments`            |
+| `POST`   | `/sites/:siteId/comments`        | `addSiteComment`              |
+| `POST`   | `/sites/:siteId/labels`          | `assignSiteLabel`             |
+| `DELETE` | `/sites/:siteId/labels/:labelId` | `removeSiteLabel`             |
 
 `GET /sites` is cursor-paginated with `cursor` and `limit` query parameters.
 Responses return `{ items, nextCursor }` and use the stable directory order

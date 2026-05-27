@@ -23,8 +23,8 @@ import { LabelsHttpLive } from "./domains/labels/http.js";
 import type { McpAuthorizedAppCacheOptions } from "./domains/mcp/cache-config.js";
 import type { McpAuthorizedAppCache } from "./domains/mcp/http.js";
 import { makeMcpWebHandler } from "./domains/mcp/http.js";
-import { SiteGeocoder } from "./domains/sites/geocoder.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
+import { SiteLocationProvider } from "./domains/sites/location-provider.js";
 import { AppApi } from "./http-api.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 import { makeHealthPayload } from "./system/health.js";
@@ -61,7 +61,11 @@ const makeApiHandlersLive = () =>
 type ApiDatabaseRuntimeLive = typeof AppDatabaseRuntimeLive;
 type ApiAuthenticationLive = typeof AuthenticationLive;
 type ApiBaseLive = Layer.Layer<never, never, never>;
-type ApiSiteGeocoderLive = Layer.Layer<SiteGeocoder, unknown, never>;
+type ApiSiteLocationProviderLive = Layer.Layer<
+  SiteLocationProvider,
+  unknown,
+  never
+>;
 export interface ApiWebHandlerOptions {
   readonly mcpAuthorizedAppCache?: McpAuthorizedAppCache | undefined;
   readonly mcpAuthorizedAppCacheOptions?:
@@ -72,20 +76,20 @@ export interface ApiWebHandlerInput extends ApiWebHandlerOptions {
   readonly authenticationLive?: ApiAuthenticationLive | undefined;
   readonly baseLive?: ApiBaseLive | undefined;
   readonly databaseRuntimeLive?: ApiDatabaseRuntimeLive | undefined;
-  readonly siteGeocoderLive?: ApiSiteGeocoderLive | undefined;
+  readonly siteLocationProviderLive?: ApiSiteLocationProviderLive | undefined;
 }
 
 export const makeApiLive = (
   databaseRuntimeLive: ApiDatabaseRuntimeLive,
   authenticationLive: ApiAuthenticationLive = AuthenticationLive,
-  siteGeocoderLive: ApiSiteGeocoderLive = SiteGeocoder.Local
+  siteLocationProviderLive: ApiSiteLocationProviderLive = SiteLocationProvider.Local
 ) =>
   makeApiHandlersLive().pipe(
     Layer.provide(
       Layer.mergeAll(
         databaseRuntimeLive,
         authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
-        siteGeocoderLive
+        siteLocationProviderLive
       )
     )
   );
@@ -164,7 +168,8 @@ export const makeApiWebHandler = (input: ApiWebHandlerInput = {}) => {
   const databaseRuntimeLive =
     input.databaseRuntimeLive ?? AppDatabaseRuntimeLive;
   const authenticationLive = input.authenticationLive ?? AuthenticationLive;
-  const siteGeocoderLive = input.siteGeocoderLive ?? SiteGeocoder.Local;
+  const siteLocationProviderLive =
+    input.siteLocationProviderLive ?? SiteLocationProvider.Local;
   const baseLive = input.baseLive ?? Layer.empty;
   const authConfig = Effect.runSync(
     loadAuthenticationConfig.pipe(Effect.provide(baseLive))
@@ -172,7 +177,7 @@ export const makeApiWebHandler = (input: ApiWebHandlerInput = {}) => {
   const runtimeLive = Layer.mergeAll(
     databaseRuntimeLive,
     authenticationLive.pipe(Layer.provide(databaseRuntimeLive)),
-    siteGeocoderLive
+    siteLocationProviderLive
   );
   const mcpWebHandler = makeMcpWebHandler({
     authorizedAppCache: input.mcpAuthorizedAppCache,
@@ -184,7 +189,7 @@ export const makeApiWebHandler = (input: ApiWebHandlerInput = {}) => {
   const apiLayer = makeApiLive(
     databaseRuntimeLive,
     authenticationLive,
-    siteGeocoderLive
+    siteLocationProviderLive
   ).pipe(
     Layer.provide(NodeHttpServer.layerHttpServices),
     Layer.provide(baseLive)

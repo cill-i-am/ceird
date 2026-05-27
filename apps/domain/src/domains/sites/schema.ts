@@ -1,9 +1,25 @@
+import {
+  SITE_COUNTRIES,
+  SITE_LOCATION_PROVIDERS,
+  SITE_LOCATION_STATUSES,
+  GOOGLE_PLACE_ID_MAX_LENGTH,
+} from "@ceird/sites-core";
+import type {
+  GoogleAddressComponent,
+  GooglePlaceIdType,
+  SiteCountry,
+  SiteLatitude,
+  SiteLocationProviderType,
+  SiteLocationStatusType,
+  SiteLongitude,
+} from "@ceird/sites-core";
 import { sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
   foreignKey,
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -22,6 +38,17 @@ const sitesTimestamp = (name: string) =>
 const archivedAtColumn = (name: string) =>
   timestamp(name, { withTimezone: true });
 
+const siteCountryValuesSql = sql.raw(
+  SITE_COUNTRIES.map((value) => `'${value}'`).join(", ")
+);
+const siteLocationStatusValuesSql = sql.raw(
+  SITE_LOCATION_STATUSES.map((value) => `'${value}'`).join(", ")
+);
+const siteLocationProviderValuesSql = sql.raw(
+  SITE_LOCATION_PROVIDERS.map((value) => `'${value}'`).join(", ")
+);
+const googlePlaceIdMaxLengthSql = sql.raw(String(GOOGLE_PLACE_ID_MAX_LENGTH));
+
 export const site = pgTable(
   "sites",
   {
@@ -30,17 +57,30 @@ export const site = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    addressLine1: text("address_line_1").notNull(),
+    addressLine1: text("address_line_1"),
     addressLine2: text("address_line_2"),
     town: text("town"),
-    county: text("county").notNull(),
-    country: text("country").notNull().default("IE"),
+    county: text("county"),
+    country: text("country").$type<SiteCountry>(),
     eircode: text("eircode"),
     accessNotes: text("access_notes"),
-    latitude: doublePrecision("latitude").notNull(),
-    longitude: doublePrecision("longitude").notNull(),
-    geocodingProvider: text("geocoding_provider").notNull(),
-    geocodedAt: timestamp("geocoded_at", { withTimezone: true }).notNull(),
+    rawLocationInput: text("raw_location_input"),
+    displayLocation: text("display_location").notNull().default(""),
+    formattedAddress: text("formatted_address"),
+    googlePlaceId: text("google_place_id").$type<GooglePlaceIdType>(),
+    addressComponents:
+      jsonb("address_components").$type<readonly GoogleAddressComponent[]>(),
+    latitude: doublePrecision("latitude").$type<SiteLatitude>(),
+    longitude: doublePrecision("longitude").$type<SiteLongitude>(),
+    locationProvider:
+      text("location_provider").$type<SiteLocationProviderType>(),
+    locationResolvedAt: timestamp("location_resolved_at", {
+      withTimezone: true,
+    }),
+    locationStatus: text("location_status")
+      .$type<SiteLocationStatusType>()
+      .notNull()
+      .default("unverified"),
     createdAt: sitesTimestamp("created_at"),
     updatedAt: sitesTimestamp("updated_at"),
     archivedAt: archivedAtColumn("archived_at"),
@@ -55,22 +95,33 @@ export const site = pgTable(
     index("sites_organization_active_name_idx")
       .on(table.organizationId, table.name.asc().nullsLast(), table.id)
       .where(sql`${table.archivedAt} is null`),
-    check("sites_country_chk", sql`${table.country} in ('IE', 'GB')`),
     check(
-      "sites_ie_eircode_required_chk",
-      sql`${table.country} <> 'IE' or ${table.eircode} is not null`
+      "sites_country_chk",
+      sql`${table.country} is null or ${table.country} in (${siteCountryValuesSql})`
     ),
     check(
-      "sites_geocoding_provider_chk",
-      sql`${table.geocodingProvider} is null or ${table.geocodingProvider} in ('google', 'stub')`
+      "sites_location_status_chk",
+      sql`${table.locationStatus} in (${siteLocationStatusValuesSql})`
+    ),
+    check(
+      "sites_location_provider_chk",
+      sql`${table.locationProvider} is null or ${table.locationProvider} in (${siteLocationProviderValuesSql})`
     ),
     check(
       "sites_coordinates_pair_check",
       sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`
     ),
     check(
-      "sites_geocoding_metadata_check",
-      sql`(${table.latitude} is null and ${table.longitude} is null and ${table.geocodingProvider} is null and ${table.geocodedAt} is null) or (${table.latitude} is not null and ${table.longitude} is not null and ${table.geocodingProvider} is not null and ${table.geocodedAt} is not null)`
+      "sites_google_resolved_metadata_check",
+      sql`${table.locationStatus} <> 'google_resolved' or (${table.latitude} is not null and ${table.longitude} is not null and ${table.locationProvider} is not null and ${table.locationResolvedAt} is not null and ${table.googlePlaceId} is not null)`
+    ),
+    check(
+      "sites_google_place_id_format_chk",
+      sql`${table.googlePlaceId} is null or (length(${table.googlePlaceId}) >= 1 and length(${table.googlePlaceId}) <= ${googlePlaceIdMaxLengthSql} and ${table.googlePlaceId} ~ '^[A-Za-z0-9_-]+$')`
+    ),
+    check(
+      "sites_unverified_location_metadata_check",
+      sql`${table.locationStatus} <> 'unverified' or (${table.latitude} is null and ${table.longitude} is null and ${table.locationProvider} is null and ${table.locationResolvedAt} is null and ${table.googlePlaceId} is null)`
     ),
     check(
       "sites_latitude_range_check",

@@ -370,8 +370,9 @@ contract:
   collection mutation, otherwise TanStack DB completes the transaction without
   calling `mutationFn`.
 - Prefer server-confirmed writes for operations where the server enriches the
-  row with generated IDs, geocoding, linked contacts/sites, permissions, or
-  other canonical fields that the client cannot accurately predict.
+  row with generated IDs, Google Places location resolution, linked
+  contacts/sites, permissions, or other canonical fields that the client cannot
+  accurately predict.
 - Query Collection fetch results are authoritative synced state. Race guards
   may preserve server-confirmed local writes, but they must not promote
   `$synced: false` optimistic rows into the fetched result.
