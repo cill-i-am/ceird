@@ -238,6 +238,43 @@ describe("app context request middleware payload", () => {
     });
   });
 
+  it("does not expose the session active organization on auth-only tenant routes", async () => {
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      );
+
+    const context = await loadRequestAppContextMiddlewareContext({
+      pathname: "/settings",
+      request: new Request(
+        "https://unknown-field-ops--pr-123.ceird.app/settings",
+        {
+          headers: {
+            cookie: "better-auth.session_token=session-token",
+            host: "unknown-field-ops--pr-123.ceird.app",
+          },
+        }
+      ),
+    });
+
+    expect(context).toStrictEqual({
+      activeOrganizationId: null,
+      authSession: authSessionWithActiveOrganization,
+      requestedOrganizationSlug: "unknown-field-ops",
+    });
+    expect(context).not.toHaveProperty("currentOrganizationRole");
+    expect(context).not.toHaveProperty("organizations");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("resolves the route request context active organization from a tenant host", async () => {
     const organizations = [
       { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },

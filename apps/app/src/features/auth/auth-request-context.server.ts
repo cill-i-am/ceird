@@ -145,14 +145,19 @@ export async function buildAppAuthContextSnapshotForRequest(
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
   const requestedOrganizationSlug = readRequestedOrganizationSlug(request);
+  const unresolvedTenantActiveOrganizationId =
+    requestedOrganizationSlug && !options.resolveActiveOrganizationFromList
+      ? null
+      : activeOrganizationId;
 
   if (
     !session ||
     !options.hydrateOrganizationContext ||
+    (requestedOrganizationSlug && !options.resolveActiveOrganizationFromList) ||
     (!options.resolveActiveOrganizationFromList && !activeOrganizationId)
   ) {
     return {
-      activeOrganizationId,
+      activeOrganizationId: unresolvedTenantActiveOrganizationId,
       ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
       session,
     };
@@ -169,7 +174,7 @@ export async function buildAppAuthContextSnapshotForRequest(
   if (!options.resolveActiveOrganizationFromList) {
     if (!activeOrganizationId) {
       return {
-        activeOrganizationId,
+        activeOrganizationId: unresolvedTenantActiveOrganizationId,
         ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
         session,
       };
@@ -181,7 +186,7 @@ export async function buildAppAuthContextSnapshotForRequest(
     ]);
 
     return {
-      activeOrganizationId,
+      activeOrganizationId: unresolvedTenantActiveOrganizationId,
       currentOrganizationRole,
       organizations,
       ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
