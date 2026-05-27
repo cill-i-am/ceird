@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildOrganizationTenantOrigin,
@@ -8,6 +8,10 @@ import {
 } from "./tenant-host";
 
 describe("tenant host parsing", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("parses production tenant hosts", () => {
     expect(
       parseTenantHost("acme-field-ops.ceird.app", {
@@ -93,6 +97,37 @@ describe("tenant host parsing", () => {
     });
   });
 
+  it("rejects organization slug labels outside the shared length contract", () => {
+    const config = {
+      baseDomain: "ceird.app",
+      hostMode: "production" as const,
+      reservedHostnames: [],
+    };
+
+    expect(parseTenantHost("a.ceird.app", config)).toStrictEqual({
+      kind: "system",
+    });
+    expect(
+      parseTenantHost(`${"a".repeat(41)}.ceird.app`, config)
+    ).toStrictEqual({
+      kind: "system",
+    });
+    expect(
+      buildOrganizationTenantOrigin("a", {
+        baseDomain: "ceird.app",
+        hostMode: "production",
+        reservedHostnames: [],
+      })
+    ).toBeUndefined();
+    expect(
+      buildOrganizationTenantOrigin("a".repeat(41), {
+        baseDomain: "ceird.app",
+        hostMode: "production",
+        reservedHostnames: [],
+      })
+    ).toBeUndefined();
+  });
+
   it("normalizes case and strips ports before parsing", () => {
     expect(
       parseTenantHost("Acme-Field-Ops.Ceird.App:443", {
@@ -101,6 +136,28 @@ describe("tenant host parsing", () => {
         reservedHostnames: [],
       })
     ).toStrictEqual({ kind: "tenant", organizationSlug: "acme-field-ops" });
+  });
+
+  it("rejects URL-like and malformed host input", () => {
+    const config = {
+      baseDomain: "ceird.app",
+      hostMode: "production" as const,
+      reservedHostnames: [],
+    };
+
+    for (const hostname of [
+      "https://acme.ceird.app",
+      "https://evil.com@acme.ceird.app",
+      "evil.com@acme.ceird.app",
+      "acme.ceird.app/path",
+      "acme.ceird.app?x=1",
+      "acme.ceird.app#section",
+      "acme.ceird.app:abc",
+    ]) {
+      expect(parseTenantHost(hostname, config)).toStrictEqual({
+        kind: "system",
+      });
+    }
   });
 
   it("builds stage tenant origins", () => {
@@ -129,6 +186,33 @@ describe("tenant host parsing", () => {
     ).toBe(
       "https://acme-field-ops--pr-123.ceird.app/projects/42?tab=timeline#activity"
     );
+  });
+
+  it("does not build tenant URLs from absolute or protocol-relative inputs", () => {
+    const config = {
+      baseDomain: "ceird.app",
+      hostMode: "stage" as const,
+      reservedHostnames: [],
+      stageAlias: "pr-123",
+    };
+
+    expect(
+      buildOrganizationTenantUrl(
+        "acme-field-ops",
+        "https://evil.example/path",
+        config
+      )
+    ).toBeUndefined();
+    expect(
+      buildOrganizationTenantUrl(
+        "acme-field-ops",
+        "//evil.example/path",
+        config
+      )
+    ).toBeUndefined();
+    expect(
+      buildOrganizationTenantUrl("acme-field-ops", "relative/path", config)
+    ).toBeUndefined();
   });
 
   it("does not build tenant origins when disabled", () => {
@@ -165,6 +249,19 @@ describe("tenant host parsing", () => {
       hostMode: "stage",
       reservedHostnames: ["app.pr-123.ceird.app", "api.pr-123.ceird.app"],
       stageAlias: "pr-123",
+    });
+  });
+
+  it("defaults unknown tenant host modes from env to disabled", () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "unexpected");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "");
+
+    expect(readTenantHostConfigFromEnv()).toStrictEqual({
+      baseDomain: "ceird.app",
+      hostMode: "disabled",
+      reservedHostnames: [],
+      stageAlias: undefined,
     });
   });
 });

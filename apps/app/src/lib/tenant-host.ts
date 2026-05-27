@@ -1,3 +1,8 @@
+import {
+  ORGANIZATION_SLUG_MAX_LENGTH,
+  ORGANIZATION_SLUG_PATTERN,
+} from "@ceird/identity-core";
+
 export type TenantHostMode = "disabled" | "production" | "stage";
 
 export interface TenantHostConfig {
@@ -12,7 +17,8 @@ export type TenantHostResolution =
   | { readonly kind: "system" }
   | { readonly kind: "tenant"; readonly organizationSlug: string };
 
-const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ORGANIZATION_SLUG_MIN_LENGTH = 2;
+const VALID_HOST_PATTERN = /^[a-z0-9.-]+$/;
 
 export function parseTenantHost(
   hostname: string,
@@ -25,11 +31,16 @@ export function parseTenantHost(
   const normalizedHostname = normalizeHostname(hostname);
   const baseDomain = normalizeHostname(config.baseDomain);
 
-  if (!normalizedHostname || !baseDomain) {
+  if (normalizedHostname === undefined || baseDomain === undefined) {
     return { kind: "system" };
   }
 
-  const reservedHostnames = config.reservedHostnames.map(normalizeHostname);
+  const reservedHostnames = config.reservedHostnames
+    .map(normalizeHostname)
+    .filter(
+      (reservedHostname): reservedHostname is string =>
+        reservedHostname !== undefined
+    );
 
   if (reservedHostnames.includes(normalizedHostname)) {
     return { kind: "system" };
@@ -89,7 +100,7 @@ export function buildOrganizationTenantOrigin(
 
   const baseDomain = normalizeHostname(config.baseDomain);
 
-  if (!baseDomain) {
+  if (baseDomain === undefined) {
     return;
   }
 
@@ -123,39 +134,72 @@ export function buildOrganizationTenantUrl(
     return;
   }
 
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    return;
+  }
+
   return new URL(path, origin).toString();
 }
 
 export function readTenantHostConfigFromEnv(): TenantHostConfig {
   return {
     baseDomain: import.meta.env.VITE_TENANT_BASE_DOMAIN ?? "",
-    hostMode:
-      (import.meta.env.VITE_TENANT_HOST_MODE as TenantHostMode | undefined) ??
-      "disabled",
+    hostMode: decodeTenantHostMode(import.meta.env.VITE_TENANT_HOST_MODE),
     reservedHostnames: (import.meta.env.VITE_TENANT_RESERVED_HOSTNAMES ?? "")
       .split(",")
       .map(normalizeHostname)
-      .filter((hostname: string) => hostname.length > 0),
+      .filter(
+        (reservedHostname: string | undefined): reservedHostname is string =>
+          reservedHostname !== undefined
+      ),
     stageAlias: import.meta.env.VITE_TENANT_STAGE_ALIAS,
   };
 }
 
-function normalizeHostname(hostname: string): string {
+function normalizeHostname(hostname: string): string | undefined {
   const trimmed = hostname.trim().toLowerCase();
-  const parsed = toUrl(
-    trimmed.includes("://") ? trimmed : `https://${trimmed}`
-  );
 
-  return parsed?.hostname ?? trimmed.replace(/:\d+$/, "");
+  if (!trimmed || trimmed.includes("://") || /[@/?#]/u.test(trimmed)) {
+    return;
+  }
+
+  const portSeparatorIndex = trimmed.lastIndexOf(":");
+  const hostnameWithoutPort =
+    portSeparatorIndex === -1 ? trimmed : trimmed.slice(0, portSeparatorIndex);
+  const port =
+    portSeparatorIndex === -1
+      ? undefined
+      : trimmed.slice(portSeparatorIndex + 1);
+
+  if (
+    port !== undefined &&
+    (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65_535)
+  ) {
+    return;
+  }
+
+  if (
+    !hostnameWithoutPort ||
+    hostnameWithoutPort.includes(":") ||
+    !VALID_HOST_PATTERN.test(hostnameWithoutPort)
+  ) {
+    return;
+  }
+
+  return hostnameWithoutPort;
 }
 
-function toUrl(value: string) {
-  const parsed: URL | undefined = URL.canParse(value)
-    ? new URL(value)
-    : undefined;
-  return parsed;
+function decodeTenantHostMode(value: string | undefined): TenantHostMode {
+  return value === "production" || value === "stage" || value === "disabled"
+    ? value
+    : "disabled";
 }
 
 function isOrganizationSlug(value: string | undefined): value is string {
-  return typeof value === "string" && ORGANIZATION_SLUG_PATTERN.test(value);
+  return (
+    typeof value === "string" &&
+    value.length >= ORGANIZATION_SLUG_MIN_LENGTH &&
+    value.length <= ORGANIZATION_SLUG_MAX_LENGTH &&
+    ORGANIZATION_SLUG_PATTERN.test(value)
+  );
 }
