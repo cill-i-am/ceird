@@ -406,7 +406,7 @@ export function createAuthentication(options: {
               input = decodeCreateOrganizationInput(nextOrganization);
             } catch {
               throwInvalidOrganizationInput(
-                "Organization name must be at least 2 characters long and the slug must use lowercase letters, numbers, and hyphens only."
+                "Organization name must be at least 2 characters long and the slug must use lowercase letters, numbers, and hyphens only, without reserved system labels."
               );
             }
 

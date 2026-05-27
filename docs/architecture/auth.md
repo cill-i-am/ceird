@@ -532,13 +532,17 @@ Rules:
 
 Organization slugs are generated and validated by `@ceird/identity-core`.
 The shared slug contract caps slugs at 40 characters so tenant DNS labels can
-fit `{slug}--{tenantStageAlias}` within the 63-character DNS label limit.
+fit `{slug}--{tenantStageAlias}` within the 63-character DNS label limit, and
+rejects `app`, `api`, `agent`, and `mcp` because those labels are reserved for
+Ceird system hosts. Generated slugs for organizations with those names receive
+an `-org` suffix before creation.
 
 Domain persistence enforces the same contract on the Better Auth organization
 table: `organization_slug_format_chk` checks the slug format and the 40-character
-maximum length. App-owned organization creation retry logic also uses the shared
-identity-core suffix helper, which truncates the base slug before appending a
-random suffix so conflict retries remain inside the shared slug contract.
+maximum length, and rejects reserved system labels. App-owned organization
+creation retry logic also uses the shared identity-core suffix helper, which
+truncates the base slug before appending a random suffix so conflict retries
+remain inside the shared slug contract.
 
 ## Route Model
 

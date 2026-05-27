@@ -1,6 +1,7 @@
 import {
   ORGANIZATION_SLUG_MAX_LENGTH,
   ORGANIZATION_SLUG_PATTERN,
+  isReservedOrganizationSlug,
 } from "@ceird/identity-core";
 
 export type TenantHostMode = "disabled" | "production" | "stage";
@@ -39,12 +40,7 @@ export function parseTenantHost(
     return { kind: "system" };
   }
 
-  const reservedHostnames = config.reservedHostnames
-    .map(normalizeHostname)
-    .filter(
-      (reservedHostname): reservedHostname is string =>
-        reservedHostname !== undefined
-    );
+  const reservedHostnames = normalizeReservedHostnames(config);
 
   if (reservedHostnames.includes(normalizedHostname)) {
     return { kind: "system" };
@@ -108,14 +104,17 @@ export function buildOrganizationTenantOrigin(
   }
 
   if (config.hostMode === "production") {
-    return `https://${organizationSlug}.${baseDomain}`;
+    return buildTenantOrigin(`${organizationSlug}.${baseDomain}`, config);
   }
 
   if (config.hostMode === "stage") {
     const normalizedStageAlias = normalizeStageAlias(config.stageAlias);
 
     if (normalizedStageAlias !== undefined) {
-      return `https://${organizationSlug}--${normalizedStageAlias}.${baseDomain}`;
+      return buildTenantOrigin(
+        `${organizationSlug}--${normalizedStageAlias}.${baseDomain}`,
+        config
+      );
     }
   }
 
@@ -206,6 +205,22 @@ function decodeTenantHostMode(value: string | undefined): TenantHostMode {
     : "disabled";
 }
 
+function buildTenantOrigin(
+  hostname: string,
+  config: TenantHostConfig
+): string | undefined {
+  const normalizedHostname = normalizeHostname(hostname);
+
+  if (
+    normalizedHostname === undefined ||
+    normalizeReservedHostnames(config).includes(normalizedHostname)
+  ) {
+    return;
+  }
+
+  return `https://${normalizedHostname}`;
+}
+
 function hasControlCharacter(value: string): boolean {
   return [...value].some((character) => {
     const codePoint = character.codePointAt(0);
@@ -239,6 +254,16 @@ function isOrganizationSlug(value: string | undefined): value is string {
     typeof value === "string" &&
     value.length >= ORGANIZATION_SLUG_MIN_LENGTH &&
     value.length <= ORGANIZATION_SLUG_MAX_LENGTH &&
-    ORGANIZATION_SLUG_PATTERN.test(value)
+    ORGANIZATION_SLUG_PATTERN.test(value) &&
+    !isReservedOrganizationSlug(value)
   );
+}
+
+function normalizeReservedHostnames(config: TenantHostConfig): string[] {
+  return config.reservedHostnames
+    .map(normalizeHostname)
+    .filter(
+      (reservedHostname): reservedHostname is string =>
+        reservedHostname !== undefined
+    );
 }

@@ -4,6 +4,12 @@ export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_MAX_LENGTH = 40;
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const DEFAULT_ORGANIZATION_SLUG_PREFIX = "team";
+export const RESERVED_ORGANIZATION_SLUGS = [
+  "app",
+  "api",
+  "agent",
+  "mcp",
+] as const;
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
@@ -101,35 +107,57 @@ export const OrganizationSlugSchema = Schema.Trim.pipe(
     Schema.isMinLength(2),
     Schema.isMaxLength(ORGANIZATION_SLUG_MAX_LENGTH),
     Schema.isPattern(ORGANIZATION_SLUG_PATTERN)
+  ),
+  Schema.refine(
+    (value): value is string => !isReservedOrganizationSlug(value),
+    {
+      message: "Organization slug is reserved for a system host",
+    }
   )
 );
 
-export function createOrganizationSlugFromName(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replaceAll(/['’]/g, "")
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, ORGANIZATION_SLUG_MAX_LENGTH)
-    .replaceAll(/^-+|-+$/g, "");
+export function isReservedOrganizationSlug(value: string): boolean {
+  return (RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(value);
+}
 
-  return slug || DEFAULT_ORGANIZATION_SLUG_PREFIX;
+function avoidReservedOrganizationSlug(slug: string): string {
+  if (!isReservedOrganizationSlug(slug)) {
+    return slug;
+  }
+
+  return `${slug}-org`;
+}
+
+function createRawOrganizationSlugFromName(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replaceAll(/['’]/g, "")
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, ORGANIZATION_SLUG_MAX_LENGTH)
+      .replaceAll(/^-+|-+$/g, "") || DEFAULT_ORGANIZATION_SLUG_PREFIX
+  );
+}
+
+export function createOrganizationSlugFromName(name: string): string {
+  return avoidReservedOrganizationSlug(createRawOrganizationSlugFromName(name));
 }
 
 export function appendOrganizationSlugSuffix(
   baseSlug: string,
   suffix: string
 ): string {
-  const suffixSlug = createOrganizationSlugFromName(suffix)
+  const suffixSlug = createRawOrganizationSlugFromName(suffix)
     .slice(0, ORGANIZATION_SLUG_MAX_LENGTH - 2)
     .replaceAll(/^-+|-+$/g, "");
   const baseMaxLength = ORGANIZATION_SLUG_MAX_LENGTH - suffixSlug.length - 1;
-  const truncatedBaseSlug = createOrganizationSlugFromName(baseSlug)
+  const truncatedBaseSlug = createRawOrganizationSlugFromName(baseSlug)
     .slice(0, baseMaxLength)
     .replaceAll(/-+$/g, "");
 
-  return `${truncatedBaseSlug}-${suffixSlug}`;
+  return avoidReservedOrganizationSlug(`${truncatedBaseSlug}-${suffixSlug}`);
 }
 
 export const OrganizationSummarySchema = Schema.Struct({

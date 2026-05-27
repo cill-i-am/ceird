@@ -10,6 +10,8 @@ import {
   decodeUpdateOrganizationInput,
   decodeUserId,
   ORGANIZATION_SLUG_MAX_LENGTH,
+  RESERVED_ORGANIZATION_SLUGS,
+  isReservedOrganizationSlug,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
   ORGANIZATION_SLUG_PATTERN,
@@ -36,6 +38,17 @@ describe("createOrganizationInputSchema", () => {
       })
     ).toThrow(/Expected/);
   }, 1000);
+
+  it("rejects slugs reserved for system hosts", () => {
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(() =>
+        decodeCreateOrganizationInput({
+          name: "Reserved Host",
+          slug,
+        })
+      ).toThrow(/reserved/);
+    }
+  }, 1000);
 });
 
 describe("organization slug generation", () => {
@@ -50,6 +63,15 @@ describe("organization slug generation", () => {
 
   it("falls back when a name has no slug-safe characters", () => {
     expect(createOrganizationSlugFromName("!!")).toBe("team");
+  }, 1000);
+
+  it("avoids slugs reserved for system hosts when generating from names", () => {
+    expect(createOrganizationSlugFromName("API")).toBe("api-org");
+    expect(createOrganizationSlugFromName("App")).toBe("app-org");
+
+    for (const slug of RESERVED_ORGANIZATION_SLUGS) {
+      expect(isReservedOrganizationSlug(slug)).toBeTruthy();
+    }
   }, 1000);
 
   it("keeps truncated slugs short enough for tenant stage host labels", () => {

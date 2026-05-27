@@ -32,6 +32,19 @@ describe("tenant host parsing", () => {
     ).toStrictEqual({ kind: "system" });
   });
 
+  it("does not parse or build tenant hosts from reserved organization slugs", () => {
+    const config = {
+      baseDomain: "ceird.app",
+      hostMode: "production" as const,
+      reservedHostnames: [],
+    };
+
+    expect(parseTenantHost("api.ceird.app", config)).toStrictEqual({
+      kind: "system",
+    });
+    expect(buildOrganizationTenantOrigin("api", config)).toBeUndefined();
+  });
+
   it("parses stage tenant hosts", () => {
     expect(
       parseTenantHost("acme-field-ops--pr-123.ceird.app", {
@@ -169,6 +182,24 @@ describe("tenant host parsing", () => {
         stageAlias: "pr-123",
       })
     ).toBe("https://acme-field-ops--pr-123.ceird.app");
+  });
+
+  it("does not build tenant origins that collide with configured reserved hosts", () => {
+    expect(
+      buildOrganizationTenantOrigin("acme-field-ops", {
+        baseDomain: "ceird.app",
+        hostMode: "production",
+        reservedHostnames: ["acme-field-ops.ceird.app"],
+      })
+    ).toBeUndefined();
+    expect(
+      buildOrganizationTenantOrigin("acme-field-ops", {
+        baseDomain: "ceird.app",
+        hostMode: "stage",
+        reservedHostnames: ["acme-field-ops--pr-123.ceird.app"],
+        stageAlias: "pr-123",
+      })
+    ).toBeUndefined();
   });
 
   it("builds tenant URLs while preserving path, search, and hash", () => {

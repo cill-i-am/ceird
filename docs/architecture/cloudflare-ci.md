@@ -55,7 +55,9 @@ use `{orgSlug}.ceird.app`. Non-production tenant hosts use
 `{orgSlug}--{tenantStageAlias}.ceird.app`, for example
 `example-co--staging.ceird.app` or `example-co--pr-123.ceird.app`. This keeps
 dynamic tenants as first-level `ceird.app` labels so they stay inside the zone's
-wildcard DNS and Universal SSL coverage.
+wildcard DNS and Universal SSL coverage. Organization slugs cannot be `app`,
+`api`, `agent`, or `mcp`, so production tenant URLs cannot collide with system
+hostnames.
 
 Alchemy owns the stage route that sends tenant host traffic to the app Worker:
 production uses `*.ceird.app/*`, while non-production stages use

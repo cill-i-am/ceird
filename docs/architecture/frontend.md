@@ -103,7 +103,9 @@ navigation and SSR stay on the same route transition path; raw `href` redirects
 are reserved for external or intentionally document-level navigation.
 Tenant host parsing lives in `apps/app/src/lib/tenant-host.ts`. The parser
 treats configured system hosts as neutral, ignores hosts outside the tenant base
-domain, and resolves only valid organization slugs from the first DNS label.
+domain, and resolves only valid non-reserved organization slugs from the first
+DNS label. Tenant URL generation also refuses any computed hostname that matches
+the configured reserved-host list.
 Server request context prefers the organization requested by a tenant host over
 the session's active organization, then synchronizes the Better Auth active
 organization after route resolution. Package-local Vite/Playwright servers run

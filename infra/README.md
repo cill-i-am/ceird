@@ -62,7 +62,9 @@ for the active tenant pattern, such as `*.ceird.app/*` in production or
 stage route but leaves the shared wildcard DNS record in place. Production adds
 reserved-host bypass routes with no script for `app.ceird.app`,
 `api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app` so the tenant wildcard
-does not intercept system traffic.
+does not intercept system traffic. The shared organization slug contract also
+reserves `app`, `api`, `agent`, and `mcp`, preventing tenant URLs from colliding
+with those exact production hostnames.
 Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
 and passed through the app-owned Worker env module; the root stack does not own
 those runtime defaults. Worker compatibility flags and observability settings
