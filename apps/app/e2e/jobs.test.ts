@@ -8,6 +8,7 @@ import { JobDetailSheet, JobsCreateSheet, JobsPage } from "./pages/jobs-page";
 import { SignupPage } from "./pages/signup-page";
 
 const JOBS_FLOW_TIMEOUT_MS = 240_000;
+const JOB_ACTIVITY_TIMEOUT_MS = 30_000;
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
 function createTestEmail(prefix: string): string {
@@ -109,13 +110,16 @@ test.describe("jobs flow", () => {
 
     await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("In progress");
+    const inProgressResponse = waitForJobTransitionResponse(page);
     await detailSheet.applyStatusChange.click();
+    const inProgressResult = await inProgressResponse;
+    expect(inProgressResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
     await expect(
       detailSheet.root.getByText(/changed status from New to In progress/)
-    ).toBeVisible();
+    ).toBeVisible({ timeout: JOB_ACTIVITY_TIMEOUT_MS });
 
     await detailSheet.openPanel("Visit");
     await detailSheet.visitDate.fill("2026-04-24");
@@ -127,10 +131,13 @@ test.describe("jobs flow", () => {
 
     await detailSheet.openPanel("Status");
     await detailSheet.chooseStatusOption("Completed");
+    const completedResponse = waitForJobTransitionResponse(page);
     await detailSheet.applyStatusChange.click();
+    const completedResult = await completedResponse;
+    expect(completedResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText(/changed status from In progress to Completed/)
-    ).toBeVisible();
+    ).toBeVisible({ timeout: JOB_ACTIVITY_TIMEOUT_MS });
     if (!(await detailSheet.reopenJob.isVisible())) {
       await detailSheet.openPanel("Status");
     }
@@ -167,4 +174,13 @@ async function runCommandBarAction(page: Page, label: string) {
   const option = page.getByRole("option", { exact: true, name: label });
   await option.click();
   await expect(option).toBeHidden();
+}
+
+function waitForJobTransitionResponse(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /^\/jobs\/[^/]+\/transitions$/.test(new URL(response.url()).pathname),
+    { timeout: JOB_ACTIVITY_TIMEOUT_MS }
+  );
 }
