@@ -47,14 +47,26 @@ export async function loadRequestAppContextMiddlewareContext({
 
   if (shouldIncludeOrganizationContext && snapshot.organizations) {
     return {
+      ...(snapshot.activeOrganizationId
+        ? { activeOrganizationId: snapshot.activeOrganizationId }
+        : {}),
       authSession: snapshot.session,
       currentOrganizationRole: snapshot.currentOrganizationRole,
       organizations: snapshot.organizations,
+      ...(snapshot.requestedOrganizationSlug
+        ? { requestedOrganizationSlug: snapshot.requestedOrganizationSlug }
+        : {}),
     };
   }
 
   return {
+    ...(snapshot.activeOrganizationId
+      ? { activeOrganizationId: snapshot.activeOrganizationId }
+      : {}),
     authSession: snapshot.session,
+    ...(snapshot.requestedOrganizationSlug
+      ? { requestedOrganizationSlug: snapshot.requestedOrganizationSlug }
+      : {}),
   };
 }
 

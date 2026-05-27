@@ -186,6 +186,7 @@ describe("app context request middleware payload", () => {
         request: buildAuthRequest(),
       })
     ).resolves.toStrictEqual({
+      activeOrganizationId: "org_123",
       authSession: authSessionWithActiveOrganization,
       currentOrganizationRole: "admin",
       organizations,
@@ -195,9 +196,18 @@ describe("app context request middleware payload", () => {
 
 describe("app auth context snapshot for request", () => {
   let originalApiOrigin: string | undefined;
+  let originalTenantBaseDomain: string | undefined;
+  let originalTenantHostMode: string | undefined;
+  let originalTenantReservedHostnames: string | undefined;
+  let originalTenantStageAlias: string | undefined;
 
   beforeEach(() => {
     originalApiOrigin = process.env.API_ORIGIN;
+    originalTenantBaseDomain = process.env.VITE_TENANT_BASE_DOMAIN;
+    originalTenantHostMode = process.env.VITE_TENANT_HOST_MODE;
+    originalTenantReservedHostnames =
+      process.env.VITE_TENANT_RESERVED_HOSTNAMES;
+    originalTenantStageAlias = process.env.VITE_TENANT_STAGE_ALIAS;
   });
 
   afterEach(() => {
@@ -209,6 +219,31 @@ describe("app auth context snapshot for request", () => {
       delete process.env.API_ORIGIN;
     } else {
       process.env.API_ORIGIN = originalApiOrigin;
+    }
+    if (originalTenantBaseDomain === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_BASE_DOMAIN;
+    } else {
+      process.env.VITE_TENANT_BASE_DOMAIN = originalTenantBaseDomain;
+    }
+    if (originalTenantHostMode === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_HOST_MODE;
+    } else {
+      process.env.VITE_TENANT_HOST_MODE = originalTenantHostMode;
+    }
+    if (originalTenantReservedHostnames === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_RESERVED_HOSTNAMES;
+    } else {
+      process.env.VITE_TENANT_RESERVED_HOSTNAMES =
+        originalTenantReservedHostnames;
+    }
+    if (originalTenantStageAlias === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_STAGE_ALIAS;
+    } else {
+      process.env.VITE_TENANT_STAGE_ALIAS = originalTenantStageAlias;
     }
   });
 
@@ -430,6 +465,55 @@ describe("app auth context snapshot for request", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       new URL(
         "organization/get-active-member-role?organizationId=org_123",
+        "https://api.example.com/api/auth/"
+      ),
+      expect.anything()
+    );
+  });
+
+  it("prefers the organization requested by a tenant host over the session active organization", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+    ];
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "external" }))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    const snapshot = await buildAppAuthContextSnapshotForRequest(
+      new Request("https://app.pr-123.ceird.app/jobs", {
+        headers: {
+          cookie: "better-auth.session_token=session-token",
+          host: "app.pr-123.ceird.app",
+          "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
+        },
+      }),
+      {
+        hydrateOrganizationContext: true,
+        resolveActiveOrganizationFromList: true,
+        session: authSessionWithActiveOrganization,
+      }
+    );
+
+    expect(snapshot.activeOrganizationId).toBe("org_456");
+    expect(snapshot.requestedOrganizationSlug).toBe("beta-field-ops");
+    expect(snapshot).toStrictEqual({
+      activeOrganizationId: "org_456",
+      currentOrganizationRole: "admin",
+      organizations,
+      requestedOrganizationSlug: "beta-field-ops",
+      session: authSessionWithActiveOrganization,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "organization/get-active-member-role?organizationId=org_456",
         "https://api.example.com/api/auth/"
       ),
       expect.anything()

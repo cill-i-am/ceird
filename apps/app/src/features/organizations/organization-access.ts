@@ -194,8 +194,10 @@ async function resolveOrganizationAccessState(session: Session) {
   const currentActiveOrganizationId = decodeNullableOrganizationId(
     session.session.activeOrganizationId
   );
+  const routeResolvedActiveOrganizationId =
+    await readRouteResolvedActiveOrganizationId();
   const activeOrganization = resolveCurrentOrganization(
-    currentActiveOrganizationId,
+    routeResolvedActiveOrganizationId ?? currentActiveOrganizationId,
     organizations
   );
   const activeOrganizationId = activeOrganization?.id ?? null;
@@ -209,6 +211,23 @@ async function resolveOrganizationAccessState(session: Session) {
     ),
     organizations,
   };
+}
+
+async function readRouteResolvedActiveOrganizationId(): Promise<OrganizationIdType | null> {
+  const serverContextActiveOrganizationId =
+    readGlobalAppServerContext().activeOrganizationId;
+
+  if (serverContextActiveOrganizationId !== undefined) {
+    return serverContextActiveOrganizationId;
+  }
+
+  if (isServerEnvironment()) {
+    return null;
+  }
+
+  const clientAppContext = await readFreshCachedClientAppContext();
+
+  return clientAppContext?.activeOrganizationId ?? null;
 }
 
 export async function getCurrentOrganizationMemberRole(

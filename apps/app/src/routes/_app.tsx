@@ -37,7 +37,8 @@ export async function loadAuthenticatedAppRoute(input?: {
   });
   const activeOrganizationId =
     clientAppContext === undefined
-      ? decodeActiveOrganizationIdFromSession(session)
+      ? (serverContext.activeOrganizationId ??
+        decodeActiveOrganizationIdFromSession(session))
       : clientAppContext.activeOrganizationId;
   const currentOrganizationRole =
     serverContext.currentOrganizationRole ??

@@ -14,6 +14,10 @@ import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
 } from "#/lib/server-api-forwarded-headers";
+import {
+  parseTenantHost,
+  readTenantHostConfigFromEnv,
+} from "#/lib/tenant-host";
 
 import { decodeServerAuthSession } from "./app-context-types";
 import type { AppAuthContextSnapshot } from "./app-context-types";
@@ -139,6 +143,7 @@ export async function buildAppAuthContextSnapshotForRequest(
   const activeOrganizationId = session?.session.activeOrganizationId
     ? decodeOrganizationId(session.session.activeOrganizationId)
     : null;
+  const requestedOrganizationSlug = readRequestedOrganizationSlug(request);
 
   if (
     !session ||
@@ -147,6 +152,7 @@ export async function buildAppAuthContextSnapshotForRequest(
   ) {
     return {
       activeOrganizationId,
+      ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
       session,
     };
   }
@@ -163,6 +169,7 @@ export async function buildAppAuthContextSnapshotForRequest(
     if (!activeOrganizationId) {
       return {
         activeOrganizationId,
+        ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
         session,
       };
     }
@@ -176,6 +183,7 @@ export async function buildAppAuthContextSnapshotForRequest(
       activeOrganizationId,
       currentOrganizationRole,
       organizations,
+      ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
       session,
     };
   }
@@ -187,7 +195,8 @@ export async function buildAppAuthContextSnapshotForRequest(
   const organizations = await organizationsPromise;
   const resolvedActiveOrganizationId = resolveActiveOrganizationId(
     activeOrganizationId,
-    organizations
+    organizations,
+    requestedOrganizationSlug
   );
   const activeOrganizationRole =
     activeOrganizationRolePromise === undefined
@@ -209,6 +218,7 @@ export async function buildAppAuthContextSnapshotForRequest(
     activeOrganizationId: resolvedActiveOrganizationId,
     currentOrganizationRole,
     organizations,
+    ...(requestedOrganizationSlug ? { requestedOrganizationSlug } : {}),
     session,
   };
 }
@@ -440,8 +450,19 @@ export async function readRequiredCurrentOrganizationRoleForRequest(
 
 function resolveActiveOrganizationId(
   activeOrganizationId: OrganizationId | null,
-  organizations: readonly OrganizationSummary[]
+  organizations: readonly OrganizationSummary[],
+  requestedOrganizationSlug?: string | undefined
 ): OrganizationId | null {
+  if (requestedOrganizationSlug) {
+    const requestedOrganization = organizations.find(
+      (organization) => organization.slug === requestedOrganizationSlug
+    );
+
+    if (requestedOrganization) {
+      return requestedOrganization.id;
+    }
+  }
+
   if (!activeOrganizationId) {
     return organizations[0]?.id ?? null;
   }
@@ -453,6 +474,44 @@ function resolveActiveOrganizationId(
     organizations[0]?.id ??
     null
   );
+}
+
+function readRequestedOrganizationSlug(request: Request) {
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+
+  if (!host) {
+    return;
+  }
+
+  const resolution = parseTenantHost(
+    stripValidPort(host),
+    readTenantHostConfigFromEnv()
+  );
+
+  return resolution.kind === "tenant" ? resolution.organizationSlug : undefined;
+}
+
+function stripValidPort(host: string) {
+  const portSeparatorIndex = host.lastIndexOf(":");
+
+  if (portSeparatorIndex === -1) {
+    return host;
+  }
+
+  const port = host.slice(portSeparatorIndex + 1);
+
+  if (!/^\d+$/u.test(port)) {
+    return host;
+  }
+
+  const portNumber = Number(port);
+
+  if (portNumber < 1 || portNumber > 65_535) {
+    return host;
+  }
+
+  return host.slice(0, portSeparatorIndex);
 }
 
 export function buildAuthReadHeaders(authRequest: ServerAuthRequest) {

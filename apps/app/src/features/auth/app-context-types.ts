@@ -50,6 +50,7 @@ const appAuthContextSnapshotFields = {
   activeOrganizationId: NullableOrganizationId,
   currentOrganizationRole: Schema.optional(OrganizationRole),
   organizations: Schema.optional(OrganizationSummaryListSchema),
+  requestedOrganizationSlug: Schema.optional(Schema.String),
 };
 
 const AppAuthContextSnapshotSchema = Schema.Struct(
