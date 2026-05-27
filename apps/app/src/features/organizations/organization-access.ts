@@ -173,14 +173,21 @@ export async function redirectIfOrganizationReady() {
     throw redirect(getLoginNavigationTarget());
   }
 
-  const { activeOrganizationId, activeOrganizationSync, organizations } =
-    await resolveOrganizationAccessState(session);
+  const {
+    activeOrganizationId,
+    activeOrganizationSync,
+    organizations,
+    routeResolvedNoAccessibleRequestedOrganization,
+  } = await resolveOrganizationAccessState(session);
 
   if (activeOrganizationId) {
     throw redirect({ to: "/" });
   }
 
-  if (organizations.length > 0) {
+  if (
+    organizations.length > 0 &&
+    !routeResolvedNoAccessibleRequestedOrganization
+  ) {
     throw redirect({ to: "/" });
   }
 
@@ -218,6 +225,10 @@ async function resolveOrganizationAccessState(session: Session) {
       activeOrganizationId
     ),
     organizations,
+    routeResolvedNoAccessibleRequestedOrganization:
+      routeResolvedActiveOrganization.kind === "resolved" &&
+      routeResolvedActiveOrganization.activeOrganizationId === null &&
+      routeResolvedActiveOrganization.requestedOrganizationSlug !== undefined,
   };
 }
 
@@ -225,6 +236,7 @@ type RouteResolvedActiveOrganization =
   | {
       readonly activeOrganizationId: OrganizationIdType | null;
       readonly kind: "resolved";
+      readonly requestedOrganizationSlug: string | undefined;
     }
   | { readonly kind: "none" };
 
@@ -239,6 +251,7 @@ async function readRouteResolvedActiveOrganizationId(): Promise<RouteResolvedAct
     return {
       activeOrganizationId: serverContext.activeOrganizationId ?? null,
       kind: "resolved",
+      requestedOrganizationSlug: serverContext.requestedOrganizationSlug,
     };
   }
 
@@ -256,6 +269,7 @@ async function readRouteResolvedActiveOrganizationId(): Promise<RouteResolvedAct
     return {
       activeOrganizationId: clientAppContext.activeOrganizationId,
       kind: "resolved",
+      requestedOrganizationSlug: clientAppContext.requestedOrganizationSlug,
     };
   }
 
