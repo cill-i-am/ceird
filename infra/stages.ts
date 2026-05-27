@@ -276,8 +276,7 @@ export function loadInfraStageConfig(stageInput: string) {
       mcpHostname,
     ];
     const authCookiePrefix = makeAuthCookiePrefix(identity);
-    const authCookieDomain =
-      tenantHostMode === "production" ? tenantBaseDomain : undefined;
+    const authCookieDomain = tenantBaseDomain;
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
       Config.mapOrFail(decodeAuthEmailFrom)
     );

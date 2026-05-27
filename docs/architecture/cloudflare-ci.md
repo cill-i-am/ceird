@@ -227,11 +227,11 @@ open PR consumes Cloudflare Worker routes, queues, Hyperdrive configs, and a
 Neon branch until it is closed. Watch provider quotas if many same-repository
 PRs are open at once.
 
-Preview auth cookies are not scoped to the shared `ceird.app` apex. Preview
-app/API hosts share cookies at their stage parent, for example
-`pr-123.ceird.app`, while production alone uses `ceird.app` for
-cross-subdomain tenant sessions. This prevents preview code from receiving
-production session cookies.
+Preview auth cookies are scoped to the shared `ceird.app` apex because preview
+tenant hosts use `org--pr-123.ceird.app` while the neutral app host uses
+`app.pr-123.ceird.app`. Stage-specific Better Auth cookie prefixes such as
+`ceird-pr-123` prevent preview Workers from accepting production sessions even
+when browsers send multiple stage-prefixed cookies under the same apex.
 
 ## Main Workflow
 

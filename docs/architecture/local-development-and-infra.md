@@ -176,12 +176,11 @@ metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
 credentials, observability logs, and traces. Alchemy injects
 `AUTH_TRUSTED_ORIGINS` from the system app origin plus the tenant wildcard
 origin pattern, while keeping `AUTH_APP_ORIGIN` as the neutral system app origin
-for redirects and emails. Production also injects `AUTH_COOKIE_DOMAIN` from the
-tenant base domain so system and tenant hosts under `ceird.app` share a session.
-Preview and branch stages leave `AUTH_COOKIE_DOMAIN` unset so production cookies
-are not sent to non-production Worker code under the same apex; their neutral
-app/API hosts still share the stage parent domain through the auth fallback and
-use the stage-derived `AUTH_COOKIE_PREFIX`.
+for redirects and emails. Deployed Alchemy stages inject `AUTH_COOKIE_DOMAIN`
+from the tenant base domain so system and tenant hosts under `ceird.app` share a
+session after organization creation or switching. Preview and branch stages rely
+on the stage-derived `AUTH_COOKIE_PREFIX` to prevent accepting another stage's
+session cookies under the shared apex.
 Canonical `app.<zone>`, `api.<zone>`, `mcp.<zone>`, and `agent.<zone>`
 hostnames require explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
 `CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` overrides after any existing

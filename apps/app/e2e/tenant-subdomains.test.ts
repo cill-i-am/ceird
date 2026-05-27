@@ -210,9 +210,17 @@ test("created organization can be opened on the tenant host", async ({
     throw new Error("PLAYWRIGHT_TENANT_URL is required.");
   }
 
+  const organizationSlug = deriveTenantOrganizationSlug(TENANT_ORIGIN);
   await createAuthenticatedOrganizationSession(request, page);
   await page.goto(TENANT_ORIGIN);
 
   await expect(page).toHaveURL(new RegExp(`^${escapeRegExp(TENANT_ORIGIN)}`));
-  await expect(page.getByText(ORGANIZATION_NAME)).toBeVisible();
+  const workspaceHome = page.getByRole("main", { name: "Workspace home" });
+
+  await expect(workspaceHome).toBeVisible({ timeout: 20_000 });
+  await expect(
+    workspaceHome.getByText(`${ORGANIZATION_NAME} / @${organizationSlug}`, {
+      exact: true,
+    })
+  ).toBeVisible();
 });

@@ -67,6 +67,10 @@ reserved-host bypass routes with no script for `app.ceird.app`,
 does not intercept system traffic. The shared organization slug contract also
 reserves `app`, `api`, `agent`, and `mcp`, preventing tenant URLs from colliding
 with those exact production hostnames.
+Deployed stages set `AUTH_COOKIE_DOMAIN` to the tenant base domain so the
+neutral system hosts and tenant hosts can share Better Auth sessions. Stage
+cookie prefixes keep PR, branch, staging, and production session names isolated
+under that shared parent domain.
 Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
 and passed through the app-owned Worker env module; the root stack does not own
 those runtime defaults. Worker compatibility flags and observability settings

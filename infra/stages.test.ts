@@ -219,7 +219,7 @@ describe("Alchemy stage identity", () => {
     expect(config.tenantHostMode).toBe("stage");
     expect(config.tenantRoutePattern).toBe("*--main.ceird.app/*");
     expect(config.tenantTrustedOriginPattern).toBe("https://*--main.ceird.app");
-    expect(config.authCookieDomain).toBeUndefined();
+    expect(config.authCookieDomain).toBe("ceird.app");
   });
 
   it("keeps local main-stage defaults in staged tenant mode", () => {
@@ -236,7 +236,7 @@ describe("Alchemy stage identity", () => {
     expect(config.tenantTrustedOriginPattern).toBe(
       "https://*--main.example.com"
     );
-    expect(config.authCookieDomain).toBeUndefined();
+    expect(config.authCookieDomain).toBe("example.com");
   });
 
   it("derives tenant host aliases for staging stages", () => {
@@ -265,7 +265,7 @@ describe("Alchemy stage identity", () => {
     expect(config.tenantStageAlias).toBe("pr-123");
     expect(config.tenantRoutePattern).toBe("*--pr-123.example.com/*");
     expect(config.authCookiePrefix).toBe("ceird-pr-123");
-    expect(config.authCookieDomain).toBeUndefined();
+    expect(config.authCookieDomain).toBe("example.com");
   });
 
   it("uses a short deterministic tenant alias for long branch stages", () => {

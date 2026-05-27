@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 
+import { appendOrganizationSlugSuffix } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
@@ -42,7 +43,7 @@ function createTestEmail(prefix: string): string {
 }
 
 function createTestSlug(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
+  return appendOrganizationSlugSuffix(prefix, randomUUID().slice(0, 12));
 }
 
 function createForwardedFor() {

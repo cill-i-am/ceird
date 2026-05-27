@@ -26,7 +26,10 @@ export class CreateOrganizationPage {
     });
     this.name = page.getByLabel("Team name");
     this.skipInvites = page.getByRole("button", { name: "Skip for now" });
-    this.submit = page.getByRole("button", { name: /create team/i });
+    this.submit = page.getByRole("button", {
+      exact: true,
+      name: "Create team",
+    });
   }
 
   async expectLoaded() {

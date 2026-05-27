@@ -289,7 +289,7 @@ describe("Cloudflare stack", () => {
     agentHostname: "agent.pr-123.example.com",
     apiHostname: "api.pr-123.example.com",
     appHostname: "app.pr-123.example.com",
-    authCookieDomain: undefined,
+    authCookieDomain: "example.com",
     authCookiePrefix: "ceird-pr-123",
     mcpHostname: "mcp.pr-123.example.com",
     stage: "pr-123",
@@ -335,6 +335,7 @@ describe("Cloudflare stack", () => {
       AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "900",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AUTH_APP_ORIGIN: "https://app.example.com",
+      AUTH_COOKIE_DOMAIN: "example.com",
       AUTH_COOKIE_PREFIX: "ceird-main",
       AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_RATE_LIMIT_ENABLED: "true",
@@ -409,7 +410,7 @@ describe("Cloudflare stack", () => {
     );
     expect(appEnv.VITE_TENANT_STAGE_ALIAS).toBe("pr-123");
     expect(domainEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
-    expect(domainEnv.AUTH_COOKIE_DOMAIN).toBeUndefined();
+    expect(domainEnv.AUTH_COOKIE_DOMAIN).toBe("example.com");
     expect(domainEnv.AUTH_COOKIE_PREFIX).toBe("ceird-pr-123");
     expect(domainEnv.AUTH_TRUSTED_ORIGINS.split(",")).toStrictEqual([
       "https://app.pr-123.example.com",
@@ -418,7 +419,7 @@ describe("Cloudflare stack", () => {
     expect(agentEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
   });
 
-  it("sets cross-subdomain auth cookies only for production tenant hosts", () => {
+  it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
     const domainEnv = makeDomainWorkerEnv({
