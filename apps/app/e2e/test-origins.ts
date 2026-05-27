@@ -10,6 +10,37 @@ export const readOptionalEnv = (name: string) => {
   return value && value.length > 0 ? value : undefined;
 };
 
+const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function deriveTenantOrganizationSlug(tenantOrigin: string) {
+  let tenantUrl: URL;
+
+  try {
+    tenantUrl = new URL(tenantOrigin);
+  } catch {
+    throw new Error("PLAYWRIGHT_TENANT_URL must be an absolute tenant URL.");
+  }
+
+  if (tenantUrl.protocol !== "https:" && tenantUrl.protocol !== "http:") {
+    throw new Error("PLAYWRIGHT_TENANT_URL must use an http or https origin.");
+  }
+
+  const [tenantLabel] = tenantUrl.hostname.toLowerCase().split(".");
+  const stageSeparatorIndex = tenantLabel?.lastIndexOf("--") ?? -1;
+  const organizationSlug =
+    stageSeparatorIndex === -1
+      ? tenantLabel
+      : tenantLabel?.slice(0, stageSeparatorIndex);
+
+  if (!organizationSlug || !ORGANIZATION_SLUG_PATTERN.test(organizationSlug)) {
+    throw new Error(
+      `PLAYWRIGHT_TENANT_URL must start with a tenant organization slug; received ${tenantOrigin}.`
+    );
+  }
+
+  return organizationSlug;
+}
+
 const readPlaywrightOrigin = (name: string, packageLocalFallback: string) => {
   const value = readOptionalEnv(name);
   if (value) {

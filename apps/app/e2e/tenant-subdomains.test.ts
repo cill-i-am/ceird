@@ -6,14 +6,14 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import {
   API_ORIGIN,
   APP_ORIGIN,
+  deriveTenantOrganizationSlug,
   TENANT_ORIGIN,
   USE_PACKAGE_LOCAL_SERVER,
-} from "./test-urls";
+} from "./test-origins";
 
 type CookieJar = Map<string, string>;
 
 const ORGANIZATION_NAME = "Preview Tenant Health";
-const ORGANIZATION_SLUG = "preview-tenant-health";
 
 test.skip(
   USE_PACKAGE_LOCAL_SERVER,
@@ -137,6 +137,7 @@ async function createAuthenticatedOrganizationSession(
   const cookieJar = new Map<string, string>();
   const forwardedFor = createForwardedFor();
   const email = createTenantHealthEmail();
+  const organizationSlug = deriveTenantOrganizationSlug(TENANT_ORIGIN);
   const password = "password123";
 
   const signupResponse = await fetchAuthRequest(request, "/sign-up/email", {
@@ -168,7 +169,7 @@ async function createAuthenticatedOrganizationSession(
     {
       body: {
         name: ORGANIZATION_NAME,
-        slug: ORGANIZATION_SLUG,
+        slug: organizationSlug,
       },
       cookieJar,
       forwardedFor,
