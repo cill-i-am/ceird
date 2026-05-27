@@ -27,6 +27,7 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "#/components/ui/sidebar";
 import { Skeleton } from "#/components/ui/skeleton";
+import { shouldHydrateOrganizationContext } from "#/features/auth/app-context-route-selection";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyId } from "#/hotkeys/hotkey-registry";
@@ -229,6 +230,10 @@ export function OrganizationSwitcher({
 }
 
 function getCurrentLocationPath() {
+  if (!shouldHydrateOrganizationContext(window.location.pathname)) {
+    return "/";
+  }
+
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
