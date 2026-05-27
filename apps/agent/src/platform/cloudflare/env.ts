@@ -15,6 +15,7 @@ export interface AgentWorkerConfigEnv {
   readonly AGENT_MODEL?: string;
   readonly AGENT_MUTATION_TOOLS_ENABLED?: string;
   readonly AUTH_APP_ORIGIN?: string;
+  readonly AUTH_TRUSTED_ORIGINS?: string;
   readonly NODE_ENV?: string;
 }
 

@@ -185,6 +185,7 @@ type AgentWorkerStackRuntimeConfigEnv = Required<
     | "AGENT_INTERNAL_SECRET"
     | "AGENT_MUTATION_TOOLS_ENABLED"
     | "AUTH_APP_ORIGIN"
+    | "AUTH_TRUSTED_ORIGINS"
     | "NODE_ENV"
   >
 >;
@@ -352,6 +353,8 @@ describe("Cloudflare stack", () => {
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN: "https://app.example.com",
+      AUTH_TRUSTED_ORIGINS:
+        "https://app.example.com,https://*--main.example.com",
       NODE_ENV: "production",
     });
     expect(appEnv).toStrictEqual({
@@ -417,6 +420,10 @@ describe("Cloudflare stack", () => {
       "https://*--pr-123.example.com",
     ]);
     expect(agentEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
+    expect(agentEnv.AUTH_TRUSTED_ORIGINS.split(",")).toStrictEqual([
+      "https://app.pr-123.example.com",
+      "https://*--pr-123.example.com",
+    ]);
   });
 
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
@@ -632,6 +639,8 @@ describe("Cloudflare stack", () => {
         AGENT_INTERNAL_SECRET: agentInternalSecret,
         AGENT_MUTATION_TOOLS_ENABLED: "true",
         AUTH_APP_ORIGIN: "https://app.example.com",
+        AUTH_TRUSTED_ORIGINS:
+          "https://app.example.com,https://*--main.example.com",
         NODE_ENV: "production",
       },
       name: "ceird-main-agent",

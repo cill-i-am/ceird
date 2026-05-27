@@ -46,12 +46,14 @@ type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export interface AgentWorkerStageConfig {
   readonly appHostname: string;
+  readonly tenantTrustedOriginPattern?: string | undefined;
 }
 
 export interface AgentWorkerConfiguredEnv {
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AGENT_MUTATION_TOOLS_ENABLED: "true";
   readonly AUTH_APP_ORIGIN: string;
+  readonly AUTH_TRUSTED_ORIGINS: string;
   readonly NODE_ENV: "production";
 }
 
@@ -76,10 +78,19 @@ export function makeAgentWorkerEnv(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly config: AgentWorkerStageConfig;
 }): AgentWorkerConfiguredEnv {
+  const authAppOrigin = `https://${input.config.appHostname}`;
+  const authTrustedOrigins = [
+    authAppOrigin,
+    input.config.tenantTrustedOriginPattern,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(",");
+
   return {
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AGENT_MUTATION_TOOLS_ENABLED: "true",
-    AUTH_APP_ORIGIN: `https://${input.config.appHostname}`,
+    AUTH_APP_ORIGIN: authAppOrigin,
+    AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     NODE_ENV: "production",
   } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;
 }

@@ -4,7 +4,7 @@ import type { Page, Response } from "@playwright/test";
 import { createSignedInOrganization } from "./helpers/auth-session";
 import { GlobalAgentChatPage } from "./pages/global-agent-chat";
 import { JobsPage } from "./pages/jobs-page";
-import { AGENT_ORIGIN, API_ORIGIN, APP_ORIGIN } from "./test-urls";
+import { AGENT_ORIGIN, API_ORIGIN } from "./test-urls";
 
 const GLOBAL_AGENT_CHAT_TIMEOUT_MS = 120_000;
 
@@ -163,7 +163,7 @@ test.describe("global agent chat", () => {
       expect.stringMatching(/^org:.+:user:.+:thread:[0-9a-f-]{36}$/)
     );
     expect(authorization.token).toEqual(expect.any(String));
-    await expect(page).toHaveURL(`${APP_ORIGIN}/jobs`);
+    await expect(page).toHaveURL(/\/jobs$/);
     const issuedAgentInstanceName = String(authorization.agentInstanceName);
     const issuedToken = String(authorization.token);
     await expect

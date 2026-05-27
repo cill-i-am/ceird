@@ -7,7 +7,10 @@ import type { Page } from "@playwright/test";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
-import { waitForSubmitHydration } from "./pages/wait-for-submit-hydration";
+import {
+  waitForLocatorHydration,
+  waitForSubmitHydration,
+} from "./pages/wait-for-submit-hydration";
 import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
 
 const apiRequire = createRequire(
@@ -250,6 +253,7 @@ test.describe("auth pages", () => {
       name: "Resend verification email",
     });
 
+    await waitForLocatorHydration(resendButton);
     await resendButton.click();
 
     await expect(

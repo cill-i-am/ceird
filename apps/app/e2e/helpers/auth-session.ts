@@ -5,7 +5,6 @@ import type { Page } from "@playwright/test";
 
 import { CreateOrganizationPage } from "../pages/create-organization-page";
 import { SignupPage } from "../pages/signup-page";
-import { APP_ORIGIN } from "../test-urls";
 
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
@@ -20,7 +19,7 @@ function createTestSlug(prefix: string): string {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
-  await expect(page).toHaveURL(`${APP_ORIGIN}/`, {
+  await expect(page).toHaveURL(/\/$/, {
     timeout: WORKSPACE_HOME_TIMEOUT_MS,
   });
   await expect(workspaceHome).toBeVisible({

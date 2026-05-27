@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { SignupPage } from "./pages/signup-page";
+import { waitForLocatorHydration } from "./pages/wait-for-submit-hydration";
 
 const ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS = 90_000;
 const AUTHENTICATED_HOME_TIMEOUT_MS = 30_000;
@@ -30,12 +31,20 @@ async function expectAuthenticatedHome(page: Page) {
 }
 
 async function openAccountMenu(page: Page) {
-  await page.getByRole("button", { name: /settings owner/i }).click();
+  const trigger = page.getByRole("button", { name: /settings owner/i });
+
+  await expect(trigger).toBeVisible({
+    timeout: AUTHENTICATED_HOME_TIMEOUT_MS,
+  });
+  await waitForLocatorHydration(trigger);
+  await trigger.click();
 }
 
 async function openSettingsFromAccountMenu(page: Page) {
   await openAccountMenu(page);
-  await page.getByRole("menuitem", { name: "Organization settings" }).click();
+  await page
+    .getByRole("menuitem", { name: "Organization settings" })
+    .click({ timeout: AUTHENTICATED_HOME_TIMEOUT_MS });
   await expect(page).toHaveURL(/\/organization\/settings$/);
 }
 

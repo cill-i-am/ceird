@@ -142,7 +142,10 @@ Cloudflare invocation URL logging while the query-token fallback exists. It
 binds native Workers AI directly and does not provision an account-level AI
 Gateway resource. Browser clients should prefer bearer connect tokens; when the
 query-token fallback is used, the Agent Worker strips it before routing into the
-Agents SDK runtime.
+Agents SDK runtime. Its browser CORS allowlist is derived from the neutral app
+origin plus the tenant wildcard origin pattern, so Agent SDK HTTP/WebSocket
+traffic continues to work after an authenticated user is redirected onto an
+organization tenant host.
 
 The Agent Worker bundle currently depends on packages that ship only a
 `main` entry even though the Alchemy Cloudflare Rolldown plugin resolves Worker
@@ -171,9 +174,10 @@ modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
 batch.
-The domain Worker is also configured with Better Auth env vars, MCP resource
-metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
-credentials, observability logs, and traces. Alchemy injects
+The domain and Agent Workers are also configured with trusted app-origin env
+vars; the domain Worker additionally receives Better Auth env vars, MCP
+resource metadata, optional MCP authorized-app cache sizing, Google Maps
+geocoding credentials, observability logs, and traces. Alchemy injects
 `AUTH_TRUSTED_ORIGINS` from the system app origin plus the tenant wildcard
 origin pattern, while keeping `AUTH_APP_ORIGIN` as the neutral system app origin
 for redirects and emails. Deployed Alchemy stages inject `AUTH_COOKIE_DOMAIN`

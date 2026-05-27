@@ -6,7 +6,6 @@ import type { Page } from "@playwright/test";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { JobDetailSheet, JobsCreateSheet, JobsPage } from "./pages/jobs-page";
 import { SignupPage } from "./pages/signup-page";
-import { APP_ORIGIN } from "./test-urls";
 
 const JOBS_FLOW_TIMEOUT_MS = 240_000;
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
@@ -32,7 +31,7 @@ async function signUpAndCreateOrganization(page: Page) {
   await createOrganizationPage.submit.click();
   await createOrganizationPage.skipInviteStep();
 
-  await expect(page).toHaveURL(`${APP_ORIGIN}/`, {
+  await expect(page).toHaveURL(/\/$/, {
     timeout: WORKSPACE_HOME_TIMEOUT_MS,
   });
   await expect(page.getByRole("main", { name: "Workspace home" })).toBeVisible({
@@ -149,7 +148,22 @@ test.describe("jobs flow", () => {
 });
 
 async function runCommandBarAction(page: Page, label: string) {
-  await page.keyboard.press("ControlOrMeta+K");
+  const commandBar = page.getByRole("dialog", { name: "Command bar" });
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await page.keyboard.press("ControlOrMeta+K");
+
+    try {
+      await expect(commandBar).toBeVisible({
+        timeout: 1000,
+      });
+      break;
+    } catch {
+      // Retry until the client-side command hotkey has hydrated.
+    }
+  }
+
+  await expect(commandBar).toBeVisible();
   const option = page.getByRole("option", { exact: true, name: label });
   await option.click();
   await expect(option).toBeHidden();
