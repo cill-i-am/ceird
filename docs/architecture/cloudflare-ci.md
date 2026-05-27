@@ -60,11 +60,14 @@ wildcard DNS and Universal SSL coverage.
 Alchemy owns the stage route that sends tenant host traffic to the app Worker:
 production uses `*.ceird.app/*`, while non-production stages use
 `*--{tenantStageAlias}.ceird.app/*`. The wildcard DNS record for `*.ceird.app`
-is global/shared and is adopted or updated by the stack, not duplicated per PR.
-When a PR stage is destroyed, Alchemy removes that PR's Worker route; the shared
-wildcard DNS remains. Production also creates bypass routes for the reserved
-system hostnames so the production tenant wildcard cannot capture
-`app.ceird.app`, `api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
+is global/shared and is not duplicated per PR. The stack will maintain an
+existing Ceird-managed tenant wildcard record, but it deliberately fails instead
+of silently adopting an unmanaged `*.ceird.app` record; operators must delete,
+tag, or explicitly adopt that record before reconciliation. When a PR stage is
+destroyed, Alchemy removes that PR's Worker route; the shared wildcard DNS
+remains. Production also creates bypass routes for the reserved system hostnames
+so the production tenant wildcard cannot capture `app.ceird.app`,
+`api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
 
 ## GitHub Secrets And Variables
 
