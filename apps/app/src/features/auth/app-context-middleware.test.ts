@@ -67,6 +67,17 @@ function createBetterAuthSessionPayload(session: ServerAuthSession) {
   };
 }
 
+function clearTenantHostEnv() {
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete process.env.VITE_TENANT_BASE_DOMAIN;
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete process.env.VITE_TENANT_HOST_MODE;
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete process.env.VITE_TENANT_RESERVED_HOSTNAMES;
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete process.env.VITE_TENANT_STAGE_ALIAS;
+}
+
 describe("app/auth server function middleware exports", () => {
   it("exports app/auth server function middleware", () => {
     expect(optionalAuthFunctionMiddleware).toBeDefined();
@@ -126,9 +137,18 @@ describe("app context request middleware route selection", () => {
 
 describe("app context request middleware payload", () => {
   let originalApiOrigin: string | undefined;
+  let originalTenantBaseDomain: string | undefined;
+  let originalTenantHostMode: string | undefined;
+  let originalTenantReservedHostnames: string | undefined;
+  let originalTenantStageAlias: string | undefined;
 
   beforeEach(() => {
     originalApiOrigin = process.env.API_ORIGIN;
+    originalTenantBaseDomain = process.env.VITE_TENANT_BASE_DOMAIN;
+    originalTenantHostMode = process.env.VITE_TENANT_HOST_MODE;
+    originalTenantReservedHostnames =
+      process.env.VITE_TENANT_RESERVED_HOSTNAMES;
+    originalTenantStageAlias = process.env.VITE_TENANT_STAGE_ALIAS;
   });
 
   afterEach(() => {
@@ -139,6 +159,31 @@ describe("app context request middleware payload", () => {
       delete process.env.API_ORIGIN;
     } else {
       process.env.API_ORIGIN = originalApiOrigin;
+    }
+    if (originalTenantBaseDomain === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_BASE_DOMAIN;
+    } else {
+      process.env.VITE_TENANT_BASE_DOMAIN = originalTenantBaseDomain;
+    }
+    if (originalTenantHostMode === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_HOST_MODE;
+    } else {
+      process.env.VITE_TENANT_HOST_MODE = originalTenantHostMode;
+    }
+    if (originalTenantReservedHostnames === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_RESERVED_HOSTNAMES;
+    } else {
+      process.env.VITE_TENANT_RESERVED_HOSTNAMES =
+        originalTenantReservedHostnames;
+    }
+    if (originalTenantStageAlias === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete process.env.VITE_TENANT_STAGE_ALIAS;
+    } else {
+      process.env.VITE_TENANT_STAGE_ALIAS = originalTenantStageAlias;
     }
   });
 
@@ -192,6 +237,101 @@ describe("app context request middleware payload", () => {
       organizations,
     });
   });
+
+  it("resolves the route request context active organization from a tenant host", async () => {
+    const organizations = [
+      { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+      { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+    ];
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json(organizations))
+      .mockResolvedValueOnce(Response.json({ role: "external" }))
+      .mockResolvedValueOnce(Response.json({ role: "admin" }));
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/jobs",
+        request: new Request("https://app.pr-123.ceird.app/jobs", {
+          headers: {
+            cookie: "better-auth.session_token=session-token",
+            host: "app.pr-123.ceird.app",
+            "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
+          },
+        }),
+      })
+    ).resolves.toStrictEqual({
+      activeOrganizationId: "org_456",
+      authSession: authSessionWithActiveOrganization,
+      currentOrganizationRole: "admin",
+      organizations,
+      requestedOrganizationSlug: "beta-field-ops",
+    });
+  });
+
+  it.each([
+    {
+      configureTenantEnv: clearTenantHostEnv,
+      name: "missing tenant env",
+    },
+    {
+      configureTenantEnv: () => {
+        vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+        vi.stubEnv("VITE_TENANT_HOST_MODE", "disabled");
+        vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+        vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+      },
+      name: "disabled tenant host mode",
+    },
+  ])(
+    "ignores tenant-looking route request hosts with $name",
+    async ({ configureTenantEnv }) => {
+      const organizations = [
+        { id: "org_123", name: "Acme Field Ops", slug: "acme-field-ops" },
+        { id: "org_456", name: "Beta Field Ops", slug: "beta-field-ops" },
+      ];
+
+      process.env.API_ORIGIN = "https://api.example.com";
+      configureTenantEnv();
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          Response.json(
+            createBetterAuthSessionPayload(authSessionWithActiveOrganization)
+          )
+        )
+        .mockResolvedValueOnce(Response.json(organizations))
+        .mockResolvedValueOnce(Response.json({ role: "owner" }));
+
+      const context = await loadRequestAppContextMiddlewareContext({
+        pathname: "/jobs",
+        request: new Request("https://app.pr-123.ceird.app/jobs", {
+          headers: {
+            cookie: "better-auth.session_token=session-token",
+            host: "app.pr-123.ceird.app",
+            "x-forwarded-host": "beta-field-ops--pr-123.ceird.app",
+          },
+        }),
+      });
+
+      expect(context).toStrictEqual({
+        activeOrganizationId: "org_123",
+        authSession: authSessionWithActiveOrganization,
+        currentOrganizationRole: "owner",
+        organizations,
+      });
+      expect(context).not.toHaveProperty("requestedOrganizationSlug");
+    }
+  );
 });
 
 describe("app auth context snapshot for request", () => {

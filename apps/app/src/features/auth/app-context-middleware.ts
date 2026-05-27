@@ -41,6 +41,7 @@ export async function loadRequestAppContextMiddlewareContext({
     await import("./auth-request-context.server");
   const snapshot = await buildAppAuthContextSnapshotForRequest(request, {
     hydrateOrganizationContext,
+    resolveActiveOrganizationFromList: hydrateOrganizationContext,
   });
   const shouldIncludeOrganizationContext =
     hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
