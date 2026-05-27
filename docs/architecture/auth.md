@@ -125,8 +125,15 @@ Current config decisions:
   auth/app hosts; they cannot include schemes, ports, paths, or wildcards
 - canonical deployed app/API sibling domains share the configured parent cookie
   domain, for example `app.ceird.app` and `api.ceird.app` use `ceird.app`
-- Alchemy stages set the cookie domain to the tenant base domain, normally
-  `ceird.app`, and isolate sessions with the stage-specific
+- production Alchemy sets the cookie domain to the tenant base domain, normally
+  `ceird.app`, so `app.ceird.app`, `api.ceird.app`, and tenant hosts share
+  the same session
+- non-production Alchemy stages do not set a shared apex cookie domain by
+  default, because a `ceird.app` parent cookie would send production sessions
+  to preview/staging Workers under the same apex
+- non-production neutral app/API hosts still share their stage parent domain
+  such as `pr-123.ceird.app` through the app/API sibling-domain fallback
+- deployed stages isolate Better Auth cookie names with the stage-specific
   `AUTH_COOKIE_PREFIX`
 - package-local localhost development keeps host-scoped cookies because tenant
   hosts are disabled there
@@ -145,14 +152,15 @@ which infra derives from the stage tenant route pattern. Production trusts
 `https://*--{tenantStageAlias}.ceird.app`. The neutral app origin is still
 trusted explicitly.
 
-Cookies are scoped to the tenant base domain in deployed Alchemy stages,
-normally `ceird.app`, so neutral app/API hosts and tenant hosts can share the
-session. Cross-stage isolation comes from the stage-specific
-`AUTH_COOKIE_PREFIX` (`ceird-main`, `ceird-pr-123`, or a branch-derived
-prefix), so sessions from one stage do not collide with sessions from another
-stage even though the browser can send them to hosts under the same apex
-domain. Package-local localhost development keeps tenant hosts disabled and
-uses host-scoped cookies.
+Cookies are scoped to the tenant base domain only in production. Production
+uses `ceird.app`, so neutral app/API hosts and tenant hosts can share the
+session. Non-production stages keep cookies scoped to the neutral app/API stage
+parent, such as `pr-123.ceird.app`, rather than the shared apex. This prevents
+preview or staging Workers from receiving production cookies while preserving
+neutral-host auth for branch deploys. Cross-stage isolation also uses the
+stage-specific `AUTH_COOKIE_PREFIX` (`ceird-main`, `ceird-pr-123`, or a
+branch-derived prefix). Package-local localhost development keeps tenant hosts
+disabled and uses host-scoped cookies.
 
 Current OAuth/OIDC discovery endpoints provided by Better Auth under the auth
 base path:

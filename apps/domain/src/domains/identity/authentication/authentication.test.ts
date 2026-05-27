@@ -309,6 +309,12 @@ describe("makeAuthenticationConfig()", () => {
         config.trustedOrigins
       )
     ).toBeTruthy();
+    expect(
+      matchesTrustedOrigin(
+        "https://nested.acme-field-ops--pr-123.ceird.app",
+        config.trustedOrigins
+      )
+    ).toBeFalsy();
   }, 10_000);
 
   it("validates configured trusted origins as http or https origin patterns", () => {
@@ -833,6 +839,38 @@ describe("createAuthentication()", () => {
     expect(delegated).toBeFalsy();
   });
 
+  it("matches tenant wildcard origins at the auth CORS boundary", async () => {
+    const handler = withAuthenticationCors(
+      () => Promise.resolve(Response.json({ delegated: true })),
+      ["https://*--pr-123.ceird.app"]
+    );
+
+    const acceptedResponse = await handler(
+      new Request("https://api.pr-123.ceird.app/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-method": "POST",
+          origin: "https://acme-field-ops--pr-123.ceird.app",
+        },
+      })
+    );
+    const rejectedResponse = await handler(
+      new Request("https://api.pr-123.ceird.app/api/auth/sign-in/email", {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-method": "POST",
+          origin: "https://app.pr-123.ceird.app",
+        },
+      })
+    );
+
+    expect(acceptedResponse.status).toBe(204);
+    expect(acceptedResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://acme-field-ops--pr-123.ceird.app"
+    );
+    expect(rejectedResponse.status).toBe(403);
+  });
+
   it("runs default email failure reports with the captured Effect context", async () => {
     const { logger, logs } = captureLogs();
 
@@ -859,6 +897,37 @@ describe("createAuthentication()", () => {
     );
     expect(serializedLogs).toContain("Password reset email delivery failed");
     expect(serializedLogs).toContain("delivery failed");
+  });
+
+  it("redacts sensitive values from email failure reports", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyEmailFailureReporterRedaction() {
+      const runtimeContext = yield* Effect.context<never>();
+      const reportFailure = makeEmailFailureReporter(
+        "Verification email delivery failed",
+        runtimeContext
+      );
+
+      reportFailure(
+        new Error(
+          "delivery to person@example.com failed at https://example.com/reset?token=secret"
+        )
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await Effect.runPromise(Effect.yieldNow);
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("[redacted-email]");
+    expect(serializedLogs).toContain("[redacted-url]");
+    expect(serializedLogs).not.toContain("person@example.com");
+    expect(serializedLogs).not.toContain("token=secret");
   });
 
   it("configures organization invitation delivery through the Better Auth organization plugin", async () => {
@@ -1436,9 +1505,19 @@ describe("createAuthentication()", () => {
       app: matchesTrustedOrigin("https://preview.app.ceird.example.com", [
         "https://*.app.ceird.example.com",
       ]),
+      nested: matchesTrustedOrigin(
+        "https://nested.preview.app.ceird.example.com",
+        ["https://*.app.ceird.example.com"]
+      ),
+      productionStageHost: matchesTrustedOrigin(
+        "https://app.pr-123.ceird.app",
+        ["https://*.ceird.app"]
+      ),
     }).toStrictEqual({
       api: false,
       app: true,
+      nested: false,
+      productionStageHost: false,
     });
   }, 10_000);
 });

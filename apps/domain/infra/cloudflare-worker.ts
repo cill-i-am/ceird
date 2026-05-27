@@ -17,6 +17,7 @@ export interface DomainWorkerStageConfig {
   readonly agentActionRunStaleAfterSeconds: number;
   readonly apiHostname: string;
   readonly appHostname: string;
+  readonly authCookieDomain?: string | undefined;
   readonly authCookiePrefix: string;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
@@ -56,7 +57,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly AGENT_ACTION_RUN_STALE_AFTER_SECONDS: string;
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
-  readonly AUTH_COOKIE_DOMAIN: string;
+  readonly AUTH_COOKIE_DOMAIN?: string | undefined;
   readonly AUTH_COOKIE_PREFIX: string;
   readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
   readonly AUTH_EMAIL_FROM_NAME: string;
@@ -106,7 +107,6 @@ export function makeDomainWorkerEnv(input: {
     ),
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AUTH_APP_ORIGIN: authAppOrigin,
-    AUTH_COOKIE_DOMAIN: input.config.tenantBaseDomain,
     AUTH_COOKIE_PREFIX: input.config.authCookiePrefix,
     AUTH_EMAIL_FROM: input.config.authEmailFrom,
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
@@ -117,6 +117,11 @@ export function makeDomainWorkerEnv(input: {
     BETTER_AUTH_BASE_URL: betterAuthBaseUrl,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
+    ...(input.config.authCookieDomain === undefined
+      ? {}
+      : {
+          AUTH_COOKIE_DOMAIN: input.config.authCookieDomain,
+        }),
     ...(input.config.mcpAuthorizedAppCacheMaxEntries === undefined
       ? {}
       : {

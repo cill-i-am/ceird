@@ -175,6 +175,13 @@ interface CloudflareItemResponse<T> extends CloudflareBaseResponse {
 
 interface CloudflareListResponse<T> extends CloudflareBaseResponse {
   readonly result?: readonly T[];
+  readonly result_info?: {
+    readonly count?: number;
+    readonly page?: number;
+    readonly per_page?: number;
+    readonly total_count?: number;
+    readonly total_pages?: number;
+  };
 }
 
 interface CloudflareZoneResult {
@@ -212,6 +219,7 @@ class CloudflareTenantRoutingApiError extends Error {
 
   constructor(input: {
     readonly body: unknown;
+    readonly cause?: unknown;
     readonly method: string;
     readonly path: string;
     readonly status: number | undefined;
@@ -222,7 +230,8 @@ class CloudflareTenantRoutingApiError extends Error {
         method: input.method,
         path: input.path,
         status: input.status,
-      })
+      }),
+      input.cause === undefined ? undefined : { cause: input.cause }
     );
     this.name = "CloudflareTenantRoutingApiError";
     this.status = input.status;
@@ -537,10 +546,25 @@ function makeCloudflareAuthHeaders(
       };
     }
     default: {
-      const unsupportedCredentials: never = credentials;
-      throw new Error(
-        `Unsupported Cloudflare credential type: ${JSON.stringify(unsupportedCredentials)}.`
-      );
+      const unsupportedCredentials = credentials as {
+        readonly type?: unknown;
+      };
+      throw new CloudflareTenantRoutingApiError({
+        body: {
+          errors: [
+            {
+              message: `Unsupported Cloudflare credential type: ${
+                typeof unsupportedCredentials.type === "string"
+                  ? unsupportedCredentials.type
+                  : "unknown"
+              }.`,
+            },
+          ],
+        },
+        method: "AUTH",
+        path: "cloudflare-credentials",
+        status: undefined,
+      });
     }
   }
 }
@@ -581,9 +605,21 @@ function cloudflareApiRequest<T extends CloudflareBaseResponse>(
       return body;
     },
     catch: (cause) =>
-      cause instanceof Error
+      cause instanceof CloudflareTenantRoutingApiError
         ? cause
-        : new Error("Cloudflare tenant routing request failed.", { cause }),
+        : new CloudflareTenantRoutingApiError({
+            body: {
+              errors: [
+                {
+                  message: "Cloudflare tenant routing request failed.",
+                },
+              ],
+            },
+            cause,
+            method: input.method,
+            path: input.path,
+            status: undefined,
+          }),
   });
 }
 
@@ -735,19 +771,55 @@ function findCloudflareWorkerRoute(input: {
   readonly pattern: string;
   readonly zoneId: string;
 }) {
-  const params = new URLSearchParams({ per_page: "100" });
+  const perPage = 100;
+  const noMatchingRoute: CloudflareWorkerRouteResult | undefined = undefined;
 
-  return cloudflareApiRequest<
-    CloudflareListResponse<CloudflareWorkerRouteResult>
-  >({
-    credentials: input.client.credentials,
-    method: "GET",
-    path: `/zones/${input.zoneId}/workers/routes?${params.toString()}`,
-  }).pipe(
-    Effect.map((response) =>
-      response.result?.find((route) => route.pattern === input.pattern)
-    )
-  );
+  const readPage = (
+    page: number
+  ): Effect.Effect<CloudflareWorkerRouteResult | undefined, Error> => {
+    const params = new URLSearchParams({
+      page: String(page),
+      per_page: String(perPage),
+    });
+
+    return cloudflareApiRequest<
+      CloudflareListResponse<CloudflareWorkerRouteResult>
+    >({
+      credentials: input.client.credentials,
+      method: "GET",
+      path: `/zones/${input.zoneId}/workers/routes?${params.toString()}`,
+    }).pipe(
+      Effect.flatMap((response) => {
+        const matchingRoute = response.result?.find(
+          (route) => route.pattern === input.pattern
+        );
+
+        if (matchingRoute !== undefined) {
+          return Effect.succeed(matchingRoute);
+        }
+
+        return hasNextCloudflareListPage(response, {
+          page,
+          perPage,
+        })
+          ? readPage(page + 1)
+          : Effect.succeed(noMatchingRoute);
+      })
+    );
+  };
+
+  return readPage(1);
+}
+
+function hasNextCloudflareListPage<T>(
+  response: CloudflareListResponse<T>,
+  input: { readonly page: number; readonly perPage: number }
+) {
+  if (typeof response.result_info?.total_pages === "number") {
+    return input.page < response.result_info.total_pages;
+  }
+
+  return (response.result?.length ?? 0) >= input.perPage;
 }
 
 function readCloudflareWorkerRoute(input: {

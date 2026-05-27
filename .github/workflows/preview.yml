@@ -247,6 +247,7 @@ jobs:
           wait_for_auth_domain_forwarding
           wait_for_health "$PLAYWRIGHT_AGENT_URL/health" "Agent"
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
+          wait_for_health "$PLAYWRIGHT_TENANT_URL/health" "Tenant app"
           wait_for_app_authenticated_navigation
 
       - name: Comment preview URLs
@@ -396,3 +397,95 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
+      - name: Delete preview tenant route fallback
+        if: always()
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const stage = process.env.PREVIEW_STAGE;
+          const zoneName = process.env.CEIRD_ZONE_NAME;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+
+          if (!/^pr-[0-9]+$/.test(stage ?? "")) {
+            throw new Error(`Refusing to delete tenant route for unexpected preview stage: ${stage}`);
+          }
+          if (!zoneName) {
+            throw new Error("CEIRD_ZONE_NAME is required for preview tenant route cleanup");
+          }
+          if (!accountId) {
+            throw new Error("CLOUDFLARE_ACCOUNT_ID is required for preview tenant route cleanup");
+          }
+          if (!apiToken) {
+            throw new Error("CLOUDFLARE_API_TOKEN is required for preview tenant route cleanup");
+          }
+
+          const apiBaseUrl = "https://api.cloudflare.com/client/v4";
+          const routePattern = `*--${stage}.${zoneName}/*`;
+
+          async function cloudflare(path, init = {}) {
+            const response = await fetch(`${apiBaseUrl}${path}`, {
+              ...init,
+              headers: {
+                authorization: `Bearer ${apiToken}`,
+                "content-type": "application/json",
+                ...(init.headers ?? {}),
+              },
+            });
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok || body?.success !== true) {
+              const details = body?.errors
+                ?.map((error) => error.message)
+                .filter(Boolean)
+                .join(", ");
+              throw new Error(
+                `Cloudflare ${init.method ?? "GET"} ${path} failed with ${response.status}${details ? `: ${details}` : ""}`
+              );
+            }
+
+            return body;
+          }
+
+          const zones = await cloudflare(
+            `/zones?account.id=${encodeURIComponent(accountId)}&name=${encodeURIComponent(zoneName)}&per_page=1`
+          );
+          const zoneId = zones.result?.find((zone) => zone.name === zoneName)?.id;
+
+          if (!zoneId) {
+            throw new Error(`Cloudflare zone not found: ${zoneName}`);
+          }
+
+          for (let page = 1; ; page += 1) {
+            const routes = await cloudflare(
+              `/zones/${zoneId}/workers/routes?page=${page}&per_page=100`
+            );
+            const route = routes.result?.find(
+              (candidate) => candidate.pattern === routePattern
+            );
+
+            if (route) {
+              await cloudflare(`/zones/${zoneId}/workers/routes/${route.id}`, {
+                method: "DELETE",
+              });
+              console.log(`Deleted preview tenant route ${routePattern}`);
+              break;
+            }
+
+            const totalPages = routes.result_info?.total_pages;
+            const hasNextPage =
+              typeof totalPages === "number"
+                ? page < totalPages
+                : (routes.result?.length ?? 0) >= 100;
+
+            if (!hasNextPage) {
+              console.log(`No preview tenant route found for ${routePattern}`);
+              break;
+            }
+          }
+          NODE
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

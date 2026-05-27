@@ -125,6 +125,10 @@ export function isOrganizationSlug(value: unknown): value is OrganizationSlug {
   return isOrganizationSlugValue(value);
 }
 
+export function decodeOrganizationSlug(input: unknown): OrganizationSlug {
+  return Schema.decodeUnknownSync(OrganizationSlugSchema)(input);
+}
+
 export function isReservedOrganizationSlug(value: string): boolean {
   return (RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(value);
 }

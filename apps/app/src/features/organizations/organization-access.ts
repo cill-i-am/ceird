@@ -5,6 +5,7 @@ import {
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
+  OrganizationSlug,
   OrganizationSummary,
 } from "@ceird/identity-core";
 import { redirect } from "@tanstack/react-router";
@@ -236,7 +237,7 @@ type RouteResolvedActiveOrganization =
   | {
       readonly activeOrganizationId: OrganizationIdType | null;
       readonly kind: "resolved";
-      readonly requestedOrganizationSlug: string | undefined;
+      readonly requestedOrganizationSlug: OrganizationSlug | undefined;
     }
   | { readonly kind: "none" };
 

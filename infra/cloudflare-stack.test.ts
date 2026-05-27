@@ -155,7 +155,6 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
     | "AGENT_INTERNAL_SECRET"
     | "AUTH_APP_ORIGIN"
-    | "AUTH_COOKIE_DOMAIN"
     | "AUTH_COOKIE_PREFIX"
     | "AUTH_EMAIL_FROM"
     | "AUTH_EMAIL_FROM_NAME"
@@ -173,6 +172,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     DomainWorkerConfigEnv,
     | "MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES"
     | "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS"
+    | "AUTH_COOKIE_DOMAIN"
   >;
 type McpWorkerStackRuntimeConfigEnv = Required<
   Pick<McpWorkerConfigEnv, "ALCHEMY_STACK_NAME" | "ALCHEMY_STAGE" | "NODE_ENV">
@@ -289,6 +289,7 @@ describe("Cloudflare stack", () => {
     agentHostname: "agent.pr-123.example.com",
     apiHostname: "api.pr-123.example.com",
     appHostname: "app.pr-123.example.com",
+    authCookieDomain: undefined,
     authCookiePrefix: "ceird-pr-123",
     mcpHostname: "mcp.pr-123.example.com",
     stage: "pr-123",
@@ -334,7 +335,6 @@ describe("Cloudflare stack", () => {
       AGENT_ACTION_RUN_STALE_AFTER_SECONDS: "900",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
       AUTH_APP_ORIGIN: "https://app.example.com",
-      AUTH_COOKIE_DOMAIN: "example.com",
       AUTH_COOKIE_PREFIX: "ceird-main",
       AUTH_EMAIL_FROM_NAME: "Ceird",
       AUTH_RATE_LIMIT_ENABLED: "true",
@@ -409,13 +409,33 @@ describe("Cloudflare stack", () => {
     );
     expect(appEnv.VITE_TENANT_STAGE_ALIAS).toBe("pr-123");
     expect(domainEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
-    expect(domainEnv.AUTH_COOKIE_DOMAIN).toBe("example.com");
+    expect(domainEnv.AUTH_COOKIE_DOMAIN).toBeUndefined();
     expect(domainEnv.AUTH_COOKIE_PREFIX).toBe("ceird-pr-123");
     expect(domainEnv.AUTH_TRUSTED_ORIGINS.split(",")).toStrictEqual([
       "https://app.pr-123.example.com",
       "https://*--pr-123.example.com",
     ]);
     expect(agentEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
+  });
+
+  it("sets cross-subdomain auth cookies only for production tenant hosts", () => {
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const agentInternalSecret = Redacted.make("agent-secret");
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret,
+      betterAuthSecret,
+      config: {
+        ...configWithoutCloudflareBootstrapSecrets,
+        apiHostname: "api.ceird.app",
+        appHostname: "app.ceird.app",
+        authCookieDomain: "ceird.app",
+        mcpHostname: "mcp.ceird.app",
+        tenantBaseDomain: "ceird.app",
+        tenantTrustedOriginPattern: "https://*.ceird.app",
+      },
+    });
+
+    expect(domainEnv.AUTH_COOKIE_DOMAIN).toBe("ceird.app");
   });
 
   it("passes disabled auth rate limits through to preview domain Workers", () => {

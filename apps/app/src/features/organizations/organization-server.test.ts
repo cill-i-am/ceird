@@ -748,6 +748,11 @@ describe("server organization lookup", () => {
           name: "Acme Field Ops",
           slug: "acme-field-ops-retry",
         })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+        })
       );
 
     await expect(
@@ -792,6 +797,11 @@ describe("server organization lookup", () => {
           id: "org_123",
           name: "A".repeat(40),
           slug: `${"a".repeat(31)}-retry123`,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
         })
       );
 

@@ -1,11 +1,13 @@
 import {
   OrganizationId,
   OrganizationRole,
+  OrganizationSlugSchema,
   OrganizationSummaryListSchema,
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
   OrganizationRole as OrganizationRoleType,
+  OrganizationSlug,
   OrganizationSummary,
 } from "@ceird/identity-core";
 import { getGlobalStartContext } from "@tanstack/react-start";
@@ -20,7 +22,7 @@ function createAppServerContextSchema() {
     authSession: Schema.optional(Schema.NullOr(ServerAuthSessionSchema)),
     currentOrganizationRole: Schema.optional(OrganizationRole),
     organizations: Schema.optional(OrganizationSummaryListSchema),
-    requestedOrganizationSlug: Schema.optional(Schema.String),
+    requestedOrganizationSlug: Schema.optional(OrganizationSlugSchema),
   });
 }
 
@@ -29,7 +31,7 @@ export interface AppServerContext {
   readonly authSession?: ServerAuthSession | null;
   readonly currentOrganizationRole?: OrganizationRoleType;
   readonly organizations?: readonly OrganizationSummary[];
-  readonly requestedOrganizationSlug?: string | undefined;
+  readonly requestedOrganizationSlug?: OrganizationSlug | undefined;
 }
 
 export function readAppServerContext(input: unknown): AppServerContext {

@@ -6,6 +6,7 @@ import {
 import type {
   OrganizationId,
   OrganizationMemberRoleResponse,
+  OrganizationSlug,
   OrganizationSummary,
 } from "@ceird/identity-core";
 
@@ -430,7 +431,7 @@ export async function readRequiredCurrentOrganizationRoleForRequest(
 function resolveActiveOrganizationId(
   activeOrganizationId: OrganizationId | null,
   organizations: readonly OrganizationSummary[],
-  requestedOrganizationSlug?: string | undefined
+  requestedOrganizationSlug?: OrganizationSlug | undefined
 ): OrganizationId | null {
   if (requestedOrganizationSlug) {
     const requestedOrganization = organizations.find(
@@ -465,7 +466,7 @@ async function resolveActiveOrganizationContextFromList({
 }: {
   readonly activeOrganizationId: OrganizationId | null;
   readonly authRequest: ServerAuthRequest;
-  readonly requestedOrganizationSlug: string | undefined;
+  readonly requestedOrganizationSlug: OrganizationSlug | undefined;
   readonly session: ServerAuthSession;
 }): Promise<AppAuthContextSnapshot> {
   const organizationsPromise = readServerOrganizations(authRequest);

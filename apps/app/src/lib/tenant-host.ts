@@ -1,4 +1,5 @@
 import { isOrganizationSlug } from "@ceird/identity-core";
+import type { OrganizationSlug } from "@ceird/identity-core";
 
 export type TenantHostMode = "disabled" | "production" | "stage";
 
@@ -12,7 +13,7 @@ export interface TenantHostConfig {
 export type TenantHostResolution =
   | { readonly kind: "disabled" }
   | { readonly kind: "system" }
-  | { readonly kind: "tenant"; readonly organizationSlug: string };
+  | { readonly kind: "tenant"; readonly organizationSlug: OrganizationSlug };
 
 const VALID_HOST_PATTERN = /^[a-z0-9.-]+$/;
 const DNS_LABEL_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -66,7 +67,7 @@ export function parseTenantHost(
 function readStageOrganizationSlug(
   label: string,
   stageAlias: string | undefined
-) {
+): string | undefined {
   const normalizedStageAlias = normalizeStageAlias(stageAlias);
 
   if (normalizedStageAlias === undefined) {

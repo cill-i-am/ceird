@@ -452,17 +452,18 @@ function WorkspaceSetupStep({
     <Tooltip>
       <TooltipTrigger
         render={
-          <span
-            aria-hidden="true"
+          <button
+            type="button"
             aria-label={accessibleLabel}
             title={tooltipText}
             className={cn(
-              "relative z-10 flex size-4 shrink-0 cursor-help items-center justify-center rounded-full ring-1 transition-[background-color,color,box-shadow,transform] duration-200 motion-reduce:transition-none",
+              "relative z-10 flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border-0 p-0 ring-1 transition-[background-color,color,box-shadow,transform] duration-200 motion-reduce:transition-none",
               getSetupStepMarkerClassName(state)
             )}
           />
         }
       >
+        <span className="sr-only">{accessibleLabel}</span>
         {state === "complete" ? (
           <HugeiconsIcon
             icon={CheckmarkCircle02Icon}

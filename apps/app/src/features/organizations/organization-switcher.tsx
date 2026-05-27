@@ -105,6 +105,18 @@ export function OrganizationSwitcher({
       const nextOrganizationId = nextOrganization.id;
 
       if (currentActiveOrganizationId === nextOrganizationId) {
+        const tenantUrl = buildOrganizationTenantUrl(
+          nextOrganization.slug,
+          getCurrentLocationPath(),
+          readTenantHostConfigFromEnv()
+        );
+
+        if (tenantUrl && tenantUrl !== window.location.href) {
+          window.location.assign(tenantUrl);
+          return;
+        }
+
+        setOpen(false);
         return;
       }
 
@@ -459,15 +471,12 @@ function OrganizationSwitcherListContent({
           >
             <OrganizationMenuIcon />
             <span className="min-w-0 flex-1 truncate">{organization.name}</span>
-            {switchState.status === "switching" &&
-            switchState.organizationId === organization.id ? (
-              <DotMatrixButtonLoader />
-            ) : (
-              <OrganizationMenuShortcut
-                index={index}
-                name={organization.name}
-              />
-            )}
+            <OrganizationMenuTrailing
+              activeOrganizationId={activeOrganizationId}
+              index={index}
+              organization={organization}
+              switchState={switchState}
+            />
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
@@ -494,6 +503,38 @@ function OrganizationSwitcherListContent({
       </DropdownMenuItem>
     </>
   );
+}
+
+function OrganizationMenuTrailing({
+  activeOrganizationId,
+  index,
+  organization,
+  switchState,
+}: {
+  readonly activeOrganizationId: OrganizationId | null;
+  readonly index: number;
+  readonly organization: OrganizationSummary;
+  readonly switchState: SwitchState;
+}) {
+  if (
+    switchState.status === "switching" &&
+    switchState.organizationId === organization.id
+  ) {
+    return <DotMatrixButtonLoader />;
+  }
+
+  if (organization.id === activeOrganizationId) {
+    return (
+      <Badge
+        variant="secondary"
+        className="ml-auto h-6 px-2 text-[0.6875rem] leading-none text-muted-foreground"
+      >
+        Current
+      </Badge>
+    );
+  }
+
+  return <OrganizationMenuShortcut index={index} name={organization.name} />;
 }
 
 function OrganizationSwitchHotkeys({

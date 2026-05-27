@@ -1,3 +1,5 @@
+import { isOrganizationSlug } from "@ceird/identity-core";
+
 export const DEFAULT_APP_ORIGIN = "http://127.0.0.1:4173";
 export const DEFAULT_API_ORIGIN = "http://127.0.0.1:3001";
 export const DEFAULT_AGENT_ORIGIN = DEFAULT_APP_ORIGIN;
@@ -9,8 +11,6 @@ export const readOptionalEnv = (name: string) => {
   const value = process.env[name]?.trim();
   return value && value.length > 0 ? value : undefined;
 };
-
-const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function deriveTenantOrganizationSlug(tenantOrigin: string) {
   let tenantUrl: URL;
@@ -32,7 +32,7 @@ export function deriveTenantOrganizationSlug(tenantOrigin: string) {
       ? tenantLabel
       : tenantLabel?.slice(0, stageSeparatorIndex);
 
-  if (!organizationSlug || !ORGANIZATION_SLUG_PATTERN.test(organizationSlug)) {
+  if (!isOrganizationSlug(organizationSlug)) {
     throw new Error(
       `PLAYWRIGHT_TENANT_URL must start with a tenant organization slug; received ${tenantOrigin}.`
     );

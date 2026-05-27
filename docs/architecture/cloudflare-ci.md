@@ -71,6 +71,11 @@ remains. Production also creates bypass routes for the reserved system hostnames
 so the production tenant wildcard cannot capture `app.ceird.app`,
 `api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
 
+Preview cleanup also runs a direct Cloudflare Worker-route cleanup fallback for
+the known `*--pr-<number>.ceird.app/*` pattern after `alchemy destroy`. This
+covers previews created from PR code that declared tenant-route resources before
+that same stack shape reaches the repository default branch.
+
 ## GitHub Secrets And Variables
 
 Create a GitHub environment named `main` for production deploys and main-stage
@@ -221,6 +226,12 @@ Preview resources persist for the lifetime of the pull request. That means each
 open PR consumes Cloudflare Worker routes, queues, Hyperdrive configs, and a
 Neon branch until it is closed. Watch provider quotas if many same-repository
 PRs are open at once.
+
+Preview auth cookies are not scoped to the shared `ceird.app` apex. Preview
+app/API hosts share cookies at their stage parent, for example
+`pr-123.ceird.app`, while production alone uses `ceird.app` for
+cross-subdomain tenant sessions. This prevents preview code from receiving
+production session cookies.
 
 ## Main Workflow
 

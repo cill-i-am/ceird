@@ -58,6 +58,7 @@ export interface InfraStageConfig {
   readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
   readonly authCookiePrefix: string;
+  readonly authCookieDomain: DomainName | undefined;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
   readonly authRateLimitEnabled: boolean;
@@ -275,6 +276,8 @@ export function loadInfraStageConfig(stageInput: string) {
       mcpHostname,
     ];
     const authCookiePrefix = makeAuthCookiePrefix(identity);
+    const authCookieDomain =
+      tenantHostMode === "production" ? tenantBaseDomain : undefined;
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
       Config.mapOrFail(decodeAuthEmailFrom)
     );
@@ -371,6 +374,7 @@ export function loadInfraStageConfig(stageInput: string) {
       agentHostname,
       mcpHostname,
       authCookiePrefix,
+      authCookieDomain,
       authEmailFrom,
       authEmailFromName,
       authRateLimitEnabled,

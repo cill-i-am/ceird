@@ -7,6 +7,7 @@ import {
   decodeCreateOrganizationInput,
   decodeOrganizationId,
   decodeOrganizationRole,
+  decodeOrganizationSlug,
   decodePublicInvitationPreview,
   decodeSessionId,
   decodeUpdateOrganizationInput,
@@ -688,19 +689,25 @@ function serializeBackgroundTaskError(error: unknown) {
     return {
       cause:
         "cause" in error && typeof error.cause === "string"
-          ? error.cause
+          ? sanitizeAuthFailureLogValue(error.cause)
           : undefined,
       message:
         "message" in error && typeof error.message === "string"
-          ? error.message
-          : String(error),
+          ? sanitizeAuthFailureLogValue(error.message)
+          : sanitizeAuthFailureLogValue(String(error)),
       tag: "_tag" in error && typeof error._tag === "string" ? error._tag : "",
     };
   }
 
   return {
-    message: String(error),
+    message: sanitizeAuthFailureLogValue(String(error)),
   };
+}
+
+function sanitizeAuthFailureLogValue(value: string) {
+  return value
+    .replaceAll(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[redacted-email]")
+    .replaceAll(/https?:\/\/[^\s]+/g, "[redacted-url]");
 }
 
 function serializeUnknownCause(error: unknown) {
@@ -845,12 +852,21 @@ async function resolveAdministrativeOrganizationTargetId(
   const organizationSlug = searchParams.get("organizationSlug");
 
   if (organizationSlug !== null) {
+    const decodedOrganizationSlug = decodeIdentityBoundaryValue(
+      organizationSlug,
+      decodeOrganizationSlug
+    );
+
+    if (decodedOrganizationSlug === null) {
+      return null;
+    }
+
     const [organizationRow] = await database
       .select({
         id: organizationTable.id,
       })
       .from(organizationTable)
-      .where(eq(organizationTable.slug, organizationSlug))
+      .where(eq(organizationTable.slug, decodedOrganizationSlug))
       .limit(1);
 
     return organizationRow === undefined

@@ -2,6 +2,7 @@ import {
   IsoDateTimeString,
   OrganizationId,
   OrganizationRole,
+  OrganizationSlugSchema,
   OrganizationSummaryListSchema,
   SessionId,
   UserId,
@@ -50,7 +51,7 @@ const appAuthContextSnapshotFields = {
   activeOrganizationId: NullableOrganizationId,
   currentOrganizationRole: Schema.optional(OrganizationRole),
   organizations: Schema.optional(OrganizationSummaryListSchema),
-  requestedOrganizationSlug: Schema.optional(Schema.String),
+  requestedOrganizationSlug: Schema.optional(OrganizationSlugSchema),
 };
 
 const AppAuthContextSnapshotSchema = Schema.Struct(

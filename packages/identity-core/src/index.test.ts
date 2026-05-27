@@ -6,6 +6,7 @@ import {
   decodeInvitationId,
   decodeOrganizationSummary,
   decodeOrganizationRole,
+  decodeOrganizationSlug,
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
@@ -85,6 +86,11 @@ describe("organization slug generation", () => {
       expect(isOrganizationSlug(slug)).toBeFalsy();
       expect(isOrganizationSlug(`${slug}-org`)).toBeTruthy();
     }
+  }, 1000);
+
+  it("decodes organization slugs through the shared boundary helper", () => {
+    expect(decodeOrganizationSlug("  acme-field-ops  ")).toBe("acme-field-ops");
+    expect(() => decodeOrganizationSlug("app")).toThrow(/reserved/);
   }, 1000);
 
   it("keeps truncated slugs short enough for tenant stage host labels", () => {

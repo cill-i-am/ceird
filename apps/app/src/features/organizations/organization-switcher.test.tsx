@@ -819,6 +819,37 @@ describe("organization switcher", () => {
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
   });
 
+  it("navigates the already active organization to its tenant URL", async () => {
+    vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
+    vi.stubEnv("VITE_TENANT_HOST_MODE", "stage");
+    vi.stubEnv("VITE_TENANT_RESERVED_HOSTNAMES", "app.pr-123.ceird.app");
+    vi.stubEnv("VITE_TENANT_STAGE_ALIAS", "pr-123");
+    mockedListOrganizations.mockResolvedValue([
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),
+      organization({ id: "org_beta", name: "Beta Builds", slug: "beta" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderSwitcher(
+      organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" })
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /acme field ops/i })
+    );
+    expect(screen.getByText("Current")).toBeVisible();
+
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /acme field ops/i })
+    );
+
+    expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
+    expect(mockedRouterInvalidate).not.toHaveBeenCalled();
+    expect(assignedUrl).toBe(
+      "https://acme--pr-123.ceird.app/jobs/42?tab=notes#activity"
+    );
+  });
+
   it("opens the switcher with G O when multiple organizations are available", async () => {
     mockedListOrganizations.mockResolvedValue([
       organization({ id: "org_acme", name: "Acme Field Ops", slug: "acme" }),

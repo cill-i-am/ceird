@@ -174,15 +174,14 @@ batch.
 The domain Worker is also configured with Better Auth env vars, MCP resource
 metadata, optional MCP authorized-app cache sizing, Google Maps geocoding
 credentials, observability logs, and traces. Alchemy injects
-`AUTH_COOKIE_DOMAIN` from the tenant base domain and `AUTH_TRUSTED_ORIGINS`
-from the system app origin plus the tenant wildcard origin pattern, while
-keeping `AUTH_APP_ORIGIN` as the neutral system app origin for redirects and
-emails. That lets Better Auth share cookies across system and tenant hosts under
-the same base domain, such as `ceird.app`, without pointing app-owned email or
-redirect links at a tenant host. Preview and branch stages rely on the
-stage-derived `AUTH_COOKIE_PREFIX` to keep Better Auth cookie names distinct
-while the browser sends those cookies to other hosts under the same tenant base
-domain.
+`AUTH_TRUSTED_ORIGINS` from the system app origin plus the tenant wildcard
+origin pattern, while keeping `AUTH_APP_ORIGIN` as the neutral system app origin
+for redirects and emails. Production also injects `AUTH_COOKIE_DOMAIN` from the
+tenant base domain so system and tenant hosts under `ceird.app` share a session.
+Preview and branch stages leave `AUTH_COOKIE_DOMAIN` unset so production cookies
+are not sent to non-production Worker code under the same apex; their neutral
+app/API hosts still share the stage parent domain through the auth fallback and
+use the stage-derived `AUTH_COOKIE_PREFIX`.
 Canonical `app.<zone>`, `api.<zone>`, `mcp.<zone>`, and `agent.<zone>`
 hostnames require explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
 `CEIRD_MCP_HOSTNAME`, and `CEIRD_AGENT_HOSTNAME` overrides after any existing

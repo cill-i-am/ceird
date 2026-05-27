@@ -450,6 +450,7 @@ jobs:
           wait_for_auth_domain_forwarding
           wait_for_health "$PLAYWRIGHT_AGENT_URL/health" "Agent"
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
+          wait_for_health "$PLAYWRIGHT_TENANT_URL/health" "Tenant app"
           wait_for_app_authenticated_navigation
 
   staging-e2e:

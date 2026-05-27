@@ -59,7 +59,9 @@ tenants use `{orgSlug}--{tenantStageAlias}.ceird.app`. The stack manages one
 shared wildcard DNS record for `*.ceird.app` and one Alchemy-owned Worker route
 for the active tenant pattern, such as `*.ceird.app/*` in production or
 `*--pr-123.ceird.app/*` for a PR preview. Destroying a PR stage removes that
-stage route but leaves the shared wildcard DNS record in place. Production adds
+stage route but leaves the shared wildcard DNS record in place; preview CI also
+deletes the known route pattern directly after destroy as a stale-state
+fallback. Production adds
 reserved-host bypass routes with no script for `app.ceird.app`,
 `api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app` so the tenant wildcard
 does not intercept system traffic. The shared organization slug contract also

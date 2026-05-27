@@ -10,6 +10,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   agentHostname: "agent.example.com",
   apiHostname: "api.example.com",
   appHostname: "app.example.com",
+  authCookieDomain: undefined,
   authCookiePrefix: "ceird-main",
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",

@@ -75,7 +75,9 @@ export function matchesTrustedOrigin(
     }
 
     const escapedPattern = pattern.replaceAll(/[.+^${}()|[\]\\]/g, "\\$&");
-    const matcher = escapedPattern.replaceAll("*", ".*").replaceAll("?", ".");
+    const matcher = escapedPattern
+      .replaceAll("*", "[^.]+")
+      .replaceAll("?", "[^.]");
 
     return new RegExp(`^${matcher}$`).test(origin);
   });

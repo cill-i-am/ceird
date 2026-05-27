@@ -392,6 +392,93 @@ describe("Cloudflare tenant routing", () => {
     expect(Unowned.is(result)).toBe(true);
   });
 
+  it("finds existing Worker routes after the first Cloudflare page", async () => {
+    const { fetchMock, requests } = makeCloudflareFetchMock((request) => {
+      if (request.url.pathname === "/client/v4/zones") {
+        return matchingZoneResponse();
+      }
+
+      expect(request.url.pathname).toBe(
+        "/client/v4/zones/zone-id/workers/routes"
+      );
+
+      const page = request.url.searchParams.get("page");
+
+      if (page === "1") {
+        return {
+          result: Array.from({ length: 100 }, (_, index) => ({
+            id: `route-page-1-${index}`,
+            pattern: `unrelated-${index}.ceird.app/*`,
+            script: "another-worker",
+          })),
+          result_info: {
+            count: 100,
+            page: 1,
+            per_page: 100,
+            total_count: 101,
+            total_pages: 2,
+          },
+          success: true,
+        };
+      }
+
+      expect(page).toBe("2");
+
+      return {
+        result: [
+          {
+            id: "route-foreign",
+            pattern: "*--pr-123.ceird.app/*",
+            script: "another-worker",
+          },
+        ],
+        result_info: {
+          count: 1,
+          page: 2,
+          per_page: 100,
+          total_count: 101,
+          total_pages: 2,
+        },
+        success: true,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runTenantRoutingEffect(
+      Effect.gen(function* () {
+        const provider = yield* findProviderByType<TenantWorkerRoute>(
+          "Ceird.CloudflareTenantWorkerRoute"
+        );
+        if (!provider.read) {
+          return yield* Effect.die("Tenant Worker route provider needs read.");
+        }
+
+        return yield* provider.read({
+          id: "TenantWorkerRoute",
+          instanceId: "instance-id",
+          olds: {
+            pattern: "*--pr-123.ceird.app/*",
+            scriptName: "ceird-pr-123-app",
+            zoneName: "ceird.app",
+          },
+          output: undefined,
+        });
+      })
+    );
+
+    expect(result).toMatchObject({
+      pattern: "*--pr-123.ceird.app/*",
+      routeId: "route-foreign",
+      scriptName: "another-worker",
+      zoneId: "zone-id",
+    });
+    expect(
+      requests
+        .filter((request) => request.url.pathname.endsWith("/workers/routes"))
+        .map((request) => request.url.searchParams.get("page"))
+    ).toStrictEqual(["1", "2"]);
+  });
+
   it("refuses to reassign existing Worker routes without saved state", async () => {
     const { fetchMock, requests } = makeCloudflareFetchMock((request) => {
       if (request.url.pathname === "/client/v4/zones") {

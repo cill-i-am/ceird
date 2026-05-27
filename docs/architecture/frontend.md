@@ -86,9 +86,10 @@ When tenant hosts are enabled, the switcher sets the Better Auth active
 organization and then navigates the browser to that organization's tenant host
 while preserving the current path. Production tenant URLs are
 `https://{orgSlug}.ceird.app`; non-production tenant URLs are
-`https://{orgSlug}--{tenantStageAlias}.ceird.app`. If tenant mode is disabled,
-or the computed tenant URL matches the current page, switching falls back to the
-same-router invalidation path.
+`https://{orgSlug}--{tenantStageAlias}.ceird.app`. Selecting the already active
+organization still navigates to its tenant host when the user is on a neutral
+host. If tenant mode is disabled, or the computed tenant URL matches the current
+page, switching falls back to the same-router invalidation path.
 TanStack Start request middleware wired from
 `apps/app/src/features/auth/app-context-middleware.ts` hydrates auth request
 context once for routes that need it. Organization pages also prefetch the
