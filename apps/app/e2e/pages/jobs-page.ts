@@ -2,7 +2,10 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
-import { waitForSubmitHydration } from "./wait-for-submit-hydration";
+import {
+  waitForLocatorHydration,
+  waitForSubmitHydration,
+} from "./wait-for-submit-hydration";
 
 const JOBS_ROUTE_TIMEOUT_MS = 30_000;
 
@@ -105,6 +108,10 @@ export class JobsCreateSheet {
   async chooseSiteOption(optionLabel: string) {
     await this.site.click();
     await chooseCommandOption(this.page, optionLabel);
+
+    if (optionLabel === "Create a new site") {
+      await this.expectSiteDialogReady();
+    }
   }
 
   async chooseContactOption(optionLabel: string) {
@@ -126,6 +133,14 @@ export class JobsCreateSheet {
       this.page,
       `Create new contact: "${contactName}"`
     );
+  }
+
+  async expectSiteDialogReady() {
+    await Promise.all([
+      expect(this.siteDialog).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
+      waitForLocatorHydration(this.siteName),
+      waitForLocatorHydration(this.siteSubmit),
+    ]);
   }
 
   async closeSiteDialog() {
