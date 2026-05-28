@@ -307,7 +307,7 @@ jobs:
             }
 
       - name: Install Playwright browsers
-        run: pnpm --filter app exec playwright install chromium
+        run: pnpm --filter app exec playwright install --only-shell chromium
 
       - name: Run E2E tests
         run: pnpm --filter app e2e
