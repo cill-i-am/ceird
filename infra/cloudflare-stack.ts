@@ -61,6 +61,19 @@ export function makeCloudflareHyperdriveProps(input: {
   } satisfies InputProps<Cloudflare.HyperdriveProps>;
 }
 
+export function makeTenantReservedHostBypassRoutePatterns(
+  config: Pick<
+    InfraStageConfig,
+    "tenantReservedHostnames" | "tenantRoutePattern"
+  >
+) {
+  if (config.tenantRoutePattern === undefined) {
+    return [];
+  }
+
+  return config.tenantReservedHostnames.map((hostname) => `${hostname}/*`);
+}
+
 export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   input: CloudflareStackInput
 ) {
@@ -195,16 +208,16 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
           zoneName: input.config.zoneName,
         });
   const tenantReservedHostBypassRoutes =
-    input.config.tenantRoutePattern === undefined ||
-    input.config.tenantHostMode !== "production"
+    input.config.tenantRoutePattern === undefined
       ? []
       : yield* Effect.all(
-          input.config.tenantReservedHostnames.map((hostname, index) =>
-            TenantWorkerRoute(`TenantReservedHostBypassRoute${index}`, {
-              pattern: `${hostname}/*`,
-              scriptName: undefined,
-              zoneName: input.config.zoneName,
-            })
+          makeTenantReservedHostBypassRoutePatterns(input.config).map(
+            (pattern, index) =>
+              TenantWorkerRoute(`TenantReservedHostBypassRoute${index}`, {
+                pattern,
+                scriptName: undefined,
+                zoneName: input.config.zoneName,
+              })
           )
         );
 
