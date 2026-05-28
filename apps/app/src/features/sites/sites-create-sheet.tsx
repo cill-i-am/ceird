@@ -66,6 +66,12 @@ export function SitesCreateSheet({
   const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const updateValues = React.useCallback((patch: Partial<SiteCreateDraft>) => {
+    setValues((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }, []);
   function finishClosedSheet() {
     if (closeNavigationTimeoutRef.current) {
       clearTimeout(closeNavigationTimeoutRef.current);
@@ -201,7 +207,7 @@ export function SitesCreateSheet({
               draft={values}
               errors={fieldErrors}
               idPrefix="site"
-              onDraftChange={setValues}
+              onDraftPatch={updateValues}
             />
           </div>
 
