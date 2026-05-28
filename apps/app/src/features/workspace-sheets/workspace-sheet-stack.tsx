@@ -77,48 +77,26 @@ export function WorkspaceSheetStack({
   const sitesStatus = getDomainStatus(existingSitesViewer, sitesResource);
   const entries = useWorkspaceSheetRenderEntries(stack);
 
-  let content = (
+  const content = (
     <>
       {entries.map(({ key, sheet }, index) => (
         <WorkspaceSheetEntry
           active={index === entries.length - 1}
           canCreate={canCreateWorkspaceRecords(routeContext)}
+          existingJobsViewer={existingJobsViewer}
+          existingSitesViewer={existingSitesViewer}
+          jobsResource={jobsResource}
           jobsStatus={jobsStatus}
           key={key}
           onClose={pop}
+          routeContext={routeContext}
           sheet={sheet}
+          sitesResource={sitesResource}
           sitesStatus={sitesStatus}
         />
       ))}
     </>
   );
-
-  if (existingJobsViewer === undefined && jobsResource.status === "success") {
-    content = (
-      <JobsStateProvider
-        activeOrganizationId={routeContext.activeOrganizationId}
-        list={jobsResource.data.list}
-        options={jobsResource.data.options}
-        queryClient={routeContext.queryClient}
-        viewer={jobsResource.data.viewer}
-      >
-        {content}
-      </JobsStateProvider>
-    );
-  }
-
-  if (existingSitesViewer === undefined && sitesResource.status === "success") {
-    content = (
-      <SitesStateProvider
-        activeOrganizationId={routeContext.activeOrganizationId}
-        options={sitesResource.data.options}
-        queryClient={routeContext.queryClient}
-        viewer={sitesResource.data.viewer}
-      >
-        {content}
-      </SitesStateProvider>
-    );
-  }
 
   return content;
 }
@@ -126,16 +104,30 @@ export function WorkspaceSheetStack({
 function WorkspaceSheetEntry({
   active,
   canCreate,
+  existingJobsViewer,
+  existingSitesViewer,
+  jobsResource,
   jobsStatus,
   onClose,
+  routeContext,
   sheet,
+  sitesResource,
   sitesStatus,
 }: {
   readonly active: boolean;
   readonly canCreate: boolean;
+  readonly existingJobsViewer: ReturnType<typeof useOptionalJobsViewer>;
+  readonly existingSitesViewer: ReturnType<typeof useOptionalSitesViewer>;
+  readonly jobsResource: AsyncResource<
+    Awaited<ReturnType<typeof loadJobsRouteData>>
+  >;
   readonly jobsStatus: WorkspaceSheetDomainStatus;
   readonly onClose: () => void;
+  readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
   readonly sheet: WorkspaceSheet;
+  readonly sitesResource: AsyncResource<
+    Awaited<ReturnType<typeof loadSitesRouteData>>
+  >;
   readonly sitesStatus: WorkspaceSheetDomainStatus;
 }) {
   if (
@@ -169,11 +161,17 @@ function WorkspaceSheetEntry({
       }
 
       return (
-        <JobsCreateSheet
-          active={active}
-          initialSiteId={sheet.siteId}
-          onClose={onClose}
-        />
+        <WorkspaceJobsStateScope
+          existingJobsViewer={existingJobsViewer}
+          jobsResource={jobsResource}
+          routeContext={routeContext}
+        >
+          <JobsCreateSheet
+            active={active}
+            initialSiteId={sheet.siteId}
+            onClose={onClose}
+          />
+        </WorkspaceJobsStateScope>
       );
     }
     case "job.detail": {
@@ -191,11 +189,17 @@ function WorkspaceSheetEntry({
       }
 
       return (
-        <WorkspaceJobDetailSheet
-          active={active}
-          jobId={sheet.jobId}
-          onClose={onClose}
-        />
+        <WorkspaceJobsStateScope
+          existingJobsViewer={existingJobsViewer}
+          jobsResource={jobsResource}
+          routeContext={routeContext}
+        >
+          <WorkspaceJobDetailSheet
+            active={active}
+            jobId={sheet.jobId}
+            onClose={onClose}
+          />
+        </WorkspaceJobsStateScope>
       );
     }
     case "site.create": {
@@ -213,11 +217,17 @@ function WorkspaceSheetEntry({
       }
 
       return (
-        <SitesCreateSheet
-          active={active}
-          onClose={onClose}
-          siteCreatedTargetId={sheet.targetSheetId}
-        />
+        <WorkspaceSitesStateScope
+          existingSitesViewer={existingSitesViewer}
+          routeContext={routeContext}
+          sitesResource={sitesResource}
+        >
+          <SitesCreateSheet
+            active={active}
+            onClose={onClose}
+            siteCreatedTargetId={sheet.targetSheetId}
+          />
+        </WorkspaceSitesStateScope>
       );
     }
     case "site.detail": {
@@ -235,17 +245,82 @@ function WorkspaceSheetEntry({
       }
 
       return (
-        <WorkspaceSiteDetailSheet
-          active={active}
-          onClose={onClose}
-          siteId={sheet.siteId}
-        />
+        <WorkspaceSitesStateScope
+          existingSitesViewer={existingSitesViewer}
+          routeContext={routeContext}
+          sitesResource={sitesResource}
+        >
+          <WorkspaceSiteDetailSheet
+            active={active}
+            onClose={onClose}
+            siteId={sheet.siteId}
+          />
+        </WorkspaceSitesStateScope>
       );
     }
     default: {
       return assertNever(sheet);
     }
   }
+}
+
+function WorkspaceJobsStateScope({
+  children,
+  existingJobsViewer,
+  jobsResource,
+  routeContext,
+}: {
+  readonly children: React.ReactNode;
+  readonly existingJobsViewer: ReturnType<typeof useOptionalJobsViewer>;
+  readonly jobsResource: AsyncResource<
+    Awaited<ReturnType<typeof loadJobsRouteData>>
+  >;
+  readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
+}) {
+  if (existingJobsViewer !== undefined || jobsResource.status !== "success") {
+    return children;
+  }
+
+  return (
+    <JobsStateProvider
+      activeOrganizationId={routeContext.activeOrganizationId}
+      list={jobsResource.data.list}
+      options={jobsResource.data.options}
+      queryClient={routeContext.queryClient}
+      viewer={jobsResource.data.viewer}
+    >
+      {children}
+    </JobsStateProvider>
+  );
+}
+
+function WorkspaceSitesStateScope({
+  children,
+  existingSitesViewer,
+  routeContext,
+  sitesResource,
+}: {
+  readonly children: React.ReactNode;
+  readonly existingSitesViewer: ReturnType<typeof useOptionalSitesViewer>;
+  readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
+  readonly sitesResource: AsyncResource<
+    Awaited<ReturnType<typeof loadSitesRouteData>>
+  >;
+}) {
+  if (existingSitesViewer !== undefined || sitesResource.status !== "success") {
+    return children;
+  }
+
+  return (
+    <SitesStateProvider
+      activeOrganizationId={routeContext.activeOrganizationId}
+      options={sitesResource.data.options}
+      queryClient={routeContext.queryClient}
+      viewer={sitesResource.data.viewer}
+    >
+      {children}
+    </SitesStateProvider>
+  );
 }
 
 function WorkspaceSheetDataFallback({

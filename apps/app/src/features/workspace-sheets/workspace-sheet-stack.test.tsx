@@ -1,14 +1,38 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { JobsStateProvider } from "#/features/jobs/jobs-state";
 
 import { WorkspaceSheetEventsProvider } from "./workspace-sheet-events";
 import { WorkspaceSheetNavigationProvider } from "./workspace-sheet-navigation";
+import type { WorkspaceSheet } from "./workspace-sheet-search";
 import { WorkspaceSheetStack } from "./workspace-sheet-stack";
 
-const { mockedLoadJobsRouteData } = vi.hoisted(() => ({
-  mockedLoadJobsRouteData: vi.fn<(...args: unknown[]) => unknown>(),
-}));
+const EMPTY_JOBS_LIST = { items: [], nextCursor: undefined };
+const EMPTY_JOBS_OPTIONS = {
+  contacts: [],
+  labels: [],
+  members: [],
+  sites: [],
+};
+const OWNER_VIEWER = { role: "owner" as const, userId: "user_123" as never };
+
+const {
+  getDeferredSitesRouteData,
+  mockedLoadJobsRouteData,
+  mockedLoadSitesRouteData,
+  resetDeferredSitesRouteData,
+} = vi.hoisted(() => {
+  let deferredSitesRouteData = Promise.withResolvers<unknown>();
+
+  return {
+    getDeferredSitesRouteData: () => deferredSitesRouteData,
+    mockedLoadJobsRouteData: vi.fn<(...args: unknown[]) => unknown>(),
+    mockedLoadSitesRouteData: vi.fn<(...args: unknown[]) => unknown>(),
+    resetDeferredSitesRouteData: () => {
+      deferredSitesRouteData = Promise.withResolvers<unknown>();
+    },
+  };
+});
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -48,9 +72,21 @@ vi.mock(import("#/features/jobs/jobs-route-loader"), async (importActual) => {
   };
 });
 
+vi.mock(import("#/features/sites/sites-route-loader"), async (importActual) => {
+  const actual = await importActual();
+
+  return {
+    ...actual,
+    loadSitesRouteData: mockedLoadSitesRouteData.mockImplementation(
+      () => getDeferredSitesRouteData().promise
+    ) as typeof actual.loadSitesRouteData,
+  };
+});
+
 describe("workspace sheet stack", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    resetDeferredSitesRouteData();
   });
 
   it("renders skeleton loading state while a job sheet provider loads", () => {
@@ -132,4 +168,63 @@ describe("workspace sheet stack", () => {
 
     expect(screen.getAllByRole("dialog", { name: "New job" })).toHaveLength(1);
   });
+
+  it("keeps an inactive parent sheet draft when a nested domain provider resolves", async () => {
+    const parentStack = [{ kind: "job.create" }] as const;
+    const nestedStack = [
+      { kind: "job.create" },
+      { kind: "site.create" },
+    ] as const;
+    const view = render(renderStackWithJobsProvider(parentStack));
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "Replace boiler relay" },
+      });
+    });
+
+    await act(async () => {
+      view.rerender(renderStackWithJobsProvider(nestedStack));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("dialog", { name: "Loading site" })).toBeVisible();
+
+    await act(async () => {
+      const deferredSitesRouteData = getDeferredSitesRouteData();
+
+      deferredSitesRouteData.resolve({
+        options: { sites: [] },
+        viewer: { role: "owner", userId: "user_123" },
+      });
+      await deferredSitesRouteData.promise;
+    });
+
+    const siteDialog = await screen.findByRole("dialog", { name: "New site" });
+    expect(siteDialog).toBeVisible();
+
+    await act(async () => {
+      view.rerender(renderStackWithJobsProvider(parentStack));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Replace boiler relay");
+  });
 });
+
+function renderStackWithJobsProvider(stack: readonly WorkspaceSheet[]) {
+  return (
+    <JobsStateProvider
+      activeOrganizationId={"org_123" as never}
+      list={EMPTY_JOBS_LIST}
+      options={EMPTY_JOBS_OPTIONS}
+      viewer={OWNER_VIEWER}
+    >
+      <WorkspaceSheetEventsProvider>
+        <WorkspaceSheetNavigationProvider stack={stack}>
+          <WorkspaceSheetStack stack={stack} />
+        </WorkspaceSheetNavigationProvider>
+      </WorkspaceSheetEventsProvider>
+    </JobsStateProvider>
+  );
+}
