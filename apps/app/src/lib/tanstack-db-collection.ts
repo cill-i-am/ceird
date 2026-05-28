@@ -32,6 +32,11 @@ interface WritableSyncedCollection<
   };
 }
 
+interface PreloadableSyncedCollection {
+  readonly preload?: () => Promise<void>;
+  readonly status?: string;
+}
+
 export function withoutTanStackDbVirtualProps<Item extends object>(
   item: Item
 ): TanStackDbCollectionData<Item> {
@@ -61,6 +66,16 @@ export function markTanStackDbCollectionWrite(
   writeVersionRef: TanStackDbCollectionWriteVersionRef
 ) {
   writeVersionRef.current += 1;
+}
+
+export async function ensureTanStackDbCollectionReadyForWrite(
+  collection: PreloadableSyncedCollection
+) {
+  if (collection.status === "ready" || collection.preload === undefined) {
+    return;
+  }
+
+  await collection.preload();
 }
 
 export function reconcileQueryCollectionDataAfterConcurrentWrite<

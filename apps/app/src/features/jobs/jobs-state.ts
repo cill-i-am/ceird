@@ -32,6 +32,7 @@ import { upsertOrganizationLabel } from "#/features/labels/labels-state";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+  ensureTanStackDbCollectionReadyForWrite,
   markTanStackDbCollectionWrite,
   reconcileQueryCollectionDataAfterConcurrentWrite,
   replaceSyncedCollectionData,
@@ -666,12 +667,24 @@ function replaceJobs(
 ): Promise<void> {
   store.fallbackJobsRef.current = jobs;
   store.jobOrderRef.current = jobs.map((job) => job.id);
+
+  return replaceReadyJobsCollection(store, jobs);
+}
+
+async function replaceReadyJobsCollection(
+  store: JobsStateStore,
+  jobs: readonly JobListItem[]
+) {
+  await ensureTanStackDbCollectionReadyForWrite(store.jobs);
   markTanStackDbCollectionWrite(store.collectionWriteVersionRef);
   replaceSyncedCollectionData(store.jobs, jobs);
-  return Promise.resolve();
 }
 
 function jobsFromCollection(store: JobsStateStore): readonly JobListItem[] {
+  if (store.jobs.status !== "ready") {
+    return jobsFromCollectionData(store, store.fallbackJobsRef.current);
+  }
+
   return jobsFromCollectionData(
     store,
     stripTanStackDbCollectionData(store.jobs.toArray)

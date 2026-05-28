@@ -33,6 +33,7 @@ import type { OrganizationViewer } from "#/features/organizations/organization-v
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+  ensureTanStackDbCollectionReadyForWrite,
   markTanStackDbCollectionWrite,
   reconcileQueryCollectionDataAfterConcurrentWrite,
   replaceSyncedCollectionData,
@@ -810,31 +811,43 @@ function replaceSites(
   sites: readonly SiteOption[]
 ): Promise<void> {
   store.fallbackSitesRef.current = sites;
-  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
-  replaceSyncedCollectionData(store.sites, sites);
-  return Promise.resolve();
+
+  return replaceReadySitesCollection(store, sites);
 }
 
-function upsertSiteCollectionItem(
+async function replaceReadySitesCollection(
+  store: SitesStateStore,
+  sites: readonly SiteOption[]
+) {
+  await ensureTanStackDbCollectionReadyForWrite(store.sites);
+  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
+  replaceSyncedCollectionData(store.sites, sites);
+}
+
+async function upsertSiteCollectionItem(
   store: SitesStateStore,
   site: SiteOption
 ): Promise<void> {
+  store.fallbackSitesRef.current = upsertSiteOption(
+    store.fallbackSitesRef.current,
+    site
+  );
+  await ensureTanStackDbCollectionReadyForWrite(store.sites);
   markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
   store.sites.utils.writeUpsert(site);
-  return Promise.resolve();
 }
 
-function upsertSiteCommentCollectionItem(
+async function upsertSiteCommentCollectionItem(
   store: SitesStateStore,
   siteId: SiteIdType,
   comment: AddSiteCommentResponse
 ): Promise<void> {
   const collection = getOrCreateSiteCommentsCollection(store, siteId);
+  await ensureTanStackDbCollectionReadyForWrite(collection);
   markTanStackDbCollectionWrite(
     getOrCreateSiteCommentsWriteVersionRef(store, siteId)
   );
   collection.utils.writeUpsert(comment);
-  return Promise.resolve();
 }
 
 function getOrCreateSiteCommentsCollection(
@@ -897,6 +910,21 @@ function pruneInactiveSiteCommentCollections(
 
 function sortSiteOptions(sites: readonly SiteOption[]) {
   return sites.toSorted(compareSiteOptions);
+}
+
+function upsertSiteOption(
+  sites: readonly SiteOption[],
+  site: SiteOption
+): readonly SiteOption[] {
+  const existingIndex = sites.findIndex((current) => current.id === site.id);
+
+  if (existingIndex === -1) {
+    return sortSiteOptions([...sites, site]);
+  }
+
+  return sortSiteOptions(
+    sites.map((current, index) => (index === existingIndex ? site : current))
+  );
 }
 
 function compareSiteOptions(left: SiteOption, right: SiteOption) {
