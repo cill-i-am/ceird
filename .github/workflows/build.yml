@@ -555,9 +555,6 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
 
-      - name: Install Playwright browsers
-        run: pnpm --filter app exec playwright install --only-shell chromium
-
       - name: Run E2E tests
         run: pnpm --filter app e2e --shard=${{ matrix.shard }}
 

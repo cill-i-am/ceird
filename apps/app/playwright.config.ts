@@ -7,6 +7,7 @@ const playwrightApiUrl = API_ORIGIN;
 const playwrightAgentUrl = AGENT_ORIGIN;
 const usePackageLocalServer =
   process.env.PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER === "1";
+const useSystemChrome = process.env.CI === "true";
 const playwrightAuthEmailFrom =
   process.env.AUTH_EMAIL_FROM ?? "auth@ceird.localhost";
 const playwrightAuthEmailFromName = process.env.AUTH_EMAIL_FROM_NAME ?? "Ceird";
@@ -62,7 +63,10 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(useSystemChrome ? { channel: "chrome" } : {}),
+      },
     },
   ],
 });
