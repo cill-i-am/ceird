@@ -1,4 +1,8 @@
 import { isJobsMapViewSearch } from "#/features/jobs/jobs-search";
+import {
+  decodeWorkspaceSheetSearch,
+  getActiveWorkspaceSheet,
+} from "#/features/workspace-sheets/workspace-sheet-search";
 
 import type { HotkeyScope } from "./hotkey-registry";
 
@@ -6,16 +10,38 @@ export function getActiveShortcutScopes(
   pathname: string,
   search?: unknown
 ): readonly HotkeyScope[] {
+  const baseScopes = getBaseShortcutScopes(pathname, search);
+  const activeSheet = getActiveWorkspaceSheet(
+    decodeWorkspaceSheetSearch(search)
+  );
+
+  if (!activeSheet) {
+    return baseScopes;
+  }
+
+  switch (activeSheet.kind) {
+    case "job.create": {
+      return appendScopes(baseScopes, ["jobs", "job-create"]);
+    }
+    case "job.detail": {
+      return appendScopes(baseScopes, ["jobs", "job-detail"]);
+    }
+    case "site.create":
+    case "site.detail": {
+      return appendScopes(baseScopes, ["sites"]);
+    }
+    default: {
+      return baseScopes;
+    }
+  }
+}
+
+function getBaseShortcutScopes(
+  pathname: string,
+  search?: unknown
+): readonly HotkeyScope[] {
   if (pathname === "/") {
     return ["global", "home"];
-  }
-
-  if (pathname === "/jobs/new") {
-    return ["global", "jobs", "job-create"];
-  }
-
-  if (pathname.startsWith("/jobs/")) {
-    return ["global", "jobs", "job-detail"];
   }
 
   if (pathname === "/jobs") {
@@ -25,10 +51,6 @@ export function getActiveShortcutScopes(
   }
 
   if (pathname === "/sites") {
-    return ["global", "sites"];
-  }
-
-  if (pathname === "/sites/new" || pathname.startsWith("/sites/")) {
     return ["global", "sites"];
   }
 
@@ -45,4 +67,11 @@ export function getActiveShortcutScopes(
   }
 
   return ["global"];
+}
+
+function appendScopes(
+  baseScopes: readonly HotkeyScope[],
+  nextScopes: readonly HotkeyScope[]
+): readonly HotkeyScope[] {
+  return [...new Set([...baseScopes, ...nextScopes])];
 }

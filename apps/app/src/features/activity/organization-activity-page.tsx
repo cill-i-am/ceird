@@ -30,6 +30,7 @@ import {
   decodeActivityIsoDate,
 } from "#/features/activity/activity-search";
 import { formatJobDateTime } from "#/features/jobs/job-display";
+import { createWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { cn } from "#/lib/utils";
 
 import type { ActivitySearch } from "./activity-search";
@@ -189,8 +190,11 @@ function ActivityTimelineRow({
           <span>{actorLabel}</span>
           <Link
             className="truncate font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            params={{ jobId: item.workItemId }}
-            to="/jobs/$jobId"
+            to="/jobs"
+            search={createWorkspaceSheetSearch({
+              jobId: item.workItemId,
+              kind: "job.detail",
+            })}
           >
             {item.jobTitle}
           </Link>

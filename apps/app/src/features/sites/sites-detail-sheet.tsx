@@ -9,13 +9,12 @@ import {
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import {
   DrawerClose,
   DrawerContent,
@@ -37,6 +36,7 @@ import {
   buildSiteAddressLines,
 } from "#/features/sites/site-location";
 import { SiteLocationMapPreview } from "#/features/sites/site-location-map-preview";
+import { usePushWorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-navigation";
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
@@ -61,8 +61,10 @@ import {
 } from "./sites-state";
 
 interface SitesDetailSheetProps {
+  readonly active?: boolean;
   readonly hasMoreRelatedJobs?: boolean;
   readonly initialSite: SiteOption | null;
+  readonly onClose?: () => void;
   readonly relatedJobs?: readonly JobListItem[];
   readonly siteId: SiteIdType;
   readonly viewer: OrganizationViewer;
@@ -95,17 +97,15 @@ type SiteDetailEditor = "location" | "notes";
 // The detail sheet owns the editable site draft while the provider-backed option can refresh underneath it.
 // react-doctor-disable-next-line
 export function SitesDetailSheet({
+  active = true,
   hasMoreRelatedJobs = false,
   initialSite,
+  onClose,
   relatedJobs = EMPTY_RELATED_JOBS,
   siteId,
   viewer,
   // react-doctor-disable-next-line
 }: SitesDetailSheetProps) {
-  const navigate = useNavigate({ from: "/sites/$siteId" });
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  });
   const options = useSitesOptions();
   const currentSite = React.useMemo(
     () => options.sites.find((site) => site.id === siteId) ?? initialSite,
@@ -123,7 +123,7 @@ export function SitesDetailSheet({
   );
   const [activeEditor, setActiveEditor] =
     React.useState<SiteDetailEditor | null>(null);
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerOpen, setDrawerOpen] = React.useState(true);
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState(currentSite?.name ?? "");
@@ -138,18 +138,6 @@ export function SitesDetailSheet({
       setFieldErrors({});
     }
   }, [currentSite]);
-
-  React.useEffect(() => {
-    if (pathname === `/sites/${siteId}`) {
-      setDrawerOpen(true);
-    }
-  }, [pathname, siteId]);
-
-  function navigateToSites() {
-    React.startTransition(() => {
-      navigate({ to: "/sites" });
-    });
-  }
 
   function closeSheet() {
     navigateAfterCloseRef.current = true;
@@ -262,6 +250,10 @@ export function SitesDetailSheet({
       ? getSitesAsyncErrorMessage(updateResult.error)
       : undefined;
 
+  if (!active) {
+    return null;
+  }
+
   if (!currentSite) {
     return (
       <ResponsiveDrawer
@@ -274,7 +266,7 @@ export function SitesDetailSheet({
         onAnimationEnd={(open) => {
           if (!open && navigateAfterCloseRef.current) {
             navigateAfterCloseRef.current = false;
-            navigateToSites();
+            onClose?.();
           }
         }}
       >
@@ -306,7 +298,7 @@ export function SitesDetailSheet({
       onAnimationEnd={(open) => {
         if (!open && navigateAfterCloseRef.current) {
           navigateAfterCloseRef.current = false;
-          navigateToSites();
+          onClose?.();
         }
       }}
     >
@@ -803,6 +795,8 @@ function SiteRelatedJobs({
   readonly jobs: readonly JobListItem[];
   readonly siteId: SiteIdType;
 }) {
+  const pushWorkspaceSheet = usePushWorkspaceSheet();
+
   if (jobs.length === 0) {
     return (
       <section
@@ -824,16 +818,16 @@ function SiteRelatedJobs({
               </p>
             </div>
             {canCreateJobs ? (
-              <Link
-                to="/jobs/new"
-                search={{ siteId }}
-                className={buttonVariants({
-                  size: "sm",
-                  variant: "outline",
-                })}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  pushWorkspaceSheet({ kind: "job.create", siteId })
+                }
               >
                 New job
-              </Link>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -856,11 +850,13 @@ function SiteRelatedJobs({
 
       <div className="divide-y">
         {jobs.map((job) => (
-          <Link
+          <button
             key={job.id}
-            to="/jobs/$jobId"
-            params={{ jobId: job.id }}
-            className="flex min-w-0 items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            type="button"
+            className="flex w-full min-w-0 items-start justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={() =>
+              pushWorkspaceSheet({ jobId: job.id, kind: "job.detail" })
+            }
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-foreground">
@@ -880,7 +876,7 @@ function SiteRelatedJobs({
                 {RELATED_JOB_PRIORITY_LABELS[job.priority]}
               </Badge>
             </div>
-          </Link>
+          </button>
         ))}
         {hasMoreJobs ? (
           <div className="px-4 py-3 text-sm text-muted-foreground">

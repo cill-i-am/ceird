@@ -181,22 +181,15 @@ interface SiteCreateDrawerFieldsProps {
   readonly draft: SiteCreateDraft;
   readonly errors: SiteCreateFieldErrors;
   readonly idPrefix: string;
-  readonly onDraftChange: (draft: SiteCreateDraft) => void;
+  readonly onDraftPatch: (patch: SiteCreateDraftPatch) => void;
 }
 
 export function SiteCreateDrawerFields({
   draft,
   errors,
   idPrefix,
-  onDraftChange,
+  onDraftPatch,
 }: SiteCreateDrawerFieldsProps) {
-  const updateDraft = (patch: Partial<SiteCreateDraft>) => {
-    onDraftChange({
-      ...draft,
-      ...patch,
-    });
-  };
-
   return (
     <div className="flex flex-col">
       <SiteCreateSection title="Basics">
@@ -206,7 +199,7 @@ export function SiteCreateDrawerFields({
             errors={errors}
             idPrefix={idPrefix}
             placeholder="e.g. Riverside Apartments"
-            onDraftPatch={updateDraft}
+            onDraftPatch={onDraftPatch}
           />
         </FieldGroup>
       </SiteCreateSection>
@@ -218,7 +211,7 @@ export function SiteCreateDrawerFields({
           errors={errors}
           idPrefix={idPrefix}
           placeholder="Search an address, Eircode, town, or landmark"
-          onDraftPatch={updateDraft}
+          onDraftPatch={onDraftPatch}
         />
       </SiteCreateSection>
 
@@ -230,7 +223,7 @@ export function SiteCreateDrawerFields({
             label="Notes"
             placeholder="e.g. Gate code, arrival notes, safety context."
             rows={3}
-            onDraftPatch={updateDraft}
+            onDraftPatch={onDraftPatch}
           />
         </FieldGroup>
       </SiteCreateSection>

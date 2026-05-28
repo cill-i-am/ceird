@@ -306,9 +306,6 @@ jobs:
               });
             }
 
-      - name: Install Playwright browsers
-        run: pnpm --filter app exec playwright install --with-deps chromium
-
       - name: Run E2E tests
         run: pnpm --filter app e2e
 

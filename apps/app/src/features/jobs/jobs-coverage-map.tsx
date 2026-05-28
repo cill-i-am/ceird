@@ -21,6 +21,10 @@ import {
   hasSiteCoordinates,
 } from "#/features/sites/site-location";
 import type { SiteLocationLike } from "#/features/sites/site-location";
+import {
+  createWorkspaceSheetSearch,
+  openWorkspaceSheetSearch,
+} from "#/features/workspace-sheets/workspace-sheet-search";
 import { cn } from "#/lib/utils";
 
 import { JOB_STATUS_LABELS as STATUS_LABELS } from "./job-display";
@@ -164,8 +168,13 @@ function JobsMapSiteRail({
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Link
-                        to="/jobs/$jobId"
-                        params={{ jobId: job.id }}
+                        to="/jobs"
+                        search={(current) =>
+                          openWorkspaceSheetSearch(current, {
+                            jobId: job.id,
+                            kind: "job.detail",
+                          })
+                        }
                         className={buttonVariants({
                           size: "xs",
                           variant: "ghost",
@@ -213,8 +222,11 @@ function JobsMapSiteRailItem({ group }: { readonly group: MappedSiteGroup }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
-              to="/sites/$siteId"
-              params={{ siteId: group.site.id }}
+              to="/sites"
+              search={createWorkspaceSheetSearch({
+                kind: "site.detail",
+                siteId: group.site.id,
+              })}
               className="block truncate rounded-sm text-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               {group.site.name ?? "Mapped site"}
@@ -238,8 +250,13 @@ function JobsMapSiteRailItem({ group }: { readonly group: MappedSiteGroup }) {
           {visibleJobs.map((job) => (
             <li key={job.id}>
               <Link
-                to="/jobs/$jobId"
-                params={{ jobId: job.id }}
+                to="/jobs"
+                search={(current) =>
+                  openWorkspaceSheetSearch(current, {
+                    jobId: job.id,
+                    kind: "job.detail",
+                  })
+                }
                 className="block rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 <span className="line-clamp-1">{job.title}</span>
@@ -249,8 +266,11 @@ function JobsMapSiteRailItem({ group }: { readonly group: MappedSiteGroup }) {
           {hiddenJobCount > 0 ? (
             <li>
               <Link
-                to="/sites/$siteId"
-                params={{ siteId: group.site.id }}
+                to="/sites"
+                search={createWorkspaceSheetSearch({
+                  kind: "site.detail",
+                  siteId: group.site.id,
+                })}
                 className="block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 View {hiddenJobCount} more on site

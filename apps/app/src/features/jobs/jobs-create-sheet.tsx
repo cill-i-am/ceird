@@ -11,10 +11,7 @@ import type {
   JobContactOption,
   JobPriority,
 } from "@ceird/jobs-core";
-import {
-  SITE_LOCATION_RESOLUTION_ERROR_TAG,
-  SITE_NOT_FOUND_ERROR_TAG,
-} from "@ceird/sites-core";
+import { SITE_NOT_FOUND_ERROR_TAG } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import {
   Add01Icon,
@@ -31,7 +28,6 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate } from "@tanstack/react-router";
 import { Cause, Exit, Option, Schema } from "effect";
 import * as React from "react";
 
@@ -49,13 +45,13 @@ import {
 import { CommandSelect } from "#/components/ui/command-select";
 import type { CommandSelectGroup } from "#/components/ui/command-select";
 import {
-  DRAWER_CLOSE_FALLBACK_MS,
   DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
+  DRAWER_CLOSE_FALLBACK_MS,
 } from "#/components/ui/drawer";
 import { FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
@@ -64,24 +60,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
-import {
-  ResponsiveDrawer,
-  ResponsiveNestedDrawer,
-} from "#/components/ui/responsive-drawer";
+import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
-import {
-  SiteCreateDrawerFields,
-  buildCreateSiteInputFromDraft,
-  createDefaultSiteCreateDraft,
-  hasSiteCreateFieldErrors,
-  toOptionalTrimmedString,
-  validateSiteCreateDraft,
-} from "#/features/sites/site-create-form";
-import type {
-  SiteCreateDraft,
-  SiteCreateFieldErrors,
-} from "#/features/sites/site-create-form";
+import { toOptionalTrimmedString } from "#/features/sites/site-create-form";
+import { useWorkspaceSheetSiteCreated } from "#/features/workspace-sheets/workspace-sheet-events";
+import { usePushWorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-navigation";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
 
@@ -91,6 +75,7 @@ import {
   isJobsAsyncFailure,
   useCreateJobMutation,
   useJobsOptions,
+  useUpsertJobOptionSite,
 } from "./jobs-state";
 
 const INLINE_CREATE_VALUE = "__create__";
@@ -131,7 +116,6 @@ interface JobsCreateFormState {
   readonly contactPhone: string;
   readonly contactSelection: string;
   readonly priority: JobPriority;
-  readonly siteDraft: SiteCreateDraft;
   readonly siteSelection: string;
   readonly title: string;
 }
@@ -140,7 +124,6 @@ interface JobsCreateFieldErrors {
   readonly contactEmail?: string;
   readonly contactName?: string;
   readonly contactNotes?: string;
-  readonly site?: SiteCreateFieldErrors;
   readonly siteSelection?: string;
   readonly title?: string;
 }
@@ -159,7 +142,6 @@ function createDefaultJobsFormState(
     contactPhone: "",
     contactSelection: NONE_VALUE,
     priority: "none",
-    siteDraft: createDefaultSiteCreateDraft(),
     siteSelection: initialSiteId ?? NONE_VALUE,
     title: "",
   };
@@ -168,12 +150,17 @@ function createDefaultJobsFormState(
 // The create sheet keeps one local draft so validation and inline site/contact creation stay atomic.
 // react-doctor-disable-next-line
 export function JobsCreateSheet({
+  active = true,
   initialSiteId,
+  onClose,
 }: {
+  readonly active?: boolean;
   readonly initialSiteId?: SiteIdType;
+  readonly onClose?: () => void;
 } = {}) {
-  const navigate = useNavigate({ from: "/jobs/new" });
+  const pushWorkspaceSheet = usePushWorkspaceSheet();
   const options = useJobsOptions();
+  const upsertJobOptionSite = useUpsertJobOptionSite();
   const [createResult, createJob] = useCreateJobMutation();
   const [fieldErrors, setFieldErrors] = React.useState<JobsCreateFieldErrors>(
     {}
@@ -182,7 +169,7 @@ export function JobsCreateSheet({
     createDefaultJobsFormState(initialSiteId)
   );
   const [overlayOpen, setOverlayOpen] = React.useState(true);
-  const [siteDrawerOpen, setSiteDrawerOpen] = React.useState(false);
+  const sheetInstanceId = React.useId();
   const navigateAfterCloseRef = React.useRef(false);
   const resetAfterCloseRef = React.useRef(false);
   const closeNavigationTimeoutRef = React.useRef<ReturnType<
@@ -198,24 +185,21 @@ export function JobsCreateSheet({
   const prioritySelectionGroups = buildPrioritySelectionGroups();
   const siteSelectionGroups = buildSiteSelectionGroups(options.sites);
   const contactSelectionGroups = buildContactSelectionGroups(contactGroups);
-  const showInlineSiteSummary =
-    values.siteSelection === INLINE_CREATE_VALUE && hasInlineSiteDraft(values);
 
-  React.useEffect(() => {
-    if (values.siteSelection !== INLINE_CREATE_VALUE) {
-      setSiteDrawerOpen(false);
-    }
-  }, [values.siteSelection]);
-
-  React.useEffect(() => {
-    if (
-      values.siteSelection === INLINE_CREATE_VALUE &&
-      fieldErrors.site &&
-      hasSiteCreateFieldErrors(fieldErrors.site)
-    ) {
-      setSiteDrawerOpen(true);
-    }
-  }, [fieldErrors.site, values.siteSelection]);
+  useWorkspaceSheetSiteCreated(
+    sheetInstanceId,
+    React.useCallback(
+      (site) => {
+        upsertJobOptionSite(site);
+        setValues((current) => ({
+          ...current,
+          siteSelection: site.id,
+        }));
+        setFieldErrors(clearSiteSelectionFieldError);
+      },
+      [upsertJobOptionSite]
+    )
+  );
 
   React.useEffect(
     () => () => {
@@ -225,12 +209,6 @@ export function JobsCreateSheet({
     },
     []
   );
-
-  function navigateToJobs() {
-    React.startTransition(() => {
-      navigate({ to: "/jobs" });
-    });
-  }
 
   function finishClosedSheet() {
     if (closeNavigationTimeoutRef.current) {
@@ -245,7 +223,7 @@ export function JobsCreateSheet({
 
     if (navigateAfterCloseRef.current) {
       navigateAfterCloseRef.current = false;
-      navigateToJobs();
+      onClose?.();
     }
   }
 
@@ -330,20 +308,10 @@ export function JobsCreateSheet({
           "That contact is no longer available. Pick another one or create a new contact.",
       }));
     }
+  }
 
-    if (
-      Option.isSome(failure) &&
-      failure.value._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG
-    ) {
-      setFieldErrors((current) => ({
-        ...current,
-        site: {
-          ...current.site,
-          location: failure.value.message,
-        },
-      }));
-      setSiteDrawerOpen(true);
-    }
+  if (!active) {
+    return null;
   }
 
   return (
@@ -438,45 +406,23 @@ export function JobsCreateSheet({
                   icon={Location01Icon}
                   errorText={fieldErrors.siteSelection}
                   onValueChange={(nextValue) => {
+                    if (nextValue === INLINE_CREATE_VALUE) {
+                      setFieldErrors(clearSiteSelectionFieldError);
+                      pushWorkspaceSheet({
+                        kind: "site.create",
+                        targetSheetId: sheetInstanceId,
+                      });
+                      return;
+                    }
+
                     setValues((current) => ({
                       ...current,
                       siteSelection: nextValue,
                     }));
-
-                    if (nextValue === INLINE_CREATE_VALUE) {
-                      setFieldErrors(clearSiteSelectionFieldError);
-                      setSiteDrawerOpen(true);
-                      return;
-                    }
-
-                    setFieldErrors(clearInlineSiteFieldErrors);
+                    setFieldErrors(clearSiteSelectionFieldError);
                   }}
                 />
               </AuthFormField>
-
-              {showInlineSiteSummary ? (
-                <div className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">New site</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {values.siteDraft.name.trim()}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSiteDrawerOpen(true)}
-                  >
-                    Edit details
-                  </Button>
-                </div>
-              ) : null}
             </FieldGroup>
           </CreateFormSection>
 
@@ -602,53 +548,6 @@ export function JobsCreateSheet({
           </Button>
         </DrawerFooter>
       </form>
-
-      <ResponsiveNestedDrawer
-        open={siteDrawerOpen}
-        onOpenChange={setSiteDrawerOpen}
-      >
-        <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-xl">
-          <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
-            <div className="flex min-w-0 items-start justify-between gap-4">
-              <div className="min-w-0">
-                <DrawerTitle>New site</DrawerTitle>
-                <DrawerDescription className="sr-only">
-                  Add a site name, address, and access notes.
-                </DrawerDescription>
-              </div>
-              <Button
-                type="button"
-                size="icon-lg"
-                variant="ghost"
-                aria-label="Close new site"
-                onClick={() => setSiteDrawerOpen(false)}
-              >
-                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-              </Button>
-            </div>
-          </DrawerHeader>
-
-          <div className="flex flex-1 flex-col overflow-y-auto px-5 py-2 sm:px-6">
-            <SiteCreateDrawerFields
-              draft={values.siteDraft}
-              errors={fieldErrors.site ?? {}}
-              idPrefix="new-site"
-              onDraftChange={(siteDraft) =>
-                setValues((current) => ({
-                  ...current,
-                  siteDraft,
-                }))
-              }
-            />
-          </div>
-
-          <DrawerFooter className="shrink-0 flex-row justify-end border-t px-5 py-3 sm:px-6">
-            <Button type="button" onClick={() => setSiteDrawerOpen(false)}>
-              Close site details
-            </Button>
-          </DrawerFooter>
-        </DrawerContent>
-      </ResponsiveNestedDrawer>
     </ResponsiveCreateOverlay>
   );
 }
@@ -1000,13 +899,7 @@ function buildContactSelectionGroups(
 }
 
 function validate(values: JobsCreateFormState): JobsCreateFieldErrors {
-  const validateInlineSite = values.siteSelection === INLINE_CREATE_VALUE;
   const validateInlineContact = values.contactSelection === INLINE_CREATE_VALUE;
-  const siteErrors = validateInlineSite
-    ? validateSiteCreateDraft(values.siteDraft, {
-        nameRequiredMessage: "Add the site name or pick an existing site.",
-      })
-    : undefined;
 
   return {
     contactEmail: validateInlineContact
@@ -1028,19 +921,11 @@ function validate(values: JobsCreateFormState): JobsCreateFieldErrors {
           "Use 2,000 characters or fewer."
         )
       : undefined,
-    site:
-      siteErrors && hasSiteCreateFieldErrors(siteErrors)
-        ? siteErrors
-        : undefined,
     title:
       values.title.trim().length === 0
         ? "Give the job a clear title before you create it."
         : undefined,
   };
-}
-
-function hasInlineSiteDraft(values: JobsCreateFormState) {
-  return values.siteDraft.name.trim().length > 0;
 }
 
 function hasFieldErrors(errors: JobsCreateFieldErrors) {
@@ -1049,8 +934,7 @@ function hasFieldErrors(errors: JobsCreateFieldErrors) {
     errors.contactName !== undefined ||
     errors.contactNotes !== undefined ||
     errors.siteSelection !== undefined ||
-    errors.title !== undefined ||
-    (errors.site !== undefined && hasSiteCreateFieldErrors(errors.site))
+    errors.title !== undefined
   );
 }
 
@@ -1079,16 +963,6 @@ function isValidBoundaryValue(
   }
 }
 
-function clearInlineSiteFieldErrors(
-  current: JobsCreateFieldErrors
-): JobsCreateFieldErrors {
-  return {
-    ...current,
-    site: undefined,
-    siteSelection: undefined,
-  };
-}
-
 function clearSiteSelectionFieldError(
   current: JobsCreateFieldErrors
 ): JobsCreateFieldErrors {
@@ -1104,8 +978,7 @@ function isHandledCreateJobError(error: unknown) {
     error !== null &&
     "_tag" in error &&
     (error._tag === SITE_NOT_FOUND_ERROR_TAG ||
-      error._tag === CONTACT_NOT_FOUND_ERROR_TAG ||
-      error._tag === SITE_LOCATION_RESOLUTION_ERROR_TAG)
+      error._tag === CONTACT_NOT_FOUND_ERROR_TAG)
   );
 }
 
@@ -1162,13 +1035,6 @@ function resolveCreateJobSiteInput(
     return undefined;
   }
 
-  if (values.siteSelection === INLINE_CREATE_VALUE) {
-    return {
-      kind: "create",
-      input: buildCreateSiteInputFromDraft(values.siteDraft),
-    };
-  }
-
   return {
     kind: "existing",
     siteId: expectDefined(
@@ -1197,8 +1063,7 @@ function resolveCreateSelectionIds(
         ? undefined
         : resolveSelectedOptionId(options.contacts, values.contactSelection),
     siteId:
-      values.siteSelection === NONE_VALUE ||
-      values.siteSelection === INLINE_CREATE_VALUE
+      values.siteSelection === NONE_VALUE
         ? undefined
         : resolveSelectedOptionId(options.sites, values.siteSelection),
   };

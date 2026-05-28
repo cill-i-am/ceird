@@ -61,6 +61,7 @@ import type {
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
   makeCloudflareHyperdriveProps,
+  makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
 } from "./cloudflare-stack.ts";
 import {
@@ -424,6 +425,26 @@ describe("Cloudflare stack", () => {
       "https://app.pr-123.example.com",
       "https://*--pr-123.example.com",
     ]);
+  });
+
+  it("creates no-script bypass routes for preview system hosts", () => {
+    expect(
+      makeTenantReservedHostBypassRoutePatterns(previewTenantConfig)
+    ).toStrictEqual([
+      "app.pr-123.example.com/*",
+      "api.pr-123.example.com/*",
+      "agent.pr-123.example.com/*",
+      "mcp.pr-123.example.com/*",
+    ]);
+  });
+
+  it("skips reserved host bypass routes when tenant routing is disabled", () => {
+    expect(
+      makeTenantReservedHostBypassRoutePatterns({
+        tenantReservedHostnames: previewTenantConfig.tenantReservedHostnames,
+        tenantRoutePattern: undefined,
+      })
+    ).toStrictEqual([]);
   });
 
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {

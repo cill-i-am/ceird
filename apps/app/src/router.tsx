@@ -45,12 +45,10 @@ declare module "@tanstack/react-router" {
         | "/"
         | "/activity"
         | "/jobs"
-        | "/jobs/new"
         | "/members"
         | "/organization/settings"
         | "/settings"
-        | "/sites"
-        | "/sites/new";
+        | "/sites";
     };
   }
 }

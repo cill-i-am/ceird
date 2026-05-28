@@ -8,10 +8,8 @@ const APP_SRC_DIR = resolve(process.cwd(), "src");
 const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.activity.tsx",
   "routes/_app._org.index.tsx",
-  "routes/_app._org.jobs.$jobId.tsx",
   "routes/_app._org.jobs.tsx",
   "routes/_app._org.organization.settings.tsx",
-  "routes/_app._org.sites.$siteId.tsx",
   "routes/_app._org.sites.tsx",
 ] as const;
 
@@ -31,6 +29,7 @@ const ROUTE_SEARCH_FILES = [
   "features/activity/activity-search.ts",
   "features/jobs/jobs-search.ts",
   "features/settings/user-settings-search.ts",
+  "features/workspace-sheets/workspace-sheet-search.ts",
 ] as const;
 
 describe("app route code splitting", () => {
@@ -79,6 +78,9 @@ describe("app route code splitting", () => {
       expect(source).not.toMatch(/from\s+["']effect["']/u);
       expect(source).not.toMatch(
         /import\s+\{[^}]*\}\s+from\s+["']@ceird\/jobs-core["']/u
+      );
+      expect(source).not.toMatch(
+        /import\s+\{[^}]*\}\s+from\s+["']@ceird\/sites-core["']/u
       );
     }
   });

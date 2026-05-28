@@ -87,7 +87,8 @@ The job create flow stays intentionally small:
 
 - required: title
 - optional: priority
-- optional: existing or inline-created site
+- optional: existing site or a newly created site from a stacked `site.create`
+  sheet
 - optional: existing or inline-created contact
 
 If a user needs narrative context, they add it as a first comment after

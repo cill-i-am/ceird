@@ -51,6 +51,7 @@ import {
   buildSiteAddressLines,
   hasSiteCoordinates,
 } from "#/features/sites/site-location";
+import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -73,10 +74,10 @@ type SitesMapFilter = "all" | "mapped" | "unmapped";
 // Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
 // react-doctor-disable-next-line
 export function SitesPage({
-  children,
+  routeHotkeysEnabled = true,
   viewer,
 }: {
-  readonly children?: React.ReactNode;
+  readonly routeHotkeysEnabled?: boolean;
   readonly viewer: OrganizationViewer;
 }) {
   const navigate = useNavigate({ from: "/sites" });
@@ -146,21 +147,28 @@ export function SitesPage({
         priority: 60,
         run: () =>
           navigate({
-            params: { siteId: site.id },
-            to: "/sites/$siteId",
+            search: (current) =>
+              openWorkspaceSheetSearch(current, {
+                kind: "site.detail",
+                siteId: site.id,
+              }),
           }),
         scope: "route",
         subtitle: addressSummary,
         title: `Open ${site.name}`,
       }));
 
-    if (canCreateSites) {
+    if (canCreateSites && routeHotkeysEnabled) {
       actions.unshift({
         group: "Current page",
         icon: Add01Icon,
         id: "sites-create",
         priority: 80,
-        run: () => navigate({ to: "/sites/new" }),
+        run: () =>
+          navigate({
+            search: (current) =>
+              openWorkspaceSheetSearch(current, { kind: "site.create" }),
+          }),
         scope: "route",
         shortcut: HOTKEYS.sitesCreate,
         title: "Create site",
@@ -168,16 +176,19 @@ export function SitesPage({
     }
 
     return actions;
-  }, [canCreateSites, navigate, siteDirectoryItems]);
+  }, [canCreateSites, navigate, routeHotkeysEnabled, siteDirectoryItems]);
 
   useRegisterCommandActions(sitesPageCommandActions);
   useAppHotkey(
     "sitesCreate",
     () => {
-      navigate({ to: "/sites/new" });
+      navigate({
+        search: (current) =>
+          openWorkspaceSheetSearch(current, { kind: "site.create" }),
+      });
     },
     {
-      enabled: canCreateSites,
+      enabled: canCreateSites && routeHotkeysEnabled,
       ignoreInputs: true,
     }
   );
@@ -189,8 +200,8 @@ export function SitesPage({
 
   function openSite(siteId: SiteDirectoryItem["id"]) {
     navigate({
-      params: { siteId },
-      to: "/sites/$siteId",
+      search: (current) =>
+        openWorkspaceSheetSearch(current, { kind: "site.detail", siteId }),
     });
   }
 
@@ -201,7 +212,13 @@ export function SitesPage({
         leading={<HugeiconsIcon icon={Location01Icon} strokeWidth={2} />}
         actions={
           canCreateSites ? (
-            <Link to="/sites/new" className={buttonVariants({ size: "sm" })}>
+            <Link
+              to="/sites"
+              search={(current) =>
+                openWorkspaceSheetSearch(current, { kind: "site.create" })
+              }
+              className={buttonVariants({ size: "sm" })}
+            >
               <HugeiconsIcon
                 icon={Add01Icon}
                 strokeWidth={2}
@@ -343,8 +360,6 @@ export function SitesPage({
           </EmptyHeader>
         </Empty>
       )}
-
-      {children}
     </main>
   );
 }
@@ -400,8 +415,13 @@ function SitesDesktopDirectory({
                 <SiteMapIndicator isMapped={isMapped} />
                 <div className="min-w-0">
                   <Link
-                    to="/sites/$siteId"
-                    params={{ siteId: site.id }}
+                    to="/sites"
+                    search={(current) =>
+                      openWorkspaceSheetSearch(current, {
+                        kind: "site.detail",
+                        siteId: site.id,
+                      })
+                    }
                     className="block truncate font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     onClick={(event) => event.stopPropagation()}
                   >
@@ -433,8 +453,13 @@ function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
   return (
     <li>
       <Link
-        to="/sites/$siteId"
-        params={{ siteId: site.id }}
+        to="/sites"
+        search={(current) =>
+          openWorkspaceSheetSearch(current, {
+            kind: "site.detail",
+            siteId: site.id,
+          })
+        }
         className="group block px-3 py-3 transition-colors outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-4"
       >
         <div className="flex min-w-0 items-start justify-between gap-3">

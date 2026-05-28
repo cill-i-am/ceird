@@ -5,15 +5,26 @@ describe("active shortcut scopes", () => {
     expect(getActiveShortcutScopes("/")).toStrictEqual(["global", "home"]);
   });
 
-  it("activates job drawer shortcut scopes for job drawer routes", () => {
-    expect(getActiveShortcutScopes("/jobs/new")).toStrictEqual([
-      "global",
-      "jobs",
-      "job-create",
-    ]);
+  it("activates job drawer shortcut scopes from sheet search state", () => {
     expect(
-      getActiveShortcutScopes("/jobs/11111111-1111-4111-8111-111111111111")
-    ).toStrictEqual(["global", "jobs", "job-detail"]);
+      getActiveShortcutScopes("/jobs", {
+        sheets: [{ kind: "job.create" }],
+      })
+    ).toStrictEqual(["global", "jobs", "job-create"]);
+    expect(
+      getActiveShortcutScopes("/sites", {
+        sheets: [
+          {
+            kind: "site.detail",
+            siteId: "55555555-5555-4555-8555-555555555555",
+          },
+          {
+            jobId: "11111111-1111-4111-8111-111111111111",
+            kind: "job.detail",
+          },
+        ],
+      })
+    ).toStrictEqual(["global", "sites", "jobs", "job-detail"]);
   });
 
   it("activates sites, members, settings, and map shortcut scopes on matching routes", () => {
@@ -21,12 +32,15 @@ describe("active shortcut scopes", () => {
       "global",
       "sites",
     ]);
-    expect(getActiveShortcutScopes("/sites/new")).toStrictEqual([
-      "global",
-      "sites",
-    ]);
     expect(
-      getActiveShortcutScopes("/sites/55555555-5555-4555-8555-555555555555")
+      getActiveShortcutScopes("/sites", {
+        sheets: [
+          {
+            kind: "site.detail",
+            siteId: "55555555-5555-4555-8555-555555555555",
+          },
+        ],
+      })
     ).toStrictEqual(["global", "sites"]);
     expect(getActiveShortcutScopes("/members")).toStrictEqual([
       "global",

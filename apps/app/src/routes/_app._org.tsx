@@ -3,13 +3,19 @@ import {
   Outlet,
   createFileRoute,
   useRouteContext,
+  useRouterState,
 } from "@tanstack/react-router";
 
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
+import { WorkspaceSheetEventsProvider } from "#/features/workspace-sheets/workspace-sheet-events";
+import { WorkspaceSheetNavigationProvider } from "#/features/workspace-sheets/workspace-sheet-navigation";
+import { decodeWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
+import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
 export const Route = createFileRoute("/_app/_org")({
+  validateSearch: decodeWorkspaceSheetSearch,
   beforeLoad: async ({ context }) => {
     const {
       ensureActiveOrganizationIdForSession,
@@ -50,15 +56,26 @@ function OrganizationRouteComponent() {
   const { activeOrganizationSync, currentOrganizationRole } = useRouteContext({
     from: "/_app/_org",
   });
+  const stack = Route.useSearch().sheets ?? [];
+  const routeOwnsSheetStack = useRouterState({
+    select: (state) =>
+      state.location.pathname === "/jobs" ||
+      state.location.pathname === "/sites",
+  });
 
   return (
     <OrganizationActiveSyncBoundary
       activeOrganizationSync={activeOrganizationSync}
     >
-      <AppOrganizationCommandActions
-        currentOrganizationRole={currentOrganizationRole}
-      />
-      <Outlet />
+      <WorkspaceSheetEventsProvider>
+        <WorkspaceSheetNavigationProvider stack={stack}>
+          <AppOrganizationCommandActions
+            currentOrganizationRole={currentOrganizationRole}
+          />
+          <Outlet />
+          {routeOwnsSheetStack ? null : <WorkspaceSheetStack stack={stack} />}
+        </WorkspaceSheetNavigationProvider>
+      </WorkspaceSheetEventsProvider>
     </OrganizationActiveSyncBoundary>
   );
 }

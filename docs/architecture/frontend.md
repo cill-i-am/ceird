@@ -27,13 +27,9 @@ Current visible routes:
 | `/settings`                        | `_app.settings.tsx`                   | User settings.                                                 |
 | `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                    |
 | `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                     |
-| `/jobs/new`                        | `_app._org.jobs.new.tsx`              | New job flow.                                                  |
-| `/jobs/$jobId`                     | `_app._org.jobs.$jobId.tsx`           | Job detail route.                                              |
 | `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                          |
 | `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                              |
 | `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                    |
-| `/sites/new`                       | `_app._org.sites.new.tsx`             | New site flow.                                                 |
-| `/sites/$siteId`                   | `_app._org.sites.$siteId.tsx`         | Site detail route.                                             |
 | `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks. |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
@@ -63,6 +59,16 @@ validation/form libraries that are unnecessary for unrelated first paint.
 Route `validateSearch` functions run in the route manifest, so they should stay
 small and avoid importing domain API contracts or boundary schemas when a local
 query-string parser can preserve the same behavior.
+
+Organization-scoped sheet overlays are not child routes. The `_app/_org` route
+validates a typed `sheets` search param and renders the workspace sheet stack
+above the active page. Examples include `/jobs?sheets=[{kind:"job.create"}]`
+and `/sites?sheets=[{kind:"site.detail",siteId:"..."},{kind:"job.create",siteId:"..."}]`.
+The stack stores only durable sheet identity and seed IDs; unsaved form fields
+remain local to mounted sheet components. Opening a child sheet appends to the
+stack so the parent draft stays mounted, and closing pops only the active
+sheet. Detail sheets load their provider and detail data inside the stack and
+compose loading states with the shared `Skeleton` component.
 
 ## Application Shell
 

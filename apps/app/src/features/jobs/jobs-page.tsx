@@ -72,6 +72,7 @@ import {
 } from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -189,13 +190,11 @@ const JobsCoverageMap = React.lazy(async () => {
 // Route-level page coordinates filters, URL state, command actions, and layout.
 // react-doctor-disable-next-line
 export function JobsPage({
-  children,
   listHotkeysEnabled = true,
   onViewModeChange,
   viewMode: controlledViewMode,
   viewer,
 }: {
-  readonly children?: React.ReactNode;
   readonly listHotkeysEnabled?: boolean;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
   readonly viewMode?: JobsViewMode;
@@ -289,8 +288,8 @@ export function JobsPage({
   const openJob = React.useCallback(
     (jobId: JobListItem["id"]) => {
       navigate({
-        params: { jobId },
-        to: "/jobs/$jobId",
+        search: (current) =>
+          openWorkspaceSheetSearch(current, { jobId, kind: "job.detail" }),
       });
     },
     [navigate]
@@ -305,7 +304,11 @@ export function JobsPage({
               icon: Add01Icon,
               id: "jobs-create",
               priority: 90,
-              run: () => navigate({ to: "/jobs/new" }),
+              run: () =>
+                navigate({
+                  search: (current) =>
+                    openWorkspaceSheetSearch(current, { kind: "job.create" }),
+                }),
               scope: "route" as const,
               shortcut: HOTKEYS.jobsCreate,
               title: "Create job",
@@ -411,7 +414,10 @@ export function JobsPage({
   useAppHotkey(
     "jobsCreate",
     () => {
-      navigate({ to: "/jobs/new" });
+      navigate({
+        search: (current) =>
+          openWorkspaceSheetSearch(current, { kind: "job.create" }),
+      });
     },
     { enabled: listHotkeysEnabled && canCreateJobs }
   );
@@ -549,8 +555,6 @@ export function JobsPage({
           </React.Suspense>
         </section>
       )}
-
-      {children}
     </main>
   );
 }
@@ -1122,7 +1126,10 @@ function JobGroupHeading({
 function AddJobGroupLink() {
   return (
     <Link
-      to="/jobs/new"
+      to="/jobs"
+      search={(current) =>
+        openWorkspaceSheetSearch(current, { kind: "job.create" })
+      }
       className="flex w-fit items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
@@ -1206,8 +1213,13 @@ function JobIssueTableRow({
     >
       <TableCell className="min-w-0">
         <Link
-          to="/jobs/$jobId"
-          params={{ jobId: job.id }}
+          to="/jobs"
+          search={(current) =>
+            openWorkspaceSheetSearch(current, {
+              jobId: job.id,
+              kind: "job.detail",
+            })
+          }
           className="flex min-w-0 items-center gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           onClick={(event) => event.stopPropagation()}
         >
@@ -1261,8 +1273,13 @@ function JobIssueRow({
 
   return (
     <Link
-      to="/jobs/$jobId"
-      params={{ jobId: job.id }}
+      to="/jobs"
+      search={(current) =>
+        openWorkspaceSheetSearch(current, {
+          jobId: job.id,
+          kind: "job.detail",
+        })
+      }
       className={cn(
         "group flex min-w-0 items-center gap-3 border-b px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/30",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -1371,7 +1388,13 @@ function getJobsEmptyStateAction({
   if (canCreateJobs && totalJobs === 0) {
     return (
       <EmptyContent>
-        <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
+        <Link
+          to="/jobs"
+          search={(current) =>
+            openWorkspaceSheetSearch(current, { kind: "job.create" })
+          }
+          className={buttonVariants({ size: "sm" })}
+        >
           <HugeiconsIcon
             icon={Add01Icon}
             strokeWidth={2}
@@ -1428,7 +1451,13 @@ function NewJobLink() {
     <Tooltip>
       <TooltipTrigger
         render={
-          <Link to="/jobs/new" className={buttonVariants({ size: "sm" })} />
+          <Link
+            to="/jobs"
+            search={(current) =>
+              openWorkspaceSheetSearch(current, { kind: "job.create" })
+            }
+            className={buttonVariants({ size: "sm" })}
+          />
         }
       >
         <HugeiconsIcon

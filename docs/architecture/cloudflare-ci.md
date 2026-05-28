@@ -67,9 +67,11 @@ existing Ceird-managed tenant wildcard record, but it deliberately fails instead
 of silently adopting an unmanaged `*.ceird.app` record; operators must delete,
 tag, or explicitly adopt that record before reconciliation. When a PR stage is
 destroyed, Alchemy removes that PR's Worker route; the shared wildcard DNS
-remains. Production also creates bypass routes for the reserved system hostnames
-so the production tenant wildcard cannot capture `app.ceird.app`,
-`api.ceird.app`, `agent.ceird.app`, or `mcp.ceird.app`.
+remains. Every tenant-enabled stage also creates no-script bypass routes for its
+reserved system hostnames. Those routes keep the production tenant wildcard from
+capturing neutral hosts such as `app.ceird.app`, `api.ceird.app`, or preview
+hosts such as `api.pr-123.ceird.app`, leaving worker custom domains to serve the
+intended app, API, Agent, and MCP workers.
 
 Preview cleanup also runs a direct Cloudflare Worker-route cleanup fallback for
 the known `*--pr-<number>.ceird.app/*` pattern after `alchemy destroy`. This

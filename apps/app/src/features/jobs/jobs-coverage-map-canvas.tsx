@@ -23,6 +23,7 @@ import {
   DEFAULT_SITE_MAP_CENTER,
   DEFAULT_SITE_MAP_ZOOM,
 } from "#/features/sites/site-location";
+import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 
 import type { MappedSiteGroup } from "./jobs-coverage-map";
 import { markerToneClassName, STATUS_LABELS } from "./jobs-coverage-map";
@@ -130,8 +131,13 @@ export function JobsCoverageMapCanvas({
                             </Badge>
                           </div>
                           <Link
-                            to="/jobs/$jobId"
-                            params={{ jobId: job.id }}
+                            to="/jobs"
+                            search={(current) =>
+                              openWorkspaceSheetSearch(current, {
+                                jobId: job.id,
+                                kind: "job.detail",
+                              })
+                            }
                             className="leading-6 font-medium hover:underline"
                           >
                             {job.title}

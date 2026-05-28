@@ -1,11 +1,11 @@
 import {
-  Outlet,
   createFileRoute,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
 
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
+import { shouldEnableJobsListHotkeys } from "#/features/jobs/jobs-route-hotkeys";
 import { loadJobsRouteData } from "#/features/jobs/jobs-route-loader";
 import { decodeJobsSearch } from "#/features/jobs/jobs-search";
 
@@ -27,8 +27,13 @@ function JobsRoute() {
   const { list, options, viewer } = Route.useLoaderData();
   const navigate = useNavigate({ from: "/jobs" });
   const search = Route.useSearch();
-  const listHotkeysEnabled = useRouterState({
-    select: (state) => state.location.pathname === "/jobs",
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const stack = search.sheets ?? [];
+  const listHotkeysEnabled = shouldEnableJobsListHotkeys({
+    pathname,
+    stack,
   });
 
   return (
@@ -46,10 +51,9 @@ function JobsRoute() {
       }}
       options={options}
       queryClient={queryClient}
+      stack={stack}
       viewMode={search.view ?? "list"}
       viewer={viewer}
-    >
-      <Outlet />
-    </JobsRouteContent>
+    />
   );
 }

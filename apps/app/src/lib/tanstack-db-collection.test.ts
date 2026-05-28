@@ -1,4 +1,5 @@
 import {
+  ensureTanStackDbCollectionReadyForWrite,
   markTanStackDbCollectionWrite,
   reconcileQueryCollectionDataAfterConcurrentWrite,
   replaceSyncedCollectionData,
@@ -111,6 +112,28 @@ describe("TanStack DB collection helpers", () => {
         type: "batch-end",
       },
     ]);
+  });
+
+  it("preloads collections before manual writes when sync is not ready", async () => {
+    const preload = vi.fn<() => Promise<void>>().mockResolvedValue();
+
+    await ensureTanStackDbCollectionReadyForWrite({
+      preload,
+      status: "idle",
+    });
+
+    expect(preload).toHaveBeenCalledOnce();
+  });
+
+  it("does not preload collections that are already ready", async () => {
+    const preload = vi.fn<() => Promise<void>>().mockResolvedValue();
+
+    await ensureTanStackDbCollectionReadyForWrite({
+      preload,
+      status: "ready",
+    });
+
+    expect(preload).not.toHaveBeenCalled();
   });
 
   it("returns authoritative query data when no local writes raced the request", () => {

@@ -2,7 +2,10 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
-import { waitForSubmitHydration } from "./wait-for-submit-hydration";
+import {
+  waitForLocatorHydration,
+  waitForSubmitHydration,
+} from "./wait-for-submit-hydration";
 
 const JOBS_ROUTE_TIMEOUT_MS = 30_000;
 
@@ -63,6 +66,7 @@ export class JobsCreateSheet {
   readonly siteLocation: Locator;
   readonly siteLocationStatus: Locator;
   readonly siteName: Locator;
+  readonly siteSubmit: Locator;
   readonly contact: Locator;
   readonly contactName: Locator;
   readonly submit: Locator;
@@ -83,6 +87,9 @@ export class JobsCreateSheet {
     this.siteLocation = this.siteDialog.getByLabel("Location");
     this.siteLocationStatus = this.siteDialog.getByRole("status");
     this.siteName = this.siteDialog.getByLabel("Site name");
+    this.siteSubmit = this.siteDialog.getByRole("button", {
+      name: "Create site",
+    });
     this.contact = this.root.getByLabel("Contact");
     this.contactName = page.getByPlaceholder("Contact");
     this.submit = this.root.getByRole("button", { name: "Create job" });
@@ -90,7 +97,7 @@ export class JobsCreateSheet {
 
   async expectOpen() {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\/new$/, {
+      expect(this.page).toHaveURL(/\/jobs\?.*sheets=/, {
         timeout: JOBS_ROUTE_TIMEOUT_MS,
       }),
       expect(this.heading).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
@@ -101,6 +108,10 @@ export class JobsCreateSheet {
   async chooseSiteOption(optionLabel: string) {
     await this.site.click();
     await chooseCommandOption(this.page, optionLabel);
+
+    if (optionLabel === "Create a new site") {
+      await this.expectSiteDialogReady();
+    }
   }
 
   async chooseContactOption(optionLabel: string) {
@@ -124,11 +135,19 @@ export class JobsCreateSheet {
     );
   }
 
+  async expectSiteDialogReady() {
+    await Promise.all([
+      expect(this.siteDialog).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
+      waitForLocatorHydration(this.siteName),
+      waitForLocatorHydration(this.siteSubmit),
+    ]);
+  }
+
   async closeSiteDialog() {
-    await this.siteDialog
-      .getByRole("button", { name: "Close site details" })
-      .click();
-    await expect(this.siteDialog).toBeHidden();
+    await this.siteSubmit.click();
+    await expect(this.siteDialog).toBeHidden({
+      timeout: JOBS_ROUTE_TIMEOUT_MS,
+    });
   }
 }
 
@@ -181,7 +200,7 @@ export class JobDetailSheet {
 
   async expectOpen(title: string) {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\/.+$/, {
+      expect(this.page).toHaveURL(/\/jobs\?.*sheets=/, {
         timeout: JOBS_ROUTE_TIMEOUT_MS,
       }),
       expect(this.root.getByText(title, { exact: true })).toBeVisible({
