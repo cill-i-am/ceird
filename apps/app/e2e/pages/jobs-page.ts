@@ -130,7 +130,9 @@ export class JobsCreateSheet {
 
   async closeSiteDialog() {
     await this.siteSubmit.click();
-    await expect(this.siteDialog).toBeHidden();
+    await expect(this.siteDialog).toBeHidden({
+      timeout: JOBS_ROUTE_TIMEOUT_MS,
+    });
   }
 }
 
