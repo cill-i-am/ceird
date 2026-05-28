@@ -58,7 +58,7 @@ export function decodeWorkspaceSheetSearch(
   return search.sheets === undefined ? {} : search;
 }
 
-export function getWorkspaceSheetStack(
+function getWorkspaceSheetStack(
   search: WorkspaceSheetSearch
 ): readonly WorkspaceSheet[] {
   return search.sheets ?? [];

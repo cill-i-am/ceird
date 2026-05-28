@@ -122,7 +122,7 @@ export function WorkspaceSheetNavigationProvider({
 }
 
 export function useWorkspaceSheetNavigation() {
-  const context = React.useContext(WorkspaceSheetNavigationContext);
+  const context = React.use(WorkspaceSheetNavigationContext);
 
   if (!context) {
     throw new Error(
@@ -133,16 +133,8 @@ export function useWorkspaceSheetNavigation() {
   return context;
 }
 
-export function useOpenWorkspaceSheet() {
-  return useWorkspaceSheetNavigation().open;
-}
-
 export function usePushWorkspaceSheet() {
   return useWorkspaceSheetNavigation().push;
-}
-
-export function usePopWorkspaceSheet() {
-  return useWorkspaceSheetNavigation().pop;
 }
 
 function withDecodedCurrentStack<T extends WorkspaceSheetSearch>(current: T) {

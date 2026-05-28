@@ -9,6 +9,8 @@ import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
+const EMPTY_WORKSPACE_SHEET_STACK: readonly WorkspaceSheet[] = [];
+
 export function JobsRouteContent({
   activeOrganizationId,
   listHotkeysEnabled,
@@ -16,7 +18,7 @@ export function JobsRouteContent({
   onViewModeChange,
   options,
   queryClient,
-  stack = [],
+  stack = EMPTY_WORKSPACE_SHEET_STACK,
   viewMode,
   viewer,
 }: {

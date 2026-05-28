@@ -9,11 +9,13 @@ import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet
 
 import { SitesStateProvider } from "./sites-state";
 
+const EMPTY_WORKSPACE_SHEET_STACK: readonly WorkspaceSheet[] = [];
+
 export function SitesRouteContent({
   activeOrganizationId,
   options,
   queryClient,
-  stack = [],
+  stack = EMPTY_WORKSPACE_SHEET_STACK,
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;

@@ -35,6 +35,10 @@ type AsyncResource<T> =
   | { readonly status: "error"; readonly error: unknown }
   | { readonly status: "loading" }
   | { readonly data: T; readonly status: "success" };
+type AsyncResourceAction<T> =
+  | { readonly type: "error"; readonly error: unknown }
+  | { readonly type: "loading" }
+  | { readonly type: "success"; readonly data: T };
 type WorkspaceSheetDomainStatus = "available" | "error" | "loading";
 
 interface WorkspaceSheetRenderEntry {
@@ -437,9 +441,10 @@ function useAsyncResource<T>(
   load: () => Promise<T>,
   enabled = true
 ): AsyncResource<T> {
-  const [resource, setResource] = React.useState<AsyncResource<T>>({
-    status: "loading",
-  });
+  const [resource, dispatch] = React.useReducer(
+    asyncResourceReducer<T>,
+    INITIAL_ASYNC_RESOURCE
+  );
 
   React.useEffect(() => {
     if (!enabled) {
@@ -448,17 +453,17 @@ function useAsyncResource<T>(
 
     let ignore = false;
 
-    setResource({ status: "loading" });
+    dispatch({ type: "loading" });
     async function loadResource() {
       try {
         const data = await load();
 
         if (!ignore) {
-          setResource({ data, status: "success" });
+          dispatch({ data, type: "success" });
         }
       } catch (error) {
         if (!ignore) {
-          setResource({ error, status: "error" });
+          dispatch({ error, type: "error" });
         }
       }
     }
@@ -471,6 +476,28 @@ function useAsyncResource<T>(
   }, [enabled, load]);
 
   return resource;
+}
+
+const INITIAL_ASYNC_RESOURCE: AsyncResource<never> = { status: "loading" };
+
+function asyncResourceReducer<T>(
+  _state: AsyncResource<T>,
+  action: AsyncResourceAction<T>
+): AsyncResource<T> {
+  switch (action.type) {
+    case "error": {
+      return { error: action.error, status: "error" };
+    }
+    case "loading": {
+      return INITIAL_ASYNC_RESOURCE;
+    }
+    case "success": {
+      return { data: action.data, status: "success" };
+    }
+    default: {
+      return assertNever(action);
+    }
+  }
 }
 
 function useWorkspaceSheetRenderEntries(

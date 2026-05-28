@@ -74,7 +74,7 @@ export function useWorkspaceSheetSiteCreated(
 }
 
 function useWorkspaceSheetEventsContext() {
-  const context = React.useContext(WorkspaceSheetEventsContext);
+  const context = React.use(WorkspaceSheetEventsContext);
 
   if (!context) {
     throw new Error(
