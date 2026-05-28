@@ -29,7 +29,6 @@ import {
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate } from "@tanstack/react-router";
 import { Exit, Option, Schema } from "effect";
 import * as React from "react";
 
@@ -149,12 +148,16 @@ interface ExternalMemberOption {
 }
 
 interface JobsDetailSheetProps {
+  readonly active?: boolean;
   readonly initialDetail: JobDetailResponse;
+  readonly onClose?: () => void;
   readonly viewer: JobsViewer;
 }
 
 export function JobsDetailSheet({
+  active = true,
   initialDetail,
+  onClose,
   viewer,
 }: JobsDetailSheetProps) {
   return (
@@ -162,13 +165,24 @@ export function JobsDetailSheet({
       key={initialDetail.job.id}
       initialDetail={initialDetail}
     >
-      <JobsDetailSheetContent viewer={viewer} />
+      <JobsDetailSheetContent
+        active={active}
+        onClose={onClose}
+        viewer={viewer}
+      />
     </JobsDetailStateProvider>
   );
 }
 
-function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
-  const navigate = useNavigate({ from: "/jobs/$jobId" });
+function JobsDetailSheetContent({
+  active,
+  onClose,
+  viewer,
+}: {
+  readonly active: boolean;
+  readonly onClose?: () => void;
+  readonly viewer: JobsViewer;
+}) {
   const {
     addJobComment,
     addJobVisit,
@@ -380,12 +394,6 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
     []
   );
 
-  const navigateToJobs = React.useCallback(() => {
-    React.startTransition(() => {
-      navigate({ to: "/jobs" });
-    });
-  }, [navigate]);
-
   const finishClosedSheet = React.useCallback(() => {
     if (closeNavigationTimeoutRef.current) {
       clearTimeout(closeNavigationTimeoutRef.current);
@@ -394,9 +402,9 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
 
     if (navigateAfterCloseRef.current) {
       navigateAfterCloseRef.current = false;
-      navigateToJobs();
+      onClose?.();
     }
-  }, [navigateToJobs]);
+  }, [onClose]);
 
   const closeSheet = React.useCallback(() => {
     navigateAfterCloseRef.current = true;
@@ -445,6 +453,10 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   const jobDetailCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {
+    if (!active) {
+      return [];
+    }
+
     const actions: CommandAction[] = [
       {
         group: "Current job",
@@ -498,6 +510,7 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
 
     return actions;
   }, [
+    active,
     canReopen,
     closeSheet,
     detail.job.status,
@@ -511,24 +524,24 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   ]);
 
   useRegisterCommandActions(jobDetailCommandActions);
-  useAppHotkey("jobDetailClose", closeSheet);
+  useAppHotkey("jobDetailClose", closeSheet, { enabled: active });
   useAppHotkey("jobDetailStatus", () => setActivePanel("workflow"), {
-    enabled: !isExternalViewer,
+    enabled: active && !isExternalViewer,
   });
   useAppHotkey("jobDetailSite", () => setActivePanel("site"), {
-    enabled: !isExternalViewer,
+    enabled: active && !isExternalViewer,
   });
   useAppHotkey("jobDetailComment", () => setActivePanel("comments"), {
-    enabled: canAddComment,
+    enabled: active && canAddComment,
   });
   useAppHotkey("jobDetailVisit", () => setActivePanel("visits"), {
-    enabled: !isExternalViewer && canAddVisit,
+    enabled: active && !isExternalViewer && canAddVisit,
   });
   useAppHotkey(
     "jobDetailCollaborators",
     () => setActivePanel("collaborators"),
     {
-      enabled: !isExternalViewer && canManageCollaborators,
+      enabled: active && !isExternalViewer && canManageCollaborators,
     }
   );
 
@@ -1159,6 +1172,10 @@ function JobsDetailSheetContent({ viewer }: { readonly viewer: JobsViewer }) {
   }
 
   const activePanelContent = renderActivePanelContent();
+
+  if (!active) {
+    return null;
+  }
 
   return (
     <ResponsiveDrawer

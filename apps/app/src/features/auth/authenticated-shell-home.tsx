@@ -21,6 +21,8 @@ import {
 } from "#/components/app-row-list";
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
+import { createWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
+import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
@@ -61,8 +63,10 @@ const EMPTY_AUTHENTICATED_HOME_DASHBOARD: AuthenticatedHomeDashboard = {
 
 export function AuthenticatedShellHome({
   dashboard = EMPTY_AUTHENTICATED_HOME_DASHBOARD,
+  routeHotkeysEnabled = true,
 }: {
   readonly dashboard?: AuthenticatedHomeDashboard;
+  readonly routeHotkeysEnabled?: boolean;
 }) {
   const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
   const { session } = useRouteContext({ from: "/_app" });
@@ -78,10 +82,13 @@ export function AuthenticatedShellHome({
     "homeCreateJob",
     () => {
       React.startTransition(() => {
-        navigate({ to: "/jobs/new" });
+        navigate({
+          to: "/jobs",
+          search: createWorkspaceSheetSearch({ kind: "job.create" }),
+        });
       });
     },
-    { ignoreInputs: true }
+    { enabled: routeHotkeysEnabled, ignoreInputs: true }
   );
 
   return (
@@ -111,7 +118,11 @@ export function AuthenticatedShellHome({
                 decorative
               />
             </Link>
-            <Link to="/jobs/new" className={buttonVariants({ size: "sm" })}>
+            <Link
+              to="/jobs"
+              search={createWorkspaceSheetSearch({ kind: "job.create" })}
+              className={buttonVariants({ size: "sm" })}
+            >
               <HugeiconsIcon
                 icon={Add01Icon}
                 strokeWidth={2}
@@ -245,7 +256,11 @@ function JobsAtAGlance({
     return (
       <DashboardPanel
         title="Jobs at a glance"
-        action={<DashboardLink to="/jobs/new">New job</DashboardLink>}
+        action={
+          <DashboardLink to="/jobs" sheet={{ kind: "job.create" }}>
+            New job
+          </DashboardLink>
+        }
       >
         <EmptyPanelMessage
           title="No active jobs."
@@ -284,8 +299,11 @@ function HomeJobRow({ job }: { readonly job: AuthenticatedHomeJobItem }) {
     >
       <div className="min-w-0 font-medium">
         <Link
-          to="/jobs/$jobId"
-          params={{ jobId: job.id }}
+          to="/jobs"
+          search={createWorkspaceSheetSearch({
+            jobId: job.id,
+            kind: "job.detail",
+          })}
           className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {job.title}
@@ -330,7 +348,11 @@ function SitesWithActiveWork({
     return (
       <DashboardPanel
         title="Sites with active work"
-        action={<DashboardLink to="/sites/new">New site</DashboardLink>}
+        action={
+          <DashboardLink to="/sites" sheet={{ kind: "site.create" }}>
+            New site
+          </DashboardLink>
+        }
       >
         <EmptyPanelMessage
           title={emptySitesTitle}
@@ -369,8 +391,11 @@ function HomeSiteRow({ site }: { readonly site: AuthenticatedHomeSiteItem }) {
     >
       <div className="min-w-0 font-medium">
         <Link
-          to="/sites/$siteId"
-          params={{ siteId: site.id }}
+          to="/sites"
+          search={createWorkspaceSheetSearch({
+            kind: "site.detail",
+            siteId: site.id,
+          })}
           className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {site.name}
@@ -455,15 +480,9 @@ function DashboardGridCell({
 interface NextActionItem {
   readonly badge: string;
   readonly description: string;
-  readonly href:
-    | "/"
-    | "/jobs"
-    | "/jobs/new"
-    | "/members"
-    | "/settings"
-    | "/sites"
-    | "/sites/new";
+  readonly href: "/" | "/jobs" | "/members" | "/settings" | "/sites";
   readonly key: string;
+  readonly sheet?: WorkspaceSheet;
   readonly title: string;
 }
 
@@ -475,33 +494,38 @@ function NextActions({
   return (
     <DashboardPanel title="Next actions">
       <AppRowList className="rounded-none border-0 shadow-none">
-        {actions.map((action, index) => (
-          <AppRowListItem
-            key={action.key}
-            className="flex-row items-start gap-2 px-4 py-2.5"
-          >
-            <AppRowListLeading aria-hidden="true" className="size-7 text-xs">
-              {String(index + 1).padStart(2, "0")}
-            </AppRowListLeading>
-            <AppRowListBody
-              className="gap-0.5"
-              eyebrow={action.badge}
-              title={action.title}
-              description={action.description}
-              descriptionClassName="text-xs/4"
-              truncateTitle={false}
-            />
-            <AppRowListMeta className="self-start pt-1 sm:self-center sm:pt-0">
-              <Link
-                to={action.href}
-                aria-label={action.title}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-              </Link>
-            </AppRowListMeta>
-          </AppRowListItem>
-        ))}
+        {actions.map((action, index) => {
+          const { sheet } = action;
+
+          return (
+            <AppRowListItem
+              key={action.key}
+              className="flex-row items-start gap-2 px-4 py-2.5"
+            >
+              <AppRowListLeading aria-hidden="true" className="size-7 text-xs">
+                {String(index + 1).padStart(2, "0")}
+              </AppRowListLeading>
+              <AppRowListBody
+                className="gap-0.5"
+                eyebrow={action.badge}
+                title={action.title}
+                description={action.description}
+                descriptionClassName="text-xs/4"
+                truncateTitle={false}
+              />
+              <AppRowListMeta className="self-start pt-1 sm:self-center sm:pt-0">
+                <Link
+                  to={action.href}
+                  search={sheet ? createWorkspaceSheetSearch(sheet) : undefined}
+                  aria-label={action.title}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+                </Link>
+              </AppRowListMeta>
+            </AppRowListItem>
+          );
+        })}
       </AppRowList>
     </DashboardPanel>
   );
@@ -570,14 +594,17 @@ function RecentActivity({
 
 function DashboardLink({
   children,
+  sheet,
   to,
 }: {
   readonly children: React.ReactNode;
-  readonly to: "/activity" | "/jobs" | "/jobs/new" | "/sites" | "/sites/new";
+  readonly sheet?: WorkspaceSheet;
+  readonly to: "/activity" | "/jobs" | "/sites";
 }) {
   return (
     <Link
       to={to}
+      search={sheet ? createWorkspaceSheetSearch(sheet) : undefined}
       className="text-xs font-medium text-muted-foreground hover:text-foreground"
     >
       {children}
@@ -630,8 +657,9 @@ function buildNextActions({
     actions.push({
       badge: "Jobs",
       description: "Start the queue with a scheduled job.",
-      href: "/jobs/new",
+      href: "/jobs",
       key: "first-job",
+      sheet: { kind: "job.create" },
       title: "Create the first job",
     });
   }
@@ -640,8 +668,9 @@ function buildNextActions({
     actions.push({
       badge: "Sites",
       description: "Add locations before jobs start moving.",
-      href: "/sites/new",
+      href: "/sites",
       key: "first-site",
+      sheet: { kind: "site.create" },
       title: "Create the first site",
     });
   }

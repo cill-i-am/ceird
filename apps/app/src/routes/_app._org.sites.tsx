@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { SitesRouteContent } from "#/features/sites/sites-route-content";
 import { loadSitesRouteData } from "#/features/sites/sites-route-loader";
@@ -18,15 +18,15 @@ export const Route = createFileRoute("/_app/_org/sites")({
 function SitesRoute() {
   const { activeOrganizationId, queryClient } = Route.useRouteContext();
   const { options, viewer } = Route.useLoaderData();
+  const { sheets } = Route.useSearch();
 
   return (
     <SitesRouteContent
       activeOrganizationId={activeOrganizationId}
       options={options}
       queryClient={queryClient}
+      stack={sheets}
       viewer={viewer}
-    >
-      <Outlet />
-    </SitesRouteContent>
+    />
   );
 }

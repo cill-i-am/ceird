@@ -16,7 +16,7 @@ import type {
 } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
-import type { SiteIdType } from "@ceird/sites-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { createCollection } from "@tanstack/react-db";
@@ -137,7 +137,9 @@ interface JobsStateContextValue {
   ) => void;
   readonly store: JobsStateStore;
   readonly upsertJobOptionLabel: (label: Label) => void;
+  readonly upsertJobOptionSite: (site: SiteOption) => void;
   readonly upsertJobsListItem: (job: JobListItemSource) => Promise<void>;
+  readonly viewer: JobsViewer;
 }
 
 const JobsStateContext = React.createContext<JobsStateContextValue | null>(
@@ -355,6 +357,18 @@ export function JobsStateProvider({
     },
     [state.options]
   );
+  const upsertJobOptionSiteCallback = React.useCallback(
+    (site: SiteOption) => {
+      dispatch({
+        options: {
+          ...state.options,
+          sites: upsertJobOptionSite(state.options.sites, site),
+        },
+        type: "replace-options-state",
+      });
+    },
+    [state.options]
+  );
 
   const value = React.useMemo<JobsStateContextValue>(
     () => ({
@@ -369,7 +383,9 @@ export function JobsStateProvider({
       replaceJobsOptionsState,
       store,
       upsertJobOptionLabel,
+      upsertJobOptionSite: upsertJobOptionSiteCallback,
       upsertJobsListItem,
+      viewer,
     }),
     [
       clearNotice,
@@ -383,7 +399,9 @@ export function JobsStateProvider({
       state.options,
       store,
       upsertJobOptionLabel,
+      upsertJobOptionSiteCallback,
       upsertJobsListItem,
+      viewer,
     ]
   );
 
@@ -406,6 +424,14 @@ export function useJobsListState(): JobsListState {
 
 export function useJobsOptions(): JobOptionsResponse {
   return useJobsStateContext().options;
+}
+
+export function useOptionalJobsViewer(): JobsViewer | undefined {
+  return use(JobsStateContext)?.viewer;
+}
+
+export function useJobsViewer(): JobsViewer {
+  return useJobsStateContext().viewer;
 }
 
 export function useJobsLookup() {
@@ -438,8 +464,27 @@ export function useUpsertJobOptionLabel() {
   return useJobsStateContext().upsertJobOptionLabel;
 }
 
+export function useUpsertJobOptionSite() {
+  return useJobsStateContext().upsertJobOptionSite;
+}
+
 export function isJobsAsyncFailure(result: JobsAsyncResult): boolean {
   return result.error !== null;
+}
+
+export function upsertJobOptionSite(
+  sites: readonly SiteOption[],
+  site: SiteOption
+): readonly SiteOption[] {
+  const existingIndex = sites.findIndex((current) => current.id === site.id);
+
+  if (existingIndex === -1) {
+    return [...sites, site];
+  }
+
+  return sites.map((current, index) =>
+    index === existingIndex ? site : current
+  );
 }
 
 export function getJobsAsyncErrorMessage(error: unknown): string {

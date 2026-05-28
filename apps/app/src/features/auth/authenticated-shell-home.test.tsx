@@ -32,6 +32,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     Link: (({
       children,
       params: _params,
+      search: _search,
       to,
       ...props
     }: {
@@ -39,6 +40,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
       to: string;
       className?: string;
       params?: unknown;
+      search?: unknown;
     }) => (
       <a href={to} {...props}>
         {children}
@@ -96,7 +98,7 @@ describe("authenticated shell home", () => {
       ).toHaveAttribute("href", "/members");
       expect(
         within(pageHeader).getByRole("link", { name: /^new job/i })
-      ).toHaveAttribute("href", "/jobs/new");
+      ).toHaveAttribute("href", "/jobs");
       expect(
         within(pageHeader).queryByRole("link", { name: /open jobs/i })
       ).not.toBeInTheDocument();
@@ -131,7 +133,7 @@ describe("authenticated shell home", () => {
         within(nextActions as HTMLElement).getByRole("link", {
           name: /create the first job/i,
         })
-      ).toHaveAttribute("href", "/jobs/new");
+      ).toHaveAttribute("href", "/jobs");
       expect(
         within(nextActions as HTMLElement).getByRole("link", {
           name: /invite your team/i,
@@ -156,7 +158,20 @@ describe("authenticated shell home", () => {
 
     fireEvent.keyDown(document, { code: "KeyN", key: "n" });
 
-    expect(mockedNavigate).toHaveBeenCalledWith({ to: "/jobs/new" });
+    expect(mockedNavigate).toHaveBeenCalledWith({
+      search: {
+        sheets: [{ kind: "job.create" }],
+      },
+      to: "/jobs",
+    });
+  });
+
+  it("disables the home action hotkey behind active sheets", () => {
+    renderHome(<AuthenticatedShellHome routeHotkeysEnabled={false} />);
+
+    fireEvent.keyDown(document, { code: "KeyN", key: "n" });
+
+    expect(mockedNavigate).not.toHaveBeenCalled();
   });
 
   it(

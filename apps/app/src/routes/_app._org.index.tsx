@@ -21,6 +21,12 @@ export const Route = createFileRoute("/_app/_org/")({
 
 function OrganizationHomeRoute() {
   const dashboard = Route.useLoaderData();
+  const { sheets } = Route.useSearch();
 
-  return <AuthenticatedShellHome dashboard={dashboard} />;
+  return (
+    <AuthenticatedShellHome
+      dashboard={dashboard}
+      routeHotkeysEnabled={(sheets ?? []).length === 0}
+    />
+  );
 }

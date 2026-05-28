@@ -73,10 +73,12 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     Link: (({
       children,
       params,
+      search: _search,
       to,
       ...props
     }: ComponentProps<"a"> & {
       params?: { jobId?: string };
+      search?: unknown;
       to?: string;
     }) => (
       <a href={to?.replace("$jobId", params?.jobId ?? "")} {...props}>
@@ -161,7 +163,7 @@ describe("organization activity page", () => {
       );
       expect(
         screen.getByRole("link", { name: "Inspect boiler" })
-      ).toHaveAttribute("href", "/jobs/11111111-1111-4111-8111-111111111111");
+      ).toHaveAttribute("href", "/jobs");
     }
   );
 

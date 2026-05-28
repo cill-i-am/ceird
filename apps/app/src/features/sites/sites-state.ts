@@ -117,6 +117,7 @@ interface SitesStateContextValue {
   readonly updateSiteResults: Readonly<
     Partial<Record<SiteIdType, SitesAsyncResult>>
   >;
+  readonly viewer: OrganizationViewer;
 }
 
 interface SitesState {
@@ -372,6 +373,7 @@ export function SitesStateProvider({
       store,
       updateSite,
       updateSiteResults,
+      viewer,
     }),
     [
       addSiteComment,
@@ -387,6 +389,7 @@ export function SitesStateProvider({
       store,
       updateSite,
       updateSiteResults,
+      viewer,
     ]
   );
 
@@ -403,6 +406,14 @@ export function useSitesOptions(): SitesOptionsResponse {
     }),
     [sites]
   );
+}
+
+export function useOptionalSitesViewer(): OrganizationViewer | undefined {
+  return use(SitesStateContext)?.viewer;
+}
+
+export function useSitesViewer(): OrganizationViewer {
+  return useSitesStateContext().viewer;
 }
 
 export function useSitesNotice() {

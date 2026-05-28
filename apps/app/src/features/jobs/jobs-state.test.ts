@@ -6,12 +6,13 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import type { LabelIdType } from "@ceird/labels-core";
-import type { SiteIdType } from "@ceird/sites-core";
+import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 
 import {
   defaultJobsListFilters,
   filterVisibleJobs,
   toJobListItem,
+  upsertJobOptionSite,
 } from "./jobs-state";
 
 describe("jobs state", () => {
@@ -77,4 +78,44 @@ describe("jobs state", () => {
       })
     ).toStrictEqual([job]);
   }, 1000);
+
+  it("upserts a created site into job option sites", () => {
+    const site = createSiteOption({
+      id: "44444444-4444-4444-8444-444444444444" as SiteIdType,
+      name: "North depot",
+    });
+    const renamedSite = createSiteOption({
+      id: site.id,
+      name: "North depot renamed",
+    });
+    const addedSite = createSiteOption({
+      id: "55555555-5555-4555-8555-555555555555" as SiteIdType,
+      name: "South depot",
+    });
+
+    expect(upsertJobOptionSite([site], renamedSite)).toStrictEqual([
+      renamedSite,
+    ]);
+    expect(upsertJobOptionSite([site], addedSite)).toStrictEqual([
+      site,
+      addedSite,
+    ]);
+  });
 });
+
+function createSiteOption({
+  id,
+  name,
+}: {
+  readonly id: SiteIdType;
+  readonly name: string;
+}): SiteOption {
+  return {
+    displayLocation: "Dublin",
+    hasUsableCoordinates: false,
+    id,
+    labels: [],
+    locationStatus: "unverified",
+    name,
+  };
+}

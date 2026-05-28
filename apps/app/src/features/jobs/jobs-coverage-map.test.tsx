@@ -17,9 +17,10 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
+      search: _search,
       to,
       ...props
-    }: ComponentProps<"a"> & { to?: string }) => (
+    }: ComponentProps<"a"> & { search?: unknown; to?: string }) => (
       <a href={to} {...props}>
         {children}
       </a>
@@ -105,7 +106,7 @@ describe("jobs coverage map", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Depot" })).toHaveAttribute(
       "href",
-      "/sites/$siteId"
+      "/sites"
     );
     expect(
       screen.getByRole("link", { name: "Await switchgear" })
@@ -157,7 +158,7 @@ describe("jobs coverage map", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Depot" })).toHaveAttribute(
       "href",
-      "/sites/$siteId"
+      "/sites"
     );
     expect(screen.getByText("1 job")).toBeInTheDocument();
     expect(
@@ -204,14 +205,14 @@ describe("jobs coverage map", () => {
     expect(screen.getByText("5 jobs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Depot job 1" })).toHaveAttribute(
       "href",
-      "/jobs/$jobId"
+      "/jobs"
     );
     expect(
       screen.queryByRole("link", { name: "Depot job 5" })
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View 1 more on site" })
-    ).toHaveAttribute("href", "/sites/$siteId");
+    ).toHaveAttribute("href", "/sites");
   }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {

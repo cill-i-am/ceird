@@ -1,31 +1,26 @@
 import type { OrganizationId } from "@ceird/identity-core";
-import type {
-  JobDetailResponse,
-  JobListResponse,
-  JobOptionsResponse,
-} from "@ceird/jobs-core";
+import type { JobListResponse, JobOptionsResponse } from "@ceird/jobs-core";
 import type { QueryClient } from "@tanstack/query-core";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps } from "react";
 
-import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
-import { JobsDetailSheet } from "#/features/jobs/jobs-detail-sheet";
 import { JobsPage } from "#/features/jobs/jobs-page";
 import { JobsStateProvider } from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
+import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
 export function JobsRouteContent({
   activeOrganizationId,
-  children,
   listHotkeysEnabled,
   list,
   onViewModeChange,
   options,
   queryClient,
+  stack = [],
   viewMode,
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
-  readonly children?: ReactNode;
   readonly listHotkeysEnabled?: ComponentProps<
     typeof JobsPage
   >["listHotkeysEnabled"];
@@ -35,6 +30,7 @@ export function JobsRouteContent({
   >["onViewModeChange"];
   readonly options: JobOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
+  readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
 }) {
@@ -52,23 +48,8 @@ export function JobsRouteContent({
         onViewModeChange={onViewModeChange}
         viewMode={viewMode}
         viewer={viewer}
-      >
-        {children}
-      </JobsPage>
+      />
+      <WorkspaceSheetStack stack={stack} />
     </JobsStateProvider>
   );
-}
-
-export function JobsDetailRouteContent({
-  initialDetail,
-  viewer,
-}: {
-  readonly initialDetail: JobDetailResponse;
-  readonly viewer: JobsViewer;
-}) {
-  return <JobsDetailSheet initialDetail={initialDetail} viewer={viewer} />;
-}
-
-export function JobsCreateRouteContent() {
-  return <JobsCreateSheet />;
 }

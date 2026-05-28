@@ -6,7 +6,6 @@ import {
   Location01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
@@ -22,6 +21,7 @@ import {
   DrawerTitle,
 } from "#/components/ui/drawer";
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
+import { useNotifyWorkspaceSheetSiteCreated } from "#/features/workspace-sheets/workspace-sheet-events";
 import { submitClientForm } from "#/lib/client-form-submit";
 
 import {
@@ -43,11 +43,16 @@ import {
 
 export type SitesCreateFieldErrors = SiteCreateDraftFieldErrors;
 
-export function SitesCreateSheet() {
-  const navigate = useNavigate({ from: "/sites/new" });
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  });
+export function SitesCreateSheet({
+  active = true,
+  onClose,
+  siteCreatedTargetId,
+}: {
+  readonly active?: boolean;
+  readonly onClose?: () => void;
+  readonly siteCreatedTargetId?: string | undefined;
+} = {}) {
+  const notifySiteCreated = useNotifyWorkspaceSheetSiteCreated();
   const [createResult, createSite] = useCreateSiteMutation();
   const [fieldErrors, setFieldErrors] = React.useState<SitesCreateFieldErrors>(
     {}
@@ -55,24 +60,12 @@ export function SitesCreateSheet() {
   const [values, setValues] = React.useState<SiteCreateDraft>(() =>
     createDefaultSiteCreateDraft()
   );
-  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const [overlayOpen, setOverlayOpen] = React.useState(true);
   const navigateAfterCloseRef = React.useRef(false);
   const resetAfterCloseRef = React.useRef(false);
   const closeNavigationTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  React.useEffect(() => {
-    if (pathname === "/sites/new") {
-      setOverlayOpen(true);
-    }
-  }, [pathname]);
-
-  function navigateToSites() {
-    React.startTransition(() => {
-      navigate({ to: "/sites" });
-    });
-  }
-
   function finishClosedSheet() {
     if (closeNavigationTimeoutRef.current) {
       clearTimeout(closeNavigationTimeoutRef.current);
@@ -86,7 +79,7 @@ export function SitesCreateSheet() {
 
     if (navigateAfterCloseRef.current) {
       navigateAfterCloseRef.current = false;
-      navigateToSites();
+      onClose?.();
     }
   }
 
@@ -125,6 +118,7 @@ export function SitesCreateSheet() {
     const exit = await createSite(payload);
 
     if (Exit.isSuccess(exit)) {
+      notifySiteCreated(exit.value, siteCreatedTargetId);
       setFieldErrors({});
       resetAfterCloseRef.current = true;
       closeSheet();
@@ -142,6 +136,10 @@ export function SitesCreateSheet() {
         location: failure.value.message,
       }));
     }
+  }
+
+  if (!active) {
+    return null;
   }
 
   return (
