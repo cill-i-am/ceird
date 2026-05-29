@@ -148,25 +148,24 @@ describe("workspace sheet stack", () => {
     expect(screen.getByRole("dialog", { name: "New job" })).toBeVisible();
   });
 
-  it("only renders the top sheet drawer when sheets are stacked", () => {
-    const stack = [{ kind: "job.create" }, { kind: "job.create" }] as const;
+  it("renders the immediate parent sheet as live Vaul drawer content", async () => {
+    const stack = [{ kind: "job.create" }, { kind: "site.create" }] as const;
 
-    render(
-      <JobsStateProvider
-        activeOrganizationId={"org_123" as never}
-        list={{ items: [], nextCursor: undefined }}
-        options={{ contacts: [], labels: [], members: [], sites: [] }}
-        viewer={{ role: "owner", userId: "user_123" as never }}
-      >
-        <WorkspaceSheetEventsProvider>
-          <WorkspaceSheetNavigationProvider stack={stack}>
-            <WorkspaceSheetStack stack={stack} />
-          </WorkspaceSheetNavigationProvider>
-        </WorkspaceSheetEventsProvider>
-      </JobsStateProvider>
-    );
+    render(renderStackWithJobsProvider(stack));
 
-    expect(screen.getAllByRole("dialog", { name: "New job" })).toHaveLength(1);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.queryByTestId("workspace-sheet-background")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("New site").closest("[data-vaul-drawer]")
+    ).toHaveAttribute("data-workspace-sheet-interactive", "true");
+    expect(
+      screen.getByText("New job").closest("[data-vaul-drawer]")
+    ).toHaveAttribute("data-workspace-sheet-interactive", "false");
   });
 
   it("keeps an inactive parent sheet draft when a nested domain provider resolves", async () => {
@@ -188,7 +187,21 @@ describe("workspace sheet stack", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByRole("dialog", { name: "Loading site" })).toBeVisible();
+    const loadingSiteDialog = screen.getByRole("dialog", { name: "New site" });
+
+    expect(loadingSiteDialog).toBeVisible();
+    expect(
+      screen.queryByTestId("workspace-sheet-background")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("New job").closest("[data-vaul-drawer]")
+    ).toHaveAttribute("data-workspace-sheet-interactive", "false");
+    expect(
+      screen.queryByRole("dialog", { name: "Loading site" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("sites-create-sheet-skeleton-row")
+    ).not.toHaveLength(0);
 
     await act(async () => {
       const deferredSitesRouteData = getDeferredSitesRouteData();
@@ -202,6 +215,9 @@ describe("workspace sheet stack", () => {
 
     const siteDialog = await screen.findByRole("dialog", { name: "New site" });
     expect(siteDialog).toBeVisible();
+    expect(
+      screen.queryByTestId("sites-create-sheet-skeleton-row")
+    ).not.toBeInTheDocument();
 
     await act(async () => {
       view.rerender(renderStackWithJobsProvider(parentStack));

@@ -67,8 +67,14 @@ and `/sites?sheets=[{kind:"site.detail",siteId:"..."},{kind:"job.create",siteId:
 The stack stores only durable sheet identity and seed IDs; unsaved form fields
 remain local to mounted sheet components. Opening a child sheet appends to the
 stack so the parent draft stays mounted, and closing pops only the active
-sheet. Detail sheets load their provider and detail data inside the stack and
-compose loading states with the shared `Skeleton` component.
+sheet. The renderer folds the URL stack into a real Vaul drawer tree, deriving
+an explicit drawer kind (`root` or `nested`) and sheet layer (`active` or
+`background`) for each entry. Only the active sheet is interactive, while Vaul
+keeps the visible parent drawer mounted and applies the native nested-drawer
+scale and displacement. Detail sheets load their provider and detail data inside
+the stack. Create sheets keep async provider loading inside the real sheet body,
+using the shared `Skeleton` component instead of swapping through a separate
+loading drawer.
 
 ## Application Shell
 

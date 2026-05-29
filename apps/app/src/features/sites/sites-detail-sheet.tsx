@@ -25,10 +25,7 @@ import {
   DrawerTrigger,
 } from "#/components/ui/drawer";
 import { Input } from "#/components/ui/input";
-import {
-  ResponsiveDrawer,
-  ResponsiveNestedDrawer,
-} from "#/components/ui/responsive-drawer";
+import { ResponsiveNestedDrawer } from "#/components/ui/responsive-drawer";
 import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import {
@@ -36,6 +33,14 @@ import {
   buildSiteAddressLines,
 } from "#/features/sites/site-location";
 import { SiteLocationMapPreview } from "#/features/sites/site-location-map-preview";
+import {
+  WorkspaceSheetDrawer,
+  isWorkspaceSheetLayerInteractive,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
+import type {
+  WorkspaceSheetDrawerKind,
+  WorkspaceSheetLayer,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
 import { usePushWorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-navigation";
 import { submitClientForm } from "#/lib/client-form-submit";
 
@@ -62,10 +67,13 @@ import {
 
 interface SitesDetailSheetProps {
   readonly active?: boolean;
+  readonly drawerKind?: WorkspaceSheetDrawerKind | undefined;
   readonly hasMoreRelatedJobs?: boolean;
   readonly initialSite: SiteOption | null;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose?: () => void;
   readonly relatedJobs?: readonly JobListItem[];
+  readonly sheetLayer?: WorkspaceSheetLayer | undefined;
   readonly siteId: SiteIdType;
   readonly viewer: OrganizationViewer;
 }
@@ -98,10 +106,13 @@ type SiteDetailEditor = "location" | "notes";
 // react-doctor-disable-next-line
 export function SitesDetailSheet({
   active = true,
+  drawerKind = "root",
   hasMoreRelatedJobs = false,
   initialSite,
+  nestedSheet,
   onClose,
   relatedJobs = EMPTY_RELATED_JOBS,
+  sheetLayer = "active",
   siteId,
   viewer,
   // react-doctor-disable-next-line
@@ -128,6 +139,7 @@ export function SitesDetailSheet({
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState(currentSite?.name ?? "");
   const navigateAfterCloseRef = React.useRef(false);
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
 
   // Reset the editable draft when the backing site record changes.
   // react-doctor-disable-next-line
@@ -256,10 +268,12 @@ export function SitesDetailSheet({
 
   if (!currentSite) {
     return (
-      <ResponsiveDrawer
+      <WorkspaceSheetDrawer
+        drawerKind={drawerKind}
+        layer={sheetLayer}
         open={drawerOpen}
         onOpenChange={(open) => {
-          if (!open) {
+          if (canInteract && !open) {
             closeSheet();
           }
         }}
@@ -270,7 +284,10 @@ export function SitesDetailSheet({
           }
         }}
       >
-        <DrawerContent className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
+        <DrawerContent
+          className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!"
+          data-workspace-sheet-interactive={canInteract ? "true" : "false"}
+        >
           <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
             <DrawerTitle>Site not found</DrawerTitle>
             <DrawerDescription>
@@ -283,15 +300,18 @@ export function SitesDetailSheet({
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>
-      </ResponsiveDrawer>
+        {nestedSheet}
+      </WorkspaceSheetDrawer>
     );
   }
 
   return (
-    <ResponsiveDrawer
+    <WorkspaceSheetDrawer
+      drawerKind={drawerKind}
+      layer={sheetLayer}
       open={drawerOpen}
       onOpenChange={(open) => {
-        if (!open) {
+        if (canInteract && !open) {
           closeSheet();
         }
       }}
@@ -302,7 +322,10 @@ export function SitesDetailSheet({
         }
       }}
     >
-      <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl">
+      <DrawerContent
+        className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-2xl"
+        data-workspace-sheet-interactive={canInteract ? "true" : "false"}
+      >
         <DrawerHeader className="shrink-0 gap-3 border-b px-5 py-4 text-left md:px-6 md:py-5">
           <div className="flex min-w-0 items-start justify-between gap-3">
             <SiteTitleEditor
@@ -391,7 +414,8 @@ export function SitesDetailSheet({
           />
         </ResponsiveNestedDrawer>
       </DrawerContent>
-    </ResponsiveDrawer>
+      {nestedSheet}
+    </WorkspaceSheetDrawer>
   );
 }
 

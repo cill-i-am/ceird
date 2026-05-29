@@ -60,10 +60,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
-import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Textarea } from "#/components/ui/textarea";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { toOptionalTrimmedString } from "#/features/sites/site-create-form";
+import {
+  WorkspaceSheetDrawer,
+  isWorkspaceSheetLayerInteractive,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
+import type {
+  WorkspaceSheetDrawerKind,
+  WorkspaceSheetLayer,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
 import { useWorkspaceSheetSiteCreated } from "#/features/workspace-sheets/workspace-sheet-events";
 import { usePushWorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-navigation";
 import { submitClientForm } from "#/lib/client-form-submit";
@@ -151,13 +158,20 @@ function createDefaultJobsFormState(
 // react-doctor-disable-next-line
 export function JobsCreateSheet({
   active = true,
+  drawerKind = "root",
   initialSiteId,
+  nestedSheet,
   onClose,
+  sheetLayer = "active",
 }: {
   readonly active?: boolean;
+  readonly drawerKind?: WorkspaceSheetDrawerKind | undefined;
   readonly initialSiteId?: SiteIdType;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose?: () => void;
+  readonly sheetLayer?: WorkspaceSheetLayer | undefined;
 } = {}) {
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
   const pushWorkspaceSheet = usePushWorkspaceSheet();
   const options = useJobsOptions();
   const upsertJobOptionSite = useUpsertJobOptionSite();
@@ -316,9 +330,12 @@ export function JobsCreateSheet({
 
   return (
     <ResponsiveCreateOverlay
+      drawerKind={drawerKind}
+      nestedSheet={nestedSheet}
       open={overlayOpen}
+      sheetLayer={sheetLayer}
       onOpenChange={(open) => {
-        if (!open && !createResult.waiting) {
+        if (canInteract && !open && !createResult.waiting) {
           closeSheet();
         }
       }}
@@ -769,22 +786,35 @@ function LinearContactSelect({
 
 function ResponsiveCreateOverlay({
   children,
+  drawerKind,
+  nestedSheet,
   onAnimationEnd,
   onOpenChange,
   open,
+  sheetLayer,
 }: {
   readonly children: React.ReactNode;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
+  readonly nestedSheet?: React.ReactNode;
   readonly onAnimationEnd: (open: boolean) => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
+  readonly sheetLayer: WorkspaceSheetLayer;
 }) {
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
+
   return (
-    <ResponsiveDrawer
+    <WorkspaceSheetDrawer
+      drawerKind={drawerKind}
+      layer={sheetLayer}
       open={open}
       onOpenChange={onOpenChange}
       onAnimationEnd={onAnimationEnd}
     >
-      <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg">
+      <DrawerContent
+        className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg"
+        data-workspace-sheet-interactive={canInteract ? "true" : "false"}
+      >
         <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0">
@@ -807,7 +837,8 @@ function ResponsiveCreateOverlay({
         </DrawerHeader>
         {children}
       </DrawerContent>
-    </ResponsiveDrawer>
+      {nestedSheet}
+    </WorkspaceSheetDrawer>
   );
 }
 
