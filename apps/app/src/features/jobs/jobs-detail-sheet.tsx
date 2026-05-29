@@ -76,13 +76,20 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "#/components/ui/responsive-dialog";
-import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { validateLabelName } from "#/features/labels/label-name-validation";
+import {
+  WorkspaceSheetDrawer,
+  isWorkspaceSheetLayerInteractive,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
+import type {
+  WorkspaceSheetDrawerKind,
+  WorkspaceSheetLayer,
+} from "#/features/workspace-sheets/workspace-sheet-drawer";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { cn } from "#/lib/utils";
@@ -149,15 +156,21 @@ interface ExternalMemberOption {
 
 interface JobsDetailSheetProps {
   readonly active?: boolean;
+  readonly drawerKind?: WorkspaceSheetDrawerKind | undefined;
   readonly initialDetail: JobDetailResponse;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose?: () => void;
+  readonly sheetLayer?: WorkspaceSheetLayer | undefined;
   readonly viewer: JobsViewer;
 }
 
 export function JobsDetailSheet({
   active = true,
+  drawerKind = "root",
   initialDetail,
+  nestedSheet,
   onClose,
+  sheetLayer = "active",
   viewer,
 }: JobsDetailSheetProps) {
   return (
@@ -167,7 +180,10 @@ export function JobsDetailSheet({
     >
       <JobsDetailSheetContent
         active={active}
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
         onClose={onClose}
+        sheetLayer={sheetLayer}
         viewer={viewer}
       />
     </JobsDetailStateProvider>
@@ -176,11 +192,17 @@ export function JobsDetailSheet({
 
 function JobsDetailSheetContent({
   active,
+  drawerKind,
+  nestedSheet,
   onClose,
+  sheetLayer,
   viewer,
 }: {
   readonly active: boolean;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose?: () => void;
+  readonly sheetLayer: WorkspaceSheetLayer;
   readonly viewer: JobsViewer;
 }) {
   const {
@@ -214,6 +236,7 @@ function JobsDetailSheetContent({
   const assignLabelResult = results.assignLabel;
   const createAndAssignLabelResult = results.createAndAssignLabel;
   const removeLabelResult = results.removeLabel;
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
   const hasAssignmentAccess = hasAssignedJobAccess(
     viewer,
     detail.job.assigneeId
@@ -1178,10 +1201,12 @@ function JobsDetailSheetContent({
   }
 
   return (
-    <ResponsiveDrawer
+    <WorkspaceSheetDrawer
+      drawerKind={drawerKind}
+      layer={sheetLayer}
       open={overlayOpen}
       onOpenChange={(open) => {
-        if (!open) {
+        if (canInteract && !open) {
           closeSheet();
         }
       }}
@@ -1194,6 +1219,7 @@ function JobsDetailSheetContent({
       <DrawerContent
         aria-describedby={undefined}
         className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-[38rem]"
+        data-workspace-sheet-interactive={canInteract ? "true" : "false"}
       >
         <DrawerHeader className="shrink-0 gap-4 border-b px-5 py-4">
           <div className="flex items-start justify-between gap-4">
@@ -1327,7 +1353,8 @@ function JobsDetailSheetContent({
           </div>
         </div>
       </DrawerContent>
-    </ResponsiveDrawer>
+      {nestedSheet}
+    </WorkspaceSheetDrawer>
   );
 }
 

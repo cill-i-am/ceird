@@ -4,6 +4,7 @@ import {
   InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import * as React from "react";
 
 import { Button } from "#/components/ui/button";
 import {
@@ -13,23 +14,42 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "#/components/ui/drawer";
-import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Skeleton } from "#/components/ui/skeleton";
+
+import {
+  WorkspaceSheetDrawer,
+  isWorkspaceSheetLayerInteractive,
+} from "./workspace-sheet-drawer";
+import type {
+  WorkspaceSheetDrawerKind,
+  WorkspaceSheetLayer,
+} from "./workspace-sheet-drawer";
 
 export function WorkspaceSheetSkeleton({
   active = true,
+  drawerKind = "root",
+  nestedSheet,
+  sheetLayer = "active",
   title,
 }: {
   readonly active?: boolean;
+  readonly drawerKind?: WorkspaceSheetDrawerKind | undefined;
+  readonly nestedSheet?: React.ReactNode;
+  readonly sheetLayer?: WorkspaceSheetLayer | undefined;
   readonly title: string;
 }) {
   if (!active) {
     return null;
   }
 
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
+
   return (
-    <ResponsiveDrawer open>
-      <DrawerContent className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg">
+    <WorkspaceSheetDrawer drawerKind={drawerKind} layer={sheetLayer} open>
+      <DrawerContent
+        className="route-drawer-content route-side-drawer-content flex max-h-[92vh] w-full flex-col overflow-hidden p-2 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg"
+        data-workspace-sheet-interactive={canInteract ? "true" : "false"}
+      >
         <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription className="sr-only">
@@ -55,7 +75,8 @@ export function WorkspaceSheetSkeleton({
           />
         </div>
       </DrawerContent>
-    </ResponsiveDrawer>
+      {nestedSheet}
+    </WorkspaceSheetDrawer>
   );
 }
 
@@ -63,29 +84,42 @@ export function WorkspaceSheetUnavailable({
   actionLabel,
   active = true,
   description,
+  drawerKind = "root",
+  nestedSheet,
   onClose,
+  sheetLayer = "active",
   title,
 }: {
   readonly actionLabel: string;
   readonly active?: boolean;
   readonly description: string;
+  readonly drawerKind?: WorkspaceSheetDrawerKind | undefined;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose: () => void;
+  readonly sheetLayer?: WorkspaceSheetLayer | undefined;
   readonly title: string;
 }) {
   if (!active) {
     return null;
   }
 
+  const canInteract = isWorkspaceSheetLayerInteractive(sheetLayer);
+
   return (
-    <ResponsiveDrawer
+    <WorkspaceSheetDrawer
+      drawerKind={drawerKind}
+      layer={sheetLayer}
       open
       onOpenChange={(open) => {
-        if (!open) {
+        if (canInteract && !open) {
           onClose();
         }
       }}
     >
-      <DrawerContent className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!">
+      <DrawerContent
+        className="route-drawer-content max-h-[92vh] w-full p-2 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:sm:top-1/2 data-[vaul-drawer-direction=right]:sm:right-auto data-[vaul-drawer-direction=right]:sm:bottom-auto data-[vaul-drawer-direction=right]:sm:left-1/2 data-[vaul-drawer-direction=right]:sm:h-auto data-[vaul-drawer-direction=right]:sm:max-h-[calc(100vh-6rem)] data-[vaul-drawer-direction=right]:sm:max-w-[min(42rem,calc(100vw-6rem))] data-[vaul-drawer-direction=right]:sm:-translate-x-1/2 data-[vaul-drawer-direction=right]:sm:-translate-y-1/2 data-[vaul-drawer-direction=right]:sm:animate-none!"
+        data-workspace-sheet-interactive={canInteract ? "true" : "false"}
+      >
         <DrawerHeader className="border-b px-5 py-4 text-left md:px-6 md:py-5">
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0">
@@ -111,6 +145,7 @@ export function WorkspaceSheetUnavailable({
           </Button>
         </DrawerFooter>
       </DrawerContent>
-    </ResponsiveDrawer>
+      {nestedSheet}
+    </WorkspaceSheetDrawer>
   );
 }

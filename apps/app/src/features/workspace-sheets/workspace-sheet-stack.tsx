@@ -24,6 +24,14 @@ import {
 } from "#/features/sites/sites-state";
 
 import {
+  getWorkspaceSheetDrawerKind,
+  getWorkspaceSheetLayer,
+} from "./workspace-sheet-drawer";
+import type {
+  WorkspaceSheetDrawerKind,
+  WorkspaceSheetLayer,
+} from "./workspace-sheet-drawer";
+import {
   WorkspaceSheetSkeleton,
   WorkspaceSheetUnavailable,
 } from "./workspace-sheet-loading";
@@ -76,46 +84,45 @@ export function WorkspaceSheetStack({
   const jobsStatus = getDomainStatus(existingJobsViewer, jobsResource);
   const sitesStatus = getDomainStatus(existingSitesViewer, sitesResource);
   const entries = useWorkspaceSheetRenderEntries(stack);
+  const renderEntries = shouldRenderOnlyTopSheet({
+    canCreate: canCreateWorkspaceRecords(routeContext),
+    entries,
+    jobsStatus,
+    sitesStatus,
+  })
+    ? entries.slice(-1)
+    : entries;
 
-  const content = (
-    <>
-      {entries.map(({ key, sheet }, index) => (
-        <WorkspaceSheetEntry
-          active={index === entries.length - 1}
-          canCreate={canCreateWorkspaceRecords(routeContext)}
-          existingJobsViewer={existingJobsViewer}
-          existingSitesViewer={existingSitesViewer}
-          jobsResource={jobsResource}
-          jobsStatus={jobsStatus}
-          key={key}
-          onClose={pop}
-          routeContext={routeContext}
-          sheet={sheet}
-          sitesResource={sitesResource}
-          sitesStatus={sitesStatus}
-        />
-      ))}
-    </>
-  );
+  const content = renderWorkspaceSheetEntries({
+    canCreate: canCreateWorkspaceRecords(routeContext),
+    entries: renderEntries,
+    existingJobsViewer,
+    existingSitesViewer,
+    jobsResource,
+    jobsStatus,
+    onClose: pop,
+    routeContext,
+    sitesResource,
+    sitesStatus,
+  });
 
   return content;
 }
 
-function WorkspaceSheetEntry({
-  active,
+function renderWorkspaceSheetEntries({
   canCreate,
+  entries,
   existingJobsViewer,
   existingSitesViewer,
   jobsResource,
   jobsStatus,
   onClose,
   routeContext,
-  sheet,
   sitesResource,
   sitesStatus,
 }: {
-  readonly active: boolean;
   readonly canCreate: boolean;
+  readonly entries: readonly WorkspaceSheetRenderEntry[];
   readonly existingJobsViewer: ReturnType<typeof useOptionalJobsViewer>;
   readonly existingSitesViewer: ReturnType<typeof useOptionalSitesViewer>;
   readonly jobsResource: AsyncResource<
@@ -124,6 +131,66 @@ function WorkspaceSheetEntry({
   readonly jobsStatus: WorkspaceSheetDomainStatus;
   readonly onClose: () => void;
   readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
+  readonly sitesResource: AsyncResource<
+    Awaited<ReturnType<typeof loadSitesRouteData>>
+  >;
+  readonly sitesStatus: WorkspaceSheetDomainStatus;
+}) {
+  let nestedSheet: React.ReactNode = null;
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+
+    nestedSheet = (
+      <WorkspaceSheetEntry
+        canCreate={canCreate}
+        drawerKind={getWorkspaceSheetDrawerKind(index)}
+        existingJobsViewer={existingJobsViewer}
+        existingSitesViewer={existingSitesViewer}
+        jobsResource={jobsResource}
+        jobsStatus={jobsStatus}
+        key={entry.key}
+        nestedSheet={nestedSheet}
+        onClose={onClose}
+        routeContext={routeContext}
+        sheetLayer={getWorkspaceSheetLayer(index, entries.length)}
+        sheet={entry.sheet}
+        sitesResource={sitesResource}
+        sitesStatus={sitesStatus}
+      />
+    );
+  }
+
+  return nestedSheet;
+}
+
+function WorkspaceSheetEntry({
+  canCreate,
+  drawerKind,
+  existingJobsViewer,
+  existingSitesViewer,
+  jobsResource,
+  jobsStatus,
+  nestedSheet,
+  onClose,
+  routeContext,
+  sheetLayer,
+  sheet,
+  sitesResource,
+  sitesStatus,
+}: {
+  readonly canCreate: boolean;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
+  readonly existingJobsViewer: ReturnType<typeof useOptionalJobsViewer>;
+  readonly existingSitesViewer: ReturnType<typeof useOptionalSitesViewer>;
+  readonly jobsResource: AsyncResource<
+    Awaited<ReturnType<typeof loadJobsRouteData>>
+  >;
+  readonly jobsStatus: WorkspaceSheetDomainStatus;
+  readonly nestedSheet?: React.ReactNode;
+  readonly onClose: () => void;
+  readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
+  readonly sheetLayer: WorkspaceSheetLayer;
   readonly sheet: WorkspaceSheet;
   readonly sitesResource: AsyncResource<
     Awaited<ReturnType<typeof loadSitesRouteData>>
@@ -137,9 +204,12 @@ function WorkspaceSheetEntry({
     return (
       <WorkspaceSheetUnavailable
         actionLabel="Close sheet"
-        active={active}
+        active
         description="You need owner or admin access to create workspace records."
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
         onClose={onClose}
+        sheetLayer={sheetLayer}
         title="Create unavailable"
       />
     );
@@ -150,9 +220,11 @@ function WorkspaceSheetEntry({
       if (jobsStatus !== "available") {
         return (
           <WorkspaceSheetDataFallback
-            active={active}
+            drawerKind={drawerKind}
             domainStatus={jobsStatus}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
             title="Loading job"
             unavailableDescription="Job data could not be loaded."
             unavailableTitle="Job unavailable"
@@ -167,9 +239,12 @@ function WorkspaceSheetEntry({
           routeContext={routeContext}
         >
           <JobsCreateSheet
-            active={active}
+            active
+            drawerKind={drawerKind}
             initialSiteId={sheet.siteId}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
           />
         </WorkspaceJobsStateScope>
       );
@@ -178,9 +253,11 @@ function WorkspaceSheetEntry({
       if (jobsStatus !== "available") {
         return (
           <WorkspaceSheetDataFallback
-            active={active}
+            drawerKind={drawerKind}
             domainStatus={jobsStatus}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
             title="Loading job"
             unavailableDescription="Job data could not be loaded."
             unavailableTitle="Job unavailable"
@@ -195,48 +272,64 @@ function WorkspaceSheetEntry({
           routeContext={routeContext}
         >
           <WorkspaceJobDetailSheet
-            active={active}
+            active
+            drawerKind={drawerKind}
             jobId={sheet.jobId}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
           />
         </WorkspaceJobsStateScope>
       );
     }
     case "site.create": {
-      if (sitesStatus !== "available") {
+      if (sitesStatus === "error") {
         return (
-          <WorkspaceSheetDataFallback
-            active={active}
-            domainStatus={sitesStatus}
+          <WorkspaceSheetUnavailable
+            actionLabel="Close sheet"
+            active
+            description="Site data could not be loaded."
+            drawerKind={drawerKind}
+            nestedSheet={nestedSheet}
             onClose={onClose}
-            title="Loading site"
-            unavailableDescription="Site data could not be loaded."
-            unavailableTitle="Site unavailable"
+            sheetLayer={sheetLayer}
+            title="Site unavailable"
           />
         );
       }
 
       return (
-        <WorkspaceSitesStateScope
-          existingSitesViewer={existingSitesViewer}
-          routeContext={routeContext}
-          sitesResource={sitesResource}
+        <SitesCreateSheet
+          active
+          drawerKind={drawerKind}
+          nestedSheet={nestedSheet}
+          onClose={onClose}
+          sheetLayer={sheetLayer}
+          siteCreatedTargetId={sheet.targetSheetId}
         >
-          <SitesCreateSheet
-            active={active}
-            onClose={onClose}
-            siteCreatedTargetId={sheet.targetSheetId}
-          />
-        </WorkspaceSitesStateScope>
+          {sitesStatus === "loading" ? (
+            <SitesCreateSheet.LoadingContent />
+          ) : (
+            <WorkspaceSitesStateScope
+              existingSitesViewer={existingSitesViewer}
+              routeContext={routeContext}
+              sitesResource={sitesResource}
+            >
+              <SitesCreateSheet.Form />
+            </WorkspaceSitesStateScope>
+          )}
+        </SitesCreateSheet>
       );
     }
     case "site.detail": {
       if (sitesStatus !== "available") {
         return (
           <WorkspaceSheetDataFallback
-            active={active}
+            drawerKind={drawerKind}
             domainStatus={sitesStatus}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
             title="Loading site"
             unavailableDescription="Site data could not be loaded."
             unavailableTitle="Site unavailable"
@@ -251,8 +344,11 @@ function WorkspaceSheetEntry({
           sitesResource={sitesResource}
         >
           <WorkspaceSiteDetailSheet
-            active={active}
+            active
+            drawerKind={drawerKind}
+            nestedSheet={nestedSheet}
             onClose={onClose}
+            sheetLayer={sheetLayer}
             siteId={sheet.siteId}
           />
         </WorkspaceSitesStateScope>
@@ -324,33 +420,104 @@ function WorkspaceSitesStateScope({
 }
 
 function WorkspaceSheetDataFallback({
-  active,
+  drawerKind,
   domainStatus,
+  nestedSheet,
   onClose,
+  sheetLayer,
   title,
   unavailableDescription,
   unavailableTitle,
 }: {
-  readonly active: boolean;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
   readonly domainStatus: Exclude<WorkspaceSheetDomainStatus, "available">;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose: () => void;
+  readonly sheetLayer: WorkspaceSheetLayer;
   readonly title: string;
   readonly unavailableDescription: string;
   readonly unavailableTitle: string;
 }) {
   if (domainStatus === "loading") {
-    return <WorkspaceSheetSkeleton active={active} title={title} />;
+    return (
+      <WorkspaceSheetSkeleton
+        active
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
+        sheetLayer={sheetLayer}
+        title={title}
+      />
+    );
   }
 
   return (
     <WorkspaceSheetUnavailable
       actionLabel="Close sheet"
-      active={active}
+      active
       description={unavailableDescription}
+      drawerKind={drawerKind}
+      nestedSheet={nestedSheet}
       onClose={onClose}
+      sheetLayer={sheetLayer}
       title={unavailableTitle}
     />
   );
+}
+
+function shouldRenderOnlyTopSheet({
+  canCreate,
+  entries,
+  jobsStatus,
+  sitesStatus,
+}: {
+  readonly canCreate: boolean;
+  readonly entries: readonly WorkspaceSheetRenderEntry[];
+  readonly jobsStatus: WorkspaceSheetDomainStatus;
+  readonly sitesStatus: WorkspaceSheetDomainStatus;
+}) {
+  return entries.slice(0, -1).some(({ sheet }) =>
+    isWorkspaceSheetBlockedAsStackParent(sheet, {
+      canCreate,
+      jobsStatus,
+      sitesStatus,
+    })
+  );
+}
+
+function isWorkspaceSheetBlockedAsStackParent(
+  sheet: WorkspaceSheet,
+  {
+    canCreate,
+    jobsStatus,
+    sitesStatus,
+  }: {
+    readonly canCreate: boolean;
+    readonly jobsStatus: WorkspaceSheetDomainStatus;
+    readonly sitesStatus: WorkspaceSheetDomainStatus;
+  }
+) {
+  if (
+    (sheet.kind === "job.create" || sheet.kind === "site.create") &&
+    !canCreate
+  ) {
+    return true;
+  }
+
+  switch (sheet.kind) {
+    case "job.create":
+    case "job.detail": {
+      return jobsStatus !== "available";
+    }
+    case "site.create": {
+      return sitesStatus === "error";
+    }
+    case "site.detail": {
+      return sitesStatus !== "available";
+    }
+    default: {
+      return assertNever(sheet);
+    }
+  }
 }
 
 function canCreateWorkspaceRecords({
@@ -382,15 +549,21 @@ function isSiteSheet(sheet: WorkspaceSheet) {
 
 function WorkspaceJobDetailSheet({
   active,
+  drawerKind,
   jobId,
+  nestedSheet,
   onClose,
+  sheetLayer,
 }: {
   readonly active: boolean;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
   readonly jobId: Extract<
     WorkspaceSheet,
     { readonly kind: "job.detail" }
   >["jobId"];
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose: () => void;
+  readonly sheetLayer: WorkspaceSheetLayer;
 }) {
   const routeContext = useWorkspaceRouteAccess();
   const viewer = useJobsViewer();
@@ -401,7 +574,15 @@ function WorkspaceJobDetailSheet({
   const resource = useAsyncResource(loadResource);
 
   if (resource.status === "loading") {
-    return <WorkspaceSheetSkeleton active={active} title="Loading job" />;
+    return (
+      <WorkspaceSheetSkeleton
+        active={active}
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
+        sheetLayer={sheetLayer}
+        title="Loading job"
+      />
+    );
   }
 
   if (
@@ -414,7 +595,10 @@ function WorkspaceJobDetailSheet({
         actionLabel="Close job"
         active={active}
         description="This job is no longer available in the current organization."
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
         onClose={onClose}
+        sheetLayer={sheetLayer}
         title="Job unavailable"
       />
     );
@@ -423,8 +607,11 @@ function WorkspaceJobDetailSheet({
   return (
     <JobsDetailSheet
       active={active}
+      drawerKind={drawerKind}
       initialDetail={resource.data}
+      nestedSheet={nestedSheet}
       onClose={onClose}
+      sheetLayer={sheetLayer}
       viewer={viewer}
     />
   );
@@ -432,11 +619,17 @@ function WorkspaceJobDetailSheet({
 
 function WorkspaceSiteDetailSheet({
   active,
+  drawerKind,
+  nestedSheet,
   onClose,
+  sheetLayer,
   siteId,
 }: {
   readonly active: boolean;
+  readonly drawerKind: WorkspaceSheetDrawerKind;
+  readonly nestedSheet?: React.ReactNode;
   readonly onClose: () => void;
+  readonly sheetLayer: WorkspaceSheetLayer;
   readonly siteId: Extract<
     WorkspaceSheet,
     { readonly kind: "site.detail" }
@@ -452,7 +645,15 @@ function WorkspaceSiteDetailSheet({
   const resource = useAsyncResource(loadResource);
 
   if (resource.status === "loading") {
-    return <WorkspaceSheetSkeleton active={active} title="Loading site" />;
+    return (
+      <WorkspaceSheetSkeleton
+        active={active}
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
+        sheetLayer={sheetLayer}
+        title="Loading site"
+      />
+    );
   }
 
   if (resource.status === "error") {
@@ -461,7 +662,10 @@ function WorkspaceSiteDetailSheet({
         actionLabel="Close site"
         active={active}
         description="This site could not be loaded."
+        drawerKind={drawerKind}
+        nestedSheet={nestedSheet}
         onClose={onClose}
+        sheetLayer={sheetLayer}
         title="Site unavailable"
       />
     );
@@ -470,10 +674,13 @@ function WorkspaceSiteDetailSheet({
   return (
     <SitesDetailSheet
       active={active}
+      drawerKind={drawerKind}
       hasMoreRelatedJobs={resource.data.hasMoreRelatedJobs}
       initialSite={options.sites.find((site) => site.id === siteId) ?? null}
+      nestedSheet={nestedSheet}
       onClose={onClose}
       relatedJobs={resource.data.relatedJobs}
+      sheetLayer={sheetLayer}
       siteId={resource.data.siteId}
       viewer={viewer}
     />
