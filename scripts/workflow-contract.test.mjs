@@ -107,9 +107,10 @@ test("root workflow scripts call the Alchemy CLI directly", () => {
   const rootPackage = readJson("package.json");
 
   assert.equal(rootPackage.scripts.alchemy, "alchemy");
+  assert.equal(rootPackage.scripts.dev, "node scripts/alchemy-dev.mjs");
   assert.equal(
-    rootPackage.scripts.dev,
-    "CEIRD_CLOUDFLARE=1 alchemy dev --env-file .env.local"
+    existsSync(path.join(repoRoot, "scripts/alchemy-dev.mjs")),
+    true
   );
   assert.equal(rootPackage.scripts["infra:check-types"], undefined);
   assert.equal(rootPackage.scripts["infra:bootstrap:cloudflare"], undefined);
@@ -117,6 +118,113 @@ test("root workflow scripts call the Alchemy CLI directly", () => {
   assert.equal(rootPackage.scripts["infra:destroy"], undefined);
   assert.equal(rootPackage.scripts["infra:dev"], undefined);
   assert.equal(rootPackage.devDependencies.portless, undefined);
+});
+
+test("Alchemy dev wrapper keeps local development to one command", async () => {
+  const {
+    makeAlchemyExecOptions,
+    makeAlchemyNodeExecArgv,
+    makeAlchemyDevEnvironment,
+    makeFallbackStage,
+    normalizeAlchemyDevArgs,
+    readExplicitAlchemyStageArg,
+  } = await import(path.join(repoRoot, "scripts/alchemy-dev.mjs"));
+
+  assert.deepEqual(normalizeAlchemyDevArgs(["--", "--stage", "codex-ui"]), [
+    "--stage",
+    "codex-ui",
+  ]);
+  assert.deepEqual(
+    makeAlchemyNodeExecArgv({ nodeVersion: "v26.0.0" }).filter(
+      (arg) => arg === "--experimental-transform-types"
+    ),
+    []
+  );
+  assert.ok(
+    makeAlchemyNodeExecArgv({ nodeVersion: "v26.0.0" }).includes(
+      "--disable-warning=DEP0205"
+    )
+  );
+  assert.ok(
+    makeAlchemyNodeExecArgv({ nodeVersion: "v24.16.0" }).includes(
+      "--experimental-transform-types"
+    )
+  );
+  assert.deepEqual(
+    makeAlchemyExecOptions({
+      args: ["--", "--stage", "codex-ui-polish"],
+      defaultProfile: "ceird-env",
+      envFile: ".env.local",
+      fallbackStage: "codex-ui-polish",
+    }),
+    {
+      dev: true,
+      envFile: ".env.local",
+      main: "alchemy.run.ts",
+      profile: "ceird-env",
+      stage: "codex-ui-polish",
+      yes: false,
+    }
+  );
+  assert.equal(
+    makeAlchemyExecOptions({
+      args: ["--", "--stage", "codex-ui-polish", "--yes"],
+      defaultProfile: "ceird-env",
+      envFile: ".env.local",
+      fallbackStage: "codex-ui-polish",
+    }).yes,
+    true
+  );
+  assert.equal(
+    makeAlchemyExecOptions({
+      args: ["--", "--env-file", ".env.preview"],
+      defaultProfile: "ceird-env",
+      envFile: ".env.local",
+      fallbackStage: "codex-ui-polish",
+    }).envFile,
+    ".env.preview"
+  );
+  assert.equal(
+    readExplicitAlchemyStageArg(["--", "--stage=codex-ui"]),
+    "codex-ui"
+  );
+  assert.equal(
+    makeFallbackStage({ branch: "codex/ui-polish", user: "cillian" }),
+    "codex-ui-polish"
+  );
+  assert.throws(
+    () => makeFallbackStage({ branch: "", user: "cillian" }),
+    /detached worktree/
+  );
+  assert.deepEqual(
+    makeAlchemyDevEnvironment({
+      baseEnv: {},
+      defaultProfile: "ceird-env",
+      envFileValues: {
+        CLOUDFLARE_ACCOUNT_ID: "account-id",
+        CLOUDFLARE_API_TOKEN: "token",
+        NEON_API_KEY: "neon-key",
+      },
+      nodeVersion: "v24.16.0",
+    }),
+    {
+      ALCHEMY_NO_TUI: "1",
+      ALCHEMY_PROFILE: "ceird-env",
+      CEIRD_CLOUDFLARE: "1",
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_API_TOKEN: "token",
+      NEON_API_KEY: "neon-key",
+    }
+  );
+  assert.equal(
+    makeAlchemyDevEnvironment({
+      baseEnv: { NODE_OPTIONS: "--conditions development" },
+      defaultProfile: "ceird-env",
+      envFileValues: {},
+      nodeVersion: "v26.0.0",
+    }).NODE_OPTIONS,
+    "--conditions development --disable-warning=DEP0205"
+  );
 });
 
 test("root Alchemy stack uses a single source-defined stack name", () => {

@@ -54,6 +54,7 @@ export interface AgentWorkerConfiguredEnv {
   readonly AGENT_MUTATION_TOOLS_ENABLED: "true";
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
+  readonly CEIRD_LOCAL_DEV?: "true" | undefined;
   readonly NODE_ENV: "production";
 }
 
@@ -77,11 +78,18 @@ export function makeAgentWorkersAiBinding() {
 export function makeAgentWorkerEnv(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly config: AgentWorkerStageConfig;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
 }): AgentWorkerConfiguredEnv {
-  const authAppOrigin = `https://${input.config.appHostname}`;
+  const authAppOrigin =
+    input.localDev === true && input.localAppOrigin
+      ? input.localAppOrigin
+      : `https://${input.config.appHostname}`;
   const authTrustedOrigins = [
     authAppOrigin,
-    input.config.tenantTrustedOriginPattern,
+    input.localDev === true
+      ? undefined
+      : input.config.tenantTrustedOriginPattern,
   ]
     .filter((value): value is string => typeof value === "string")
     .join(",");
@@ -91,6 +99,11 @@ export function makeAgentWorkerEnv(input: {
     AGENT_MUTATION_TOOLS_ENABLED: "true",
     AUTH_APP_ORIGIN: authAppOrigin,
     AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
+    ...(input.localDev === true
+      ? {
+          CEIRD_LOCAL_DEV: "true" as const,
+        }
+      : {}),
     NODE_ENV: "production",
   } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
@@ -100,6 +113,8 @@ export function makeAgentWorkerProps(input: {
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
   readonly name: string;
 }) {
   return {
@@ -113,6 +128,8 @@ export function makeAgentWorkerProps(input: {
       ...makeAgentWorkerEnv({
         agentInternalSecret: input.agentInternalSecret,
         config: input.config,
+        localDev: input.localDev,
+        localAppOrigin: input.localAppOrigin,
       }),
     },
     domain: input.hostname,
@@ -126,6 +143,8 @@ export function makeAgentWorker(input: {
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
   readonly name: string;
 }) {
   return Effect.gen(function* () {

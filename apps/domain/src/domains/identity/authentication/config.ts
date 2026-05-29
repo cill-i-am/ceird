@@ -129,7 +129,8 @@ function isLoopbackHostname(hostname: string) {
     hostname === "localhost" ||
     hostname === "::1" ||
     hostname === "[::1]" ||
-    hostname.startsWith("127.")
+    hostname.startsWith("127.") ||
+    hostname.endsWith(".localhost")
   );
 }
 

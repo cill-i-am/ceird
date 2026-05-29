@@ -45,6 +45,20 @@ describe("Cloudflare Worker environment config", () => {
     expect(config.get("GOOGLE_MAPS_API_KEY")).toBe("google-key");
   });
 
+  it("propagates explicit local Alchemy runtime settings", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      CEIRD_LOCAL_DEV: "true",
+      DATABASE: undefined,
+      DATABASE_URL: "postgresql://ceird:secret@example.neon.tech/ceird",
+    });
+
+    expect(config.get("CEIRD_LOCAL_DEV")).toBe("true");
+    expect(config.get("DATABASE_URL")).toBe(
+      "postgresql://ceird:secret@example.neon.tech/ceird"
+    );
+  });
+
   it("propagates the auth rate limit override when Alchemy provides one", () => {
     const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),

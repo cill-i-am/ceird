@@ -1,5 +1,6 @@
-import { routeAgentRequest } from "agents";
+import { Effect } from "effect";
 
+import { AgentRouteError, routeCeirdAgentRequest } from "./agent-router.js";
 import {
   AgentRequestUnauthorizedError,
   authorizeAgentRequest,
@@ -44,16 +45,15 @@ const worker = {
     }
 
     try {
-      const response =
-        (await routeAgentRequest(authorized.request, env)) ??
-        new Response("Not found", { status: 404 });
+      const response = await routeCeirdAgentRequest(
+        authorized.request,
+        env,
+        authorized.agentInstanceName
+      );
 
       return withCorsHeaders(response, request, env);
     } catch (error) {
-      console.error("Agent route failed", {
-        cause: error instanceof Error ? error.name : typeof error,
-        path: new URL(authorized.request.url).pathname,
-      });
+      await logAgentRouteFailure(error, authorized.agentInstanceName);
 
       return withCorsHeaders(
         new Response("Agent route failed", { status: 500 }),
@@ -70,6 +70,30 @@ function isAgentRoutePath(pathname: string): boolean {
   return (
     pathname.startsWith("/agents/ceird-agent/") ||
     pathname.startsWith("/agents/CeirdAgent/")
+  );
+}
+
+async function logAgentRouteFailure(error: unknown, agentInstanceName: string) {
+  const annotations =
+    error instanceof AgentRouteError
+      ? {
+          agentInstanceName: error.agentInstanceName,
+          agentNamespace: error.namespace,
+          agentRouteFailureCause: error.cause,
+          agentRouteFailureMessage: error.message,
+          agentRouteFailureTag: error._tag,
+          "http.path": error.path,
+        }
+      : {
+          agentInstanceName,
+          agentRouteFailureCause:
+            error instanceof Error ? error.message : String(error),
+          agentRouteFailureTag:
+            error instanceof Error ? error.name : typeof error,
+        };
+
+  await Effect.runPromise(
+    Effect.logError("Agent route failed").pipe(Effect.annotateLogs(annotations))
   );
 }
 

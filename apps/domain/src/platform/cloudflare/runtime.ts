@@ -17,6 +17,11 @@ import {
   sendAuthEmailQueueMessage,
 } from "../../domains/identity/authentication/auth-email-queue.js";
 import {
+  AuthenticationEmailScheduler,
+  AuthenticationEmailSchedulerLive,
+  AuthenticationEmailSchedulingError,
+} from "../../domains/identity/authentication/auth-email-scheduler.js";
+import {
   fingerprintDeliveryKey,
   sanitizeProviderErrorMessage,
 } from "../../domains/identity/authentication/auth-email-transport-helpers.js";
@@ -52,10 +57,20 @@ import {
   runWithPlatformRequestObservation,
 } from "../request-observability.js";
 import type { PlatformRequestObservation } from "../request-observability.js";
+import {
+  DOMAIN_WORKER_DATABASE_CONFIGURATION_ERROR_TAG,
+  DomainWorkerDatabaseConfigurationError,
+} from "./database-configuration-error.js";
 import type { DomainWorkerEnv } from "./env.js";
 import { domainWorkerEnvConfigMap } from "./env.js";
 
 const REQUEST_ID_HEADER = "x-request-id";
+type DomainWorkerDatabaseSource = "hyperdrive" | "env";
+
+interface DomainWorkerDatabaseConfiguration {
+  readonly source: DomainWorkerDatabaseSource;
+  readonly url: string;
+}
 
 export class DomainWorkerFetchError extends Schema.TaggedErrorClass<DomainWorkerFetchError>()(
   "@ceird/domain/WorkerFetchError",
@@ -82,6 +97,42 @@ export function makeWorkerBaseLive(env: DomainWorkerEnv) {
 }
 
 export const DomainWorkerSiteLocationProviderLive = SiteLocationProvider.Google;
+
+function isDomainWorkerLocalDev(env: DomainWorkerEnv) {
+  return env.CEIRD_LOCAL_DEV === "true";
+}
+
+export function readDomainWorkerDatabaseConfiguration(
+  env: DomainWorkerEnv
+): Effect.Effect<
+  DomainWorkerDatabaseConfiguration,
+  DomainWorkerDatabaseConfigurationError
+> {
+  const localDev = isDomainWorkerLocalDev(env);
+
+  if (env.DATABASE?.connectionString !== undefined) {
+    return Effect.succeed({
+      source: "hyperdrive",
+      url: env.DATABASE.connectionString,
+    });
+  }
+
+  if (localDev && env.DATABASE_URL !== undefined) {
+    return Effect.succeed({
+      source: "env",
+      url: env.DATABASE_URL,
+    });
+  }
+
+  return Effect.fail(
+    new DomainWorkerDatabaseConfigurationError({
+      localDev,
+      message: localDev
+        ? "Local Domain Worker requires DATABASE_URL."
+        : "Deployed Domain Worker requires the DATABASE Hyperdrive binding.",
+    })
+  );
+}
 
 export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
   return Layer.succeed(AuthenticationBackgroundTaskHandler, (task) => {
@@ -128,13 +179,18 @@ export function makeWorkerAuthenticationBackgroundTaskHandlerLive() {
   });
 }
 
-export function makeDomainWorkerRuntimeLayers(env: DomainWorkerEnv) {
+export function makeDomainWorkerRuntimeLayers(
+  env: DomainWorkerEnv,
+  database: DomainWorkerDatabaseConfiguration
+) {
   const baseLive = makeWorkerBaseLive(env);
   const databaseRuntimeLive = makeAppDatabaseRuntimeLive(
-    makeAppDatabaseLive(env.DATABASE.connectionString)
+    makeAppDatabaseLive(database.url)
   );
+  const authenticationEmailSchedulerLive =
+    makeDomainWorkerAuthenticationEmailSchedulerLive(env);
   const authenticationLive = makeAuthenticationLive(
-    makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE),
+    authenticationEmailSchedulerLive,
     makeWorkerAuthenticationBackgroundTaskHandlerLive()
   );
 
@@ -146,13 +202,46 @@ export function makeDomainWorkerRuntimeLayers(env: DomainWorkerEnv) {
   };
 }
 
-function makeDomainWorkerHandler(env: DomainWorkerEnv) {
+function makeDomainWorkerAuthenticationEmailSchedulerLive(
+  env: DomainWorkerEnv
+) {
+  if (isDomainWorkerLocalDev(env)) {
+    return AuthenticationEmailSchedulerLive;
+  }
+
+  if (env.AUTH_EMAIL_QUEUE === undefined) {
+    return makeMissingAuthEmailQueueSchedulerLive();
+  }
+
+  return makeCloudflareAuthenticationEmailSchedulerLive(env.AUTH_EMAIL_QUEUE);
+}
+
+function makeMissingAuthEmailQueueSchedulerLive() {
+  const makeFailure = (emailKind: string) =>
+    new AuthenticationEmailSchedulingError({
+      cause: "missing_auth_email_queue_binding",
+      emailKind,
+      message: "Deployed Domain Worker requires the AUTH_EMAIL_QUEUE binding",
+    });
+
+  return Layer.succeed(AuthenticationEmailScheduler, {
+    sendOrganizationInvitationEmail: () =>
+      Effect.fail(makeFailure("organization-invitation")),
+    sendPasswordResetEmail: () => Effect.fail(makeFailure("password-reset")),
+    sendVerificationEmail: () => Effect.fail(makeFailure("email-verification")),
+  });
+}
+
+function makeDomainWorkerHandler(
+  env: DomainWorkerEnv,
+  database: DomainWorkerDatabaseConfiguration
+) {
   const {
     authenticationLive,
     baseLive,
     databaseRuntimeLive,
     siteLocationProviderLive,
-  } = makeDomainWorkerRuntimeLayers(env);
+  } = makeDomainWorkerRuntimeLayers(env, database);
 
   return makeApiWebHandler({
     authenticationLive,
@@ -210,24 +299,32 @@ function makeDomainWorkerHandlerEffect(
   env: DomainWorkerEnv,
   observation: DomainWorkerRequestObservation
 ) {
-  return Effect.try({
-    catch: (cause) =>
-      new DomainWorkerFetchError({
-        cause: serializeFailureCause(cause),
-        message: "Failed to create domain Worker web handler",
-        method: request.method,
-        path: requestPathname(request.url),
-      }),
-    try: () => {
-      const startedAt = nowMs();
+  const startedAt = nowMs();
 
-      try {
-        return makeDomainWorkerHandler(env);
-      } finally {
+  return readDomainWorkerDatabaseConfiguration(env).pipe(
+    Effect.tap((database) =>
+      Effect.sync(() => {
+        observation.databaseSource = database.source;
+      })
+    ),
+    Effect.flatMap((database) =>
+      Effect.try({
+        catch: (cause) =>
+          new DomainWorkerFetchError({
+            cause: serializeFailureCause(cause),
+            message: "Failed to create domain Worker web handler",
+            method: request.method,
+            path: requestPathname(request.url),
+          }),
+        try: () => makeDomainWorkerHandler(env, database),
+      })
+    ),
+    Effect.ensuring(
+      Effect.sync(() => {
         observation.handlerInitMs = elapsedMs(startedAt);
-      }
-    },
-  });
+      })
+    )
+  );
 }
 
 export function runWithDomainWorkerExecutionContext<T>(
@@ -275,6 +372,26 @@ export function handleWorkerFetch(
       }),
     disposeDomainWorkerHandler
   ).pipe(
+    Effect.catchTag(DOMAIN_WORKER_DATABASE_CONFIGURATION_ERROR_TAG, (failure) =>
+      logDomainWorkerDatabaseConfigurationFailure(
+        env,
+        failure,
+        observation,
+        observedRequest
+      ).pipe(
+        Effect.as(
+          withRequestIdResponseHeader(
+            Response.json(
+              {
+                error: "domain_worker_failed",
+              },
+              { status: 500 }
+            ),
+            observation.requestId
+          )
+        )
+      )
+    ),
     Effect.catchTag("@ceird/domain/WorkerFetchError", (failure) =>
       logDomainWorkerFetchFailure(env, failure, observation).pipe(
         Effect.as(
@@ -348,10 +465,40 @@ function logDomainWorkerFetchFailure(
       "ceird.adapter": "domain",
       ...makePlatformRequestLogAnnotations(observation.platform),
       "domain.failure": "domain_worker_failed",
+      "domain.failureCause": failure.cause,
       "domain.failureTag": failure._tag,
       ...makeDomainWorkerTimingAnnotations(observation),
       "http.method": failure.method,
       "http.path": failure.path,
+      "http.status": 500,
+    })
+  );
+}
+
+function logDomainWorkerDatabaseConfigurationFailure(
+  env: DomainWorkerEnv,
+  failure: DomainWorkerDatabaseConfigurationError,
+  observation: DomainWorkerRequestObservation,
+  request: Request
+) {
+  return Effect.logError("Domain Worker database configuration failed").pipe(
+    Effect.annotateLogs({
+      ...(env.ALCHEMY_STACK_NAME === undefined
+        ? {}
+        : { "alchemy.stackName": env.ALCHEMY_STACK_NAME }),
+      ...(env.ALCHEMY_STAGE === undefined
+        ? {}
+        : { "alchemy.stage": env.ALCHEMY_STAGE }),
+      "ceird.adapter": "domain",
+      ...makePlatformRequestLogAnnotations(observation.platform),
+      "domain.databaseSource": failure.databaseSource ?? "missing",
+      "domain.failure": "database_configuration_failed",
+      "domain.failureCause": failure.message,
+      "domain.failureTag": failure._tag,
+      "domain.localDev": failure.localDev,
+      ...makeDomainWorkerTimingAnnotations(observation),
+      "http.method": request.method,
+      "http.path": requestPathname(request.url),
       "http.status": 500,
     })
   );
@@ -376,6 +523,9 @@ function makeDomainWorkerFetchAnnotations(
     ...(observation === undefined
       ? {}
       : makeDomainWorkerTimingAnnotations(observation)),
+    ...(observation?.databaseSource === undefined
+      ? {}
+      : { "domain.databaseSource": observation.databaseSource }),
     "http.method": request.method,
     "http.path": requestPathname(request.url),
   };
@@ -384,6 +534,7 @@ function makeDomainWorkerFetchAnnotations(
 interface DomainWorkerRequestObservation {
   readonly authentication: AuthenticationRequestObservation;
   readonly cfRay?: string | undefined;
+  databaseSource?: DomainWorkerDatabaseSource | undefined;
   handlerInitMs?: number | undefined;
   handlerMs?: number | undefined;
   readonly platform: PlatformRequestObservation;

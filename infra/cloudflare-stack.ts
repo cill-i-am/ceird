@@ -5,6 +5,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 import { makeAgentWorker } from "../apps/agent/infra/cloudflare-worker.ts";
 import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
@@ -25,6 +26,14 @@ export interface CloudflareStackInput {
   readonly hyperdrive: Cloudflare.Hyperdrive;
 }
 
+const alchemyLocalProxyPort = 1337;
+
+export function makeAlchemyLocalWorkerOrigin(
+  worker: "agent" | "api" | "app" | "mcp"
+) {
+  return `http://${worker}.localhost:${alchemyLocalProxyPort}`;
+}
+
 export function makeCloudflareWorkerOrigin(input: {
   readonly domains: readonly {
     readonly hostname: string;
@@ -32,7 +41,13 @@ export function makeCloudflareWorkerOrigin(input: {
     readonly zoneId?: string;
   }[];
   readonly fallbackHostname: string;
+  readonly localDev?: boolean;
+  readonly localUrl?: string | undefined;
 }) {
+  if (input.localDev === true && input.localUrl !== undefined) {
+    return input.localUrl;
+  }
+
   return `https://${input.domains[0]?.hostname ?? input.fallbackHostname}`;
 }
 
@@ -74,6 +89,13 @@ export function makeTenantReservedHostBypassRoutePatterns(
   return config.tenantReservedHostnames.map((hostname) => `${hostname}/*`);
 }
 
+export function shouldReconcileTenantRouting(input: {
+  readonly localDev: boolean;
+  readonly tenantRoutePattern: string | undefined;
+}) {
+  return !input.localDev && input.tenantRoutePattern !== undefined;
+}
+
 export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   input: CloudflareStackInput
 ) {
@@ -96,6 +118,22 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const agentInternalSecret = yield* Alchemy.Random("AgentInternalSecret", {
     bytes: 32,
   });
+  const alchemyContext = yield* Alchemy.AlchemyContext;
+  const localDev = alchemyContext.dev;
+  const localOrigins = {
+    agent: makeAlchemyLocalWorkerOrigin("agent"),
+    api: makeAlchemyLocalWorkerOrigin("api"),
+    app: makeAlchemyLocalWorkerOrigin("app"),
+    mcp: makeAlchemyLocalWorkerOrigin("mcp"),
+  };
+  const localDatabaseUrl =
+    localDev === true
+      ? input.database.branch.connectionUri.pipe(
+          Output.map((connectionUri) => Redacted.make(connectionUri))
+        )
+      : undefined;
+
+  yield* Effect.annotateCurrentSpan("alchemy.localDev", localDev);
 
   const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
     "AuthEmailDeadLetterQueue",
@@ -113,7 +151,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     authEmailQueue,
     betterAuthSecret: betterAuthSecret.text,
     config: input.config,
+    databaseUrl: localDatabaseUrl,
     hyperdrive: input.hyperdrive,
+    localDev,
+    localOrigins,
     name: resourceName(input.config, "domain"),
   });
 
@@ -123,23 +164,31 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     name: resourceName(input.config, "api"),
   });
 
-  yield* Cloudflare.QueueConsumer("AuthEmailConsumer", {
-    queueId: authEmailQueue.queueId,
-    scriptName: domain.workerName,
-    deadLetterQueue: authEmailDeadLetterQueue.queueName,
-    settings: {
-      batchSize: 10,
-      maxRetries: 5,
-      maxWaitTimeMs: 2000,
-      retryDelay: 30,
-    },
-  });
+  if (!localDev) {
+    yield* Cloudflare.QueueConsumer("AuthEmailConsumer", {
+      queueId: authEmailQueue.queueId,
+      scriptName: domain.workerName,
+      deadLetterQueue: authEmailDeadLetterQueue.queueName,
+      settings: {
+        batchSize: 10,
+        maxRetries: 5,
+        maxWaitTimeMs: 2000,
+        retryDelay: 30,
+      },
+    });
+  }
+  yield* Effect.annotateCurrentSpan(
+    "authEmailQueueConsumerReconciled",
+    !localDev
+  );
 
-  const apiOrigin = api.domains.pipe(
-    Output.map((domains) =>
+  const apiOrigin = Output.all(api.domains, api.url).pipe(
+    Output.map(([domains, localUrl]) =>
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.apiHostname,
+        localDev,
+        localUrl,
       })
     )
   );
@@ -150,11 +199,13 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     name: resourceName(input.config, "mcp"),
   });
 
-  const mcpOrigin = mcp.domains.pipe(
-    Output.map((domains) =>
+  const mcpOrigin = Output.all(mcp.domains, mcp.url).pipe(
+    Output.map(([domains, localUrl]) =>
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.mcpHostname,
+        localDev,
+        localUrl,
       })
     )
   );
@@ -164,14 +215,18 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     hostname: input.config.agentHostname,
+    localDev,
+    localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "agent"),
   });
 
-  const agentOrigin = agent.domains.pipe(
-    Output.map((domains) =>
+  const agentOrigin = Output.all(agent.domains, agent.url).pipe(
+    Output.map(([domains, localUrl]) =>
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.agentHostname,
+        localDev,
+        localUrl,
       })
     )
   );
@@ -181,44 +236,59 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     apiOrigin,
     config: input.config,
     hostname: input.config.appHostname,
+    localDev,
+    localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "app"),
   });
 
-  const appOrigin = app.domains.pipe(
-    Output.map((domains) =>
+  const appOrigin = Output.all(app.domains, app.url).pipe(
+    Output.map(([domains, localUrl]) =>
       makeCloudflareWorkerOrigin({
         domains,
         fallbackHostname: input.config.appHostname,
+        localDev,
+        localUrl,
       })
     )
   );
 
+  const reconcileTenantRouting = shouldReconcileTenantRouting({
+    localDev,
+    tenantRoutePattern: input.config.tenantRoutePattern,
+  });
+  const tenantRoutePattern = reconcileTenantRouting
+    ? input.config.tenantRoutePattern
+    : undefined;
+  yield* Effect.annotateCurrentSpan(
+    "tenantRoutingReconciled",
+    reconcileTenantRouting
+  );
   const tenantWildcardDnsRecord =
-    input.config.tenantRoutePattern === undefined
+    tenantRoutePattern === undefined
       ? undefined
       : yield* TenantWildcardDnsRecord("TenantWildcardDnsRecord", {
           zoneName: input.config.zoneName,
         });
   const tenantRoute =
-    input.config.tenantRoutePattern === undefined
+    tenantRoutePattern === undefined
       ? undefined
       : yield* TenantWorkerRoute("TenantWorkerRoute", {
-          pattern: input.config.tenantRoutePattern,
+          pattern: tenantRoutePattern,
           scriptName: app.workerName,
           zoneName: input.config.zoneName,
         });
   const tenantReservedHostBypassRoutes =
-    input.config.tenantRoutePattern === undefined
+    tenantRoutePattern === undefined
       ? []
-      : yield* Effect.all(
-          makeTenantReservedHostBypassRoutePatterns(input.config).map(
-            (pattern, index) =>
-              TenantWorkerRoute(`TenantReservedHostBypassRoute${index}`, {
-                pattern,
-                scriptName: undefined,
-                zoneName: input.config.zoneName,
-              })
-          )
+      : // oxlint-disable-next-line unicorn/no-array-for-each -- Effect.forEach keeps route reconciliation inside the stack Effect.
+        yield* Effect.forEach(
+          makeTenantReservedHostBypassRoutePatterns(input.config),
+          (pattern, index) =>
+            TenantWorkerRoute(`TenantReservedHostBypassRoute${index}`, {
+              pattern,
+              scriptName: undefined,
+              zoneName: input.config.zoneName,
+            })
         );
 
   return {

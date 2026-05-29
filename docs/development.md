@@ -26,14 +26,26 @@ Use root dev for normal app/API development:
 pnpm dev
 ```
 
-Root dev delegates to `alchemy dev --env-file .env.local`. Alchemy creates or
-updates the selected stage's Cloudflare Workers/Vite app, Agent Worker,
-Hyperdrive config, queues, routes, and Neon branch. By default Alchemy chooses
-its normal dev stage. For linked worktrees and agent tasks, pass an explicit
-stage through the Alchemy CLI:
+Root dev delegates through `scripts/alchemy-dev.mjs`, which loads `.env.local`,
+enables Cloudflare-backed Alchemy, and starts `alchemy dev`. In linked
+worktrees the wrapper derives a branch stage such as `codex-my-task`; pass an
+explicit stage when you want a different name:
 
 ```bash
 pnpm dev -- --stage codex-my-task
+```
+
+Alchemy creates or updates the selected stage's Cloudflare Workers/Vite app,
+Agent Worker, Hyperdrive config, queues, and Neon branch. Local Workerd serves
+the running stack through Alchemy proxy origins such as
+`http://app.localhost:1337`, `http://api.localhost:1337`, and
+`http://agent.localhost:1337`; these are the origins printed by `pnpm dev` for
+browser and API smoke checks.
+The wrapper keeps Alchemy's confirmation prompt enabled by default. For a
+known stage in a non-interactive workflow, pass `--yes` after the Alchemy args:
+
+```bash
+pnpm dev -- --stage codex-my-task --yes
 ```
 
 Non-parent stages depend on the parent `main` stage because they fork Neon
@@ -119,7 +131,7 @@ pnpm test:domain:integration -- --stage codex-my-task -- -t organization
 Run Playwright E2E tests against an Alchemy stage:
 
 ```bash
-pnpm dev -- --stage codex-my-task
+pnpm dev -- --stage codex-my-task --yes
 PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
 PLAYWRIGHT_API_URL=<alchemy-api-url> \
 PLAYWRIGHT_DATABASE_URL=<alchemy-database-url> \

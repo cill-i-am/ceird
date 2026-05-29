@@ -4,6 +4,7 @@ export interface AppCloudflareEnv {
   readonly AGENT_ORIGIN: string;
   readonly API_ORIGIN: string;
   readonly CEIRD_CLOUDFLARE: "1";
+  readonly CEIRD_LOCAL_DEV?: "true" | undefined;
   readonly SYSTEM_APP_ORIGIN: string;
   readonly TENANT_BASE_DOMAIN: string;
   readonly TENANT_HOST_MODE: "disabled" | "production" | "stage";
