@@ -1,9 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
 export interface DomainWorkerBindingRuntimeEnv {
-  readonly AUTH_EMAIL: SendEmail;
-  readonly AUTH_EMAIL_QUEUE: Queue<unknown>;
-  readonly DATABASE: Hyperdrive;
+  readonly AUTH_EMAIL?: SendEmail | undefined;
+  readonly AUTH_EMAIL_QUEUE?: Queue<unknown> | undefined;
+  readonly DATABASE?: Hyperdrive | undefined;
 }
 
 export interface DomainWorkerConfigEnv {
@@ -20,6 +20,8 @@ export interface DomainWorkerConfigEnv {
   readonly AUTH_TRUSTED_ORIGINS?: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: string;
+  readonly CEIRD_LOCAL_DEV?: "true";
+  readonly DATABASE_URL?: string;
   readonly GOOGLE_MAPS_API_KEY: string;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string;
@@ -48,6 +50,8 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
       AUTH_TRUSTED_ORIGINS: env.AUTH_TRUSTED_ORIGINS,
       BETTER_AUTH_BASE_URL: env.BETTER_AUTH_BASE_URL,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
+      CEIRD_LOCAL_DEV: env.CEIRD_LOCAL_DEV,
+      DATABASE_URL: env.DATABASE_URL,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
       MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES:
         env.MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES,

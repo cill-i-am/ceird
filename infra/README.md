@@ -9,6 +9,7 @@ typechecking, and tests.
 From the repo root:
 
 ```bash
+pnpm dev -- --stage codex-my-task
 CEIRD_CLOUDFLARE=1 pnpm alchemy dev --env-file .env.local --stage codex-my-task
 CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage codex-my-task
 CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file .env.local --stage codex-my-task
@@ -43,7 +44,10 @@ to the adopted `ceird-production-postgres` Hyperdrive name; non-parent stages
 use stage-scoped names unless `CEIRD_HYPERDRIVE_NAME` is set.
 
 The root stack outputs `app`, `api`, `mcp`, and `agent` as stage HTTPS origins
-derived from the reconciled public Cloudflare Worker domains. It also outputs
+derived from the reconciled public Cloudflare Worker domains. In local
+`alchemy dev`, those outputs switch to Alchemy proxy URLs such as
+`http://app.localhost:1337` and `http://api.localhost:1337` when the local
+provider supplies them. It also outputs
 tenant routing details: `tenantRoutePattern`,
 `tenantWildcardDnsRecordId`, and
 `tenantReservedHostBypassRoutePatterns`. The configured app/API/MCP/Agent

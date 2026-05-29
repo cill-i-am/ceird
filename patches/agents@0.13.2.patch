@@ -1,0 +1,21 @@
+diff --git a/dist/index.js b/dist/index.js
+index 9d3ad6e..f47a82f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -11,9 +11,15 @@ import { genericObservability } from "./observability/index.js";
+ import { AsyncLocalStorage } from "node:async_hooks";
+ import { parseCronExpression } from "cron-schedule";
+ import { nanoid } from "nanoid";
+-import { EmailMessage } from "cloudflare:email";
+ import { RpcTarget, exports } from "cloudflare:workers";
+ import { Server, getServerByName, routePartykitRequest } from "partyserver";
++class EmailMessage {
++	constructor(from, to, raw) {
++		this.from = from;
++		this.to = to;
++		this.raw = raw;
++	}
++}
+ //#region src/index.ts
+ let _Symbol$dispose;
+ /**

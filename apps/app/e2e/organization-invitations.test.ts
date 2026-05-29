@@ -402,14 +402,20 @@ async function expectPublicInvitationPreviewReady(
   await expect
     .poll(
       async () => {
-        const response = await request.get(
-          `${API_ORIGIN}/api/public/invitations/${encodeURIComponent(invitationId)}/preview`,
-          {
-            headers: {
-              accept: "application/json",
-            },
-          }
-        );
+        let response: Awaited<ReturnType<APIRequestContext["get"]>>;
+
+        try {
+          response = await request.get(
+            `${API_ORIGIN}/api/public/invitations/${encodeURIComponent(invitationId)}/preview`,
+            {
+              headers: {
+                accept: "application/json",
+              },
+            }
+          );
+        } catch {
+          return null;
+        }
 
         if (!response.ok()) {
           return null;

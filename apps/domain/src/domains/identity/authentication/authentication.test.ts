@@ -175,6 +175,24 @@ describe("makeAuthenticationConfig()", () => {
     );
   }, 10_000);
 
+  it("keeps local Alchemy proxy OAuth issuer URLs on HTTP", async () => {
+    await withEnvironment(
+      {
+        OAUTH_ISSUER_URL: "http://api.localhost:1337/api/auth",
+        BETTER_AUTH_BASE_URL: "http://api.localhost:1337/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
+
+        expect(config.oauthIssuerUrl).toBe(
+          "http://api.localhost:1337/api/auth"
+        );
+      }
+    );
+  }, 10_000);
+
   it("defaults the MCP resource URL to the API origin when configured", () => {
     const config = makeAuthenticationConfig({
       appOrigin: "https://app.ceird.example",

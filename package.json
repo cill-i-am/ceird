@@ -8,7 +8,7 @@
     "check": "ultracite check .",
     "check-types": "pnpm -r --if-present check-types && pnpm run check-types:infra",
     "check-types:infra": "tsc --noEmit -p tsconfig.infra.json",
-    "dev": "CEIRD_CLOUDFLARE=1 alchemy dev --env-file .env.local",
+    "dev": "node scripts/alchemy-dev.mjs",
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
@@ -31,7 +31,7 @@
     "@types/bun": "^1.3.13",
     "@types/node": "^25.6.0",
     "@types/picomatch": "^4.0.3",
-    "alchemy": "2.0.0-beta.40",
+    "alchemy": "2.0.0-beta.44",
     "drizzle-kit": "^1.0.0-rc.1",
     "drizzle-orm": "^1.0.0-rc.1",
     "effect": "4.0.0-beta.68",
@@ -43,7 +43,8 @@
     "typescript": "5.9.2",
     "ultracite": "^7.6.2",
     "vite": "^8.0.10",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "workerd": "1.20260528.1"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.60.1"
@@ -82,6 +83,7 @@
     "patchedDependencies": {
       "ajv@8.20.0": "patches/ajv@8.20.0.patch",
       "ajv-formats@3.0.1": "patches/ajv-formats@3.0.1.patch",
+      "agents@0.13.2": "patches/agents@0.13.2.patch",
       "workers-ai-provider@3.1.14": "patches/workers-ai-provider@3.1.14.patch"
     }
   }

@@ -34,7 +34,10 @@ pnpm dev -- --stage codex-my-task
 ```
 
 Alchemy creates or updates the stage-scoped Cloudflare Workers, app,
-Agent Worker, Hyperdrive, Neon branch, queues, and routes.
+Agent Worker, Hyperdrive, Neon branch, and queues. In local dev it prints
+local proxy origins such as `http://app.localhost:1337` for the running stack.
+The wrapper leaves Alchemy confirmations enabled by default; add `--yes` only
+for an intentional non-interactive run against the selected stage.
 
 Non-parent stages depend on the parent `main` stage because they fork Neon
 branches from its shared project. If a worktree stage reports a missing
@@ -66,20 +69,20 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 ## Common Commands
 
-| Command                            | What it does                                                                                                          |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                         | Runs `alchemy dev --env-file .env.local` for the default cloud-backed stage.                                          |
-| `pnpm test`                        | Runs workspace package tests, root infra tests, and root script tests.                                                |
-| `pnpm check-types`                 | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                        |
-| `pnpm lint`                        | Runs oxlint over the workspace.                                                                                       |
-| `pnpm check`                       | Runs the Ultracite quality check.                                                                                     |
-| `pnpm format`                      | Checks formatting with oxfmt.                                                                                         |
-| `pnpm format:write`                | Writes formatting changes with oxfmt.                                                                                 |
-| `pnpm --filter app e2e`            | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                 |
-| `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes.                                                        |
-| `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow.                                           |
-| `pnpm alchemy dev`                 | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`. |
-| `pnpm alchemy deploy`              | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                               |
+| Command                            | What it does                                                                                                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                         | Runs the Alchemy dev wrapper against `.env.local`, deriving a branch stage unless `--stage` is passed. Use `--yes` for non-interactive confirmation. |
+| `pnpm test`                        | Runs workspace package tests, root infra tests, and root script tests.                                                                               |
+| `pnpm check-types`                 | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                                                       |
+| `pnpm lint`                        | Runs oxlint over the workspace.                                                                                                                      |
+| `pnpm check`                       | Runs the Ultracite quality check.                                                                                                                    |
+| `pnpm format`                      | Checks formatting with oxfmt.                                                                                                                        |
+| `pnpm format:write`                | Writes formatting changes with oxfmt.                                                                                                                |
+| `pnpm --filter app e2e`            | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                                                |
+| `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes.                                                                                       |
+| `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow.                                                                          |
+| `pnpm alchemy dev`                 | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`.                                |
+| `pnpm alchemy deploy`              | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                                                              |
 
 ## Documentation
 
@@ -139,7 +142,7 @@ For UI workflows that need real auth cookies or API calls, run the affected
 Playwright tests against an explicit Alchemy stage:
 
 ```bash
-pnpm dev -- --stage codex-my-task
+pnpm dev -- --stage codex-my-task --yes
 PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
 PLAYWRIGHT_API_URL=<alchemy-api-url> \
 PLAYWRIGHT_DATABASE_URL=<alchemy-database-url> \

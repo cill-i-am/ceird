@@ -33,9 +33,9 @@ export interface DomainWorkerStageConfig {
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
 export type DomainWorkerBindings = {
-  readonly AUTH_EMAIL: Cloudflare.SendEmail;
-  readonly AUTH_EMAIL_QUEUE: Cloudflare.Queue;
-  readonly DATABASE: Cloudflare.Hyperdrive;
+  readonly AUTH_EMAIL?: Cloudflare.SendEmail | undefined;
+  readonly AUTH_EMAIL_QUEUE?: Cloudflare.Queue | undefined;
+  readonly DATABASE?: Cloudflare.Hyperdrive | undefined;
 };
 
 export type DomainWorkerBindingEnv = Cloudflare.InferEnv<
@@ -46,8 +46,12 @@ export type DomainWorkerResource = Cloudflare.Worker<DomainWorkerBindings>;
 
 type DomainWorkerBindingProps = {
   readonly [BindingName in keyof DomainWorkerBindings]:
-    | DomainWorkerBindings[BindingName]
-    | Effect.Effect<DomainWorkerBindings[BindingName], never, never>;
+    | NonNullable<DomainWorkerBindings[BindingName]>
+    | Effect.Effect<
+        NonNullable<DomainWorkerBindings[BindingName]>,
+        never,
+        never
+      >;
 };
 
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
@@ -65,6 +69,8 @@ export interface DomainWorkerConfiguredEnv {
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
+  readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly DATABASE_URL?: Input<Redacted.Redacted<string>> | undefined;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string | undefined;
@@ -77,7 +83,12 @@ export function makeDomainWorkerBindings(input: {
   readonly authEmailQueue: Cloudflare.Queue;
   readonly config: Pick<DomainWorkerStageConfig, "authEmailFrom">;
   readonly hyperdrive: Cloudflare.Hyperdrive;
-}) {
+  readonly localDev?: boolean | undefined;
+}): DomainWorkerBindingProps {
+  if (input.localDev === true) {
+    return {} satisfies DomainWorkerBindingProps;
+  }
+
   return {
     AUTH_EMAIL: Cloudflare.SendEmail("AuthEmailBinding", {
       allowedSenderAddresses: [Redacted.value(input.config.authEmailFrom)],
@@ -91,12 +102,34 @@ export function makeDomainWorkerEnv(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
+  readonly databaseUrl?: Input<Redacted.Redacted<string>> | undefined;
+  readonly localDev?: boolean | undefined;
+  readonly localOrigins?:
+    | {
+        readonly app: string;
+        readonly api: string;
+        readonly mcp: string;
+      }
+    | undefined;
 }): DomainWorkerConfiguredEnv {
-  const authAppOrigin = `https://${input.config.appHostname}`;
-  const betterAuthBaseUrl = `https://${input.config.apiHostname}/api/auth`;
+  const authAppOrigin =
+    input.localDev === true && input.localOrigins
+      ? input.localOrigins.app
+      : `https://${input.config.appHostname}`;
+  const apiOrigin =
+    input.localDev === true && input.localOrigins
+      ? input.localOrigins.api
+      : `https://${input.config.apiHostname}`;
+  const mcpOrigin =
+    input.localDev === true && input.localOrigins
+      ? input.localOrigins.mcp
+      : `https://${input.config.mcpHostname}`;
+  const betterAuthBaseUrl = `${apiOrigin}/api/auth`;
   const authTrustedOrigins = [
     authAppOrigin,
-    input.config.tenantTrustedOriginPattern,
+    input.localDev === true
+      ? undefined
+      : input.config.tenantTrustedOriginPattern,
   ]
     .filter((value): value is string => typeof value === "string")
     .join(",");
@@ -116,8 +149,18 @@ export function makeDomainWorkerEnv(input: {
     AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     BETTER_AUTH_BASE_URL: betterAuthBaseUrl,
     BETTER_AUTH_SECRET: input.betterAuthSecret,
+    ...(input.localDev === true
+      ? {
+          CEIRD_LOCAL_DEV: "true" as const,
+        }
+      : {}),
+    ...(input.databaseUrl === undefined
+      ? {}
+      : {
+          DATABASE_URL: input.databaseUrl,
+        }),
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
-    ...(input.config.authCookieDomain === undefined
+    ...(input.config.authCookieDomain === undefined || input.localDev === true
       ? {}
       : {
           AUTH_COOKIE_DOMAIN: input.config.authCookieDomain,
@@ -136,7 +179,7 @@ export function makeDomainWorkerEnv(input: {
             input.config.mcpAuthorizedAppCacheTtlSeconds
           ),
         }),
-    MCP_RESOURCE_URL: `https://${input.config.mcpHostname}/mcp`,
+    MCP_RESOURCE_URL: `${mcpOrigin}/mcp`,
     NODE_ENV: "production",
     OAUTH_ISSUER_URL: betterAuthBaseUrl,
   } satisfies DomainWorkerConfiguredEnv & WorkerConfiguredEnv;
@@ -147,7 +190,16 @@ export function makeDomainWorkerProps(input: {
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
+  readonly databaseUrl?: Input<Redacted.Redacted<string>> | undefined;
   readonly hyperdrive: Cloudflare.Hyperdrive;
+  readonly localDev?: boolean | undefined;
+  readonly localOrigins?:
+    | {
+        readonly app: string;
+        readonly api: string;
+        readonly mcp: string;
+      }
+    | undefined;
   readonly name: string;
 }) {
   return {
@@ -158,12 +210,16 @@ export function makeDomainWorkerProps(input: {
       authEmailQueue: input.authEmailQueue,
       config: input.config,
       hyperdrive: input.hyperdrive,
+      localDev: input.localDev,
     }),
     env: {
       ...makeDomainWorkerEnv({
         agentInternalSecret: input.agentInternalSecret,
         betterAuthSecret: input.betterAuthSecret,
         config: input.config,
+        databaseUrl: input.databaseUrl,
+        localDev: input.localDev,
+        localOrigins: input.localOrigins,
       }),
     },
     observability: ceirdWorkerObservability,
@@ -176,7 +232,16 @@ export function makeDomainWorker(input: {
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
+  readonly databaseUrl?: Input<Redacted.Redacted<string>> | undefined;
   readonly hyperdrive: Cloudflare.Hyperdrive;
+  readonly localDev?: boolean | undefined;
+  readonly localOrigins?:
+    | {
+        readonly app: string;
+        readonly api: string;
+        readonly mcp: string;
+      }
+    | undefined;
   readonly name: string;
 }) {
   return Cloudflare.Worker("Domain", makeDomainWorkerProps(input));

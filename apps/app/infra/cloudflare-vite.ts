@@ -1,5 +1,5 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import type { ViteProps } from "alchemy/Cloudflare";
+import type { ViteProps, WorkerProps } from "alchemy/Cloudflare";
 import type { Input } from "alchemy/Input";
 
 import type {
@@ -23,7 +23,7 @@ const appWorkerObservability = {
   },
 } satisfies NonNullable<ViteProps["observability"]>;
 
-type WorkerConfiguredEnvValue = Input<NonNullable<ViteProps["env"]>[string]>;
+type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
 type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export type AppWorkerStageConfig = Pick<
@@ -39,6 +39,7 @@ export interface AppWorkerConfiguredEnv {
   readonly AGENT_ORIGIN: Input<string>;
   readonly API_ORIGIN: Input<string>;
   readonly CEIRD_CLOUDFLARE: "1";
+  readonly CEIRD_LOCAL_DEV?: "true" | undefined;
   readonly SYSTEM_APP_ORIGIN: string;
   readonly TENANT_BASE_DOMAIN: string;
   readonly TENANT_HOST_MODE: TenantHostMode;
@@ -57,31 +58,47 @@ export function makeAppWorkerEnv(input: {
   readonly agentOrigin: Input<string>;
   readonly apiOrigin: Input<string>;
   readonly config: AppWorkerStageConfig;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
 }): AppWorkerConfiguredEnv {
-  const systemAppOrigin = `https://${input.config.appHostname}`;
+  const systemAppOrigin =
+    input.localDev === true && input.localAppOrigin
+      ? input.localAppOrigin
+      : `https://${input.config.appHostname}`;
+  const tenantHostMode =
+    input.localDev === true ? "disabled" : input.config.tenantHostMode;
   const tenantReservedHostnames =
-    input.config.tenantReservedHostnames.join(",");
+    input.localDev === true
+      ? ""
+      : input.config.tenantReservedHostnames.join(",");
+  const tenantStageAlias =
+    input.localDev === true ? undefined : input.config.tenantStageAlias;
 
   return {
     AGENT_ORIGIN: input.agentOrigin,
     API_ORIGIN: input.apiOrigin,
     CEIRD_CLOUDFLARE: "1",
+    ...(input.localDev === true
+      ? {
+          CEIRD_LOCAL_DEV: "true" as const,
+        }
+      : {}),
     SYSTEM_APP_ORIGIN: systemAppOrigin,
     TENANT_BASE_DOMAIN: input.config.tenantBaseDomain,
-    TENANT_HOST_MODE: input.config.tenantHostMode,
+    TENANT_HOST_MODE: tenantHostMode,
     TENANT_RESERVED_HOSTNAMES: tenantReservedHostnames,
-    ...(input.config.tenantStageAlias === undefined
+    ...(tenantStageAlias === undefined
       ? {}
-      : { TENANT_STAGE_ALIAS: input.config.tenantStageAlias }),
+      : { TENANT_STAGE_ALIAS: tenantStageAlias }),
     VITE_AGENT_ORIGIN: input.agentOrigin,
     VITE_API_ORIGIN: input.apiOrigin,
     VITE_SYSTEM_APP_ORIGIN: systemAppOrigin,
     VITE_TENANT_BASE_DOMAIN: input.config.tenantBaseDomain,
-    VITE_TENANT_HOST_MODE: input.config.tenantHostMode,
+    VITE_TENANT_HOST_MODE: tenantHostMode,
     VITE_TENANT_RESERVED_HOSTNAMES: tenantReservedHostnames,
-    ...(input.config.tenantStageAlias === undefined
+    ...(tenantStageAlias === undefined
       ? {}
-      : { VITE_TENANT_STAGE_ALIAS: input.config.tenantStageAlias }),
+      : { VITE_TENANT_STAGE_ALIAS: tenantStageAlias }),
   } satisfies AppWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
 
@@ -90,6 +107,8 @@ export function makeAppWorker(input: {
   readonly apiOrigin: Input<string>;
   readonly config: AppWorkerStageConfig;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
   readonly name: string;
 }) {
   return Cloudflare.Vite("App", {
@@ -101,6 +120,8 @@ export function makeAppWorker(input: {
         agentOrigin: input.agentOrigin,
         apiOrigin: input.apiOrigin,
         config: input.config,
+        localDev: input.localDev,
+        localAppOrigin: input.localAppOrigin,
       }),
     },
     domain: input.hostname,

@@ -4,7 +4,6 @@ import {
 } from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
-import type { routeAgentRequest as routeAgentRequestFunction } from "agents";
 import { Schema } from "effect";
 import { beforeEach, vi } from "vitest";
 
@@ -13,12 +12,11 @@ import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 
 type CeirdAgentConstructor = typeof CeirdAgentModule.CeirdAgent;
 
-const { routeAgentRequest } = vi.hoisted(() => ({
-  routeAgentRequest: vi.fn<typeof routeAgentRequestFunction>(),
+const { agentFetch } = vi.hoisted(() => ({
+  agentFetch: vi.fn<(request: Request) => Promise<Response>>(),
 }));
 const MockCeirdAgent = function CeirdAgent() {};
 
-vi.mock(import("agents"), () => ({ routeAgentRequest }));
 vi.mock(import("./ceird-agent.js"), () => ({
   CeirdAgent: MockCeirdAgent as unknown as CeirdAgentConstructor,
 }));
@@ -30,11 +28,11 @@ const agentInstanceName = decodeAgentInstanceName(
 
 describe("Agent Worker adapter", () => {
   beforeEach(() => {
-    routeAgentRequest.mockReset();
+    agentFetch.mockReset();
   });
 
   it("routes the SDK canonical kebab-case Agent path after authorization", async () => {
-    routeAgentRequest.mockResolvedValue(new Response(null, { status: 204 }));
+    agentFetch.mockResolvedValue(new Response(null, { status: 204 }));
     const env = makeEnv();
     const token = await signAgentConnectToken({
       agentInstanceName,
@@ -50,7 +48,7 @@ describe("Agent Worker adapter", () => {
       }),
       env
     );
-    const routedRequest = routeAgentRequest.mock.calls[0]?.[0];
+    const routedRequest = agentFetch.mock.calls[0]?.[0];
 
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-origin")).toBe(
@@ -61,15 +59,19 @@ describe("Agent Worker adapter", () => {
       "/agents/ceird-agent/"
     );
     expect((routedRequest as Request).headers.get("authorization")).toBeNull();
+    expect((routedRequest as Request).headers.get("x-partykit-room")).toBe(
+      agentInstanceName
+    );
+    expect((routedRequest as Request).headers.get("x-partykit-namespace")).toBe(
+      "ceird-agent"
+    );
     expect(
       new URL((routedRequest as Request).url).searchParams.has("token")
     ).toBe(false);
   });
 
   it("adds browser CORS headers to immutable Durable Object responses", async () => {
-    routeAgentRequest.mockResolvedValue(
-      await fetch("data:application/json,%5B%5D")
-    );
+    agentFetch.mockResolvedValue(await fetch("data:application/json,%5B%5D"));
     const env = makeEnv();
     const token = await signAgentConnectToken({
       agentInstanceName,
@@ -93,9 +95,7 @@ describe("Agent Worker adapter", () => {
   });
 
   it("allows tenant origins declared in the trusted origin patterns", async () => {
-    routeAgentRequest.mockResolvedValue(
-      await fetch("data:application/json,%5B%5D")
-    );
+    agentFetch.mockResolvedValue(await fetch("data:application/json,%5B%5D"));
     const env = makeEnv({
       trustedOrigins:
         "https://app.pr-123.example.com,https://*--pr-123.example.com",
@@ -121,9 +121,7 @@ describe("Agent Worker adapter", () => {
   });
 
   it("does not add browser CORS headers for untrusted origins", async () => {
-    routeAgentRequest.mockResolvedValue(
-      await fetch("data:application/json,%5B%5D")
-    );
+    agentFetch.mockResolvedValue(await fetch("data:application/json,%5B%5D"));
     const env = makeEnv({
       trustedOrigins:
         "https://app.pr-123.example.com,https://*--pr-123.example.com",
@@ -169,38 +167,49 @@ describe("Agent Worker adapter", () => {
     expect(response.headers.get("access-control-allow-headers")).toBe(
       "authorization, content-type"
     );
-    expect(routeAgentRequest).not.toHaveBeenCalled();
+    expect(agentFetch).not.toHaveBeenCalled();
   });
 
   it("does not report Agent routing failures as authorization failures", async () => {
-    routeAgentRequest.mockRejectedValue(new Error("durable object down"));
-    const consoleError = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
+    agentFetch.mockRejectedValue(new Error("durable object down"));
     const env = makeEnv();
     const token = await signAgentConnectToken({
       agentInstanceName,
       secret: "agent-secret",
       ttlSeconds: 60,
     });
-    try {
-      const response = await fetchWorker(
-        new Request(makeAgentUrl("ceird-agent", token)),
-        env
-      );
+    const response = await fetchWorker(
+      new Request(makeAgentUrl("ceird-agent", token)),
+      env
+    );
 
-      await expect(response.text()).resolves.toBe("Agent route failed");
-      expect(response.status).toBe(500);
-      expect(consoleError).toHaveBeenCalledWith(
-        "Agent route failed",
-        expect.objectContaining({
-          cause: "Error",
-          path: `/agents/ceird-agent/${encodeURIComponent(agentInstanceName)}`,
-        })
-      );
-    } finally {
-      consoleError.mockRestore();
-    }
+    await expect(response.text()).resolves.toBe("Agent route failed");
+    expect(response.status).toBe(500);
+  });
+
+  it("retries retryable Durable Object routing failures", async () => {
+    const retryableFailure = Object.assign(
+      new Error("durable object temporarily unavailable"),
+      { retryable: true }
+    );
+    const env = makeEnv();
+    const token = await signAgentConnectToken({
+      agentInstanceName,
+      secret: "agent-secret",
+      ttlSeconds: 60,
+    });
+
+    agentFetch
+      .mockRejectedValueOnce(retryableFailure)
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const response = await fetchWorker(
+      new Request(makeAgentUrl("ceird-agent", token)),
+      env
+    );
+
+    expect(response.status).toBe(204);
+    expect(agentFetch).toHaveBeenCalledTimes(2);
   });
 
   it("rejects missing connect tokens as authorization failures", async () => {
@@ -235,6 +244,17 @@ function makeEnv(
     readonly trustedOrigins?: string | undefined;
   } = {}
 ): AgentWorkerEnv {
+  const durableObjectId = {} as DurableObjectId;
+  const durableObjectStub = {
+    fetch: agentFetch,
+  } as unknown as DurableObjectStub;
+  const ceirdAgent = {
+    get: vi.fn<(id: DurableObjectId) => DurableObjectStub>(
+      () => durableObjectStub
+    ),
+    idFromName: vi.fn<(name: string) => DurableObjectId>(() => durableObjectId),
+  } as unknown as DurableObjectNamespace;
+
   return {
     AGENT_INTERNAL_SECRET: "agent-secret",
     AUTH_APP_ORIGIN: "https://app.example.com",
@@ -242,7 +262,7 @@ function makeEnv(
       ? {}
       : { AUTH_TRUSTED_ORIGINS: options.trustedOrigins }),
     AI: {} as Ai,
-    CeirdAgent: {} as DurableObjectNamespace,
+    CeirdAgent: ceirdAgent,
     DOMAIN: {} as DomainServiceBinding,
   };
 }

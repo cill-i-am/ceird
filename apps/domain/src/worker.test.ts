@@ -23,6 +23,7 @@ import {
   makeDomainWorkerRuntimeLayers,
   makeWorkerBaseLive,
   makeWorkerAuthenticationBackgroundTaskHandlerLive,
+  readDomainWorkerDatabaseConfiguration,
   runWithDomainWorkerExecutionContext,
 } from "./platform/cloudflare/runtime.js";
 import {
@@ -138,9 +139,58 @@ function makeEnv(
 }
 
 describe("worker queue auth email delivery", () => {
+  it("uses Hyperdrive in deployed Workers and DATABASE_URL only in explicit local Alchemy dev", async () => {
+    await expect(
+      Effect.runPromise(readDomainWorkerDatabaseConfiguration(makeEnv()))
+    ).resolves.toStrictEqual({
+      source: "hyperdrive",
+      url: "postgresql://postgres:postgres@localhost:5432/app",
+    });
+    await expect(
+      Effect.runPromise(
+        readDomainWorkerDatabaseConfiguration(
+          makeEnv({
+            CEIRD_LOCAL_DEV: "true",
+            DATABASE: undefined,
+            DATABASE_URL: "postgresql://ceird:secret@example.neon.tech/ceird",
+          })
+        )
+      )
+    ).resolves.toStrictEqual({
+      source: "env",
+      url: "postgresql://ceird:secret@example.neon.tech/ceird",
+    });
+    await expect(
+      Effect.runPromise(
+        readDomainWorkerDatabaseConfiguration(
+          makeEnv({
+            DATABASE: undefined,
+            DATABASE_URL: "postgresql://ceird:secret@example.neon.tech/ceird",
+          })
+        )
+      )
+    ).rejects.toThrow(
+      "Deployed Domain Worker requires the DATABASE Hyperdrive binding"
+    );
+    await expect(
+      Effect.runPromise(
+        readDomainWorkerDatabaseConfiguration(
+          makeEnv({
+            CEIRD_LOCAL_DEV: "true",
+            DATABASE: undefined,
+            DATABASE_URL: undefined,
+          })
+        )
+      )
+    ).rejects.toThrow("Local Domain Worker requires DATABASE_URL");
+  });
+
   it("assembles request runtime layers from Cloudflare Worker bindings", async () => {
     const env = makeEnv();
-    const runtimeLayers = makeDomainWorkerRuntimeLayers(env);
+    const database = await Effect.runPromise(
+      readDomainWorkerDatabaseConfiguration(env)
+    );
+    const runtimeLayers = makeDomainWorkerRuntimeLayers(env, database);
 
     const baseUrl = await Effect.runPromise(
       Config.string("BETTER_AUTH_BASE_URL").pipe(

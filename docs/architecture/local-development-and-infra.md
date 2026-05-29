@@ -3,9 +3,11 @@
 ## Alchemy-Native Local Development
 
 Local development uses the same root Alchemy stack as deployment. Root
-`pnpm dev` delegates to `alchemy dev --env-file .env.local`, which creates or
-updates a cloud-backed stage with Cloudflare Workers/Vite, the Agent Worker,
-Hyperdrive, queues, routes, and a Neon branch.
+`pnpm dev` runs `scripts/alchemy-dev.mjs`, which loads `.env.local`, selects
+the Alchemy profile `ceird-env`, enables Cloudflare-backed Alchemy, derives a
+branch stage for linked worktrees, and starts `alchemy dev`. The selected stage
+creates or updates Cloudflare Workers/Vite, the Agent Worker, Hyperdrive,
+queues, and a Neon branch.
 
 Authenticate Cloudflare locally through the Alchemy profile before the first
 cloud-backed run:
@@ -38,15 +40,26 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage main
 CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 ```
 
+In local dev, Alchemy's Workerd proxy owns the browser-facing URLs. Stack
+outputs and app env origins use local proxy URLs such as
+`http://app.localhost:1337`, `http://api.localhost:1337`,
+`http://agent.localhost:1337`, and `http://mcp.localhost:1337` when the local
+provider supplies them; deployed stages still output HTTPS origins from the
+reconciled Cloudflare Worker domains.
+The wrapper keeps Alchemy's confirmation prompt enabled by default. Use
+`pnpm dev -- --stage <stage> --yes` only for an intentional non-interactive run
+against a known stage.
+
 The Alchemy stack and stage are the identities for state, resource names,
 Worker health payloads, and Neon branches. Use the `--stage` CLI flag to choose
 the stage; `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` are injected into app/API
 runtimes after Alchemy resolves the stack and stage. Worker health endpoints
 return those values as `stackName` and `stage`, falling back to `local` in
-package-local Node runs. The root stack outputs `app`, `api`, `mcp`, and
-`agent` as stage HTTPS origins derived from the reconciled Cloudflare Worker
-domains, with the configured hostnames as pre-resolution fallbacks. Canonical
-domain cutover is an explicit `CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` /
+package-local Node runs. Outside local `alchemy dev`, the root stack outputs
+`app`, `api`, `mcp`, and `agent` as stage HTTPS origins derived from the
+reconciled Cloudflare Worker domains, with the configured hostnames as
+pre-resolution fallbacks. Canonical domain cutover is an explicit
+`CEIRD_APP_HOSTNAME` / `CEIRD_API_HOSTNAME` /
 `CEIRD_MCP_HOSTNAME` / `CEIRD_AGENT_HOSTNAME` override so a parent-stage deploy
 cannot accidentally take over a hostname owned by another Worker. Use the
 Alchemy CLI directly for explicit deploy and destroy operations:
@@ -138,6 +151,17 @@ The stack provisions:
 - Cloudflare dead-letter queue for auth email failures
 - Cloudflare Email Worker binding for deployed auth email delivery
 
+Alchemy local Workerd does not support every deployed provider binding. In
+local dev, the domain Worker omits `AUTH_EMAIL`, `AUTH_EMAIL_QUEUE`, and the
+Hyperdrive binding, injects the selected Neon branch connection URI as a
+redacted Worker `DATABASE_URL` env value, and uses the domain's deterministic
+email scheduler instead of the Cloudflare Queue consumer. Deployed stages keep
+Hyperdrive, Queue, and Email Worker bindings.
+
+Local Vite app Workers are not deployed edge scripts, so local dev also skips
+tenant wildcard DNS, tenant Worker routes, reserved host bypass routes, and the
+auth-email queue consumer. Deploy and preview stages reconcile those resources.
+
 The Agent Worker uses shared Worker trace/log settings, but disables
 Cloudflare invocation URL logging while the query-token fallback exists. It
 binds native Workers AI directly and does not provision an account-level AI
@@ -153,6 +177,9 @@ The Agent Worker bundle currently depends on packages that ship only a
 bundles through Worker/browser/module fields. Root `pnpm.patchedDependencies`
 adds `module` metadata for those packages so CI/deploy bundles include them
 instead of emitting unresolved bare Worker imports.
+The `agents` package also hard-imports `cloudflare:email` from its root export;
+root `pnpm.patchedDependencies` removes that eager import because Ceird does
+not route inbound Agent email and local Workerd cannot provide the email module.
 
 The domain, API, MCP, Agent, and Cloudflare Vite app share the same typed Worker
 compatibility contract, including `nodejs_compat`, so runtime packages that rely

@@ -60,9 +60,11 @@ import type {
 } from "../apps/mcp/src/platform/cloudflare/env.ts";
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
+  makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
+  shouldReconcileTenantRouting,
 } from "./cloudflare-stack.ts";
 import {
   ceirdWorkerCompatibility,
@@ -174,6 +176,8 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES"
     | "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS"
     | "AUTH_COOKIE_DOMAIN"
+    | "CEIRD_LOCAL_DEV"
+    | "DATABASE_URL"
   >;
 type McpWorkerStackRuntimeConfigEnv = Required<
   Pick<McpWorkerConfigEnv, "ALCHEMY_STACK_NAME" | "ALCHEMY_STAGE" | "NODE_ENV">
@@ -189,7 +193,8 @@ type AgentWorkerStackRuntimeConfigEnv = Required<
     | "AUTH_TRUSTED_ORIGINS"
     | "NODE_ENV"
   >
->;
+> &
+  Pick<AgentWorkerConfigEnv, "CEIRD_LOCAL_DEV">;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
   AlchemyInjectedWorkerEnv;
@@ -200,6 +205,7 @@ type DomainWorkerRuntimeStringValueKeys = Exclude<
   | "AGENT_INTERNAL_SECRET"
   | "AUTH_EMAIL_FROM"
   | "BETTER_AUTH_SECRET"
+  | "DATABASE_URL"
   | "GOOGLE_MAPS_API_KEY"
 >;
 type DomainWorkerRuntimeStringValueEnv = Pick<
@@ -447,6 +453,27 @@ describe("Cloudflare stack", () => {
     ).toStrictEqual([]);
   });
 
+  it("reconciles tenant routing only outside local Alchemy dev", () => {
+    expect(
+      shouldReconcileTenantRouting({
+        localDev: false,
+        tenantRoutePattern: previewTenantConfig.tenantRoutePattern,
+      })
+    ).toBe(true);
+    expect(
+      shouldReconcileTenantRouting({
+        localDev: true,
+        tenantRoutePattern: previewTenantConfig.tenantRoutePattern,
+      })
+    ).toBe(false);
+    expect(
+      shouldReconcileTenantRouting({
+        localDev: false,
+        tenantRoutePattern: undefined,
+      })
+    ).toBe(false);
+  });
+
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
@@ -525,6 +552,22 @@ describe("Cloudflare stack", () => {
         fallbackHostname: "api.example.com",
       })
     ).toBe("https://api.example.com");
+    expect(
+      makeCloudflareWorkerOrigin({
+        domains: [{ hostname: "api.stage.example.com" }],
+        fallbackHostname: "api.example.com",
+        localDev: true,
+        localUrl: "http://api.localhost:1337",
+      })
+    ).toBe("http://api.localhost:1337");
+    expect(
+      makeCloudflareWorkerOrigin({
+        domains: [{ hostname: "api.stage.example.com" }],
+        fallbackHostname: "api.example.com",
+        localDev: true,
+        localUrl: undefined,
+      })
+    ).toBe("https://api.stage.example.com");
 
     expect(
       makeAppWorkerEnv({
@@ -589,7 +632,15 @@ describe("Cloudflare stack", () => {
     });
     const mcpBindings = makeMcpWorkerBindings({ domain });
     const agentBindings = makeAgentWorkerBindings({ domain });
-    const authEmail = Effect.runSync(domainBindings.AUTH_EMAIL);
+    const authEmailBinding = domainBindings.AUTH_EMAIL;
+
+    if (authEmailBinding === undefined) {
+      throw new Error("Expected deployed domain Worker auth email binding");
+    }
+
+    const authEmail = Effect.isEffect(authEmailBinding)
+      ? Effect.runSync(authEmailBinding)
+      : authEmailBinding;
 
     expect(Object.keys(domainBindings)).toStrictEqual([
       ...domainWorkerBindingKeys,
@@ -638,6 +689,120 @@ describe("Cloudflare stack", () => {
     expect(authEmail).toMatchObject({
       allowedSenderAddresses: ["no-reply@example.com"],
       name: "AuthEmailBinding",
+    });
+  });
+
+  it("omits provider bindings unsupported by local Alchemy dev", () => {
+    const authEmailQueue = {
+      accountId: "account-id",
+      queueId: "queue-id",
+      queueName: "ceird-test-auth-email",
+    } as unknown as Cloudflare.Queue;
+    const hyperdrive = {
+      accountId: "account-id",
+      hyperdriveId: "hyperdrive-id",
+      name: "ceird-test-postgres",
+    } as unknown as Cloudflare.Hyperdrive;
+    const domain = {
+      workerName: "ceird-test-domain",
+    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+    const localOrigins = {
+      agent: makeAlchemyLocalWorkerOrigin("agent"),
+      api: makeAlchemyLocalWorkerOrigin("api"),
+      app: makeAlchemyLocalWorkerOrigin("app"),
+      mcp: makeAlchemyLocalWorkerOrigin("mcp"),
+    };
+
+    const domainBindings = makeDomainWorkerBindings({
+      authEmailQueue,
+      config: configWithoutCloudflareBootstrapSecrets,
+      hyperdrive,
+      localDev: true,
+    });
+    const domainWorkerProps = makeDomainWorkerProps({
+      agentInternalSecret: Redacted.make("agent-secret"),
+      authEmailQueue,
+      betterAuthSecret: Redacted.make("better-auth-secret"),
+      config: configWithoutCloudflareBootstrapSecrets,
+      databaseUrl: Redacted.make(
+        "postgresql://ceird:secret@example.neon.tech/ceird"
+      ),
+      hyperdrive,
+      localDev: true,
+      localOrigins: {
+        app: localOrigins.app,
+        api: localOrigins.api,
+        mcp: localOrigins.mcp,
+      },
+      name: "ceird-main-domain",
+    });
+    const agentWorkerProps = makeAgentWorkerProps({
+      agentInternalSecret: Redacted.make("agent-secret"),
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      hostname: "agent.example.com",
+      localAppOrigin: localOrigins.app,
+      localDev: true,
+      name: "ceird-main-agent",
+    });
+    const appEnv = makeAppWorkerEnv({
+      agentOrigin: localOrigins.agent,
+      apiOrigin: localOrigins.api,
+      config: configWithoutCloudflareBootstrapSecrets,
+      localAppOrigin: localOrigins.app,
+      localDev: true,
+    });
+
+    expect(Object.keys(domainBindings)).toStrictEqual([]);
+    expect(domainWorkerProps.bindings).toStrictEqual(domainBindings);
+    const localDatabaseUrl = domainWorkerProps.env.DATABASE_URL;
+
+    if (!Redacted.isRedacted(localDatabaseUrl)) {
+      throw new Error(
+        "Expected local domain Worker DATABASE_URL to be redacted"
+      );
+    }
+
+    expect(Redacted.value(localDatabaseUrl)).toBe(
+      "postgresql://ceird:secret@example.neon.tech/ceird"
+    );
+    expect(domainWorkerProps.env.CEIRD_LOCAL_DEV).toBe("true");
+    expect(domainWorkerProps.env.AUTH_APP_ORIGIN).toBe(
+      "http://app.localhost:1337"
+    );
+    expect(domainWorkerProps.env.AUTH_COOKIE_DOMAIN).toBeUndefined();
+    expect(domainWorkerProps.env.AUTH_TRUSTED_ORIGINS).toBe(
+      "http://app.localhost:1337"
+    );
+    expect(domainWorkerProps.env.BETTER_AUTH_BASE_URL).toBe(
+      "http://api.localhost:1337/api/auth"
+    );
+    expect(domainWorkerProps.env.MCP_RESOURCE_URL).toBe(
+      "http://mcp.localhost:1337/mcp"
+    );
+    expect(agentWorkerProps.env).toStrictEqual({
+      AGENT_INTERNAL_SECRET: expect.any(Object),
+      AGENT_MUTATION_TOOLS_ENABLED: "true",
+      AUTH_APP_ORIGIN: "http://app.localhost:1337",
+      AUTH_TRUSTED_ORIGINS: "http://app.localhost:1337",
+      CEIRD_LOCAL_DEV: "true",
+      NODE_ENV: "production",
+    });
+    expect(appEnv).toStrictEqual({
+      AGENT_ORIGIN: "http://agent.localhost:1337",
+      API_ORIGIN: "http://api.localhost:1337",
+      CEIRD_CLOUDFLARE: "1",
+      CEIRD_LOCAL_DEV: "true",
+      SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
+      TENANT_BASE_DOMAIN: "example.com",
+      TENANT_HOST_MODE: "disabled",
+      TENANT_RESERVED_HOSTNAMES: "",
+      VITE_AGENT_ORIGIN: "http://agent.localhost:1337",
+      VITE_API_ORIGIN: "http://api.localhost:1337",
+      VITE_SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
+      VITE_TENANT_BASE_DOMAIN: "example.com",
+      VITE_TENANT_HOST_MODE: "disabled",
+      VITE_TENANT_RESERVED_HOSTNAMES: "",
     });
   });
 
