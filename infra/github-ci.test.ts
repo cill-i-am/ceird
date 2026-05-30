@@ -20,9 +20,13 @@ describe("GitHub CI credentials stack", () => {
         {
           effect: "allow",
           permissionGroups: [
+            "AI Gateway Read",
             "AI Gateway Write",
+            "Hyperdrive Read",
             "Hyperdrive Write",
+            "Queues Read",
             "Queues Write",
+            "Workers Scripts Read",
             "Workers Scripts Write",
           ],
           resources: {
@@ -31,7 +35,13 @@ describe("GitHub CI credentials stack", () => {
         },
         {
           effect: "allow",
-          permissionGroups: ["DNS Write", "Workers Routes Write", "Zone Read"],
+          permissionGroups: [
+            "DNS Read",
+            "DNS Write",
+            "Workers Routes Read",
+            "Workers Routes Write",
+            "Zone Read",
+          ],
           resources: {
             "com.cloudflare.api.account.zone.zone-id": "*",
           },
