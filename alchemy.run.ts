@@ -65,6 +65,7 @@ export default Alchemy.Stack(
     return {
       api: cloudflareStack.apiOrigin,
       agent: cloudflareStack.agentOrigin,
+      agentAiGateway: cloudflareStack.agentAiGateway.gatewayId,
       app: cloudflareStack.appOrigin,
       authEmailDeadLetterQueue:
         cloudflareStack.authEmailDeadLetterQueue.queueName,

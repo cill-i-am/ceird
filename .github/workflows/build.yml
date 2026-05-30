@@ -288,43 +288,23 @@ jobs:
           fi
 
       - name: Restore Alchemy state store credentials
-        run: |
-          set -euo pipefail
-
-          credentials_dir="$HOME/.alchemy/credentials/default"
-          credentials_file="$credentials_dir/cloudflare-state-store.json"
-
-          mkdir -p "$credentials_dir"
-          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
-          chmod 600 "$credentials_file"
-
-          node <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-
-          const credentialsFile = path.join(
-            process.env.HOME,
-            ".alchemy",
-            "credentials",
-            "default",
-            "cloudflare-state-store.json"
-          );
-          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
-
-          if (
-            typeof credentials.url !== "string" ||
-            !credentials.url.startsWith("https://") ||
-            typeof credentials.authToken !== "string" ||
-            credentials.authToken.length === 0
-          ) {
-            throw new Error("Invalid Alchemy Cloudflare state store credentials");
-          }
-          NODE
+        run: node scripts/restore-alchemy-state-store-credentials.mjs
         env:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
       - name: Deploy cloud E2E
         run: pnpm alchemy deploy --stage "$CI_STAGE" --yes
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
+      - name: Audit CI Alchemy state
+        run: pnpm alchemy:state-audit -- --stage "$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
@@ -515,38 +495,7 @@ jobs:
           fi
 
       - name: Restore Alchemy state store credentials
-        run: |
-          set -euo pipefail
-
-          credentials_dir="$HOME/.alchemy/credentials/default"
-          credentials_file="$credentials_dir/cloudflare-state-store.json"
-
-          mkdir -p "$credentials_dir"
-          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
-          chmod 600 "$credentials_file"
-
-          node <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-
-          const credentialsFile = path.join(
-            process.env.HOME,
-            ".alchemy",
-            "credentials",
-            "default",
-            "cloudflare-state-store.json"
-          );
-          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
-
-          if (
-            typeof credentials.url !== "string" ||
-            !credentials.url.startsWith("https://") ||
-            typeof credentials.authToken !== "string" ||
-            credentials.authToken.length === 0
-          ) {
-            throw new Error("Invalid Alchemy Cloudflare state store credentials");
-          }
-          NODE
+        run: node scripts/restore-alchemy-state-store-credentials.mjs
         env:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
@@ -615,38 +564,7 @@ jobs:
           fi
 
       - name: Restore Alchemy state store credentials
-        run: |
-          set -euo pipefail
-
-          credentials_dir="$HOME/.alchemy/credentials/default"
-          credentials_file="$credentials_dir/cloudflare-state-store.json"
-
-          mkdir -p "$credentials_dir"
-          printf '%s' "$ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS" > "$credentials_file"
-          chmod 600 "$credentials_file"
-
-          node <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-
-          const credentialsFile = path.join(
-            process.env.HOME,
-            ".alchemy",
-            "credentials",
-            "default",
-            "cloudflare-state-store.json"
-          );
-          const credentials = JSON.parse(fs.readFileSync(credentialsFile, "utf8"));
-
-          if (
-            typeof credentials.url !== "string" ||
-            !credentials.url.startsWith("https://") ||
-            typeof credentials.authToken !== "string" ||
-            credentials.authToken.length === 0
-          ) {
-            throw new Error("Invalid Alchemy Cloudflare state store credentials");
-          }
-          NODE
+        run: node scripts/restore-alchemy-state-store-credentials.mjs
         env:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 

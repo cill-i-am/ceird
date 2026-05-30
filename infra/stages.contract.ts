@@ -45,6 +45,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   tenantRoutePattern: "*--main.example.com/*",
   tenantStageAlias: "main",
   tenantTrustedOriginPattern: "https://*--main.example.com",
+  workerAnalyticsSampleRate: 0.1,
   zoneName: "example.com",
 } satisfies InfraStageConfig;
 

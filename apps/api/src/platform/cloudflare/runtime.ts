@@ -2,12 +2,17 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import { makeDomainServiceClient } from "@ceird/domain-core";
+import {
+  makeWorkerObservabilityLive,
+  WorkerObservability,
+} from "@ceird/worker-observability";
 import { Effect, Schema } from "effect";
 
 import { makeApiWebHandler } from "../../server.js";
 import type { ApiWorkerEnv } from "./env.js";
 
 const REQUEST_ID_HEADER = "x-request-id";
+const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 export class ApiDomainForwardingError extends Schema.TaggedErrorClass<ApiDomainForwardingError>()(
   "@ceird/api/DomainForwardingError",
@@ -40,15 +45,42 @@ export function handleWorkerFetch(
       withRequestIdResponseHeader(response, observation.requestId)
     ),
     Effect.tap((response) =>
+      WorkerObservability.recordRequest({
+        adapter: "api",
+        durationMs: elapsedMs(observation.startedAtMs),
+        method: observedRequest.method,
+        path: requestPathname(observedRequest.url),
+        requestId: observation.requestId,
+        status: response.status,
+      }).pipe(Effect.provide(makeWorkerObservabilityLive(env)))
+    ),
+    Effect.tap((response) =>
       logApiWorkerOutcome(observedRequest, env, response, observation)
     ),
     Effect.catchTag("@ceird/api/DomainForwardingError", (failure) =>
-      logApiWorkerForwardingFailure(request, env, failure, observation).pipe(
-        Effect.andThen(Effect.annotateCurrentSpan("http.status", 502)),
-        Effect.as(
-          withRequestIdResponseHeader(
-            makeDomainForwardingFailureResponse(),
-            observation.requestId
+      WorkerObservability.recordRequest({
+        adapter: "api",
+        durationMs: elapsedMs(observation.startedAtMs),
+        method: request.method,
+        path: requestPathname(request.url),
+        requestId: observation.requestId,
+        status: 502,
+      }).pipe(
+        Effect.provide(makeWorkerObservabilityLive(env)),
+        Effect.andThen(
+          logApiWorkerForwardingFailure(
+            request,
+            env,
+            failure,
+            observation
+          ).pipe(
+            Effect.andThen(Effect.annotateCurrentSpan("http.status", 502)),
+            Effect.as(
+              withRequestIdResponseHeader(
+                makeDomainForwardingFailureResponse(),
+                observation.requestId
+              )
+            )
           )
         )
       )
@@ -145,7 +177,7 @@ interface ApiRequestObservation {
 function makeApiRequestObservation(request: Request): ApiRequestObservation {
   return {
     cfRay: request.headers.get("cf-ray") ?? undefined,
-    requestId: request.headers.get(REQUEST_ID_HEADER) ?? makeRequestId(),
+    requestId: readSafeRequestId(request),
     startedAtMs: nowMs(),
   };
 }
@@ -232,6 +264,14 @@ function withRequestIdResponseHeader(response: Response, requestId: string) {
 
 function makeRequestId() {
   return randomUUID();
+}
+
+function readSafeRequestId(request: Request) {
+  const value = request.headers.get(REQUEST_ID_HEADER)?.trim();
+
+  return value !== undefined && SAFE_REQUEST_ID_PATTERN.test(value)
+    ? value
+    : makeRequestId();
 }
 
 function nowMs() {

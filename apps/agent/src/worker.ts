@@ -1,4 +1,9 @@
-import { Effect } from "effect";
+import {
+  makeWorkerObservabilityLive,
+  normalizeWorkerAnalyticsPath,
+  WorkerObservability,
+} from "@ceird/worker-observability";
+import { Effect, Schema } from "effect";
 
 import { AgentRouteError, routeCeirdAgentRequest } from "./agent-router.js";
 import {
@@ -6,26 +11,47 @@ import {
   authorizeAgentRequest,
 } from "./instance.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
+import { readAgentAiGatewayId } from "./platform/cloudflare/env.js";
 
 export { CeirdAgent } from "./ceird-agent.js";
 
 const worker = {
   async fetch(request: Request, env: AgentWorkerEnv): Promise<Response> {
+    const startedAt = performance.now();
+    const requestId = makeRequestId();
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
-      return Response.json({ ok: true });
+      return withAgentAnalytics(
+        Response.json(makeAgentHealthPayload(env)),
+        request,
+        env,
+        startedAt,
+        requestId
+      );
     }
 
     if (!isAgentRoutePath(url.pathname)) {
-      return new Response("Not found", { status: 404 });
+      return withAgentAnalytics(
+        new Response("Not found", { status: 404 }),
+        request,
+        env,
+        startedAt,
+        requestId
+      );
     }
 
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: makeCorsHeaders(request, env, { preflight: true }),
-        status: 204,
-      });
+      return withAgentAnalytics(
+        new Response(null, {
+          headers: makeCorsHeaders(request, env, { preflight: true }),
+          status: 204,
+        }),
+        request,
+        env,
+        startedAt,
+        requestId
+      );
     }
 
     let authorized;
@@ -34,10 +60,16 @@ const worker = {
       authorized = await authorizeAgentRequest(request, env);
     } catch (error) {
       if (error instanceof AgentRequestUnauthorizedError) {
-        return withCorsHeaders(
-          new Response("Agent request unauthorized", { status: 401 }),
+        return withAgentAnalytics(
+          withCorsHeaders(
+            new Response("Agent request unauthorized", { status: 401 }),
+            request,
+            env
+          ),
           request,
-          env
+          env,
+          startedAt,
+          requestId
         );
       }
 
@@ -51,14 +83,26 @@ const worker = {
         authorized.agentInstanceName
       );
 
-      return withCorsHeaders(response, request, env);
+      return withAgentAnalytics(
+        withCorsHeaders(response, request, env),
+        request,
+        env,
+        startedAt,
+        requestId
+      );
     } catch (error) {
       await logAgentRouteFailure(error, authorized.agentInstanceName);
 
-      return withCorsHeaders(
-        new Response("Agent route failed", { status: 500 }),
+      return withAgentAnalytics(
+        withCorsHeaders(
+          new Response("Agent route failed", { status: 500 }),
+          request,
+          env
+        ),
         request,
-        env
+        env,
+        startedAt,
+        requestId
       );
     }
   },
@@ -66,11 +110,109 @@ const worker = {
 
 export default worker;
 
+const AgentHealthPayload = Schema.Struct({
+  aiGateway: Schema.optional(Schema.String),
+  ok: Schema.Literal(true),
+  service: Schema.Literal("agent"),
+  stackName: Schema.String,
+  stage: Schema.String,
+});
+type AgentHealthPayload = Schema.Schema.Type<typeof AgentHealthPayload>;
+const decodeAgentHealthPayload = Schema.decodeUnknownSync(AgentHealthPayload);
+
+function makeAgentHealthPayload(env: AgentWorkerEnv) {
+  const aiGatewayId = readAgentAiGatewayId(env);
+
+  return decodeAgentHealthPayload({
+    ...(aiGatewayId === undefined ? {} : { aiGateway: aiGatewayId }),
+    ok: true,
+    service: "agent",
+    stackName: runtimeIdentity(env.ALCHEMY_STACK_NAME),
+    stage: runtimeIdentity(env.ALCHEMY_STAGE),
+  } satisfies AgentHealthPayload);
+}
+
+function runtimeIdentity(value: string | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : "local";
+}
+
 function isAgentRoutePath(pathname: string): boolean {
   return (
     pathname.startsWith("/agents/ceird-agent/") ||
     pathname.startsWith("/agents/CeirdAgent/")
   );
+}
+
+function withAgentAnalytics(
+  response: Response,
+  request: Request,
+  env: AgentWorkerEnv,
+  startedAt: number,
+  requestId: string
+) {
+  const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+  const path = new URL(request.url).pathname;
+
+  Effect.runSync(
+    WorkerObservability.recordRequest({
+      adapter: "agent",
+      durationMs,
+      method: request.method,
+      path,
+      requestId,
+      status: response.status,
+    }).pipe(
+      Effect.provide(makeWorkerObservabilityLive(env)),
+      Effect.andThen(logAgentWorkerOutcome(request, env, response, durationMs)),
+      Effect.withLogSpan("agent.request"),
+      Effect.withSpan("AgentWorker.handleFetch", {
+        attributes: makeAgentRequestLogAnnotations(request, env),
+      })
+    )
+  );
+
+  return response;
+}
+
+function makeRequestId() {
+  const { crypto } = globalThis as { readonly crypto?: Crypto };
+
+  return crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
+function logAgentWorkerOutcome(
+  request: Request,
+  env: AgentWorkerEnv,
+  response: Response,
+  durationMs: number
+) {
+  const log =
+    response.status >= 500
+      ? Effect.logWarning("Handled Agent Worker request")
+      : Effect.logInfo("Handled Agent Worker request");
+
+  return log.pipe(
+    Effect.annotateLogs({
+      ...makeAgentRequestLogAnnotations(request, env),
+      "http.durationMs": durationMs,
+      "http.status": response.status,
+    })
+  );
+}
+
+function makeAgentRequestLogAnnotations(request: Request, env: AgentWorkerEnv) {
+  return {
+    ...(env.ALCHEMY_STACK_NAME === undefined
+      ? {}
+      : { "alchemy.stackName": env.ALCHEMY_STACK_NAME }),
+    ...(env.ALCHEMY_STAGE === undefined
+      ? {}
+      : { "alchemy.stage": env.ALCHEMY_STAGE }),
+    "ceird.adapter": "agent",
+    "http.method": request.method,
+    "http.path": normalizeWorkerAnalyticsPath(new URL(request.url).pathname),
+  };
 }
 
 async function logAgentRouteFailure(error: unknown, agentInstanceName: string) {

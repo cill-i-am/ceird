@@ -17,12 +17,14 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type ApiWorkerBindings = {
+  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
   readonly DOMAIN: DomainWorkerResource;
 };
 
-export type ApiWorkerBindingEnv = {
-  readonly [BindingName in keyof ApiWorkerBindings]: WorkerServiceBinding;
-};
+export interface ApiWorkerBindingEnv {
+  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly DOMAIN: WorkerServiceBinding;
+}
 
 type ApiWorkerBindingProps = {
   readonly [BindingName in keyof ApiWorkerBindings]:
@@ -31,25 +33,33 @@ type ApiWorkerBindingProps = {
 };
 
 export interface ApiWorkerConfiguredEnv {
+  readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly NODE_ENV: "production";
 }
 
 export function makeApiWorkerBindings(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
 }) {
   return {
+    ANALYTICS: input.analytics,
     DOMAIN: input.domain,
   } satisfies ApiWorkerBindingProps;
 }
 
-export function makeApiWorkerEnv(): ApiWorkerConfiguredEnv {
+export function makeApiWorkerEnv(input: {
+  readonly workerAnalyticsSampleRate: number;
+}): ApiWorkerConfiguredEnv {
   return {
+    CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(input.workerAnalyticsSampleRate),
     NODE_ENV: "production",
   } satisfies ApiWorkerConfiguredEnv &
     Record<string, NonNullable<WorkerProps["env"]>[string]>;
 }
 
 export function makeApiWorkerProps(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
   readonly name: string;
@@ -58,8 +68,15 @@ export function makeApiWorkerProps(input: {
     name: input.name,
     main: apiWorkerMain,
     compatibility: ceirdWorkerCompatibility,
-    bindings: makeApiWorkerBindings({ domain: input.domain }),
-    env: { ...makeApiWorkerEnv() },
+    bindings: makeApiWorkerBindings({
+      analytics: input.analytics,
+      domain: input.domain,
+    }),
+    env: {
+      ...makeApiWorkerEnv({
+        workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
+      }),
+    },
     domain: input.hostname,
     observability: ceirdWorkerObservability,
     url: true,
@@ -67,6 +84,8 @@ export function makeApiWorkerProps(input: {
 }
 
 export function makeApiWorker(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
   readonly name: string;

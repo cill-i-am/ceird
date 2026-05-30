@@ -7,6 +7,7 @@ import type * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
 import {
+  ceirdDomainWorkerPlacement,
   ceirdWorkerCompatibility,
   ceirdWorkerObservability,
 } from "../../../infra/cloudflare-worker-defaults.ts";
@@ -29,10 +30,12 @@ export interface DomainWorkerStageConfig {
   readonly stage?: string | undefined;
   readonly tenantBaseDomain: string;
   readonly tenantTrustedOriginPattern: string | undefined;
+  readonly workerAnalyticsSampleRate: number;
 }
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
 export type DomainWorkerBindings = {
+  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
   readonly AUTH_EMAIL?: Cloudflare.SendEmail | undefined;
   readonly AUTH_EMAIL_QUEUE?: Cloudflare.Queue | undefined;
   readonly DATABASE?: Cloudflare.Hyperdrive | undefined;
@@ -70,6 +73,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly BETTER_AUTH_BASE_URL: string;
   readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly DATABASE_URL?: Input<Redacted.Redacted<string>> | undefined;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string | undefined;
@@ -80,16 +84,20 @@ export interface DomainWorkerConfiguredEnv {
 }
 
 export function makeDomainWorkerBindings(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly config: Pick<DomainWorkerStageConfig, "authEmailFrom">;
   readonly hyperdrive: Cloudflare.Hyperdrive;
   readonly localDev?: boolean | undefined;
 }): DomainWorkerBindingProps {
   if (input.localDev === true) {
-    return {} satisfies DomainWorkerBindingProps;
+    return {
+      ANALYTICS: input.analytics,
+    } satisfies DomainWorkerBindingProps;
   }
 
   return {
+    ANALYTICS: input.analytics,
     AUTH_EMAIL: Cloudflare.SendEmail("AuthEmailBinding", {
       allowedSenderAddresses: [Redacted.value(input.config.authEmailFrom)],
     }),
@@ -154,6 +162,9 @@ export function makeDomainWorkerEnv(input: {
           CEIRD_LOCAL_DEV: "true" as const,
         }
       : {}),
+    CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
+      input.config.workerAnalyticsSampleRate
+    ),
     ...(input.databaseUrl === undefined
       ? {}
       : {
@@ -187,6 +198,7 @@ export function makeDomainWorkerEnv(input: {
 
 export function makeDomainWorkerProps(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;
@@ -207,6 +219,7 @@ export function makeDomainWorkerProps(input: {
     main: domainWorkerMain,
     compatibility: ceirdWorkerCompatibility,
     bindings: makeDomainWorkerBindings({
+      analytics: input.analytics,
       authEmailQueue: input.authEmailQueue,
       config: input.config,
       hyperdrive: input.hyperdrive,
@@ -223,12 +236,14 @@ export function makeDomainWorkerProps(input: {
       }),
     },
     observability: ceirdWorkerObservability,
+    placement: ceirdDomainWorkerPlacement,
     url: false,
   } satisfies InputProps<WorkerProps<DomainWorkerBindingProps>>;
 }
 
 export function makeDomainWorker(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly config: DomainWorkerStageConfig;

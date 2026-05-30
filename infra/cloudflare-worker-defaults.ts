@@ -5,13 +5,21 @@ export const ceirdWorkerCompatibility = {
   flags: ["nodejs_compat"],
 } satisfies NonNullable<WorkerProps["compatibility"]>;
 
+export const ceirdWorkerTelemetryHeadSamplingRate = 0.1;
+
 export const ceirdWorkerObservability = {
   enabled: true,
   logs: {
     enabled: true,
+    headSamplingRate: ceirdWorkerTelemetryHeadSamplingRate,
     invocationLogs: true,
   },
   traces: {
     enabled: true,
+    headSamplingRate: ceirdWorkerTelemetryHeadSamplingRate,
   },
 } satisfies NonNullable<WorkerProps["observability"]>;
+
+export const ceirdDomainWorkerPlacement = {
+  mode: "smart",
+} satisfies NonNullable<WorkerProps["placement"]>;

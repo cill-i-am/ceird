@@ -60,14 +60,24 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Bootstrap Alchemy state store
-        run: pnpm alchemy cloudflare bootstrap
+      - name: Restore Alchemy state store credentials
+        run: node scripts/restore-alchemy-state-store-credentials.mjs
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
       - name: Deploy
         run: pnpm alchemy deploy --stage main --yes
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
+      - name: Audit main Alchemy state
+        run: pnpm alchemy:state-audit -- --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}

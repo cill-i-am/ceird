@@ -10,6 +10,7 @@
   "dependencies": {
     "@ceird/agents-core": "workspace:*",
     "@ceird/domain-core": "workspace:*",
+    "@ceird/worker-observability": "workspace:*",
     "@cloudflare/ai-chat": "0.7.1",
     "agents": "0.13.2",
     "ai": "6.0.185",

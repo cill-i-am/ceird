@@ -183,6 +183,28 @@ describe("worker queue auth email delivery", () => {
         )
       )
     ).rejects.toThrow("Local Domain Worker requires DATABASE_URL");
+    await expect(
+      Effect.runPromise(
+        readDomainWorkerDatabaseConfiguration(
+          makeEnv({
+            DATABASE: {
+              connectionString: "https://not-postgres.example.com/app",
+            } as Hyperdrive,
+          })
+        )
+      )
+    ).rejects.toThrow("Domain Worker hyperdrive database URL is invalid");
+    await expect(
+      Effect.runPromise(
+        readDomainWorkerDatabaseConfiguration(
+          makeEnv({
+            CEIRD_LOCAL_DEV: "true",
+            DATABASE: undefined,
+            DATABASE_URL: "not-a-postgres-url",
+          })
+        )
+      )
+    ).rejects.toThrow("Domain Worker env database URL is invalid");
   });
 
   it("assembles request runtime layers from Cloudflare Worker bindings", async () => {

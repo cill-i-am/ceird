@@ -17,12 +17,14 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type McpWorkerBindings = {
+  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
   readonly DOMAIN: DomainWorkerResource;
 };
 
-export type McpWorkerBindingEnv = {
-  readonly [BindingName in keyof McpWorkerBindings]: WorkerServiceBinding;
-};
+export interface McpWorkerBindingEnv {
+  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly DOMAIN: WorkerServiceBinding;
+}
 
 type McpWorkerBindingProps = {
   readonly [BindingName in keyof McpWorkerBindings]:
@@ -31,25 +33,33 @@ type McpWorkerBindingProps = {
 };
 
 export interface McpWorkerConfiguredEnv {
+  readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly NODE_ENV: "production";
 }
 
 export function makeMcpWorkerBindings(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
 }) {
   return {
+    ANALYTICS: input.analytics,
     DOMAIN: input.domain,
   } satisfies McpWorkerBindingProps;
 }
 
-export function makeMcpWorkerEnv(): McpWorkerConfiguredEnv {
+export function makeMcpWorkerEnv(input: {
+  readonly workerAnalyticsSampleRate: number;
+}): McpWorkerConfiguredEnv {
   return {
+    CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(input.workerAnalyticsSampleRate),
     NODE_ENV: "production",
   } satisfies McpWorkerConfiguredEnv &
     Record<string, NonNullable<WorkerProps["env"]>[string]>;
 }
 
 export function makeMcpWorkerProps(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
   readonly name: string;
@@ -58,8 +68,15 @@ export function makeMcpWorkerProps(input: {
     name: input.name,
     main: mcpWorkerMain,
     compatibility: ceirdWorkerCompatibility,
-    bindings: makeMcpWorkerBindings({ domain: input.domain }),
-    env: { ...makeMcpWorkerEnv() },
+    bindings: makeMcpWorkerBindings({
+      analytics: input.analytics,
+      domain: input.domain,
+    }),
+    env: {
+      ...makeMcpWorkerEnv({
+        workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
+      }),
+    },
     domain: input.hostname,
     observability: ceirdWorkerObservability,
     url: false,
@@ -67,6 +84,8 @@ export function makeMcpWorkerProps(input: {
 }
 
 export function makeMcpWorker(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
   readonly name: string;

@@ -127,6 +127,7 @@ For `main`, add:
 
 Secrets:
 
+- `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
@@ -176,12 +177,30 @@ for `main` and ordinary non-PR stages by default.
 
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` is the JSON body from
 `~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a GitHub
-environment secret. Non-production deploy jobs write it back to Alchemy's
-expected credentials path before deploy, state inspection, or destroy. This
-avoids re-running `pnpm alchemy cloudflare bootstrap` for preview and ephemeral
-CI jobs; the current Alchemy beta reads the state-store token through Cloudflare
-edge preview during bootstrap, and Cloudflare rejects edge preview for the
-existing state-store Worker because it has a Durable Object binding.
+environment secret. Main, preview, and ephemeral CI jobs restore it through
+`scripts/restore-alchemy-state-store-credentials.mjs` before deploy, state
+reads, or destroy. This keeps the credential path and file permissions
+centralized and avoids re-running
+`pnpm alchemy cloudflare bootstrap` in CI; the current Alchemy beta
+reads the state-store token through Cloudflare edge preview during bootstrap,
+and Cloudflare rejects edge preview for the existing state-store Worker because
+it has a Durable Object binding.
+
+After main, preview, and ephemeral CI deploys, CI runs:
+
+```bash
+pnpm alchemy:state-audit -- --stage <stage> --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
+```
+
+The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
+`AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
+missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
+env, missing Domain Worker Smart Placement, and stage tenant-route or
+wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
+has been inspected and intentionally removed. Plain
+`PostgresBranch.connectionUri` state is reported as a low-severity finding, not
+a CI blocker, because Alchemy may still expose that value for some provider
+shapes.
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
 store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
@@ -276,8 +295,9 @@ The workflow:
 
 - installs dependencies with pnpm
 - type-checks the app, API, domain, MCP, and root infra helpers
-- bootstraps Cloudflare state through `pnpm alchemy cloudflare bootstrap`
+- restores Alchemy Cloudflare state-store credentials through the shared helper
 - deploys through `pnpm alchemy deploy --stage main --yes`
+- audits the live `main` Alchemy state after deploy
 - serializes deploys with a GitHub Actions concurrency group
 - lets Alchemy `Drizzle.Schema` update domain migration snapshots before the native
   Neon branch resource applies the stage-specific migration directory
@@ -310,6 +330,18 @@ v2.alchemy.run. Older local patches for beta.28 and
 `@distilled.cloud/cloudflare@0.15.2` were removed after beta.40 published native
 ESM-safe CLI imports and Cloudflare observability support.
 
+`alchemy.github.run.ts` is the credentials-as-code stack for GitHub Actions. It
+creates an account-owned Cloudflare deploy token, writes it to the repository
+environments `main`, `preview-deploy`, and `preview-cleanup` as
+`CLOUDFLARE_API_TOKEN`, writes the state-store JSON from
+`CEIRD_ALCHEMY_STATE_STORE_CREDENTIALS` to the matching environment secret
+`ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`, writes `CLOUDFLARE_ACCOUNT_ID`
+as an environment secret, and manages the non-secret repository variables
+`CEIRD_CLOUDFLARE_ZONE_ID` and `CEIRD_ZONE_NAME`. Reconcile that stack only
+with a bootstrap Cloudflare token that can manage account API tokens and a
+GitHub token that can write repository and environment Actions
+secrets/variables.
+
 ## Alchemy Docs Notes
 
 The Alchemy v2 CI guide recommends:
@@ -322,7 +354,7 @@ The Alchemy v2 CI guide recommends:
 - optionally using `--adopt` when importing existing cloud resources into a
   fresh state store
 
-The guide also describes a more advanced `stacks/github.ts` approach where
-Alchemy creates scoped provider credentials and writes them into GitHub. Ceird
-currently uses manually managed GitHub environment secrets to avoid giving the
-stack token-management authority until that deployment model is needed.
+Ceird implements the advanced credentials stack in `alchemy.github.run.ts`.
+Keep WAF/API Shield/Turnstile outside this stack until Alchemy has native
+Cloudflare resources for those features or this repo intentionally adds custom
+providers.

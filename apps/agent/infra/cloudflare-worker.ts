@@ -10,6 +10,11 @@ import {
   ceirdWorkerCompatibility,
   ceirdWorkerObservability,
 } from "../../../infra/cloudflare-worker-defaults.ts";
+import {
+  makeAlchemyStageIdentity,
+  stageResourceName,
+} from "../../../infra/stages.ts";
+import type { InfraStageConfig } from "../../../infra/stages.ts";
 import type { DomainWorkerResource } from "../../domain/infra/cloudflare-worker.ts";
 
 const agentWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
@@ -25,12 +30,15 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type AgentWorkerBindings = {
+  readonly AI: Cloudflare.AiGateway;
+  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
   readonly CeirdAgent: Cloudflare.DurableObjectNamespaceLike;
   readonly DOMAIN: DomainWorkerResource;
 };
 
 export interface AgentWorkerBindingEnv {
   readonly AI: Ai;
+  readonly ANALYTICS: AnalyticsEngineDataset;
   readonly CeirdAgent: DurableObjectNamespace;
   readonly DOMAIN: WorkerServiceBinding;
 }
@@ -46,22 +54,31 @@ type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export interface AgentWorkerStageConfig {
   readonly appHostname: string;
+  readonly appName: string;
+  readonly stage: string;
   readonly tenantTrustedOriginPattern?: string | undefined;
+  readonly workerAnalyticsSampleRate: number;
 }
 
 export interface AgentWorkerConfiguredEnv {
+  readonly AGENT_AI_GATEWAY_ID: Input<string>;
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AGENT_MUTATION_TOOLS_ENABLED: "true";
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly NODE_ENV: "production";
 }
 
 export function makeAgentWorkerBindings(input: {
+  readonly aiGateway: Cloudflare.AiGateway;
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
 }) {
   return {
+    AI: input.aiGateway,
+    ANALYTICS: input.analytics,
     CeirdAgent: Cloudflare.DurableObjectNamespace("CeirdAgent", {
       className: "CeirdAgent",
     }),
@@ -69,13 +86,21 @@ export function makeAgentWorkerBindings(input: {
   } satisfies AgentWorkerBindingProps;
 }
 
-export function makeAgentWorkersAiBinding() {
+export function makeAgentAiGatewayProps(input: {
+  readonly config: Pick<InfraStageConfig, "appName" | "stage">;
+}) {
   return {
-    bindings: [{ type: "ai", name: "AI" }],
-  } satisfies Cloudflare.Worker["Binding"];
+    authentication: true,
+    cacheTtl: null,
+    collectLogs: false,
+    id: stageResourceName(makeAlchemyStageIdentity(input.config), "agent-ai"),
+    rateLimitingInterval: null,
+    rateLimitingLimit: null,
+  } satisfies InputProps<Cloudflare.AiGatewayProps>;
 }
 
 export function makeAgentWorkerEnv(input: {
+  readonly aiGatewayId: Input<string>;
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly config: AgentWorkerStageConfig;
   readonly localDev?: boolean | undefined;
@@ -95,6 +120,7 @@ export function makeAgentWorkerEnv(input: {
     .join(",");
 
   return {
+    AGENT_AI_GATEWAY_ID: input.aiGatewayId,
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
     AGENT_MUTATION_TOOLS_ENABLED: "true",
     AUTH_APP_ORIGIN: authAppOrigin,
@@ -104,12 +130,17 @@ export function makeAgentWorkerEnv(input: {
           CEIRD_LOCAL_DEV: "true" as const,
         }
       : {}),
+    CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
+      input.config.workerAnalyticsSampleRate
+    ),
     NODE_ENV: "production",
   } satisfies AgentWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
 
 export function makeAgentWorkerProps(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly aiGateway: Cloudflare.AiGateway;
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
@@ -122,10 +153,13 @@ export function makeAgentWorkerProps(input: {
     main: agentWorkerMain,
     compatibility: ceirdWorkerCompatibility,
     bindings: makeAgentWorkerBindings({
+      aiGateway: input.aiGateway,
+      analytics: input.analytics,
       domain: input.domain,
     }),
     env: {
       ...makeAgentWorkerEnv({
+        aiGatewayId: input.aiGateway.gatewayId,
         agentInternalSecret: input.agentInternalSecret,
         config: input.config,
         localDev: input.localDev,
@@ -138,8 +172,10 @@ export function makeAgentWorkerProps(input: {
   } satisfies InputProps<WorkerProps<AgentWorkerBindingProps>>;
 }
 
-export function makeAgentWorker(input: {
+export const makeAgentWorker = Effect.fn("AgentWorker.make")(function* (input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly aiGateway: Cloudflare.AiGateway;
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
@@ -147,14 +183,5 @@ export function makeAgentWorker(input: {
   readonly localAppOrigin?: string | undefined;
   readonly name: string;
 }) {
-  return Effect.gen(function* () {
-    const worker = yield* Cloudflare.Worker(
-      "Agent",
-      makeAgentWorkerProps(input)
-    );
-
-    yield* worker.bind("AgentWorkersAiBinding", makeAgentWorkersAiBinding());
-
-    return worker;
-  });
-}
+  return yield* Cloudflare.Worker("Agent", makeAgentWorkerProps(input));
+});

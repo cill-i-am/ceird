@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "alchemy": "alchemy",
+    "alchemy:doctor": "node scripts/alchemy-doctor.mjs",
+    "alchemy:state-audit": "node scripts/alchemy-state-audit.mjs",
     "build": "pnpm -r --if-present build",
     "check": "ultracite check .",
     "check-types": "pnpm -r --if-present check-types && pnpm run check-types:infra",

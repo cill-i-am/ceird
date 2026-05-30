@@ -3,9 +3,9 @@ import {
   signAgentConnectToken,
 } from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
-import { describe, expect, it } from "@effect/vitest";
+import { beforeEach, describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { beforeEach, vi } from "vitest";
+import { vi } from "vitest";
 
 import type * as CeirdAgentModule from "./ceird-agent.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
@@ -233,6 +233,41 @@ describe("Agent Worker adapter", () => {
     await expect(response.text()).resolves.toBe("Agent request unauthorized");
     expect(response.status).toBe(401);
   });
+
+  it("returns stack and stage metadata from health checks", async () => {
+    const response = await fetchWorker(
+      new Request("https://agent.example.com/health"),
+      makeEnv({
+        aiGatewayId: "ceird-main-agent-ai",
+        stackName: "ceird",
+        stage: "main",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      aiGateway: "ceird-main-agent-ai",
+      ok: true,
+      service: "agent",
+      stackName: "ceird",
+      stage: "main",
+    });
+    expect(agentFetch).not.toHaveBeenCalled();
+  });
+
+  it("uses local health metadata when Alchemy runtime values are absent", async () => {
+    const response = await fetchWorker(
+      new Request("https://agent.example.com/health"),
+      makeEnv()
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      ok: true,
+      service: "agent",
+      stackName: "local",
+      stage: "local",
+    });
+    expect(agentFetch).not.toHaveBeenCalled();
+  });
 });
 
 function makeAgentUrl(routeName: "CeirdAgent" | "ceird-agent", token: string) {
@@ -241,6 +276,9 @@ function makeAgentUrl(routeName: "CeirdAgent" | "ceird-agent", token: string) {
 
 function makeEnv(
   options: {
+    readonly aiGatewayId?: string | undefined;
+    readonly stackName?: string | undefined;
+    readonly stage?: string | undefined;
     readonly trustedOrigins?: string | undefined;
   } = {}
 ): AgentWorkerEnv {
@@ -256,7 +294,14 @@ function makeEnv(
   } as unknown as DurableObjectNamespace;
 
   return {
+    ...(options.aiGatewayId === undefined
+      ? {}
+      : { AGENT_AI_GATEWAY_ID: options.aiGatewayId }),
     AGENT_INTERNAL_SECRET: "agent-secret",
+    ...(options.stackName === undefined
+      ? {}
+      : { ALCHEMY_STACK_NAME: options.stackName }),
+    ...(options.stage === undefined ? {} : { ALCHEMY_STAGE: options.stage }),
     AUTH_APP_ORIGIN: "https://app.example.com",
     ...(options.trustedOrigins === undefined
       ? {}
