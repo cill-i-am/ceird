@@ -1,0 +1,28 @@
+name: Codex Apply Electric Sync Bundle
+
+on:
+  push:
+    branches:
+      - codex/electric-sync-cloudflare-containers
+
+permissions:
+  contents: write
+
+jobs:
+  apply-bundle:
+    if: contains(github.event.head_commit.message, 'Codex bootstrap Electric sync bundle workflow')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Import implementation bundle
+        run: |
+          set -euo pipefail
+          cat .codex/electric-sync-cloudflare-containers.bundle.b64.part-* > /tmp/electric.bundle.b64
+          base64 -d /tmp/electric.bundle.b64 > /tmp/electric.bundle
+          test "$(sha256sum /tmp/electric.bundle | awk '{print $1}')" = "9cb1e37749b387cbb3a9f4d351ccd6d4fed5b87a1075f8762acdbc09e77cb88f"
+          git bundle verify /tmp/electric.bundle
+          git fetch /tmp/electric.bundle HEAD:refs/remotes/codex-bundle/electric-sync-cloudflare-containers
+          git checkout -B "$GITHUB_REF_NAME" refs/remotes/codex-bundle/electric-sync-cloudflare-containers
+          git push origin "HEAD:$GITHUB_REF_NAME" --force
