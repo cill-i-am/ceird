@@ -2,7 +2,38 @@ export {
   makeDomainOriginClient,
   makeDomainServiceClient,
 } from "./service-binding.js";
+export {
+  isSyncInternalPath,
+  makeSyncShapeAuthorizationPath,
+  SyncAccessDeniedError,
+  SyncAuthorizationStorageError,
+  SyncInternalApiGroup,
+  OrganizationSyncShapeAuthorizationParamsSchema,
+  OrganizationSyncShapeAuthorizationSchema,
+  OrganizationUserSyncShapeAuthorizationParamsSchema,
+  OrganizationUserSyncShapeAuthorizationSchema,
+  SyncShapeAuthorizationSchema,
+  SyncShapeAuthorizationScopeSchema,
+  SyncShapeNameSchema,
+  SyncShapeNotFoundError,
+  SyncUnauthorizedError,
+  SYNC_ACCESS_DENIED_ERROR_TAG,
+  SYNC_AUTHORIZATION_STORAGE_ERROR_TAG,
+  SYNC_INTERNAL_PATH_PREFIX,
+  SYNC_SHAPE_NAMES,
+  SYNC_SHAPE_NOT_FOUND_ERROR_TAG,
+  SYNC_UNAUTHORIZED_ERROR_TAG,
+} from "./sync.js";
 export type {
   DomainHttpClient,
   DomainServiceBinding,
 } from "./service-binding.js";
+export type {
+  OrganizationSyncShapeAuthorization,
+  OrganizationSyncShapeAuthorizationParams,
+  OrganizationUserSyncShapeAuthorization,
+  OrganizationUserSyncShapeAuthorizationParams,
+  SyncShapeAuthorization,
+  SyncShapeAuthorizationScope,
+  SyncShapeName,
+} from "./sync.js";

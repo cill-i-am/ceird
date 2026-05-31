@@ -74,6 +74,7 @@ export default Alchemy.Stack(
       hyperdrive: cloudflareStack.database.name,
       mcp: cloudflareStack.mcpOrigin,
       neonDatabase: database.databaseName,
+      sync: cloudflareStack.syncOrigin,
       tenantReservedHostBypassRoutePatterns:
         cloudflareStack.tenantReservedHostBypassRoutePatterns,
       tenantRoutePattern: cloudflareStack.tenantRoutePattern,

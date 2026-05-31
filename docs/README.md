@@ -2,7 +2,7 @@
 
 This directory documents the current Ceird app and platform: the TanStack Start
 web app, public adapters, private domain Worker, Agent runtime, shared
-packages, and Alchemy-managed infrastructure. The `architecture` guides
+packages, Electric sync runtime, and Alchemy-managed infrastructure. The `architecture` guides
 describe how the major systems fit together; `superpowers/specs` and
 `superpowers/plans` preserve historical design and implementation context.
 

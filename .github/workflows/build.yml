@@ -181,6 +181,8 @@ jobs:
             command: pnpm --filter domain test
           - name: mcp
             command: pnpm --filter mcp test
+          - name: sync
+            command: pnpm --filter sync test
           - name: agents-core
             command: pnpm --filter @ceird/agents-core test
           - name: comments-core

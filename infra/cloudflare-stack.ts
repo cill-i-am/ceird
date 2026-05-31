@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { createHash } from "node:crypto";
+
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
@@ -16,6 +18,7 @@ import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
 import { makeMcpWorker } from "../apps/mcp/infra/cloudflare-worker.ts";
+import { makeSyncWorker } from "../apps/sync/infra/cloudflare-worker.ts";
 import {
   TenantWildcardDnsRecord,
   TenantWorkerRoute,
@@ -33,7 +36,7 @@ export interface CloudflareStackInput {
 const alchemyLocalProxyPort = 1337;
 
 export function makeAlchemyLocalWorkerOrigin(
-  worker: "agent" | "api" | "app" | "mcp"
+  worker: "agent" | "api" | "app" | "mcp" | "sync"
 ) {
   return `http://${worker}.localhost:${alchemyLocalProxyPort}`;
 }
@@ -80,6 +83,42 @@ export function makeCloudflareHyperdriveProps(input: {
   } satisfies InputProps<Cloudflare.HyperdriveProps>;
 }
 
+export function makeCloudflareR2BucketResourceKey(input: {
+  readonly accountId: string;
+  readonly bucketName: string;
+  readonly jurisdiction: string;
+}) {
+  return `com.cloudflare.edge.r2.bucket.${input.accountId}_${input.jurisdiction}_${input.bucketName}` as const;
+}
+
+export function makeR2SecretAccessKey(
+  apiTokenValue: Redacted.Redacted<string>
+) {
+  return createHash("sha256")
+    .update(Redacted.value(apiTokenValue))
+    .digest("hex");
+}
+
+const durableObjectLocationHintByNeonRegion = {
+  "aws-ap-southeast-1": "apac",
+  "aws-ap-southeast-2": "apac",
+  "aws-eu-central-1": "weur",
+  "aws-eu-west-2": "weur",
+  "aws-sa-east-1": "sam",
+  "aws-us-east-1": "enam",
+  "aws-us-east-2": "enam",
+  "aws-us-west-2": "wnam",
+  "azure-eastus2": "enam",
+  "azure-gwc": "weur",
+  "azure-westus3": "wnam",
+} satisfies Record<InfraStageConfig["neonRegion"], DurableObjectLocationHint>;
+
+export function makeDurableObjectLocationHintForNeonRegion(
+  neonRegion: InfraStageConfig["neonRegion"]
+): DurableObjectLocationHint {
+  return durableObjectLocationHintByNeonRegion[neonRegion];
+}
+
 export function makeTenantReservedHostBypassRoutePatterns(
   config: Pick<
     InfraStageConfig,
@@ -111,17 +150,74 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     input.config.agentHostname
   );
   yield* Effect.annotateCurrentSpan("mcpHostname", input.config.mcpHostname);
+  yield* Effect.annotateCurrentSpan("syncHostname", input.config.syncHostname);
   yield* Effect.annotateCurrentSpan(
     "hyperdriveId",
     input.hyperdrive.hyperdriveId
   );
 
+  const { accountId: cloudflareAccountId } =
+    yield* Cloudflare.CloudflareEnvironment;
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
     bytes: 32,
   });
   const agentInternalSecret = yield* Alchemy.Random("AgentInternalSecret", {
     bytes: 32,
   });
+  const electricSourceSecret = yield* Alchemy.Random("ElectricSourceSecret", {
+    bytes: 32,
+  });
+  const electricSourceSecretValue = electricSourceSecret.text.pipe(
+    Output.map(Redacted.value)
+  );
+  const electricStorageBucketName = resourceName(
+    input.config,
+    "electric-storage"
+  );
+  const electricStorageBucket = yield* Cloudflare.R2Bucket(
+    "ElectricStorageBucket",
+    {
+      name: electricStorageBucketName,
+      jurisdiction: "default",
+      lifecycleRules: [
+        {
+          id: "abort-incomplete-multipart-uploads",
+          abortMultipartUploadsTransition: {
+            condition: {
+              maxAge: 604_800,
+              type: "Age",
+            },
+          },
+        },
+      ],
+    }
+  );
+  const electricStorageApiToken = yield* Cloudflare.AccountApiToken(
+    "ElectricStorageR2Token",
+    {
+      name: resourceName(input.config, "electric-storage-r2-token"),
+      accountId: cloudflareAccountId,
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups: [
+            "Workers R2 Storage Bucket Item Read",
+            "Workers R2 Storage Bucket Item Write",
+          ],
+          resources: {
+            [makeCloudflareR2BucketResourceKey({
+              accountId: cloudflareAccountId,
+              bucketName: electricStorageBucketName,
+              jurisdiction: "default",
+            })]: "*",
+          },
+        },
+      ],
+    }
+  );
+  const electricStorageSecretAccessKey = electricStorageApiToken.value.pipe(
+    Output.map(makeR2SecretAccessKey)
+  );
   const alchemyContext = yield* Alchemy.AlchemyContext;
   const localDev = alchemyContext.dev;
   const localOrigins = {
@@ -129,6 +225,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     api: makeAlchemyLocalWorkerOrigin("api"),
     app: makeAlchemyLocalWorkerOrigin("app"),
     mcp: makeAlchemyLocalWorkerOrigin("mcp"),
+    sync: makeAlchemyLocalWorkerOrigin("sync"),
   };
   const localDatabaseUrl =
     localDev === true
@@ -258,6 +355,40 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const sync = yield* makeSyncWorker({
+    analytics: workerAnalytics,
+    config: input.config,
+    database: input.database,
+    domain,
+    electricContainerName: resourceName(input.config, "electric"),
+    electricSqlLocationHint: makeDurableObjectLocationHintForNeonRegion(
+      input.config.neonRegion
+    ),
+    electricSourceSecret: electricSourceSecret.text,
+    electricSourceSecretValue,
+    hostname: input.config.syncHostname,
+    localDev,
+    localAppOrigin: localOrigins.app,
+    name: resourceName(input.config, "sync"),
+    storage: {
+      accessKeyId: electricStorageApiToken.tokenId,
+      accountId: cloudflareAccountId,
+      bucketName: electricStorageBucketName,
+      secretAccessKey: electricStorageSecretAccessKey,
+    },
+  });
+
+  const syncOrigin = Output.all(sync.domains, sync.url).pipe(
+    Output.map(([domains, localUrl]) =>
+      makeCloudflareWorkerOrigin({
+        domains,
+        fallbackHostname: input.config.syncHostname,
+        localDev,
+        localUrl,
+      })
+    )
+  );
+
   const app = yield* makeAppWorker({
     agentOrigin,
     apiOrigin,
@@ -266,6 +397,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     localDev,
     localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "app"),
+    syncOrigin,
   });
 
   const appOrigin = Output.all(app.domains, app.url).pipe(
@@ -330,8 +462,11 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     authEmailQueue,
     database: input.hyperdrive,
     domain,
+    electricStorageBucket,
     mcp,
     mcpOrigin,
+    sync,
+    syncOrigin,
     tenantReservedHostBypassRoutePatterns: Array.map((route) => route.pattern)(
       tenantReservedHostBypassRoutes
     ),

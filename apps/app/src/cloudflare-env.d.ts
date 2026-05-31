@@ -5,6 +5,7 @@ export interface AppCloudflareEnv {
   readonly API_ORIGIN: string;
   readonly CEIRD_CLOUDFLARE: "1";
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly SYNC_ORIGIN: string;
   readonly SYSTEM_APP_ORIGIN: string;
   readonly TENANT_BASE_DOMAIN: string;
   readonly TENANT_HOST_MODE: "disabled" | "production" | "stage";
@@ -12,6 +13,7 @@ export interface AppCloudflareEnv {
   readonly TENANT_STAGE_ALIAS?: string | undefined;
   readonly VITE_AGENT_ORIGIN: string;
   readonly VITE_API_ORIGIN: string;
+  readonly VITE_SYNC_ORIGIN: string;
   readonly VITE_SYSTEM_APP_ORIGIN: string;
   readonly VITE_TENANT_BASE_DOMAIN: string;
   readonly VITE_TENANT_HOST_MODE: "disabled" | "production" | "stage";

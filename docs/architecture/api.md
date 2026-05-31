@@ -22,23 +22,33 @@ Durable Objects for org/user/thread-scoped conversations, streams model output
 through Workers AI, and executes Ceird actions by calling the private
 `apps/domain` Worker through the same `DOMAIN` service binding.
 
+`apps/sync` is the Electric SQL sync adapter. It exposes public shape endpoints
+for browser sync clients, authorizes those named shapes through the private
+`apps/domain` Worker, and forwards authorized requests to Electric SQL running
+inside a Cloudflare Container.
+
 ## Entry Points
 
-| Workspace     | File/path                        | Purpose                                                                                                |
-| ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `apps/api`    | `src/index.ts`                   | Node development entrypoint for the public adapter.                                                    |
-| `apps/api`    | `src/server.ts`                  | Public root/health handling, request logger, and domain forwarding handler.                            |
-| `apps/api`    | `src/worker.ts`                  | Public API Cloudflare Worker adapter.                                                                  |
-| `apps/api`    | `src/platform/cloudflare/env.ts` | API Worker binding contract for `DOMAIN`.                                                              |
-| `apps/agent`  | `src/worker.ts`                  | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.                       |
-| `apps/agent`  | `src/ceird-agent.ts`             | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.                     |
-| `apps/agent`  | `src/tools.ts`                   | AI SDK tool adapter derived from executable shared action registry metadata.                           |
-| `apps/agent`  | `src/domain-client.ts`           | Internal client for the domain action API over the `DOMAIN` service binding.                           |
-| `apps/domain` | `src/server.ts`                  | Effect `HttpApi` construction, domain route composition, and web-handler factory.                      |
-| `apps/domain` | `src/worker.ts`                  | Private domain Cloudflare Worker adapter and auth email queue consumer.                                |
-| `apps/domain` | `src/platform/cloudflare`        | Domain Worker config, Hyperdrive, queue, email, Google Places location, and runtime layer composition. |
-| `apps/domain` | `src/platform/database`          | Database runtime, schema barrel, config, errors, and test helpers.                                     |
-| `apps/mcp`    | `src/worker.ts`                  | Public MCP adapter Worker at `mcp.<stage>.ceird.app` that forwards to `DOMAIN`.                        |
+| Workspace     | File/path                                               | Purpose                                                                                                |
+| ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/api`    | `src/index.ts`                                          | Node development entrypoint for the public adapter.                                                    |
+| `apps/api`    | `src/server.ts`                                         | Public root/health handling, request logger, and domain forwarding handler.                            |
+| `apps/api`    | `src/worker.ts`                                         | Public API Cloudflare Worker adapter.                                                                  |
+| `apps/api`    | `src/platform/cloudflare/env.ts`                        | API Worker binding contract for `DOMAIN`.                                                              |
+| `apps/agent`  | `src/worker.ts`                                         | Public Agent Worker adapter, connect-token gate, and Agents SDK request routing.                       |
+| `apps/agent`  | `src/ceird-agent.ts`                                    | `CeirdAgent` Durable Object runtime, system prompt, model streaming, and tool set.                     |
+| `apps/agent`  | `src/tools.ts`                                          | AI SDK tool adapter derived from executable shared action registry metadata.                           |
+| `apps/agent`  | `src/domain-client.ts`                                  | Internal client for the domain action API over the `DOMAIN` service binding.                           |
+| `apps/sync`   | `src/worker.ts`                                         | Public sync Worker adapter and `ElectricSql` Durable Object export.                                    |
+| `apps/sync`   | `src/platform/cloudflare/runtime.ts`                    | Effect-native sync authorization, CORS, Electric parameter injection, and forwarding.                  |
+| `apps/sync`   | `src/platform/cloudflare/electric-sql-do.ts`            | Durable Object bridge to the Electric container TCP port.                                              |
+| `apps/sync`   | `src/platform/cloudflare/electric-container-runtime.ts` | Node container entrypoint that starts Electric SQL.                                                    |
+| `apps/sync`   | `src/platform/cloudflare/env.ts`                        | Sync Worker binding contract for `DOMAIN`, `ElectricSql`, and Electric source config.                  |
+| `apps/domain` | `src/server.ts`                                         | Effect `HttpApi` construction, domain route composition, and web-handler factory.                      |
+| `apps/domain` | `src/worker.ts`                                         | Private domain Cloudflare Worker adapter and auth email queue consumer.                                |
+| `apps/domain` | `src/platform/cloudflare`                               | Domain Worker config, Hyperdrive, queue, email, Google Places location, and runtime layer composition. |
+| `apps/domain` | `src/platform/database`                                 | Database runtime, schema barrel, config, errors, and test helpers.                                     |
+| `apps/mcp`    | `src/worker.ts`                                         | Public MCP adapter Worker at `mcp.<stage>.ceird.app` that forwards to `DOMAIN`.                        |
 
 Public system endpoints are defined in `apps/api/src/server.ts`:
 
@@ -69,9 +79,10 @@ declaration in its app-local `infra/cloudflare-worker.ts`; the root infra
 stack still creates shared resources and passes stage-specific names, hostnames,
 secrets, Hyperdrive, queues, and cross-service Worker references into those
 app-owned declarations. Infra tests compare those app-owned binding/config keys
-with the runtime contracts for API, MCP, Agent, and domain Workers. Secret and
-credential values stay typed as Alchemy deploy-time redacted inputs, while
-runtime apps see resolved strings through Cloudflare Worker environment values.
+with the runtime contracts for API, MCP, Agent, sync, and domain Workers.
+Secret and credential values stay typed as Alchemy deploy-time redacted inputs,
+while runtime apps see resolved strings through Cloudflare Worker environment
+values.
 
 `apps/domain/src/server.ts` also intercepts MCP resource-server traffic before
 falling through to the Effect `HttpApi` handler. The MCP route defaults to
@@ -211,9 +222,39 @@ action implementations use the domain authorization, repository, and
 activity-recording paths rather than bypassing domain behavior, and those
 services own their own write transaction boundaries.
 
-The public API adapter does not forward `/agent/internal/*`; that surface is
-intended for private Worker service-binding calls from `apps/agent` to
-`apps/domain`.
+The public API adapter does not forward `/agent/internal/*` or
+`/sync/internal/*`; those surfaces are intended for private Worker
+service-binding calls from `apps/agent` and `apps/sync` to `apps/domain`.
+
+## Sync Runtime
+
+Sync contracts live in `@ceird/domain-core`. That package defines the allowed
+shape names, the private sync authorization path helper, typed sync
+authorization responses, and sync-specific HTTP errors. The public sync Worker
+never accepts caller-supplied Electric `table`, `where`, `params[...]`, or
+`secret` values.
+
+The domain Worker owns the private authorization endpoint:
+
+| Method | Path                                         | Purpose                                                              |
+| ------ | -------------------------------------------- | -------------------------------------------------------------------- |
+| `GET`  | `/sync/internal/shapes/:shapeName/authorize` | Authorize a named Electric shape for the current organization actor. |
+
+The sync Worker exposes the public Electric-compatible shape endpoints:
+
+| Method | Path                    | Purpose                                                 |
+| ------ | ----------------------- | ------------------------------------------------------- |
+| `GET`  | `/v1/shape?shape=:name` | Request an authorized named shape through Electric SQL. |
+| `GET`  | `/v1/shapes/:name`      | Path-param equivalent for named shape clients.          |
+| `GET`  | `/health`               | Sync Worker health probe.                               |
+
+The sync Worker forwards the original cookies and headers only to the private
+domain authorization request. After authorization succeeds, it strips cookies,
+authorization, origin, forwarded-host, and Cloudflare headers before forwarding
+to Electric. It then injects the domain-approved table, predicate, positional
+params, and the `ELECTRIC_SOURCE_SECRET` configured by Alchemy. Electric itself
+runs in the `ElectricSql` Cloudflare Container behind a Durable Object bridge,
+which starts the container on demand and forwards requests to port `3000`.
 
 ## Observability
 

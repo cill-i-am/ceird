@@ -25,6 +25,7 @@ import type { McpAuthorizedAppCache } from "./domains/mcp/http.js";
 import { makeMcpWebHandler } from "./domains/mcp/http.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { SiteLocationProvider } from "./domains/sites/location-provider.js";
+import { SyncHttpLive } from "./domains/sync/http.js";
 import { AppApi } from "./http-api.js";
 import { AppDatabaseRuntimeLive } from "./platform/database/database.js";
 import { makeHealthPayload } from "./system/health.js";
@@ -53,7 +54,8 @@ const makeApiHandlersLive = () =>
         AuthenticationHttpLive,
         JobsHttpLive,
         LabelsHttpLive,
-        SitesHttpLive
+        SitesHttpLive,
+        SyncHttpLive
       )
     )
   );

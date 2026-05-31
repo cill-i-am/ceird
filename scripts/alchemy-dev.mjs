@@ -5,11 +5,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
-import {
-  RpcSpawner,
-  layerServer as rpcSpawnerLayerServer,
-} from "alchemy/Local/RpcSpawner";
-import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -204,7 +199,7 @@ function readGitBranch() {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-function runAlchemyExec({ env, execPath, options, spawnerUrl }) {
+function runAlchemyExec({ env, execPath, options }) {
   return Effect.callback((resume) => {
     const child = spawn(
       process.execPath,
@@ -214,7 +209,6 @@ function runAlchemyExec({ env, execPath, options, spawnerUrl }) {
         env: {
           ...env,
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
-          ALCHEMY_RPC_SPAWNER_URL: spawnerUrl,
         },
         stdio: "inherit",
       }
@@ -262,24 +256,11 @@ async function main() {
     process.env.NODE_OPTIONS = env.NODE_OPTIONS;
   }
   const exitCode = await Effect.runPromise(
-    Effect.gen(function* () {
-      const spawner = yield* RpcSpawner;
-
-      return yield* runAlchemyExec({
-        env,
-        execPath,
-        options,
-        spawnerUrl: spawner.url,
-      });
-    }).pipe(
-      Effect.provide(
-        rpcSpawnerLayerServer({
-          envFile: options.envFile,
-          profile: options.profile,
-        })
-      ),
-      Effect.provide(PlatformServices)
-    )
+    runAlchemyExec({
+      env,
+      execPath,
+      options,
+    })
   );
 
   process.exit(exitCode);

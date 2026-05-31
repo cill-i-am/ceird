@@ -23,6 +23,7 @@ env:
   CEIRD_APP_HOSTNAME: app.ceird.app
   CEIRD_CLOUDFLARE: "1"
   CEIRD_MCP_HOSTNAME: mcp.ceird.app
+  CEIRD_SYNC_HOSTNAME: sync.ceird.app
   CEIRD_ZONE_NAME: ceird.app
   PNPM_CONFIG_OPTIONAL: "true"
 

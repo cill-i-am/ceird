@@ -22,6 +22,19 @@ const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const providerResourceNamePattern = /^[a-z0-9-]+$/;
 
 export type TenantHostMode = "disabled" | "production" | "stage";
+export const ElectricContainerInstanceType = Schema.Literals([
+  "lite",
+  "dev",
+  "basic",
+  "standard",
+  "standard-1",
+  "standard-2",
+  "standard-3",
+  "standard-4",
+] as const);
+export type ElectricContainerInstanceType = Schema.Schema.Type<
+  typeof ElectricContainerInstanceType
+>;
 
 export const DomainName = Schema.NonEmptyString.check(
   Schema.isPattern(domainNamePattern, {
@@ -57,6 +70,7 @@ export interface InfraStageConfig {
   readonly apiHostname: DomainName;
   readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
+  readonly syncHostname: DomainName;
   readonly authCookiePrefix: string;
   readonly authCookieDomain: DomainName | undefined;
   readonly authEmailFrom: Redacted.Redacted<string>;
@@ -65,6 +79,7 @@ export interface InfraStageConfig {
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
+  readonly electricContainerInstanceType: ElectricContainerInstanceType;
   readonly mcpAuthorizedAppCacheMaxEntries: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds: number | undefined;
   readonly neonDatabaseName: string;
@@ -226,6 +241,12 @@ function decodeNeonPgVersion(value: number) {
   );
 }
 
+function decodeElectricContainerInstanceType(value: string) {
+  return Schema.decodeUnknownEffect(ElectricContainerInstanceType)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 export function loadInfraStageConfig(stageInput: string) {
   return Effect.gen(function* () {
     const stage = yield* decodeAlchemyStage(stageInput);
@@ -245,6 +266,7 @@ export function loadInfraStageConfig(stageInput: string) {
     const defaultApiHostname = `api.${identity.stageSlug}.${zoneName}`;
     const defaultAgentHostname = `agent.${identity.stageSlug}.${zoneName}`;
     const defaultMcpHostname = `mcp.${identity.stageSlug}.${zoneName}`;
+    const defaultSyncHostname = `sync.${identity.stageSlug}.${zoneName}`;
     const defaultHyperdriveName = identity.isProduction
       ? `${identity.appName}-production-postgres`
       : stageResourceName(identity, "postgres");
@@ -264,6 +286,10 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(defaultMcpHostname),
       Config.mapOrFail(decodeDomainName)
     );
+    const syncHostname = yield* Config.string("CEIRD_SYNC_HOSTNAME").pipe(
+      Config.withDefault(defaultSyncHostname),
+      Config.mapOrFail(decodeDomainName)
+    );
     const tenantBaseDomain = zoneName;
     const tenantHostMode = resolveTenantHostMode({
       agentHostname,
@@ -271,6 +297,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       identity,
       mcpHostname,
+      syncHostname,
       zoneName,
     });
     const tenantStageAlias =
@@ -290,6 +317,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       agentHostname,
       mcpHostname,
+      syncHostname,
     ];
     const authCookiePrefix = makeAuthCookiePrefix(identity);
     const authCookieDomain = tenantBaseDomain;
@@ -326,6 +354,12 @@ export function loadInfraStageConfig(stageInput: string) {
     ).pipe(
       Config.withDefault(0.1),
       Config.mapOrFail(decodeWorkerAnalyticsSampleRate)
+    );
+    const electricContainerInstanceType = yield* Config.string(
+      "CEIRD_ELECTRIC_CONTAINER_INSTANCE_TYPE"
+    ).pipe(
+      Config.withDefault(identity.isProduction ? "basic" : "dev"),
+      Config.mapOrFail(decodeElectricContainerInstanceType)
     );
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
@@ -394,6 +428,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       agentHostname,
       mcpHostname,
+      syncHostname,
       authCookiePrefix,
       authCookieDomain,
       authEmailFrom,
@@ -402,6 +437,7 @@ export function loadInfraStageConfig(stageInput: string) {
       googleMapsApiKey,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
+      electricContainerInstanceType,
       mcpAuthorizedAppCacheMaxEntries,
       mcpAuthorizedAppCacheTtlSeconds,
       neonDatabaseName,
@@ -508,6 +544,7 @@ function resolveTenantHostMode(input: {
   readonly apiHostname: string;
   readonly identity: AlchemyStageIdentity;
   readonly mcpHostname: string;
+  readonly syncHostname: string;
   readonly zoneName: string;
 }): TenantHostMode {
   if (
@@ -515,7 +552,8 @@ function resolveTenantHostMode(input: {
     input.agentHostname === `agent.${input.zoneName}` &&
     input.apiHostname === `api.${input.zoneName}` &&
     input.appHostname === `app.${input.zoneName}` &&
-    input.mcpHostname === `mcp.${input.zoneName}`
+    input.mcpHostname === `mcp.${input.zoneName}` &&
+    input.syncHostname === `sync.${input.zoneName}`
   ) {
     return "production";
   }
