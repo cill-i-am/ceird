@@ -1,6 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { extname, join, relative, resolve } from "node:path";
 
 import type { OrganizationId } from "@ceird/identity-core";
 import { describe, expect, it } from "vitest";
@@ -139,26 +138,25 @@ describe("data-plane architecture boundaries", () => {
 });
 
 function getAppSourceFiles() {
-  sourceFilesCache ??= getSourceFiles(APP_SRC_DIR).flatMap((filePath) =>
-    filePath === THIS_FILE || !existsSync(join(APP_SRC_DIR, filePath))
+  sourceFilesCache ??= getSourceFiles(APP_SRC_DIR).flatMap((absolutePath) => {
+    const filePath = relative(APP_SRC_DIR, absolutePath);
+
+    return filePath === THIS_FILE
       ? []
       : [
           {
             filePath,
-            source: readFileSync(join(APP_SRC_DIR, filePath), "utf8"),
+            source: readFileSync(absolutePath, "utf8"),
           },
-        ]
-  );
+        ];
+  });
 
   return sourceFilesCache;
 }
 
 function getSourceFiles(rootDir: string) {
-  return execFileSync("rg", ["--files", rootDir], {
-    encoding: "utf8",
-  })
-    .split("\n")
-    .filter(Boolean)
-    .map((filePath) => filePath.slice(rootDir.length + 1))
+  return readdirSync(rootDir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
     .filter((filePath) => SOURCE_EXTENSIONS.has(extname(filePath)));
 }
