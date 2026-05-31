@@ -3,9 +3,17 @@ import { appendFile } from "node:fs/promises";
 import { expect } from "@playwright/test";
 import type { Locator, Page, Request, TestInfo } from "@playwright/test";
 
+export interface BrowserFailedRequest {
+  readonly errorText: string | null;
+  readonly method: string;
+  readonly resourceType: string;
+  readonly url: string;
+}
+
 export interface BrowserPerformanceMetric {
   readonly dataRequestCount: number;
   readonly durationMs: number;
+  readonly failedRequests: readonly BrowserFailedRequest[];
   readonly failedRequestCount: number;
   readonly name: string;
 }
@@ -22,7 +30,7 @@ export async function measureVisibleInteraction({
   readonly visible: Locator;
 }): Promise<BrowserPerformanceMetric> {
   const dataRequests = new Set<string>();
-  let failedRequestCount = 0;
+  const failedRequests: BrowserFailedRequest[] = [];
   const startedAt = performance.now();
   const handleRequestFinished = (request: Request) => {
     if (isDataRequest(request)) {
@@ -31,7 +39,12 @@ export async function measureVisibleInteraction({
   };
   const handleRequestFailed = (request: Request) => {
     if (isDataRequest(request)) {
-      failedRequestCount += 1;
+      failedRequests.push({
+        errorText: request.failure()?.errorText ?? null,
+        method: request.method(),
+        resourceType: request.resourceType(),
+        url: request.url(),
+      });
     }
   };
 
@@ -52,7 +65,8 @@ export async function measureVisibleInteraction({
   return {
     dataRequestCount: dataRequests.size,
     durationMs: Math.round(performance.now() - startedAt),
-    failedRequestCount,
+    failedRequestCount: failedRequests.length,
+    failedRequests,
     name,
   };
 }
@@ -85,9 +99,20 @@ export function expectNoPerformanceFailures(
   metrics: readonly BrowserPerformanceMetric[]
 ) {
   for (const metric of metrics) {
-    expect(metric.failedRequestCount, `${metric.name} failed requests`).toBe(0);
+    expect(
+      metric.failedRequests,
+      `${metric.name} failed requests\n${formatFailedRequests(metric.failedRequests)}`
+    ).toStrictEqual([]);
     expect(metric.durationMs, `${metric.name} duration`).toBeLessThan(30_000);
   }
+}
+
+function formatFailedRequests(requests: readonly BrowserFailedRequest[]) {
+  if (requests.length === 0) {
+    return "[]";
+  }
+
+  return JSON.stringify(requests, null, 2);
 }
 
 function isDataRequest(request: Request) {
