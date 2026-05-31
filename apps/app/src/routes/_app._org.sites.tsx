@@ -17,12 +17,13 @@ export const Route = createFileRoute("/_app/_org/sites")({
 
 function SitesRoute() {
   const { activeOrganizationId, queryClient } = Route.useRouteContext();
-  const { options, viewer } = Route.useLoaderData();
+  const { dataPlaneSeeds, options, viewer } = Route.useLoaderData();
   const { sheets } = Route.useSearch();
 
   return (
     <SitesRouteContent
       activeOrganizationId={activeOrganizationId}
+      dataPlaneSeeds={dataPlaneSeeds}
       options={options}
       queryClient={queryClient}
       stack={sheets}

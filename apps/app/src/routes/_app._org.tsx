@@ -6,6 +6,8 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
+import { DataPlaneProvider } from "#/data-plane/session";
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
@@ -53,7 +55,13 @@ export const Route = createFileRoute("/_app/_org")({
 });
 
 function OrganizationRouteComponent() {
-  const { activeOrganizationSync, currentOrganizationRole } = useRouteContext({
+  const {
+    activeOrganizationId,
+    activeOrganizationSync,
+    currentOrganizationRole,
+    currentUserId,
+    queryClient,
+  } = useRouteContext({
     from: "/_app/_org",
   });
   const stack = Route.useSearch().sheets ?? [];
@@ -67,15 +75,24 @@ function OrganizationRouteComponent() {
     <OrganizationActiveSyncBoundary
       activeOrganizationSync={activeOrganizationSync}
     >
-      <WorkspaceSheetEventsProvider>
-        <WorkspaceSheetNavigationProvider stack={stack}>
-          <AppOrganizationCommandActions
-            currentOrganizationRole={currentOrganizationRole}
-          />
-          <Outlet />
-          {routeOwnsSheetStack ? null : <WorkspaceSheetStack stack={stack} />}
-        </WorkspaceSheetNavigationProvider>
-      </WorkspaceSheetEventsProvider>
+      <DataPlaneProvider
+        queryClient={queryClient}
+        scope={createOrganizationDataScope({
+          organizationId: activeOrganizationId,
+          role: currentOrganizationRole,
+          userId: currentUserId,
+        })}
+      >
+        <WorkspaceSheetEventsProvider>
+          <WorkspaceSheetNavigationProvider stack={stack}>
+            <AppOrganizationCommandActions
+              currentOrganizationRole={currentOrganizationRole}
+            />
+            <Outlet />
+            {routeOwnsSheetStack ? null : <WorkspaceSheetStack stack={stack} />}
+          </WorkspaceSheetNavigationProvider>
+        </WorkspaceSheetEventsProvider>
+      </DataPlaneProvider>
     </OrganizationActiveSyncBoundary>
   );
 }

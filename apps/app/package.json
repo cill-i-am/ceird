@@ -30,6 +30,7 @@
     "@fontsource-variable/raleway": "^5.2.8",
     "@hugeicons/core-free-icons": "^4.1.1",
     "@hugeicons/react": "^1.1.6",
+    "@standard-schema/spec": "1.1.0",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/query-core": "5.96.1",
     "@tanstack/query-db-collection": "1.0.36",

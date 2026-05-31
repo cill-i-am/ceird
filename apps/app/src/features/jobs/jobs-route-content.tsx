@@ -3,6 +3,8 @@ import type { JobListResponse, JobOptionsResponse } from "@ceird/jobs-core";
 import type { QueryClient } from "@tanstack/query-core";
 import type { ComponentProps } from "react";
 
+import type { DataPlaneSeed } from "#/data-plane/bootstrap";
+import { useApplyDataPlaneSeeds } from "#/data-plane/session";
 import { JobsPage } from "#/features/jobs/jobs-page";
 import { JobsStateProvider } from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
@@ -10,9 +12,11 @@ import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet
 import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
 const EMPTY_WORKSPACE_SHEET_STACK: readonly WorkspaceSheet[] = [];
+const EMPTY_DATA_PLANE_SEEDS: readonly DataPlaneSeed<unknown>[] = [];
 
 export function JobsRouteContent({
   activeOrganizationId,
+  dataPlaneSeeds = EMPTY_DATA_PLANE_SEEDS,
   listHotkeysEnabled,
   list,
   onViewModeChange,
@@ -23,6 +27,7 @@ export function JobsRouteContent({
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
+  readonly dataPlaneSeeds?: readonly DataPlaneSeed<unknown>[] | undefined;
   readonly listHotkeysEnabled?: ComponentProps<
     typeof JobsPage
   >["listHotkeysEnabled"];
@@ -36,9 +41,12 @@ export function JobsRouteContent({
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
 }) {
+  useApplyDataPlaneSeeds(dataPlaneSeeds);
+  const dataPlaneScopeKey = `${activeOrganizationId}:${viewer.userId}:${viewer.role}`;
+
   return (
     <JobsStateProvider
-      key={activeOrganizationId}
+      key={dataPlaneScopeKey}
       activeOrganizationId={activeOrganizationId}
       list={list}
       options={options}

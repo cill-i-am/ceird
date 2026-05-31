@@ -1,5 +1,6 @@
 "use client";
 import type { OrganizationId } from "@ceird/identity-core";
+import type { JobListItem } from "@ceird/jobs-core";
 import type { CreateLabelInput, LabelIdType } from "@ceird/labels-core";
 import type {
   AddSiteCommentInput,
@@ -15,44 +16,50 @@ import type {
   UpdateSiteInput,
   UpdateSiteResponse,
 } from "@ceird/sites-core";
-import { SiteCommentSchema, SiteOptionSchema } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
-import { queryCollectionOptions } from "@tanstack/query-db-collection";
-import { createCollection } from "@tanstack/react-db";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { use } from "react";
 import * as React from "react";
 
+import { executeDataPlaneCommandAction } from "#/data-plane/command-action";
+import type { DataPlaneCommandAction } from "#/data-plane/command-action";
+import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
+import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
+import type { OrganizationDataScope } from "#/data-plane/query-scope";
+import { useOptionalDataPlaneSession } from "#/data-plane/session";
+import type { DataPlaneSession } from "#/data-plane/session";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import { normalizeAppApiError } from "#/features/api/app-api-errors";
 import type { AppApiError } from "#/features/api/app-api-errors";
-import { listAllCurrentServerSites } from "#/features/api/app-api-server";
+import {
+  getOrCreateLabelsCollectionState,
+  upsertLabelCollectionItem,
+} from "#/features/labels/labels-data-plane";
+import type { LabelsCollectionState } from "#/features/labels/labels-data-plane";
 import { createBrowserLabel } from "#/features/labels/labels-state";
-import type { OrganizationQueryScope } from "#/features/organizations/organization-query-scope";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
+
 import {
-  ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-  ensureTanStackDbCollectionReadyForWrite,
-  markTanStackDbCollectionWrite,
-  reconcileQueryCollectionDataAfterConcurrentWrite,
-  replaceSyncedCollectionData,
-  stripTanStackDbCollectionData,
-} from "#/lib/tanstack-db-collection";
+  deleteSiteCommentsCollectionState,
+  deleteSiteRelatedJobsCollectionState,
+  getOrCreateSiteCommentsCollectionState,
+  getOrCreateSiteRelatedJobsCollectionState,
+  getOrCreateSitesCollectionState,
+  replaceSiteRelatedJobsCollectionData,
+  replaceSitesCollectionData,
+  refetchSiteCommentsCollectionData,
+  siteCommentsFromCollectionState,
+  upsertSiteCollectionItem as upsertSiteCollectionItemDataPlane,
+  upsertSiteCommentCollectionItem as upsertSiteCommentCollectionItemDataPlane,
+} from "./sites-data-plane";
 import type {
-  TanStackDbCollectionSnapshot,
-  TanStackDbCollectionWriteVersionRef,
-} from "#/lib/tanstack-db-collection";
-import { seedQueryCollectionInitialData } from "#/lib/tanstack-db-query";
-import { useHydratedCollectionItems } from "#/lib/tanstack-db-react";
-
-import {
-  organizationSitesQueryKey,
-  siteCommentsQueryKey,
-} from "./sites-query-keys";
-
-type SitesCollection = ReturnType<typeof makeSitesCollection>;
-type SiteCommentsCollection = ReturnType<typeof makeSiteCommentsCollection>;
+  SiteCommentsCollectionState,
+  SiteRelatedJobsCollectionState,
+  SitesCollectionState,
+} from "./sites-data-plane";
 
 interface SitesNotice {
   readonly kind: "created" | "updated";
@@ -65,19 +72,19 @@ export interface SitesAsyncResult {
 }
 
 interface SitesStateStore {
-  readonly commentsBySiteId: Map<SiteIdType, SiteCommentsCollection>;
-  readonly commentWriteVersionsBySiteId: Map<
-    SiteIdType,
-    TanStackDbCollectionWriteVersionRef
-  >;
+  readonly commentsBySiteId: Map<SiteIdType, SiteCommentsCollectionState>;
+  readonly dataPlaneSession?: DataPlaneSession | undefined;
   readonly fallbackSitesRef: React.MutableRefObject<readonly SiteOption[]>;
   readonly initialCommentsBySiteId: Map<SiteIdType, readonly SiteComment[]>;
+  readonly labels: LabelsCollectionState;
+  readonly mutationJournal: DataPlaneMutationJournal;
   readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
-  readonly queryScope: OrganizationQueryScope;
+  readonly queryScope: OrganizationDataScope;
   readonly queryClient: QueryClient;
+  readonly relatedJobsBySiteId: Map<SiteIdType, SiteRelatedJobsCollectionState>;
+  readonly initialRelatedJobsBySiteId: Map<SiteIdType, readonly JobListItem[]>;
   readonly refreshVersionsBySiteId: Map<SiteIdType, number>;
-  readonly sites: SitesCollection;
-  readonly sitesWriteVersionRef: TanStackDbCollectionWriteVersionRef;
+  readonly sites: SitesCollectionState;
 }
 
 interface SitesStateContextValue {
@@ -110,7 +117,12 @@ interface SitesStateContextValue {
     organizationId: OrganizationId,
     response: SitesOptionsResponse
   ) => Promise<void>;
+  readonly registerSiteRelatedJobs: (
+    siteId: SiteIdType,
+    jobs: readonly JobListItem[]
+  ) => void;
   readonly store: SitesStateStore;
+  readonly unregisterSiteRelatedJobs: (siteId: SiteIdType) => void;
   readonly updateSite: (
     siteId: SiteIdType,
     input: UpdateSiteInput
@@ -177,8 +189,10 @@ export function SitesStateProvider({
   readonly viewer: OrganizationViewer;
 }) {
   const organizationIdRef = React.useRef(activeOrganizationId);
+  const dataPlaneSession = useOptionalDataPlaneSession();
   const [fallbackQueryClient] = React.useState(() => new QueryClient());
-  const queryClient = providedQueryClient ?? fallbackQueryClient;
+  const queryClient =
+    providedQueryClient ?? dataPlaneSession?.queryClient ?? fallbackQueryClient;
   const [store] = React.useState(() =>
     makeSitesStateStore(
       organizationIdRef,
@@ -186,10 +200,11 @@ export function SitesStateProvider({
       viewer,
       queryClient,
       options.sites,
-      initialSiteComments
+      initialSiteComments,
+      dataPlaneSession
     )
   );
-  const previousOptionsRef = React.useRef(options);
+  const previousOptionsRef = React.useRef<SitesOptionsResponse | null>(null);
   const [state, dispatch] = React.useReducer(sitesStateReducer, {
     createSiteResult: idleSitesAsyncResult,
     notice: null,
@@ -209,6 +224,11 @@ export function SitesStateProvider({
       pruneInactiveSiteCommentCollections(store, response.sites);
       store.initialCommentsBySiteId.clear();
       await replaceSites(store, response.sites);
+      await Promise.all(
+        response.sites
+          .flatMap((site) => site.labels)
+          .map((label) => upsertLabelCollectionItem(store.labels, label))
+      );
     },
     [organizationIdRef, store]
   );
@@ -226,31 +246,43 @@ export function SitesStateProvider({
     (input: CreateSiteInput) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runTrackedSitesOperation(
-        withMinimumMutationPendingDurationEffect(createBrowserSite(input)),
+      return runTrackedSitesCommand(
+        {
+          affectedCollections: ["sites"],
+          execute: (commandInput: CreateSiteInput) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                createBrowserSite(commandInput)
+              )
+            ),
+          name: "sites.create",
+          optimistic: "none",
+          reconcile: async (createdSite) => {
+            await syncChangedSiteDetail(
+              store,
+              createdSite,
+              expectedOrganizationId
+            );
+            if (organizationIdRef.current !== expectedOrganizationId) {
+              return;
+            }
+
+            dispatch({
+              notice: {
+                kind: "created",
+                name: createdSite.name,
+              },
+              type: "set-notice",
+            });
+          },
+        },
+        input,
         (result) =>
           dispatch({
             result,
             type: "set-create-site-result",
           }),
-        async (createdSite) => {
-          await syncChangedSiteDetail(
-            store,
-            createdSite,
-            expectedOrganizationId
-          );
-          if (organizationIdRef.current !== expectedOrganizationId) {
-            return;
-          }
-
-          dispatch({
-            notice: {
-              kind: "created",
-              name: createdSite.name,
-            },
-            type: "set-notice",
-          });
-        }
+        store.mutationJournal
       );
     },
     [organizationIdRef, store]
@@ -260,30 +292,47 @@ export function SitesStateProvider({
     (siteId: SiteIdType, input: UpdateSiteInput) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runTrackedSitesOperation(
-        withMinimumMutationPendingDurationEffect(
-          updateBrowserSite(siteId, input)
-        ),
+      return runTrackedSitesCommand(
+        {
+          affectedCollections: ["sites"],
+          execute: (commandInput: {
+            readonly input: UpdateSiteInput;
+            readonly siteId: SiteIdType;
+          }) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                updateBrowserSite(commandInput.siteId, commandInput.input)
+              )
+            ),
+          name: "sites.update",
+          optimistic: "none",
+          reconcile: async (response) => {
+            await syncChangedSiteDetail(
+              store,
+              response,
+              expectedOrganizationId
+            );
+            if (organizationIdRef.current !== expectedOrganizationId) {
+              return;
+            }
+
+            dispatch({
+              notice: {
+                kind: "updated",
+                name: response.name,
+              },
+              type: "set-notice",
+            });
+          },
+        },
+        { input, siteId },
         (result) =>
           dispatch({
             result,
             siteId,
             type: "set-update-site-result",
           }),
-        async (response) => {
-          await syncChangedSiteDetail(store, response, expectedOrganizationId);
-          if (organizationIdRef.current !== expectedOrganizationId) {
-            return;
-          }
-
-          dispatch({
-            notice: {
-              kind: "updated",
-              name: response.name,
-            },
-            type: "set-notice",
-          });
-        }
+        store.mutationJournal
       );
     },
     [organizationIdRef, store]
@@ -300,17 +349,47 @@ export function SitesStateProvider({
     [store]
   );
 
+  const registerSiteRelatedJobs = React.useCallback(
+    (siteId: SiteIdType, jobs: readonly JobListItem[]) => {
+      store.initialRelatedJobsBySiteId.set(siteId, jobs);
+      void replaceSiteRelatedJobsCollectionData(
+        getOrCreateSiteRelatedJobsState(store, siteId),
+        jobs
+      );
+    },
+    [store]
+  );
+  const unregisterSiteRelatedJobs = React.useCallback(
+    (siteId: SiteIdType) => {
+      disposeSiteRelatedJobsState(store, siteId);
+    },
+    [store]
+  );
+
   const assignSiteLabel = React.useCallback(
     (siteId: SiteIdType, input: AssignSiteLabelInput) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runSitesOperation(
-        withMinimumMutationPendingDurationEffect(
-          assignBrowserSiteLabel(siteId, input)
-        ),
-        async (site) => {
-          await syncChangedSiteDetail(store, site, expectedOrganizationId);
-        }
+      return runSitesCommand(
+        {
+          affectedCollections: ["sites", "labels"],
+          execute: (commandInput: {
+            readonly input: AssignSiteLabelInput;
+            readonly siteId: SiteIdType;
+          }) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                assignBrowserSiteLabel(commandInput.siteId, commandInput.input)
+              )
+            ),
+          name: "sites.assign-label",
+          optimistic: "none",
+          reconcile: async (site) => {
+            await syncChangedSiteDetail(store, site, expectedOrganizationId);
+          },
+        },
+        { input, siteId },
+        store.mutationJournal
       );
     },
     [organizationIdRef, store]
@@ -320,17 +399,32 @@ export function SitesStateProvider({
     (siteId: SiteIdType, input: CreateLabelInput) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runSitesOperation(
-        withMinimumMutationPendingDurationEffect(
-          createBrowserLabel(input).pipe(
-            Effect.flatMap((label) =>
-              assignBrowserSiteLabel(siteId, { labelId: label.id })
-            )
-          )
-        ),
-        async (site) => {
-          await syncChangedSiteDetail(store, site, expectedOrganizationId);
-        }
+      return runSitesCommand(
+        {
+          affectedCollections: ["sites", "labels"],
+          execute: (commandInput: {
+            readonly input: CreateLabelInput;
+            readonly siteId: SiteIdType;
+          }) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                createBrowserLabel(commandInput.input).pipe(
+                  Effect.flatMap((label) =>
+                    assignBrowserSiteLabel(commandInput.siteId, {
+                      labelId: label.id,
+                    })
+                  )
+                )
+              )
+            ),
+          name: "sites.create-and-assign-label",
+          optimistic: "none",
+          reconcile: async (site) => {
+            await syncChangedSiteDetail(store, site, expectedOrganizationId);
+          },
+        },
+        { input, siteId },
+        store.mutationJournal
       );
     },
     [organizationIdRef, store]
@@ -340,13 +434,29 @@ export function SitesStateProvider({
     (siteId: SiteIdType, labelId: LabelIdType) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runSitesOperation(
-        withMinimumMutationPendingDurationEffect(
-          removeBrowserSiteLabel(siteId, labelId)
-        ),
-        async (site) => {
-          await syncChangedSiteDetail(store, site, expectedOrganizationId);
-        }
+      return runSitesCommand(
+        {
+          affectedCollections: ["sites"],
+          execute: (commandInput: {
+            readonly labelId: LabelIdType;
+            readonly siteId: SiteIdType;
+          }) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                removeBrowserSiteLabel(
+                  commandInput.siteId,
+                  commandInput.labelId
+                )
+              )
+            ),
+          name: "sites.remove-label",
+          optimistic: "none",
+          reconcile: async (site) => {
+            await syncChangedSiteDetail(store, site, expectedOrganizationId);
+          },
+        },
+        { labelId, siteId },
+        store.mutationJournal
       );
     },
     [organizationIdRef, store]
@@ -371,7 +481,9 @@ export function SitesStateProvider({
       refreshSiteComments,
       removeSiteLabel,
       replaceSitesOptionsState,
+      registerSiteRelatedJobs,
       store,
+      unregisterSiteRelatedJobs,
       updateSite,
       updateSiteResults,
       viewer,
@@ -387,6 +499,8 @@ export function SitesStateProvider({
       refreshSiteComments,
       removeSiteLabel,
       replaceSitesOptionsState,
+      registerSiteRelatedJobs,
+      unregisterSiteRelatedJobs,
       store,
       updateSite,
       updateSiteResults,
@@ -423,6 +537,46 @@ export function useSitesNotice() {
   return [notice, clearNotice] as const;
 }
 
+export function useSiteComments(siteId: SiteIdType): readonly SiteComment[] {
+  const { store } = useSitesStateContext();
+  const collectionState = getOrCreateSiteCommentsState(store, siteId);
+  const fallbackComments = store.initialCommentsBySiteId.get(siteId) ?? [];
+  const comments = useHydratedCollectionItems(
+    collectionState.collection,
+    fallbackComments
+  );
+
+  React.useEffect(
+    () => () => {
+      disposeSiteCommentsState(store, siteId);
+    },
+    [siteId, store]
+  );
+
+  return React.useMemo(() => sortSiteComments(comments), [comments]);
+}
+
+export function useSiteRelatedJobs(
+  siteId: SiteIdType,
+  initialJobs: readonly JobListItem[] = []
+): readonly JobListItem[] {
+  const { registerSiteRelatedJobs, store, unregisterSiteRelatedJobs } =
+    useSitesStateContext();
+
+  React.useEffect(() => {
+    registerSiteRelatedJobs(siteId, initialJobs);
+    return () => {
+      unregisterSiteRelatedJobs(siteId);
+    };
+  }, [initialJobs, registerSiteRelatedJobs, siteId, unregisterSiteRelatedJobs]);
+
+  const collectionState = getOrCreateSiteRelatedJobsState(store, siteId);
+  const fallbackJobs =
+    store.initialRelatedJobsBySiteId.get(siteId) ?? initialJobs;
+
+  return useHydratedCollectionItems(collectionState.collection, fallbackJobs);
+}
+
 export function useCreateSiteMutation() {
   const { createSite, createSiteResult } = useSitesStateContext();
 
@@ -455,119 +609,47 @@ function makeSitesStateStore(
   viewer: OrganizationViewer,
   queryClient: QueryClient,
   sites: readonly SiteOption[],
-  initialComments?: ReadonlyMap<SiteIdType, readonly SiteComment[]>
+  initialComments?: ReadonlyMap<SiteIdType, readonly SiteComment[]>,
+  dataPlaneSession?: DataPlaneSession | undefined
 ): SitesStateStore {
-  const sitesWriteVersionRef = { current: 0 };
-  const queryScope = {
-    organizationId,
-    role: viewer.role,
-    userId: viewer.userId,
-  } satisfies OrganizationQueryScope;
+  const queryScope =
+    dataPlaneSession?.scope ??
+    createOrganizationDataScope({
+      organizationId,
+      role: viewer.role,
+      userId: viewer.userId,
+    });
+  const sitesState = getOrCreateSitesCollectionState({
+    initialSites: sites,
+    queryClient,
+    scope: queryScope,
+    session: dataPlaneSession,
+  });
+  const labels = getOrCreateLabelsCollectionState({
+    initialLabels: sites.flatMap((site) => site.labels),
+    queryClient,
+    scope: queryScope,
+    session: dataPlaneSession,
+  });
 
   return {
     commentsBySiteId: new Map(),
-    commentWriteVersionsBySiteId: new Map(),
+    dataPlaneSession,
     fallbackSitesRef: {
       current: sites,
     },
     initialCommentsBySiteId: new Map(initialComments),
+    initialRelatedJobsBySiteId: new Map(),
+    labels,
+    mutationJournal:
+      dataPlaneSession?.mutationJournal ?? createDataPlaneMutationJournal(),
     organizationIdRef,
     queryScope,
     queryClient,
+    relatedJobsBySiteId: new Map(),
     refreshVersionsBySiteId: new Map(),
-    sites: makeSitesCollection(
-      queryScope,
-      queryClient,
-      sites,
-      sitesWriteVersionRef
-    ),
-    sitesWriteVersionRef,
+    sites: sitesState,
   };
-}
-
-function makeSitesCollection(
-  queryScope: OrganizationQueryScope,
-  queryClient: QueryClient,
-  sites: readonly SiteOption[],
-  writeVersionRef: TanStackDbCollectionWriteVersionRef
-) {
-  const queryKey = organizationSitesQueryKey(queryScope);
-  seedQueryCollectionInitialData(queryClient, queryKey, [...sites]);
-
-  const collection: {
-    current?: TanStackDbCollectionSnapshot<SiteOption>;
-  } = {};
-  const createdCollection = createCollection(
-    queryCollectionOptions({
-      getKey: (site) => site.id,
-      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:sites`,
-      queryClient,
-      queryFn: async () => {
-        const requestWriteVersion = writeVersionRef.current;
-        const response = await listAllCurrentServerSites();
-
-        return reconcileQueryCollectionDataAfterConcurrentWrite({
-          collection: collection.current,
-          incomingItems: response.items,
-          requestWriteVersion,
-          writeVersionRef,
-        });
-      },
-      queryKey,
-      retry: false,
-      schema: Schema.toStandardSchemaV1(SiteOptionSchema),
-      staleTime: 30_000,
-    })
-  );
-  collection.current = createdCollection;
-  return createdCollection;
-}
-
-function makeSiteCommentsCollection(
-  queryScope: OrganizationQueryScope,
-  queryClient: QueryClient,
-  siteId: SiteIdType,
-  comments: readonly SiteComment[],
-  writeVersionRef: TanStackDbCollectionWriteVersionRef
-) {
-  const queryKey = siteCommentsQueryKey(queryScope, siteId);
-  seedQueryCollectionInitialData(
-    queryClient,
-    queryKey,
-    sortSiteComments(comments)
-  );
-
-  const collection: {
-    current?: TanStackDbCollectionSnapshot<SiteComment>;
-  } = {};
-  const createdCollection = createCollection(
-    queryCollectionOptions({
-      getKey: (comment) => comment.id,
-      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-      id: `organization:${queryScope.organizationId}:user:${queryScope.userId ?? "unknown"}:role:${queryScope.role ?? "unknown"}:site:${siteId}:comments`,
-      queryClient,
-      queryFn: async () => {
-        const requestWriteVersion = writeVersionRef.current;
-        const response = await Effect.runPromise(
-          listBrowserSiteComments(siteId)
-        );
-
-        return reconcileQueryCollectionDataAfterConcurrentWrite({
-          collection: collection.current,
-          incomingItems: sortSiteComments(response.comments),
-          requestWriteVersion,
-          writeVersionRef,
-        });
-      },
-      queryKey,
-      retry: false,
-      schema: Schema.toStandardSchemaV1(SiteCommentSchema),
-      staleTime: 30_000,
-    })
-  );
-  collection.current = createdCollection;
-  return createdCollection;
 }
 
 function useSitesStateContext() {
@@ -620,21 +702,23 @@ function useSitesCollectionItems(
   store: SitesStateStore
 ): readonly SiteOption[] {
   return useHydratedCollectionItems(
-    store.sites,
+    store.sites.collection,
     store.fallbackSitesRef.current
   );
 }
 
-async function runTrackedSitesOperation<Success>(
-  effect: Effect.Effect<Success, AppApiError>,
+async function runTrackedSitesCommand<Input, Success>(
+  action: DataPlaneCommandAction<Input, Success, AppApiError>,
+  input: Input,
   setResult: (result: SitesAsyncResult) => void,
-  onSuccess: (value: Success) => Promise<void>
+  mutationJournal: DataPlaneMutationJournal
 ): Promise<Exit.Exit<Success, AppApiError>> {
   setResult(waitingSitesAsyncResult);
-  const exit = await Effect.runPromiseExit(effect);
+  const exit = await executeDataPlaneCommandAction(action, input, {
+    journal: mutationJournal,
+  });
 
   if (Exit.isSuccess(exit)) {
-    await onSuccess(exit.value);
     setResult(idleSitesAsyncResult);
     return exit;
   }
@@ -647,43 +731,64 @@ async function runTrackedSitesOperation<Success>(
   return exit;
 }
 
-async function runSitesOperation<Success>(
-  effect: Effect.Effect<Success, AppApiError>,
-  onSuccess: (value: Success) => Promise<void>
+function runSitesCommand<Input, Success>(
+  action: DataPlaneCommandAction<Input, Success, AppApiError>,
+  input: Input,
+  mutationJournal: DataPlaneMutationJournal
 ): Promise<Exit.Exit<Success, AppApiError>> {
-  const exit = await Effect.runPromiseExit(effect);
-
-  if (Exit.isSuccess(exit)) {
-    await onSuccess(exit.value);
-  }
-
-  return exit;
+  return executeDataPlaneCommandAction(action, input, {
+    journal: mutationJournal,
+  });
 }
 
 function refreshSiteCommentsState(
   store: SitesStateStore,
   siteId: SiteIdType
 ): Promise<Exit.Exit<readonly SiteComment[], AppApiError>> {
-  return refetchSiteCommentsState(store, siteId);
+  return executeDataPlaneCommandAction(
+    {
+      affectedCollections: ["site-comments"],
+      execute: (commandInput: { readonly siteId: SiteIdType }) =>
+        refetchSiteCommentsState(store, commandInput.siteId),
+      name: "site-comments.refresh",
+      optimistic: "none",
+    },
+    { siteId },
+    { journal: store.mutationJournal }
+  );
 }
 
-async function addSiteCommentState(
+function addSiteCommentState(
   store: SitesStateStore,
   siteId: SiteIdType,
   input: AddSiteCommentInput
 ): Promise<Exit.Exit<AddSiteCommentResponse, AppApiError>> {
-  const exit = await Effect.runPromiseExit(
-    withMinimumMutationPendingDurationEffect(
-      addBrowserSiteComment(siteId, input)
-    )
+  return executeDataPlaneCommandAction(
+    {
+      affectedCollections: ["site-comments"],
+      execute: (commandInput: {
+        readonly input: AddSiteCommentInput;
+        readonly siteId: SiteIdType;
+      }) =>
+        Effect.runPromiseExit(
+          withMinimumMutationPendingDurationEffect(
+            addBrowserSiteComment(commandInput.siteId, commandInput.input)
+          )
+        ),
+      name: "site-comments.add",
+      optimistic: "none",
+      reconcile: async (comment, commandInput) => {
+        await upsertSiteCommentCollectionItem(
+          store,
+          commandInput.siteId,
+          comment
+        );
+        await refreshSiteCommentsIfPossible(store, commandInput.siteId);
+      },
+    },
+    { input, siteId },
+    { journal: store.mutationJournal }
   );
-
-  if (Exit.isSuccess(exit)) {
-    await upsertSiteCommentCollectionItem(store, siteId, exit.value);
-    await refreshSiteCommentsIfPossible(store, siteId);
-  }
-
-  return exit;
 }
 
 async function refreshSiteCommentsIfPossible(
@@ -712,13 +817,14 @@ async function refetchSiteCommentsState(
   siteId: SiteIdType
 ): Promise<Exit.Exit<readonly SiteComment[], AppApiError>> {
   const refreshVersion = beginSiteCommentsRefresh(store, siteId);
-  const collection = getOrCreateSiteCommentsCollection(store, siteId);
+  const collectionState = getOrCreateSiteCommentsState(store, siteId);
   const exit = await Effect.runPromiseExit(
     Effect.tryPromise({
-      try: async () => {
-        await collection.utils.refetch({ throwOnError: true });
-        return sortSiteComments(siteCommentsFromCollection(collection));
-      },
+      try: async () =>
+        await refetchSiteCommentsCollectionData(
+          collectionState,
+          store.initialCommentsBySiteId.get(siteId) ?? []
+        ),
       catch: normalizeAppApiError,
     })
   );
@@ -728,7 +834,10 @@ async function refetchSiteCommentsState(
     store.refreshVersionsBySiteId.get(siteId) !== refreshVersion
   ) {
     return Exit.succeed(
-      sortSiteComments(siteCommentsFromCollection(collection))
+      siteCommentsFromCollection(
+        collectionState,
+        store.initialCommentsBySiteId.get(siteId) ?? []
+      )
     );
   }
 
@@ -753,14 +862,6 @@ function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
     client.sites.updateSite({
       params: { siteId },
       payload: input,
-    })
-  );
-}
-
-function listBrowserSiteComments(siteId: SiteIdType) {
-  return runBrowserAppApiRequest("SitesBrowser.listSiteComments", (client) =>
-    client.sites.listSiteComments({
-      params: { siteId },
     })
   );
 }
@@ -812,16 +913,7 @@ function replaceSites(
 ): Promise<void> {
   store.fallbackSitesRef.current = sites;
 
-  return replaceReadySitesCollection(store, sites);
-}
-
-async function replaceReadySitesCollection(
-  store: SitesStateStore,
-  sites: readonly SiteOption[]
-) {
-  await ensureTanStackDbCollectionReadyForWrite(store.sites);
-  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
-  replaceSyncedCollectionData(store.sites, sites);
+  return replaceSitesCollectionData(store.sites, sites);
 }
 
 async function upsertSiteCollectionItem(
@@ -832,9 +924,12 @@ async function upsertSiteCollectionItem(
     store.fallbackSitesRef.current,
     site
   );
-  await ensureTanStackDbCollectionReadyForWrite(store.sites);
-  markTanStackDbCollectionWrite(store.sitesWriteVersionRef);
-  store.sites.utils.writeUpsert(site);
+  await Promise.all([
+    upsertSiteCollectionItemDataPlane(store.sites, site),
+    ...site.labels.map((label) =>
+      upsertLabelCollectionItem(store.labels, label)
+    ),
+  ]);
 }
 
 async function upsertSiteCommentCollectionItem(
@@ -842,15 +937,11 @@ async function upsertSiteCommentCollectionItem(
   siteId: SiteIdType,
   comment: AddSiteCommentResponse
 ): Promise<void> {
-  const collection = getOrCreateSiteCommentsCollection(store, siteId);
-  await ensureTanStackDbCollectionReadyForWrite(collection);
-  markTanStackDbCollectionWrite(
-    getOrCreateSiteCommentsWriteVersionRef(store, siteId)
-  );
-  collection.utils.writeUpsert(comment);
+  const collectionState = getOrCreateSiteCommentsState(store, siteId);
+  await upsertSiteCommentCollectionItemDataPlane(collectionState, comment);
 }
 
-function getOrCreateSiteCommentsCollection(
+function getOrCreateSiteCommentsState(
   store: SitesStateStore,
   siteId: SiteIdType
 ) {
@@ -860,37 +951,83 @@ function getOrCreateSiteCommentsCollection(
     return existing;
   }
 
-  const collection = makeSiteCommentsCollection(
-    store.queryScope,
-    store.queryClient,
+  const collectionState = getOrCreateSiteCommentsCollectionState({
+    initialComments: store.initialCommentsBySiteId.get(siteId) ?? [],
+    queryClient: store.queryClient,
+    scope: store.queryScope,
+    session: store.dataPlaneSession,
     siteId,
-    store.initialCommentsBySiteId.get(siteId) ?? [],
-    getOrCreateSiteCommentsWriteVersionRef(store, siteId)
-  );
-  store.commentsBySiteId.set(siteId, collection);
+  });
+  store.commentsBySiteId.set(siteId, collectionState);
 
-  return collection;
+  return collectionState;
 }
 
-function getOrCreateSiteCommentsWriteVersionRef(
+function getOrCreateSiteRelatedJobsState(
   store: SitesStateStore,
   siteId: SiteIdType
 ) {
-  const existing = store.commentWriteVersionsBySiteId.get(siteId);
+  const existing = store.relatedJobsBySiteId.get(siteId);
 
   if (existing) {
     return existing;
   }
 
-  const created = { current: 0 };
-  store.commentWriteVersionsBySiteId.set(siteId, created);
-  return created;
+  const collectionState = getOrCreateSiteRelatedJobsCollectionState({
+    initialJobs: store.initialRelatedJobsBySiteId.get(siteId) ?? [],
+    queryClient: store.queryClient,
+    scope: store.queryScope,
+    session: store.dataPlaneSession,
+    siteId,
+  });
+  store.relatedJobsBySiteId.set(siteId, collectionState);
+
+  return collectionState;
+}
+
+function disposeSiteCommentsState(store: SitesStateStore, siteId: SiteIdType) {
+  queueMicrotask(() => {
+    const collectionState = store.commentsBySiteId.get(siteId);
+
+    if (!collectionState || collectionState.collection.subscriberCount > 0) {
+      return;
+    }
+
+    store.commentsBySiteId.delete(siteId);
+    deleteSiteCommentsCollectionState({
+      scope: store.queryScope,
+      session: store.dataPlaneSession,
+      siteId,
+    });
+  });
+}
+
+function disposeSiteRelatedJobsState(
+  store: SitesStateStore,
+  siteId: SiteIdType
+) {
+  queueMicrotask(() => {
+    const collectionState = store.relatedJobsBySiteId.get(siteId);
+
+    if (!collectionState || collectionState.collection.subscriberCount > 0) {
+      return;
+    }
+
+    store.relatedJobsBySiteId.delete(siteId);
+    store.initialRelatedJobsBySiteId.delete(siteId);
+    deleteSiteRelatedJobsCollectionState({
+      scope: store.queryScope,
+      session: store.dataPlaneSession,
+      siteId,
+    });
+  });
 }
 
 function siteCommentsFromCollection(
-  collection: SiteCommentsCollection
+  collectionState: SiteCommentsCollectionState,
+  fallbackComments: readonly SiteComment[]
 ): readonly SiteComment[] {
-  return stripTanStackDbCollectionData(collection.toArray);
+  return siteCommentsFromCollectionState(collectionState, fallbackComments);
 }
 
 function pruneInactiveSiteCommentCollections(
@@ -898,13 +1035,20 @@ function pruneInactiveSiteCommentCollections(
   sites: readonly SiteOption[]
 ) {
   const activeSiteIds = new Set(sites.map((site) => site.id));
-  for (const [siteId, collection] of store.commentsBySiteId) {
-    if (activeSiteIds.has(siteId) || collection.subscriberCount > 0) {
+  for (const [siteId, collectionState] of store.commentsBySiteId) {
+    if (
+      activeSiteIds.has(siteId) ||
+      collectionState.collection.subscriberCount > 0
+    ) {
       continue;
     }
 
     store.commentsBySiteId.delete(siteId);
-    store.commentWriteVersionsBySiteId.delete(siteId);
+    deleteSiteCommentsCollectionState({
+      scope: store.queryScope,
+      session: store.dataPlaneSession,
+      siteId,
+    });
   }
 }
 

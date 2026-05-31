@@ -14,6 +14,9 @@ describe how the major systems fit together; `superpowers/specs` and
   runtime services, request flow, data flow, and code ownership boundaries.
 - [Frontend Architecture](architecture/frontend.md) explains the TanStack Start
   app, routes, feature folders, hotkeys, auth bridge, and UI testing approach.
+- [TanStack DB Data Plane](architecture/tanstack-db-data-plane.md) explains
+  scoped Query Collections, Start loader seeding, feature data-plane modules,
+  and command mutation journaling.
 - [API Architecture](architecture/api.md) explains the public API and MCP
   adapters, private domain Worker, public Agent Worker, Better Auth
   integration, domain actions, database schema, errors, and Cloudflare Workers.

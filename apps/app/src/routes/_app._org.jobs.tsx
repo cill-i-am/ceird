@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_app/_org/jobs")({
 
 function JobsRoute() {
   const { activeOrganizationId, queryClient } = Route.useRouteContext();
-  const { list, options, viewer } = Route.useLoaderData();
+  const { dataPlaneSeeds, list, options, viewer } = Route.useLoaderData();
   const navigate = useNavigate({ from: "/jobs" });
   const search = Route.useSearch();
   const pathname = useRouterState({
@@ -39,6 +39,7 @@ function JobsRoute() {
   return (
     <JobsRouteContent
       activeOrganizationId={activeOrganizationId}
+      dataPlaneSeeds={dataPlaneSeeds}
       listHotkeysEnabled={listHotkeysEnabled}
       list={list}
       onViewModeChange={(viewMode) => {
