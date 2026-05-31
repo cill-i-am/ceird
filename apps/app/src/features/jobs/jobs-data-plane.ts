@@ -62,12 +62,10 @@ export const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 
 const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
 
-export type JobsCollection = ReturnType<typeof createJobsCollection>;
-export type JobOptionsCollection = ReturnType<
-  typeof createJobOptionsCollection
->;
-export type JobDetailCollection = ReturnType<typeof createJobDetailCollection>;
-export type JobCollaboratorsCollection = ReturnType<
+type JobsCollection = ReturnType<typeof createJobsCollection>;
+type JobOptionsCollection = ReturnType<typeof createJobOptionsCollection>;
+type JobDetailCollection = ReturnType<typeof createJobDetailCollection>;
+type JobCollaboratorsCollection = ReturnType<
   typeof createJobCollaboratorsCollection
 >;
 
@@ -111,18 +109,18 @@ export function jobsCollectionKey(scope: OrganizationDataScope) {
   return organizationDataQueryKey("jobs", scope);
 }
 
-export function jobOptionsCollectionKey(scope: OrganizationDataScope) {
+function jobOptionsCollectionKey(scope: OrganizationDataScope) {
   return organizationDataQueryKey("job-options", scope);
 }
 
-export function jobDetailCollectionKey(
+function jobDetailCollectionKey(
   scope: OrganizationDataScope,
   workItemId: WorkItemIdType
 ) {
   return [...organizationDataQueryKey("job-details", scope), "job", workItemId];
 }
 
-export function jobCollaboratorsCollectionKey(
+function jobCollaboratorsCollectionKey(
   scope: OrganizationDataScope,
   workItemId: WorkItemIdType
 ) {
@@ -137,18 +135,18 @@ export function jobsCollectionId(scope: OrganizationDataScope) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:jobs`;
 }
 
-export function jobOptionsCollectionId(scope: OrganizationDataScope) {
+function jobOptionsCollectionId(scope: OrganizationDataScope) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:job-options`;
 }
 
-export function jobDetailCollectionId(
+function jobDetailCollectionId(
   scope: OrganizationDataScope,
   workItemId: WorkItemIdType
 ) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:job:${workItemId}:detail`;
 }
 
-export function jobCollaboratorsCollectionId(
+function jobCollaboratorsCollectionId(
   scope: OrganizationDataScope,
   workItemId: WorkItemIdType
 ) {
@@ -179,35 +177,6 @@ export function createJobOptionsSeed(
     completeness: "complete",
     data: [toJobOptionsCollectionItem(response)],
     queryKey: jobOptionsCollectionKey(scope),
-    requestStartedAt,
-  });
-}
-
-export function createJobDetailSeed(
-  scope: OrganizationDataScope,
-  response: JobDetailResponse,
-  requestStartedAt?: number | undefined
-): DataPlaneSeed<readonly JobDetailCollectionItem[]> {
-  return createDataPlaneSeed({
-    collection: "job-details",
-    completeness: "complete",
-    data: [toJobDetailCollectionItem(response)],
-    queryKey: jobDetailCollectionKey(scope, response.job.id),
-    requestStartedAt,
-  });
-}
-
-export function createJobCollaboratorsSeed(
-  scope: OrganizationDataScope,
-  workItemId: WorkItemIdType,
-  collaborators: readonly JobCollaborator[],
-  requestStartedAt?: number | undefined
-): DataPlaneSeed<readonly JobCollaborator[]> {
-  return createDataPlaneSeed({
-    collection: "job-collaborators",
-    completeness: "complete",
-    data: sortJobCollaborators(collaborators),
-    queryKey: jobCollaboratorsCollectionKey(scope, workItemId),
     requestStartedAt,
   });
 }
@@ -472,17 +441,6 @@ export async function replaceJobCollaboratorsCollectionData(
   });
 }
 
-export async function upsertJobDetailCollectionItem(
-  state: JobDetailCollectionState,
-  detail: JobDetailResponse
-) {
-  await upsertDataPlaneCollectionItem({
-    collection: state.collection,
-    item: toJobDetailCollectionItem(detail),
-    writeVersionRef: state.writeVersionRef,
-  });
-}
-
 export async function upsertJobCollaboratorCollectionItem(
   state: JobCollaboratorsCollectionState,
   collaborator: JobCollaborator
@@ -527,30 +485,6 @@ export function jobOptionsFromCollectionState(
   return (
     readDataPlaneCollectionData(state.collection)[0]?.options ?? fallbackOptions
   );
-}
-
-export function jobDetailFromCollectionState(
-  state: JobDetailCollectionState,
-  fallbackDetail: JobDetailResponse
-): JobDetailResponse {
-  if (state.collection.status !== "ready") {
-    return fallbackDetail;
-  }
-
-  return (
-    readDataPlaneCollectionData(state.collection)[0]?.detail ?? fallbackDetail
-  );
-}
-
-export function jobCollaboratorsFromCollectionState(
-  state: JobCollaboratorsCollectionState,
-  fallbackCollaborators: readonly JobCollaborator[]
-): readonly JobCollaborator[] {
-  if (state.collection.status !== "ready") {
-    return sortJobCollaborators(fallbackCollaborators);
-  }
-
-  return sortJobCollaborators(readDataPlaneCollectionData(state.collection));
 }
 
 export function upsertJobOptionsLabel(

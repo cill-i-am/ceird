@@ -2,7 +2,7 @@ import type { QueryClient, QueryKey } from "@tanstack/query-core";
 
 import type { DataPlaneCollectionName } from "./collection-contract";
 
-export type DataPlaneSeedCompleteness = "complete" | "partial";
+type DataPlaneSeedCompleteness = "complete" | "partial";
 
 export interface DataPlaneSeed<
   Data,

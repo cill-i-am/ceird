@@ -42,11 +42,9 @@ import {
   listAllCurrentServerSites,
 } from "#/features/api/app-api-server";
 
-export type SitesCollection = ReturnType<typeof createSitesCollection>;
-export type SiteCommentsCollection = ReturnType<
-  typeof createSiteCommentsCollection
->;
-export type SiteRelatedJobsCollection = ReturnType<
+type SitesCollection = ReturnType<typeof createSitesCollection>;
+type SiteCommentsCollection = ReturnType<typeof createSiteCommentsCollection>;
+type SiteRelatedJobsCollection = ReturnType<
   typeof createSiteRelatedJobsCollection
 >;
 
@@ -76,7 +74,7 @@ export function siteCommentsCollectionKey(
   return [...organizationDataQueryKey("site-comments", scope), "site", siteId];
 }
 
-export function siteRelatedJobsCollectionKey(
+function siteRelatedJobsCollectionKey(
   scope: OrganizationDataScope,
   siteId: SiteIdType
 ) {
@@ -98,7 +96,7 @@ export function siteCommentsCollectionId(
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:site:${siteId}:comments`;
 }
 
-export function siteRelatedJobsCollectionId(
+function siteRelatedJobsCollectionId(
   scope: OrganizationDataScope,
   siteId: SiteIdType
 ) {
@@ -130,21 +128,6 @@ export function createSiteCommentsSeed(
     completeness: "complete",
     data: sortSiteComments(response.comments),
     queryKey: siteCommentsCollectionKey(scope, siteId),
-    requestStartedAt,
-  });
-}
-
-export function createSiteRelatedJobsSeed(
-  scope: OrganizationDataScope,
-  siteId: SiteIdType,
-  jobs: readonly JobListItem[],
-  requestStartedAt?: number | undefined
-): DataPlaneSeed<readonly JobListItem[]> {
-  return createDataPlaneSeed({
-    collection: "site-related-jobs",
-    completeness: "partial",
-    data: jobs,
-    queryKey: siteRelatedJobsCollectionKey(scope, siteId),
     requestStartedAt,
   });
 }
@@ -354,17 +337,6 @@ export async function upsertSiteCollectionItem(
   });
 }
 
-export async function replaceSiteCommentsCollectionData(
-  state: SiteCommentsCollectionState,
-  comments: readonly SiteComment[]
-) {
-  await replaceDataPlaneCollectionData({
-    collection: state.collection,
-    items: sortSiteComments(comments),
-    writeVersionRef: state.writeVersionRef,
-  });
-}
-
 export async function refetchSiteCommentsCollectionData(
   state: SiteCommentsCollectionState,
   fallbackComments: readonly SiteComment[] = []
@@ -418,17 +390,6 @@ export async function deleteSiteRelatedJobCollectionItem(
   });
 }
 
-export function sitesFromCollectionState(
-  state: SitesCollectionState,
-  fallbackSites: readonly SiteOption[]
-): readonly SiteOption[] {
-  if (state.collection.status !== "ready") {
-    return sortSiteOptions(fallbackSites);
-  }
-
-  return sortSiteOptions(readDataPlaneCollectionData(state.collection));
-}
-
 export function siteCommentsFromCollectionState(
   state: SiteCommentsCollectionState,
   fallbackComments: readonly SiteComment[]
@@ -438,17 +399,6 @@ export function siteCommentsFromCollectionState(
   }
 
   return sortSiteComments(readDataPlaneCollectionData(state.collection));
-}
-
-export function siteRelatedJobsFromCollectionState(
-  state: SiteRelatedJobsCollectionState,
-  fallbackJobs: readonly JobListItem[]
-): readonly JobListItem[] {
-  if (state.collection.status !== "ready") {
-    return fallbackJobs;
-  }
-
-  return readDataPlaneCollectionData(state.collection);
 }
 
 function createSitesCollection({

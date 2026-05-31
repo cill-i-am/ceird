@@ -1,6 +1,6 @@
 import type { DataPlaneCollectionName } from "./collection-contract";
 
-export type DataPlaneMutationStatus = "pending" | "success" | "failure";
+type DataPlaneMutationStatus = "pending" | "success" | "failure";
 
 export interface DataPlaneMutationJournalEntry {
   readonly affectedCollections: readonly DataPlaneCollectionName[];

@@ -1,22 +1,16 @@
-import type { Label, LabelsResponse } from "@ceird/labels-core";
+import type { Label } from "@ceird/labels-core";
 import { LabelSchema } from "@ceird/labels-core";
 import type { QueryClient } from "@tanstack/query-core";
 import { Schema } from "effect";
 
-import {
-  createDataPlaneSeed,
-  seedQueryCollectionInitialData,
-} from "#/data-plane/bootstrap";
-import type { DataPlaneSeed } from "#/data-plane/bootstrap";
+import { seedQueryCollectionInitialData } from "#/data-plane/bootstrap";
 import {
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
 } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-  readDataPlaneCollectionData,
   reconcileQueryCollectionDataAfterConcurrentWrite,
-  replaceDataPlaneCollectionData,
   upsertDataPlaneCollectionItem,
 } from "#/data-plane/collection-write";
 import type {
@@ -28,33 +22,19 @@ import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
 import { getCurrentServerLabels } from "#/features/api/app-api-server";
 
-export type LabelsCollection = ReturnType<typeof createLabelsCollection>;
+type LabelsCollection = ReturnType<typeof createLabelsCollection>;
 
 export interface LabelsCollectionState {
   readonly collection: LabelsCollection;
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
 
-export function labelsCollectionKey(scope: OrganizationDataScope) {
+function labelsCollectionKey(scope: OrganizationDataScope) {
   return organizationDataQueryKey("labels", scope);
 }
 
-export function labelsCollectionId(scope: OrganizationDataScope) {
+function labelsCollectionId(scope: OrganizationDataScope) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:labels`;
-}
-
-export function createLabelsSeed(
-  scope: OrganizationDataScope,
-  response: LabelsResponse,
-  requestStartedAt?: number | undefined
-): DataPlaneSeed<readonly Label[]> {
-  return createDataPlaneSeed({
-    collection: "labels",
-    completeness: "complete",
-    data: sortLabels(response.labels),
-    queryKey: labelsCollectionKey(scope),
-    requestStartedAt,
-  });
 }
 
 export function getOrCreateLabelsCollectionState({
@@ -103,17 +83,6 @@ export function getOrCreateLabelsCollectionState({
   return created;
 }
 
-export async function replaceLabelsCollectionData(
-  state: LabelsCollectionState,
-  labels: readonly Label[]
-) {
-  await replaceDataPlaneCollectionData({
-    collection: state.collection,
-    items: sortLabels(labels),
-    writeVersionRef: state.writeVersionRef,
-  });
-}
-
 export async function upsertLabelCollectionItem(
   state: LabelsCollectionState,
   label: Label
@@ -123,17 +92,6 @@ export async function upsertLabelCollectionItem(
     item: label,
     writeVersionRef: state.writeVersionRef,
   });
-}
-
-export function labelsFromCollectionState(
-  state: LabelsCollectionState,
-  fallbackLabels: readonly Label[]
-): readonly Label[] {
-  if (state.collection.status !== "ready") {
-    return sortLabels(fallbackLabels);
-  }
-
-  return sortLabels(readDataPlaneCollectionData(state.collection));
 }
 
 function createLabelsCollection({

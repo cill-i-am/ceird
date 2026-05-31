@@ -17,8 +17,8 @@ export const DATA_PLANE_COLLECTION_NAMES = [
 export type DataPlaneCollectionName =
   (typeof DATA_PLANE_COLLECTION_NAMES)[number];
 
-export type DataPlaneCollectionCompleteness = "complete" | "partial";
-export type DataPlaneCollectionSyncMode = "eager" | "on-demand";
+type DataPlaneCollectionCompleteness = "complete" | "partial";
+type DataPlaneCollectionSyncMode = "eager" | "on-demand";
 type DataPlaneInferSchemaOutput<Schema extends StandardSchemaV1> =
   Schema extends StandardSchemaV1
     ? StandardSchemaV1.InferOutput<Schema> extends object

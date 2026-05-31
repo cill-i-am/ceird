@@ -68,8 +68,6 @@ export function markDataPlaneCollectionWrite(
   writeVersionRef.current += 1;
 }
 
-export const markTanStackDbCollectionWrite = markDataPlaneCollectionWrite;
-
 export async function ensureDataPlaneCollectionReadyForWrite(
   collection: PreloadableSyncedCollection
 ) {
@@ -79,9 +77,6 @@ export async function ensureDataPlaneCollectionReadyForWrite(
 
   await collection.preload();
 }
-
-export const ensureTanStackDbCollectionReadyForWrite =
-  ensureDataPlaneCollectionReadyForWrite;
 
 export function reconcileQueryCollectionDataAfterConcurrentWrite<
   Item extends { readonly id: string | number },
@@ -203,10 +198,3 @@ function isSyncedTanStackDbCollectionItem<Item extends object>(
 ): boolean {
   return (item as Item & TanStackDbVirtualProps).$synced !== false;
 }
-
-export type TanStackDbCollectionData<Item extends object> =
-  DataPlaneCollectionData<Item>;
-export type TanStackDbCollectionSnapshot<Item extends object> =
-  DataPlaneCollectionSnapshot<Item>;
-export type TanStackDbCollectionWriteVersionRef =
-  DataPlaneCollectionWriteVersionRef;

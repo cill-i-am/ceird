@@ -3,7 +3,7 @@ import { Cause, Exit, Option } from "effect";
 import type { DataPlaneCollectionName } from "./collection-contract";
 import type { DataPlaneMutationJournal } from "./mutation-journal";
 
-export type DataPlaneCommandOptimisticPolicy =
+type DataPlaneCommandOptimisticPolicy =
   | "none"
   | "reversible"
   | "temporary-row"
@@ -17,7 +17,7 @@ export interface DataPlaneCommandAction<Input, Output, Failure> {
   readonly reconcile?: (output: Output, input: Input) => Promise<void> | void;
 }
 
-export function defineDataPlaneCommandAction<Input, Output, Failure>(
+function defineDataPlaneCommandAction<Input, Output, Failure>(
   action: DataPlaneCommandAction<Input, Output, Failure>
 ): DataPlaneCommandAction<Input, Output, Failure> {
   if (action.name.length === 0) {
