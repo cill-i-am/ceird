@@ -6,6 +6,7 @@ import type { AppRouterContext } from "./router-context";
 import { routeTree } from "./routeTree.gen";
 
 export const ROUTER_LOADER_STALE_TIME_MS = 10_000;
+export const ROUTER_PRELOAD_DELAY_MS = 100;
 export const ROUTER_PRELOAD_STALE_TIME_MS = 30_000;
 
 export function getRouter() {
@@ -21,6 +22,7 @@ function createAppRouter() {
     routeTree,
     scrollRestoration: true,
     defaultPreload: "intent",
+    defaultPreloadDelay: ROUTER_PRELOAD_DELAY_MS,
     defaultPreloadStaleTime: ROUTER_PRELOAD_STALE_TIME_MS,
     defaultStaleTime: ROUTER_LOADER_STALE_TIME_MS,
   });

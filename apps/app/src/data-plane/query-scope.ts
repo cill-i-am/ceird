@@ -1,14 +1,22 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 
-export interface OrganizationQueryScope {
+import type { DataPlaneCollectionName } from "./collection-contract";
+
+export interface OrganizationDataScope {
   readonly organizationId: OrganizationId;
   readonly role?: OrganizationRole | undefined;
   readonly userId?: string | undefined;
 }
 
-export function organizationScopedQueryKey(
-  collection: string,
-  scope: OrganizationQueryScope
+export function createOrganizationDataScope(
+  scope: OrganizationDataScope
+): OrganizationDataScope {
+  return scope;
+}
+
+export function organizationDataQueryKey(
+  collection: DataPlaneCollectionName,
+  scope: OrganizationDataScope
 ) {
   return [
     collection,

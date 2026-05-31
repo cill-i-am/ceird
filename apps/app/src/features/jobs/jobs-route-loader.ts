@@ -1,36 +1,25 @@
-import type {
-  JobContactOption,
-  JobDetailResponse,
-  JobListResponse,
-  JobOptionsResponse,
-} from "@ceird/jobs-core";
-import type { Label } from "@ceird/labels-core";
-import type { SiteOption } from "@ceird/sites-core";
+import type { JobListResponse } from "@ceird/jobs-core";
 import type { QueryClient } from "@tanstack/query-core";
 
+import { applyDataPlaneSeed } from "#/data-plane/bootstrap";
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import {
-  getCurrentServerJobDetail,
+  EMPTY_JOBS_OPTIONS,
+  createJobOptionsSeed,
+  createJobsListSeed,
+  loadCurrentJobsOptionsForViewer,
+} from "#/features/jobs/jobs-data-plane";
+import {
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
 import {
   canUseInternalJobOptions,
   decodeJobsViewerUserId,
-  isExternalJobsViewer,
 } from "#/features/jobs/jobs-viewer";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import { requireOrganizationRouteContextRole } from "#/features/organizations/organization-route-access";
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
-import { seedRouteQueryData } from "#/lib/tanstack-db-query";
-
-import { organizationJobsQueryKey } from "./jobs-query-keys";
-
-const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
-  contacts: [],
-  labels: [],
-  members: [],
-  sites: [],
-};
 
 const EMPTY_JOBS_LIST: JobListResponse = {
   items: [],
@@ -46,6 +35,7 @@ export async function loadJobsRouteData(
 ) {
   if (organizationAccess.activeOrganizationSync.required) {
     return {
+      dataPlaneSeeds: [],
       list: EMPTY_JOBS_LIST,
       options: EMPTY_JOBS_OPTIONS,
       viewer: {
@@ -62,90 +52,56 @@ export async function loadJobsRouteData(
   } satisfies JobsViewer;
   const listRequestStartedAt = Date.now();
   const listPromise = listAllCurrentServerJobs({});
-  const internalOptionsPromise = canUseInternalJobOptions(viewer)
+  let optionsRequestStartedAt = Date.now();
+  let optionsPromise = canUseInternalJobOptions(viewer)
     ? getCurrentServerJobOptions()
     : undefined;
   const list = await listPromise;
-  let options = EMPTY_JOBS_OPTIONS;
 
-  if (internalOptionsPromise) {
-    options = await internalOptionsPromise;
-  } else if (isExternalJobsViewer(viewer)) {
-    options = await loadExternalJobsScopedOptions(list);
+  if (!optionsPromise) {
+    optionsRequestStartedAt = Date.now();
+    optionsPromise = loadCurrentJobsOptionsForViewer(viewer, list);
   }
 
+  const options = await optionsPromise;
+  const scope = createOrganizationDataScope({
+    organizationId: organizationAccess.activeOrganizationId,
+    role: viewer.role,
+    userId: viewer.userId,
+  });
+
+  const jobsSeed = createJobsListSeed(scope, list, listRequestStartedAt);
+  const jobOptionsSeed = createJobOptionsSeed(
+    scope,
+    options,
+    optionsRequestStartedAt
+  );
+
   if (organizationAccess.queryClient) {
-    const seededItems = seedRouteQueryData(
+    const seededItems = applyDataPlaneSeed(
       organizationAccess.queryClient,
-      organizationJobsQueryKey({
-        organizationId: organizationAccess.activeOrganizationId,
-        role: viewer.role,
-        userId: viewer.userId,
-      }),
-      list.items,
-      {
-        requestStartedAt: listRequestStartedAt,
-      }
+      jobsSeed
+    );
+    const [seededOptions] = applyDataPlaneSeed(
+      organizationAccess.queryClient,
+      jobOptionsSeed
     );
 
     return {
+      dataPlaneSeeds: [jobsSeed, jobOptionsSeed],
       list: {
         ...list,
         items: seededItems,
       },
-      options,
+      options: seededOptions?.options ?? options,
       viewer,
     };
   }
 
   return {
+    dataPlaneSeeds: [jobsSeed, jobOptionsSeed],
     list,
     options,
     viewer,
-  };
-}
-
-async function loadExternalJobsScopedOptions(
-  list: JobListResponse
-): Promise<JobOptionsResponse> {
-  const details = await Promise.all(
-    list.items.map((item) => getCurrentServerJobDetail(item.id))
-  );
-
-  return deriveExternalJobsScopedOptions(details);
-}
-
-function deriveExternalJobsScopedOptions(
-  details: readonly JobDetailResponse[]
-): JobOptionsResponse {
-  const contactsById = new Map<JobContactOption["id"], JobContactOption>();
-  const labelsById = new Map<Label["id"], Label>();
-  const sitesById = new Map<SiteOption["id"], SiteOption>();
-
-  for (const detail of details) {
-    for (const label of detail.job.labels) {
-      labelsById.set(label.id, label);
-    }
-
-    if (detail.site !== undefined) {
-      sitesById.set(detail.site.id, detail.site);
-    }
-
-    if (detail.contact !== undefined) {
-      contactsById.set(detail.contact.id, {
-        email: detail.contact.email,
-        id: detail.contact.id,
-        name: detail.contact.name,
-        phone: detail.contact.phone,
-        siteIds: detail.job.siteId === undefined ? [] : [detail.job.siteId],
-      });
-    }
-  }
-
-  return {
-    contacts: [...contactsById.values()],
-    labels: [...labelsById.values()],
-    members: [],
-    sites: [...sitesById.values()],
   };
 }

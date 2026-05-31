@@ -3,8 +3,8 @@ import * as React from "react";
 
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 
-import type { TanStackDbCollectionData } from "./tanstack-db-collection";
-import { withoutTanStackDbVirtualProps } from "./tanstack-db-collection";
+import type { DataPlaneCollectionData } from "./collection-write";
+import { withoutTanStackDbVirtualProps } from "./collection-write";
 
 const noopUnsubscribe = () => null;
 
@@ -12,21 +12,22 @@ interface HydratableCollection<Item extends object> {
   readonly status: string;
   entries: () => Iterable<[string | number, Item]>;
   subscribeChanges: (callback: () => void) => {
+    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
     unsubscribe: () => void;
   };
 }
 
 export function useHydratedCollectionItems<Item extends object>(
   collection: HydratableCollection<Item> | null,
-  fallbackItems: readonly NoInfer<TanStackDbCollectionData<Item>>[]
-): readonly TanStackDbCollectionData<Item>[] {
+  fallbackItems: readonly NoInfer<DataPlaneCollectionData<Item>>[]
+): readonly DataPlaneCollectionData<Item>[] {
   const isHydrated = useIsHydrated();
   const versionRef = React.useRef(0);
   const snapshotRef = React.useRef<{
     readonly collection: HydratableCollection<Item> | null;
-    readonly fallbackItems: readonly TanStackDbCollectionData<Item>[];
+    readonly fallbackItems: readonly DataPlaneCollectionData<Item>[];
     readonly isHydrated: boolean;
-    readonly items: readonly TanStackDbCollectionData<Item>[];
+    readonly items: readonly DataPlaneCollectionData<Item>[];
     readonly version: number;
   } | null>(null);
 
@@ -51,6 +52,13 @@ export function useHydratedCollectionItems<Item extends object>(
       if (collection.status === "ready") {
         queueMicrotask(notifyCollectionChanged);
       }
+      queueMicrotask(() => {
+        if (!isSubscribed) {
+          return;
+        }
+
+        subscription.requestSnapshot?.({ optimizedOnly: false });
+      });
 
       return () => {
         isSubscribed = false;
@@ -74,7 +82,7 @@ export function useHydratedCollectionItems<Item extends object>(
       return cachedSnapshot.items;
     }
 
-    const items: readonly TanStackDbCollectionData<Item>[] =
+    const items: readonly DataPlaneCollectionData<Item>[] =
       isHydrated && collection
         ? Array.from(collection.entries(), ([, item]) =>
             withoutTanStackDbVirtualProps(item)

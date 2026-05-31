@@ -14,38 +14,51 @@ import type {
   JobStatus,
   UserIdType,
 } from "@ceird/jobs-core";
-import { JobListItemSchema } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
-import { queryCollectionOptions } from "@tanstack/query-db-collection";
-import { createCollection } from "@tanstack/react-db";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { use } from "react";
 import * as React from "react";
 
+import { executeDataPlaneCommandAction } from "#/data-plane/command-action";
+import type { DataPlaneCommandAction } from "#/data-plane/command-action";
+import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
+import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
+import type { OrganizationDataScope } from "#/data-plane/query-scope";
+import { useOptionalDataPlaneSession } from "#/data-plane/session";
+import type { DataPlaneSession } from "#/data-plane/session";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
-import { listAllCurrentServerJobs } from "#/features/jobs/jobs-server";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
-import { upsertOrganizationLabel } from "#/features/labels/labels-state";
-import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 import {
-  ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-  ensureTanStackDbCollectionReadyForWrite,
-  markTanStackDbCollectionWrite,
-  reconcileQueryCollectionDataAfterConcurrentWrite,
-  replaceSyncedCollectionData,
-  stripTanStackDbCollectionData,
-} from "#/lib/tanstack-db-collection";
-import type {
-  TanStackDbCollectionSnapshot,
-  TanStackDbCollectionWriteVersionRef,
-} from "#/lib/tanstack-db-collection";
-import { seedQueryCollectionInitialData } from "#/lib/tanstack-db-query";
-import { useHydratedCollectionItems } from "#/lib/tanstack-db-react";
+  getOrCreateLabelsCollectionState,
+  upsertLabelCollectionItem,
+} from "#/features/labels/labels-data-plane";
+import type { LabelsCollectionState } from "#/features/labels/labels-data-plane";
+import {
+  getSiteRelatedJobsCollectionState,
+  upsertSiteRelatedJobCollectionItem,
+} from "#/features/sites/sites-data-plane";
+import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
-import { organizationJobsQueryKey } from "./jobs-query-keys";
+import type {
+  JobOptionsCollectionState,
+  JobsCollectionState,
+} from "./jobs-data-plane";
+import {
+  jobOptionsFromCollectionState,
+  jobsFromCollectionState,
+  loadCurrentJobsOptionsForViewer,
+  replaceJobOptionsCollectionData,
+  replaceJobsCollectionData,
+  upsertJobOptionsLabel,
+  upsertJobOptionsSite,
+  getOrCreateJobOptionsCollectionState,
+  getOrCreateJobsCollectionState,
+} from "./jobs-data-plane";
 
 type JobsStatusFilter = "active" | "all" | JobStatus;
 
@@ -80,32 +93,31 @@ export interface JobsAsyncResult {
   readonly waiting: boolean;
 }
 
-type JobsCollection = ReturnType<typeof makeJobsCollection>;
-
 interface JobsStateStore {
-  readonly collectionWriteVersionRef: TanStackDbCollectionWriteVersionRef;
+  readonly dataPlaneSession?: DataPlaneSession | undefined;
   readonly fallbackJobsRef: React.MutableRefObject<readonly JobListItem[]>;
+  readonly fallbackOptionsRef: React.MutableRefObject<JobOptionsResponse>;
   readonly jobOrderRef: React.MutableRefObject<readonly JobListItem["id"][]>;
-  readonly jobs: JobsCollection;
+  readonly jobOptions: JobOptionsCollectionState;
+  readonly jobs: JobsCollectionState;
+  readonly labels: LabelsCollectionState;
+  readonly mutationJournal: DataPlaneMutationJournal;
   readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
+  readonly queryScope: OrganizationDataScope;
   readonly queryClient: QueryClient;
+  readonly viewer: JobsViewer;
 }
 
 interface JobsProviderState {
   readonly createJobResult: JobsAsyncResult;
   readonly nextCursor?: JobListCursorType | undefined;
   readonly notice: JobsNotice | null;
-  readonly options: JobOptionsResponse;
 }
 
 type JobsProviderStateAction =
   | {
       readonly nextCursor?: JobListCursorType | undefined;
       readonly type: "replace-list-state";
-    }
-  | {
-      readonly options: JobOptionsResponse;
-      readonly type: "replace-options-state";
     }
   | {
       readonly notice: JobsNotice | null;
@@ -124,7 +136,6 @@ interface JobsStateContextValue {
   readonly createJobResult: JobsAsyncResult;
   readonly nextCursor?: JobListCursorType | undefined;
   readonly notice: JobsNotice | null;
-  readonly options: JobOptionsResponse;
   readonly refreshJobsList: () => Promise<
     Exit.Exit<JobListResponse, AppApiError>
   >;
@@ -135,7 +146,7 @@ interface JobsStateContextValue {
   readonly replaceJobsOptionsState: (
     organizationId: OrganizationId,
     response: JobOptionsResponse
-  ) => void;
+  ) => Promise<void>;
   readonly store: JobsStateStore;
   readonly upsertJobOptionLabel: (label: Label) => void;
   readonly upsertJobOptionSite: (site: SiteOption) => void;
@@ -195,23 +206,26 @@ export function JobsStateProvider({
 }) {
   const organizationIdRef = React.useRef(activeOrganizationId);
   const [fallbackQueryClient] = React.useState(() => new QueryClient());
-  const queryClient = providedQueryClient ?? fallbackQueryClient;
+  const dataPlaneSession = useOptionalDataPlaneSession();
+  const queryClient =
+    providedQueryClient ?? dataPlaneSession?.queryClient ?? fallbackQueryClient;
   const [store] = React.useState(() =>
     makeJobsStateStore(
       organizationIdRef,
       activeOrganizationId,
       viewer,
       queryClient,
-      list.items
+      list.items,
+      options,
+      dataPlaneSession
     )
   );
-  const previousListRef = React.useRef(list);
-  const previousOptionsRef = React.useRef(options);
+  const previousListRef = React.useRef<JobListResponse | null>(null);
+  const previousOptionsRef = React.useRef<JobOptionsResponse | null>(null);
   const [state, dispatch] = React.useReducer(jobsProviderStateReducer, {
     createJobResult: idleJobsAsyncResult,
     nextCursor: list.nextCursor,
     notice: null,
-    options,
   } satisfies JobsProviderState);
   const { createJobResult, nextCursor, notice } = state;
 
@@ -232,14 +246,11 @@ export function JobsStateProvider({
   );
 
   const replaceJobsOptionsState = React.useCallback(
-    (organizationId: OrganizationId, response: JobOptionsResponse) => {
+    async (organizationId: OrganizationId, response: JobOptionsResponse) => {
       organizationIdRef.current = organizationId;
-      dispatch({
-        options: response,
-        type: "replace-options-state",
-      });
+      await replaceJobOptions(store, response);
     },
-    [organizationIdRef]
+    [organizationIdRef, store]
   );
 
   React.useEffect(() => {
@@ -260,60 +271,86 @@ export function JobsStateProvider({
     void replaceJobsOptionsState(activeOrganizationId, options);
   }, [activeOrganizationId, options, replaceJobsOptionsState]);
 
-  const refreshJobsList = React.useCallback(async () => {
+  const refreshJobsList = React.useCallback(() => {
     const expectedOrganizationId = organizationIdRef.current;
-    const exit = await Effect.runPromiseExit(listAllBrowserJobs());
+    return executeDataPlaneCommandAction(
+      {
+        affectedCollections: ["jobs"],
+        execute: () => Effect.runPromiseExit(listAllBrowserJobs()),
+        name: "jobs.refresh-list",
+        optimistic: "none",
+        reconcile: async (response) => {
+          if (organizationIdRef.current !== expectedOrganizationId) {
+            return;
+          }
 
-    if (
-      Exit.isSuccess(exit) &&
-      organizationIdRef.current === expectedOrganizationId
-    ) {
-      await replaceJobsListState(expectedOrganizationId, exit.value);
-    }
-
-    return exit;
-  }, [organizationIdRef, replaceJobsListState]);
+          await replaceJobsListState(expectedOrganizationId, response);
+        },
+      },
+      undefined,
+      { journal: store.mutationJournal }
+    );
+  }, [organizationIdRef, replaceJobsListState, store.mutationJournal]);
 
   const createJob = React.useCallback(
     (input: CreateJobInput) => {
       const expectedOrganizationId = organizationIdRef.current;
 
-      return runTrackedJobsOperation(
-        withMinimumMutationPendingDurationEffect(createBrowserJob(input)),
+      return runTrackedJobsCommand(
+        {
+          affectedCollections: ["jobs", "job-options", "site-related-jobs"],
+          execute: (commandInput: CreateJobInput) =>
+            Effect.runPromiseExit(
+              withMinimumMutationPendingDurationEffect(
+                createBrowserJob(commandInput)
+              )
+            ),
+          name: "jobs.create",
+          optimistic: "none",
+          reconcile: async (createdJob, commandInput) => {
+            const shouldRefreshOptions =
+              commandInput.site?.kind === "create" ||
+              commandInput.contact?.kind === "create";
+
+            await refreshJobsListOrUpsertState({
+              currentNextCursor: nextCursor,
+              expectedOrganizationId,
+              job: createdJob,
+              organizationIdRef,
+              replaceJobsListState,
+              store,
+            });
+
+            if (organizationIdRef.current !== expectedOrganizationId) {
+              return;
+            }
+
+            await upsertLoadedSiteRelatedJob(store, createdJob);
+            await refreshJobOptionsStateWhen({
+              expectedOrganizationId,
+              organizationIdRef,
+              replaceJobsOptionsState,
+              shouldRefresh: shouldRefreshOptions,
+            });
+
+            if (organizationIdRef.current === expectedOrganizationId) {
+              dispatch({
+                notice: {
+                  kind: "created",
+                  title: createdJob.title,
+                },
+                type: "set-notice",
+              });
+            }
+          },
+        },
+        input,
         (result) =>
           dispatch({
             result,
             type: "set-create-job-result",
           }),
-        async (createdJob) => {
-          const shouldRefreshOptions =
-            input.site?.kind === "create" || input.contact?.kind === "create";
-
-          await refreshJobsListOrUpsertState({
-            currentNextCursor: nextCursor,
-            expectedOrganizationId,
-            job: createdJob,
-            organizationIdRef,
-            replaceJobsListState,
-            store,
-          });
-          await refreshJobOptionsStateWhen({
-            expectedOrganizationId,
-            organizationIdRef,
-            replaceJobsOptionsState,
-            shouldRefresh: shouldRefreshOptions,
-          });
-
-          if (organizationIdRef.current === expectedOrganizationId) {
-            dispatch({
-              notice: {
-                kind: "created",
-                title: createdJob.title,
-              },
-              type: "set-notice",
-            });
-          }
-        }
+        store.mutationJournal
       );
     },
     [
@@ -348,27 +385,15 @@ export function JobsStateProvider({
 
   const upsertJobOptionLabel = React.useCallback(
     (label: Label) => {
-      dispatch({
-        options: {
-          ...state.options,
-          labels: upsertOrganizationLabel(state.options.labels, label),
-        },
-        type: "replace-options-state",
-      });
+      void upsertJobOptionLabelState(store, label);
     },
-    [state.options]
+    [store]
   );
   const upsertJobOptionSiteCallback = React.useCallback(
     (site: SiteOption) => {
-      dispatch({
-        options: {
-          ...state.options,
-          sites: upsertJobOptionSite(state.options.sites, site),
-        },
-        type: "replace-options-state",
-      });
+      void upsertJobOptionSiteState(store, site);
     },
-    [state.options]
+    [store]
   );
 
   const value = React.useMemo<JobsStateContextValue>(
@@ -378,7 +403,6 @@ export function JobsStateProvider({
       createJobResult,
       nextCursor,
       notice,
-      options: state.options,
       refreshJobsList,
       replaceJobsListState,
       replaceJobsOptionsState,
@@ -397,7 +421,6 @@ export function JobsStateProvider({
       refreshJobsList,
       replaceJobsListState,
       replaceJobsOptionsState,
-      state.options,
       store,
       upsertJobOptionLabel,
       upsertJobOptionSiteCallback,
@@ -424,7 +447,9 @@ export function useJobsListState(): JobsListState {
 }
 
 export function useJobsOptions(): JobOptionsResponse {
-  return useJobsStateContext().options;
+  const { store } = useJobsStateContext();
+
+  return useJobOptionsCollectionOptions(store);
 }
 
 export function useOptionalJobsViewer(): JobsViewer | undefined {
@@ -530,73 +555,60 @@ function makeJobsStateStore(
   organizationId: OrganizationId,
   viewer: JobsViewer,
   queryClient: QueryClient,
-  jobs: readonly JobListItem[]
+  jobs: readonly JobListItem[],
+  options: JobOptionsResponse,
+  dataPlaneSession: ReturnType<typeof useOptionalDataPlaneSession>
 ): JobsStateStore {
-  const collectionWriteVersionRef = { current: 0 };
   const fallbackJobsRef = {
     current: jobs,
   };
+  const fallbackOptionsRef = {
+    current: options,
+  };
+  const queryScope =
+    dataPlaneSession?.scope ??
+    createOrganizationDataScope({
+      organizationId,
+      role: viewer.role,
+      userId: viewer.userId,
+    });
+  const collectionState = getOrCreateJobsCollectionState({
+    initialJobs: jobs,
+    queryClient,
+    scope: queryScope,
+    session: dataPlaneSession,
+  });
+  const jobOptionsState = getOrCreateJobOptionsCollectionState({
+    initialOptions: options,
+    loadOptions: () => loadCurrentJobsOptionsForViewer(viewer),
+    queryClient,
+    scope: queryScope,
+    session: dataPlaneSession,
+  });
+  const labelsState = getOrCreateLabelsCollectionState({
+    initialLabels: options.labels,
+    queryClient,
+    scope: queryScope,
+    session: dataPlaneSession,
+  });
 
   return {
-    collectionWriteVersionRef,
+    dataPlaneSession,
     fallbackJobsRef,
+    fallbackOptionsRef,
     jobOrderRef: {
       current: jobs.map((job) => job.id),
     },
-    jobs: makeJobsCollection(
-      organizationId,
-      viewer,
-      queryClient,
-      jobs,
-      collectionWriteVersionRef
-    ),
+    jobOptions: jobOptionsState,
+    jobs: collectionState,
+    labels: labelsState,
+    mutationJournal:
+      dataPlaneSession?.mutationJournal ?? createDataPlaneMutationJournal(),
     organizationIdRef,
+    queryScope,
     queryClient,
+    viewer,
   };
-}
-
-function makeJobsCollection(
-  organizationId: OrganizationId,
-  viewer: JobsViewer,
-  queryClient: QueryClient,
-  jobs: readonly JobListItem[],
-  writeVersionRef: TanStackDbCollectionWriteVersionRef
-) {
-  const queryKey = organizationJobsQueryKey({
-    organizationId,
-    role: viewer.role,
-    userId: viewer.userId,
-  });
-  seedQueryCollectionInitialData(queryClient, queryKey, [...jobs]);
-
-  const collection: {
-    current?: TanStackDbCollectionSnapshot<JobListItem>;
-  } = {};
-  const createdCollection = createCollection(
-    queryCollectionOptions({
-      getKey: (job) => job.id,
-      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-      id: `organization:${organizationId}:user:${viewer.userId}:role:${viewer.role}:jobs`,
-      queryClient,
-      queryFn: async () => {
-        const requestWriteVersion = writeVersionRef.current;
-        const response = await listAllCurrentServerJobs({});
-
-        return reconcileQueryCollectionDataAfterConcurrentWrite({
-          collection: collection.current,
-          incomingItems: response.items,
-          requestWriteVersion,
-          writeVersionRef,
-        });
-      },
-      queryKey,
-      retry: false,
-      schema: Schema.toStandardSchemaV1(JobListItemSchema),
-      staleTime: 30_000,
-    })
-  );
-  collection.current = createdCollection;
-  return createdCollection;
 }
 
 function useJobsStateContext() {
@@ -618,13 +630,6 @@ function jobsProviderStateReducer(
       return {
         ...state,
         nextCursor: action.nextCursor,
-      };
-    }
-
-    case "replace-options-state": {
-      return {
-        ...state,
-        options: action.options,
       };
     }
 
@@ -651,13 +656,29 @@ function jobsProviderStateReducer(
 
 function useJobsCollectionItems(store: JobsStateStore): readonly JobListItem[] {
   const items = useHydratedCollectionItems(
-    store.jobs,
+    store.jobs.collection,
     store.fallbackJobsRef.current
   );
 
   return React.useMemo(
     () => jobsFromCollectionData(store, items),
     [items, store]
+  );
+}
+
+function useJobOptionsCollectionOptions(
+  store: JobsStateStore
+): JobOptionsResponse {
+  const items = useHydratedCollectionItems(store.jobOptions.collection, [
+    {
+      id: "job-options",
+      options: store.fallbackOptionsRef.current,
+    },
+  ]);
+
+  return React.useMemo(
+    () => items[0]?.options ?? store.fallbackOptionsRef.current,
+    [items, store.fallbackOptionsRef]
   );
 }
 
@@ -668,27 +689,82 @@ function replaceJobs(
   store.fallbackJobsRef.current = jobs;
   store.jobOrderRef.current = jobs.map((job) => job.id);
 
-  return replaceReadyJobsCollection(store, jobs);
-}
-
-async function replaceReadyJobsCollection(
-  store: JobsStateStore,
-  jobs: readonly JobListItem[]
-) {
-  await ensureTanStackDbCollectionReadyForWrite(store.jobs);
-  markTanStackDbCollectionWrite(store.collectionWriteVersionRef);
-  replaceSyncedCollectionData(store.jobs, jobs);
+  return replaceJobsCollectionData(store.jobs, jobs);
 }
 
 function jobsFromCollection(store: JobsStateStore): readonly JobListItem[] {
-  if (store.jobs.status !== "ready") {
-    return jobsFromCollectionData(store, store.fallbackJobsRef.current);
-  }
-
   return jobsFromCollectionData(
     store,
-    stripTanStackDbCollectionData(store.jobs.toArray)
+    jobsFromCollectionState(store.jobs, store.fallbackJobsRef.current)
   );
+}
+
+function jobsOptionsFromCollection(store: JobsStateStore): JobOptionsResponse {
+  return jobOptionsFromCollectionState(
+    store.jobOptions,
+    store.fallbackOptionsRef.current
+  );
+}
+
+async function replaceJobOptions(
+  store: JobsStateStore,
+  options: JobOptionsResponse
+) {
+  store.fallbackOptionsRef.current = options;
+  await Promise.all([
+    replaceJobOptionsCollectionData(store.jobOptions, options),
+    replaceLabelsCollectionDataFromOptions(store, options),
+  ]);
+}
+
+async function replaceLabelsCollectionDataFromOptions(
+  store: JobsStateStore,
+  options: JobOptionsResponse
+) {
+  await Promise.all(
+    options.labels.map((label) =>
+      upsertLabelCollectionItem(store.labels, label)
+    )
+  );
+}
+
+async function upsertJobOptionLabelState(store: JobsStateStore, label: Label) {
+  await upsertLabelCollectionItem(store.labels, label);
+  await replaceJobOptions(
+    store,
+    upsertJobOptionsLabel(jobsOptionsFromCollection(store), label)
+  );
+}
+
+async function upsertJobOptionSiteState(
+  store: JobsStateStore,
+  site: SiteOption
+) {
+  await replaceJobOptions(
+    store,
+    upsertJobOptionsSite(jobsOptionsFromCollection(store), site)
+  );
+}
+
+async function upsertLoadedSiteRelatedJob(
+  store: JobsStateStore,
+  job: JobListItemSource
+) {
+  if (!store.dataPlaneSession || job.siteId === undefined) {
+    return;
+  }
+
+  const relatedJobs = getSiteRelatedJobsCollectionState({
+    scope: store.queryScope,
+    session: store.dataPlaneSession,
+    siteId: job.siteId,
+  });
+
+  if (!relatedJobs) {
+    return;
+  }
+
+  await upsertSiteRelatedJobCollectionItem(relatedJobs, toJobListItem(job));
 }
 
 function jobsFromCollectionData(
@@ -706,16 +782,18 @@ function jobsFromCollectionData(
   );
 }
 
-async function runTrackedJobsOperation<Success>(
-  effect: Effect.Effect<Success, AppApiError>,
+async function runTrackedJobsCommand<Input, Success>(
+  action: DataPlaneCommandAction<Input, Success, AppApiError>,
+  input: Input,
   setResult: (result: JobsAsyncResult) => void,
-  onSuccess: (value: Success) => Promise<void>
+  mutationJournal: DataPlaneMutationJournal
 ): Promise<Exit.Exit<Success, AppApiError>> {
   setResult(waitingJobsAsyncResult);
-  const exit = await Effect.runPromiseExit(effect);
+  const exit = await executeDataPlaneCommandAction(action, input, {
+    journal: mutationJournal,
+  });
 
   if (Exit.isSuccess(exit)) {
-    await onSuccess(exit.value);
     setResult(idleJobsAsyncResult);
     return exit;
   }
@@ -820,7 +898,7 @@ async function refreshJobOptionsStateWhen({
   readonly replaceJobsOptionsState: (
     organizationId: OrganizationId,
     response: JobOptionsResponse
-  ) => void;
+  ) => Promise<void>;
   readonly shouldRefresh: boolean;
 }) {
   if (!shouldRefresh) {
@@ -834,7 +912,7 @@ async function refreshJobOptionsStateWhen({
   }
 
   if (Exit.isSuccess(optionsExit)) {
-    replaceJobsOptionsState(expectedOrganizationId, optionsExit.value);
+    await replaceJobsOptionsState(expectedOrganizationId, optionsExit.value);
     return;
   }
 

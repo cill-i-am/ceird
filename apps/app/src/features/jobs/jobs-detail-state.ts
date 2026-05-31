@@ -18,18 +18,47 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import type { CreateLabelInput, LabelIdType } from "@ceird/labels-core";
+import { QueryClient } from "@tanstack/query-core";
 /* oxlint-disable unicorn/no-array-sort */
 import { Cause, Effect, Exit, Option } from "effect";
 import { use } from "react";
 import * as React from "react";
 
+import { executeDataPlaneCommandAction } from "#/data-plane/command-action";
+import type { DataPlaneCommandAction } from "#/data-plane/command-action";
+import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
+import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import { useOptionalDataPlaneSession } from "#/data-plane/session";
+import type { DataPlaneSession } from "#/data-plane/session";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiError } from "#/features/api/app-api-errors";
 import { createBrowserLabel } from "#/features/labels/labels-state";
+import {
+  deleteSiteRelatedJobCollectionItem,
+  getSiteRelatedJobsCollectionState,
+  upsertSiteRelatedJobCollectionItem,
+} from "#/features/sites/sites-data-plane";
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 import {
+  deleteJobCollaboratorsCollectionState,
+  deleteJobDetailCollectionState,
+  deleteJobCollaboratorCollectionItem,
+  getOrCreateJobCollaboratorsCollectionState,
+  getOrCreateJobDetailCollectionState,
+  replaceJobCollaboratorsCollectionData,
+  replaceJobDetailCollectionData,
+  toJobDetailCollectionItem,
+  upsertJobCollaboratorCollectionItem,
+} from "./jobs-data-plane";
+import type {
+  JobCollaboratorsCollectionState,
+  JobDetailCollectionState,
+} from "./jobs-data-plane";
+import {
   getJobsAsyncErrorMessage,
+  toJobListItem,
   useUpsertJobOptionLabel,
   useUpsertJobsListItem,
 } from "./jobs-state";
@@ -54,45 +83,26 @@ type JobsDetailMutationResults = Readonly<
 >;
 
 interface JobsDetailState {
-  readonly collaborators: readonly JobCollaborator[];
-  readonly detail: JobDetailResponse;
   readonly results: JobsDetailMutationResults;
 }
 
-type JobsDetailStateAction =
-  | {
-      readonly detail: JobDetailResponse;
-      readonly type: "set-detail";
-    }
-  | {
-      readonly job: Job;
-      readonly type: "set-detail-job";
-    }
-  | {
-      readonly collaborator: JobCollaborator;
-      readonly type: "upsert-collaborator";
-    }
-  | {
-      readonly collaboratorId: JobCollaboratorIdType;
-      readonly type: "remove-collaborator";
-    }
-  | {
-      readonly collaborators: readonly JobCollaborator[];
-      readonly type: "set-collaborators";
-    }
-  | {
-      readonly comment: AddJobCommentResponse;
-      readonly type: "append-comment";
-    }
-  | {
-      readonly type: "insert-visit";
-      readonly visit: AddJobVisitResponse;
-    }
-  | {
-      readonly key: JobsDetailMutationKey;
-      readonly result: JobsAsyncResult;
-      readonly type: "set-result";
-    };
+interface JobsDetailStateAction {
+  readonly key: JobsDetailMutationKey;
+  readonly result: JobsAsyncResult;
+  readonly type: "set-result";
+}
+
+interface JobsDetailStateStore {
+  readonly collaborators: JobCollaboratorsCollectionState;
+  readonly dataPlaneSession?: DataPlaneSession | undefined;
+  readonly detail: JobDetailCollectionState;
+  readonly fallbackCollaboratorsRef: React.MutableRefObject<
+    readonly JobCollaborator[]
+  >;
+  readonly fallbackDetailRef: React.MutableRefObject<JobDetailResponse>;
+  readonly mutationJournal: DataPlaneMutationJournal;
+  readonly queryClient: QueryClient;
+}
 
 export interface JobsDetailStateContextValue {
   readonly addJobComment: (
@@ -175,33 +185,72 @@ export function JobsDetailStateProvider({
   const workItemId = initialDetail.job.id;
   const upsertJobsListItem = useUpsertJobsListItem();
   const upsertJobOptionLabel = useUpsertJobOptionLabel();
+  const dataPlaneSession = useOptionalDataPlaneSession();
+  const [fallbackQueryClient] = React.useState(() => new QueryClient());
+  const [store] = React.useState(() =>
+    makeJobsDetailStateStore(
+      initialDetail,
+      dataPlaneSession,
+      fallbackQueryClient
+    )
+  );
   const [state, dispatch] = React.useReducer(jobsDetailStateReducer, {
-    collaborators: [],
-    detail: initialDetail,
     results: initialJobsDetailMutationResults,
   } satisfies JobsDetailState);
-  const detailRef = React.useRef(state.detail);
+  const fallbackDetailItems = React.useMemo(
+    () => [toJobDetailCollectionItem(store.fallbackDetailRef.current)],
+    [store]
+  );
+  const detailItems = useHydratedCollectionItems(
+    store.detail.collection,
+    fallbackDetailItems
+  );
+  const currentDetail = React.useMemo(
+    () => detailItems[0]?.detail ?? store.fallbackDetailRef.current,
+    [detailItems, store.fallbackDetailRef]
+  );
+  const currentCollaborators = useHydratedCollectionItems(
+    store.collaborators.collection,
+    store.fallbackCollaboratorsRef.current
+  );
+  const detailRef = React.useRef(currentDetail);
+
+  React.useEffect(
+    () => () => {
+      if (!store.dataPlaneSession) {
+        return;
+      }
+
+      deleteJobDetailCollectionState({
+        scope: store.dataPlaneSession.scope,
+        session: store.dataPlaneSession,
+        workItemId,
+      });
+      deleteJobCollaboratorsCollectionState({
+        scope: store.dataPlaneSession.scope,
+        session: store.dataPlaneSession,
+        workItemId,
+      });
+    },
+    [store, workItemId]
+  );
 
   React.useEffect(() => {
-    detailRef.current = state.detail;
-  }, [state.detail]);
+    detailRef.current = currentDetail;
+  }, [currentDetail]);
 
   React.useEffect(() => {
-    dispatch({
-      detail: initialDetail,
-      type: "set-detail",
-    });
-  }, [initialDetail]);
+    store.fallbackDetailRef.current = initialDetail;
+    void replaceJobDetailCollectionData(store.detail, initialDetail);
+  }, [initialDetail, store]);
 
   const refreshDetailIfPossible = React.useCallback(async () => {
     const exit = await Effect.runPromiseExit(getBrowserJobDetail(workItemId));
 
     if (Exit.isSuccess(exit)) {
       detailRef.current = exit.value;
-      dispatch({
-        detail: exit.value,
-        type: "set-detail",
-      });
+      store.fallbackDetailRef.current = exit.value;
+      await replaceJobDetailCollectionData(store.detail, exit.value);
       return;
     }
 
@@ -211,73 +260,93 @@ export function JobsDetailStateProvider({
         workItemId,
       })
     );
-  }, [workItemId]);
+  }, [store, workItemId]);
 
   const syncChangedJob = React.useCallback(
     async (job: Job) => {
-      detailRef.current = updateJobDetailJob(detailRef.current, job);
-      dispatch({
-        job,
-        type: "set-detail-job",
-      });
+      const previousSiteId = detailRef.current.job.siteId;
+      const nextDetail = updateJobDetailJob(detailRef.current, job);
+      detailRef.current = nextDetail;
+      store.fallbackDetailRef.current = nextDetail;
+      await replaceJobDetailCollectionData(store.detail, nextDetail);
       await upsertJobsListItem(job);
+      await reconcileLoadedSiteRelatedJobsForJob(store, previousSiteId, job);
       await refreshDetailIfPossible();
     },
-    [refreshDetailIfPossible, upsertJobsListItem]
+    [refreshDetailIfPossible, store, upsertJobsListItem]
   );
 
   const syncChangedJobDetail = React.useCallback(
-    async (detail: JobDetailResponse) => {
-      detailRef.current = detail;
-      dispatch({
-        detail,
-        type: "set-detail",
-      });
-      await upsertJobsListItem(detail.job);
+    async (nextDetail: JobDetailResponse) => {
+      const previousSiteId = detailRef.current.job.siteId;
+      detailRef.current = nextDetail;
+      store.fallbackDetailRef.current = nextDetail;
+      await replaceJobDetailCollectionData(store.detail, nextDetail);
+      await upsertJobsListItem(nextDetail.job);
+      await reconcileLoadedSiteRelatedJobsForJob(
+        store,
+        previousSiteId,
+        nextDetail.job
+      );
     },
-    [upsertJobsListItem]
+    [store, upsertJobsListItem]
   );
 
   const runMutation = React.useCallback(
     <Success>(
       key: JobsDetailMutationKey,
+      affectedCollections: DataPlaneCommandAction<
+        void,
+        Success,
+        AppApiError
+      >["affectedCollections"],
       effect: Effect.Effect<Success, AppApiError>,
       onSuccess: (value: Success) => Promise<void> | void
     ) =>
-      runTrackedJobsDetailOperation(
-        effect,
+      runTrackedJobsDetailCommand(
+        {
+          affectedCollections,
+          execute: () => Effect.runPromiseExit(effect),
+          name: `job-detail.${key}`,
+          optimistic: "none",
+          reconcile: onSuccess,
+        },
+        undefined,
         (result) =>
           dispatch({
             key,
             result,
             type: "set-result",
           }),
-        onSuccess
+        store.mutationJournal
       ),
-    []
+    [store.mutationJournal]
   );
 
   const refreshCollaborators = React.useCallback(
     () =>
       runMutation(
         "refreshCollaborators",
+        ["job-collaborators"],
         listBrowserJobCollaborators(workItemId).pipe(
           Effect.map((response) => response.collaborators)
         ),
-        (collaborators) => {
-          dispatch({
-            collaborators,
-            type: "set-collaborators",
-          });
+        async (nextCollaborators) => {
+          store.fallbackCollaboratorsRef.current = nextCollaborators;
+          await replaceJobCollaboratorsCollectionData(
+            store.collaborators,
+            nextCollaborators
+          );
         }
       ),
-    [runMutation, workItemId]
+    [runMutation, store, workItemId]
   );
 
   const transitionJob = React.useCallback(
     (input: TransitionJobInput) =>
       runMutation(
         "transition",
+        ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
           transitionBrowserJob(workItemId, input)
         ),
@@ -290,6 +359,7 @@ export function JobsDetailStateProvider({
     () =>
       runMutation(
         "reopen",
+        ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(reopenBrowserJob(workItemId)),
         syncChangedJob
       ),
@@ -300,6 +370,7 @@ export function JobsDetailStateProvider({
     (input: PatchJobInput) =>
       runMutation(
         "patch",
+        ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
           patchBrowserJob(workItemId, input)
         ),
@@ -312,44 +383,45 @@ export function JobsDetailStateProvider({
     (input: AddJobCommentInput) =>
       runMutation(
         "addComment",
+        ["job-details"],
         withMinimumMutationPendingDurationEffect(
           addBrowserJobComment(workItemId, input)
         ),
         async (comment) => {
-          detailRef.current = appendJobComment(detailRef.current, comment);
-          dispatch({
-            comment,
-            type: "append-comment",
-          });
+          const nextDetail = appendJobComment(detailRef.current, comment);
+          detailRef.current = nextDetail;
+          store.fallbackDetailRef.current = nextDetail;
+          await replaceJobDetailCollectionData(store.detail, nextDetail);
           await refreshDetailIfPossible();
         }
       ),
-    [refreshDetailIfPossible, runMutation, workItemId]
+    [refreshDetailIfPossible, runMutation, store, workItemId]
   );
 
   const addJobVisit = React.useCallback(
     (input: AddJobVisitInput) =>
       runMutation(
         "addVisit",
+        ["job-details"],
         withMinimumMutationPendingDurationEffect(
           addBrowserJobVisit(workItemId, input)
         ),
         async (visit) => {
-          detailRef.current = insertJobVisit(detailRef.current, visit);
-          dispatch({
-            type: "insert-visit",
-            visit,
-          });
+          const nextDetail = insertJobVisit(detailRef.current, visit);
+          detailRef.current = nextDetail;
+          store.fallbackDetailRef.current = nextDetail;
+          await replaceJobDetailCollectionData(store.detail, nextDetail);
           await refreshDetailIfPossible();
         }
       ),
-    [refreshDetailIfPossible, runMutation, workItemId]
+    [refreshDetailIfPossible, runMutation, store, workItemId]
   );
 
   const assignJobLabel = React.useCallback(
     (input: AssignJobLabelInput) =>
       runMutation(
         "assignLabel",
+        ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
           assignBrowserJobLabel(workItemId, input)
         ),
@@ -362,6 +434,7 @@ export function JobsDetailStateProvider({
     (input: CreateLabelInput) =>
       runMutation(
         "createAndAssignLabel",
+        ["job-details", "jobs", "labels", "job-options", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
           createBrowserLabel(input).pipe(
             Effect.tap((label) =>
@@ -383,6 +456,7 @@ export function JobsDetailStateProvider({
     (labelId: LabelIdType) =>
       runMutation(
         "removeLabel",
+        ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
           removeBrowserJobLabel(workItemId, labelId)
         ),
@@ -395,17 +469,22 @@ export function JobsDetailStateProvider({
     (input: AttachJobCollaboratorInput) =>
       runMutation(
         "attachCollaborator",
+        ["job-collaborators"],
         withMinimumMutationPendingDurationEffect(
           attachBrowserJobCollaborator(workItemId, input)
         ),
-        (collaborator) => {
-          dispatch({
-            collaborator,
-            type: "upsert-collaborator",
-          });
+        async (collaborator) => {
+          store.fallbackCollaboratorsRef.current = upsertJobCollaborator(
+            store.fallbackCollaboratorsRef.current,
+            collaborator
+          );
+          await upsertJobCollaboratorCollectionItem(
+            store.collaborators,
+            collaborator
+          );
         }
       ),
-    [runMutation, workItemId]
+    [runMutation, store, workItemId]
   );
 
   const updateCollaborator = React.useCallback(
@@ -418,34 +497,44 @@ export function JobsDetailStateProvider({
     }) =>
       runMutation(
         "updateCollaborator",
+        ["job-collaborators"],
         withMinimumMutationPendingDurationEffect(
           updateBrowserJobCollaborator(workItemId, collaboratorId, input)
         ),
-        (collaborator) => {
-          dispatch({
-            collaborator,
-            type: "upsert-collaborator",
-          });
+        async (collaborator) => {
+          store.fallbackCollaboratorsRef.current = upsertJobCollaborator(
+            store.fallbackCollaboratorsRef.current,
+            collaborator
+          );
+          await upsertJobCollaboratorCollectionItem(
+            store.collaborators,
+            collaborator
+          );
         }
       ),
-    [runMutation, workItemId]
+    [runMutation, store, workItemId]
   );
 
   const detachCollaborator = React.useCallback(
     (collaboratorId: JobCollaboratorIdType) =>
       runMutation(
         "detachCollaborator",
+        ["job-collaborators"],
         withMinimumMutationPendingDurationEffect(
           detachBrowserJobCollaborator(workItemId, collaboratorId)
         ),
-        (collaborator) => {
-          dispatch({
-            collaboratorId: collaborator.id,
-            type: "remove-collaborator",
-          });
+        async (collaborator) => {
+          store.fallbackCollaboratorsRef.current =
+            store.fallbackCollaboratorsRef.current.filter(
+              (current) => current.id !== collaborator.id
+            );
+          await deleteJobCollaboratorCollectionItem(
+            store.collaborators,
+            collaborator.id
+          );
         }
       ),
-    [runMutation, workItemId]
+    [runMutation, store, workItemId]
   );
 
   const value = React.useMemo<JobsDetailStateContextValue>(
@@ -454,10 +543,10 @@ export function JobsDetailStateProvider({
       addJobVisit,
       assignJobLabel,
       attachCollaborator,
-      collaborators: state.collaborators,
+      collaborators: currentCollaborators,
       createAndAssignJobLabel,
       detachCollaborator,
-      detail: state.detail,
+      detail: currentDetail,
       patchJob,
       refreshCollaborators,
       removeJobLabel,
@@ -472,13 +561,13 @@ export function JobsDetailStateProvider({
       assignJobLabel,
       attachCollaborator,
       createAndAssignJobLabel,
+      currentCollaborators,
       detachCollaborator,
+      currentDetail,
       patchJob,
       refreshCollaborators,
       removeJobLabel,
       reopenJob,
-      state.collaborators,
-      state.detail,
       state.results,
       transitionJob,
       updateCollaborator,
@@ -509,60 +598,6 @@ function jobsDetailStateReducer(
   action: JobsDetailStateAction
 ): JobsDetailState {
   switch (action.type) {
-    case "set-detail": {
-      return {
-        ...state,
-        detail: action.detail,
-      };
-    }
-
-    case "set-detail-job": {
-      return {
-        ...state,
-        detail: updateJobDetailJob(state.detail, action.job),
-      };
-    }
-
-    case "set-collaborators": {
-      return {
-        ...state,
-        collaborators: action.collaborators,
-      };
-    }
-
-    case "upsert-collaborator": {
-      return {
-        ...state,
-        collaborators: upsertJobCollaborator(
-          state.collaborators,
-          action.collaborator
-        ),
-      };
-    }
-
-    case "remove-collaborator": {
-      return {
-        ...state,
-        collaborators: state.collaborators.filter(
-          (collaborator) => collaborator.id !== action.collaboratorId
-        ),
-      };
-    }
-
-    case "append-comment": {
-      return {
-        ...state,
-        detail: appendJobComment(state.detail, action.comment),
-      };
-    }
-
-    case "insert-visit": {
-      return {
-        ...state,
-        detail: insertJobVisit(state.detail, action.visit),
-      };
-    }
-
     case "set-result": {
       return {
         ...state,
@@ -572,24 +607,64 @@ function jobsDetailStateReducer(
         },
       };
     }
-
     default: {
-      const exhaustiveAction: never = action;
-      return exhaustiveAction;
+      return state;
     }
   }
 }
 
-async function runTrackedJobsDetailOperation<Success>(
-  effect: Effect.Effect<Success, AppApiError>,
+function makeJobsDetailStateStore(
+  initialDetail: JobDetailResponse,
+  dataPlaneSession: DataPlaneSession | undefined,
+  fallbackQueryClient: QueryClient
+): JobsDetailStateStore {
+  if (!dataPlaneSession) {
+    throw new Error("Jobs detail state requires a data-plane session.");
+  }
+
+  const queryClient = dataPlaneSession.queryClient ?? fallbackQueryClient;
+  const detail = getOrCreateJobDetailCollectionState({
+    initialDetail,
+    queryClient,
+    scope: dataPlaneSession.scope,
+    session: dataPlaneSession,
+  });
+  const collaborators = getOrCreateJobCollaboratorsCollectionState({
+    initialCollaborators: [],
+    queryClient,
+    scope: dataPlaneSession.scope,
+    session: dataPlaneSession,
+    workItemId: initialDetail.job.id,
+  });
+
+  return {
+    collaborators,
+    dataPlaneSession,
+    detail,
+    fallbackCollaboratorsRef: {
+      current: [],
+    },
+    fallbackDetailRef: {
+      current: initialDetail,
+    },
+    mutationJournal:
+      dataPlaneSession.mutationJournal ?? createDataPlaneMutationJournal(),
+    queryClient,
+  };
+}
+
+async function runTrackedJobsDetailCommand<Input, Success>(
+  action: DataPlaneCommandAction<Input, Success, AppApiError>,
+  input: Input,
   setResult: (result: JobsAsyncResult) => void,
-  onSuccess: (value: Success) => Promise<void> | void
+  mutationJournal: DataPlaneMutationJournal
 ): Promise<Exit.Exit<Success, AppApiError>> {
   setResult(waitingJobsDetailAsyncResult);
-  const exit = await Effect.runPromiseExit(effect);
+  const exit = await executeDataPlaneCommandAction(action, input, {
+    journal: mutationJournal,
+  });
 
   if (Exit.isSuccess(exit)) {
-    await onSuccess(exit.value);
     setResult(idleJobsDetailAsyncResult);
     return exit;
   }
@@ -792,6 +867,49 @@ function upsertJobCollaborator(
     collaborator,
     ...collaborators.filter((item) => item.id !== collaborator.id),
   ].sort((left, right) => left.roleLabel.localeCompare(right.roleLabel));
+}
+
+async function reconcileLoadedSiteRelatedJobsForJob(
+  store: JobsDetailStateStore,
+  previousSiteId: Job["siteId"],
+  job: Job
+) {
+  if (!store.dataPlaneSession) {
+    return;
+  }
+
+  const nextSiteId = job.siteId;
+  const operations: Promise<void>[] = [];
+
+  if (previousSiteId !== undefined && previousSiteId !== nextSiteId) {
+    const previousState = getSiteRelatedJobsCollectionState({
+      scope: store.dataPlaneSession.scope,
+      session: store.dataPlaneSession,
+      siteId: previousSiteId,
+    });
+
+    if (previousState) {
+      operations.push(
+        deleteSiteRelatedJobCollectionItem(previousState, job.id)
+      );
+    }
+  }
+
+  if (nextSiteId !== undefined) {
+    const nextState = getSiteRelatedJobsCollectionState({
+      scope: store.dataPlaneSession.scope,
+      session: store.dataPlaneSession,
+      siteId: nextSiteId,
+    });
+
+    if (nextState) {
+      operations.push(
+        upsertSiteRelatedJobCollectionItem(nextState, toJobListItem(job))
+      );
+    }
+  }
+
+  await Promise.all(operations);
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {

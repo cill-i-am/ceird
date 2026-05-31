@@ -2,6 +2,8 @@
 import { useRouteContext } from "@tanstack/react-router";
 import * as React from "react";
 
+import type { DataPlaneSeed } from "#/data-plane/bootstrap";
+import { useApplyDataPlaneSeeds } from "#/data-plane/session";
 import { JobsCreateSheet } from "#/features/jobs/jobs-create-sheet";
 import { isCreateJobRouteData } from "#/features/jobs/jobs-detail-route-data";
 import { loadJobDetailRouteData } from "#/features/jobs/jobs-detail-route-loader";
@@ -48,6 +50,7 @@ type AsyncResourceAction<T> =
   | { readonly type: "loading" }
   | { readonly type: "success"; readonly data: T };
 type WorkspaceSheetDomainStatus = "available" | "error" | "loading";
+const EMPTY_DATA_PLANE_SEEDS: readonly DataPlaneSeed<unknown>[] = [];
 
 interface WorkspaceSheetRenderEntry {
   readonly key: string;
@@ -373,12 +376,21 @@ function WorkspaceJobsStateScope({
   >;
   readonly routeContext: ReturnType<typeof useWorkspaceRouteAccess>;
 }) {
+  useApplyDataPlaneSeeds(
+    jobsResource.status === "success"
+      ? jobsResource.data.dataPlaneSeeds
+      : EMPTY_DATA_PLANE_SEEDS
+  );
+
   if (existingJobsViewer !== undefined || jobsResource.status !== "success") {
     return children;
   }
 
+  const dataPlaneScopeKey = `${routeContext.activeOrganizationId}:${jobsResource.data.viewer.userId}:${jobsResource.data.viewer.role}`;
+
   return (
     <JobsStateProvider
+      key={dataPlaneScopeKey}
       activeOrganizationId={routeContext.activeOrganizationId}
       list={jobsResource.data.list}
       options={jobsResource.data.options}
@@ -403,12 +415,21 @@ function WorkspaceSitesStateScope({
     Awaited<ReturnType<typeof loadSitesRouteData>>
   >;
 }) {
+  useApplyDataPlaneSeeds(
+    sitesResource.status === "success"
+      ? sitesResource.data.dataPlaneSeeds
+      : EMPTY_DATA_PLANE_SEEDS
+  );
+
   if (existingSitesViewer !== undefined || sitesResource.status !== "success") {
     return children;
   }
 
+  const dataPlaneScopeKey = `${routeContext.activeOrganizationId}:${sitesResource.data.viewer.userId}:${sitesResource.data.viewer.role}`;
+
   return (
     <SitesStateProvider
+      key={dataPlaneScopeKey}
       activeOrganizationId={routeContext.activeOrganizationId}
       options={sitesResource.data.options}
       queryClient={routeContext.queryClient}
@@ -677,9 +698,9 @@ function WorkspaceSiteDetailSheet({
       drawerKind={drawerKind}
       hasMoreRelatedJobs={resource.data.hasMoreRelatedJobs}
       initialSite={options.sites.find((site) => site.id === siteId) ?? null}
+      initialRelatedJobs={resource.data.relatedJobs}
       nestedSheet={nestedSheet}
       onClose={onClose}
-      relatedJobs={resource.data.relatedJobs}
       sheetLayer={sheetLayer}
       siteId={resource.data.siteId}
       viewer={viewer}

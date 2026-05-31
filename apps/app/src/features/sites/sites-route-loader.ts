@@ -1,6 +1,8 @@
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 import type { QueryClient } from "@tanstack/query-core";
 
+import { applyDataPlaneSeed } from "#/data-plane/bootstrap";
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import {
   assertOrganizationInternalRole,
@@ -9,9 +11,8 @@ import {
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
-import { seedRouteQueryData } from "#/lib/tanstack-db-query";
 
-import { organizationSitesQueryKey } from "./sites-query-keys";
+import { createSitesListSeed } from "./sites-data-plane";
 
 const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   sites: [],
@@ -26,6 +27,7 @@ export async function loadSitesRouteData(
 ) {
   if (organizationAccess.activeOrganizationSync.required) {
     return {
+      dataPlaneSeeds: [],
       options: EMPTY_SITE_OPTIONS,
       viewer: {
         role: "member",
@@ -49,22 +51,24 @@ export async function loadSitesRouteData(
     role: activeRole,
     userId: decodeOrganizationViewerUserId(organizationAccess.currentUserId),
   } satisfies OrganizationViewer;
+  const sitesSeed = createSitesListSeed(
+    createOrganizationDataScope({
+      organizationId: organizationAccess.activeOrganizationId,
+      role: viewer.role,
+      userId: viewer.userId,
+    }),
+    sites,
+    sitesRequestStartedAt
+  );
 
   if (organizationAccess.queryClient) {
-    const seededSites = seedRouteQueryData(
+    const seededSites = applyDataPlaneSeed(
       organizationAccess.queryClient,
-      organizationSitesQueryKey({
-        organizationId: organizationAccess.activeOrganizationId,
-        role: viewer.role,
-        userId: viewer.userId,
-      }),
-      siteOptions.sites,
-      {
-        requestStartedAt: sitesRequestStartedAt,
-      }
+      sitesSeed
     );
 
     return {
+      dataPlaneSeeds: [sitesSeed],
       options: {
         ...siteOptions,
         sites: seededSites,
@@ -74,6 +78,7 @@ export async function loadSitesRouteData(
   }
 
   return {
+    dataPlaneSeeds: [sitesSeed],
     options: siteOptions,
     viewer,
   };

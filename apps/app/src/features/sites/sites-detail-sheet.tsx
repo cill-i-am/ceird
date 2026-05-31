@@ -61,6 +61,7 @@ import type {
 import {
   getSitesAsyncErrorMessage,
   isSitesAsyncFailure,
+  useSiteRelatedJobs,
   useSitesOptions,
   useUpdateSiteMutation,
 } from "./sites-state";
@@ -72,7 +73,7 @@ interface SitesDetailSheetProps {
   readonly initialSite: SiteOption | null;
   readonly nestedSheet?: React.ReactNode;
   readonly onClose?: () => void;
-  readonly relatedJobs?: readonly JobListItem[];
+  readonly initialRelatedJobs?: readonly JobListItem[];
   readonly sheetLayer?: WorkspaceSheetLayer | undefined;
   readonly siteId: SiteIdType;
   readonly viewer: OrganizationViewer;
@@ -111,13 +112,14 @@ export function SitesDetailSheet({
   initialSite,
   nestedSheet,
   onClose,
-  relatedJobs = EMPTY_RELATED_JOBS,
+  initialRelatedJobs = EMPTY_RELATED_JOBS,
   sheetLayer = "active",
   siteId,
   viewer,
   // react-doctor-disable-next-line
 }: SitesDetailSheetProps) {
   const options = useSitesOptions();
+  const relatedJobs = useSiteRelatedJobs(siteId, initialRelatedJobs);
   const currentSite = React.useMemo(
     () => options.sites.find((site) => site.id === siteId) ?? initialSite,
     [initialSite, options.sites, siteId]

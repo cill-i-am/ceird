@@ -78,6 +78,10 @@ import {
 } from "#/components/ui/responsive-dialog";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
+import {
+  getDataPlaneSessionKey,
+  useOptionalDataPlaneSession,
+} from "#/data-plane/session";
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
@@ -173,9 +177,15 @@ export function JobsDetailSheet({
   sheetLayer = "active",
   viewer,
 }: JobsDetailSheetProps) {
+  const dataPlaneSession = useOptionalDataPlaneSession();
+  const dataPlaneScopeKey =
+    dataPlaneSession === undefined
+      ? `${viewer.userId}:${viewer.role}`
+      : getDataPlaneSessionKey(dataPlaneSession.scope);
+
   return (
     <JobsDetailStateProvider
-      key={initialDetail.job.id}
+      key={`${initialDetail.job.id}:${dataPlaneScopeKey}`}
       initialDetail={initialDetail}
     >
       <JobsDetailSheetContent
