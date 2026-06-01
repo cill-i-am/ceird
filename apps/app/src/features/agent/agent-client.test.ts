@@ -1,5 +1,4 @@
-import { AgentThreadId } from "@ceird/agents-core";
-import { AGENT_ACTIONS_MANIFEST } from "@ceird/agents-core";
+import { AGENT_ACTIONS_MANIFEST, AgentThreadId } from "@ceird/agents-core";
 import { Schema } from "effect";
 
 import {
