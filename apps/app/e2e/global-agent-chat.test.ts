@@ -156,6 +156,7 @@ test.describe("global agent chat", () => {
     await expect(page).toHaveURL(/\/jobs$/);
     const issuedAgentInstanceName =
       preparedSession.authorization.agentInstanceName;
+    const issuedAgentHost = new URL(AGENT_ORIGIN).host;
     const issuedToken = preparedSession.authorization.token;
     await expect
       .poll(() =>
@@ -167,16 +168,17 @@ test.describe("global agent chat", () => {
               const url = new URL(rawUrl);
 
               return (
-                url.origin === input.origin &&
+                (url.protocol === "ws:" || url.protocol === "wss:") &&
+                url.host === input.issuedAgentHost &&
                 decodeURIComponent(url.pathname) === expectedPath &&
                 url.searchParams.get("token") === input.issuedToken
               );
             });
           },
           {
+            issuedAgentHost,
             issuedAgentInstanceName,
             issuedToken,
-            origin: AGENT_ORIGIN,
           }
         )
       )
