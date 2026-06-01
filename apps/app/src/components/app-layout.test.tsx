@@ -63,7 +63,7 @@ const {
     }) => ReactElement | null
   >(({ activeOrganizationId, currentOrganizationRole }) =>
     activeOrganizationId && currentOrganizationRole ? (
-      <button type="button">Open Ceird Agent</button>
+      <button type="button">Ask Ceird</button>
     ) : null
   ),
   mockedSidebarInset: vi.fn<
@@ -259,7 +259,7 @@ describe("app layout", () => {
         currentOrganizationRole: "owner",
       });
       expect(
-        screen.getByRole("button", { name: /open ceird agent/i })
+        screen.getByRole("button", { name: /ask ceird/i })
       ).toBeInTheDocument();
 
       rerender(
@@ -279,7 +279,7 @@ describe("app layout", () => {
         currentOrganizationRole: undefined,
       });
       expect(
-        screen.queryByRole("button", { name: /open ceird agent/i })
+        screen.queryByRole("button", { name: /ask ceird/i })
       ).not.toBeInTheDocument();
     }
   );

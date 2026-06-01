@@ -54,7 +54,7 @@ describe("app global command actions", () => {
 
       expectCommandShortcut("Open user settings", ["G", "T"]);
       expect(
-        screen.queryByRole("option", { name: /open ceird agent/i })
+        screen.queryByRole("option", { name: /ask ceird/i })
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", { name: /go to jobs/i })
@@ -92,7 +92,7 @@ describe("app global command actions", () => {
         fireEvent.keyDown(window, { key: "k", metaKey: true });
 
         await user.click(
-          await screen.findByRole("option", { name: /open ceird agent/i })
+          await screen.findByRole("option", { name: /ask ceird/i })
         );
 
         expect(openListener).toHaveBeenCalledOnce();
@@ -121,7 +121,7 @@ describe("app global command actions", () => {
         ).toBeInTheDocument();
       });
       expect(
-        screen.queryByRole("option", { name: /open ceird agent/i })
+        screen.queryByRole("option", { name: /ask ceird/i })
       ).not.toBeInTheDocument();
     }
   );
@@ -156,7 +156,7 @@ describe("app global command actions", () => {
         screen.getByRole("option", { name: /open organization settings/i })
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("option", { name: /open ceird agent/i })
+        screen.queryByRole("option", { name: /ask ceird/i })
       ).not.toBeInTheDocument();
       expectCommandShortcut("Go to Home", ["G", "H"]);
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
@@ -256,9 +256,9 @@ describe("app global command actions", () => {
 
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expect(
-        screen.getByRole("option", { name: /open ceird agent/i })
+        screen.getByRole("option", { name: /ask ceird/i })
       ).toBeInTheDocument();
-      expectCommandShortcut("Open Ceird Agent", ["J"]);
+      expectCommandShortcut("Ask Ceird", ["J"]);
       expect(
         screen.getByRole("option", { name: /open user settings/i })
       ).toBeInTheDocument();

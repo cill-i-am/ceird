@@ -56,14 +56,27 @@ describe("agent repositories", () => {
 
     await applyAllMigrations(testDatabase.url);
     const identity = await seedIdentityRecords(testDatabase.url);
-    const thread = await runAgentEffect(
-      testDatabase.url,
-      AgentThreadsRepository.create({
-        organizationId: identity.organizationId,
-        title: " Quote follow-up ",
-        userId: identity.userId,
-      })
+    const preparedThreads = await Promise.all(
+      [
+        " Quote follow-up ",
+        " Should reuse current ",
+        " Concurrent prepare ",
+      ].map((title) =>
+        runAgentEffect(
+          testDatabase.url,
+          AgentThreadsRepository.getOrCreateCurrent({
+            organizationId: identity.organizationId,
+            title,
+            userId: identity.userId,
+          })
+        )
+      )
     );
+    const [thread] = preparedThreads;
+    if (thread === undefined) {
+      throw new Error("Expected a prepared agent thread");
+    }
+    const preparedThreadIds = new Set(preparedThreads.map((item) => item.id));
     const threads = await runAgentEffect(
       testDatabase.url,
       AgentThreadsRepository.listForUser(
@@ -146,8 +159,13 @@ describe("agent repositories", () => {
       )
     );
 
-    expect(thread.title).toBe("Quote follow-up");
-    expect(threads.map((item) => item.id)).toContain(thread.id);
+    expect(preparedThreadIds.size).toBe(1);
+    expect(threads.map((item) => item.id)).toStrictEqual([thread.id]);
+    expect([
+      "Quote follow-up",
+      "Should reuse current",
+      "Concurrent prepare",
+    ]).toContain(thread.title);
     expect(Option.getOrUndefined(actor)?.actor.role).toBe("owner");
     expect(firstRun.inserted).toBe(true);
     expect(replayedRun.inserted).toBe(false);
@@ -159,6 +177,75 @@ describe("agent repositories", () => {
     expect(lateFailedRun.result).toStrictEqual({ labels: [] });
     expect(freshStaleAttempt.status).toBe("running");
     expect(freshStaleAttempt.errorMessage).toBeNull();
+
+    const archivedThread = await runAgentEffect(
+      testDatabase.url,
+      AgentThreadsRepository.archive(
+        identity.organizationId,
+        identity.userId,
+        thread.id
+      )
+    );
+    const replacementThread = await runAgentEffect(
+      testDatabase.url,
+      AgentThreadsRepository.getOrCreateCurrent({
+        organizationId: identity.organizationId,
+        title: " Replacement current thread ",
+        userId: identity.userId,
+      })
+    );
+    const activeThreadsAfterArchive = await runAgentEffect(
+      testDatabase.url,
+      AgentThreadsRepository.listForUser(
+        identity.organizationId,
+        identity.userId,
+        { limit: 50 }
+      )
+    );
+    const manuallyCreatedThread = await runAgentEffect(
+      testDatabase.url,
+      AgentThreadsRepository.create({
+        organizationId: identity.organizationId,
+        title: " Manually newer active ",
+        userId: identity.userId,
+      })
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      await pool.query(
+        `update agent_threads
+         set updated_at = case
+           when id = $1 then $3::timestamptz
+           when id = $2 then $4::timestamptz
+           else updated_at
+         end
+         where id in ($1, $2)`,
+        [
+          replacementThread.id,
+          manuallyCreatedThread.id,
+          "2026-05-20T10:00:00.000Z",
+          "2026-05-20T10:05:00.000Z",
+        ]
+      );
+    });
+
+    const newestThread = await runAgentEffect(
+      testDatabase.url,
+      AgentThreadsRepository.getOrCreateCurrent({
+        organizationId: identity.organizationId,
+        title: " Should reuse the newest active thread ",
+        userId: identity.userId,
+      })
+    );
+
+    expect(Option.getOrUndefined(archivedThread)?.id).toBe(thread.id);
+    expect(replacementThread.id).not.toBe(thread.id);
+    expect(replacementThread.title).toBe("Replacement current thread");
+    expect(activeThreadsAfterArchive.map((item) => item.id)).toStrictEqual([
+      replacementThread.id,
+    ]);
+    expect(newestThread.id).toBe(manuallyCreatedThread.id);
+    expect(newestThread.title).toBe("Manually newer active");
   });
 });
 

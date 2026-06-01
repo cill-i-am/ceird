@@ -63,7 +63,7 @@ export function AppAgentCommandActions({
               run: requestOpenGlobalAgentChat,
               scope: "global" as const,
               shortcut: HOTKEYS.openAgentChat,
-              title: "Open Ceird Agent",
+              title: "Ask Ceird",
             },
           ]
         : [],

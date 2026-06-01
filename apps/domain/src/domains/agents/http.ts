@@ -21,6 +21,11 @@ const AgentThreadsHandlersLive = HttpApiBuilder.group(
       const agentThreadsService = yield* AgentThreadsService;
 
       return handlers
+        .handle("prepareAgentSession", ({ payload }) =>
+          agentThreadsService
+            .prepareSession(payload)
+            .pipe(observeAgentsOperation("prepareAgentSession"))
+        )
         .handle("listAgentThreads", ({ query }) =>
           agentThreadsService
             .list(query)

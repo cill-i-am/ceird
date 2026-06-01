@@ -9,12 +9,14 @@ import {
   AgentStorageError,
   AgentThreadId,
   buildAgentInstanceName,
+  verifyAgentConnectToken,
 } from "@ceird/agents-core";
 import type { AgentThread } from "@ceird/agents-core";
 import { OrganizationId, UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
+import type { SqlError } from "effect/unstable/sql";
 
 import {
   configProviderFromMap,
@@ -23,6 +25,7 @@ import {
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
 import { AgentActions } from "./actions.js";
 import {
   AgentActionRunsRepository,
@@ -563,6 +566,134 @@ describe("agent threads service", () => {
       tag: AGENT_ACCESS_DENIED_ERROR_TAG,
     });
   });
+
+  it("prepares an idempotent agent session with the current thread, token, and action manifest", async () => {
+    let getOrCreateCurrentCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.prepareSession({ title: " Operator desk " });
+        }),
+        {
+          threadsRepository: {
+            getOrCreateCurrent: (input) =>
+              Effect.sync(() => {
+                getOrCreateCurrentCalls += 1;
+                expect(input).toStrictEqual({
+                  organizationId,
+                  title: " Operator desk ",
+                  userId,
+                });
+
+                return thread;
+              }),
+          },
+        }
+      )
+    );
+
+    expect(getOrCreateCurrentCalls).toBe(1);
+    expect(response.thread).toStrictEqual(thread);
+    expect(response.authorization.agentInstanceName).toBe(
+      thread.agentInstanceName
+    );
+    expect(response.authorization.token).toEqual(expect.any(String));
+    await expect(
+      verifyAgentConnectToken({
+        secret: "agent-secret",
+        token: response.authorization.token,
+      })
+    ).resolves.toBe(response.thread.agentInstanceName);
+    expect(response.manifest.actions.length).toBeGreaterThan(0);
+    expect(response.tokenExpiresInSeconds).toBe(300);
+  });
+
+  it("denies prepare-session before creating or authorizing a thread", async () => {
+    let getOrCreateCurrentCalls = 0;
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .prepareSession({ title: "Operator desk" })
+            .pipe(Effect.flip);
+        }),
+        {
+          organizationAuthorization: {
+            ensureCanViewOrganizationData: () =>
+              Effect.fail(
+                new OrganizationAuthorizationDeniedError({
+                  message: "Cannot view this organization",
+                })
+              ),
+          },
+          threadsRepository: {
+            getOrCreateCurrent: () =>
+              Effect.sync(() => {
+                getOrCreateCurrentCalls += 1;
+
+                return thread;
+              }),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(error.message).toBe("Cannot view this organization");
+    expect(getOrCreateCurrentCalls).toBe(0);
+  });
+
+  it("maps prepare-session repository failures to agent storage errors", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .prepareSession({ title: "Operator desk" })
+            .pipe(Effect.flip);
+        }),
+        {
+          threadsRepository: {
+            getOrCreateCurrent: () => Effect.fail(makeSqlError()),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentStorageError);
+    expect(error).toMatchObject({
+      message: "Agent storage operation failed",
+      operation: "session.prepare",
+    });
+    expect(error.cause).toContain("database unavailable");
+  });
+
+  it("rejects non-positive agent connect token TTL config", async () => {
+    const exit = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.prepareSession({ title: "Operator desk" });
+        }),
+        {},
+        new Map([
+          ["AGENT_INTERNAL_SECRET", "agent-secret"],
+          ["AGENT_CONNECT_TOKEN_TTL_SECONDS", "0"],
+        ])
+      ).pipe(Effect.exit)
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toContain(
+      "AGENT_CONNECT_TOKEN_TTL_SECONDS must be a positive integer"
+    );
+  });
 });
 
 function runAgentThreadsService<Value, Error>(
@@ -571,16 +702,15 @@ function runAgentThreadsService<Value, Error>(
     Error,
     AgentThreadsService | HttpServerRequest.HttpServerRequest
   >,
-  options: AgentThreadsServiceTestOptions = {}
+  options: AgentThreadsServiceTestOptions = {},
+  configValues = new Map<string, string>([
+    ["AGENT_INTERNAL_SECRET", "agent-secret"],
+  ])
 ): Effect.Effect<Value, Error, never> {
   return effect.pipe(
     Effect.provide(AgentThreadsService.DefaultWithoutDependencies),
     Effect.provide(makeAgentThreadsServiceTestLayer(options)),
-    withConfigProvider(
-      configProviderFromMap(
-        new Map([["AGENT_INTERNAL_SECRET", "agent-secret"]])
-      )
-    )
+    withConfigProvider(configProviderFromMap(configValues))
   ) as Effect.Effect<Value, Error, never>;
 }
 
@@ -632,6 +762,7 @@ function makeAgentThreadsServiceTestLayer(
       OrganizationAuthorization,
       OrganizationAuthorization.of({
         ensureCanViewOrganizationData: () => Effect.void,
+        ...options.organizationAuthorization,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
     )
   );
@@ -645,6 +776,16 @@ interface AgentThreadsServiceTestOptions {
   readonly threadsRepository?: Partial<
     ContextService<typeof AgentThreadsRepository>
   >;
+  readonly organizationAuthorization?: Partial<
+    ContextService<typeof OrganizationAuthorization>
+  >;
+}
+
+function makeSqlError(): SqlError.SqlError {
+  return Object.assign(new Error("database unavailable"), {
+    _tag: "SqlError" as const,
+    cause: "database unavailable",
+  }) as unknown as SqlError.SqlError;
 }
 
 type ContextService<Service> = Service extends {

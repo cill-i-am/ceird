@@ -100,6 +100,14 @@ export interface CreateAgentThreadRecordInput {
   readonly userId: UserId;
 }
 
+function buildCurrentThreadLockKey(input: CreateAgentThreadRecordInput) {
+  return JSON.stringify([
+    "agent-current-thread",
+    input.organizationId,
+    input.userId,
+  ]);
+}
+
 export interface AgentThreadActor {
   readonly actor: OrganizationActor;
   readonly thread: AgentThread;
@@ -238,6 +246,63 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         }
       );
 
+      const getOrCreateCurrent = Effect.fn(
+        "AgentThreadsRepository.getOrCreateCurrent"
+      )(function* (input: CreateAgentThreadRecordInput) {
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          input.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("userId", input.userId);
+
+        return yield* sql.withTransaction(
+          Effect.gen(function* () {
+            yield* sql`
+              select pg_advisory_xact_lock(
+                hashtext(${buildCurrentThreadLockKey(input)})
+              )
+            `;
+            const rows = yield* sql<AgentThreadRow>`
+              select *
+              from agent_threads
+              where organization_id = ${input.organizationId}
+                and user_id = ${input.userId}
+                and status = 'active'
+              order by updated_at desc, id desc
+              limit 1
+            `;
+            const existingThread = Option.fromNullishOr(rows[0]).pipe(
+              Option.map(mapThreadRow)
+            );
+
+            return yield* Option.match(existingThread, {
+              onNone: () =>
+                Effect.gen(function* () {
+                  yield* Effect.annotateCurrentSpan(
+                    "agent.threadCreated",
+                    true
+                  );
+
+                  return yield* create(input);
+                }),
+              onSome: (thread) =>
+                Effect.gen(function* () {
+                  yield* Effect.annotateCurrentSpan(
+                    "agent.threadCreated",
+                    false
+                  );
+                  yield* Effect.annotateCurrentSpan(
+                    "agent.threadId",
+                    thread.id
+                  );
+
+                  return thread;
+                }),
+            });
+          })
+        );
+      });
+
       const findActiveForUser = Effect.fn(
         "AgentThreadsRepository.findActiveForUser"
       )(function* (
@@ -354,6 +419,7 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         archive,
         create,
         findActiveForUser,
+        getOrCreateCurrent,
         listForUser,
         resolveActiveThreadActor,
         touchActivity,
@@ -377,6 +443,14 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
     >
   ) =>
     AgentThreadsRepository.use((service) => service.findActiveForUser(...args));
+  static readonly getOrCreateCurrent = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsRepository>["getOrCreateCurrent"]
+    >
+  ) =>
+    AgentThreadsRepository.use((service) =>
+      service.getOrCreateCurrent(...args)
+    );
   static readonly listForUser = (
     ...args: Parameters<
       Context.Service.Shape<typeof AgentThreadsRepository>["listForUser"]

@@ -15,6 +15,7 @@ import {
   AgentThreadListResponseSchema,
   AgentConnectTokenInvalidError,
   CreateAgentThreadInputSchema,
+  PreparedAgentSessionSchema,
   buildAgentInstanceName,
   getAgentActionDefinition,
   getAgentActionManifest,
@@ -35,6 +36,9 @@ const decodeCreateInput = Schema.decodeUnknownSync(
 );
 const decodeListResponse = Schema.decodeUnknownSync(
   AgentThreadListResponseSchema
+);
+const decodePreparedAgentSession = Schema.decodeUnknownSync(
+  PreparedAgentSessionSchema
 );
 const decodeInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 
@@ -275,6 +279,43 @@ describe("@ceird/agents-core", () => {
         ],
       })
     ).toThrow("Expected an ISO-8601 UTC datetime string");
+  });
+
+  it("validates prepared session responses at the HTTP boundary", () => {
+    const thread = {
+      agentInstanceName:
+        "org:org_123:user:user_123:thread:11111111-1111-4111-8111-111111111111",
+      createdAt: "2026-05-18T10:00:00.000Z",
+      id: "11111111-1111-4111-8111-111111111111",
+      lastMessageAt: null,
+      status: "active",
+      title: "New thread",
+      updatedAt: "2026-05-18T10:00:00.000Z",
+    };
+
+    expect(
+      decodePreparedAgentSession({
+        authorization: {
+          agentInstanceName: thread.agentInstanceName,
+          token: "agent-connect-token",
+        },
+        manifest: AGENT_ACTIONS_MANIFEST,
+        thread,
+        tokenExpiresInSeconds: 300,
+      }).tokenExpiresInSeconds
+    ).toBe(300);
+
+    expect(() =>
+      decodePreparedAgentSession({
+        authorization: {
+          agentInstanceName: thread.agentInstanceName,
+          token: "agent-connect-token",
+        },
+        manifest: AGENT_ACTIONS_MANIFEST,
+        thread,
+        tokenExpiresInSeconds: 0,
+      })
+    ).toThrow(/greater than 0/);
   });
 
   it("signs and rejects malformed connect tokens", async () => {

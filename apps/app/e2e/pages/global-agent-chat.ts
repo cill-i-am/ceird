@@ -12,10 +12,10 @@ export class GlobalAgentChatPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.launcher = page.getByRole("button", { name: "Open Ceird Agent" });
-    this.drawer = page.getByRole("dialog", { name: "Ceird Agent" });
+    this.launcher = page.getByRole("button", { name: "Ask Ceird" });
+    this.drawer = page.getByRole("dialog", { name: "Ask Ceird" });
     this.message = this.drawer.getByRole("textbox", {
-      name: "Message Ceird Agent",
+      name: "Message Ask Ceird",
     });
     this.send = this.drawer.getByRole("button", { name: "Send" });
   }
@@ -28,9 +28,9 @@ export class GlobalAgentChatPage {
     await this.expectLauncherReady();
     await expect(async () => {
       await this.launcher.click();
-      await expect(
-        this.page.locator('button[aria-label="Open Ceird Agent"]')
-      ).toHaveAttribute("aria-expanded", "true", { timeout: 1000 });
+      await expect(this.launcher).toHaveAttribute("aria-expanded", "true", {
+        timeout: 1000,
+      });
     }).toPass({ timeout: AGENT_CHAT_TIMEOUT_MS });
     await expect(this.drawer).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
     await expect(this.message).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });

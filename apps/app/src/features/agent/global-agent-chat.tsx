@@ -1,7 +1,8 @@
 "use client";
 
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { Sparkles } from "lucide-react";
+import { AiChat02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import * as React from "react";
 
 import { buttonVariants } from "#/components/ui/button";
@@ -96,15 +97,20 @@ export function GlobalAgentChat({
         type="button"
         className={cn(
           buttonVariants({ size: "sm" }),
-          "fixed right-4 bottom-4 z-30 h-10 rounded-full px-4 shadow-lg shadow-primary/15 sm:right-5 sm:bottom-5"
+          "fixed right-4 bottom-4 z-30 h-10 rounded-full border-border bg-background px-4 text-foreground shadow-lg shadow-foreground/10 hover:bg-muted sm:right-5 sm:bottom-5"
         )}
-        aria-label="Open Ceird Agent"
+        aria-label="Ask Ceird"
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={startAgentChat}
       >
-        <Sparkles className="size-4" aria-hidden="true" />
-        <span>Agent</span>
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={AiChat02Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+        />
+        <span>Ask Ceird</span>
       </button>
 
       {open ? (

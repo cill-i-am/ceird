@@ -145,6 +145,10 @@ export const CreateAgentThreadInputSchema = Schema.Struct({
 export type CreateAgentThreadInput = Schema.Schema.Type<
   typeof CreateAgentThreadInputSchema
 >;
+export const PrepareAgentSessionInputSchema = CreateAgentThreadInputSchema;
+export type PrepareAgentSessionInput = Schema.Schema.Type<
+  typeof PrepareAgentSessionInputSchema
+>;
 
 export const AgentThreadListResponseSchema = Schema.Struct({
   items: Schema.Array(AgentThreadSchema),
@@ -166,6 +170,16 @@ export const AgentConnectAuthorizationSchema = Schema.Struct({
 });
 export type AgentConnectAuthorization = Schema.Schema.Type<
   typeof AgentConnectAuthorizationSchema
+>;
+
+export const PreparedAgentSessionSchema = Schema.Struct({
+  authorization: AgentConnectAuthorizationSchema,
+  manifest: AgentActionManifestResponseSchema,
+  thread: AgentThreadSchema,
+  tokenExpiresInSeconds: Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
+});
+export type PreparedAgentSession = Schema.Schema.Type<
+  typeof PreparedAgentSessionSchema
 >;
 
 export const AgentActionOperationId = Schema.String.pipe(
@@ -201,6 +215,7 @@ export const AGENT_STORAGE_OPERATIONS = [
   "thread.archive",
   "thread.authorizeConnect",
   "thread.touchActivity",
+  "session.prepare",
   "action.manifest",
   "action.run",
   "action.execute",
@@ -270,6 +285,13 @@ export class AgentActionRejectedError extends Schema.TaggedErrorClass<AgentActio
 ) {}
 
 export const AgentThreadsApiGroup = HttpApiGroup.make("agentThreads")
+  .add(
+    HttpApiEndpoint.post("prepareAgentSession", "/agent/session/prepare", {
+      payload: PrepareAgentSessionInputSchema,
+      success: PreparedAgentSessionSchema,
+      error: [AgentAccessDeniedError, AgentStorageError],
+    })
+  )
   .add(
     HttpApiEndpoint.get("listAgentThreads", "/agent/threads", {
       query: AgentThreadListQuerySchema,

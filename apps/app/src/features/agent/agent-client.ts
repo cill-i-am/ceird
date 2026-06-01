@@ -2,6 +2,7 @@
 
 import type {
   AgentConnectAuthorization,
+  PreparedAgentSession,
   AgentThread,
   AgentThreadId,
   AgentThreadListResponse,
@@ -53,6 +54,16 @@ export async function ensureCurrentAgentThread(): Promise<AgentThread> {
   }
 
   return createCurrentAgentThread();
+}
+
+export function prepareCurrentAgentSession(
+  title = DEFAULT_AGENT_THREAD_TITLE
+): Promise<PreparedAgentSession> {
+  return runBrowserAgentApiClient("AgentClient.prepareSession", (client) =>
+    client.agentThreads.prepareAgentSession({
+      payload: { title },
+    })
+  );
 }
 
 export function authorizeCurrentAgentThread(
