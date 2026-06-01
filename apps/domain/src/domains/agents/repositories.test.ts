@@ -72,7 +72,7 @@ describe("agent repositories", () => {
         )
       )
     );
-    const thread = preparedThreads[0];
+    const [thread] = preparedThreads;
     if (thread === undefined) {
       throw new Error("Expected a prepared agent thread");
     }
