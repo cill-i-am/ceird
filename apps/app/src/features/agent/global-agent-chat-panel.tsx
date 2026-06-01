@@ -604,7 +604,7 @@ function CapabilityTile({
   readonly value: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-background px-3 py-3 text-left">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-background p-3 text-left">
       <AgentIcon icon={icon} strokeWidth={2} />
       <div className="flex min-w-0 flex-col gap-1">
         <span className="truncate text-sm font-medium">{label}</span>
@@ -773,7 +773,7 @@ function AgentToolCard({
   readonly toolName: string;
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3">
+    <section className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
@@ -812,7 +812,7 @@ function ApprovalReview({
   readonly onToolApprovalResponse: (response: ToolApprovalResponse) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-md border bg-background px-3 py-3">
+    <div className="flex flex-col gap-3 rounded-md border bg-background p-3">
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium">Review before Ceird acts</span>
         <span className="text-xs text-muted-foreground">
@@ -865,12 +865,12 @@ function ToolPayloadPreview({
 
   return (
     <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2">
-      {input !== undefined ? (
+      {input === undefined ? null : (
         <PayloadBlock label="Input" value={formatPayload(input)} />
-      ) : null}
-      {output !== undefined ? (
+      )}
+      {output === undefined ? null : (
         <PayloadBlock label="Result" value={formatPayload(output)} />
-      ) : null}
+      )}
     </div>
   );
 }
@@ -883,7 +883,7 @@ function PayloadBlock({
   readonly value: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-md border bg-background px-2 py-2">
+    <div className="flex min-w-0 flex-col gap-1 rounded-md border bg-background p-2">
       <span className="font-medium text-muted-foreground">{label}</span>
       <code className="max-h-24 overflow-auto break-words whitespace-pre-wrap text-foreground">
         {value}
