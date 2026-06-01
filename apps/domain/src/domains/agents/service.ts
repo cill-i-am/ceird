@@ -18,9 +18,12 @@ import type {
   AgentActionName,
   AgentActionRunId,
   AgentActionRunStatus,
+  AgentConnectAuthorization,
+  AgentInstanceName,
   AgentThreadListQuery,
   AgentThreadId,
   CreateAgentThreadInput,
+  PrepareAgentSessionInput,
   RunAgentActionInput,
   RunAgentActionResponse,
 } from "@ceird/agents-core";
@@ -40,7 +43,10 @@ import { HttpServerRequest } from "effect/unstable/http";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
-import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
+import {
+  ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
+  ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
+} from "../organizations/errors.js";
 import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
 import { AgentActions } from "./actions.js";
 import { signAgentConnectToken } from "./internal-token.js";
@@ -64,7 +70,10 @@ const AgentRuntimeConfig = Config.all({
     )
   ),
   connectTokenTtlSeconds: Config.int("AGENT_CONNECT_TOKEN_TTL_SECONDS").pipe(
-    Config.withDefault(300)
+    Config.withDefault(300),
+    Config.mapOrFail(
+      decodePositiveIntegerConfig("AGENT_CONNECT_TOKEN_TTL_SECONDS")
+    )
   ),
   internalSecret: Config.string("AGENT_INTERNAL_SECRET"),
 }).pipe(Effect.orDie);
@@ -105,9 +114,45 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
           yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
           yield* authorization
             .ensureCanViewOrganizationData(currentActor)
-            .pipe(Effect.mapError(mapAuthorizationDenied));
+            .pipe(mapAuthorizationDenied);
 
           return AGENT_ACTIONS_MANIFEST;
+        }
+      );
+
+      const prepareSession = Effect.fn("AgentThreadsService.prepareSession")(
+        function* (input: PrepareAgentSessionInput) {
+          const currentActor = yield* loadActor("session.prepare");
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            currentActor.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("actorUserId", currentActor.userId);
+          yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
+          yield* authorization
+            .ensureCanViewOrganizationData(currentActor)
+            .pipe(mapAuthorizationDenied);
+
+          const thread = yield* threadsRepository
+            .getOrCreateCurrent({
+              organizationId: currentActor.organizationId,
+              title: input.title,
+              userId: currentActor.userId,
+            })
+            .pipe(Effect.catchTag("SqlError", failStorage("session.prepare")));
+          yield* Effect.annotateCurrentSpan("agent.threadId", thread.id);
+          const authorizationResponse = yield* signAgentAuthorization({
+            agentInstanceName: thread.agentInstanceName,
+            config,
+            operation: "session.prepare",
+          });
+
+          return {
+            authorization: authorizationResponse,
+            manifest: AGENT_ACTIONS_MANIFEST,
+            thread,
+            tokenExpiresInSeconds: config.connectTokenTtlSeconds,
+          } as const;
         }
       );
 
@@ -125,7 +170,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         yield* Effect.annotateCurrentSpan("agent.threadLimit", limit);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(mapAuthorizationDenied);
 
         const items = yield* threadsRepository
           .listForUser(currentActor.organizationId, currentActor.userId, {
@@ -149,7 +194,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(mapAuthorizationDenied);
 
         const item = yield* threadsRepository
           .create({
@@ -176,7 +221,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(mapAuthorizationDenied);
 
         const result = yield* threadsRepository
           .archive(currentActor.organizationId, currentActor.userId, threadId)
@@ -210,7 +255,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         yield* Effect.annotateCurrentSpan("actorRole", currentActor.role);
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
-          .pipe(Effect.mapError(mapAuthorizationDenied));
+          .pipe(mapAuthorizationDenied);
 
         const thread = yield* threadsRepository
           .findActiveForUser(
@@ -232,25 +277,13 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
           );
         }
 
-        const token = yield* Effect.tryPromise({
-          catch: (error) =>
-            new AgentStorageError({
-              cause: formatUnknownCause(error),
-              message: "Agent connect token signing failed",
-              operation: "thread.authorizeConnect",
-            }),
-          try: () =>
-            signAgentConnectToken({
-              agentInstanceName: thread.agentInstanceName,
-              secret: config.internalSecret,
-              ttlSeconds: config.connectTokenTtlSeconds,
-            }),
+        const authorizationResponse = yield* signAgentAuthorization({
+          agentInstanceName: thread.agentInstanceName,
+          config,
+          operation: "thread.authorizeConnect",
         });
 
-        return {
-          agentInstanceName: thread.agentInstanceName,
-          token,
-        } as const;
+        return authorizationResponse;
       });
 
       const touchActivity = Effect.fn("AgentThreadsService.touchActivity")(
@@ -414,6 +447,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         create,
         getActions,
         list,
+        prepareSession,
         runAction,
         touchActivity,
       };
@@ -445,6 +479,11 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
       Context.Service.Shape<typeof AgentThreadsService>["list"]
     >
   ) => AgentThreadsService.use((service) => service.list(...args));
+  static readonly prepareSession = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof AgentThreadsService>["prepareSession"]
+    >
+  ) => AgentThreadsService.use((service) => service.prepareSession(...args));
   static readonly runAction = (
     ...args: Parameters<
       Context.Service.Shape<typeof AgentThreadsService>["runAction"]
@@ -476,8 +515,18 @@ const mapAgentActorErrors = mapOrganizationActorResolutionErrors(
   (message) => new AgentAccessDeniedError({ message })
 );
 
-function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
-  return new AgentAccessDeniedError({ message: error.message });
+function mapAuthorizationDenied<Value, Requirements>(
+  effect: Effect.Effect<
+    Value,
+    OrganizationAuthorizationDeniedError,
+    Requirements
+  >
+): Effect.Effect<Value, AgentAccessDeniedError, Requirements> {
+  return effect.pipe(
+    Effect.catchTag(ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG, (error) =>
+      Effect.fail(new AgentAccessDeniedError({ message: error.message }))
+    )
+  );
 }
 
 function failStorage(operation: AgentStorageOperation) {
@@ -487,6 +536,44 @@ function failStorage(operation: AgentStorageOperation) {
         cause: formatUnknownCause(error),
         message: "Agent storage operation failed",
         operation,
+      })
+    );
+}
+
+function signAgentAuthorization(input: {
+  readonly agentInstanceName: AgentInstanceName;
+  readonly config: {
+    readonly connectTokenTtlSeconds: number;
+    readonly internalSecret: string;
+  };
+  readonly operation: AgentStorageOperation;
+}): Effect.Effect<AgentConnectAuthorization, AgentStorageError> {
+  return Effect.tryPromise({
+    catch: (error) =>
+      new AgentStorageError({
+        cause: formatUnknownCause(error),
+        message: "Agent connect token signing failed",
+        operation: input.operation,
+      }),
+    try: () =>
+      signAgentConnectToken({
+        agentInstanceName: input.agentInstanceName,
+        secret: input.config.internalSecret,
+        ttlSeconds: input.config.connectTokenTtlSeconds,
+      }),
+  })
+    .pipe(
+      Effect.map((token) => ({
+        agentInstanceName: input.agentInstanceName,
+        token,
+      }))
+    )
+    .pipe(
+      Effect.withSpan("AgentThreadsService.signAgentAuthorization", {
+        attributes: {
+          "agent.tokenTtlSeconds": input.config.connectTokenTtlSeconds,
+          operation: input.operation,
+        },
       })
     );
 }

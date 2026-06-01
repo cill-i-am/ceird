@@ -102,6 +102,7 @@ The domain Worker owns the durable product side of agents:
 | Method | Path                                         | Purpose                                                                                          |
 | ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `GET`  | `/agent/actions`                             | Return presentation-safe shared action manifest metadata for authenticated organization clients. |
+| `POST` | `/agent/session/prepare`                     | Idempotently prepare the current chat session with thread, action manifest, and connect token.   |
 | `GET`  | `/agent/threads`                             | List a user's threads in the active org.                                                         |
 | `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.                                                      |
 | `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                                                            |
@@ -116,12 +117,13 @@ Public agent chat traffic goes to:
 | `*`    | `/agents/CeirdAgent/:agentInstanceName` | Route to the scoped Agent instance. |
 
 The browser app does not construct agent instance names or connect tokens
-itself. Its global chat surface calls the authenticated domain Agent thread API
-to list/create the current user's thread and then calls
-`POST /agent/threads/:threadId/authorize` immediately before connecting to the
-Agent Worker. The Agent Worker HTTP/WebSocket path owns chat transport, while
-all product reads, writes, destructive operations, idempotency, and audit still
-flow through private domain action execution.
+itself. Its global chat surface calls `POST /agent/session/prepare` to
+idempotently get the current user's active thread, the public action manifest,
+and an initial short-lived connect token in one authenticated request. It uses
+`POST /agent/threads/:threadId/authorize` only for later token refreshes before
+reconnecting to the Agent Worker. The Agent Worker HTTP/WebSocket path owns chat
+transport, while all product reads, writes, destructive operations,
+idempotency, and audit still flow through private domain action execution.
 
 The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
 Agent route accepts a short-lived connect token as a bearer token or `token`

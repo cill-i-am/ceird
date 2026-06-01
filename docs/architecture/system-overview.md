@@ -95,14 +95,17 @@ actor resolution, and authorization rules run against the same services as the
 HTTP API.
 
 Agent threads are domain-owned records keyed by organization, user, and thread.
-The domain Worker creates/list/archives threads, issues short-lived connect
-tokens, and records action runs with an operation id. The Agent Worker verifies
-the connect token before routing to the `CeirdAgent` Durable Object instance,
-keeps live chat/runtime state in the Agent store, touches thread activity in
-the domain Worker for each chat turn, and executes Ceird tools by calling the
-domain Worker's internal action API. Read tools are model-available by default;
-mutating tools are gated until a client confirmation flow can approve them
-outside the model prompt. Mutating actions use the domain action-run ledger for
+The domain Worker prepares the current browser session by atomically finding or
+creating the user's active thread, returning the public action manifest, and
+issuing an initial short-lived connect token. It also creates/lists/archives
+threads, refreshes connect tokens, and records action runs with an operation id.
+The Agent Worker verifies the connect token before routing to the `CeirdAgent`
+Durable Object instance, keeps live chat/runtime state in the Agent store,
+touches thread activity in the domain Worker for each chat turn, and executes
+Ceird tools by calling the domain Worker's internal action API. Read tools are
+model-available by default; mutating tools are gated until a client
+confirmation flow can approve them outside the model prompt. Mutating actions
+use the domain action-run ledger for
 idempotent replay protection and reuse the same authorization and
 activity-recording paths as the HTTP API. The ledger is a small begin/complete
 record, not an outer transaction around the whole action; domain services keep

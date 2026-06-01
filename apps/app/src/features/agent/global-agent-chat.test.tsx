@@ -1,3 +1,4 @@
+import { AGENT_ACTIONS_MANIFEST } from "@ceird/agents-core";
 import type * as AiChatReactModule from "@cloudflare/ai-chat/react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,6 +14,9 @@ import { GlobalAgentChat } from "./global-agent-chat";
 
 type TestAgentThread = Awaited<
   ReturnType<typeof AgentClientModule.ensureCurrentAgentThread>
+>;
+type TestPreparedAgentSession = Awaited<
+  ReturnType<typeof AgentClientModule.prepareCurrentAgentSession>
 >;
 
 const thread: TestAgentThread = {
@@ -34,6 +38,7 @@ const {
   mockedAuthorizeCurrentAgentThread,
   mockedAddToolApprovalResponse,
   mockedEnsureCurrentAgentThread,
+  mockedPrepareCurrentAgentSession,
   mockedResolveAgentHost,
   mockedSendMessage,
   mockedUseAgent,
@@ -47,6 +52,8 @@ const {
     >(),
   mockedEnsureCurrentAgentThread:
     vi.fn<typeof AgentClientModule.ensureCurrentAgentThread>(),
+  mockedPrepareCurrentAgentSession:
+    vi.fn<typeof AgentClientModule.prepareCurrentAgentSession>(),
   mockedResolveAgentHost: vi.fn<typeof AgentOriginModule.resolveAgentHost>(),
   mockedSendMessage:
     vi.fn<(message: { readonly text: string }) => Promise<void>>(),
@@ -57,6 +64,7 @@ const {
 vi.mock(import("./agent-client"), () => ({
   authorizeCurrentAgentThread: mockedAuthorizeCurrentAgentThread,
   ensureCurrentAgentThread: mockedEnsureCurrentAgentThread,
+  prepareCurrentAgentSession: mockedPrepareCurrentAgentSession,
 }));
 
 vi.mock(import("#/lib/agent-origin"), () => ({
@@ -74,10 +82,23 @@ vi.mock(import("@cloudflare/ai-chat/react"), () => {
     part.input) as typeof AiChatReactModule.getToolInput;
   const getToolOutput = ((part: { readonly output?: unknown }) =>
     part.output) as typeof AiChatReactModule.getToolOutput;
-  const getToolPartState = ((part: { readonly state?: string }) =>
-    part.state === "approval-requested"
-      ? "waiting-approval"
-      : "complete") as typeof AiChatReactModule.getToolPartState;
+  const getToolPartState = ((part: { readonly state?: string }) => {
+    switch (part.state) {
+      case "approval-requested": {
+        return "waiting-approval";
+      }
+      case "approved":
+      case "denied":
+      case "error":
+      case "loading":
+      case "streaming": {
+        return part.state;
+      }
+      default: {
+        return "complete";
+      }
+    }
+  }) as typeof AiChatReactModule.getToolPartState;
 
   return {
     getToolApproval,
@@ -130,11 +151,22 @@ vi.mock(import("#/components/ui/drawer"), async (importActual) => {
 
 describe("global agent chat", () => {
   beforeEach(() => {
+    const preparedSession = {
+      authorization: {
+        agentInstanceName: thread.agentInstanceName,
+        token: "agent-connect-token",
+      },
+      manifest: AGENT_ACTIONS_MANIFEST,
+      thread,
+      tokenExpiresInSeconds: 300,
+    } satisfies TestPreparedAgentSession;
+
     mockedAuthorizeCurrentAgentThread.mockResolvedValue({
       agentInstanceName: thread.agentInstanceName,
       token: "agent-connect-token",
     });
     mockedEnsureCurrentAgentThread.mockResolvedValue(thread);
+    mockedPrepareCurrentAgentSession.mockResolvedValue(preparedSession);
     mockedResolveAgentHost.mockReturnValue("agent.example.com");
     mockedSendMessage.mockImplementation(async () => {});
     mockedUseAgent.mockReturnValue({
@@ -179,7 +211,7 @@ describe("global agent chat", () => {
     render(<GlobalAgentChat activeOrganizationId={null} />);
 
     expect(
-      screen.queryByRole("button", { name: /open ceird agent/i })
+      screen.queryByRole("button", { name: /ask ceird/i })
     ).not.toBeInTheDocument();
   });
 
@@ -187,7 +219,7 @@ describe("global agent chat", () => {
     render(<GlobalAgentChat activeOrganizationId={"org_123" as never} />);
 
     expect(
-      screen.queryByRole("button", { name: /open ceird agent/i })
+      screen.queryByRole("button", { name: /ask ceird/i })
     ).not.toBeInTheDocument();
   });
 
@@ -200,9 +232,10 @@ describe("global agent chat", () => {
 
     expect(mockedEnsureCurrentAgentThread).not.toHaveBeenCalled();
     expect(mockedAuthorizeCurrentAgentThread).not.toHaveBeenCalled();
+    expect(mockedPrepareCurrentAgentSession).not.toHaveBeenCalled();
   });
 
-  it("opens one app-level drawer and authorizes the org user thread", async () => {
+  it("opens one app-level drawer and prepares a single org agent session", async () => {
     const user = userEvent.setup();
     render(
       <GlobalAgentChat
@@ -211,12 +244,15 @@ describe("global agent chat", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open ceird agent/i }));
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
-      screen.findByRole("heading", { name: /ceird agent/i })
+      screen.findByRole("heading", { name: /ask ceird/i })
     ).resolves.toBeVisible();
-    expect(mockedEnsureCurrentAgentThread).toHaveBeenCalledOnce();
+    expect(mockedPrepareCurrentAgentSession).toHaveBeenCalledOnce();
+    expect(screen.getByText(/owner access/i)).toBeVisible();
+    const workspaceBadges = await screen.findAllByText("Read workspace");
+    expect(workspaceBadges.length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(mockedUseAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -247,6 +283,14 @@ describe("global agent chat", () => {
       token: "agent-connect-token-refreshed",
     });
     expect(mockedAuthorizeCurrentAgentThread).toHaveBeenCalledWith(thread.id);
+    mockedAuthorizeCurrentAgentThread.mockResolvedValueOnce({
+      agentInstanceName:
+        "org:org_123:user:user_123:thread:22222222-2222-4222-8222-222222222222" as TestAgentThread["agentInstanceName"],
+      token: "wrong-thread-token",
+    });
+    await expect(refreshQuery()).rejects.toThrow(
+      "Agent authorization returned a different thread."
+    );
     const useAgentChatOptions = mockedUseAgentChat.mock.calls.at(-1)?.[0];
     expect(useAgentChatOptions?.getInitialMessages).toBeUndefined();
   });
@@ -261,29 +305,26 @@ describe("global agent chat", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open ceird agent/i }));
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
       screen.findByText(/agent worker origin is not configured/i)
     ).resolves.toBeVisible();
-    expect(mockedEnsureCurrentAgentThread).not.toHaveBeenCalled();
+    expect(mockedPrepareCurrentAgentSession).not.toHaveBeenCalled();
 
     mockedResolveAgentHost.mockReturnValue("agent.example.com");
     await user.click(screen.getByRole("button", { name: /retry/i }));
 
     await waitFor(() => {
-      expect(mockedEnsureCurrentAgentThread).toHaveBeenCalledOnce();
+      expect(mockedPrepareCurrentAgentSession).toHaveBeenCalledOnce();
     });
   });
 
   it("keeps authorization failures inside the retryable drawer state", async () => {
     const user = userEvent.setup();
-    mockedAuthorizeCurrentAgentThread
-      .mockRejectedValueOnce(new Error("Agent authorization failed."))
-      .mockResolvedValueOnce({
-        agentInstanceName: thread.agentInstanceName,
-        token: "agent-connect-token",
-      });
+    mockedPrepareCurrentAgentSession.mockRejectedValueOnce(
+      new Error("Agent authorization failed.")
+    );
     render(
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
@@ -291,12 +332,22 @@ describe("global agent chat", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open ceird agent/i }));
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
       screen.findByText("Agent authorization failed.")
     ).resolves.toBeVisible();
     expect(mockedUseAgent).not.toHaveBeenCalled();
+
+    mockedPrepareCurrentAgentSession.mockResolvedValueOnce({
+      authorization: {
+        agentInstanceName: thread.agentInstanceName,
+        token: "agent-connect-token",
+      },
+      manifest: AGENT_ACTIONS_MANIFEST,
+      thread,
+      tokenExpiresInSeconds: 300,
+    });
 
     await user.click(screen.getByRole("button", { name: /retry/i }));
 
@@ -318,9 +369,13 @@ describe("global agent chat", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open ceird agent/i }));
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
+    expect(within(drawer).getByRole("log")).toHaveAttribute(
+      "aria-live",
+      "polite"
+    );
     await expect(
       within(drawer).findByText("Add a label to the boiler job")
     ).resolves.toBeVisible();
@@ -328,9 +383,10 @@ describe("global agent chat", () => {
       within(drawer).getByText("I can do that. Which label?")
     ).toBeVisible();
     expect(within(drawer).getByText(/jobs.assignLabel/i)).toBeVisible();
+    expect(within(drawer).getByText(/tool completed/i)).toBeVisible();
 
     await user.type(
-      within(drawer).getByRole("textbox", { name: /message ceird agent/i }),
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i }),
       "Use the urgent label"
     );
     await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
@@ -341,7 +397,7 @@ describe("global agent chat", () => {
       });
     });
     expect(
-      within(drawer).getByRole("textbox", { name: /message ceird agent/i })
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i })
     ).toHaveValue("");
   });
 
@@ -377,11 +433,11 @@ describe("global agent chat", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open ceird agent/i }));
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
-    expect(within(drawer).getByText("deleteLabel")).toBeVisible();
-    expect(within(drawer).getByText("Approval needed")).toBeVisible();
+    expect(within(drawer).getByText("Approval required")).toBeVisible();
+    expect(within(drawer).getByText(/review before ceird acts/i)).toBeVisible();
 
     await user.click(within(drawer).getByRole("button", { name: /approve/i }));
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
@@ -394,5 +450,49 @@ describe("global agent chat", () => {
       approved: false,
       id: "approval-delete-label",
     });
+  });
+
+  it("does not show approval controls without an approval decision id", async () => {
+    const user = userEvent.setup();
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isStreaming: false,
+      messages: [
+        {
+          id: "message-missing-approval-id",
+          parts: [
+            {
+              input: { labelId: "label_123" },
+              state: "approval-requested",
+              toolName: "deleteLabel",
+              type: "tool-deleteLabel",
+            },
+          ],
+          role: "assistant",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    expect(within(drawer).getByText("Approval required")).toBeVisible();
+    expect(
+      within(drawer).queryByText(/review before ceird acts/i)
+    ).not.toBeInTheDocument();
+    expect(
+      within(drawer).queryByRole("button", { name: /approve/i })
+    ).not.toBeInTheDocument();
+    expect(within(drawer).getByText(/label_123/)).toBeVisible();
   });
 });

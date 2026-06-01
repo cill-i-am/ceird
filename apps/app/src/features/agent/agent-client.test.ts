@@ -1,9 +1,11 @@
 import { AgentThreadId } from "@ceird/agents-core";
+import { AGENT_ACTIONS_MANIFEST } from "@ceird/agents-core";
 import { Schema } from "effect";
 
 import {
   ensureCurrentAgentThread,
   authorizeCurrentAgentThread,
+  prepareCurrentAgentSession,
 } from "./agent-client";
 
 const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
@@ -101,5 +103,39 @@ describe("agent client", () => {
     );
     expect(requestInit?.method).toBe("POST");
     expect(requestInit?.credentials).toBe("include");
+  });
+
+  it("prepares the current agent session in one idempotent request", async () => {
+    vi.stubEnv("VITE_API_ORIGIN", "http://127.0.0.1:3001");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        authorization: {
+          agentInstanceName: existingThread.agentInstanceName,
+          token: "agent-connect-token",
+        },
+        manifest: AGENT_ACTIONS_MANIFEST,
+        thread: existingThread,
+        tokenExpiresInSeconds: 300,
+      })
+    );
+
+    await expect(prepareCurrentAgentSession()).resolves.toStrictEqual({
+      authorization: {
+        agentInstanceName: existingThread.agentInstanceName,
+        token: "agent-connect-token",
+      },
+      manifest: AGENT_ACTIONS_MANIFEST,
+      thread: existingThread,
+      tokenExpiresInSeconds: 300,
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toBe("http://127.0.0.1:3001/agent/session/prepare");
+    expect(requestInit?.method).toBe("POST");
+    expect(requestInit?.credentials).toBe("include");
+    expect(new TextDecoder().decode(requestInit?.body as Uint8Array)).toBe(
+      JSON.stringify({ title: "New conversation" })
+    );
   });
 });

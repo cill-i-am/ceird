@@ -139,11 +139,13 @@ intentionally small; it lazy-loads
 drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the Agent API
 client out of normal authenticated page startup. Desktop opens a right-side
 drawer and mobile uses the existing bottom drawer behavior. The browser app
-prepares or reuses the current user's active thread through the Agent thread
-API, authorizes that thread with a short-lived connect token, and then connects
-to the Agent Worker. Product mutations still execute only through the Agent
+prepares or reuses the current user's active thread through
+`POST /agent/session/prepare`, which returns the thread, public action
+manifest, and initial short-lived connect token before the drawer connects to
+the Agent Worker. Later reconnects refresh the token through the thread
+authorization endpoint. Product mutations still execute only through the Agent
 Worker and private domain action registry; the app chat surface owns
-presentation, thread selection, and connection setup.
+presentation, approval review, thread selection, and connection setup.
 
 Shared mutation feedback uses a short minimum pending duration in
 `apps/app/src/lib/mutation-feedback.ts`. Keep that default below a perceptual
@@ -195,9 +197,9 @@ Domain API access is contract-based:
 
 - `features/api/app-api-client.ts` composes the app-wide Effect client,
   including Agent thread and action groups from `@ceird/agents-core`.
-- `features/agent/agent-client.ts` uses that app-wide client to list/create
-  user threads and authorize Agent Worker connections for the current active
-  organization.
+- `features/agent/agent-client.ts` uses that app-wide client to prepare the
+  current Agent session, keep legacy thread helpers available, and authorize
+  Agent Worker reconnects for the current active organization.
 - `features/api/app-api-client.ts` builds a composed Effect `HttpApiClient`
   from jobs, labels, sites, agent, and activity-facing API groups exported by
   the shared core packages. App code imports site-owned DTOs from

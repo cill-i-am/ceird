@@ -1,5 +1,7 @@
+import { PreparedAgentSessionSchema } from "@ceird/agents-core";
 import { expect, test } from "@playwright/test";
 import type { Page, Response } from "@playwright/test";
+import { Schema } from "effect";
 
 import { createSignedInOrganization } from "./helpers/auth-session";
 import { GlobalAgentChatPage } from "./pages/global-agent-chat";
@@ -7,6 +9,9 @@ import { JobsPage } from "./pages/jobs-page";
 import { AGENT_ORIGIN, API_ORIGIN } from "./test-urls";
 
 const GLOBAL_AGENT_CHAT_TIMEOUT_MS = 120_000;
+const decodePreparedAgentSession = Schema.decodeUnknownSync(
+  PreparedAgentSessionSchema
+);
 
 declare global {
   interface Window {
@@ -67,44 +72,14 @@ async function installFakeAgentWebSocket(page: Page) {
   });
 }
 
-function waitForAgentThreadList(page: Page): Promise<Response> {
+function waitForAgentSessionPrepare(page: Page): Promise<Response> {
   return page.waitForResponse(
     (response) => {
       const url = new URL(response.url());
 
       return (
         url.origin === API_ORIGIN &&
-        url.pathname === "/agent/threads" &&
-        response.request().method() === "GET"
-      );
-    },
-    { timeout: GLOBAL_AGENT_CHAT_TIMEOUT_MS }
-  );
-}
-
-function waitForAgentThreadCreate(page: Page): Promise<Response> {
-  return page.waitForResponse(
-    (response) => {
-      const url = new URL(response.url());
-
-      return (
-        url.origin === API_ORIGIN &&
-        url.pathname === "/agent/threads" &&
-        response.request().method() === "POST"
-      );
-    },
-    { timeout: GLOBAL_AGENT_CHAT_TIMEOUT_MS }
-  );
-}
-
-function waitForAgentThreadAuthorize(page: Page): Promise<Response> {
-  return page.waitForResponse(
-    (response) => {
-      const url = new URL(response.url());
-
-      return (
-        url.origin === API_ORIGIN &&
-        /^\/agent\/threads\/[0-9a-f-]{36}\/authorize$/.test(url.pathname) &&
+        url.pathname === "/agent/session/prepare" &&
         response.request().method() === "POST"
       );
     },
@@ -119,9 +94,26 @@ test.describe("global agent chat", () => {
     page,
   }) => {
     const agentHttpMessageRequests: string[] = [];
+    const agentSessionPrepareRequests: string[] = [];
+    const legacyAgentThreadRequests: string[] = [];
 
     page.on("request", (request) => {
       const url = new URL(request.url());
+
+      if (
+        url.origin === API_ORIGIN &&
+        url.pathname === "/agent/session/prepare" &&
+        request.method() === "POST"
+      ) {
+        agentSessionPrepareRequests.push(request.url());
+      }
+
+      if (
+        url.origin === API_ORIGIN &&
+        url.pathname.startsWith("/agent/threads")
+      ) {
+        legacyAgentThreadRequests.push(request.url());
+      }
 
       if (
         url.origin === AGENT_ORIGIN &&
@@ -142,30 +134,29 @@ test.describe("global agent chat", () => {
     const agentChat = new GlobalAgentChatPage(page);
     await agentChat.expectLauncherReady();
     await installFakeAgentWebSocket(page);
-    const threadListResponse = waitForAgentThreadList(page);
-    const threadCreateResponse = waitForAgentThreadCreate(page);
-    const threadAuthorizeResponse = waitForAgentThreadAuthorize(page);
+    const sessionPrepareResponse = waitForAgentSessionPrepare(page);
 
     await agentChat.open();
 
-    const listResponse = await threadListResponse;
-    const createResponse = await threadCreateResponse;
-
-    expect(listResponse.ok()).toBe(true);
-    expect(createResponse.ok()).toBe(true);
-    const authorizeResponse = await threadAuthorizeResponse;
-    expect(authorizeResponse.ok()).toBe(true);
-    const authorization = (await authorizeResponse.json()) as {
-      readonly agentInstanceName?: unknown;
-      readonly token?: unknown;
-    };
-    expect(authorization.agentInstanceName).toEqual(
+    const prepareResponse = await sessionPrepareResponse;
+    expect(prepareResponse.ok()).toBe(true);
+    expect(agentSessionPrepareRequests).toHaveLength(1);
+    expect(legacyAgentThreadRequests).toStrictEqual([]);
+    const preparedSession = decodePreparedAgentSession(
+      await prepareResponse.json()
+    );
+    expect(preparedSession.authorization.agentInstanceName).toEqual(
       expect.stringMatching(/^org:.+:user:.+:thread:[0-9a-f-]{36}$/)
     );
-    expect(authorization.token).toEqual(expect.any(String));
+    expect(preparedSession.authorization.token).toEqual(expect.any(String));
+    expect(preparedSession.thread.id).toEqual(
+      expect.stringMatching(/^[0-9a-f-]{36}$/)
+    );
+    expect(preparedSession.manifest.actions.length).toBeGreaterThan(0);
     await expect(page).toHaveURL(/\/jobs$/);
-    const issuedAgentInstanceName = String(authorization.agentInstanceName);
-    const issuedToken = String(authorization.token);
+    const issuedAgentInstanceName =
+      preparedSession.authorization.agentInstanceName;
+    const issuedToken = preparedSession.authorization.token;
     await expect
       .poll(() =>
         page.evaluate(
@@ -176,6 +167,7 @@ test.describe("global agent chat", () => {
               const url = new URL(rawUrl);
 
               return (
+                url.origin === input.origin &&
                 decodeURIComponent(url.pathname) === expectedPath &&
                 url.searchParams.get("token") === input.issuedToken
               );

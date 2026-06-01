@@ -62,7 +62,7 @@ export const HOTKEYS = {
     group: "Agent",
     hotkey: "Mod+J",
     id: "openAgentChat",
-    label: "Open Ceird Agent",
+    label: "Ask Ceird",
     scope: "global",
     when: "Organization is active",
   },
