@@ -235,21 +235,26 @@ jobs:
       - name: Build
         run: pnpm build
 
-  staging-deploy:
+  cloud-e2e-deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: Deploy staging
+    name: Deploy cloud E2E
     runs-on: ubuntu-latest
-    # Reuse the existing non-production deploy environment for credentials;
-    # STAGING_STAGE controls the actual Alchemy resources and hostnames.
+    # Reuse the existing non-production deploy environment for credentials.
+    # CI_STAGE is intentionally ephemeral and destroyed after E2E finishes.
     environment: preview-deploy
     needs:
       - build
     env:
-      PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
-      PLAYWRIGHT_API_URL: https://api.staging.ceird.app
-      PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
-      PLAYWRIGHT_TENANT_URL: https://staging-tenant-health--staging.ceird.app
-      STAGING_STAGE: staging
+      AUTH_RATE_LIMIT_ENABLED: "false"
+      CEIRD_AGENT_HOSTNAME: agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
+      PLAYWRIGHT_AGENT_URL: https://agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_API_URL: https://api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_BASE_URL: https://app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_TENANT_URL: https://ci-tenant-health--ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
 
     steps:
       - name: Checkout
@@ -274,11 +279,11 @@ jobs:
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
 
-      - name: Validate staging stage
+      - name: Validate CI stage
         run: |
           set -euo pipefail
-          if [[ "$STAGING_STAGE" != "staging" ]]; then
-            echo "Refusing to deploy unexpected staging stage: $STAGING_STAGE"
+          if [[ ! "$CI_STAGE" =~ ^ci-[0-9]+-[0-9]+$ ]]; then
+            echo "Refusing to deploy unexpected CI stage: $CI_STAGE"
             exit 1
           fi
 
@@ -318,19 +323,18 @@ jobs:
         env:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
-      - name: Deploy staging
-        run: pnpm alchemy deploy --stage "$STAGING_STAGE" --yes
+      - name: Deploy cloud E2E
+        run: pnpm alchemy deploy --stage "$CI_STAGE" --yes
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
-          AUTH_RATE_LIMIT_ENABLED: "false"
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
 
-      - name: Wait for staging health
+      - name: Wait for CI deploy health
         run: |
           set -euo pipefail
 
@@ -349,7 +353,7 @@ jobs:
                 return 1
               fi
 
-              echo "$label health check attempt $attempt failed; waiting for staging route and TLS propagation"
+              echo "$label health check attempt $attempt failed; waiting for CI deploy route and TLS propagation"
               sleep 5
             done
           }
@@ -365,8 +369,8 @@ jobs:
 
               suffix="$(date +%s)-$RANDOM-$attempt"
               cookie_jar="$(mktemp)"
-              signup_payload=$(printf '{"email":"staging-health-%s@example.com","password":"password123","name":"Staging Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
-              organization_payload=$(printf '{"name":"Staging Health %s","slug":"staging-health-%s"}' "$suffix" "$suffix")
+              signup_payload=$(printf '{"email":"ci-health-%s@example.com","password":"password123","name":"CI Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+              organization_payload=$(printf '{"name":"CI Health %s","slug":"ci-health-%s"}' "$suffix" "$suffix")
 
               if curl --fail --silent --show-error --max-time 10 \
                 -c "$cookie_jar" \
@@ -414,7 +418,7 @@ jobs:
               suffix="$(date +%s)-$RANDOM-$attempt"
               cookie_jar="$(mktemp)"
               headers_file="$(mktemp)"
-              signup_payload=$(printf '{"email":"staging-app-health-%s@example.com","password":"password123","name":"Staging App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+              signup_payload=$(printf '{"email":"ci-app-health-%s@example.com","password":"password123","name":"CI App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
 
               if curl --fail --silent --show-error --max-time 10 \
                 -c "$cookie_jar" \
@@ -453,13 +457,13 @@ jobs:
           wait_for_health "$PLAYWRIGHT_TENANT_URL/health" "Tenant app"
           wait_for_app_authenticated_navigation
 
-  staging-e2e:
+  cloud-e2e:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: E2E shard ${{ matrix.shard }}
+    name: Cloud E2E shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     environment: preview-deploy
     needs:
-      - staging-deploy
+      - cloud-e2e-deploy
     strategy:
       fail-fast: false
       matrix:
@@ -468,11 +472,16 @@ jobs:
           - 2/3
           - 3/3
     env:
-      PLAYWRIGHT_AGENT_URL: https://agent.staging.ceird.app
-      PLAYWRIGHT_API_URL: https://api.staging.ceird.app
-      PLAYWRIGHT_BASE_URL: https://app.staging.ceird.app
-      PLAYWRIGHT_TENANT_URL: https://staging-tenant-health--staging.ceird.app
-      STAGING_STAGE: staging
+      AUTH_RATE_LIMIT_ENABLED: "false"
+      CEIRD_AGENT_HOSTNAME: agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
+      PLAYWRIGHT_AGENT_URL: https://agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_API_URL: https://api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_BASE_URL: https://app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_TENANT_URL: https://ci-tenant-health--ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
 
     steps:
       - name: Checkout
@@ -497,11 +506,11 @@ jobs:
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
 
-      - name: Validate staging stage
+      - name: Validate CI stage
         run: |
           set -euo pipefail
-          if [[ "$STAGING_STAGE" != "staging" ]]; then
-            echo "Refusing to test unexpected staging stage: $STAGING_STAGE"
+          if [[ ! "$CI_STAGE" =~ ^ci-[0-9]+-[0-9]+$ ]]; then
+            echo "Refusing to test unexpected CI stage: $CI_STAGE"
             exit 1
           fi
 
@@ -544,7 +553,7 @@ jobs:
       - name: Export Playwright database URL
         run: |
           set -euo pipefail
-          pnpm --silent alchemy state get ceird "$STAGING_STAGE" PostgresBranch --stage "$STAGING_STAGE" \
+          pnpm --silent alchemy state get ceird "$CI_STAGE" PostgresBranch --stage "$CI_STAGE" \
             | node scripts/export-playwright-database-url.mjs
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
@@ -558,16 +567,21 @@ jobs:
       - name: Run E2E tests
         run: pnpm --filter app e2e --shard=${{ matrix.shard }}
 
-  staging-destroy:
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.staging-deploy.result != 'skipped'
-    name: Destroy staging
+  cloud-e2e-destroy:
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs['cloud-e2e-deploy'].result != 'skipped'
+    name: Destroy cloud E2E
     runs-on: ubuntu-latest
     environment: preview-deploy
     needs:
-      - staging-deploy
-      - staging-e2e
+      - cloud-e2e-deploy
+      - cloud-e2e
     env:
-      STAGING_STAGE: staging
+      AUTH_RATE_LIMIT_ENABLED: "false"
+      CEIRD_AGENT_HOSTNAME: agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout
@@ -592,11 +606,11 @@ jobs:
       - name: Ensure Linux native packages
         run: node scripts/ensure-linux-native-packages.mjs
 
-      - name: Validate staging stage
+      - name: Validate CI stage
         run: |
           set -euo pipefail
-          if [[ "$STAGING_STAGE" != "staging" ]]; then
-            echo "Refusing to destroy unexpected staging stage: $STAGING_STAGE"
+          if [[ ! "$CI_STAGE" =~ ^ci-[0-9]+-[0-9]+$ ]]; then
+            echo "Refusing to destroy unexpected CI stage: $CI_STAGE"
             exit 1
           fi
 
@@ -636,8 +650,8 @@ jobs:
         env:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
-      - name: Destroy staging
-        run: pnpm alchemy destroy --stage "$STAGING_STAGE" --yes
+      - name: Destroy cloud E2E
+        run: pnpm alchemy destroy --stage "$CI_STAGE" --yes
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}

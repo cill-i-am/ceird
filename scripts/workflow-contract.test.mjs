@@ -629,14 +629,14 @@ test("manual Drizzle commands are documented as package-local fallbacks", () => 
   assert.doesNotMatch(dataLayerGuide, /infra\s+package/);
 });
 
-test("main branch CI deploys staging before Playwright E2E", () => {
+test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E", () => {
   const buildWorkflow = readFileSync(
     path.join(repoRoot, ".github/workflows/build.yml"),
     "utf8"
   );
-  const stagingDeployJob = getWorkflowJob(buildWorkflow, "staging-deploy");
-  const stagingE2eJob = getWorkflowJob(buildWorkflow, "staging-e2e");
-  const stagingDestroyJob = getWorkflowJob(buildWorkflow, "staging-destroy");
+  const ciDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
+  const ciE2eJob = getWorkflowJob(buildWorkflow, "cloud-e2e");
+  const ciDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
   const playwrightConfig = readFileSync(
     path.join(repoRoot, "apps/app/playwright.config.ts"),
     "utf8"
@@ -650,6 +650,10 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     path.join(repoRoot, "docs/development.md"),
     "utf8"
   );
+  const cloudflareCiGuide = readFileSync(
+    path.join(repoRoot, "docs/architecture/cloudflare-ci.md"),
+    "utf8"
+  );
 
   assert.match(playwrightConfig, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER/);
   assert.doesNotMatch(playwrightConfig, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
@@ -661,77 +665,113 @@ test("main branch CI deploys staging before Playwright E2E", () => {
     buildWorkflow,
     /e2e:\n(?: {4}.*\n)* {4}environment: main/
   );
-  assert.match(stagingDeployJob, /needs:\n(?: {6}.*\n)* {6}- build/);
-  assert.match(stagingE2eJob, /needs:\n(?: {6}.*\n)* {6}- staging-deploy/);
+  assert.match(ciDeployJob, /needs:\n(?: {6}.*\n)* {6}- build/);
+  assert.match(ciE2eJob, /needs:\n(?: {6}.*\n)* {6}- cloud-e2e-deploy/);
   assert.match(
-    stagingDestroyJob,
-    /needs:\n(?: {6}.*\n)* {6}- staging-deploy\n {6}- staging-e2e/
+    ciDestroyJob,
+    /needs:\n(?: {6}.*\n)* {6}- cloud-e2e-deploy\n {6}- cloud-e2e/
   );
   assert.match(buildWorkflow, /environment: preview-deploy/);
   assert.match(
     buildWorkflow,
     /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
   );
-  assert.match(buildWorkflow, /STAGING_STAGE: staging/);
+  assert.doesNotMatch(buildWorkflow, /STAGING_STAGE/);
   assert.match(
     buildWorkflow,
-    /PLAYWRIGHT_BASE_URL: https:\/\/app\.staging\.ceird\.app/
-  );
-  assert.match(
-    buildWorkflow,
-    /PLAYWRIGHT_API_URL: https:\/\/api\.staging\.ceird\.app/
+    /CI_STAGE: ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}/
   );
   assert.match(
     buildWorkflow,
-    /PLAYWRIGHT_AGENT_URL: https:\/\/agent\.staging\.ceird\.app/
+    /CEIRD_APP_HOSTNAME: app-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
   assert.match(
-    stagingDeployJob,
-    /pnpm alchemy deploy --stage "\$STAGING_STAGE" --yes/
+    buildWorkflow,
+    /CEIRD_API_HOSTNAME: api-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
-  assert.match(stagingDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
+  assert.match(
+    buildWorkflow,
+    /CEIRD_AGENT_HOSTNAME: agent-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /CEIRD_MCP_HOSTNAME: mcp-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_BASE_URL: https:\/\/app-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_API_URL: https:\/\/api-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_AGENT_URL: https:\/\/agent-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_TENANT_URL: https:\/\/ci-tenant-health--ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(ciDeployJob, /pnpm alchemy deploy --stage "\$CI_STAGE" --yes/);
+  assert.match(ciDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
   assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
   assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
   assert.match(buildWorkflow, /cloudflare-state-store\.json/);
   assert.doesNotMatch(
-    stagingDeployJob + stagingE2eJob + stagingDestroyJob,
+    ciDeployJob + ciE2eJob + ciDestroyJob,
     /pnpm alchemy cloudflare bootstrap/
   );
   assert.match(
-    stagingE2eJob,
-    /pnpm --silent alchemy state get ceird "\$STAGING_STAGE" PostgresBranch --stage "\$STAGING_STAGE"/
+    ciE2eJob,
+    /pnpm --silent alchemy state get ceird "\$CI_STAGE" PostgresBranch --stage "\$CI_STAGE"/
   );
-  assert.match(stagingDeployJob, /Wait for staging health/);
-  assert.doesNotMatch(stagingDeployJob, /pnpm --filter app e2e/);
-  assert.match(stagingE2eJob, /strategy:\n {6}fail-fast: false/);
+  assert.match(ciDeployJob, /Wait for CI deploy health/);
+  assert.match(
+    buildWorkflow,
+    /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
+  );
+  assert.doesNotMatch(ciDeployJob, /pnpm --filter app e2e/);
+  assert.match(ciE2eJob, /strategy:\n {6}fail-fast: false/);
   for (const shard of ["1/3", "2/3", "3/3"]) {
     assert.match(
-      stagingE2eJob,
+      ciE2eJob,
       new RegExp(`- ${shard.replace("/", "\\/")}\\b`),
-      `staging e2e should run shard ${shard}`
+      `cloud e2e should run shard ${shard}`
     );
   }
   assert.match(
-    stagingE2eJob,
+    ciE2eJob,
     /pnpm --filter app e2e --shard=\$\{\{ matrix\.shard \}\}/
   );
-  assert.doesNotMatch(stagingE2eJob, /pnpm alchemy deploy/);
-  assert.doesNotMatch(stagingE2eJob, /pnpm alchemy destroy/);
+  assert.doesNotMatch(ciE2eJob, /pnpm alchemy deploy/);
+  assert.doesNotMatch(ciE2eJob, /pnpm alchemy destroy/);
   assert.match(
-    stagingDestroyJob,
+    ciDestroyJob,
     /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
   );
-  assert.match(
-    stagingDestroyJob,
-    /pnpm alchemy destroy --stage "\$STAGING_STAGE" --yes/
-  );
-  assert.doesNotMatch(stagingDestroyJob, /pnpm --filter app e2e/);
+  assert.match(ciDestroyJob, /pnpm alchemy destroy --stage "\$CI_STAGE" --yes/);
+  assert.doesNotMatch(ciDestroyJob, /pnpm --filter app e2e/);
   assert.doesNotMatch(readme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(appReadme, /PLAYWRIGHT_BASE_URL=<alchemy-app-url>/);
   assert.match(appReadme, /PLAYWRIGHT_AGENT_URL=<alchemy-agent-url>/);
   assert.doesNotMatch(appReadme, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.doesNotMatch(developmentGuide, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.match(developmentGuide, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1/);
+  assert.match(cloudflareCiGuide, /ephemeral CI deploy stage/);
+  assert.match(cloudflareCiGuide, /first-level hostnames/);
+  assert.doesNotMatch(
+    cloudflareCiGuide,
+    /Build` workflow's Playwright E2E job selects the `main` environment/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /cloud E2E path uses `preview-deploy` with an\s+ephemeral `ci-<run-number>-<attempt>` stage/
+  );
+  assert.match(
+    developmentGuide,
+    /Cloud E2E jobs read the\s+target stage's `PostgresBranch` state/
+  );
 });
 
 test("build workflow runs static checks and tests before build in parallel", () => {

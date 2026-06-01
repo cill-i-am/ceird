@@ -6,8 +6,11 @@ state rather than checked-in `.alchemy` files. The stack does not configure a
 custom state-store Worker name; it relies on Alchemy's default shared
 Cloudflare state store.
 
-CI owns two deployment paths:
+CI owns three deployment paths:
 
+- `.github/workflows/build.yml` deploys an ephemeral CI deploy stage on pushes
+  to `main`, runs Playwright E2E against it, and destroys it in the same
+  workflow.
 - `.github/workflows/preview.yml` deploys persistent same-repository pull
   request previews and runs Playwright E2E against the preview app/API.
 - `.github/workflows/deploy-main.yml` deploys the canonical `main` stage after
@@ -23,6 +26,12 @@ explicitly so GitHub Actions never falls back to Alchemy's default
 For mainline deployment:
 
 - `pnpm alchemy deploy --stage main --yes`
+- `CEIRD_CLOUDFLARE=1`
+
+For push-to-main cloud E2E:
+
+- `pnpm alchemy deploy --stage ci-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT} --yes`
+- `pnpm alchemy destroy --stage ci-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT} --yes`
 - `CEIRD_CLOUDFLARE=1`
 
 For pull request previews:
@@ -53,11 +62,20 @@ Production pins the system hosts to the exact custom domains `app.ceird.app`,
 `api.ceird.app`, `agent.ceird.app`, and `mcp.ceird.app`. Production tenant hosts
 use `{orgSlug}.ceird.app`. Non-production tenant hosts use
 `{orgSlug}--{tenantStageAlias}.ceird.app`, for example
-`example-co--staging.ceird.app` or `example-co--pr-123.ceird.app`. This keeps
+`example-co--ci-123-1.ceird.app` or `example-co--pr-123.ceird.app`. This keeps
 dynamic tenants as first-level `ceird.app` labels so they stay inside the zone's
 wildcard DNS and Universal SSL coverage. Organization slugs cannot be `app`,
 `api`, `agent`, or `mcp`, so production tenant URLs cannot collide with system
 hostnames.
+
+The root stage defaults still use `app.<stage>.ceird.app` and
+`api.<stage>.ceird.app` for ordinary non-production stages, but the push-to-main
+cloud E2E path overrides the system hostnames to first-level hostnames such as
+`app-ci-123-1.ceird.app`, `api-ci-123-1.ceird.app`,
+`agent-ci-123-1.ceird.app`, and `mcp-ci-123-1.ceird.app`. That ephemeral CI
+deploy stage is destroyed after the workflow, so first-level hostnames avoid
+depending on nested-subdomain certificate coverage while still exercising
+Cloudflare custom-domain reconciliation.
 
 Alchemy owns the stage route that sends tenant host traffic to the app Worker:
 production uses `*.ceird.app/*`, while non-production stages use
@@ -78,14 +96,32 @@ the known `*--pr-<number>.ceird.app/*` pattern after `alchemy destroy`. This
 covers previews created from PR code that declared tenant-route resources before
 that same stack shape reaches the repository default branch.
 
+## Build Workflow Cloud E2E
+
+`.github/workflows/build.yml` treats the deploy target as an ephemeral CI
+validation environment, not as a persistent staging environment. On pushes to
+`main`, the workflow derives `CI_STAGE` from the GitHub workflow run number and
+attempt, then sets explicit `CEIRD_APP_HOSTNAME`, `CEIRD_API_HOSTNAME`,
+`CEIRD_AGENT_HOSTNAME`, and `CEIRD_MCP_HOSTNAME` values with first-level
+`ceird.app` labels. The deploy job waits for the app, API, Agent, tenant health,
+and auth-forwarding probes before the sharded Playwright job starts.
+
+The E2E jobs read the CI stage's `PostgresBranch` state to export a masked
+`PLAYWRIGHT_DATABASE_URL`, then run `pnpm --filter app e2e` against the
+Cloudflare app/API/Agent URLs. A final cleanup job destroys the same `CI_STAGE`
+with the same hostname overrides. The cleanup job runs with `always()` so
+failed health checks or failed E2E shards still attempt to remove the temporary
+Cloudflare, Hyperdrive, Queue, Worker route, and Neon branch resources.
+
 ## GitHub Secrets And Variables
 
-Create a GitHub environment named `main` for production deploys and main-stage
-E2E. Create `preview-deploy` and `preview-cleanup` for pull request previews.
-`preview-deploy` should require reviewer approval through GitHub environment
-protection rules so same-repository PR code is reviewed before provider secrets
-are exposed. `preview-cleanup` should not require reviewer approval, otherwise
-PR cleanup can stall after a branch is closed.
+Create a GitHub environment named `main` for production deploys. Create
+`preview-deploy` for non-production deploys, including same-repository PR
+previews and push-to-main cloud E2E stages. Create `preview-cleanup` for PR
+preview cleanup. `preview-deploy` should require reviewer approval through
+GitHub environment protection rules so same-repository PR code is reviewed
+before provider secrets are exposed. `preview-cleanup` should not require
+reviewer approval, otherwise PR cleanup can stall after a branch is closed.
 
 For `main`, add:
 
@@ -101,18 +137,12 @@ Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
 - `NEON_ORG_ID` (optional)
-- `PLAYWRIGHT_AGENT_URL`
-- `PLAYWRIGHT_API_URL`
-- `PLAYWRIGHT_BASE_URL`
 
-E2E secrets:
-
-- `PLAYWRIGHT_DATABASE_URL`
-
-The `Build` workflow's Playwright E2E job selects the `main` environment only on
-trusted pushes to `main`, so those environment-scoped variables and secrets are
-not exposed to pull-request code while still testing the live Alchemy stage
-before deployment.
+The `main` environment is used by `.github/workflows/deploy-main.yml` only after
+the `Build` workflow has succeeded on `main`, or during an explicit manual main
+deploy. The `Build` workflow's cloud E2E path uses `preview-deploy` with an
+ephemeral `ci-<run-number>-<attempt>` stage, so production deploy secrets are not
+exposed to pull-request code or reused for temporary validation environments.
 
 For both `preview-deploy` and `preview-cleanup`, add:
 
@@ -130,35 +160,35 @@ Variables:
 - `AUTH_EMAIL_FROM_NAME`
 - `NEON_ORG_ID` (optional)
 
-Preview E2E does not store `PLAYWRIGHT_DATABASE_URL` as a GitHub secret. After
-deploy, `.github/workflows/preview.yml` reads the preview stage's
-`PostgresBranch` state and pipes the JSON to
+Preview E2E and push-to-main cloud E2E do not store
+`PLAYWRIGHT_DATABASE_URL` as GitHub secrets. After deploy, the workflows read the
+stage's `PostgresBranch` state and pipe the JSON to
 `scripts/export-playwright-database-url.mjs`. The helper extracts
 `attr.connectionUri` from either the current redacted Alchemy encoding
-(`{"__redacted__":"..."}`) or a plain string, emits a GitHub Actions
-`add-mask` command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to
-`GITHUB_ENV`.
+(`{"__redacted__":"..."}`) or a plain string, emits a GitHub Actions `add-mask`
+command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to `GITHUB_ENV`.
 
-Preview stages named `pr-<number>` deploy the domain Worker with
-`AUTH_RATE_LIMIT_ENABLED=false`. This keeps repeated same-PR E2E runs from
-locking themselves out against a persistent preview database while preserving
-auth rate limiting for `main` and ordinary non-PR stages by default.
+Preview stages named `pr-<number>` and ephemeral CI stages named
+`ci-<run-number>-<attempt>` deploy the domain Worker with
+`AUTH_RATE_LIMIT_ENABLED=false`. This keeps repeated same-PR E2E runs and CI
+health probes from locking themselves out while preserving auth rate limiting
+for `main` and ordinary non-PR stages by default.
 
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` is the JSON body from
-`~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a
-GitHub environment secret. Preview CI writes it back to Alchemy's expected
-credentials path before deploy or destroy. This avoids re-running
-`pnpm alchemy cloudflare bootstrap` for preview jobs; the current Alchemy beta
-reads the state-store token through Cloudflare edge preview during bootstrap,
-and Cloudflare rejects edge preview for the existing state-store Worker because
-it has a Durable Object binding.
+`~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a GitHub
+environment secret. Non-production deploy jobs write it back to Alchemy's
+expected credentials path before deploy, state inspection, or destroy. This
+avoids re-running `pnpm alchemy cloudflare bootstrap` for preview and ephemeral
+CI jobs; the current Alchemy beta reads the state-store token through Cloudflare
+edge preview during bootstrap, and Cloudflare rejects edge preview for the
+existing state-store Worker because it has a Durable Object binding.
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
 store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
-Cloudflare Email Service to the domain Worker. Alchemy's CI guide specifically calls out that
-`Cloudflare.state()` needs Cloudflare Secrets Store Write in CI because Alchemy
-reads the state-store token back through an ephemeral edge-preview Worker with a
-secret binding.
+Cloudflare Email Service to the domain Worker. Alchemy's CI guide specifically
+calls out that `Cloudflare.state()` needs Cloudflare Secrets Store Write in CI
+because Alchemy reads the state-store token back through an ephemeral
+edge-preview Worker with a secret binding.
 
 ## Preview Workflow
 
