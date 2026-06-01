@@ -38,7 +38,7 @@ export async function measureVisibleInteraction({
     }
   };
   const handleRequestFailed = (request: Request) => {
-    if (isDataRequest(request)) {
+    if (isDataRequest(request) && !isBrowserCanceledRequest(request)) {
       failedRequests.push({
         errorText: request.failure()?.errorText ?? null,
         method: request.method(),
@@ -113,6 +113,12 @@ function formatFailedRequests(requests: readonly BrowserFailedRequest[]) {
   }
 
   return JSON.stringify(requests, null, 2);
+}
+
+export function isBrowserCanceledRequest(
+  request: Pick<Request, "failure">
+): boolean {
+  return request.failure()?.errorText === "net::ERR_ABORTED";
 }
 
 function isDataRequest(request: Request) {
