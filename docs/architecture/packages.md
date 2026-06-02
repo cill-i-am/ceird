@@ -119,7 +119,9 @@ Exports the shared sites contract:
 - site country, location status/provider, Google place, latitude, and longitude
   schemas
 - site create/update inputs, rich site option/detail DTOs, site options response,
-  and cursor-paginated site list request/response DTOs
+  and cursor-paginated site list request/response DTOs; agent actions layer an
+  additional `{ name, eircode }` site-create shortcut in `@ceird/agents-core`
+  without changing the public sites DTO
 - Google Places autocomplete and place-details request/response DTOs
 - site comment DTOs extended from `@ceird/comments-core`
 - site label assignment inputs and endpoints; this package depends on

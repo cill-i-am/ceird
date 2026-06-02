@@ -153,7 +153,12 @@ const domainAgentActions = [
         const payload = yield* decodeActionInput("ceird.sites.create", input);
         const sitesService = yield* SitesService;
 
-        return yield* sitesService.create(payload);
+        return yield* sitesService.create(
+          normalizeCreateSiteActionInput(payload),
+          {
+            manualLocationResolution: "google-first",
+          }
+        );
       }),
   }),
   defineDomainAgentAction({
@@ -440,6 +445,23 @@ export function getDomainAgentActionHandler(
 
 export function getDomainAgentActionHandlerNames(): readonly ExecutableAgentActionName[] {
   return domainAgentActions.map((action) => action.name);
+}
+
+function normalizeCreateSiteActionInput(
+  input: AgentActionInput<"ceird.sites.create">
+) {
+  if ("eircode" in input) {
+    return {
+      location: {
+        country: "IE",
+        kind: "manual",
+        rawInput: input.eircode,
+      },
+      name: input.name,
+    } as const;
+  }
+
+  return input;
 }
 
 function decodeActionInput<const Name extends ExecutableAgentActionName>(

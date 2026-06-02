@@ -154,6 +154,8 @@ describe("SitesService contracts", () => {
           createdRecord = input;
           return Effect.succeed(siteId);
         },
+        autocomplete: () =>
+          Effect.die("SiteLocationProvider.autocomplete should not be called"),
         getOptionById: () => Effect.succeed(Option.some(createdSite)),
         resolvePlace: () =>
           Effect.die("SiteLocationProvider.resolvePlace should not be called"),
@@ -166,6 +168,212 @@ describe("SitesService contracts", () => {
       displayLocation: "gate beside old quarry",
       locationStatus: "unverified",
       rawLocationInput: "gate beside old quarry",
+    });
+  });
+
+  it("canonicalizes manual Irish Eircodes without provider resolution", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111114");
+    const createdSite = decodeSiteOption({
+      country: "IE",
+      displayLocation: "V31 R968",
+      eircode: "V31 R968",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Listowel Yard",
+      rawLocationInput: "V31R968",
+    });
+    let createdRecord:
+      | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
+      | undefined;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.create({
+          location: {
+            kind: "manual",
+            rawInput: "V31R968",
+          },
+          name: "Listowel Yard",
+        })
+      ),
+      {
+        autocomplete: () =>
+          Effect.die("SiteLocationProvider.autocomplete should not be called"),
+        create: (input) => {
+          createdRecord = input;
+          return Effect.succeed(siteId);
+        },
+        getOptionById: () => Effect.succeed(Option.some(createdSite)),
+        resolvePlace: () =>
+          Effect.die("SiteLocationProvider.resolvePlace should not be called"),
+      }
+    );
+
+    expect(result).toStrictEqual(createdSite);
+    expect(createdRecord).toMatchObject({
+      country: "IE",
+      displayLocation: "V31 R968",
+      eircode: "V31 R968",
+      locationStatus: "unverified",
+      rawLocationInput: "V31R968",
+    });
+  });
+
+  it("resolves Google-first manual Irish Eircodes with one Places session", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111115");
+    const googlePlaceId = "ChIJlistowel" as GooglePlaceIdType;
+    const createdSite = decodeSiteOption({
+      country: "IE",
+      displayLocation: "Listowel, Co. Kerry, Ireland",
+      eircode: "V31 R968",
+      formattedAddress: "Listowel, Co. Kerry, Ireland",
+      googlePlaceId,
+      hasUsableCoordinates: true,
+      id: siteId,
+      labels: [],
+      latitude: 52.446 as SiteLatitude,
+      locationProvider: "google_places",
+      locationResolvedAt: "2026-05-26T08:00:00.000Z",
+      locationStatus: "google_resolved",
+      longitude: -9.485 as SiteLongitude,
+      name: "Listowel Yard",
+      rawLocationInput: "V31R968",
+    });
+    let autocompleteInput:
+      | Parameters<
+          ContextService<typeof SiteLocationProvider>["autocomplete"]
+        >[0]
+      | undefined;
+    let resolvePlaceInput:
+      | Parameters<
+          ContextService<typeof SiteLocationProvider>["resolvePlace"]
+        >[0]
+      | undefined;
+    let createdRecord:
+      | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
+      | undefined;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.create(
+          {
+            location: {
+              kind: "manual",
+              rawInput: "V31R968",
+            },
+            name: "Listowel Yard",
+          },
+          { manualLocationResolution: "google-first" }
+        )
+      ),
+      {
+        autocomplete: (input) => {
+          autocompleteInput = input;
+          return Effect.succeed({
+            suggestions: [{ displayText: "V31 R968", placeId: googlePlaceId }],
+          });
+        },
+        create: (input) => {
+          createdRecord = input;
+          return Effect.succeed(siteId);
+        },
+        getOptionById: () => Effect.succeed(Option.some(createdSite)),
+        resolvePlace: (input) => {
+          resolvePlaceInput = input;
+          return Effect.succeed({
+            addressComponents: [],
+            displayLocation: "Listowel, Co. Kerry, Ireland",
+            formattedAddress: "Listowel, Co. Kerry, Ireland",
+            googlePlaceId,
+            latitude: 52.446 as SiteLatitude,
+            locationProvider: "google_places",
+            locationResolvedAt:
+              "2026-05-26T08:00:00.000Z" as IsoDateTimeStringType,
+            locationStatus: "google_resolved" as const,
+            longitude: -9.485 as SiteLongitude,
+            rawLocationInput: "provider raw",
+          });
+        },
+      }
+    );
+
+    expect(result).toStrictEqual(createdSite);
+    expect(autocompleteInput).toMatchObject({
+      country: "IE",
+      input: "V31 R968",
+    });
+    expect(resolvePlaceInput).toMatchObject({
+      placeId: googlePlaceId,
+      rawInput: "V31R968",
+    });
+    expect(resolvePlaceInput?.sessionToken).toBe(
+      autocompleteInput?.sessionToken
+    );
+    expect(createdRecord).toMatchObject({
+      country: "IE",
+      displayLocation: "Listowel, Co. Kerry, Ireland",
+      eircode: "V31 R968",
+      formattedAddress: "Listowel, Co. Kerry, Ireland",
+      googlePlaceId,
+      latitude: 52.446,
+      locationProvider: "google_places",
+      locationStatus: "google_resolved",
+      longitude: -9.485,
+      rawLocationInput: "V31R968",
+    });
+  });
+
+  it("falls back to an unverified canonical Eircode when Google-first has no suggestions", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111116");
+    const createdSite = decodeSiteOption({
+      country: "IE",
+      displayLocation: "V31 R968",
+      eircode: "V31 R968",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Listowel Yard",
+      rawLocationInput: "V31R968",
+    });
+    let createdRecord:
+      | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
+      | undefined;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.create(
+          {
+            location: {
+              kind: "manual",
+              rawInput: "V31R968",
+            },
+            name: "Listowel Yard",
+          },
+          { manualLocationResolution: "google-first" }
+        )
+      ),
+      {
+        autocomplete: () => Effect.succeed({ suggestions: [] }),
+        create: (input) => {
+          createdRecord = input;
+          return Effect.succeed(siteId);
+        },
+        getOptionById: () => Effect.succeed(Option.some(createdSite)),
+        resolvePlace: () =>
+          Effect.die("SiteLocationProvider.resolvePlace should not be called"),
+      }
+    );
+
+    expect(result).toStrictEqual(createdSite);
+    expect(createdRecord).toMatchObject({
+      country: "IE",
+      displayLocation: "V31 R968",
+      eircode: "V31 R968",
+      locationStatus: "unverified",
+      rawLocationInput: "V31R968",
     });
   });
 
