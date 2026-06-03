@@ -12,7 +12,7 @@
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
-    "knip": "PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1 knip --no-config-hints",
+    "knip": "knip --no-config-hints",
     "lint": "oxlint --config .oxlintrc.mjs . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
