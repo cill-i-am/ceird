@@ -18,6 +18,7 @@ import {
   PreparedAgentSessionSchema,
   buildAgentInstanceName,
   getAgentActionDefinition,
+  getAgentActionInputSchema,
   getAgentActionManifest,
   isAgentInternalPath,
   makeAgentInternalThreadActivityPath,
@@ -63,6 +64,21 @@ describe("@ceird/agents-core", () => {
     const modelNames = AGENT_ACTIONS.map((action) => action.modelName);
 
     expect(new Set(modelNames).size).toBe(modelNames.length);
+  });
+  it("accepts and trims the site Eircode create shortcut", () => {
+    const decodeSiteCreateInput = Schema.decodeUnknownSync(
+      getAgentActionInputSchema("ceird.sites.create")
+    );
+
+    expect(
+      decodeSiteCreateInput({
+        eircode: "  V31R968  ",
+        name: "  Listowel Yard  ",
+      })
+    ).toStrictEqual({
+      eircode: "V31R968",
+      name: "Listowel Yard",
+    });
   });
 
   it.each(AGENT_ACTIONS)(

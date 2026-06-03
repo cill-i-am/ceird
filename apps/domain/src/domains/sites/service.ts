@@ -35,6 +35,7 @@ import {
   resolveCreateSiteLocation,
   resolveUpdateSiteLocation,
 } from "./location-resolution.js";
+import type { ResolveCreateSiteLocationOptions } from "./location-resolution.js";
 import {
   SiteLabelAssignmentsRepository,
   SitesRepository,
@@ -70,7 +71,8 @@ export class SitesService extends Context.Service<SitesService>()(
       });
 
       const create = Effect.fn("SitesService.create")(function* (
-        input: CreateSiteInput
+        input: CreateSiteInput,
+        options: ResolveCreateSiteLocationOptions = {}
       ) {
         const actor = yield* loadActor();
         yield* authorization
@@ -91,7 +93,8 @@ export class SitesService extends Context.Service<SitesService>()(
 
         const location = yield* resolveCreateSiteLocation(
           input.location,
-          siteLocationProvider
+          siteLocationProvider,
+          options
         );
 
         return yield* sitesRepository

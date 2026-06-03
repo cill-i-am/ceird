@@ -38,6 +38,22 @@ const RemoveSiteLabelActionInputSchema = Schema.Struct({
   siteId: SiteId,
 });
 
+export const CreateSiteEircodeShortcutInputSchema = Schema.Struct({
+  eircode: Schema.Trim.pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(32))
+  ),
+  name: Schema.Trim.pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(256))
+  ),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const CreateSiteAgentInputSchema = Schema.Union([
+  CreateSiteInputSchema,
+  CreateSiteEircodeShortcutInputSchema,
+]);
+
 export const siteAgentActions = [
   defineAgentAction({
     confirmationPolicy: "none",
@@ -74,7 +90,7 @@ export const siteAgentActions = [
       summary: "Create a new customer site.",
       target: "site",
     },
-    inputSchema: CreateSiteInputSchema,
+    inputSchema: CreateSiteAgentInputSchema,
     executionStatus: "executable",
     kind: "write",
     modelDescription: "Create a Ceird site with address and access details.",
