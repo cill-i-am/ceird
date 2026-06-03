@@ -75,6 +75,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `pnpm test`                        | Runs workspace package tests, root infra tests, and root script tests.                                                                               |
 | `pnpm check-types`                 | Runs TypeScript checks for all workspaces plus the root Alchemy stack helpers.                                                                       |
 | `pnpm lint`                        | Runs oxlint over the workspace.                                                                                                                      |
+| `pnpm knip`                        | Runs Knip dependency hygiene checks used by CI.                                                                                                      |
 | `pnpm check`                       | Runs the Ultracite quality check.                                                                                                                    |
 | `pnpm format`                      | Checks formatting with oxfmt.                                                                                                                        |
 | `pnpm format:write`                | Writes formatting changes with oxfmt.                                                                                                                |
@@ -135,6 +136,7 @@ For routine changes, run the narrowest relevant tests first, then finish with:
 pnpm check-types
 pnpm test
 pnpm lint
+pnpm knip
 pnpm format
 ```
 

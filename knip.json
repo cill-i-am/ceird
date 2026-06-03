@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": [
+    "dependencies",
+    "devDependencies",
+    "optionalPeerDependencies",
+    "unlisted",
+    "binaries",
+    "unresolved",
+    "catalog"
+  ],
+  "ignoreDependencies": [
+    "@effect/platform-node",
+    "@effect/vitest",
+    "@fontsource-variable/raleway",
+    "@tanstack/router-plugin",
+    "@types/picomatch",
+    "ajv",
+    "ajv-formats",
+    "cloudflare",
+    "opensrc",
+    "tsx",
+    "vite",
+    "workerd"
+  ]
+}
