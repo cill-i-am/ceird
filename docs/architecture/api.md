@@ -186,6 +186,12 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.jobs.collaborators.update` | write       |
 | `ceird.jobs.collaborators.detach` | destructive |
 
+`ceird.sites.create` accepts the canonical site create payload and an
+agent-friendly Irish shortcut `{ name, eircode }`. The domain action handler
+normalizes the shortcut into `{ name, location: { kind: "manual", country:
+"IE", rawInput: eircode } }` and is the only caller that enables Google-first
+manual location resolution.
+
 Read tools are available to the model by default. Write and destructive tools
 are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
 require the confirmation-capable chat client to approve the action outside the
@@ -448,10 +454,21 @@ provider credentials; they do not select provider topology.
 
 Site creation accepts omitted, manual, or Google place locations. Omitted and
 manual locations are persisted as `unverified` so partial addresses can be saved
-without blocking the workflow. Google place inputs are resolved through Places
-place details before opening the write transaction; provider latency and
-provider failures stay outside Postgres transactions. The app stores Google's
-raw `placeId` value; the provider constructs Place Details URLs as
+without blocking the workflow. The one exception is internal agent-created sites:
+`ceird.sites.create` may accept `{ name, eircode }`, normalizes it to a manual
+Irish location, and asks `SitesService.create` to resolve manual locations with a
+Google-first strategy. That internal path canonicalizes Irish Eircodes such as
+`V31R968` to `V31 R968`, infers Ireland unless the caller explicitly provided
+Great Britain, tries Places Autocomplete, resolves the first suggestion through
+Place Details with the same session token, and persists Google metadata plus the
+canonical `eircode` and original raw input. If autocomplete returns no
+suggestions or provider/details resolution fails, the agent path falls back to an
+`unverified` manual location with the canonical Eircode. Normal UI typed manual
+locations do not set this option and therefore remain unverified unless the user
+selects a Google place. Google place inputs are resolved through Places place
+details before opening the write transaction; provider latency and provider
+failures stay outside Postgres transactions. The app stores Google's raw
+`placeId` value; the provider constructs Place Details URLs as
 `/v1/places/{placeId}` at the HTTP boundary and forwards the autocomplete
 session token to Place Details to keep Google billing session-aware. Site updates
 preserve the existing location when `location` is omitted and explicitly clear it

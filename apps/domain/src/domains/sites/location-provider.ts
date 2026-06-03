@@ -113,7 +113,9 @@ const decodeSiteLongitude = Schema.decodeUnknownSync(SiteLongitudeSchema);
 
 export interface ResolvedSiteLocation {
   readonly addressComponents: readonly GoogleAddressComponent[];
+  readonly country?: SiteCountry;
   readonly displayLocation: string;
+  readonly eircode?: string;
   readonly formattedAddress: string;
   readonly googlePlaceId: GooglePlaceIdType;
   readonly latitude: SiteLatitude;
