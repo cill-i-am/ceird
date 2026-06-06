@@ -407,7 +407,7 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
   assert.match(
     deployWorkflow,
-    /pnpm alchemy:state-audit -- --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+    /pnpm alchemy:state-audit --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
   );
   assertContainsInOrder(deployWorkflow, [
     "name: Build",
@@ -748,7 +748,7 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(ciDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
   assert.match(
     ciDeployJob,
-    /pnpm alchemy:state-audit -- --stage "\$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+    /pnpm alchemy:state-audit --stage "\$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
   );
   assertContainsInOrder(ciDeployJob, [
     "name: Restore Alchemy state store credentials",
@@ -917,7 +917,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(
     previewWorkflow,
-    /pnpm alchemy:state-audit -- --stage "\$PREVIEW_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+    /pnpm alchemy:state-audit --stage "\$PREVIEW_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
   );
   assertContainsInOrder(previewWorkflow, [
     "name: Restore Alchemy state store credentials",

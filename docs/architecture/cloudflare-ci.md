@@ -189,7 +189,7 @@ it has a Durable Object binding.
 After main, preview, and ephemeral CI deploys, CI runs:
 
 ```bash
-pnpm alchemy:state-audit -- --stage <stage> --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
+pnpm alchemy:state-audit --stage <stage> --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
 ```
 
 The audit reads state only. It blocks missing `PostgresBranch.origin`, missing

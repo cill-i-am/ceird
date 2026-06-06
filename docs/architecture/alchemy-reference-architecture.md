@@ -105,7 +105,7 @@ at the Worker boundary, and pass it to `workers-ai-provider`.
 
 ## Live state audit
 
-Use `pnpm alchemy:state-audit -- --stage <stage>` for a safe, read-only audit
+Use `pnpm alchemy:state-audit --stage <stage>` for a safe, read-only audit
 before removing tombstone providers or adopting resources. For deployed stages,
 add `--tenant-routing-required` so missing tenant Worker routes or wildcard DNS
 state is blocking. The audit checks for the managed Agent AI Gateway,

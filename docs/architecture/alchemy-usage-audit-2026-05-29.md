@@ -227,7 +227,7 @@ CI is intentionally Alchemy-native:
 - Preview deploy uses persistent `pr-<number>` stages, guarded by same-repo
   checks and protected GitHub environments.
 - Preview and staging deploy run
-  `pnpm alchemy:state-audit -- --tenant-routing-required` after deploy.
+  `pnpm alchemy:state-audit --tenant-routing-required` after deploy.
 - Preview cleanup validates `pr-[0-9]+` before destroy.
 - Workflows read the branch connection URI from Alchemy state only after deploy
   and mask it before putting it into `GITHUB_ENV`.

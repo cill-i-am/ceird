@@ -304,7 +304,7 @@ jobs:
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
 
       - name: Audit CI Alchemy state
-        run: pnpm alchemy:state-audit -- --stage "$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
+        run: pnpm alchemy:state-audit --stage "$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
