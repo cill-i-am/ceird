@@ -295,31 +295,34 @@ export function makeSyncWorker(input: {
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
   readonly name: string;
-  readonly storage: ElectricContainerStorageConfig;
+  readonly storage?: ElectricContainerStorageConfig | undefined;
 }) {
   return Effect.gen(function* () {
-    const electricContainer = yield* Cloudflare.Container<unknown>()(
-      "ElectricSql",
-      makeElectricContainerProps({
-        config: input.config,
-        databaseConnectionUri: input.database.branch.connectionUri,
-        electricSourceSecret: input.electricSourceSecretValue,
-        name: input.electricContainerName,
-        storage: input.storage,
-      })
-    );
     const worker = yield* Cloudflare.Worker("Sync", makeSyncWorkerProps(input));
 
-    yield* electricContainer.bind`ElectricSql`({
-      durableObjects: {
-        namespaceId: worker.durableObjectNamespaces.pipe(
-          Output.map((namespaces) => namespaces.ElectricSql)
-        ),
-      },
-    });
-    yield* worker.bind`ElectricSqlContainer`({
-      containers: [{ className: "ElectricSql" }],
-    });
+    if (input.storage !== undefined) {
+      const electricContainer = yield* Cloudflare.Container<unknown>()(
+        "ElectricSql",
+        makeElectricContainerProps({
+          config: input.config,
+          databaseConnectionUri: input.database.branch.connectionUri,
+          electricSourceSecret: input.electricSourceSecretValue,
+          name: input.electricContainerName,
+          storage: input.storage,
+        })
+      );
+
+      yield* electricContainer.bind`ElectricSql`({
+        durableObjects: {
+          namespaceId: worker.durableObjectNamespaces.pipe(
+            Output.map((namespaces) => namespaces.ElectricSql)
+          ),
+        },
+      });
+      yield* worker.bind`ElectricSqlContainer`({
+        containers: [{ className: "ElectricSql" }],
+      });
+    }
 
     return worker;
   });

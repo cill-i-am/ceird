@@ -28,7 +28,7 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import { resourceName } from "./stages.ts";
+import { makeAlchemyStageIdentity, resourceName } from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -163,32 +163,43 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     input.config,
     "electric-storage"
   );
-  const electricStorageBucket = yield* Cloudflare.R2Bucket(
-    "ElectricStorageBucket",
-    {
-      name: electricStorageBucketName,
-      jurisdiction: "default",
-      lifecycleRules: [
-        {
-          id: "abort-incomplete-multipart-uploads",
-          abortMultipartUploadsTransition: {
-            condition: {
-              maxAge: 604_800,
-              type: "Age",
+  const electricStorageProvisioned = shouldProvisionElectricStorage({
+    config: input.config,
+    localDev,
+  });
+  const electricStorageBucket =
+    electricStorageProvisioned === true
+      ? yield* Cloudflare.R2Bucket("ElectricStorageBucket", {
+          name: electricStorageBucketName,
+          jurisdiction: "default",
+          lifecycleRules: [
+            {
+              id: "abort-incomplete-multipart-uploads",
+              abortMultipartUploadsTransition: {
+                condition: {
+                  maxAge: 604_800,
+                  type: "Age",
+                },
+              },
             },
-          },
-        },
-      ],
-    }
-  );
-  const electricStorageCredentials =
-    localDev === true
-      ? yield* makeLocalElectricStorageCredentials({
-          accountId: cloudflareAccountId,
-          bucketName: electricStorageBucketName,
-          config: input.config,
+          ],
         })
-      : readConfiguredElectricStorageCredentials(input.config);
+      : undefined;
+  let electricStorageCredentials:
+    | Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey">
+    | undefined;
+
+  if (electricStorageProvisioned && localDev) {
+    electricStorageCredentials = yield* makeLocalElectricStorageCredentials({
+      accountId: cloudflareAccountId,
+      bucketName: electricStorageBucketName,
+      config: input.config,
+    });
+  } else if (electricStorageProvisioned) {
+    electricStorageCredentials = readConfiguredElectricStorageCredentials(
+      input.config
+    );
+  }
   const localOrigins = {
     agent: makeAlchemyLocalWorkerOrigin("agent"),
     api: makeAlchemyLocalWorkerOrigin("api"),
@@ -204,6 +215,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       : undefined;
 
   yield* Effect.annotateCurrentSpan("alchemy.localDev", localDev);
+  yield* Effect.annotateCurrentSpan(
+    "electricStorageProvisioned",
+    electricStorageProvisioned
+  );
 
   const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
     "AuthEmailDeadLetterQueue",
@@ -339,12 +354,15 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     localDev,
     localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "sync"),
-    storage: {
-      accessKeyId: electricStorageCredentials.accessKeyId,
-      accountId: cloudflareAccountId,
-      bucketName: electricStorageBucketName,
-      secretAccessKey: electricStorageCredentials.secretAccessKey,
-    },
+    storage:
+      electricStorageCredentials === undefined
+        ? undefined
+        : {
+            accessKeyId: electricStorageCredentials.accessKeyId,
+            accountId: cloudflareAccountId,
+            bucketName: electricStorageBucketName,
+            secretAccessKey: electricStorageCredentials.secretAccessKey,
+          },
   });
 
   const syncOrigin = Output.all(sync.domains, sync.url).pipe(
@@ -480,6 +498,48 @@ function makeLocalElectricStorageCredentials(input: {
       "accessKeyId" | "secretAccessKey"
     >;
   });
+}
+
+export function shouldProvisionElectricStorage(input: {
+  readonly config: Pick<
+    InfraStageConfig,
+    | "appName"
+    | "electricStorageAccessKeyId"
+    | "electricStorageSecretAccessKey"
+    | "stage"
+  >;
+  readonly localDev: boolean;
+}) {
+  if (input.localDev) {
+    return true;
+  }
+
+  const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;
+  const hasSecretKey =
+    input.config.electricStorageSecretAccessKey !== undefined;
+
+  if (hasAccessKey && hasSecretKey) {
+    return true;
+  }
+
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error(
+      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+    );
+  }
+
+  const identity = makeAlchemyStageIdentity({
+    appName: input.config.appName,
+    stage: input.config.stage,
+  });
+
+  if (identity.isPullRequestPreview) {
+    return false;
+  }
+
+  throw new Error(
+    "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+  );
 }
 
 function readConfiguredElectricStorageCredentials(

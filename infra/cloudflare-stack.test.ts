@@ -86,6 +86,7 @@ import {
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   shouldReconcileTenantRouting,
+  shouldProvisionElectricStorage,
 } from "./cloudflare-stack.ts";
 import {
   ceirdDomainWorkerPlacement,
@@ -373,7 +374,7 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
 > = true;
 const cloudflareStackOutputsIncludeElectricStorage: AssertTrue<
   CloudflareStackResources extends {
-    readonly electricStorageBucket: Cloudflare.R2Bucket;
+    readonly electricStorageBucket: Cloudflare.R2Bucket | undefined;
   }
     ? true
     : false
@@ -622,6 +623,48 @@ describe("Cloudflare stack", () => {
         tenantRoutePattern: undefined,
       })
     ).toBe(false);
+  });
+
+  it("bootstraps PR previews without Electric R2 credentials but fails closed elsewhere", () => {
+    expect(
+      shouldProvisionElectricStorage({
+        config: configWithoutCloudflareBootstrapSecrets,
+        localDev: true,
+      })
+    ).toBe(true);
+    expect(
+      shouldProvisionElectricStorage({
+        config: {
+          ...previewTenantConfig,
+          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+          electricStorageSecretAccessKey: Redacted.make(
+            "electric-secret-access-key"
+          ),
+        },
+        localDev: false,
+      })
+    ).toBe(true);
+    expect(
+      shouldProvisionElectricStorage({
+        config: previewTenantConfig,
+        localDev: false,
+      })
+    ).toBe(false);
+    expect(() =>
+      shouldProvisionElectricStorage({
+        config: {
+          ...previewTenantConfig,
+          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+        },
+        localDev: false,
+      })
+    ).toThrow(/must be configured together/);
+    expect(() =>
+      shouldProvisionElectricStorage({
+        config: configWithoutCloudflareBootstrapSecrets,
+        localDev: false,
+      })
+    ).toThrow(/required outside local Alchemy dev/);
   });
 
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {

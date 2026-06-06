@@ -156,6 +156,12 @@ for the container. CI and deployed stages instead consume the
 `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` secrets created by the separate
 GitHub credential stack, keeping routine app deploy credentials out of API token
 management.
+Pull-request previews have one bootstrap exception: until the main credential
+stack has minted those Electric R2 secrets and updated the CI deploy token with
+R2 and Container permissions, preview deploys without both Electric storage
+secrets publish the sync Worker but skip the Electric Container and R2 bucket.
+Production and other non-preview deployed stages still fail closed when the
+Electric storage secrets are absent.
 
 There is no separate local Docker service in the default workflow; local
 cloud-backed stages exercise the same Worker, Durable Object, Container, R2,

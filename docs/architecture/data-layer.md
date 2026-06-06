@@ -219,6 +219,10 @@ Electric source parameters, then injects the authorized table, predicate,
 parameters, and source secret before forwarding to the `ElectricSql` Durable
 Object and container. Postgres remains the source of truth; Electric provides
 client-facing shape replication for selected domain tables.
+Pull-request previews can temporarily deploy the sync Worker without the
+Electric Container when the GitHub environment has not yet received the
+separate Electric R2 runtime credentials; local dev and production stages
+provision the full Worker, Durable Object, Container, R2, and Neon path.
 
 The deployed sync path is ready for Electric/TanStack DB clients, but the app's
 existing route-scoped TanStack DB collections remain query-backed in this
