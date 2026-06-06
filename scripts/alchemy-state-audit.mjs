@@ -38,11 +38,17 @@ function finding(code, severity, message) {
 }
 
 function resourceType(resource) {
-  return resource?.type ?? resource?.Type;
+  return resource?.resourceType ?? resource?.type ?? resource?.Type;
 }
 
 function resourceAttr(resource) {
-  return resource?.attr ?? resource?.attributes ?? resource?.Attributes ?? {};
+  return {
+    ...resource?.props,
+    ...resource?.Props,
+    ...resource?.attr,
+    ...resource?.attributes,
+    ...resource?.Attributes,
+  };
 }
 
 function hasRedactedConnectionUri(value) {
@@ -601,20 +607,7 @@ function makeStateReadError(input) {
   };
 }
 
-function readResourceFromAlchemy(options, fqn) {
-  const args = makeAlchemyStateGetArgs(
-    {
-      ...options,
-      envFileExists: existsSync(resolve(repoRoot, options.envFile)),
-    },
-    fqn
-  );
-
-  const result = spawnSync("pnpm", args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-
+export function parseAlchemyStateGetResult(options, fqn, result) {
   if (result.status !== 0) {
     return isMissingStateResult(result)
       ? { missing: true }
@@ -641,6 +634,10 @@ function readResourceFromAlchemy(options, fqn) {
     };
   }
 
+  if (isMissingStateResult(result)) {
+    return { missing: true };
+  }
+
   try {
     return { value: JSON.parse(result.stdout) };
   } catch (error) {
@@ -654,6 +651,23 @@ function readResourceFromAlchemy(options, fqn) {
       }),
     };
   }
+}
+
+function readResourceFromAlchemy(options, fqn) {
+  const args = makeAlchemyStateGetArgs(
+    {
+      ...options,
+      envFileExists: existsSync(resolve(repoRoot, options.envFile)),
+    },
+    fqn
+  );
+
+  const result = spawnSync("pnpm", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+
+  return parseAlchemyStateGetResult(options, fqn, result);
 }
 
 function readResourcesFromAlchemy(options) {

@@ -153,11 +153,12 @@ test("state audit flags legacy migration state and validates expected managed re
   const {
     analyzeAlchemyStateResources,
     makeAlchemyStateGetArgs,
+    parseAlchemyStateGetResult,
     parseAlchemyStateAuditArgs,
   } = await import(path.join(repoRoot, "scripts/alchemy-state-audit.mjs"));
   const healthyResources = {
     AgentAiGateway: {
-      type: "Cloudflare.AiGateway",
+      resourceType: "Cloudflare.AiGateway",
       attr: {
         authentication: true,
         collectLogs: false,
@@ -165,43 +166,43 @@ test("state audit flags legacy migration state and validates expected managed re
       },
     },
     Agent: {
-      type: "Cloudflare.Worker",
-      attr: {
+      resourceType: "Cloudflare.Worker",
+      props: {
         bindings: { ANALYTICS: { name: "ANALYTICS" } },
         env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
       },
     },
     Api: {
-      type: "Cloudflare.Worker",
-      attr: {
+      resourceType: "Cloudflare.Worker",
+      props: {
         bindings: { ANALYTICS: { name: "ANALYTICS" } },
         env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
       },
     },
     Domain: {
-      type: "Cloudflare.Worker",
-      attr: {
+      resourceType: "Cloudflare.Worker",
+      props: {
         bindings: { ANALYTICS: { name: "ANALYTICS" } },
         env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
         placement: { mode: "smart" },
       },
     },
     Mcp: {
-      type: "Cloudflare.Worker",
-      attr: {
+      resourceType: "Cloudflare.Worker",
+      props: {
         bindings: { ANALYTICS: { name: "ANALYTICS" } },
         env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
       },
     },
     PostgresBranch: {
-      type: "Neon.Branch",
+      resourceType: "Neon.Branch",
       attr: {
         connectionUri: { __redacted__: "postgresql://redacted" },
         origin: { host: "ep-example.neon.tech" },
       },
     },
     TenantWildcardDnsRecord: {
-      type: "Ceird.CloudflareTenantWildcardDnsRecord",
+      resourceType: "Ceird.CloudflareTenantWildcardDnsRecord",
       attr: {
         recordId: "dns-managed",
         zoneId: "zone-id",
@@ -209,7 +210,7 @@ test("state audit flags legacy migration state and validates expected managed re
       },
     },
     TenantWorkerRoute: {
-      type: "Ceird.CloudflareTenantWorkerRoute",
+      resourceType: "Ceird.CloudflareTenantWorkerRoute",
       attr: { pattern: "*.ceird.app/*" },
     },
   };
@@ -218,7 +219,7 @@ test("state audit flags legacy migration state and validates expected managed re
     resources: {
       ...healthyResources,
       "Drizzle.Migrations": {
-        type: "Drizzle.Migrations",
+        resourceType: "Drizzle.Migrations",
         attr: {},
       },
     },
@@ -234,7 +235,7 @@ test("state audit flags legacy migration state and validates expected managed re
         ...healthyResources,
         "Drizzle.Migrations": {
           attr: {},
-          type: "Drizzle.Migrations",
+          resourceType: "Drizzle.Migrations",
         },
       },
       stage: "main",
@@ -279,7 +280,7 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         Domain: {
-          type: "Cloudflare.Worker",
+          resourceType: "Cloudflare.Worker",
           attr: {
             bindings: {},
             env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
@@ -297,7 +298,7 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         Domain: {
-          type: "Cloudflare.Worker",
+          resourceType: "Cloudflare.Worker",
           attr: {
             bindings: { ANALYTICS: { name: "ANALYTICS" } },
             env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
@@ -315,7 +316,7 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         PostgresBranch: {
-          type: "Neon.Branch",
+          resourceType: "Neon.Branch",
           attr: {
             connectionUri: { __redacted__: "postgresql://redacted" },
           },
@@ -331,7 +332,7 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         PostgresBranch: {
-          type: "Neon.Branch",
+          resourceType: "Neon.Branch",
           attr: {
             connectionUri: "postgresql://plain-secret@example.neon.tech/app",
             origin: { host: "ep-example.neon.tech" },
@@ -355,7 +356,7 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         TenantWorkerRoute: {
-          type: "Ceird.CloudflareTenantWorkerRoute",
+          resourceType: "Ceird.CloudflareTenantWorkerRoute",
           attr: { pattern: "*--wrong.ceird.app/*" },
         },
       },
@@ -407,6 +408,14 @@ test("state audit flags legacy migration state and validates expected managed re
   assert.throws(
     () => parseAlchemyStateAuditArgs(["--unknown"]),
     /Unknown option/
+  );
+  assert.deepEqual(
+    parseAlchemyStateGetResult({ stage: "pr-123" }, "Drizzle.Migrations", {
+      status: 0,
+      stderr: "",
+      stdout: "(not found)\n",
+    }),
+    { missing: true }
   );
   assert.deepEqual(
     makeAlchemyStateGetArgs(
