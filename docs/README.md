@@ -30,6 +30,10 @@ describe how the major systems fit together; `superpowers/specs` and
 
 - [Authentication Architecture](architecture/auth.md)
 - [Authentication Extension Rules](architecture/auth-next-steps.md)
+- [Auth And Organization Permission Matrix](architecture/auth-organization-permission-matrix.md)
+- [Better Auth Decision Log](architecture/better-auth-decision-log.md)
+- [Better Auth Feature Adoption](architecture/better-auth-feature-adoption.md)
+- [Better Auth Implementation Gaps](architecture/better-auth-implementation-gaps.md)
 - [Data Layer Architecture](architecture/data-layer.md)
 - [Jobs V1 Spec](architecture/jobs-v1-spec.md)
 - [Organization Next Steps](architecture/organization-next-steps.md)

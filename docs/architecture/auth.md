@@ -10,6 +10,10 @@ the codebase across:
 - `apps/app`, which owns auth UI, route gating, and session-aware navigation
 
 It describes the current implementation, not a hypothetical target state.
+The current auth/organization authorization split is mapped in
+[`auth-organization-permission-matrix.md`](auth-organization-permission-matrix.md).
+Pending Better Auth hardening decisions are tracked in
+[`better-auth-decision-log.md`](better-auth-decision-log.md).
 
 ## Current Scope
 
@@ -20,10 +24,17 @@ Authentication currently supports only:
 - email verification
 - password reset request
 - password reset completion
+- profile updates
+- verified email-change request and completion
+- authenticated password change
 - sign-out
 - session lookup
 - route protection for the authenticated app shell
 - redirecting authenticated users away from guest-only auth pages
+- Better Auth organization creation, active organization switching,
+  invitations, invitation acceptance, member listing, member removal, and member
+  role changes
+- Ceird domain authorization for organization actors and role-scoped workflows
 - OAuth/OIDC authorization-server configuration for MCP clients
 - app-owned OAuth consent UI for Better Auth authorization requests
 - MCP resource-server bearer-token validation and tool authorization
@@ -33,7 +44,10 @@ Authentication explicitly does not currently support:
 - social auth
 - magic links or OTP flows
 - redirect-back after login or signup
-- roles, permissions, or authorization rules
+- Better Auth two-factor authentication, passkeys, captcha, API keys, SSO, or
+  SCIM
+- user-defined organization roles or Better Auth dynamic access control
+- a user-facing active-session management surface
 - custom app-owned auth endpoints such as `/me` or `/viewer`
 - a custom app-owned auth service layer that wraps Better Auth behavior
 - machine-to-machine `client_credentials` grants for Ceird MCP scopes
@@ -106,6 +120,9 @@ Current config decisions:
   through app-owned absolute URLs for `/login` and `/oauth/consent`
 - Better Auth remains the native owner of
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
+- Better Auth remains the native owner of profile updates, verified email
+  changes, and password changes; the app only renders forms around those client
+  APIs
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
 - `MCP_RESOURCE_URL` is configured from the stage MCP hostname for deployed
@@ -212,16 +229,20 @@ Current rate-limit rules:
 - `POST /sign-in/email`: 5 attempts per 60 seconds
 - `POST /sign-up/email`: 3 attempts per 60 seconds
 - `POST /send-verification-email`: 3 attempts per 60 seconds
+- `POST /change-email`: 3 attempts per 60 seconds
+- `POST /change-password`: 5 attempts per 60 seconds
 
 Current note:
 
 - auth config currently defines custom rate-limit rules for sign-in, sign-up,
-  and verification email delivery
+  verification email delivery, change email, and change password
 - Better Auth still stores rate-limit state in the `rate_limit` table, but the
   auth runtime installs a small database-backed `customStorage` wrapper so
   rate-limit reads and writes can be measured as `auth.rateLimitReadMs` and
   `auth.rateLimitWriteMs`
 - password reset revokes existing sessions once the new password is accepted
+- authenticated password changes request other-session revocation through the
+  Better Auth client
 
 ### Auth Email Runtime Configuration
 
