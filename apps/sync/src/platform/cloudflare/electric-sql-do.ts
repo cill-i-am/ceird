@@ -7,7 +7,7 @@ import { Duration, Effect } from "effect";
 import type { SyncWorkerEnv } from "./env.js";
 
 const electricPort = 3000;
-const electricReadinessAttempts = 8;
+const electricReadinessAttempts = 45;
 const maxElectricReadinessDelayMs = 1000;
 const containerReadinessByState = new WeakMap<
   DurableObjectState,
@@ -33,77 +33,81 @@ export function handleElectricSqlFetch(
   request: Request,
   state: DurableObjectState
 ) {
-  return Effect.tryPromise({
-    catch: (cause) =>
-      cause instanceof Error
-        ? cause
-        : new Error("Electric container request failed", { cause }),
-    try: async () => {
-      const { container } = state;
+  return Effect.gen(function* () {
+    const { container } = state;
 
-      if (container === undefined) {
-        await Effect.runPromise(
-          Effect.logWarning("Electric container unavailable").pipe(
-            Effect.annotateLogs(makeElectricSqlRequestAnnotations(request))
-          )
-        );
-
-        return Response.json(
-          { error: "electric_container_unavailable" },
-          { status: 503 }
-        );
-      }
-
-      try {
-        await ensureElectricContainerReady(state, container, request);
-      } catch (error) {
-        await Effect.runPromise(
-          Effect.logWarning("Electric container readiness failed").pipe(
-            Effect.annotateLogs({
-              ...makeElectricSqlRequestAnnotations(request),
-              "electric.error": formatUnknownError(error),
-            })
-          )
-        );
-
-        return Response.json(
-          { error: "electric_container_unavailable" },
-          {
-            headers: {
-              "retry-after": "1",
-            },
-            status: 503,
-          }
-        );
-      }
-
-      const targetUrl = new URL(request.url);
-      const containerUrl = new URL(
-        `${targetUrl.pathname}${targetUrl.search}`,
-        "http://electric"
+    if (container === undefined) {
+      yield* Effect.logWarning("Electric container unavailable").pipe(
+        Effect.annotateLogs(makeElectricSqlRequestAnnotations(request))
       );
-      const containerRequest = new Request(containerUrl, request);
 
-      return await container.getTcpPort(electricPort).fetch(containerRequest);
-    },
-  }).pipe(
-    Effect.catch((error: Error) =>
-      Effect.gen(function* () {
-        yield* Effect.logWarning("Electric container forwarding failed").pipe(
+      return Response.json(
+        { error: "electric_container_unavailable" },
+        { status: 503 }
+      );
+    }
+
+    const ready = yield* Effect.tryPromise({
+      catch: (cause) =>
+        cause instanceof Error
+          ? cause
+          : new Error("Electric container readiness failed", { cause }),
+      try: () => ensureElectricContainerReady(state, container, request),
+    }).pipe(
+      Effect.as(true),
+      Effect.catch((error: Error) =>
+        Effect.logWarning("Electric container readiness failed").pipe(
           Effect.annotateLogs({
-            "electric.error": error.message,
-            "http.path": requestPathname(request.url),
-            "http.request_id": request.headers.get("x-request-id") ?? undefined,
-          })
-        );
+            ...makeElectricSqlRequestAnnotations(request),
+            "electric.error": formatUnknownError(error),
+          }),
+          Effect.as(false)
+        )
+      )
+    );
 
-        return Response.json(
-          { error: "electric_container_forwarding_failed" },
-          { status: 502 }
-        );
-      })
-    )
-  );
+    if (!ready) {
+      return Response.json(
+        { error: "electric_container_unavailable" },
+        {
+          headers: {
+            "retry-after": "2",
+          },
+          status: 503,
+        }
+      );
+    }
+
+    const targetUrl = new URL(request.url);
+    const containerUrl = new URL(
+      `${targetUrl.pathname}${targetUrl.search}`,
+      "http://electric"
+    );
+    const containerRequest = new Request(containerUrl, request);
+
+    return yield* Effect.tryPromise({
+      catch: (cause) =>
+        cause instanceof Error
+          ? cause
+          : new Error("Electric container forwarding failed", { cause }),
+      try: () => container.getTcpPort(electricPort).fetch(containerRequest),
+    }).pipe(
+      Effect.catch((error: Error) =>
+        Effect.logWarning("Electric container forwarding failed").pipe(
+          Effect.annotateLogs({
+            ...makeElectricSqlRequestAnnotations(request),
+            "electric.error": formatUnknownError(error),
+          }),
+          Effect.as(
+            Response.json(
+              { error: "electric_container_forwarding_failed" },
+              { status: 502 }
+            )
+          )
+        )
+      )
+    );
+  });
 }
 
 function ensureElectricContainerReady(
@@ -188,7 +192,7 @@ function monitorElectricContainer(
         Effect.logError("Electric container monitor failed").pipe(
           Effect.annotateLogs({
             ...makeElectricSqlRequestAnnotations(request),
-            "electric.error": error.message,
+            "electric.error": formatUnknownError(error),
           })
         )
       )
@@ -214,5 +218,14 @@ function requestPathname(url: string) {
 }
 
 function formatUnknownError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return redactElectricSensitiveError(
+    error instanceof Error ? error.message : String(error)
+  );
+}
+
+function redactElectricSensitiveError(input: string) {
+  return input
+    .replaceAll(/([?&]secret=)[^&\s)"']+/giu, "$1[REDACTED]")
+    .replaceAll(/([?&]params%5B[^=]+%5D=)[^&\s)"']+/giu, "$1[REDACTED]")
+    .replaceAll(/([?&]params\[[^\]]+\]=)[^&\s)"']+/giu, "$1[REDACTED]");
 }

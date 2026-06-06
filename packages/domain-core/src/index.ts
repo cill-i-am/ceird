@@ -5,6 +5,8 @@ export {
 export {
   isSyncInternalPath,
   makeSyncShapeAuthorizationPath,
+  ORGANIZATION_SYNC_WHERE,
+  ORGANIZATION_USER_SYNC_WHERE,
   SyncAccessDeniedError,
   SyncAuthorizationStorageError,
   SyncInternalApiGroup,
@@ -17,6 +19,7 @@ export {
   SyncShapeNameSchema,
   SyncShapeNotFoundError,
   SyncUnauthorizedError,
+  SYNC_SHAPE_AUTHORIZATION_DEFINITIONS,
   SYNC_ACCESS_DENIED_ERROR_TAG,
   SYNC_AUTHORIZATION_STORAGE_ERROR_TAG,
   SYNC_INTERNAL_PATH_PREFIX,

@@ -1,11 +1,15 @@
 import {
+  ORGANIZATION_SYNC_WHERE,
+  ORGANIZATION_USER_SYNC_WHERE,
   SyncAccessDeniedError,
   SyncAuthorizationStorageError,
+  SyncShapeAuthorizationSchema,
+  SYNC_SHAPE_AUTHORIZATION_DEFINITIONS,
   SyncUnauthorizedError,
 } from "@ceird/domain-core";
-import type { SyncShapeAuthorization, SyncShapeName } from "@ceird/domain-core";
+import type { SyncShapeName } from "@ceird/domain-core";
 import { isInternalOrganizationRole } from "@ceird/identity-core";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Match, Schema } from "effect";
 
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type {
@@ -30,74 +34,6 @@ type SyncCurrentOrganizationActorError =
   | OrganizationRoleNotSupportedError
   | OrganizationSessionIdentityInvalidError
   | OrganizationSessionRequiredError;
-
-interface SyncShapeDefinition {
-  readonly scope: "organization" | "organization-user";
-  readonly table: string;
-}
-
-const syncShapeDefinitions = {
-  "agent-action-runs": {
-    scope: "organization-user",
-    table: "agent_action_runs",
-  },
-  "agent-threads": {
-    scope: "organization-user",
-    table: "agent_threads",
-  },
-  comments: {
-    scope: "organization",
-    table: "comments",
-  },
-  contacts: {
-    scope: "organization",
-    table: "contacts",
-  },
-  jobs: {
-    scope: "organization",
-    table: "work_items",
-  },
-  labels: {
-    scope: "organization",
-    table: "labels",
-  },
-  "site-comments": {
-    scope: "organization",
-    table: "site_comments",
-  },
-  "site-contacts": {
-    scope: "organization",
-    table: "site_contacts",
-  },
-  "site-labels": {
-    scope: "organization",
-    table: "site_labels",
-  },
-  sites: {
-    scope: "organization",
-    table: "sites",
-  },
-  "work-item-activity": {
-    scope: "organization",
-    table: "work_item_activity",
-  },
-  "work-item-collaborators": {
-    scope: "organization",
-    table: "work_item_collaborators",
-  },
-  "work-item-comments": {
-    scope: "organization",
-    table: "work_item_comments",
-  },
-  "work-item-labels": {
-    scope: "organization",
-    table: "work_item_labels",
-  },
-  "work-item-visits": {
-    scope: "organization",
-    table: "work_item_visits",
-  },
-} as const satisfies Record<SyncShapeName, SyncShapeDefinition>;
 
 export class SyncAuthorizationService extends Context.Service<SyncAuthorizationService>()(
   "@ceird/domains/sync/SyncAuthorizationService",
@@ -126,7 +62,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           );
         }
 
-        const definition = syncShapeDefinitions[shapeName];
+        const definition = SYNC_SHAPE_AUTHORIZATION_DEFINITIONS[shapeName];
         yield* Effect.annotateCurrentSpan("sync.scope", definition.scope);
         yield* Effect.annotateCurrentSpan("sync.table", definition.table);
         yield* Effect.annotateCurrentSpan(
@@ -141,10 +77,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           shape: shapeName,
           table: definition.table,
           userId: actor.userId,
-        } satisfies Pick<
-          SyncShapeAuthorization,
-          "organizationId" | "shape" | "table" | "userId"
-        >;
+        };
 
         if (definition.scope === "organization-user") {
           const params = {
@@ -152,24 +85,28 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
             "2": actor.userId,
           };
 
-          return {
+          const authorization = {
             ...baseAuthorization,
             params,
             scope: "organization-user",
-            where: "organization_id = $1 AND user_id = $2",
-          } satisfies SyncShapeAuthorization;
+            where: ORGANIZATION_USER_SYNC_WHERE,
+          };
+
+          return yield* decodeSyncShapeAuthorization(authorization);
         }
 
         const params = {
           "1": actor.organizationId,
         };
 
-        return {
+        const authorization = {
           ...baseAuthorization,
           params,
           scope: "organization",
-          where: "organization_id = $1",
-        } satisfies SyncShapeAuthorization;
+          where: ORGANIZATION_SYNC_WHERE,
+        };
+
+        return yield* decodeSyncShapeAuthorization(authorization);
       });
 
       return { authorizeShape };
@@ -186,39 +123,83 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
     );
 }
 
+function decodeSyncShapeAuthorization(input: unknown) {
+  return Schema.decodeUnknownEffect(SyncShapeAuthorizationSchema)(input).pipe(
+    Effect.orDie
+  );
+}
+
 function mapCurrentActorError(
   error: SyncCurrentOrganizationActorError,
   shapeName: SyncShapeName
 ) {
-  switch (error._tag) {
-    case "@ceird/domains/organizations/OrganizationActiveOrganizationRequiredError":
-    case "@ceird/domains/organizations/OrganizationSessionIdentityInvalidError":
-    case "@ceird/domains/organizations/OrganizationSessionRequiredError": {
-      return new SyncUnauthorizedError({
-        cause: error._tag,
-        message: "Authentication is required to authorize sync",
-        shapeName,
-      });
-    }
-    case "@ceird/domains/organizations/OrganizationActorStorageError": {
-      return new SyncAuthorizationStorageError({
-        cause: error._tag,
-        message: "Sync authorization lookup failed",
-        shapeName,
-      });
-    }
-    case "@ceird/domains/organizations/OrganizationActorMembershipNotFoundError":
-    case "@ceird/domains/organizations/OrganizationRoleNotSupportedError": {
-      return new SyncAccessDeniedError({
-        cause: error._tag,
-        message: "Organization membership is required to authorize sync",
-        shapeName,
-      });
-    }
-    default: {
-      const exhaustive: never = error;
-
-      return exhaustive;
-    }
-  }
+  return Match.value(error).pipe(
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationActiveOrganizationRequiredError",
+      },
+      (currentActorError) =>
+        new SyncUnauthorizedError({
+          cause: currentActorError._tag,
+          message: "Authentication is required to authorize sync",
+          shapeName,
+        })
+    ),
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationSessionIdentityInvalidError",
+      },
+      (currentActorError) =>
+        new SyncUnauthorizedError({
+          cause: currentActorError._tag,
+          message: "Authentication is required to authorize sync",
+          shapeName,
+        })
+    ),
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationSessionRequiredError",
+      },
+      (currentActorError) =>
+        new SyncUnauthorizedError({
+          cause: currentActorError._tag,
+          message: "Authentication is required to authorize sync",
+          shapeName,
+        })
+    ),
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationActorStorageError",
+      },
+      (currentActorError) =>
+        new SyncAuthorizationStorageError({
+          cause: currentActorError.cause ?? currentActorError._tag,
+          message: "Sync authorization lookup failed",
+          shapeName,
+        })
+    ),
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationActorMembershipNotFoundError",
+      },
+      (currentActorError) =>
+        new SyncAccessDeniedError({
+          cause: currentActorError._tag,
+          message: "Organization membership is required to authorize sync",
+          shapeName,
+        })
+    ),
+    Match.when(
+      {
+        _tag: "@ceird/domains/organizations/OrganizationRoleNotSupportedError",
+      },
+      (currentActorError) =>
+        new SyncAccessDeniedError({
+          cause: currentActorError._tag,
+          message: "Organization membership is required to authorize sync",
+          shapeName,
+        })
+    ),
+    Match.exhaustive
+  );
 }

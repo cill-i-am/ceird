@@ -39,6 +39,78 @@ export type SyncShapeAuthorizationScope = Schema.Schema.Type<
   typeof SyncShapeAuthorizationScopeSchema
 >;
 
+export interface SyncShapeDefinition {
+  readonly scope: SyncShapeAuthorizationScope;
+  readonly table: string;
+}
+
+export const ORGANIZATION_SYNC_WHERE = "organization_id = $1" as const;
+export const ORGANIZATION_USER_SYNC_WHERE =
+  "organization_id = $1 AND user_id = $2" as const;
+
+export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
+  "agent-action-runs": {
+    scope: "organization-user",
+    table: "agent_action_runs",
+  },
+  "agent-threads": {
+    scope: "organization-user",
+    table: "agent_threads",
+  },
+  comments: {
+    scope: "organization",
+    table: "comments",
+  },
+  contacts: {
+    scope: "organization",
+    table: "contacts",
+  },
+  jobs: {
+    scope: "organization",
+    table: "work_items",
+  },
+  labels: {
+    scope: "organization",
+    table: "labels",
+  },
+  "site-comments": {
+    scope: "organization",
+    table: "site_comments",
+  },
+  "site-contacts": {
+    scope: "organization",
+    table: "site_contacts",
+  },
+  "site-labels": {
+    scope: "organization",
+    table: "site_labels",
+  },
+  sites: {
+    scope: "organization",
+    table: "sites",
+  },
+  "work-item-activity": {
+    scope: "organization",
+    table: "work_item_activity",
+  },
+  "work-item-collaborators": {
+    scope: "organization",
+    table: "work_item_collaborators",
+  },
+  "work-item-comments": {
+    scope: "organization",
+    table: "work_item_comments",
+  },
+  "work-item-labels": {
+    scope: "organization",
+    table: "work_item_labels",
+  },
+  "work-item-visits": {
+    scope: "organization",
+    table: "work_item_visits",
+  },
+} as const satisfies Record<SyncShapeName, SyncShapeDefinition>;
+
 export const OrganizationSyncShapeAuthorizationParamsSchema = Schema.Struct({
   "1": SyncOrganizationId,
 });
@@ -56,28 +128,80 @@ export type OrganizationUserSyncShapeAuthorizationParams = Schema.Schema.Type<
   typeof OrganizationUserSyncShapeAuthorizationParamsSchema
 >;
 
-export const OrganizationSyncShapeAuthorizationSchema = Schema.Struct({
-  organizationId: SyncOrganizationId,
-  params: OrganizationSyncShapeAuthorizationParamsSchema,
-  shape: SyncShapeNameSchema,
-  scope: Schema.Literal("organization"),
-  table: Schema.NonEmptyString,
-  userId: SyncUserId,
-  where: Schema.NonEmptyString,
-});
+function makeOrganizationShapeAuthorizationSchema<
+  const Shape extends SyncShapeName,
+  const Table extends string,
+>(shape: Shape, table: Table) {
+  return Schema.Struct({
+    organizationId: SyncOrganizationId,
+    params: OrganizationSyncShapeAuthorizationParamsSchema,
+    shape: Schema.Literal(shape),
+    scope: Schema.Literal("organization"),
+    table: Schema.Literal(table),
+    userId: SyncUserId,
+    where: Schema.Literal(ORGANIZATION_SYNC_WHERE),
+  });
+}
+
+function makeOrganizationUserShapeAuthorizationSchema<
+  const Shape extends SyncShapeName,
+  const Table extends string,
+>(shape: Shape, table: Table) {
+  return Schema.Struct({
+    organizationId: SyncOrganizationId,
+    params: OrganizationUserSyncShapeAuthorizationParamsSchema,
+    shape: Schema.Literal(shape),
+    scope: Schema.Literal("organization-user"),
+    table: Schema.Literal(table),
+    userId: SyncUserId,
+    where: Schema.Literal(ORGANIZATION_USER_SYNC_WHERE),
+  });
+}
+
+export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
+  makeOrganizationShapeAuthorizationSchema("comments", "comments"),
+  makeOrganizationShapeAuthorizationSchema("contacts", "contacts"),
+  makeOrganizationShapeAuthorizationSchema("jobs", "work_items"),
+  makeOrganizationShapeAuthorizationSchema("labels", "labels"),
+  makeOrganizationShapeAuthorizationSchema("site-comments", "site_comments"),
+  makeOrganizationShapeAuthorizationSchema("site-contacts", "site_contacts"),
+  makeOrganizationShapeAuthorizationSchema("site-labels", "site_labels"),
+  makeOrganizationShapeAuthorizationSchema("sites", "sites"),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-activity",
+    "work_item_activity"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-collaborators",
+    "work_item_collaborators"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-comments",
+    "work_item_comments"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-labels",
+    "work_item_labels"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-visits",
+    "work_item_visits"
+  ),
+]);
 export type OrganizationSyncShapeAuthorization = Schema.Schema.Type<
   typeof OrganizationSyncShapeAuthorizationSchema
 >;
 
-export const OrganizationUserSyncShapeAuthorizationSchema = Schema.Struct({
-  organizationId: SyncOrganizationId,
-  params: OrganizationUserSyncShapeAuthorizationParamsSchema,
-  shape: SyncShapeNameSchema,
-  scope: Schema.Literal("organization-user"),
-  table: Schema.NonEmptyString,
-  userId: SyncUserId,
-  where: Schema.NonEmptyString,
-});
+export const OrganizationUserSyncShapeAuthorizationSchema = Schema.Union([
+  makeOrganizationUserShapeAuthorizationSchema(
+    "agent-action-runs",
+    "agent_action_runs"
+  ),
+  makeOrganizationUserShapeAuthorizationSchema(
+    "agent-threads",
+    "agent_threads"
+  ),
+]);
 export type OrganizationUserSyncShapeAuthorization = Schema.Schema.Type<
   typeof OrganizationUserSyncShapeAuthorizationSchema
 >;

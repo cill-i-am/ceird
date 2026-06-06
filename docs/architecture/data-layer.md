@@ -177,13 +177,21 @@ through the Alchemy stack and are not emitted as stack outputs.
 
 Electric stores shape logs and metadata on a filesystem that must survive sync
 service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
-provisions a stage-scoped R2 bucket for Electric storage and a bucket-scoped
-R2 API token for the container. The token id is passed as `AWS_ACCESS_KEY_ID`;
-the SHA-256 hash of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which
-matches Cloudflare R2's S3 credential derivation. The container mounts the R2
-bucket at `/var/lib/electric` with TigrisFS, verifies the mountpoint is active
-and writable with a startup probe, and only then starts Electric. Electric runs
-with `ELECTRIC_STORAGE=fast_file`, `ELECTRIC_PERSISTENT_STATE=file`, and
+provisions a stage-scoped R2 bucket for Electric storage. In local
+`alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
+local cloud-backed loop stays self-contained. In CI and deployed stages, the
+separate GitHub credential stack owns the long-lived Electric R2 API token and
+stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` as GitHub environment secrets. The
+main app stack consumes those values instead of creating API tokens during
+routine deploys, so the deploy token does not need `API Tokens Write`.
+
+The token id is passed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256 hash
+of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which matches
+Cloudflare R2's S3 credential derivation. The container mounts the R2 bucket at
+`/var/lib/electric` with TigrisFS, verifies the mountpoint is active and
+writable with a startup probe, and only then starts Electric. Electric runs with
+`ELECTRIC_STORAGE=fast_file`, `ELECTRIC_PERSISTENT_STATE=file`, and
 `ELECTRIC_STORAGE_DIR=/var/lib/electric`. It also sets
 `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so Electric's active-shape SQLite
 database is configured for the R2-backed network filesystem. The sync Worker

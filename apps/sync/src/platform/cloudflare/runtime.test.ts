@@ -1,10 +1,23 @@
 import type { SyncShapeName } from "@ceird/domain-core";
 import { SyncShapeAuthorizationSchema } from "@ceird/domain-core";
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Logger, Redacted, References, Schema } from "effect";
 
 import type { SyncWorkerEnv } from "./env.js";
 import { handleSyncWorkerFetch, SyncWorkerFailure } from "./runtime.js";
+
+function captureLogs() {
+  const logs: unknown[] = [];
+  const logger = Logger.make((input) => {
+    logs.push({
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
+      message: input.message,
+    });
+  });
+
+  return { logger, logs };
+}
 
 function makeExecutionContext() {
   return {
@@ -151,6 +164,43 @@ describe("Sync Worker runtime", () => {
     expect(response.status).toBe(502);
   });
 
+  it("maps domain authorization 5xx responses to sync unavailability", async () => {
+    const response = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          origin: "https://app.example.com",
+        },
+      }),
+      {
+        ...baseEnv,
+        DOMAIN: {
+          connect: () => {
+            throw new Error("connect is not used by the sync adapter");
+          },
+          fetch: () =>
+            Promise.resolve(
+              Response.json(
+                {
+                  _tag: "@ceird/domain-core/SyncAuthorizationStorageError",
+                  message: "storage unavailable",
+                },
+                { status: 503 }
+              )
+            ),
+        },
+      },
+      makeExecutionContext(),
+      {
+        fetchElectric: () => Effect.die("unexpected electric request"),
+      }
+    ).pipe(Effect.runPromise);
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "sync_unavailable",
+    });
+    expect(response.status).toBe(503);
+  });
+
   it("authorizes a named shape and injects Electric table, params, and secret server-side", async () => {
     const forwardedRequests: Request[] = [];
     const response = await handleSyncWorkerFetch(
@@ -206,6 +256,39 @@ describe("Sync Worker runtime", () => {
     expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
     expect(electricUrl.searchParams.get("secret")).toBe("electric-secret");
     expect(forwardedRequests[0].headers.get("cookie")).toBeNull();
+  });
+
+  it("replaces unsafe caller request IDs before forwarding", async () => {
+    const seenRequestIds: string[] = [];
+    const response = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          "x-request-id": "bad request id",
+        },
+      }),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape: (_request, _shapeName, requestId) =>
+          Effect.sync(() => {
+            seenRequestIds.push(requestId);
+
+            return makeJobsAuthorization();
+          }),
+        fetchElectric: (request) =>
+          Effect.sync(() => {
+            seenRequestIds.push(request.headers.get("x-request-id") ?? "");
+
+            return Response.json([{ headers: { control: "up-to-date" } }]);
+          }),
+      }
+    ).pipe(Effect.runPromise);
+    const requestId = response.headers.get("x-request-id");
+
+    expect(response.status).toBe(200);
+    expect(requestId).toBeTruthy();
+    expect(requestId).not.toBe("bad request id");
+    expect(seenRequestIds).toStrictEqual([requestId, requestId]);
   });
 
   it("supports both query and path style public shape requests", async () => {
@@ -412,5 +495,41 @@ describe("Sync Worker runtime", () => {
       error: "sync_unauthorized",
     });
     expect(response.status).toBe(401);
+  });
+
+  it("redacts Electric source secrets from forwarding failure logs", async () => {
+    const { logger, logs } = captureLogs();
+    const response = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          origin: "https://app.example.com",
+        },
+      }),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape: () => Effect.succeed(makeJobsAuthorization()),
+        fetchElectric: (request) =>
+          Effect.fail(
+            new SyncWorkerFailure({
+              failureTag: "ElectricForwardingFailed",
+              message: `Failed to fetch ${request.url}`,
+              status: 502,
+            })
+          ),
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+    const serializedLogs = JSON.stringify(logs);
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "sync_unavailable",
+    });
+    expect(response.status).toBe(502);
+    expect(serializedLogs).not.toContain("electric-secret");
+    expect(serializedLogs).toContain("secret=[REDACTED]");
   });
 });

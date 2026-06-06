@@ -80,6 +80,10 @@ export interface InfraStageConfig {
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly electricContainerInstanceType: ElectricContainerInstanceType;
+  readonly electricStorageAccessKeyId: Redacted.Redacted<string> | undefined;
+  readonly electricStorageSecretAccessKey:
+    | Redacted.Redacted<string>
+    | undefined;
   readonly mcpAuthorizedAppCacheMaxEntries: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds: number | undefined;
   readonly neonDatabaseName: string;
@@ -361,6 +365,12 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(identity.isProduction ? "basic" : "dev"),
       Config.mapOrFail(decodeElectricContainerInstanceType)
     );
+    const electricStorageAccessKeyId = yield* Config.option(
+      Config.redacted("CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID")
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const electricStorageSecretAccessKey = yield* Config.option(
+      Config.redacted("CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY")
+    ).pipe(Effect.map(Option.getOrUndefined));
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(
@@ -438,6 +448,8 @@ export function loadInfraStageConfig(stageInput: string) {
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
       electricContainerInstanceType,
+      electricStorageAccessKeyId,
+      electricStorageSecretAccessKey,
       mcpAuthorizedAppCacheMaxEntries,
       mcpAuthorizedAppCacheTtlSeconds,
       neonDatabaseName,

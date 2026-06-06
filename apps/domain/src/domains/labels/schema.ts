@@ -41,6 +41,7 @@ export const label = pgTable(
       table.id,
       table.organizationId
     ),
+    index("labels_organization_id_idx").on(table.organizationId),
     index("labels_organization_name_idx")
       .on(table.organizationId, table.name, table.id)
       .where(sql`${table.archivedAt} is null`),

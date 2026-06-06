@@ -1,7 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { createHash } from "node:crypto";
-
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
@@ -19,6 +17,11 @@ import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
 import { makeMcpWorker } from "../apps/mcp/infra/cloudflare-worker.ts";
 import { makeSyncWorker } from "../apps/sync/infra/cloudflare-worker.ts";
+import type { ElectricContainerStorageConfig } from "../apps/sync/infra/cloudflare-worker.ts";
+import {
+  makeCloudflareR2BucketResourceKey,
+  makeR2SecretAccessKey,
+} from "./cloudflare-r2.ts";
 import {
   TenantWildcardDnsRecord,
   TenantWorkerRoute,
@@ -83,22 +86,6 @@ export function makeCloudflareHyperdriveProps(input: {
   } satisfies InputProps<Cloudflare.HyperdriveProps>;
 }
 
-export function makeCloudflareR2BucketResourceKey(input: {
-  readonly accountId: string;
-  readonly bucketName: string;
-  readonly jurisdiction: string;
-}) {
-  return `com.cloudflare.edge.r2.bucket.${input.accountId}_${input.jurisdiction}_${input.bucketName}` as const;
-}
-
-export function makeR2SecretAccessKey(
-  apiTokenValue: Redacted.Redacted<string>
-) {
-  return createHash("sha256")
-    .update(Redacted.value(apiTokenValue))
-    .digest("hex");
-}
-
 const durableObjectLocationHintByNeonRegion = {
   "aws-ap-southeast-1": "apac",
   "aws-ap-southeast-2": "apac",
@@ -158,6 +145,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
 
   const { accountId: cloudflareAccountId } =
     yield* Cloudflare.CloudflareEnvironment;
+  const alchemyContext = yield* Alchemy.AlchemyContext;
+  const localDev = alchemyContext.dev;
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
     bytes: 32,
   });
@@ -192,34 +181,14 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       ],
     }
   );
-  const electricStorageApiToken = yield* Cloudflare.AccountApiToken(
-    "ElectricStorageR2Token",
-    {
-      name: resourceName(input.config, "electric-storage-r2-token"),
-      accountId: cloudflareAccountId,
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: [
-            "Workers R2 Storage Bucket Item Read",
-            "Workers R2 Storage Bucket Item Write",
-          ],
-          resources: {
-            [makeCloudflareR2BucketResourceKey({
-              accountId: cloudflareAccountId,
-              bucketName: electricStorageBucketName,
-              jurisdiction: "default",
-            })]: "*",
-          },
-        },
-      ],
-    }
-  );
-  const electricStorageSecretAccessKey = electricStorageApiToken.value.pipe(
-    Output.map(makeR2SecretAccessKey)
-  );
-  const alchemyContext = yield* Alchemy.AlchemyContext;
-  const localDev = alchemyContext.dev;
+  const electricStorageCredentials =
+    localDev === true
+      ? yield* makeLocalElectricStorageCredentials({
+          accountId: cloudflareAccountId,
+          bucketName: electricStorageBucketName,
+          config: input.config,
+        })
+      : readConfiguredElectricStorageCredentials(input.config);
   const localOrigins = {
     agent: makeAlchemyLocalWorkerOrigin("agent"),
     api: makeAlchemyLocalWorkerOrigin("api"),
@@ -371,10 +340,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "sync"),
     storage: {
-      accessKeyId: electricStorageApiToken.tokenId,
+      accessKeyId: electricStorageCredentials.accessKeyId,
       accountId: cloudflareAccountId,
       bucketName: electricStorageBucketName,
-      secretAccessKey: electricStorageSecretAccessKey,
+      secretAccessKey: electricStorageCredentials.secretAccessKey,
     },
   });
 
@@ -475,3 +444,58 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     workerAnalyticsDataset: workerAnalytics.dataset,
   } as const;
 });
+
+function makeLocalElectricStorageCredentials(input: {
+  readonly accountId: string;
+  readonly bucketName: string;
+  readonly config: InfraStageConfig;
+}) {
+  return Effect.gen(function* () {
+    const token = yield* Cloudflare.AccountApiToken("ElectricStorageR2Token", {
+      name: resourceName(input.config, "electric-storage-r2-token"),
+      accountId: input.accountId,
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups: [
+            "Workers R2 Storage Bucket Item Read",
+            "Workers R2 Storage Bucket Item Write",
+          ],
+          resources: {
+            [makeCloudflareR2BucketResourceKey({
+              accountId: input.accountId,
+              bucketName: input.bucketName,
+              jurisdiction: "default",
+            })]: "*",
+          },
+        },
+      ],
+    });
+
+    return {
+      accessKeyId: token.tokenId,
+      secretAccessKey: token.value.pipe(Output.map(makeR2SecretAccessKey)),
+    } satisfies Pick<
+      ElectricContainerStorageConfig,
+      "accessKeyId" | "secretAccessKey"
+    >;
+  });
+}
+
+function readConfiguredElectricStorageCredentials(
+  config: InfraStageConfig
+): Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey"> {
+  if (
+    config.electricStorageAccessKeyId === undefined ||
+    config.electricStorageSecretAccessKey === undefined
+  ) {
+    throw new Error(
+      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+    );
+  }
+
+  return {
+    accessKeyId: Redacted.value(config.electricStorageAccessKeyId),
+    secretAccessKey: Redacted.value(config.electricStorageSecretAccessKey),
+  };
+}

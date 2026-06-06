@@ -22,6 +22,8 @@ export const configWithoutCloudflareBootstrapSecrets = {
   hyperdriveName: "ceird-production-postgres",
   hyperdriveOriginConnectionLimit: 5,
   electricContainerInstanceType: "basic",
+  electricStorageAccessKeyId: undefined,
+  electricStorageSecretAccessKey: undefined,
   mcpAuthorizedAppCacheMaxEntries: undefined,
   mcpAuthorizedAppCacheTtlSeconds: undefined,
   neonDatabaseName: "ceird",

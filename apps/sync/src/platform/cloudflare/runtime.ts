@@ -17,6 +17,7 @@ import { decodeSyncWorkerConfigEnv } from "./env.js";
 import type { SyncWorkerEnv } from "./env.js";
 
 const REQUEST_ID_HEADER = "x-request-id";
+const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const electricShapePath = "/v1/shape";
 const electricShapePathPrefix = "/v1/shapes/";
 const forwardedElectricQueryParams = new Set([
@@ -61,6 +62,7 @@ export class SyncWorkerFailure extends Schema.TaggedErrorClass<SyncWorkerFailure
   {
     failureTag: SyncWorkerFailureKindSchema,
     message: Schema.String,
+    shapeName: Schema.optional(SyncShapeNameSchema),
     status: Schema.Number,
   }
 ) {}
@@ -83,8 +85,7 @@ export function handleSyncWorkerFetch(
   dependencies: SyncWorkerDependencies = {}
 ) {
   const startedAt = performance.now();
-  const requestId =
-    request.headers.get(REQUEST_ID_HEADER) ?? crypto.randomUUID();
+  const requestId = readRequestId(request);
   const authorizeShape =
     dependencies.authorizeShape ?? makeDomainShapeAuthorizer(env);
   const fetchElectric = dependencies.fetchElectric ?? makeElectricFetcher(env);
@@ -186,6 +187,11 @@ function handleSyncRequest(
   }
 
   return Effect.gen(function* () {
+    yield* Effect.annotateCurrentSpan(
+      "sync.shapeName",
+      shapeNameResult.shapeName
+    );
+
     const authorization = yield* dependencies.authorizeShape(
       request,
       shapeNameResult.shapeName,
@@ -199,7 +205,11 @@ function handleSyncRequest(
     );
 
     return yield* dependencies.fetchElectric(electricRequest);
-  });
+  }).pipe(
+    Effect.mapError((failure) =>
+      withFailureShapeName(failure, shapeNameResult.shapeName)
+    )
+  );
 }
 
 function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
@@ -212,9 +222,10 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
           makeFailure(
             "SyncAuthorizationUnavailable",
             formatUnknownError(cause),
-            503
+            503,
+            shapeName
           ),
-        try: async () => {
+        try: () => {
           const headers = new Headers(request.headers);
 
           headers.set(REQUEST_ID_HEADER, requestId);
@@ -224,7 +235,7 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
             request.url
           );
 
-          return await domain.request(
+          return domain.request(
             new Request(authorizeUrl, {
               headers,
               method: "GET",
@@ -234,11 +245,16 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
       });
 
       if (!response.ok) {
+        const message = yield* readDomainAuthorizationFailureMessage(response);
+
         return yield* Effect.fail(
           makeFailure(
-            "SyncAuthorizationRejected",
-            `Sync authorization failed with status ${response.status}`,
-            response.status
+            response.status >= 500
+              ? "SyncAuthorizationUnavailable"
+              : "SyncAuthorizationRejected",
+            message,
+            response.status,
+            shapeName
           )
         );
       }
@@ -248,7 +264,8 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
           makeFailure(
             "SyncAuthorizationInvalidResponse",
             formatUnknownError(cause),
-            502
+            502,
+            shapeName
           ),
         try: () => response.json(),
       });
@@ -260,7 +277,8 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
           makeFailure(
             "SyncAuthorizationInvalidResponse",
             formatUnknownError(cause),
-            502
+            502,
+            shapeName
           )
         )
       );
@@ -274,19 +292,55 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
     );
 }
 
+function readDomainAuthorizationFailureMessage(response: Response) {
+  return Effect.tryPromise({
+    catch: (cause) => cause,
+    try: async () =>
+      readDomainErrorPayloadSummary(await response.clone().json()),
+  }).pipe(
+    Effect.catch(() => Effect.succeed(undefined as string | undefined)),
+    Effect.map((summary) =>
+      summary === undefined
+        ? `Sync authorization failed with status ${String(response.status)}`
+        : `Sync authorization failed with status ${String(response.status)}: ${summary}`
+    )
+  );
+}
+
+function readDomainErrorPayloadSummary(payload: unknown) {
+  if (payload === null || typeof payload !== "object") {
+    return;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const { _tag: rawTag, error: rawError, message: rawMessage } = record;
+  const tag = typeof rawTag === "string" ? rawTag : undefined;
+  let message: string | undefined;
+
+  if (typeof rawMessage === "string") {
+    message = rawMessage;
+  } else if (typeof rawError === "string") {
+    message = rawError;
+  }
+
+  const parts = [tag, message].filter((part) => part !== undefined);
+
+  return parts.length === 0 ? undefined : parts.join(": ");
+}
+
 function makeElectricFetcher(env: SyncWorkerEnv) {
   return (request: Request) =>
     Effect.tryPromise({
       catch: (cause) =>
         makeFailure("ElectricForwardingFailed", formatUnknownError(cause), 502),
-      try: async () => {
+      try: () => {
         const options =
           env.ELECTRIC_SQL_LOCATION_HINT === undefined
             ? undefined
             : { locationHint: env.ELECTRIC_SQL_LOCATION_HINT };
         const stub = env.ElectricSql.getByName("primary", options);
 
-        return await stub.fetch(request);
+        return stub.fetch(request);
       },
     }).pipe(
       Effect.withSpan("SyncWorker.fetchElectric", {
@@ -453,10 +507,13 @@ function logSyncWorkerFetchOutcome(
   response: Response,
   requestId: string
 ) {
-  if (new URL(request.url).pathname === "/health") {
+  const url = new URL(request.url);
+
+  if (url.pathname === "/health") {
     return Effect.void;
   }
 
+  const shapeName = readObservedShapeName(url);
   const log =
     response.status >= 500
       ? Effect.logWarning("Handled sync Worker request")
@@ -472,9 +529,10 @@ function logSyncWorkerFetchOutcome(
         : { "alchemy.stage": env.ALCHEMY_STAGE }),
       "ceird.adapter": "sync",
       "http.method": request.method,
-      "http.path": new URL(request.url).pathname,
+      "http.path": url.pathname,
       "http.request_id": requestId,
       "http.status": response.status,
+      ...(shapeName === undefined ? {} : { "sync.shapeName": shapeName }),
     })
   );
 }
@@ -485,7 +543,12 @@ function logSyncWorkerFailure(
   failure: SyncWorkerFailure,
   requestId: string
 ) {
-  return Effect.logWarning("Sync Worker request failed").pipe(
+  const log =
+    failure.status >= 500
+      ? Effect.logWarning("Sync Worker request failed")
+      : Effect.logInfo("Sync Worker request failed");
+
+  return log.pipe(
     Effect.annotateLogs({
       ...(env.ALCHEMY_STACK_NAME === undefined
         ? {}
@@ -498,8 +561,11 @@ function logSyncWorkerFailure(
       "http.path": new URL(request.url).pathname,
       "http.request_id": requestId,
       "http.status": failure.status,
-      "sync.failure_message": failure.message,
+      "sync.failure_message": redactElectricSensitiveError(failure.message),
       "sync.failure_tag": failure.failureTag,
+      ...(failure.shapeName === undefined
+        ? {}
+        : { "sync.shapeName": failure.shapeName }),
     })
   );
 }
@@ -592,17 +658,68 @@ function readFailureErrorCode(status: number) {
 function makeFailure(
   failureTag: SyncWorkerFailureKind,
   message: string,
-  status: number
+  status: number,
+  shapeName?: SyncShapeName | undefined
 ): SyncWorkerFailure {
   return new SyncWorkerFailure({
     failureTag,
-    message,
+    message: redactElectricSensitiveError(message),
+    ...(shapeName === undefined ? {} : { shapeName }),
     status,
   });
 }
 
+function withFailureShapeName(
+  failure: SyncWorkerFailure,
+  shapeName: SyncShapeName
+) {
+  if (failure.shapeName !== undefined) {
+    return failure;
+  }
+
+  return new SyncWorkerFailure({
+    failureTag: failure.failureTag,
+    message: failure.message,
+    shapeName,
+    status: failure.status,
+  });
+}
+
 function formatUnknownError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return redactElectricSensitiveError(
+    error instanceof Error ? error.message : String(error)
+  );
+}
+
+function readRequestId(request: Request) {
+  const value = request.headers.get(REQUEST_ID_HEADER)?.trim();
+
+  return value !== undefined && SAFE_REQUEST_ID_PATTERN.test(value)
+    ? value
+    : crypto.randomUUID();
+}
+
+function readObservedShapeName(url: URL) {
+  let rawShapeName: string | null | undefined;
+
+  if (url.pathname === electricShapePath) {
+    rawShapeName = url.searchParams.get("shape");
+  } else if (url.pathname.startsWith(electricShapePathPrefix)) {
+    rawShapeName = url.pathname.slice(electricShapePathPrefix.length);
+  }
+
+  return rawShapeName !== undefined &&
+    rawShapeName !== null &&
+    Schema.is(SyncShapeNameSchema)(rawShapeName)
+    ? rawShapeName
+    : undefined;
+}
+
+function redactElectricSensitiveError(input: string) {
+  return input
+    .replaceAll(/([?&]secret=)[^&\s)"']+/giu, "$1[REDACTED]")
+    .replaceAll(/([?&]params%5B[^=]+%5D=)[^&\s)"']+/giu, "$1[REDACTED]")
+    .replaceAll(/([?&]params\[[^\]]+\]=)[^&\s)"']+/giu, "$1[REDACTED]");
 }
 
 function escapeRegExp(input: string) {

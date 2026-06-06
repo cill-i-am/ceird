@@ -74,13 +74,15 @@ import type {
   SyncWorkerBindingRuntimeEnv,
   SyncWorkerConfigEnv,
 } from "../apps/sync/src/platform/cloudflare/env.ts";
+import {
+  makeCloudflareR2BucketResourceKey,
+  makeR2SecretAccessKey,
+} from "./cloudflare-r2.ts";
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
   makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
-  makeCloudflareR2BucketResourceKey,
   makeDurableObjectLocationHintForNeonRegion,
-  makeR2SecretAccessKey,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   shouldReconcileTenantRouting,
@@ -878,7 +880,15 @@ describe("Cloudflare stack", () => {
     expect(apiWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(apiWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(syncWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
-    expect(syncWorkerProps.observability).toBe(ceirdWorkerObservability);
+    expect(syncWorkerProps.observability).toMatchObject({
+      logs: {
+        enabled: true,
+        invocationLogs: false,
+      },
+      traces: {
+        enabled: true,
+      },
+    });
     expect(domainWorkerProps).not.toHaveProperty("domain");
     expect(domainWorkerProps.main).toContain("/apps/domain/src/worker.ts");
     expect(domainWorkerProps.url).toBeFalsy();

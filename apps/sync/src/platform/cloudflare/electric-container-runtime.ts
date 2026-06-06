@@ -40,12 +40,12 @@ function readRequiredEnv(key: string) {
   return value;
 }
 
-function readNonNegativeIntegerEnv(key: string, fallback: number) {
+function readPositiveIntegerEnv(key: string, fallback: number) {
   const raw = process.env[key] ?? String(fallback);
   const value = Number.parseInt(raw, 10);
 
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${key} must be a non-negative integer`);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${key} must be a positive integer`);
   }
 
   return value;
@@ -69,12 +69,12 @@ function readR2StorageConfig(): R2StorageConfig {
     accountId: readRequiredEnv("R2_ACCOUNT_ID"),
     bucketName: readRequiredEnv("R2_BUCKET_NAME"),
     mountDir: process.env.CEIRD_ELECTRIC_STORAGE_MOUNT ?? "/var/lib/electric",
-    pollIntervalMs: readNonNegativeIntegerEnv(
+    pollIntervalMs: readPositiveIntegerEnv(
       "CEIRD_ELECTRIC_STORAGE_MOUNT_READY_POLL_MS",
       250
     ),
     secretAccessKey: readRequiredEnv("AWS_SECRET_ACCESS_KEY"),
-    startupTimeoutMs: readNonNegativeIntegerEnv(
+    startupTimeoutMs: readPositiveIntegerEnv(
       "CEIRD_ELECTRIC_STORAGE_MOUNT_READY_TIMEOUT_MS",
       30_000
     ),
@@ -230,6 +230,12 @@ function isProcessRunning(child: ChildProcess | undefined) {
   );
 }
 
+function toError(error: unknown) {
+  return error instanceof Error
+    ? error
+    : new Error("Electric container runtime failed", { cause: error });
+}
+
 const runContainer = Effect.tryPromise({
   catch: (cause) =>
     cause instanceof Error
@@ -237,10 +243,12 @@ const runContainer = Effect.tryPromise({
       : new Error("Electric exited unexpectedly", { cause }),
   try: async () => {
     const storageBackend = readStorageBackend();
+    const r2StorageConfig =
+      storageBackend === "r2" ? readR2StorageConfig() : undefined;
     const r2Mount =
-      storageBackend === "r2"
-        ? await startR2StorageMount(readR2StorageConfig())
-        : undefined;
+      r2StorageConfig === undefined
+        ? undefined
+        : await startR2StorageMount(r2StorageConfig);
     const electricEntrypoint =
       process.env.ELECTRIC_ENTRYPOINT ?? "/app/bin/entrypoint";
     const electricArgs = parseEntrypointArgs(
@@ -248,17 +256,14 @@ const runContainer = Effect.tryPromise({
     );
 
     return await new Promise<null>((resolve, reject) => {
-      const electric = spawn(electricEntrypoint, electricArgs, {
-        env: process.env,
-        stdio: "inherit",
-      });
+      let electric: ChildProcess | undefined;
       let settled = false;
       let shutdownSignal: NodeJS.Signals | undefined;
       let shutdownTimer: NodeJS.Timeout | undefined;
 
       function cleanup() {
-        electric.off("error", onElectricError);
-        electric.off("exit", onElectricExit);
+        electric?.off("error", onElectricError);
+        electric?.off("exit", onElectricExit);
         r2Mount?.off("error", onMountError);
         r2Mount?.off("exit", onMountExit);
         if (shutdownTimer !== undefined) {
@@ -325,12 +330,6 @@ const runContainer = Effect.tryPromise({
           return;
         }
 
-        if (code === 0) {
-          stopProcess(r2Mount, "SIGTERM");
-          settleWithSuccess();
-          return;
-        }
-
         settleWithFailure(
           new Error(
             `Electric exited unexpectedly with code ${String(code)} and signal ${String(signal)}`
@@ -367,13 +366,54 @@ const runContainer = Effect.tryPromise({
       for (const signal of shutdownSignals) {
         process.once(signal, shutdown);
       }
-      electric.once("exit", onElectricExit);
-      electric.once("error", onElectricError);
       r2Mount?.once("exit", onMountExit);
       r2Mount?.once("error", onMountError);
+
+      void startElectric();
+
+      async function startElectric() {
+        try {
+          if (shutdownSignal !== undefined) {
+            maybeSettleShutdown();
+            return;
+          }
+
+          if (r2StorageConfig !== undefined) {
+            if (!isProcessRunning(r2Mount)) {
+              throw new Error("R2 FUSE mount exited before Electric startup");
+            }
+
+            await assertUsableR2Mount(r2StorageConfig);
+          }
+
+          if (shutdownSignal !== undefined) {
+            maybeSettleShutdown();
+            return;
+          }
+
+          electric = spawn(electricEntrypoint, electricArgs, {
+            env: process.env,
+            stdio: "inherit",
+          });
+          electric.once("exit", onElectricExit);
+          electric.once("error", onElectricError);
+        } catch (error) {
+          settleWithFailure(toError(error));
+        }
+      }
     });
   },
-}).pipe(Effect.asVoid, Effect.orDie);
+}).pipe(
+  Effect.tapError((error) =>
+    Effect.logError("Electric container runtime failed").pipe(
+      Effect.annotateLogs({
+        "electric.error": error.message,
+      })
+    )
+  ),
+  Effect.asVoid,
+  Effect.orDie
+);
 
 await Effect.runPromise(
   Effect.logInfo("Starting Electric container runtime").pipe(

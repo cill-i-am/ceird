@@ -22,6 +22,13 @@ const electricContainerMain = new URL(
   "../src/platform/cloudflare/electric-container-runtime.ts",
   import.meta.url
 ).pathname;
+const syncWorkerObservability = {
+  ...ceirdWorkerObservability,
+  logs: {
+    ...ceirdWorkerObservability.logs,
+    invocationLogs: false,
+  },
+} satisfies WorkerProps["observability"];
 
 export type WorkerServiceBinding = Service;
 
@@ -270,7 +277,7 @@ export function makeSyncWorkerProps(input: {
       }),
     },
     domain: input.hostname,
-    observability: ceirdWorkerObservability,
+    observability: syncWorkerObservability,
     url: false,
   } satisfies InputProps<WorkerProps<SyncWorkerBindingProps>>;
 }
