@@ -173,6 +173,29 @@ describe("MCP Worker adapter", () => {
     expect(domain.fetch).not.toHaveBeenCalled();
   });
 
+  it("keeps public health checks in the MCP adapter", async () => {
+    const domain = makeDomainService(vi.fn<() => Promise<Response>>());
+    const env = {
+      ALCHEMY_STACK_NAME: "ceird",
+      ALCHEMY_STAGE: "main",
+      DOMAIN: domain,
+    } satisfies McpWorkerEnv;
+
+    const response = await handleMcpWorkerFetch(
+      new Request("https://mcp.example.com/health"),
+      env,
+      makeExecutionContext()
+    ).pipe(Effect.runPromise);
+
+    await expect(response.json()).resolves.toStrictEqual({
+      ok: true,
+      service: "mcp",
+      stackName: "ceird",
+      stage: "main",
+    });
+    expect(domain.fetch).not.toHaveBeenCalled();
+  });
+
   it("returns an observable bad gateway response when domain forwarding fails", async () => {
     const { logger, logs } = captureLogs();
     const env = {
@@ -205,6 +228,8 @@ describe("MCP Worker adapter", () => {
           "http.status": 502,
           "mcp.failure": "domain_forwarding_failed",
           "mcp.failureBinding": "DOMAIN",
+          "mcp.failureCause": "domain unavailable",
+          "mcp.failureMessage": "MCP domain forwarding failed",
           "mcp.failureTag": "@ceird/mcp/DomainForwardingError",
         },
         level: "WARN",

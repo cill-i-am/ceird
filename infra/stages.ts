@@ -83,6 +83,7 @@ export interface InfraStageConfig {
   readonly tenantRoutePattern: string | undefined;
   readonly tenantStageAlias: string | undefined;
   readonly tenantTrustedOriginPattern: string | undefined;
+  readonly workerAnalyticsSampleRate: number;
 }
 
 export interface AlchemyStageIdentityInput {
@@ -125,6 +126,15 @@ const NeonHistoryRetentionSeconds = Schema.Int.check(
     message:
       "CEIRD_NEON_HISTORY_RETENTION_SECONDS must be a non-negative integer",
   })
+);
+const WorkerAnalyticsSampleRate = Schema.Number.check(
+  Schema.isBetween(
+    { minimum: 0, maximum: 1 },
+    {
+      message:
+        "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE must be a number between 0 and 1",
+    }
+  )
 );
 export const NeonRegion = Schema.Literals([
   "aws-us-east-1",
@@ -194,6 +204,12 @@ function decodeAgentActionRunStaleAfterSeconds(value: number) {
 
 function decodeNeonHistoryRetentionSeconds(value: number) {
   return Schema.decodeUnknownEffect(NeonHistoryRetentionSeconds)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeWorkerAnalyticsSampleRate(value: number) {
+  return Schema.decodeUnknownEffect(WorkerAnalyticsSampleRate)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
   );
 }
@@ -305,6 +321,12 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(5),
       Config.mapOrFail(decodeHyperdriveOriginConnectionLimit)
     );
+    const workerAnalyticsSampleRate = yield* Config.number(
+      "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
+    ).pipe(
+      Config.withDefault(0.1),
+      Config.mapOrFail(decodeWorkerAnalyticsSampleRate)
+    );
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(
@@ -398,6 +420,7 @@ export function loadInfraStageConfig(stageInput: string) {
       tenantRoutePattern,
       tenantStageAlias,
       tenantTrustedOriginPattern,
+      workerAnalyticsSampleRate,
     } satisfies InfraStageConfig;
   });
 }

@@ -4,10 +4,14 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import * as Array from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-import { makeAgentWorker } from "../apps/agent/infra/cloudflare-worker.ts";
+import {
+  makeAgentAiGatewayProps,
+  makeAgentWorker,
+} from "../apps/agent/infra/cloudflare-worker.ts";
 import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
@@ -146,8 +150,16 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     name: resourceName(input.config, "auth-email"),
   });
 
+  const workerAnalytics = yield* Cloudflare.AnalyticsEngineDataset(
+    "WorkerAnalytics",
+    {
+      dataset: resourceName(input.config, "worker-analytics"),
+    }
+  );
+
   const domain = yield* makeDomainWorker({
     agentInternalSecret: agentInternalSecret.text,
+    analytics: workerAnalytics,
     authEmailQueue,
     betterAuthSecret: betterAuthSecret.text,
     config: input.config,
@@ -159,6 +171,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   });
 
   const api = yield* makeApiWorker({
+    analytics: workerAnalytics,
+    config: input.config,
     domain,
     hostname: input.config.apiHostname,
     name: resourceName(input.config, "api"),
@@ -194,6 +208,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   );
 
   const mcp = yield* makeMcpWorker({
+    analytics: workerAnalytics,
+    config: input.config,
     domain,
     hostname: input.config.mcpHostname,
     name: resourceName(input.config, "mcp"),
@@ -210,8 +226,19 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const agentAiGatewayProps = makeAgentAiGatewayProps({
+    config: input.config,
+  });
+  const agentAiGateway = yield* Cloudflare.AiGateway(
+    "AgentAiGateway",
+    agentAiGatewayProps
+  );
+  yield* Effect.annotateCurrentSpan("agentAiGatewayId", agentAiGatewayProps.id);
+
   const agent = yield* makeAgentWorker({
     agentInternalSecret: agentInternalSecret.text,
+    aiGateway: agentAiGateway,
+    analytics: workerAnalytics,
     config: input.config,
     domain,
     hostname: input.config.agentHostname,
@@ -295,6 +322,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     api,
     apiOrigin,
     agent,
+    agentAiGateway,
     agentOrigin,
     app,
     appOrigin,
@@ -304,10 +332,11 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     domain,
     mcp,
     mcpOrigin,
-    tenantReservedHostBypassRoutePatterns: tenantReservedHostBypassRoutes.map(
-      (route) => route.pattern
+    tenantReservedHostBypassRoutePatterns: Array.map((route) => route.pattern)(
+      tenantReservedHostBypassRoutes
     ),
     tenantRoutePattern: tenantRoute?.pattern,
     tenantWildcardDnsRecordId: tenantWildcardDnsRecord?.recordId,
+    workerAnalyticsDataset: workerAnalytics.dataset,
   } as const;
 });

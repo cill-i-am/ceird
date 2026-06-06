@@ -34,6 +34,8 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Jobs V1 Spec](architecture/jobs-v1-spec.md)
 - [Organization Next Steps](architecture/organization-next-steps.md)
 - [Cloudflare Alchemy Mainline CI](architecture/cloudflare-ci.md)
+- [Alchemy Reference Architecture](architecture/alchemy-reference-architecture.md)
+- [Alchemy Usage Audit](architecture/alchemy-usage-audit-2026-05-29.md)
 - [Legacy MVP Field Audit](architecture/legacy-mvp-field-audit.md)
 
 ## Historical Specs And Plans

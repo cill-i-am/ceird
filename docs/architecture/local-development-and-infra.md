@@ -24,6 +24,16 @@ Local operators should leave Cloudflare provider auth and state-store
 credentials in the Alchemy profile instead of exporting those variables for
 normal Alchemy runs.
 
+Before starting a provider-backed worktree for the first time, run:
+
+```bash
+pnpm alchemy:doctor -- --stage codex-my-task
+```
+
+The doctor is read-only. It checks stage derivation, the env file, required
+provider variables, the Node runtime, and the audited Alchemy package version
+before any `alchemy dev`, `deploy`, or `destroy` command can mutate providers.
+
 Use an explicit stage for linked worktrees and agent tasks:
 
 ```bash
@@ -105,6 +115,7 @@ Common local and Alchemy variables include:
 | `GOOGLE_MAPS_API_KEY`                  | Optional local Google Places key for site autocomplete and place details.            |
 | `AGENT_ACTION_RUN_STALE_AFTER_SECONDS` | Agent action ledger stale-running recovery window.                                   |
 | `AGENT_INTERNAL_SECRET`                | Internal domain/Agent shared secret for package-local runs.                          |
+| `AGENT_AI_GATEWAY_ID`                  | Alchemy-managed Cloudflare AI Gateway ID used by the Agent Worker model provider.    |
 | `AGENT_ORIGIN`                         | Server-side app Agent Worker origin.                                                 |
 | `VITE_AGENT_ORIGIN`                    | Browser-exposed Agent Worker origin used by the global chat client.                  |
 | `AGENT_MUTATION_TOOLS_ENABLED`         | Enables write/destructive Agent tools when a confirmation-capable client is present. |
@@ -164,9 +175,10 @@ auth-email queue consumer. Deploy and preview stages reconcile those resources.
 
 The Agent Worker uses shared Worker trace/log settings, but disables
 Cloudflare invocation URL logging while the query-token fallback exists. It
-binds native Workers AI directly and does not provision an account-level AI
-Gateway resource. Browser clients should prefer bearer connect tokens; when the
-query-token fallback is used, the Agent Worker strips it before routing into the
+binds native Workers AI through an Alchemy-managed Cloudflare AI Gateway with
+gateway authentication enabled and prompt-log collection disabled. Browser
+clients should prefer bearer connect tokens; when the query-token fallback is
+used, the Agent Worker strips it before routing into the
 Agents SDK runtime. Its browser CORS allowlist is derived from the neutral app
 origin plus the tenant wildcard origin pattern, so Agent SDK HTTP/WebSocket
 traffic continues to work after an authenticated user is redirected onto an
@@ -190,8 +202,14 @@ Queue resource, and `AUTH_EMAIL` is the Cloudflare Email Worker binding
 descriptor. Public API and MCP Workers declare only the `DOMAIN` service binding
 to that private Worker. The public Agent Worker declares `DOMAIN`, Workers AI,
 and its `CeirdAgent` Durable Object namespace in its app-owned infra module.
-Infra tests compare the app-owned binding/env
-declarations against the runtime contracts in each app's
+All app-owned Workers also receive the native Analytics Engine binding
+`ANALYTICS`; request data points are sampled by
+`CEIRD_WORKER_ANALYTICS_SAMPLE_RATE`, which defaults to `0.1`, and recorded
+through the Effect-native `WorkerObservability` service. The private domain
+Worker is additionally configured with Cloudflare Smart Placement because it is
+the only Worker that owns database access through Hyperdrive. Infra tests
+compare the app-owned binding/env declarations against the runtime contracts in
+each app's
 `src/platform/cloudflare/env.ts`.
 The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
@@ -337,9 +355,9 @@ cleanup by PR number. After app and API health checks pass, the deploy job
 creates or updates one pull request comment with links to the stage-scoped app
 and API URLs.
 
-Both preview environments include the Cloudflare state-store credentials secret
-so preview deploy and cleanup can use the existing state store directly instead
-of re-running Alchemy's Cloudflare bootstrap flow.
+Main and both preview environments include the Cloudflare state-store
+credentials secret so deploy, audit, and cleanup jobs can use the existing state
+store directly instead of re-running Alchemy's Cloudflare bootstrap flow.
 
 Preview stages are ordinary non-parent stages. They use the default
 stage-scoped hostnames (`app.pr-<number>.ceird.app`,

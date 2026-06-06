@@ -79,9 +79,13 @@ Domain Worker MCP authorized-app cache overrides are loaded in `infra/stages.ts`
 and passed through the app-owned Worker env module; the root stack does not own
 those runtime defaults. Worker compatibility flags and observability settings
 are intentionally shared in `infra/cloudflare-worker-defaults.ts` because they
-are platform-wide deployment defaults rather than app-specific behavior. The
-Agent Worker keeps those shared trace/log defaults but disables invocation URL
-logging while query-token connect fallback remains supported.
+are platform-wide deployment defaults rather than app-specific behavior. Those
+defaults enable logs, invocation logs, and traces with a `0.1` head sampling
+rate. Worker Analytics Engine data points use the same stage-wide runtime
+sampling default through `CEIRD_WORKER_ANALYTICS_SAMPLE_RATE` and are recorded
+through the shared Effect-native Worker observability service. The Agent Worker
+keeps those shared trace/log defaults but disables invocation URL logging while
+query-token connect fallback remains supported.
 It does not output the Neon connection URI; inspect `PostgresBranch` state when
 a local operator needs the direct database URL for Playwright.
 

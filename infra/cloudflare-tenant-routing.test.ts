@@ -2,22 +2,48 @@ import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { findProviderByType } from "alchemy/Provider";
+import * as AlchemyTest from "alchemy/Test/Vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
 import {
   makeCloudflareTenantDnsRecordPayload,
   makeCloudflareTenantWorkerRoutePayload,
+  TenantWildcardDnsRecord,
   TenantWildcardDnsRecordProvider,
+  TenantWorkerRoute,
   TenantWorkerRouteProvider,
   validateTenantRoutePattern,
 } from "./cloudflare-tenant-routing.ts";
-import type {
-  TenantWildcardDnsRecord,
-  TenantWorkerRoute,
-} from "./cloudflare-tenant-routing.ts";
 
 const cloudflareApiBaseUrl = "https://cloudflare.test/client/v4";
+const alchemyLifecycle = AlchemyTest.make({
+  providers: Layer.mergeAll(
+    TenantWildcardDnsRecordProvider(),
+    TenantWorkerRouteProvider()
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.succeed(Cloudflare.CloudflareEnvironment, {
+          accountId: "account-id",
+          apiToken: Redacted.make("environment-token"),
+          source: { type: "env" },
+          type: "apiToken",
+        }),
+        Layer.succeed(
+          Cloudflare.Credentials,
+          Effect.succeed({
+            apiBaseUrl: cloudflareApiBaseUrl,
+            apiToken: Redacted.make("api-token"),
+            type: "apiToken",
+          })
+        )
+      )
+    )
+  ),
+  stage: "tenant-routing-test",
+});
 
 interface CloudflareTestRequest {
   readonly body: unknown;
@@ -93,6 +119,116 @@ function matchingZoneResponse() {
     ],
     success: true,
   };
+}
+
+function makeCloudflareTenantRoutingLifecycleFetchMock() {
+  let dnsRecord:
+    | {
+        readonly comment?: string;
+        readonly content: string;
+        readonly id: string;
+        readonly name: string;
+        readonly proxied: boolean;
+        readonly ttl: number;
+        readonly type: string;
+      }
+    | undefined;
+  let workerRoute:
+    | {
+        readonly id: string;
+        readonly pattern: string;
+        readonly script?: string | null;
+      }
+    | undefined;
+
+  return makeCloudflareFetchMock((request) => {
+    if (request.url.pathname === "/client/v4/zones") {
+      return matchingZoneResponse();
+    }
+
+    if (request.url.pathname === "/client/v4/zones/zone-id/dns_records") {
+      if (request.method === "GET") {
+        return {
+          result: dnsRecord === undefined ? [] : [dnsRecord],
+          success: true,
+        };
+      }
+
+      if (request.method === "POST") {
+        dnsRecord = {
+          id: "dns-managed",
+          name: "*.ceird.app",
+          ...(request.body as Record<string, unknown>),
+        } as NonNullable<typeof dnsRecord>;
+        return { result: dnsRecord, success: true };
+      }
+    }
+
+    if (
+      request.url.pathname ===
+      "/client/v4/zones/zone-id/dns_records/dns-managed"
+    ) {
+      if (request.method === "GET") {
+        return { result: dnsRecord, success: true };
+      }
+
+      if (request.method === "PUT") {
+        dnsRecord = {
+          id: "dns-managed",
+          name: "*.ceird.app",
+          ...(request.body as Record<string, unknown>),
+        } as NonNullable<typeof dnsRecord>;
+        return { result: dnsRecord, success: true };
+      }
+    }
+
+    if (request.url.pathname === "/client/v4/zones/zone-id/workers/routes") {
+      if (request.method === "GET") {
+        return {
+          result: workerRoute === undefined ? [] : [workerRoute],
+          success: true,
+        };
+      }
+
+      if (request.method === "POST") {
+        const body = request.body as { pattern: string; script?: string };
+        workerRoute = {
+          id: "route-managed",
+          pattern: body.pattern,
+          script: body.script ?? null,
+        };
+        return { result: workerRoute, success: true };
+      }
+    }
+
+    if (
+      request.url.pathname ===
+      "/client/v4/zones/zone-id/workers/routes/route-managed"
+    ) {
+      if (request.method === "GET") {
+        return { result: workerRoute, success: true };
+      }
+
+      if (request.method === "PUT") {
+        const body = request.body as { pattern: string; script?: string };
+        workerRoute = {
+          id: "route-managed",
+          pattern: body.pattern,
+          script: body.script ?? null,
+        };
+        return { result: workerRoute, success: true };
+      }
+
+      if (request.method === "DELETE") {
+        workerRoute = undefined;
+        return { result: { id: "route-managed" }, success: true };
+      }
+    }
+
+    throw new Error(
+      `Unexpected Cloudflare request ${request.method} ${request.url.pathname}`
+    );
+  });
 }
 
 describe("Cloudflare tenant routing", () => {
@@ -602,4 +738,91 @@ describe("Cloudflare tenant routing", () => {
       "PUT",
     ]);
   });
+
+  alchemyLifecycle.test.provider(
+    "creates, updates, and deletes tenant Worker routes through the Alchemy lifecycle",
+    (stack) => {
+      const { fetchMock, requests } =
+        makeCloudflareTenantRoutingLifecycleFetchMock();
+      vi.stubGlobal("fetch", fetchMock);
+
+      return Effect.gen(function* () {
+        const created = yield* stack.deploy(
+          TenantWorkerRoute("TenantWorkerRoute", {
+            pattern: "*.ceird.app/*",
+            scriptName: "ceird-main-app",
+            zoneName: "ceird.app",
+          })
+        );
+        const updated = yield* stack.deploy(
+          TenantWorkerRoute("TenantWorkerRoute", {
+            pattern: "*.ceird.app/*",
+            scriptName: "ceird-next-app",
+            zoneName: "ceird.app",
+          })
+        );
+
+        expect(created).toMatchObject({
+          pattern: "*.ceird.app/*",
+          routeId: "route-managed",
+          scriptName: "ceird-main-app",
+          zoneId: "zone-id",
+        });
+        expect(updated).toMatchObject({
+          pattern: "*.ceird.app/*",
+          routeId: "route-managed",
+          scriptName: "ceird-next-app",
+          zoneId: "zone-id",
+        });
+
+        yield* stack.destroy();
+
+        expect(requests.map((request) => request.method)).toContain("POST");
+        expect(requests.map((request) => request.method)).toContain("PUT");
+        expect(
+          requests.some(
+            (request) =>
+              request.method === "DELETE" &&
+              request.url.pathname.endsWith("/workers/routes/route-managed")
+          )
+        ).toBe(true);
+      });
+    }
+  );
+
+  alchemyLifecycle.test.provider(
+    "creates and preserves the shared wildcard DNS record through the Alchemy lifecycle",
+    (stack) => {
+      const { fetchMock, requests } =
+        makeCloudflareTenantRoutingLifecycleFetchMock();
+      vi.stubGlobal("fetch", fetchMock);
+
+      return Effect.gen(function* () {
+        const record = yield* stack.deploy(
+          TenantWildcardDnsRecord("TenantWildcardDnsRecord", {
+            zoneName: "ceird.app",
+          })
+        );
+
+        expect(record).toMatchObject({
+          recordId: "dns-managed",
+          zoneId: "zone-id",
+          zoneName: "ceird.app",
+        });
+
+        yield* stack.destroy();
+
+        expect(
+          requests.some(
+            (request) =>
+              request.method === "POST" &&
+              request.url.pathname.endsWith("/dns_records")
+          )
+        ).toBe(true);
+        expect(requests.map((request) => request.method)).not.toContain(
+          "DELETE"
+        );
+      });
+    }
+  );
 });

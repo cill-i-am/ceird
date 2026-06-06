@@ -2,6 +2,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
+import {
+  makeWorkerObservabilityLive,
+  WorkerObservability,
+} from "@ceird/worker-observability";
 import { Cause, ConfigProvider, Effect, Layer, Schema } from "effect";
 
 import { AuthEmailConfigurationError } from "../../domains/identity/authentication/auth-email-errors.js";
@@ -46,6 +50,7 @@ import type { McpAuthorizedAppCache } from "../../domains/mcp/http.js";
 import { makeMcpAuthorizedAppCache } from "../../domains/mcp/http.js";
 import { SiteLocationProvider } from "../../domains/sites/location-provider.js";
 import { makeApiWebHandler } from "../../server.js";
+import { decodeAppDatabaseUrlString } from "../database/config.js";
 import {
   makeAppDatabaseLive,
   makeAppDatabaseRuntimeLive,
@@ -65,6 +70,7 @@ import type { DomainWorkerEnv } from "./env.js";
 import { domainWorkerEnvConfigMap } from "./env.js";
 
 const REQUEST_ID_HEADER = "x-request-id";
+const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 type DomainWorkerDatabaseSource = "hyperdrive" | "env";
 
 interface DomainWorkerDatabaseConfiguration {
@@ -111,14 +117,16 @@ export function readDomainWorkerDatabaseConfiguration(
   const localDev = isDomainWorkerLocalDev(env);
 
   if (env.DATABASE?.connectionString !== undefined) {
-    return Effect.succeed({
+    return decodeDomainWorkerDatabaseUrl({
+      localDev,
       source: "hyperdrive",
       url: env.DATABASE.connectionString,
     });
   }
 
   if (localDev && env.DATABASE_URL !== undefined) {
-    return Effect.succeed({
+    return decodeDomainWorkerDatabaseUrl({
+      localDev,
       source: "env",
       url: env.DATABASE_URL,
     });
@@ -131,6 +139,24 @@ export function readDomainWorkerDatabaseConfiguration(
         ? "Local Domain Worker requires DATABASE_URL."
         : "Deployed Domain Worker requires the DATABASE Hyperdrive binding.",
     })
+  );
+}
+
+function decodeDomainWorkerDatabaseUrl(input: {
+  readonly localDev: boolean;
+  readonly source: DomainWorkerDatabaseSource;
+  readonly url: string;
+}) {
+  return decodeAppDatabaseUrlString(input.url).pipe(
+    Effect.map((url) => ({ source: input.source, url })),
+    Effect.mapError(
+      () =>
+        new DomainWorkerDatabaseConfigurationError({
+          databaseSource: input.source,
+          localDev: input.localDev,
+          message: `Domain Worker ${input.source} database URL is invalid.`,
+        })
+    )
   );
 }
 
@@ -414,6 +440,14 @@ export function handleWorkerFetch(
       withRequestIdResponseHeader(response, observation.requestId)
     ),
     Effect.tap((response) =>
+      recordDomainWorkerAnalytics(
+        observedRequest,
+        env,
+        response.status,
+        observation
+      )
+    ),
+    Effect.tap((response) =>
       logDomainWorkerFetchOutcome(observedRequest, env, response, observation)
     ),
     Effect.annotateLogs(
@@ -424,6 +458,22 @@ export function handleWorkerFetch(
       attributes: makeDomainWorkerFetchAnnotations(observedRequest, env),
     })
   );
+}
+
+function recordDomainWorkerAnalytics(
+  request: Request,
+  env: DomainWorkerEnv,
+  status: number,
+  observation: DomainWorkerRequestObservation
+) {
+  return WorkerObservability.recordRequest({
+    adapter: "domain",
+    durationMs: elapsedMs(observation.startedAtMs),
+    method: request.method,
+    path: requestPathname(request.url),
+    requestId: observation.requestId,
+    status,
+  }).pipe(Effect.provide(makeWorkerObservabilityLive(env)));
 }
 
 function logDomainWorkerFetchOutcome(
@@ -546,7 +596,7 @@ function makeDomainWorkerRequestObservation(
   request: Request
 ): DomainWorkerRequestObservation {
   const cfRay = request.headers.get("cf-ray") ?? undefined;
-  const requestId = request.headers.get(REQUEST_ID_HEADER) ?? makeRequestId();
+  const requestId = readSafeRequestId(request);
 
   return {
     authentication: makeAuthenticationRequestObservation(),
@@ -767,6 +817,14 @@ function withRequestIdResponseHeader(response: Response, requestId: string) {
 
 function makeRequestId() {
   return randomUUID();
+}
+
+function readSafeRequestId(request: Request) {
+  const value = request.headers.get(REQUEST_ID_HEADER)?.trim();
+
+  return value !== undefined && SAFE_REQUEST_ID_PATTERN.test(value)
+    ? value
+    : makeRequestId();
 }
 
 function nowMs() {

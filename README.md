@@ -78,6 +78,8 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `pnpm check`                       | Runs the Ultracite quality check.                                                                                                                    |
 | `pnpm format`                      | Checks formatting with oxfmt.                                                                                                                        |
 | `pnpm format:write`                | Writes formatting changes with oxfmt.                                                                                                                |
+| `pnpm alchemy:doctor`              | Checks the selected Alchemy stage, local env file, Node version, and audited Alchemy package version before cloud-backed local dev.                  |
+| `pnpm alchemy:state-audit`         | Reads Alchemy state for a stage and reports native Neon, AI Gateway, legacy migration, and tenant-route policy drift.                                |
 | `pnpm --filter app e2e`            | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                                                |
 | `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes.                                                                                       |
 | `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow.                                                                          |

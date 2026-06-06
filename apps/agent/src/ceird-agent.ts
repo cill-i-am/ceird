@@ -13,6 +13,7 @@ import { makeCeirdChatRecoveryOptions } from "./ceird-agent-recovery.js";
 import { touchAgentThreadActivity } from "./domain-client.js";
 import { extractAgentThreadId } from "./instance.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
+import { readAgentAiGatewayId } from "./platform/cloudflare/env.js";
 import { createCeirdTools } from "./tools.js";
 
 const DEFAULT_AGENT_MODEL = "@cf/zai-org/glm-4.7-flash";
@@ -33,7 +34,11 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
   override async onChatMessage(
     onFinish: Parameters<AIChatAgent["onChatMessage"]>[0]
   ) {
-    const workersAI = createWorkersAI({ binding: this.env.AI });
+    const aiGatewayId = readAgentAiGatewayId(this.env);
+    const workersAI = createWorkersAI({
+      binding: this.env.AI,
+      ...(aiGatewayId === undefined ? {} : { gateway: { id: aiGatewayId } }),
+    });
     const agentInstanceName = decodeAgentInstanceName(this.name);
     const threadId = extractAgentThreadId(agentInstanceName);
     const tools: ToolSet = createCeirdTools(this.env, agentInstanceName);

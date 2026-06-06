@@ -24,6 +24,21 @@ function getWorkflowJob(workflow, jobName) {
   return match[0];
 }
 
+function assertContainsInOrder(text, orderedSnippets) {
+  let previousIndex = -1;
+
+  for (const snippet of orderedSnippets) {
+    const index = text.indexOf(snippet, previousIndex + 1);
+
+    assert.notEqual(index, -1, `workflow should include ${snippet}`);
+    assert.ok(
+      index > previousIndex,
+      `${snippet} should appear after the previous ordered snippet`
+    );
+    previousIndex = index;
+  }
+}
+
 const activeTextFileExtensions = new Set([
   ".css",
   ".html",
@@ -382,8 +397,24 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.doesNotMatch(deployWorkflow, /CEIRD_ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /AUTH_EMAIL_TRANSPORT:/);
   assert.match(deployWorkflow, /name: Build\n\s+run: pnpm build/);
-  assert.match(deployWorkflow, /run: pnpm alchemy cloudflare bootstrap\b/);
+  assert.match(deployWorkflow, /Restore Alchemy state store credentials/);
+  assert.match(deployWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
+  assert.match(
+    deployWorkflow,
+    /node scripts\/restore-alchemy-state-store-credentials\.mjs/
+  );
+  assert.doesNotMatch(deployWorkflow, /pnpm alchemy cloudflare bootstrap/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
+  assert.match(
+    deployWorkflow,
+    /pnpm alchemy:state-audit --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+  );
+  assertContainsInOrder(deployWorkflow, [
+    "name: Build",
+    "name: Restore Alchemy state store credentials",
+    "name: Deploy",
+    "name: Audit main Alchemy state",
+  ]);
   assert.doesNotMatch(deployWorkflow, /pnpm --filter api check-types\b/);
   assert.doesNotMatch(deployWorkflow, /pnpm --filter domain check-types\b/);
   assert.doesNotMatch(deployWorkflow, /pnpm --filter mcp check-types\b/);
@@ -715,9 +746,22 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(ciDeployJob, /pnpm alchemy deploy --stage "\$CI_STAGE" --yes/);
   assert.match(ciDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
+  assert.match(
+    ciDeployJob,
+    /pnpm alchemy:state-audit --stage "\$CI_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+  );
+  assertContainsInOrder(ciDeployJob, [
+    "name: Restore Alchemy state store credentials",
+    "name: Deploy cloud E2E",
+    "name: Audit CI Alchemy state",
+    "name: Wait for CI deploy health",
+  ]);
   assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
   assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
-  assert.match(buildWorkflow, /cloudflare-state-store\.json/);
+  assert.match(
+    buildWorkflow,
+    /node scripts\/restore-alchemy-state-store-credentials\.mjs/
+  );
   assert.doesNotMatch(
     ciDeployJob + ciE2eJob + ciDestroyJob,
     /pnpm alchemy cloudflare bootstrap/
@@ -850,7 +894,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /environment: preview-deploy/);
   assert.match(previewWorkflow, /Restore Alchemy state store credentials/);
   assert.match(previewWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
-  assert.match(previewWorkflow, /cloudflare-state-store\.json/);
+  assert.match(
+    previewWorkflow,
+    /node scripts\/restore-alchemy-state-store-credentials\.mjs/
+  );
   assert.doesNotMatch(previewWorkflow, /pnpm alchemy cloudflare bootstrap/);
   assert.match(
     previewWorkflow,
@@ -868,6 +915,16 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     previewWorkflow,
     /pnpm alchemy deploy --stage "\$PREVIEW_STAGE" --yes/
   );
+  assert.match(
+    previewWorkflow,
+    /pnpm alchemy:state-audit --stage "\$PREVIEW_STAGE" --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
+  );
+  assertContainsInOrder(previewWorkflow, [
+    "name: Restore Alchemy state store credentials",
+    "name: Deploy preview",
+    "name: Audit preview Alchemy state",
+    "name: Export Playwright database URL",
+  ]);
   assert.match(
     previewWorkflow,
     /pnpm --silent alchemy state get ceird "\$PREVIEW_STAGE" PostgresBranch --stage "\$PREVIEW_STAGE"/
