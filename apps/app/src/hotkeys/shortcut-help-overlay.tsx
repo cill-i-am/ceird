@@ -1,7 +1,11 @@
 "use client";
 import { CommandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
+import {
+  getHotkeyManager,
+  getSequenceManager,
+  toHotkeyRegistrationView,
+} from "@tanstack/react-hotkeys";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
@@ -154,8 +158,13 @@ function ShortcutHelpContent({
 }: {
   readonly activeScopes: readonly HotkeyScope[];
 }) {
-  const { hotkeys, sequences } = useHotkeyRegistrations();
   const registeredShortcutIds = React.useMemo(() => {
+    const hotkeys = Array.from(
+      getHotkeyManager().registrations.state.values()
+    ).map(toHotkeyRegistrationView);
+    const sequences = Array.from(
+      getSequenceManager().registrations.state.values()
+    );
     const idSet = new Set<HotkeyId>();
 
     for (const registration of hotkeys) {
@@ -187,7 +196,7 @@ function ShortcutHelpContent({
     }
 
     return idSet;
-  }, [hotkeys, sequences]);
+  }, []);
   const shortcutGroups = groupShortcuts(
     getShortcutsForScopes(activeScopes, registeredShortcutIds),
     activeScopes

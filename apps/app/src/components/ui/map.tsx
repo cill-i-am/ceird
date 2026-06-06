@@ -6,7 +6,12 @@ import { Cause, Effect, Exit, Option } from "effect";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { X, Minus, Plus, Locate, Maximize } from "lucide-react";
 import MapLibreGL from "maplibre-gl";
-import type { PopupOptions, MarkerOptions } from "maplibre-gl";
+import type {
+  AddLayerObject,
+  GeoJSONSourceSpecification,
+  MarkerOptions,
+  PopupOptions,
+} from "maplibre-gl";
 import {
   createContext,
   use,
@@ -368,6 +373,169 @@ function Map({
       </div>
     </MapContext.Provider>
   );
+}
+
+type MapRouteLineCoordinate = readonly [longitude: number, latitude: number];
+
+type MapRouteLineProps = {
+  /** Stable ID used for the underlying MapLibre source and layer. */
+  id: string;
+  /** Route coordinates in GeoJSON order: [longitude, latitude]. */
+  coordinates: readonly MapRouteLineCoordinate[];
+  /** Optional layer ID to insert this route before. */
+  beforeId?: string;
+  /** CSS color used for the route stroke. */
+  color?: string;
+  /** Stroke width in screen pixels. */
+  width?: number;
+  /** Stroke opacity from 0 to 1. */
+  opacity?: number;
+  /** Optional MapLibre dash pattern for alternate route states. */
+  dashArray?: readonly number[];
+};
+
+type RouteLineSource = {
+  readonly setData: (data: GeoJSON.Feature<GeoJSON.LineString>) => void;
+};
+
+const DEFAULT_ROUTE_LINE_COLOR = "#2563eb";
+const DEFAULT_ROUTE_LINE_OPACITY = 0.9;
+const DEFAULT_ROUTE_LINE_WIDTH = 4;
+
+function isRouteLineSource(source: unknown): source is RouteLineSource {
+  return (
+    typeof source === "object" &&
+    source !== null &&
+    "setData" in source &&
+    typeof source.setData === "function"
+  );
+}
+
+function makeRouteLineFeature(
+  coordinates: readonly MapRouteLineCoordinate[]
+): GeoJSON.Feature<GeoJSON.LineString> {
+  return {
+    geometry: {
+      coordinates: coordinates.map(([longitude, latitude]) => [
+        longitude,
+        latitude,
+      ]),
+      type: "LineString",
+    },
+    properties: {},
+    type: "Feature",
+  };
+}
+
+function removeMapRouteLine(
+  map: MapLibreGL.Map,
+  layerId: string,
+  sourceId: string
+) {
+  if (map.getLayer(layerId) !== undefined) {
+    map.removeLayer(layerId);
+  }
+  if (map.getSource(sourceId) !== undefined) {
+    map.removeSource(sourceId);
+  }
+}
+
+function MapRouteLine({
+  id,
+  coordinates,
+  beforeId,
+  color = DEFAULT_ROUTE_LINE_COLOR,
+  width = DEFAULT_ROUTE_LINE_WIDTH,
+  opacity = DEFAULT_ROUTE_LINE_OPACITY,
+  dashArray,
+}: MapRouteLineProps) {
+  const { isLoaded, map } = useMap();
+  const sourceId = `${id}-source`;
+  const layerId = `${id}-layer`;
+  const canRender = coordinates.length >= 2;
+  const lineData = useMemo(
+    () => makeRouteLineFeature(coordinates),
+    [coordinates]
+  );
+  const lineDataRef = useRef(lineData);
+  lineDataRef.current = lineData;
+
+  const dashArrayKey = dashArray?.join(",") ?? "";
+  const dashPattern = useMemo(
+    () =>
+      dashArrayKey.length > 0
+        ? dashArrayKey.split(",").map((value) => Number(value))
+        : undefined,
+    [dashArrayKey]
+  );
+
+  useEffect(() => {
+    if (!map || !isLoaded || !canRender) {
+      return;
+    }
+
+    const existingSource = map.getSource(sourceId);
+    if (isRouteLineSource(existingSource)) {
+      existingSource.setData(lineDataRef.current);
+    } else {
+      const source: GeoJSONSourceSpecification = {
+        data: lineDataRef.current,
+        type: "geojson",
+      };
+      map.addSource(sourceId, source);
+    }
+
+    if (map.getLayer(layerId) === undefined) {
+      const paint: NonNullable<AddLayerObject["paint"]> = {
+        "line-color": color,
+        "line-opacity": opacity,
+        "line-width": width,
+      };
+      if (dashPattern) {
+        paint["line-dasharray"] = dashPattern;
+      }
+
+      const layer: AddLayerObject = {
+        id: layerId,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint,
+        source: sourceId,
+        type: "line",
+      };
+      map.addLayer(layer, beforeId);
+    }
+
+    return () => {
+      removeMapRouteLine(map, layerId, sourceId);
+    };
+  }, [
+    beforeId,
+    canRender,
+    color,
+    dashPattern,
+    isLoaded,
+    layerId,
+    map,
+    opacity,
+    sourceId,
+    width,
+  ]);
+
+  useEffect(() => {
+    if (!map || !isLoaded || !canRender) {
+      return;
+    }
+
+    const source = map.getSource(sourceId);
+    if (isRouteLineSource(source)) {
+      source.setData(lineData);
+    }
+  }, [canRender, isLoaded, lineData, map, sourceId]);
+
+  return null;
 }
 
 interface MarkerContextValue {
@@ -996,6 +1164,7 @@ export {
   Map,
   useMap,
   MapMarker,
+  MapRouteLine,
   MarkerContent,
   MarkerPopup,
   MarkerLabel,
