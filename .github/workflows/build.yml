@@ -93,6 +93,32 @@ jobs:
       - name: Type Check
         run: pnpm check-types
 
+  knip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Knip
+        run: pnpm knip
+
   react-doctor:
     runs-on: ubuntu-latest
 
@@ -206,6 +232,7 @@ jobs:
       - lint
       - format
       - check-types
+      - knip
       - react-doctor
       - tests
 

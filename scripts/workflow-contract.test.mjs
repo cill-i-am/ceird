@@ -827,6 +827,7 @@ test("build workflow runs static checks and tests before build in parallel", () 
   assert.match(buildWorkflow, /lint:\n(?: {4}.*\n)* {4}runs-on:/);
   assert.match(buildWorkflow, /format:\n(?: {4}.*\n)* {4}runs-on:/);
   assert.match(buildWorkflow, /check-types:\n(?: {4}.*\n)* {4}runs-on:/);
+  assert.match(buildWorkflow, /knip:\n(?: {4}.*\n)* {4}runs-on:/);
   assert.match(buildWorkflow, /react-doctor:\n(?: {4}.*\n)* {4}runs-on:/);
   assert.match(buildWorkflow, /tests:\n(?: {4}.*\n)* {4}strategy:/);
   for (const testName of [
@@ -853,7 +854,7 @@ test("build workflow runs static checks and tests before build in parallel", () 
   }
   assert.match(
     buildWorkflow,
-    /build:\n(?: {4}.*\n)* {4}needs:\n(?: {6}- (?:lint|format|check-types|react-doctor|tests)\n){5}/
+    /build:\n(?: {4}.*\n)* {4}needs:\n(?: {6}- (?:lint|format|check-types|knip|react-doctor|tests)\n){6}/
   );
   assert.match(buildWorkflow, /run: pnpm build/);
 });

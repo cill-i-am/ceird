@@ -172,11 +172,13 @@ Use these before handing off substantial changes:
 pnpm check-types
 pnpm test
 pnpm lint
+pnpm knip
 pnpm format
 ```
 
-`pnpm check` runs Ultracite over the workspace. `pnpm fix` applies Ultracite
-fixes. `pnpm format:write` writes oxfmt formatting changes.
+`pnpm knip` runs the same dependency hygiene check used by CI. `pnpm check`
+runs Ultracite over the workspace. `pnpm fix` applies Ultracite fixes.
+`pnpm format:write` writes oxfmt formatting changes.
 
 ## Database Workflow
 
