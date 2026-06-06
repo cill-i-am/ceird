@@ -270,6 +270,7 @@ test("root Alchemy stack exposes operator outputs for owned runtime resources", 
     "hyperdrive",
     "mcp",
     "neonDatabase",
+    "sync",
   ]) {
     assert.match(
       stack,
@@ -393,6 +394,7 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.match(deployWorkflow, /CEIRD_API_HOSTNAME:\s+api\.ceird\.app/);
   assert.match(deployWorkflow, /CEIRD_AGENT_HOSTNAME:\s+agent\.ceird\.app/);
   assert.match(deployWorkflow, /CEIRD_MCP_HOSTNAME:\s+mcp\.ceird\.app/);
+  assert.match(deployWorkflow, /CEIRD_SYNC_HOSTNAME:\s+sync\.ceird\.app/);
   assert.doesNotMatch(deployWorkflow, /ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /CEIRD_ALCHEMY_STAGE:/);
   assert.doesNotMatch(deployWorkflow, /AUTH_EMAIL_TRANSPORT:/);
@@ -836,6 +838,7 @@ test("build workflow runs static checks and tests before build in parallel", () 
     "app",
     "domain",
     "mcp",
+    "sync",
     "agents-core",
     "comments-core",
     "domain-core",

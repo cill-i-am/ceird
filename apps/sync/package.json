@@ -1,0 +1,25 @@
+{
+  "name": "sync",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ceird/domain-core": "workspace:*",
+    "@ceird/worker-observability": "workspace:*",
+    "effect": "4.0.0-beta.68"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260501.1",
+    "@effect/language-service": "^0.84.3",
+    "@effect/vitest": "4.0.0-beta.68",
+    "@types/node": "^25.6.0",
+    "alchemy": "2.0.0-beta.44",
+    "typescript": "5.9.2",
+    "vite": "^8.0.10",
+    "vitest": "3.2.4"
+  }
+}

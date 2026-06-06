@@ -68,6 +68,11 @@ export const workItemComment = pgTable(
       table.createdAt.asc(),
       table.commentId.asc()
     ),
+    index("work_item_comments_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.asc(),
+      table.commentId.asc()
+    ),
   ]
 );
 
@@ -92,6 +97,11 @@ export const siteComment = pgTable(
     }).onDelete("cascade"),
     index("site_comments_site_created_at_idx").on(
       table.siteId,
+      table.createdAt.asc(),
+      table.commentId.asc()
+    ),
+    index("site_comments_organization_created_at_idx").on(
+      table.organizationId,
       table.createdAt.asc(),
       table.commentId.asc()
     ),

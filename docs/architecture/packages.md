@@ -80,10 +80,15 @@ Exports the shared contract for calling the private domain Worker:
   adapters and future clients
 - `makeDomainServiceClient`, the production service-binding client
 - `makeDomainOriginClient`, the package-local development origin client
+- sync shape names, private sync authorization path helpers, sync
+  authorization DTO schemas, and typed sync authorization errors used by
+  `apps/domain`, `apps/sync`, and the public API boundary guard
 
 Keep product repositories, Drizzle schema, authorization, action execution, and
 audit behavior out of this package. Those are owned by `apps/domain`; this
-package only describes how clients call that boundary.
+package only describes how clients call that boundary. Sync authorization logic
+still belongs in `apps/domain`; `@ceird/domain-core` only defines the wire
+contract and allowed shape registry.
 
 ## `@ceird/jobs-core`
 
@@ -184,6 +189,11 @@ apps/api
 apps/mcp
   -> @ceird/domain-core
   -> apps/domain through the private service binding
+
+apps/sync
+  -> @ceird/domain-core
+  -> apps/domain through the private service binding
+  -> Electric SQL through the ElectricSql Durable Object/container
 
 packages/jobs-core
   -> @ceird/comments-core

@@ -20,6 +20,13 @@ browser
   -> apps/domain private capability surface
   -> Postgres via Hyperdrive
 
+browser sync clients
+  -> apps/sync Electric SQL adapter at sync.<stage>.ceird.app
+  -> apps/domain private sync authorization through DOMAIN service binding
+  -> Electric SQL in a Cloudflare Container
+  -> R2-backed FUSE storage for Electric shape logs
+  -> Neon Postgres
+
 apps/app server-side helpers
   -> apps/api public HTTP adapter
   -> apps/domain Better Auth and product endpoints
@@ -42,15 +49,15 @@ apps/domain Cloudflare Worker
   -> Neon Postgres
   -> Cloudflare Queues for auth email
 
-apps/api, apps/mcp, and apps/agent Cloudflare Workers
+apps/api, apps/mcp, apps/agent, and apps/sync Cloudflare Workers
   -> DOMAIN service binding
 ```
 
 Local development and production deployment both use the root Alchemy stack.
-Alchemy provisions Cloudflare Workers/Vite, Hyperdrive, queues, routes, and
-stage-scoped Neon branches. The app and API health endpoints expose the
-resolved Alchemy stack and stage identity so a running Worker can be tied back
-to the stage that produced it.
+Alchemy provisions Cloudflare Workers/Vite, Cloudflare Containers, R2,
+Hyperdrive, queues, routes, and stage-scoped Neon branches. The app and API health
+endpoints expose the resolved Alchemy stack and stage identity so a running
+Worker can be tied back to the stage that produced it.
 
 ## Monorepo Ownership
 
@@ -60,6 +67,7 @@ to the stage that produced it.
 | `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
 | `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
 | `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
+| `apps/sync`              | Public Electric SQL adapter Worker, sync CORS, shape forwarding, and Cloudflare Container runtime.                              | Product authorization, schema, repositories, or migrations.    |
 | `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
 | `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
 | `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
@@ -112,6 +120,16 @@ record, not an outer transaction around the whole action; domain services keep
 their own transaction boundaries, and abandoned running rows time out to a
 terminal failed state on replay.
 
+Electric SQL sync traffic is handled by `apps/sync`, not by the public API
+adapter. Browser clients request a named shape such as `jobs` from
+`/v1/shape?shape=jobs` or `/v1/shapes/jobs`. The sync Worker asks the private
+domain Worker to authorize that shape for the current organization actor, then
+injects the domain-approved Electric table, `where` clause, positional
+parameters, and source secret before forwarding to Electric SQL in a Cloudflare
+Container. Auth-owned tables are intentionally excluded from the sync shape
+registry; identity and session behavior stay behind Better Auth and the domain
+Worker.
+
 ## Persistence Model
 
 The domain Worker exports a combined Drizzle schema from
@@ -128,6 +146,13 @@ The domain Worker exports a combined Drizzle schema from
 - `agentsSchema` contains agent threads and the agent action-run ledger.
 - `databaseSchema` merges authentication, comments, labels, sites, jobs, and
   agents for the full database runtime.
+
+The sync shape registry lives in `@ceird/domain-core` and covers domain tables
+outside auth. Most shapes are organization-scoped with
+`organization_id = $1`; agent thread and action-run shapes are additionally
+scoped to the current user. The domain Worker owns the authorization decision
+for each shape, so the public sync Worker never accepts caller-supplied table,
+predicate, parameter, or source-secret values.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

@@ -144,7 +144,10 @@ test.describe("jobs flow", () => {
     }
     await expect(detailSheet.reopenJob).toBeVisible();
 
+    const reopenResponse = waitForJobReopenResponse(page);
     await detailSheet.reopenJob.click();
+    const reopenResult = await reopenResponse;
+    expect(reopenResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText("In progress", { exact: true })
     ).toBeVisible();
@@ -182,6 +185,15 @@ function waitForJobTransitionResponse(page: Page) {
     (response) =>
       response.request().method() === "POST" &&
       /^\/jobs\/[^/]+\/transitions$/.test(new URL(response.url()).pathname),
+    { timeout: JOB_ACTIVITY_TIMEOUT_MS }
+  );
+}
+
+function waitForJobReopenResponse(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /^\/jobs\/[^/]+\/reopen$/.test(new URL(response.url()).pathname),
     { timeout: JOB_ACTIVITY_TIMEOUT_MS }
   );
 }

@@ -5,10 +5,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
-import {
-  RpcSpawner,
-  layerServer as rpcSpawnerLayerServer,
-} from "alchemy/Local/RpcSpawner";
+import * as RpcProviderProxy from "alchemy/Local/RpcProviderProxy";
+import * as RpcSpawner from "alchemy/Local/RpcSpawner";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 
@@ -214,7 +212,7 @@ function runAlchemyExec({ env, execPath, options, spawnerUrl }) {
         env: {
           ...env,
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
-          ALCHEMY_RPC_SPAWNER_URL: spawnerUrl,
+          [RpcProviderProxy.SPAWNER_URL_ENV_KEY]: spawnerUrl,
         },
         stdio: "inherit",
       }
@@ -263,7 +261,7 @@ async function main() {
   }
   const exitCode = await Effect.runPromise(
     Effect.gen(function* () {
-      const spawner = yield* RpcSpawner;
+      const spawner = yield* RpcSpawner.RpcSpawner;
 
       return yield* runAlchemyExec({
         env,
@@ -273,7 +271,7 @@ async function main() {
       });
     }).pipe(
       Effect.provide(
-        rpcSpawnerLayerServer({
+        RpcSpawner.layerServer({
           envFile: options.envFile,
           profile: options.profile,
         })

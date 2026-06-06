@@ -37,6 +37,7 @@ default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.
 | `src/domains/jobs`                    | Jobs services, repositories, authorization, action execution, activity audit, and schema. |
 | `src/domains/sites`                   | Sites services, repositories, geocoding, label assignments, and schema.                   |
 | `src/domains/labels`                  | Organization label service, repository, and schema.                                       |
+| `src/domains/sync`                    | Private Electric shape authorization for the public sync Worker.                          |
 | `drizzle`                             | SQL migrations and Drizzle metadata.                                                      |
 | `drizzle.config.ts`                   | Drizzle CLI config.                                                                       |
 
@@ -47,6 +48,7 @@ The domain Worker owns:
 - Better Auth routes and OAuth/MCP resource configuration.
 - Product domain services for jobs, sites, labels, comments, agents, and activity.
 - Authorization policy and actor resolution.
+- Private Electric SQL shape authorization for non-auth domain tables.
 - Action execution for public HTTP, MCP, and Agent clients.
 - Audit/activity records.
 - Drizzle schema, migrations, Postgres/Hyperdrive runtime, and repositories.
