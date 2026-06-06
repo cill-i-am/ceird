@@ -251,6 +251,24 @@ function decodeElectricContainerInstanceType(value: string) {
   );
 }
 
+function readOptionalNonEmptyRedactedConfig(name: string) {
+  return Config.option(Config.redacted(name)).pipe(
+    Effect.map((option) => {
+      let result: Redacted.Redacted<string> | undefined;
+
+      if (Option.isSome(option)) {
+        const trimmed = Redacted.value(option.value).trim();
+
+        if (trimmed.length > 0) {
+          result = Redacted.make(trimmed);
+        }
+      }
+
+      return result;
+    })
+  );
+}
+
 export function loadInfraStageConfig(stageInput: string) {
   return Effect.gen(function* () {
     const stage = yield* decodeAlchemyStage(stageInput);
@@ -365,12 +383,14 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(identity.isProduction ? "basic" : "dev"),
       Config.mapOrFail(decodeElectricContainerInstanceType)
     );
-    const electricStorageAccessKeyId = yield* Config.option(
-      Config.redacted("CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID")
-    ).pipe(Effect.map(Option.getOrUndefined));
-    const electricStorageSecretAccessKey = yield* Config.option(
-      Config.redacted("CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY")
-    ).pipe(Effect.map(Option.getOrUndefined));
+    const electricStorageAccessKeyId =
+      yield* readOptionalNonEmptyRedactedConfig(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID"
+      );
+    const electricStorageSecretAccessKey =
+      yield* readOptionalNonEmptyRedactedConfig(
+        "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY"
+      );
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(

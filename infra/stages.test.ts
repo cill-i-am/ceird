@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Effect, Redacted } from "effect";
 
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 import {
@@ -306,6 +306,44 @@ describe("Alchemy stage identity", () => {
     expect(config.authRateLimitEnabled).toBeFalsy();
   });
 
+  it("treats blank Electric storage credentials from GitHub secrets as absent", () => {
+    const blankConfig = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            makeConfigProvider({
+              CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: "",
+              CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: "   ",
+            })
+          )
+        )
+      )
+    );
+    const configured = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            makeConfigProvider({
+              CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: " access-key-id ",
+              CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: " secret-access-key ",
+            })
+          )
+        )
+      )
+    );
+
+    expect(blankConfig.electricStorageAccessKeyId).toBeUndefined();
+    expect(blankConfig.electricStorageSecretAccessKey).toBeUndefined();
+    expect(
+      Redacted.value(configured.electricStorageAccessKeyId ?? Redacted.make(""))
+    ).toBe("access-key-id");
+    expect(
+      Redacted.value(
+        configured.electricStorageSecretAccessKey ?? Redacted.make("")
+      )
+    ).toBe("secret-access-key");
+  });
+
   it("allows PR preview auth rate limits to be enabled explicitly", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("pr-104").pipe(
@@ -412,12 +450,13 @@ describe("Alchemy stage identity", () => {
   });
 });
 
-function makeConfigProvider() {
+function makeConfigProvider(overrides: Record<string, string> = {}) {
   return ConfigProvider.fromEnv({
     env: {
       AUTH_EMAIL_FROM: "no-reply@example.com",
       CEIRD_ZONE_NAME: "example.com",
       GOOGLE_MAPS_API_KEY: "google-key",
+      ...overrides,
     },
   });
 }
