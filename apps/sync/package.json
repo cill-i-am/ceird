@@ -17,7 +17,7 @@
     "@effect/language-service": "^0.84.3",
     "@effect/vitest": "4.0.0-beta.68",
     "@types/node": "^25.6.0",
-    "alchemy": "2.0.0-beta.40",
+    "alchemy": "2.0.0-beta.44",
     "typescript": "5.9.2",
     "vite": "^8.0.10",
     "vitest": "3.2.4"

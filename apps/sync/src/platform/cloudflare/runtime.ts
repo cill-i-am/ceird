@@ -109,7 +109,13 @@ export function handleSyncWorkerFetch(
       Effect.succeed(makeFailureResponse(request, env, requestId, failure))
     ),
     Effect.tap((response) =>
-      recordSyncWorkerAnalytics(request, env, response.status, startedAt, requestId)
+      recordSyncWorkerAnalytics(
+        request,
+        env,
+        response.status,
+        startedAt,
+        requestId
+      )
     ),
     Effect.tap((response) =>
       logSyncWorkerFetchOutcome(request, env, response, requestId)
