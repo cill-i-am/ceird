@@ -25,6 +25,8 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Local Development And Infrastructure](architecture/local-development-and-infra.md)
   explains Alchemy stages, local environment setup, the root Alchemy stack, and
   production infrastructure.
+- [Planned Features](planned-features/README.md) tracks locked product and
+  design decisions before implementation starts.
 
 ## Existing Architecture Notes
 
@@ -48,6 +50,11 @@ against source code before treating them as authoritative.
 `docs/superpowers/progress` contains living progress notes for long-running
 agent goals, including feature exploration, design direction, implementation
 status, and validation notes that should be updated on each run.
+
+Current route-aware proximity implementation plans:
+
+- [Route-Aware Proximity Logic](superpowers/plans/2026-06-06-route-aware-proximity-logic.md)
+- [Route-Aware Proximity UI](superpowers/plans/2026-06-06-route-aware-proximity-ui.md)
 
 ## Documentation Maintenance
 
