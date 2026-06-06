@@ -18,6 +18,7 @@ describe("Alchemy stage identity", () => {
 
     expect(identity).toStrictEqual({
       appName: "ceird",
+      isEphemeralCi: false,
       isProduction: true,
       isPullRequestPreview: false,
       neonBranchName: "main",
@@ -34,6 +35,7 @@ describe("Alchemy stage identity", () => {
     });
 
     expect(identity).toMatchObject({
+      isEphemeralCi: false,
       isProduction: false,
       isPullRequestPreview: false,
       neonBranchName: "codex-alchemy-v2-native-migration",
@@ -43,6 +45,22 @@ describe("Alchemy stage identity", () => {
     expect(stageResourceName(identity, "auth_email")).toBe(
       "ceird-codex-alchemy-v2-native-migration-auth-email"
     );
+  });
+
+  it("identifies ephemeral push-to-main cloud E2E stages", () => {
+    const identity = makeAlchemyStageIdentity({
+      appName: "ceird",
+      stage: "ci-517-1",
+    });
+
+    expect(identity).toMatchObject({
+      isEphemeralCi: true,
+      isProduction: false,
+      isPullRequestPreview: false,
+      neonBranchName: "ci-517-1",
+      stage: "ci-517-1",
+      stageSlug: "ci-517-1",
+    });
   });
 
   it("adds a deterministic hash when truncating long stage names", () => {

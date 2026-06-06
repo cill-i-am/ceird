@@ -113,6 +113,7 @@ export interface AlchemyStageIdentityInput {
 
 export interface AlchemyStageIdentity {
   readonly appName: string;
+  readonly isEphemeralCi: boolean;
   readonly isProduction: boolean;
   readonly isPullRequestPreview: boolean;
   readonly neonBranchName: string;
@@ -513,6 +514,7 @@ export function makeAlchemyStageIdentity(
 
   return {
     appName,
+    isEphemeralCi: /^ci-\d+-\d+$/.test(stage),
     isProduction: stage === productionStage,
     isPullRequestPreview: /^pr-\d+$/.test(stage),
     neonBranchName: stageSlug,

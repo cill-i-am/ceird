@@ -625,7 +625,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps PR previews without Electric R2 credentials but fails closed elsewhere", () => {
+  it("bootstraps ephemeral deploys without Electric R2 credentials but fails closed elsewhere", () => {
     expect(
       shouldProvisionElectricStorage({
         config: configWithoutCloudflareBootstrapSecrets,
@@ -647,6 +647,15 @@ describe("Cloudflare stack", () => {
     expect(
       shouldProvisionElectricStorage({
         config: previewTenantConfig,
+        localDev: false,
+      })
+    ).toBe(false);
+    expect(
+      shouldProvisionElectricStorage({
+        config: {
+          ...configWithoutCloudflareBootstrapSecrets,
+          stage: "ci-517-1",
+        },
         localDev: false,
       })
     ).toBe(false);

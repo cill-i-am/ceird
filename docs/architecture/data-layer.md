@@ -185,6 +185,9 @@ stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
 `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` as GitHub environment secrets. The
 main app stack consumes those values instead of creating API tokens during
 routine deploys, so the deploy token does not need `API Tokens Write`.
+Pull-request previews and push-to-main cloud E2E stages can temporarily omit
+those secrets; in that bootstrap mode the stack deploys the sync Worker but
+skips the Electric Container and R2 bucket.
 
 The token id is passed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256 hash
 of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which matches

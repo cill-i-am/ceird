@@ -533,7 +533,7 @@ export function shouldProvisionElectricStorage(input: {
     stage: input.config.stage,
   });
 
-  if (identity.isPullRequestPreview) {
+  if (identity.isPullRequestPreview || identity.isEphemeralCi) {
     return false;
   }
 
