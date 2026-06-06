@@ -195,9 +195,14 @@ pnpm alchemy:state-audit --stage <stage> --json --tenant-routing-required --allo
 The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
 `AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
 missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
-env, missing Domain Worker Smart Placement, and stage tenant-route or
-wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
-has been inspected and intentionally removed. Plain
+env, missing Sync Worker domain/analytics/Durable Object bindings, missing sync
+source configuration, missing production Electric container or R2 storage,
+missing Domain Worker Smart Placement, and stage tenant-route or wildcard-DNS
+drift while allowing the known legacy Drizzle tombstone until it has been
+inspected and intentionally removed. Preview and ephemeral cloud E2E stages
+intentionally skip shared Electric storage credentials, so the audit requires
+the Sync Worker there but only requires Electric container storage for the
+production stage. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.

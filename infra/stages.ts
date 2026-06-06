@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -270,6 +271,26 @@ function readOptionalNonEmptyRedactedConfig(name: string) {
   );
 }
 
+export function makeInfraConfigSourceError(message: string) {
+  return new Config.ConfigError(new ConfigProvider.SourceError({ message }));
+}
+
+function validateElectricStorageCredentialPair(input: {
+  readonly accessKeyId: Redacted.Redacted<string> | undefined;
+  readonly secretAccessKey: Redacted.Redacted<string> | undefined;
+}) {
+  const hasAccessKey = input.accessKeyId !== undefined;
+  const hasSecretKey = input.secretAccessKey !== undefined;
+
+  return hasAccessKey === hasSecretKey
+    ? Effect.void
+    : Effect.fail(
+        makeInfraConfigSourceError(
+          "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+        )
+      );
+}
+
 export function loadInfraStageConfig(stageInput: string) {
   return Effect.gen(function* () {
     const stage = yield* decodeAlchemyStage(stageInput);
@@ -392,6 +413,10 @@ export function loadInfraStageConfig(stageInput: string) {
       yield* readOptionalNonEmptyRedactedConfig(
         "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY"
       );
+    yield* validateElectricStorageCredentialPair({
+      accessKeyId: electricStorageAccessKeyId,
+      secretAccessKey: electricStorageSecretAccessKey,
+    });
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(

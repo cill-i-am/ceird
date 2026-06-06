@@ -469,14 +469,12 @@ function makeElectricRequestHeaders(sourceHeaders: Headers) {
 }
 
 function makeCorsPreflightResponse(request: Request, env: SyncWorkerEnv) {
+  const headers = makeCorsHeaders(request, env);
+
+  applyCorsPreflightHeaders(headers, request);
+
   return new Response(null, {
-    headers: makeCorsHeaders(request, env, {
-      "access-control-allow-headers":
-        request.headers.get("access-control-request-headers") ??
-        "authorization,content-type,x-request-id",
-      "access-control-allow-methods": "GET,OPTIONS",
-      "access-control-max-age": "600",
-    }),
+    headers,
     status: 204,
   });
 }
@@ -493,6 +491,9 @@ function withSharedResponseHeaders(
   headers.delete("content-length");
   headers.delete("transfer-encoding");
   headers.set(REQUEST_ID_HEADER, requestId);
+  if (request.method === "OPTIONS") {
+    applyCorsPreflightHeaders(headers, request);
+  }
 
   return new Response(response.body, {
     headers,
@@ -578,6 +579,8 @@ function makeCorsHeaders(
   const headers = new Headers(baseHeaders);
   const origin = request.headers.get("origin");
 
+  stripAccessControlHeaders(headers);
+
   if (origin !== null && isTrustedOrigin(origin, env)) {
     headers.set("access-control-allow-origin", origin);
     headers.set("access-control-allow-credentials", "true");
@@ -590,6 +593,25 @@ function makeCorsHeaders(
   headers.append("vary", "Origin");
 
   return headers;
+}
+
+function stripAccessControlHeaders(headers: Headers) {
+  // oxlint-disable-next-line unicorn/prefer-spread -- Clone before deleting from the same Headers object.
+  for (const name of Array.from(headers.keys())) {
+    if (name.toLowerCase().startsWith("access-control-")) {
+      headers.delete(name);
+    }
+  }
+}
+
+function applyCorsPreflightHeaders(headers: Headers, request: Request) {
+  headers.set(
+    "access-control-allow-headers",
+    request.headers.get("access-control-request-headers") ??
+      "authorization,content-type,x-request-id"
+  );
+  headers.set("access-control-allow-methods", "GET,OPTIONS");
+  headers.set("access-control-max-age", "600");
 }
 
 function isTrustedOrigin(origin: string, env: SyncWorkerEnv) {

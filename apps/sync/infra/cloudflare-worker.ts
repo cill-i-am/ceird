@@ -190,6 +190,7 @@ export function makeElectricContainerProps(input: {
   readonly storage: ElectricContainerStorageConfig;
 }) {
   return {
+    isExternal: true,
     name: input.name,
     main: electricContainerMain,
     runtime: "node",
