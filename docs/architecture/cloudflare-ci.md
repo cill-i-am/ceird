@@ -203,11 +203,12 @@ a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
 
 `CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
-store, deploy Workers, manage custom domains, queues, Hyperdrive, and bind
-Cloudflare Email Service to the domain Worker. Alchemy's CI guide specifically
-calls out that `Cloudflare.state()` needs Cloudflare Secrets Store Write in CI
-because Alchemy reads the state-store token back through an ephemeral
-edge-preview Worker with a secret binding.
+store, reconcile AI Gateway, deploy Workers, manage custom domains, queues,
+Hyperdrive, and bind Cloudflare Email Service to the domain Worker. Alchemy's
+CI guide specifically calls out that
+`Cloudflare.state()` needs Cloudflare Secrets Store Read/Write in CI because
+Alchemy reads the state-store token back through an ephemeral edge-preview
+Worker with a secret binding.
 
 ## Preview Workflow
 

@@ -35,6 +35,8 @@ export function makeCloudflareCiDeployTokenProps(
           "Hyperdrive Write",
           "Queues Read",
           "Queues Write",
+          "Secrets Store Read",
+          "Secrets Store Write",
           "Workers Scripts Read",
           "Workers Scripts Write",
         ],
