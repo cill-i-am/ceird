@@ -168,6 +168,29 @@ describe("Alchemy stage identity", () => {
     );
   });
 
+  it("loads an optional dedicated Google Routes key", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+                GOOGLE_MAPS_ROUTES_API_KEY: "google-routes-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.googleMapsRoutesApiKey).toBeDefined();
+    expect(Redacted.value(config.googleMapsRoutesApiKey!)).toBe(
+      "google-routes-key"
+    );
+  });
+
   it("defaults the parent stage to stage-scoped app/API hostnames", () => {
     const config = Effect.runSync(
       loadInfraStageConfig("main").pipe(

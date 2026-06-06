@@ -19,6 +19,9 @@ import {
   SiteLocationPlaceDetailsInputSchema,
   SiteLocationProviderError,
   SiteLocationResolutionError,
+  SiteProximityInputSchema,
+  SiteProximityResponseSchema,
+  SiteRoutePreviewInputSchema,
   SiteId,
   SiteNotFoundError,
   SiteOptionSchema,
@@ -262,6 +265,12 @@ describe("sites-core", () => {
     expect(placeDetailsOperation?.operationId).toBe(
       "sites.getSiteLocationPlaceDetails"
     );
+    expect(spec.paths["/sites/proximity"]?.post?.operationId).toBe(
+      "sites.rankNearbySites"
+    );
+    expect(spec.paths["/sites/{siteId}/route-preview"]?.post?.operationId).toBe(
+      "sites.getSiteRoutePreview"
+    );
     expect(siteComments?.get?.operationId).toBe("sites.listSiteComments");
     expect(siteComments?.post?.operationId).toBe("sites.addSiteComment");
     expect(assignOperation?.operationId).toBe("sites.assignSiteLabel");
@@ -276,6 +285,90 @@ describe("sites-core", () => {
     ).toStrictEqual({
       labelId: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("decodes route-aware site proximity contracts", () => {
+    const origin = {
+      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      displayText: "Grand Canal Dock, Dublin, Ireland",
+      mode: "typed_origin",
+      placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+    };
+    const decodedInput = Schema.decodeUnknownSync(SiteProximityInputSchema)({
+      filters: { query: "  docklands  " },
+      includeRouteLines: true,
+      limit: 10,
+      origin,
+    });
+
+    expect(decodedInput.filters?.query).toBe("docklands");
+    expect(decodedInput.limit).toBe(10);
+
+    expect(() =>
+      Schema.decodeUnknownSync(SiteProximityInputSchema)({
+        limit: 26,
+        origin,
+      })
+    ).toThrow(/less than or equal to 25/);
+
+    expect(
+      Schema.decodeUnknownSync(SiteRoutePreviewInputSchema)({
+        includeRouteLine: true,
+        origin,
+      })
+    ).toStrictEqual({ includeRouteLine: true, origin });
+
+    const response = Schema.decodeUnknownSync(SiteProximityResponseSchema)({
+      meta: {
+        candidateCount: 1,
+        candidateLimitApplied: false,
+        excluded: [],
+        rankedCandidateLimit: 100,
+      },
+      origin: {
+        computedAt: "2026-06-06T10:00:00.000Z",
+        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        displayText: "Grand Canal Dock, Dublin, Ireland",
+        mode: "typed_origin",
+      },
+      rows: [
+        {
+          activeJobCount: 2,
+          highestActiveJobPriority: "urgent",
+          routeLine: {
+            coordinates: [
+              { latitude: 53.349805, longitude: -6.26031 },
+              { latitude: 53.342886, longitude: -6.267428 },
+            ],
+            format: "geojson_linestring",
+          },
+          routeSummary: {
+            computedAt: "2026-06-06T10:00:00.000Z",
+            distanceMeters: 4200,
+            durationSeconds: 840,
+            provider: "google_routes",
+            providerRequestKind: "matrix",
+            routeStatus: "ok",
+            trafficAware: true,
+          },
+          site: {
+            displayLocation: "Dublin 8",
+            googlePlaceId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+            hasUsableCoordinates: true,
+            id: "22222222-2222-4222-8222-222222222222",
+            labels: [],
+            latitude: 53.342886,
+            locationProvider: "google_places",
+            locationResolvedAt: "2026-06-06T09:00:00.000Z",
+            locationStatus: "google_resolved",
+            longitude: -6.267428,
+            name: "Dublin Boiler Room",
+          },
+        },
+      ],
+    });
+
+    expect(response.rows[0]?.activeJobCount).toBe(2);
   });
 
   it("exports site API groups and typed errors", () => {

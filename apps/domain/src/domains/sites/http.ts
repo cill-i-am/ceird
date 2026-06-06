@@ -37,6 +37,16 @@ const SitesHandlersLive = HttpApiBuilder.group(AppApi, "sites", (handlers) =>
       .handle("createSite", ({ payload }) =>
         sitesService.create(payload).pipe(observeSitesOperation("createSite"))
       )
+      .handle("rankNearbySites", ({ payload }) =>
+        sitesService
+          .rankNearbySites(payload)
+          .pipe(observeSitesOperation("rankNearbySites"))
+      )
+      .handle("getSiteRoutePreview", ({ params, payload }) =>
+        sitesService
+          .getSiteRoutePreview(params.siteId, payload)
+          .pipe(observeSitesOperation("getSiteRoutePreview"))
+      )
       .handle("updateSite", ({ params, payload }) =>
         sitesService
           .update(params.siteId, payload)

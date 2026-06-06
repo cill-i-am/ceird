@@ -10,6 +10,7 @@ import {
   CreateSiteInputSchema,
   SiteId,
   SiteOptionSchema,
+  type SiteProximityFilters,
   SitesOptionsResponseSchema,
 } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
@@ -20,6 +21,12 @@ import { CommentsRepository } from "../comments/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { RouteProvider } from "../proximity/route-provider.js";
+import type {
+  RankRoutesInput,
+  RoutePreviewInput,
+} from "../proximity/route-provider.js";
+import { RouteProximityService } from "../proximity/service.js";
 import { SiteLocationProvider } from "./location-provider.js";
 import {
   SiteLabelAssignmentsRepository,
@@ -685,6 +692,241 @@ describe("SitesService contracts", () => {
       longitude: -6.1956,
     });
   });
+
+  it("ranks mapped sites by driving time with active job summaries", async () => {
+    let capturedFilters: SiteProximityFilters | undefined;
+    let capturedRankInput: RankRoutesInput | undefined;
+    let previewCalls = 0;
+    const closestSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111301",
+      "Canal Terrace",
+      53.341,
+      -6.261
+    );
+    const urgentSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111302",
+      "Harbour Row",
+      53.347,
+      -6.23
+    );
+    const noRouteSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111303",
+      "Private Avenue",
+      53.361,
+      -6.305
+    );
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          filters: { query: "Dublin" },
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        listProximityCandidates: (_organizationId, filters) => {
+          capturedFilters = filters;
+          return Effect.succeed({
+            candidateCount: 4,
+            candidateLimitApplied: false,
+            candidates: [
+              {
+                activeJobCount: 1,
+                highestActiveJobPriority: "medium",
+                site: closestSite,
+              },
+              {
+                activeJobCount: 2,
+                highestActiveJobPriority: "urgent",
+                site: urgentSite,
+              },
+              {
+                activeJobCount: 1,
+                highestActiveJobPriority: "high",
+                site: noRouteSite,
+              },
+            ],
+            excluded: [{ count: 1, reason: "missing_coordinates" }],
+          });
+        },
+        previewRoute: (_input) => {
+          previewCalls += 1;
+          return Effect.die("RouteProvider.previewRoute was not expected");
+        },
+        rankRoutes: (input) => {
+          capturedRankInput = input;
+          return Effect.succeed({
+            rows: [
+              {
+                destinationId: urgentSite.id,
+                routeSummary: makeRouteSummary(320, 1600),
+              },
+              {
+                destinationId: closestSite.id,
+                routeSummary: makeRouteSummary(360, 900),
+              },
+            ],
+            unavailableDestinationIds: [noRouteSite.id],
+          });
+        },
+      }
+    );
+
+    expect(capturedFilters).toStrictEqual({ query: "Dublin" });
+    expect(capturedRankInput?.destinations).toStrictEqual([
+      {
+        coordinates: { latitude: 53.341, longitude: -6.261 },
+        destinationId: closestSite.id,
+      },
+      {
+        coordinates: { latitude: 53.347, longitude: -6.23 },
+        destinationId: urgentSite.id,
+      },
+      {
+        coordinates: { latitude: 53.361, longitude: -6.305 },
+        destinationId: noRouteSite.id,
+      },
+    ]);
+    expect(previewCalls).toBe(0);
+    expect(result.rows.map((row) => row.site.id)).toStrictEqual([
+      urgentSite.id,
+      closestSite.id,
+    ]);
+    expect(result.rows[0]).toMatchObject({
+      activeJobCount: 2,
+      highestActiveJobPriority: "urgent",
+      site: urgentSite,
+    });
+    expect(result.meta).toMatchObject({
+      candidateCount: 4,
+      candidateLimitApplied: false,
+      excluded: [
+        { count: 1, reason: "missing_coordinates" },
+        { count: 1, reason: "no_driving_route" },
+      ],
+      rankedCandidateLimit: 100,
+    });
+  });
+
+  it("returns an inline route preview for a mapped site", async () => {
+    let capturedPreviewInput: RoutePreviewInput | undefined;
+    const site = makeMappedSite(
+      "11111111-1111-4111-8111-111111111401",
+      "Mill Lane",
+      53.344,
+      -6.248
+    );
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.getSiteRoutePreview(site.id, {
+          includeRouteLine: true,
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        getActiveJobSummary: () =>
+          Effect.succeed({
+            activeJobCount: 3,
+            highestActiveJobPriority: "high",
+          }),
+        getOptionById: () => Effect.succeed(Option.some(site)),
+        previewRoute: (input) => {
+          capturedPreviewInput = input;
+          return Effect.succeed({
+            line: {
+              encodedPolyline: "encoded-site-route",
+              format: "encoded_polyline" as const,
+            },
+            routeSummary: {
+              ...makeRouteSummary(510, 2300),
+              providerRequestKind: "route_preview" as const,
+            },
+          });
+        },
+        rankRoutes: () =>
+          Effect.die("RouteProvider.rankRoutes should not be called"),
+      }
+    );
+
+    expect(capturedPreviewInput).toMatchObject({
+      destination: {
+        coordinates: { latitude: 53.344, longitude: -6.248 },
+        destinationId: site.id,
+      },
+      includeLine: true,
+      origin: { latitude: 53.34, longitude: -6.26 },
+    });
+    expect(result).toMatchObject({
+      activeJobCount: 3,
+      highestActiveJobPriority: "high",
+      site,
+    });
+    expect(result.routeLine).toStrictEqual({
+      encodedPolyline: "encoded-site-route",
+      format: "encoded_polyline",
+    });
+    expect(result.routeSummary.providerRequestKind).toBe("route_preview");
+  });
+
+  it("reports how many routeable sites were omitted by the 100-candidate cap", async () => {
+    const mappedSites = Array.from({ length: 100 }, (_, index) => {
+      const suffix = String(index + 1).padStart(12, "0");
+
+      return {
+        activeJobCount: index % 3,
+        highestActiveJobPriority: "medium" as const,
+        site: makeMappedSite(
+          `11111111-1111-4111-8111-${suffix}`,
+          `Site ${index + 1}`,
+          53.3 + index / 10_000,
+          -6.2 - index / 10_000
+        ),
+      };
+    });
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        listProximityCandidates: () =>
+          Effect.succeed({
+            candidateCount: 126,
+            candidateLimitApplied: true,
+            candidates: mappedSites,
+            excluded: [],
+          }),
+        previewRoute: () =>
+          Effect.die("RouteProvider.previewRoute was not expected"),
+        rankRoutes: (input) =>
+          Effect.succeed({
+            rows: input.destinations.slice(0, 10).map((destination, index) => ({
+              destinationId: destination.destinationId,
+              routeSummary: makeRouteSummary(180 + index, 1_500 + index),
+            })),
+            unavailableDestinationIds: [],
+          }),
+      }
+    );
+
+    expect(result.rows).toHaveLength(10);
+    expect(result.meta.excluded).toContainEqual({
+      count: 26,
+      reason: "candidate_cap",
+    });
+  });
 });
 
 type TestSitesServiceRequirements =
@@ -692,6 +934,7 @@ type TestSitesServiceRequirements =
   | CurrentOrganizationActor
   | HttpServerRequest.HttpServerRequest
   | OrganizationAuthorization
+  | RouteProximityService
   | SiteLabelAssignmentsRepository
   | SiteLocationProvider
   | SitesRepository;
@@ -736,6 +979,16 @@ interface TestSitesDependencies {
   readonly getOptionById: ContextService<
     typeof SitesRepository
   >["getOptionById"];
+  readonly getActiveJobSummary: ContextService<
+    typeof SitesRepository
+  >["getActiveJobSummary"];
+  readonly listProximityCandidates: ContextService<
+    typeof SitesRepository
+  >["listProximityCandidates"];
+  readonly previewRoute: (
+    input: RoutePreviewInput
+  ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
+  readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
   readonly resolvePlace: ContextService<
     typeof SiteLocationProvider
   >["resolvePlace"];
@@ -776,6 +1029,26 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
           (() => Effect.die("SiteLocationProvider.resolvePlace not stubbed")),
       })
     ),
+    options.rankRoutes === undefined
+      ? Layer.succeed(
+          RouteProximityService,
+          RouteProximityService.of(
+            {} as ContextService<typeof RouteProximityService>
+          )
+        )
+      : RouteProximityService.DefaultWithoutDependencies.pipe(
+          Layer.provide(
+            Layer.succeed(
+              RouteProvider,
+              RouteProvider.of({
+                previewRoute:
+                  options.previewRoute ??
+                  (() => Effect.die("RouteProvider.previewRoute not stubbed")),
+                rankRoutes: options.rankRoutes,
+              })
+            )
+          )
+        ),
     Layer.succeed(
       SiteLabelAssignmentsRepository,
       SiteLabelAssignmentsRepository.of(
@@ -791,6 +1064,13 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         getOptionById:
           options.getOptionById ??
           (() => Effect.die("SitesRepository.getOptionById not stubbed")),
+        getActiveJobSummary:
+          options.getActiveJobSummary ??
+          (() => Effect.die("SitesRepository.getActiveJobSummary not stubbed")),
+        listProximityCandidates:
+          options.listProximityCandidates ??
+          (() =>
+            Effect.die("SitesRepository.listProximityCandidates not stubbed")),
         update:
           options.update ??
           (() => Effect.die("SitesRepository.update not stubbed")),
@@ -800,4 +1080,39 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
       } as unknown as ContextService<typeof SitesRepository>)
     )
   );
+}
+
+function makeMappedSite(
+  id: string,
+  name: string,
+  latitude: number,
+  longitude: number
+) {
+  return decodeSiteOption({
+    displayLocation: `${name}, Dublin`,
+    formattedAddress: `${name}, Dublin, Ireland`,
+    googlePlaceId: `place-${id}`,
+    hasUsableCoordinates: true,
+    id,
+    labels: [],
+    latitude,
+    locationProvider: "google_places",
+    locationResolvedAt: "2026-05-20T09:00:00.000Z",
+    locationStatus: "google_resolved",
+    longitude,
+    name,
+    rawLocationInput: name,
+  });
+}
+
+function makeRouteSummary(durationSeconds: number, distanceMeters: number) {
+  return {
+    computedAt: "2026-05-20T10:15:00.000Z",
+    distanceMeters,
+    durationSeconds,
+    provider: "google_routes" as const,
+    providerRequestKind: "matrix" as const,
+    routeStatus: "ok" as const,
+    trafficAware: true,
+  };
 }

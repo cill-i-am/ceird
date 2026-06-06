@@ -46,7 +46,11 @@ const decodeInstanceName = Schema.decodeUnknownSync(AgentInstanceName);
 describe("@ceird/agents-core", () => {
   it("exports the shared agent action registry metadata", () => {
     expect(AGENT_ACTION_NAMES).toContain("ceird.jobs.create");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.jobs.proximity");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.jobs.route_preview");
     expect(AGENT_ACTION_NAMES).toContain("ceird.sites.create");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.sites.proximity");
+    expect(AGENT_ACTION_NAMES).toContain("ceird.sites.route_preview");
     expect(AGENT_ACTION_NAMES).toContain("ceird.labels.create");
     expect(AGENT_ACTION_NAMES).toContain("ceird.organization.members.invite");
     expect(getAgentActionDefinition("ceird.jobs.create").kind).toBe("write");
@@ -79,6 +83,63 @@ describe("@ceird/agents-core", () => {
       eircode: "V31R968",
       name: "Listowel Yard",
     });
+  });
+
+  it("accepts route-aware proximity action inputs", () => {
+    const origin = {
+      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      mode: "current_location",
+    };
+    const decodeNearbyJobs = Schema.decodeUnknownSync(
+      getAgentActionInputSchema("ceird.jobs.proximity")
+    );
+    const decodeJobRoutePreview = Schema.decodeUnknownSync(
+      getAgentActionInputSchema("ceird.jobs.route_preview")
+    );
+    const decodeNearbySites = Schema.decodeUnknownSync(
+      getAgentActionInputSchema("ceird.sites.proximity")
+    );
+    const decodeSiteRoutePreview = Schema.decodeUnknownSync(
+      getAgentActionInputSchema("ceird.sites.route_preview")
+    );
+
+    expect(
+      decodeNearbyJobs({
+        filters: { priority: "urgent", status: "active" },
+        limit: 25,
+        origin,
+      }).filters?.status
+    ).toBe("active");
+    expect(
+      decodeJobRoutePreview({
+        input: { includeRouteLine: true, origin },
+        workItemId: "11111111-1111-4111-8111-111111111111",
+      }).input.includeRouteLine
+    ).toBe(true);
+    expect(
+      decodeNearbySites({
+        filters: { query: "  docklands  " },
+        origin,
+      }).filters?.query
+    ).toBe("docklands");
+    expect(() =>
+      decodeNearbyJobs({
+        includeRouteLines: true,
+        origin,
+      })
+    ).toThrow(/includeRouteLines/);
+    expect(() =>
+      decodeNearbySites({
+        includeRouteLines: true,
+        origin,
+      })
+    ).toThrow(/includeRouteLines/);
+    expect(
+      decodeSiteRoutePreview({
+        input: { origin },
+        siteId: "22222222-2222-4222-8222-222222222222",
+      }).siteId
+    ).toBe("22222222-2222-4222-8222-222222222222");
   });
 
   it.each(AGENT_ACTIONS)(
@@ -155,6 +216,8 @@ describe("@ceird/agents-core", () => {
       "ceird.labels.delete",
       "ceird.sites.options",
       "ceird.sites.list",
+      "ceird.sites.proximity",
+      "ceird.sites.route_preview",
       "ceird.sites.create",
       "ceird.sites.update",
       "ceird.sites.comments.list",
@@ -163,6 +226,8 @@ describe("@ceird/agents-core", () => {
       "ceird.sites.remove_label",
       "ceird.jobs.list",
       "ceird.jobs.detail",
+      "ceird.jobs.proximity",
+      "ceird.jobs.route_preview",
       "ceird.jobs.options",
       "ceird.jobs.create",
       "ceird.jobs.update",

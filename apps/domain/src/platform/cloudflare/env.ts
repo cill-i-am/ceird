@@ -31,6 +31,7 @@ export interface DomainWorkerConfigEnv {
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE?: string;
   readonly DATABASE_URL?: string;
   readonly GOOGLE_MAPS_API_KEY: string;
+  readonly GOOGLE_MAPS_ROUTES_API_KEY?: string;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string;
   readonly MCP_RESOURCE_URL?: string;
@@ -72,6 +73,7 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
         env.CEIRD_WORKER_ANALYTICS_SAMPLE_RATE,
       DATABASE_URL: env.DATABASE_URL,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
+      GOOGLE_MAPS_ROUTES_API_KEY: env.GOOGLE_MAPS_ROUTES_API_KEY,
       MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES:
         env.MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES,
       MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS:

@@ -2,6 +2,7 @@ import { AgentActionsApiGroup, AgentThreadsApiGroup } from "@ceird/agents-core";
 import { IdentityApiGroup } from "@ceird/identity-core";
 import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
+import { ProximityApiGroup } from "@ceird/proximity-core";
 import { SitesApiGroup } from "@ceird/sites-core";
 import { Cause, Effect, Exit, Layer } from "effect";
 import {
@@ -26,6 +27,7 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(IdentityApiGroup)
   .add(JobsApiGroup)
   .add(LabelsApiGroup)
+  .add(ProximityApiGroup)
   .add(SitesApiGroup);
 
 const currentGlobalFetch: typeof globalThis.fetch = (input, init) =>

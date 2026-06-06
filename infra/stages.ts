@@ -144,6 +144,9 @@ export interface InfraStageConfig {
   readonly authRateLimitEnabled: boolean;
   readonly authSecrets: Redacted.Redacted<string> | undefined;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
+  readonly googleMapsRoutesApiKey:
+    | Redacted.Redacted<InfraGoogleMapsApiKey>
+    | undefined;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly electricContainerInstanceType: ElectricContainerInstanceType;
@@ -642,6 +645,11 @@ export function loadInfraStageConfig(stageInput: string) {
     const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
       Config.mapOrFail(decodeGoogleMapsApiKey)
     );
+    const googleMapsRoutesApiKey = yield* Config.option(
+      Config.redacted("GOOGLE_MAPS_ROUTES_API_KEY").pipe(
+        Config.mapOrFail(decodeGoogleMapsApiKey)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const hyperdriveName = yield* Config.string("CEIRD_HYPERDRIVE_NAME").pipe(
       Config.withDefault(defaultHyperdriveName),
       Config.mapOrFail(decodeProviderResourceName)
@@ -757,6 +765,7 @@ export function loadInfraStageConfig(stageInput: string) {
       authRateLimitEnabled,
       authSecrets,
       googleMapsApiKey,
+      googleMapsRoutesApiKey,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
       electricContainerInstanceType,

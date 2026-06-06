@@ -5,6 +5,8 @@ import {
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
   JobListQuerySchema,
+  JobProximityInputSchema,
+  JobRoutePreviewInputSchema,
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
   TransitionJobInputSchema,
@@ -21,6 +23,14 @@ import {
 
 const JobPathInputSchema = Schema.Struct({
   workItemId: WorkItemId,
+});
+
+const JobAgentProximityInputSchema = Schema.Struct({
+  filters: JobProximityInputSchema.fields.filters,
+  limit: JobProximityInputSchema.fields.limit,
+  origin: JobProximityInputSchema.fields.origin,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 const PatchJobActionInputSchema = Schema.Struct({
@@ -96,6 +106,36 @@ export const jobAgentActions = [
     modelDescription: "Get full detail for a Ceird job by ID.",
     modelName: "getJobDetail",
     name: "ceird.jobs.detail",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "Rank nearby jobs",
+      summary: "Rank filtered jobs by driving time.",
+      target: "jobs",
+    },
+    inputSchema: JobAgentProximityInputSchema,
+    executionStatus: "executable",
+    kind: "read",
+    modelDescription:
+      "Rank Ceird jobs near a current or typed origin by traffic-aware driving time, respecting supplied job filters.",
+    modelName: "rankNearbyJobs",
+    name: "ceird.jobs.proximity",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "Preview job route",
+      summary: "Read route distance and duration for one job.",
+      target: "job",
+    },
+    inputSchema: JobNestedInputSchema(JobRoutePreviewInputSchema),
+    executionStatus: "executable",
+    kind: "read",
+    modelDescription:
+      "Preview traffic-aware driving distance and duration from an origin to a specific Ceird job.",
+    modelName: "getJobRoutePreview",
+    name: "ceird.jobs.route_preview",
   }),
   defineAgentAction({
     confirmationPolicy: "none",

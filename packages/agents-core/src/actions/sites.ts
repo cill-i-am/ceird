@@ -4,6 +4,8 @@ import {
   AssignSiteLabelInputSchema,
   CreateSiteInputSchema,
   SiteListQuerySchema,
+  SiteProximityInputSchema,
+  SiteRoutePreviewInputSchema,
   UpdateSiteInputSchema,
 } from "@ceird/sites-core/dto";
 import { SiteId } from "@ceird/sites-core/ids";
@@ -16,6 +18,14 @@ import {
 
 const SitePathInputSchema = Schema.Struct({
   siteId: SiteId,
+});
+
+const SiteAgentProximityInputSchema = Schema.Struct({
+  filters: SiteProximityInputSchema.fields.filters,
+  limit: SiteProximityInputSchema.fields.limit,
+  origin: SiteProximityInputSchema.fields.origin,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 const UpdateSiteActionInputSchema = Schema.Struct({
@@ -82,6 +92,39 @@ export const siteAgentActions = [
     modelDescription: "List Ceird sites.",
     modelName: "listSites",
     name: "ceird.sites.list",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "Rank nearby sites",
+      summary: "Rank mapped sites by driving time.",
+      target: "sites",
+    },
+    inputSchema: SiteAgentProximityInputSchema,
+    executionStatus: "executable",
+    kind: "read",
+    modelDescription:
+      "Rank mapped Ceird sites near a current or typed origin by traffic-aware driving time, respecting supplied site filters.",
+    modelName: "rankNearbySites",
+    name: "ceird.sites.proximity",
+  }),
+  defineAgentAction({
+    confirmationPolicy: "none",
+    display: {
+      label: "Preview site route",
+      summary: "Read route distance and duration for one site.",
+      target: "site",
+    },
+    inputSchema: Schema.Struct({
+      input: SiteRoutePreviewInputSchema,
+      siteId: SiteId,
+    }),
+    executionStatus: "executable",
+    kind: "read",
+    modelDescription:
+      "Preview traffic-aware driving distance and duration from an origin to a specific Ceird site.",
+    modelName: "getSiteRoutePreview",
+    name: "ceird.sites.route_preview",
   }),
   defineAgentAction({
     confirmationPolicy: "confirm",

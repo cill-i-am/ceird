@@ -24,6 +24,9 @@ import {
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
   JobOptionsResponseSchema,
+  JobProximityInputSchema,
+  JobProximityResponseSchema,
+  JobRoutePreviewInputSchema,
   JobsApi,
   JobsApiGroup,
   JobStatusSchema,
@@ -326,9 +329,15 @@ describe("jobs-core", () => {
     expect(JobsApiGroup.identifier).toBe("jobs");
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
     expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
+    expect(spec.paths["/jobs/proximity"]?.post?.operationId).toBe(
+      "jobs.rankNearbyJobs"
+    );
     expect(spec.paths["/jobs/{workItemId}"]?.get?.operationId).toBe(
       "jobs.getJobDetail"
     );
+    expect(
+      spec.paths["/jobs/{workItemId}/route-preview"]?.post?.operationId
+    ).toBe("jobs.getJobRoutePreview");
     expect(spec.paths["/jobs/{workItemId}/comments"]?.post?.operationId).toBe(
       "jobs.addJobComment"
     );
@@ -396,5 +405,97 @@ describe("jobs-core", () => {
       status: "blocked",
       blockedReason: "Waiting for parts",
     });
+  });
+
+  it("decodes route-aware job proximity contracts", () => {
+    const origin = {
+      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      mode: "current_location",
+    };
+    const decodedInput = Schema.decodeUnknownSync(JobProximityInputSchema)({
+      filters: {
+        assigneeId: { kind: "unassigned" },
+        labelId: "11111111-1111-4111-8111-111111111111",
+        priority: "urgent",
+        query: "  boiler  ",
+        siteId: "22222222-2222-4222-8222-222222222222",
+        status: "active",
+      },
+      includeRouteLines: false,
+      limit: 25,
+      origin,
+    });
+
+    expect(decodedInput.filters?.query).toBe("boiler");
+    expect(decodedInput.filters?.status).toBe("active");
+    expect(decodedInput.filters?.assigneeId).toStrictEqual({
+      kind: "unassigned",
+    });
+
+    expect(() =>
+      Schema.decodeUnknownSync(JobProximityInputSchema)({
+        filters: { priority: "urgent" },
+        limit: 26,
+        origin,
+      })
+    ).toThrow(/less than or equal to 25/);
+
+    expect(
+      Schema.decodeUnknownSync(JobRoutePreviewInputSchema)({ origin })
+    ).toStrictEqual({ origin });
+
+    const response = Schema.decodeUnknownSync(JobProximityResponseSchema)({
+      meta: {
+        candidateCount: 1,
+        candidateLimitApplied: false,
+        excluded: [],
+        rankedCandidateLimit: 100,
+      },
+      origin: {
+        computedAt: "2026-06-06T10:00:00.000Z",
+        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        displayText: "Current location",
+        mode: "current_location",
+      },
+      rows: [
+        {
+          job: {
+            createdAt: "2026-06-06T09:00:00.000Z",
+            id: "33333333-3333-4333-8333-333333333333",
+            kind: "job",
+            labels: [],
+            priority: "urgent",
+            siteId: "22222222-2222-4222-8222-222222222222",
+            status: "new",
+            title: "Leaking boiler",
+            updatedAt: "2026-06-06T09:30:00.000Z",
+          },
+          routeSummary: {
+            computedAt: "2026-06-06T10:00:00.000Z",
+            distanceMeters: 4200,
+            durationSeconds: 840,
+            provider: "google_routes",
+            providerRequestKind: "matrix",
+            routeStatus: "ok",
+            trafficAware: true,
+          },
+          site: {
+            displayLocation: "Dublin 8",
+            googlePlaceId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+            hasUsableCoordinates: true,
+            id: "22222222-2222-4222-8222-222222222222",
+            labels: [],
+            latitude: 53.342886,
+            locationProvider: "google_places",
+            locationResolvedAt: "2026-06-06T09:00:00.000Z",
+            locationStatus: "google_resolved",
+            longitude: -6.267428,
+            name: "Dublin Boiler Room",
+          },
+        },
+      ],
+    });
+
+    expect(response.rows[0]?.routeSummary.durationSeconds).toBe(840);
   });
 });

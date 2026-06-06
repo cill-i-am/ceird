@@ -4,6 +4,7 @@ import type { WorkerProps } from "alchemy/Cloudflare";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 
 import type {
   AgentWorkerBindingEnv,
@@ -94,7 +95,7 @@ import {
   ceirdWorkerObservability,
 } from "./cloudflare-worker-defaults.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
-import type { InfraStageConfig } from "./stages.ts";
+import { InfraGoogleMapsApiKey, type InfraStageConfig } from "./stages.ts";
 
 type AssertTrue<Value extends true> = Value;
 type HasSameKeys<Type, Expected> = [
@@ -246,6 +247,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "BETTER_AUTH_SECRETS"
     | "CEIRD_LOCAL_DEV"
     | "DATABASE_URL"
+    | "GOOGLE_MAPS_ROUTES_API_KEY"
   >;
 type McpWorkerStackRuntimeConfigEnv = Required<
   Pick<
@@ -308,6 +310,7 @@ type DomainWorkerRuntimeStringValueKeys = Exclude<
   | "BETTER_AUTH_SECRETS"
   | "DATABASE_URL"
   | "GOOGLE_MAPS_API_KEY"
+  | "GOOGLE_MAPS_ROUTES_API_KEY"
 >;
 type DomainWorkerRuntimeStringValueEnv = Pick<
   DomainWorkerStackRuntimeConfigEnv,
@@ -734,6 +737,25 @@ describe("Cloudflare stack", () => {
     });
 
     expect(domainEnv.AUTH_COOKIE_DOMAIN).toBe("ceird.app");
+  });
+
+  it("passes the optional Google Routes key to domain Workers", () => {
+    const googleMapsRoutesApiKey = Redacted.make(
+      Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-routes-key")
+    );
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret: Redacted.make("agent-secret"),
+      betterAuthSecret: Redacted.make("better-auth-secret"),
+      config: {
+        ...configWithoutCloudflareBootstrapSecrets,
+        googleMapsRoutesApiKey,
+      } satisfies InfraStageConfig,
+    });
+
+    expect(domainEnv.GOOGLE_MAPS_API_KEY).toBe(
+      configWithoutCloudflareBootstrapSecrets.googleMapsApiKey
+    );
+    expect(domainEnv.GOOGLE_MAPS_ROUTES_API_KEY).toBe(googleMapsRoutesApiKey);
   });
 
   it("passes disabled auth rate limits through to preview domain Workers", () => {

@@ -1,6 +1,14 @@
 import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
 import { LabelId, LabelNameSchema, LabelSchema } from "@ceird/labels-core";
 import {
+  ProximityLimitSchema,
+  ProximityOriginInputSchema,
+  ProximityOriginSummarySchema,
+  ProximityResultMetadataSchema,
+  RouteDisplayLineSchema,
+  RouteSummarySchema,
+} from "@ceird/proximity-core";
+import {
   CreateSiteInputSchema,
   SiteDetailSchema,
   SiteId,
@@ -21,6 +29,7 @@ import {
   JobCollaboratorRoleLabelSchema,
   JobCollaboratorSubjectTypeSchema,
   JobKindSchema,
+  JOB_STATUSES,
   JobPrioritySchema,
   JobStatusSchema,
   JobTitleSchema,
@@ -302,6 +311,109 @@ export const JobListQuerySchema = Schema.Struct({
   parseOptions: { onExcessProperty: "error" },
 });
 export type JobListQuery = Schema.Schema.Type<typeof JobListQuerySchema>;
+
+export const JOB_PROXIMITY_STATUS_FILTERS = [
+  "active",
+  "all",
+  ...JOB_STATUSES,
+] as const;
+export const JobProximityStatusFilterSchema = Schema.Literals(
+  JOB_PROXIMITY_STATUS_FILTERS
+);
+export type JobProximityStatusFilter = Schema.Schema.Type<
+  typeof JobProximityStatusFilterSchema
+>;
+
+export const JobProximityAssigneeFilterSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("all") }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+  Schema.Struct({ kind: Schema.Literal("unassigned") }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("user"),
+    userId: UserId,
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+]);
+export type JobProximityAssigneeFilter = Schema.Schema.Type<
+  typeof JobProximityAssigneeFilterSchema
+>;
+
+export const JobProximityFiltersSchema = Schema.Struct({
+  assigneeId: Schema.optional(JobProximityAssigneeFilterSchema),
+  coordinatorId: Schema.optional(UserId),
+  labelId: Schema.optional(LabelId),
+  priority: Schema.optional(JobPrioritySchema),
+  query: Schema.optional(
+    NonEmptyTrimmedString.pipe(Schema.check(Schema.isMaxLength(256)))
+  ),
+  siteId: Schema.optional(SiteId),
+  status: Schema.optional(JobProximityStatusFilterSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobProximityFilters = Schema.Schema.Type<
+  typeof JobProximityFiltersSchema
+>;
+
+export const JobProximityInputSchema = Schema.Struct({
+  filters: Schema.optional(JobProximityFiltersSchema),
+  includeRouteLines: Schema.optional(Schema.Boolean),
+  limit: Schema.optional(ProximityLimitSchema),
+  origin: ProximityOriginInputSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobProximityInput = Schema.Schema.Type<
+  typeof JobProximityInputSchema
+>;
+
+export const JobProximityRowSchema = Schema.Struct({
+  job: JobListItemSchema,
+  routeLine: Schema.optional(RouteDisplayLineSchema),
+  routeSummary: RouteSummarySchema,
+  site: SiteOptionSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobProximityRow = Schema.Schema.Type<typeof JobProximityRowSchema>;
+
+export const JobProximityResponseSchema = Schema.Struct({
+  meta: ProximityResultMetadataSchema,
+  origin: ProximityOriginSummarySchema,
+  rows: Schema.Array(JobProximityRowSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobProximityResponse = Schema.Schema.Type<
+  typeof JobProximityResponseSchema
+>;
+
+export const JobRoutePreviewInputSchema = Schema.Struct({
+  includeRouteLine: Schema.optional(Schema.Boolean),
+  origin: ProximityOriginInputSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobRoutePreviewInput = Schema.Schema.Type<
+  typeof JobRoutePreviewInputSchema
+>;
+
+export const JobRoutePreviewResponseSchema = Schema.Struct({
+  job: JobListItemSchema,
+  origin: ProximityOriginSummarySchema,
+  routeLine: Schema.optional(RouteDisplayLineSchema),
+  routeSummary: RouteSummarySchema,
+  site: SiteOptionSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type JobRoutePreviewResponse = Schema.Schema.Type<
+  typeof JobRoutePreviewResponseSchema
+>;
 
 export const CreateJobSiteExistingInputSchema = Schema.Struct({
   kind: Schema.Literal("existing"),

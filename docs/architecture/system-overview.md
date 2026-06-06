@@ -61,31 +61,37 @@ Worker can be tied back to the stage that produced it.
 
 ## Monorepo Ownership
 
-| Area                     | Owns                                                                                                                            | Should not own                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `apps/app`               | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions.   |
-| `apps/api`               | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
-| `apps/domain`            | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
-| `apps/mcp`               | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
-| `apps/sync`              | Public Electric SQL adapter Worker, sync CORS, shape forwarding, and Cloudflare Container runtime.                              | Product authorization, schema, repositories, or migrations.    |
-| `packages/comments-core` | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
-| `packages/identity-core` | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
-| `packages/jobs-core`     | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
-| `infra`                  | Root Alchemy stage orchestration, shared Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.       | App-owned Worker/Vite declarations or app/API domain behavior. |
+| Area                      | Owns                                                                                                                            | Should not own                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/app`                | Browser routes, UI state, server-only app helpers, feature components, command bar, hotkeys, and E2E tests.                     | Database schema, API business rules, shared DTO definitions.   |
+| `apps/api`                | Public HTTP adapter, root/health responses, request logging, and `DOMAIN` service binding.                                      | Product repositories, auth runtime, migrations, or database.   |
+| `apps/domain`             | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                          |
+| `apps/mcp`                | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.    |
+| `apps/sync`               | Public Electric SQL adapter Worker, sync CORS, shape forwarding, and Cloudflare Container runtime.                              | Product authorization, schema, repositories, or migrations.    |
+| `packages/comments-core`  | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.    |
+| `packages/identity-core`  | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                      |
+| `packages/jobs-core`      | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                 |
+| `packages/proximity-core` | Route-aware origin, route summary, route display-line, metadata, limit, and typed proximity error contracts.                    | Provider clients, cache policy, quota accounting, SQL, or UI.  |
+| `infra`                   | Root Alchemy stage orchestration, shared Cloudflare resources, Neon branches, Hyperdrive, queues, and deployment helpers.       | App-owned Worker/Vite declarations or app/API domain behavior. |
 
 ## Request And Data Flow
 
-Jobs requests use a shared contract:
+Jobs and sites requests use shared contracts:
 
-1. `packages/jobs-core/src/http-api.ts` defines endpoint names, paths, payload
+1. `packages/jobs-core/src/http-api.ts` and
+   `packages/sites-core/src/http-api.ts` define endpoint names, paths, payload
    schemas, response schemas, and typed errors.
-2. `apps/domain/src/domains/jobs/http.ts` binds that contract to `JobsService`
-   and the site-aware lookup services it needs.
-3. `apps/app/src/features/api/app-api-client.ts` creates an Effect
+2. `packages/proximity-core` defines the route-aware origin, route summary,
+   display-line, metadata, and typed provider/quota error contracts shared by
+   jobs, sites, the app client, and agent action schemas.
+3. `apps/domain/src/domains/jobs/http.ts` and
+   `apps/domain/src/domains/sites/http.ts` bind those contracts to domain
+   services and the lookup services they need.
+4. `apps/app/src/features/api/app-api-client.ts` creates an Effect
    `HttpApiClient` from the shared product API groups.
-4. Browser-side jobs state calls the client directly. Server-side route loading
+5. Browser-side feature state calls the client directly. Server-side route loading
    uses TanStack Start helpers that forward cookies and trusted proxy headers.
-5. Domain services resolve the current actor, authorize the action, call
+6. Domain services resolve the current actor, authorize the action, call
    repositories, record activity where needed, and return DTOs from the shared
    package.
 

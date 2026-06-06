@@ -1,5 +1,10 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
+  ProximityCostGuardError,
+  ProximityProviderError,
+  ProximityRouteUnavailableError,
+} from "@ceird/proximity-core";
+import {
   SiteLocationProviderError,
   SiteLocationResolutionError,
   SiteNotFoundError,
@@ -28,6 +33,10 @@ import {
   JobListQuerySchema,
   JobOptionsResponseSchema,
   JobListResponseSchema,
+  JobProximityInputSchema,
+  JobProximityResponseSchema,
+  JobRoutePreviewInputSchema,
+  JobRoutePreviewResponseSchema,
   OrganizationActivityListResponseSchema,
   OrganizationActivityQuerySchema,
   PatchJobInputSchema,
@@ -110,11 +119,43 @@ const jobsGroup = HttpApiGroup.make("jobs")
     })
   )
   .add(
+    HttpApiEndpoint.post("rankNearbyJobs", "/jobs/proximity", {
+      payload: JobProximityInputSchema,
+      success: JobProximityResponseSchema,
+      error: [
+        JobAccessDeniedError,
+        ProximityCostGuardError,
+        ProximityProviderError,
+        ProximityRouteUnavailableError,
+        JobStorageError,
+      ],
+    })
+  )
+  .add(
     HttpApiEndpoint.get("getJobDetail", "/jobs/:workItemId", {
       params: { workItemId: WorkItemId },
       success: JobDetailResponseSchema,
       error: [JobNotFoundError, JobAccessDeniedError, JobStorageError],
     })
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "getJobRoutePreview",
+      "/jobs/:workItemId/route-preview",
+      {
+        params: { workItemId: WorkItemId },
+        payload: JobRoutePreviewInputSchema,
+        success: JobRoutePreviewResponseSchema,
+        error: [
+          JobNotFoundError,
+          JobAccessDeniedError,
+          ProximityCostGuardError,
+          ProximityProviderError,
+          ProximityRouteUnavailableError,
+          JobStorageError,
+        ],
+      }
+    )
   )
   .add(
     HttpApiEndpoint.patch("patchJob", "/jobs/:workItemId", {

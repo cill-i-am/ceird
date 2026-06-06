@@ -134,6 +134,7 @@ Secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
 
 Variables:
@@ -159,6 +160,7 @@ Secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
 
 Variables:

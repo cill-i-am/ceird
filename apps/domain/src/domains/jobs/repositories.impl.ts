@@ -47,9 +47,11 @@ import type {
   JobExternalMemberOption,
   JobKind,
   JobListCursorType as JobListCursor,
+  JobListItem,
   JobListQuery,
   JobMemberOption,
   JobPriority,
+  JobProximityFilters,
   JobStatus,
   JobTitle,
   JobVisit,
@@ -67,8 +69,13 @@ import {
   LabelSchema,
 } from "@ceird/labels-core";
 import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
+import type { ProximityExcludedCount } from "@ceird/proximity-core";
 import { SiteId as SiteIdSchema, SiteNotFoundError } from "@ceird/sites-core";
-import type { SiteIdType as SiteId, SiteOption } from "@ceird/sites-core";
+import type {
+  GoogleAddressComponent,
+  SiteIdType as SiteId,
+  SiteOption,
+} from "@ceird/sites-core";
 import {
   Array as Arr,
   Context,
@@ -97,6 +104,12 @@ import {
 } from "./id-generation.js";
 
 const EXTERNAL_ORGANIZATION_ROLE = "external" as const;
+const PROXIMITY_CANDIDATE_LIMIT = 100;
+const USABLE_SITE_LOCATION_STATUSES = [
+  "google_resolved",
+  "manually_adjusted",
+  "validated",
+] as const;
 
 interface JobCursorState {
   readonly id: WorkItemId;
@@ -214,6 +227,35 @@ interface JobContactDetailRow {
   readonly phone: string | null;
 }
 
+interface JobProximityCandidateRow extends WorkItemRow {
+  readonly site_access_notes: string | null;
+  readonly site_address_components: readonly GoogleAddressComponent[] | null;
+  readonly site_address_line_1: string | null;
+  readonly site_address_line_2: string | null;
+  readonly site_country: string | null;
+  readonly site_county: string | null;
+  readonly site_display_location: string | null;
+  readonly site_eircode: string | null;
+  readonly site_formatted_address: string | null;
+  readonly site_google_place_id: string | null;
+  readonly site_id_value: string | null;
+  readonly site_latitude: number | null;
+  readonly site_location_provider: string | null;
+  readonly site_location_resolved_at: Date | null;
+  readonly site_location_status: string | null;
+  readonly site_longitude: number | null;
+  readonly site_name: string | null;
+  readonly site_raw_location_input: string | null;
+  readonly site_town: string | null;
+}
+
+interface JobProximityStatsRow {
+  readonly candidate_count: number;
+  readonly missing_coordinates_count: number;
+  readonly no_site_count: number;
+  readonly unmapped_site_count: number;
+}
+
 export interface CreateJobRecordInput {
   readonly assigneeId?: UserId;
   readonly blockedReason?: string;
@@ -319,6 +361,18 @@ export interface AssignLabelRecordInput {
 export interface LabelAssignmentResult {
   readonly changed: boolean;
   readonly label: Label;
+}
+
+export interface JobProximityCandidate {
+  readonly job: JobListItem;
+  readonly site: SiteOption;
+}
+
+export interface JobProximityCandidateSet {
+  readonly candidateCount: number;
+  readonly candidateLimitApplied: boolean;
+  readonly candidates: readonly JobProximityCandidate[];
+  readonly excluded: readonly ProximityExcludedCount[];
 }
 
 const decodeJob = Schema.decodeUnknownSync(JobSchema);
@@ -886,6 +940,220 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
 
         return decodeJobListResponse({ items, nextCursor });
+      });
+
+      const listProximityCandidates = Effect.fn(
+        "JobsRepository.listProximityCandidates"
+      )(function* (
+        organizationId: OrganizationId,
+        filters: JobProximityFilters,
+        access?: JobsRepositoryAccess
+      ) {
+        const resolvedAccess = access ?? INTERNAL_JOBS_REPOSITORY_ACCESS;
+        const clauses = [sql`work_items.organization_id = ${organizationId}`];
+        const statusFilter = filters.status ?? "active";
+
+        if (statusFilter === "active") {
+          clauses.push(sql`work_items.status not in ('completed', 'canceled')`);
+        } else if (statusFilter !== "all") {
+          clauses.push(sql`work_items.status = ${statusFilter}`);
+        }
+
+        if (filters.assigneeId !== undefined) {
+          if (filters.assigneeId.kind === "unassigned") {
+            clauses.push(sql`work_items.assignee_id is null`);
+          } else if (filters.assigneeId.kind === "user") {
+            clauses.push(
+              sql`work_items.assignee_id = ${filters.assigneeId.userId}`
+            );
+          }
+        }
+
+        if (filters.coordinatorId !== undefined) {
+          clauses.push(
+            sql`work_items.coordinator_id = ${filters.coordinatorId}`
+          );
+        }
+
+        if (filters.priority !== undefined) {
+          clauses.push(sql`work_items.priority = ${filters.priority}`);
+        }
+
+        if (filters.siteId !== undefined) {
+          clauses.push(sql`work_items.site_id = ${filters.siteId}`);
+        }
+
+        if (filters.labelId !== undefined) {
+          clauses.push(sql`exists (
+            select 1
+            from work_item_labels
+            join labels
+              on labels.id = work_item_labels.label_id
+              and labels.organization_id = work_item_labels.organization_id
+            where work_item_labels.organization_id = ${organizationId}
+              and work_item_labels.work_item_id = work_items.id
+              and work_item_labels.label_id = ${filters.labelId}
+              and labels.archived_at is null
+          )`);
+        }
+
+        if (filters.query !== undefined) {
+          const queryPattern = `%${filters.query}%`;
+          clauses.push(sql`(
+            work_items.title ilike ${queryPattern}
+            or sites.name ilike ${queryPattern}
+            or sites.display_location ilike ${queryPattern}
+            or sites.eircode ilike ${queryPattern}
+          )`);
+        }
+
+        if (resolvedAccess.visibility === "external") {
+          clauses.push(sql`exists (
+            select 1
+            from work_item_collaborators
+            where work_item_collaborators.organization_id = ${organizationId}
+              and work_item_collaborators.work_item_id = work_items.id
+              and work_item_collaborators.subject_type = 'user'
+              and work_item_collaborators.user_id = ${resolvedAccess.userId}
+          )`);
+        }
+
+        const routeableSiteClause = sql`
+          sites.id is not null
+          and sites.location_status in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+          and sites.latitude is not null
+          and sites.longitude is not null
+        `;
+        const statsRows = yield* sql<JobProximityStatsRow>`
+          select
+            count(*) filter (where ${routeableSiteClause})::integer as candidate_count,
+            count(*) filter (where work_items.site_id is null)::integer as no_site_count,
+            count(*) filter (
+              where work_items.site_id is not null
+                and (
+                  sites.id is null
+                  or sites.location_status not in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+                )
+            )::integer as unmapped_site_count,
+            count(*) filter (
+              where sites.id is not null
+                and sites.location_status in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+                and (sites.latitude is null or sites.longitude is null)
+            )::integer as missing_coordinates_count
+          from work_items
+          left join sites
+            on sites.id = work_items.site_id
+            and sites.organization_id = work_items.organization_id
+            and sites.archived_at is null
+          where ${sql.and(clauses)}
+        `;
+        const stats = statsRows[0] ?? {
+          candidate_count: 0,
+          missing_coordinates_count: 0,
+          no_site_count: 0,
+          unmapped_site_count: 0,
+        };
+        const rows = yield* sql<JobProximityCandidateRow>`
+          select
+            work_items.id,
+            work_items.kind,
+            work_items.title,
+            work_items.status,
+            work_items.priority,
+            work_items.site_id,
+            work_items.contact_id,
+            work_items.assignee_id,
+            work_items.coordinator_id,
+            work_items.blocked_reason,
+            work_items.completed_at,
+            work_items.completed_by_user_id,
+            work_items.created_at,
+            work_items.updated_at,
+            work_items.created_by_user_id,
+            work_items.organization_id,
+            sites.access_notes as site_access_notes,
+            sites.address_components as site_address_components,
+            sites.address_line_1 as site_address_line_1,
+            sites.address_line_2 as site_address_line_2,
+            sites.country as site_country,
+            sites.county as site_county,
+            sites.display_location as site_display_location,
+            sites.eircode as site_eircode,
+            sites.formatted_address as site_formatted_address,
+            sites.google_place_id as site_google_place_id,
+            sites.id as site_id_value,
+            sites.latitude as site_latitude,
+            sites.location_provider as site_location_provider,
+            sites.location_resolved_at as site_location_resolved_at,
+            sites.location_status as site_location_status,
+            sites.longitude as site_longitude,
+            sites.name as site_name,
+            sites.raw_location_input as site_raw_location_input,
+            sites.town as site_town
+          from work_items
+          left join sites
+            on sites.id = work_items.site_id
+            and sites.organization_id = work_items.organization_id
+            and sites.archived_at is null
+          where ${sql.and([...clauses, routeableSiteClause])}
+          order by work_items.updated_at desc, work_items.id desc
+          limit ${PROXIMITY_CANDIDATE_LIMIT + 1}
+        `;
+        const pageRows = Arr.take(rows, PROXIMITY_CANDIDATE_LIMIT);
+        const workItemIds = pageRows.map((row) => decodeWorkItemId(row.id));
+        const routableSiteIds = pageRows.flatMap((row) =>
+          row.site_id_value === null ? [] : [decodeSiteId(row.site_id_value)]
+        );
+        const includeSiteLabels = resolvedAccess.visibility !== "external";
+        const [labelsByWorkItemId, labelsBySiteId] = yield* Effect.all(
+          [
+            listLabelsForWorkItems(organizationId, workItemIds),
+            includeSiteLabels
+              ? listSiteLabelsForSites(
+                  sql,
+                  organizationId,
+                  Array.from(new Set(routableSiteIds))
+                )
+              : Effect.succeed(new Map<SiteId, readonly Label[]>()),
+          ],
+          { concurrency: 2 }
+        );
+        const excluded = new Map<ProximityExcludedCount["reason"], number>();
+        addExcluded(excluded, "no_site", stats.no_site_count);
+        addExcluded(excluded, "unmapped_site", stats.unmapped_site_count);
+        addExcluded(
+          excluded,
+          "missing_coordinates",
+          stats.missing_coordinates_count
+        );
+        const candidates: JobProximityCandidate[] = [];
+
+        for (const row of pageRows) {
+          const siteId = decodeSiteId(row.site_id_value);
+          const site = mapJobProximitySiteOptionRow(
+            row,
+            labelsBySiteId.get(siteId) ?? []
+          );
+
+          candidates.push({
+            job: mapJobListItemRow(
+              row,
+              labelsByWorkItemId.get(decodeWorkItemId(row.id)) ?? []
+            ),
+            site,
+          });
+        }
+
+        return {
+          candidateCount: stats.candidate_count,
+          candidateLimitApplied:
+            stats.candidate_count > PROXIMITY_CANDIDATE_LIMIT,
+          candidates,
+          excluded: Array.from(excluded.entries()).map(([reason, count]) => ({
+            count,
+            reason,
+          })),
+        } satisfies JobProximityCandidateSet;
       });
 
       const listOrganizationActivity = Effect.fn(
@@ -1705,6 +1973,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         findUserCollaboratorGrant,
         getDetail,
         list,
+        listProximityCandidates,
         listAccessibleWorkItemIdsForUser,
         listCollaborators,
         listExternalMemberOptions,
@@ -1763,6 +2032,12 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
   static readonly list = (
     ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["list"]>
   ) => JobsRepository.use((service) => service.list(...args));
+  static readonly listProximityCandidates = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listProximityCandidates"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.listProximityCandidates(...args));
   static readonly listAccessibleWorkItemIdsForUser = (
     ...args: Parameters<
       Context.Service.Shape<
@@ -2179,6 +2454,48 @@ function mapJobListItemRow(row: WorkItemRow, labels: readonly Label[] = []) {
     title: row.title,
     updatedAt: row.updated_at.toISOString(),
   });
+}
+
+function mapJobProximitySiteOptionRow(
+  row: JobProximityCandidateRow,
+  labels: readonly Label[] = []
+) {
+  return mapSiteOptionRow(
+    {
+      access_notes: row.site_access_notes,
+      address_components: row.site_address_components,
+      address_line_1: row.site_address_line_1,
+      address_line_2: row.site_address_line_2,
+      country: row.site_country,
+      county: row.site_county,
+      display_location: row.site_display_location ?? "",
+      eircode: row.site_eircode,
+      formatted_address: row.site_formatted_address,
+      google_place_id: row.site_google_place_id,
+      id: row.site_id_value ?? "",
+      latitude: row.site_latitude,
+      location_provider: row.site_location_provider,
+      location_resolved_at: row.site_location_resolved_at,
+      location_status: row.site_location_status ?? "unverified",
+      longitude: row.site_longitude,
+      name: row.site_name ?? "",
+      raw_location_input: row.site_raw_location_input,
+      town: row.site_town,
+    },
+    labels
+  );
+}
+
+function addExcluded(
+  excluded: Map<ProximityExcludedCount["reason"], number>,
+  reason: ProximityExcludedCount["reason"],
+  count: number
+) {
+  if (count <= 0) {
+    return;
+  }
+
+  excluded.set(reason, (excluded.get(reason) ?? 0) + count);
 }
 
 function mapJobCollaboratorRow(row: WorkItemCollaboratorRow): JobCollaborator {

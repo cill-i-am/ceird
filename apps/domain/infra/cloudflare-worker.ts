@@ -31,6 +31,7 @@ export interface DomainWorkerStageConfig {
   readonly authPasswordCompromiseCheckRangeUrlOverride?: string | undefined;
   readonly authRateLimitEnabled: boolean;
   readonly googleMapsApiKey: Redacted.Redacted<string>;
+  readonly googleMapsRoutesApiKey?: Redacted.Redacted<string> | undefined;
   readonly mcpAuthorizedAppCacheMaxEntries?: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds?: number | undefined;
   readonly mcpHostname: string;
@@ -96,6 +97,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly DATABASE_URL?: Input<Redacted.Redacted<string>> | undefined;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
+  readonly GOOGLE_MAPS_ROUTES_API_KEY?: Redacted.Redacted<string> | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string | undefined;
   readonly MCP_RESOURCE_URL: string;
@@ -289,6 +291,10 @@ export function makeDomainWorkerEnv(input: {
     ),
     ...optionalDomainWorkerEnv("DATABASE_URL", input.databaseUrl),
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
+    ...optionalDomainWorkerEnv(
+      "GOOGLE_MAPS_ROUTES_API_KEY",
+      input.config.googleMapsRoutesApiKey
+    ),
     ...optionalDomainWorkerEnv(
       "AUTH_COOKIE_DOMAIN",
       makeDomainWorkerCookieDomainEnvValue({

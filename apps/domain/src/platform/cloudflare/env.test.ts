@@ -45,6 +45,15 @@ describe("Cloudflare Worker environment config", () => {
     expect(config.get("GOOGLE_MAPS_API_KEY")).toBe("google-key");
   });
 
+  it("exposes the optional Google Routes API key to Effect config", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      GOOGLE_MAPS_ROUTES_API_KEY: "google-routes-key",
+    });
+
+    expect(config.get("GOOGLE_MAPS_ROUTES_API_KEY")).toBe("google-routes-key");
+  });
+
   it("propagates explicit local Alchemy runtime settings", () => {
     const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),

@@ -24,6 +24,7 @@ import { LabelsHttpLive } from "./domains/labels/http.js";
 import type { McpAuthorizedAppCacheOptions } from "./domains/mcp/cache-config.js";
 import type { McpAuthorizedAppCache } from "./domains/mcp/http.js";
 import { makeMcpWebHandler } from "./domains/mcp/http.js";
+import { ProximityHttpLive } from "./domains/proximity/http.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { SiteLocationProvider } from "./domains/sites/location-provider.js";
 import { SyncHttpLive } from "./domains/sync/http.js";
@@ -56,6 +57,7 @@ const makeApiHandlersLive = () =>
         IdentityHttpLive,
         JobsHttpLive,
         LabelsHttpLive,
+        ProximityHttpLive,
         SitesHttpLive,
         SyncHttpLive
       )

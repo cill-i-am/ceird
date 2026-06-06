@@ -11,6 +11,8 @@ import { JOB_NOT_FOUND_ERROR_TAG, JobNotFoundError } from "@ceird/jobs-core";
 import type {
   JobDetailResponse,
   JobListResponse,
+  JobProximityResponse,
+  JobRoutePreviewResponse,
   UserIdType,
   WorkItemIdType,
 } from "@ceird/jobs-core";
@@ -19,10 +21,22 @@ import {
   LabelNotFoundError,
 } from "@ceird/labels-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
+import {
+  PROXIMITY_PROVIDER_ERROR_TAG,
+  ProximityProviderError,
+} from "@ceird/proximity-core";
+import type {
+  GooglePlaceIdType as ProximityGooglePlaceIdType,
+  GooglePlacesSessionTokenType as ProximityGooglePlacesSessionTokenType,
+  ProximityOriginAutocompleteResponse,
+  ProximityOriginPlaceDetailsResponse,
+} from "@ceird/proximity-core";
 import type {
   CreateSiteResponse,
   GooglePlaceIdType,
   SiteIdType,
+  SiteProximityResponse,
+  SiteRoutePreviewResponse,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
 import { Effect, Result, Schema } from "effect";
@@ -111,6 +125,92 @@ const siteWithLabelResponse: CreateSiteResponse = {
 
 const siteOptionsResponse: SitesOptionsResponse = {
   sites: [createSiteResponse],
+};
+
+const routeSummary = {
+  computedAt: "2026-06-06T10:00:00.000Z",
+  distanceMeters: 4200,
+  durationSeconds: 840,
+  provider: "google_routes",
+  providerRequestKind: "matrix",
+  routeStatus: "ok",
+  trafficAware: true,
+} as const;
+
+const originSummary = {
+  computedAt: "2026-06-06T10:00:00.000Z",
+  coordinates: { latitude: 53.349805, longitude: -6.26031 },
+  displayText: "Current location",
+  mode: "current_location",
+} as const;
+
+const jobProximityResponse: JobProximityResponse = {
+  meta: {
+    candidateCount: 1,
+    candidateLimitApplied: false,
+    excluded: [],
+    rankedCandidateLimit: 100,
+  },
+  origin: originSummary,
+  rows: [
+    {
+      job: listResponse.items[0],
+      routeSummary,
+      site: createSiteResponse,
+    },
+  ],
+};
+
+const jobRoutePreviewResponse: JobRoutePreviewResponse = {
+  job: listResponse.items[0],
+  origin: originSummary,
+  routeSummary,
+  site: createSiteResponse,
+};
+
+const siteProximityResponse: SiteProximityResponse = {
+  meta: {
+    candidateCount: 1,
+    candidateLimitApplied: false,
+    excluded: [],
+    rankedCandidateLimit: 100,
+  },
+  origin: originSummary,
+  rows: [
+    {
+      activeJobCount: 1,
+      highestActiveJobPriority: "urgent",
+      routeSummary,
+      site: createSiteResponse,
+    },
+  ],
+};
+
+const siteRoutePreviewResponse: SiteRoutePreviewResponse = {
+  activeJobCount: 1,
+  highestActiveJobPriority: "urgent",
+  origin: originSummary,
+  routeSummary,
+  site: createSiteResponse,
+};
+
+const originAutocompleteResponse: ProximityOriginAutocompleteResponse = {
+  suggestions: [
+    {
+      displayText: "Dublin Port",
+      placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4" as ProximityGooglePlaceIdType,
+      secondaryText: "Dublin, Ireland",
+    },
+  ],
+};
+
+const originPlaceDetailsResponse: ProximityOriginPlaceDetailsResponse = {
+  origin: {
+    coordinates: { latitude: 53.3478, longitude: -6.1956 },
+    displayText: "Dublin Port, Dublin, Ireland",
+    mode: "typed_origin",
+    placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4" as ProximityGooglePlaceIdType,
+  },
 };
 
 describe("app API client", () => {
@@ -262,6 +362,129 @@ describe("app API client", () => {
 
     expect(String(url)).toBe("http://127.0.0.1:3001/sites?limit=25");
     expect(requestInit?.method).toBe("GET");
+  }, 1000);
+
+  it("runs route-aware jobs and sites computations through the shared Ceird API client", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(jobProximityResponse))
+      .mockResolvedValueOnce(Response.json(jobRoutePreviewResponse))
+      .mockResolvedValueOnce(Response.json(siteProximityResponse))
+      .mockResolvedValueOnce(Response.json(siteRoutePreviewResponse));
+    const origin = {
+      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      mode: "current_location" as const,
+    };
+
+    await expect(
+      runAppApiClient(
+        {
+          requestOrigin: "http://127.0.0.1:3000",
+        },
+        "ProximityServer.test.routeAwareEndpoints",
+        (client) =>
+          Effect.gen(function* () {
+            const jobs = yield* client.jobs.rankNearbyJobs({
+              payload: {
+                filters: { priority: "urgent", status: "active" },
+                limit: 10,
+                origin,
+              },
+            });
+            const jobRoute = yield* client.jobs.getJobRoutePreview({
+              params: {
+                workItemId:
+                  "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+              },
+              payload: { origin },
+            });
+            const sites = yield* client.sites.rankNearbySites({
+              payload: {
+                filters: { query: "docklands" },
+                origin,
+              },
+            });
+            const siteRoute = yield* client.sites.getSiteRoutePreview({
+              params: { siteId: createSiteResponse.id },
+              payload: { includeRouteLine: true, origin },
+            });
+
+            return { jobRoute, jobs, siteRoute, sites };
+          })
+      )
+    ).resolves.toStrictEqual({
+      jobRoute: jobRoutePreviewResponse,
+      jobs: jobProximityResponse,
+      siteRoute: siteRoutePreviewResponse,
+      sites: siteProximityResponse,
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "http://127.0.0.1:3001/jobs/proximity"
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "http://127.0.0.1:3001/jobs/11111111-1111-4111-8111-111111111111/route-preview"
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
+      "http://127.0.0.1:3001/sites/proximity"
+    );
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[3]?.[0])).toBe(
+      "http://127.0.0.1:3001/sites/33333333-3333-4333-8333-333333333333/route-preview"
+    );
+    expect(fetchMock.mock.calls[3]?.[1]?.method).toBe("POST");
+  }, 1000);
+
+  it("runs proximity origin lookup through the shared Ceird API client", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(originAutocompleteResponse))
+      .mockResolvedValueOnce(Response.json(originPlaceDetailsResponse));
+
+    await expect(
+      runAppApiClient(
+        {
+          requestOrigin: "http://127.0.0.1:3000",
+        },
+        "ProximityServer.test.originLookup",
+        (client) =>
+          Effect.gen(function* () {
+            const suggestions = yield* client.proximity.autocompleteOrigin({
+              payload: {
+                country: "IE",
+                input: "dub port",
+                sessionToken:
+                  "550e8400-e29b-41d4-a716-446655440000" as ProximityGooglePlacesSessionTokenType,
+              },
+            });
+            const details = yield* client.proximity.getOriginPlaceDetails({
+              payload: {
+                placeId:
+                  "ChIJN1t_tDeuEmsRUsoyG83frY4" as ProximityGooglePlaceIdType,
+                rawInput: "dub port",
+                sessionToken:
+                  "550e8400-e29b-41d4-a716-446655440000" as ProximityGooglePlacesSessionTokenType,
+              },
+            });
+
+            return { details, suggestions };
+          })
+      )
+    ).resolves.toStrictEqual({
+      details: originPlaceDetailsResponse,
+      suggestions: originAutocompleteResponse,
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "http://127.0.0.1:3001/proximity/origins/autocomplete"
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "http://127.0.0.1:3001/proximity/origins/place-details"
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
   }, 1000);
 
   it("assigns labels to standalone sites through the shared Ceird API client", async () => {
@@ -437,6 +660,20 @@ describe("app API client", () => {
     expect(normalizeAppApiError(domainError)).toMatchObject({
       _tag: AGENT_THREAD_NOT_FOUND_ERROR_TAG,
       message: "Agent thread not found",
+    });
+  }, 1000);
+
+  it("preserves proximity-core tagged domain errors", () => {
+    const domainError = new ProximityProviderError({
+      message: "Route provider failed",
+      provider: "google_routes",
+      reason: "request_denied",
+    });
+
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
+      _tag: PROXIMITY_PROVIDER_ERROR_TAG,
+      message: "Route provider failed",
     });
   }, 1000);
 });

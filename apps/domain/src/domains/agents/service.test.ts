@@ -470,6 +470,60 @@ describe("agent threads service", () => {
     expect(actionCalls).toBe(1);
   });
 
+  it("passes the current thread id into fresh action execution", async () => {
+    let receivedThreadId: AgentThreadId | undefined;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: {},
+            name: "ceird.labels.list",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: (_actor, _name, _input, context) =>
+              Effect.sync(() => {
+                receivedThreadId = context?.threadId;
+
+                return { labels: [] };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  actionKind: "read",
+                  actionName: "ceird.labels.list",
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(response).toMatchObject({
+      replayed: false,
+      result: { labels: [] },
+    });
+    expect(receivedThreadId).toBe(threadId);
+  });
+
   it("preserves the failure category when replaying failed operations", async () => {
     const error = await Effect.runPromise(
       runAgentThreadsService(
