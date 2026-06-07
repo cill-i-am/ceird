@@ -158,9 +158,10 @@ GitHub credential stack, keeping routine app deploy credentials out of API token
 management. Pull-request previews and push-to-main cloud E2E stages receive the
 same Electric storage secret names through their protected GitHub environments,
 so they reconcile the Sync Worker, Electric Container, and stage-scoped R2 bucket
-before E2E runs. The app stack copies those credential values, the Neon branch
-URL, and the generated Electric source secret into Cloudflare Secrets Store and
-passes only the stage-scoped account-secret names to the Container application.
+before E2E runs. The app stack passes those credential values, the Neon branch
+URL, and the generated Electric source secret into the Sync Worker as secrets;
+the `ElectricSql` Durable Object supplies them to the Cloudflare Container as
+startup environment variables when it starts Electric.
 Deployed stages fail closed when Electric storage secrets are absent.
 
 There is no separate local Docker service in the default workflow; local
@@ -190,8 +191,8 @@ The stack provisions:
 - native Alchemy Cloudflare R2 bucket for Electric shape storage; local dev
   stages mint their own bucket-scoped token, while CI/deployed stages consume
   Electric R2 credentials from GitHub environment secrets managed by the
-  separate credential stack; the app stack mirrors runtime container secrets
-  into Cloudflare Secrets Store before creating the Electric Container
+  separate credential stack; the Sync Worker injects runtime container secrets
+  through Durable Object container startup environment variables
 - private Cloudflare domain Worker declared in
   `apps/domain/infra/cloudflare-worker.ts` and executed from
   `apps/domain/src/worker.ts`

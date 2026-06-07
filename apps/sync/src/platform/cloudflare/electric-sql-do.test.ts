@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { handleElectricSqlFetch } from "./electric-sql-do.js";
+import type { SyncWorkerEnv } from "./env.js";
 
 function makeState(
   container?: NonNullable<DurableObjectState["container"]>,
@@ -17,6 +18,24 @@ function makeState(
     waitUntil: vi.fn<(promise: Promise<unknown>) => void>(),
   } as unknown as DurableObjectState;
 }
+
+const baseEnv = {
+  AUTH_APP_ORIGIN: "https://app.example.com",
+  DOMAIN: {
+    connect: () => {
+      throw new Error("connect is not used by the Electric SQL DO");
+    },
+    fetch: () => Promise.resolve(Response.json({ error: "unused" })),
+  },
+  ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID: "r2-access-key-id",
+  ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
+  ELECTRIC_CONTAINER_DATABASE_URL: "postgres://electric.example/db",
+  ELECTRIC_CONTAINER_ELECTRIC_SECRET: "electric-secret",
+  ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
+  ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
+  ELECTRIC_SOURCE_SECRET: "electric-secret",
+  ElectricSql: {} as DurableObjectNamespace,
+} satisfies SyncWorkerEnv;
 
 describe("ElectricSql Durable Object", () => {
   it("starts a stopped container and waits for the port before forwarding", async () => {
@@ -51,12 +70,32 @@ describe("ElectricSql Durable Object", () => {
           "x-request-id": "req_electric",
         },
       }),
-      state
+      state,
+      baseEnv
     ).pipe(Effect.runPromise);
 
     await expect(response.text()).resolves.toBe("ok");
     expect(response.status).toBe(200);
-    expect(container.start).toHaveBeenCalledOnce();
+    expect(container.start).toHaveBeenCalledExactlyOnceWith({
+      enableInternet: true,
+      env: {
+        AWS_ACCESS_KEY_ID: "r2-access-key-id",
+        AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
+        CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
+        CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+        DATABASE_URL: "postgres://electric.example/db",
+        ELECTRIC_INSECURE: "false",
+        ELECTRIC_LOG_LEVEL: "info",
+        ELECTRIC_PERSISTENT_STATE: "file",
+        ELECTRIC_PORT: "3000",
+        ELECTRIC_SECRET: "electric-secret",
+        ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
+        ELECTRIC_STORAGE: "fast_file",
+        ELECTRIC_STORAGE_DIR: "/var/lib/electric",
+        R2_ACCOUNT_ID: "cloudflare-account-id",
+        R2_BUCKET_NAME: "ceird-main-electric-storage",
+      },
+    });
     expect(state.blockConcurrencyWhile).toHaveBeenCalledOnce();
     expect(portFetch).toHaveBeenCalledTimes(2);
     expect(portFetch.mock.calls[0]?.[0]).toBe("http://electric/v1/health");
@@ -98,7 +137,8 @@ describe("ElectricSql Durable Object", () => {
 
     const response = await handleElectricSqlFetch(
       new Request("https://sync.example.com/v1/shape?offset=-1"),
-      state
+      state,
+      baseEnv
     ).pipe(Effect.runPromise);
 
     expect(response.status).toBe(200);
@@ -134,7 +174,8 @@ describe("ElectricSql Durable Object", () => {
 
     const response = await handleElectricSqlFetch(
       new Request("https://sync.example.com/v1/shape?offset=-1"),
-      state
+      state,
+      baseEnv
     ).pipe(Effect.runPromise);
 
     expect(response.status).toBe(200);
@@ -147,7 +188,8 @@ describe("ElectricSql Durable Object", () => {
   it("returns a controlled 503 when the container binding is unavailable", async () => {
     const response = await handleElectricSqlFetch(
       new Request("https://sync.example.com/v1/shape?offset=-1"),
-      makeState()
+      makeState(),
+      baseEnv
     ).pipe(Effect.runPromise);
 
     await expect(response.json()).resolves.toStrictEqual({
@@ -184,7 +226,8 @@ describe("ElectricSql Durable Object", () => {
       const state = makeState(container);
       const responsePromise = handleElectricSqlFetch(
         new Request("https://sync.example.com/v1/shape?offset=-1"),
-        state
+        state,
+        baseEnv
       ).pipe(Effect.runPromise);
 
       await vi.runAllTimersAsync();
@@ -226,7 +269,8 @@ describe("ElectricSql Durable Object", () => {
 
     const response = await handleElectricSqlFetch(
       new Request("https://sync.example.com/v1/shape?offset=-1"),
-      state
+      state,
+      baseEnv
     ).pipe(Effect.runPromise);
 
     await expect(response.json()).resolves.toStrictEqual({

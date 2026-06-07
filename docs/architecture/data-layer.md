@@ -171,8 +171,8 @@ Worker are reconciled.
 
 Electric SQL is deployed as a Cloudflare Container owned by `apps/sync`. The
 container reads the same stage Neon branch as the domain Worker through a
-container `DATABASE_URL` secret, while the public sync Worker holds the
-matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
+`DATABASE_URL` supplied at container start, while the public sync Worker holds
+the matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
 through the Alchemy stack and are not emitted as stack outputs.
 
 Electric stores shape logs and metadata on a filesystem that must survive sync
@@ -188,11 +188,11 @@ creating API tokens during routine deploys, so the deploy token does not need
 `API Tokens Write`. Production, pull-request previews, and push-to-main cloud
 E2E stages all provision the Electric Container and stage-scoped R2 bucket; a
 deployed stack fails closed when either Electric storage credential is absent.
-During reconciliation, the app stack writes the R2 credentials, stage Neon
-connection URL, and generated Electric source secret into Cloudflare Secrets
-Store with stage-scoped names. The Cloudflare Container configuration references
-those account-secret names; it does not send raw secret values to the Containers
-application API.
+During reconciliation, the app stack passes the R2 credentials, stage Neon
+connection URL, and generated Electric source secret into the Sync Worker as
+secrets. The `ElectricSql` Durable Object passes those values to the Cloudflare
+Container as startup environment variables, so the Containers application
+configuration does not need account-secret references.
 
 The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
 hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches

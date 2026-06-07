@@ -17,7 +17,10 @@ import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
 import { makeMcpWorker } from "../apps/mcp/infra/cloudflare-worker.ts";
-import { makeSyncWorker } from "../apps/sync/infra/cloudflare-worker.ts";
+import {
+  makeElectricContainerEnv,
+  makeSyncWorker,
+} from "../apps/sync/infra/cloudflare-worker.ts";
 import type { ElectricContainerConfig } from "../apps/sync/infra/cloudflare-worker.ts";
 import {
   makeCloudflareR2BucketResourceKey,
@@ -340,7 +343,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       : yield* makeElectricContainerConfig({
           accountId: cloudflareAccountId,
           bucketName: electricStorageBucketName,
-          config: input.config,
           databaseConnectionUri: input.database.branch.connectionUri,
           electricSourceSecret: electricSourceSecret.text,
           name: resourceName(input.config, "electric"),
@@ -467,13 +469,6 @@ interface ElectricStorageCredentialValues {
 
 type SecretStringInput = string | Output.Output<string>;
 
-export function makeElectricContainerSecretName(
-  config: InfraStageConfig,
-  suffix: string
-) {
-  return resourceName(config, `electric-${suffix}`);
-}
-
 function redactInput(
   value: SecretStringInput
 ): Input<Redacted.Redacted<string>> {
@@ -485,68 +480,26 @@ function redactInput(
 function makeElectricContainerConfig(input: {
   readonly accountId: string;
   readonly bucketName: string;
-  readonly config: InfraStageConfig;
   readonly databaseConnectionUri: SecretStringInput;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly name: string;
   readonly storageCredentials: ElectricStorageCredentialValues;
-}): Effect.Effect<ElectricContainerConfig, never, Cloudflare.Providers> {
-  return Effect.gen(function* () {
-    const store = yield* Cloudflare.SecretsStore("ElectricContainerSecrets");
-    const secretNames = {
-      awsAccessKeyId: makeElectricContainerSecretName(
-        input.config,
-        "aws-access-key-id"
-      ),
-      awsSecretAccessKey: makeElectricContainerSecretName(
-        input.config,
-        "aws-secret-access-key"
-      ),
-      databaseUrl: makeElectricContainerSecretName(
-        input.config,
-        "database-url"
-      ),
-      electricSecret: makeElectricContainerSecretName(
-        input.config,
-        "source-secret"
-      ),
-    };
-
-    yield* Cloudflare.Secret("ElectricContainerAwsAccessKeyIdSecret", {
-      store,
-      name: secretNames.awsAccessKeyId,
-      value: redactInput(input.storageCredentials.accessKeyId),
-    });
-    yield* Cloudflare.Secret("ElectricContainerAwsSecretAccessKeySecret", {
-      store,
-      name: secretNames.awsSecretAccessKey,
-      value: redactInput(input.storageCredentials.secretAccessKey),
-    });
-    yield* Cloudflare.Secret("ElectricContainerDatabaseUrlSecret", {
-      store,
-      name: secretNames.databaseUrl,
-      value: redactInput(input.databaseConnectionUri),
-    });
-    yield* Cloudflare.Secret("ElectricContainerSourceSecret", {
-      store,
-      name: secretNames.electricSecret,
-      value: input.electricSourceSecret,
-    });
-
-    return {
-      name: input.name,
-      secrets: {
-        awsAccessKeyId: Redacted.make(secretNames.awsAccessKeyId),
-        awsSecretAccessKey: Redacted.make(secretNames.awsSecretAccessKey),
-        databaseUrl: Redacted.make(secretNames.databaseUrl),
-        electricSecret: Redacted.make(secretNames.electricSecret),
-      },
+}): Effect.Effect<ElectricContainerConfig> {
+  return Effect.succeed({
+    env: makeElectricContainerEnv({
+      databaseUrl: redactInput(input.databaseConnectionUri),
+      electricSecret: input.electricSourceSecret,
       storage: {
+        accessKeyId: redactInput(input.storageCredentials.accessKeyId),
         accountId: input.accountId,
         bucketName: input.bucketName,
+        awsSecretAccessKey: redactInput(
+          input.storageCredentials.secretAccessKey
+        ),
       },
-    } satisfies ElectricContainerConfig;
-  });
+    }),
+    name: input.name,
+  } satisfies ElectricContainerConfig);
 }
 
 function makeLocalElectricStorageCredentials(input: {

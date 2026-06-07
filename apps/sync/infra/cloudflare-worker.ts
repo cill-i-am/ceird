@@ -52,6 +52,17 @@ type SyncWorkerBindingProps = {
 
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
 type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
+type SyncWorkerElectricContainerConfiguredEnv = Required<
+  Pick<
+    SyncWorkerConfiguredEnv,
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+  >
+>;
 
 export interface SyncWorkerStageConfig {
   readonly appHostname: string;
@@ -64,18 +75,34 @@ export interface SyncWorkerConfiguredEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
+  readonly ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID?: Input<
+    Redacted.Redacted<string>
+  >;
+  readonly ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY?: Input<
+    Redacted.Redacted<string>
+  >;
+  readonly ELECTRIC_CONTAINER_DATABASE_URL?: Input<Redacted.Redacted<string>>;
+  readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: Input<
+    Redacted.Redacted<string>
+  >;
+  readonly ELECTRIC_CONTAINER_R2_ACCOUNT_ID?: Input<string>;
+  readonly ELECTRIC_CONTAINER_R2_BUCKET_NAME?: Input<string>;
   readonly ELECTRIC_SQL_LOCATION_HINT: DurableObjectLocationHint;
   readonly ELECTRIC_SOURCE_SECRET: Input<Redacted.Redacted<string>>;
   readonly NODE_ENV: "production";
 }
 
 export interface ElectricContainerConfiguredEnv {
+  readonly AWS_ACCESS_KEY_ID: Input<Redacted.Redacted<string>>;
+  readonly AWS_SECRET_ACCESS_KEY: Input<Redacted.Redacted<string>>;
   readonly CEIRD_ELECTRIC_STORAGE_BACKEND: "r2";
   readonly CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric";
+  readonly DATABASE_URL: Input<Redacted.Redacted<string>>;
   readonly ELECTRIC_INSECURE: "false";
   readonly ELECTRIC_LOG_LEVEL: "info";
   readonly ELECTRIC_PERSISTENT_STATE: "file";
   readonly ELECTRIC_PORT: "3000";
+  readonly ELECTRIC_SECRET: Input<Redacted.Redacted<string>>;
   readonly ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true";
   readonly ELECTRIC_STORAGE: "fast_file";
   readonly ELECTRIC_STORAGE_DIR: "/var/lib/electric";
@@ -84,21 +111,15 @@ export interface ElectricContainerConfiguredEnv {
 }
 
 export interface ElectricContainerStorageConfig {
+  readonly accessKeyId: Input<Redacted.Redacted<string>>;
   readonly accountId: Input<string>;
   readonly bucketName: Input<string>;
-}
-
-export interface ElectricContainerSecretConfig {
-  readonly awsAccessKeyId: Input<Redacted.Redacted<string>>;
   readonly awsSecretAccessKey: Input<Redacted.Redacted<string>>;
-  readonly databaseUrl: Input<Redacted.Redacted<string>>;
-  readonly electricSecret: Input<Redacted.Redacted<string>>;
 }
 
 export interface ElectricContainerConfig {
+  readonly env: ElectricContainerConfiguredEnv;
   readonly name: string;
-  readonly secrets: ElectricContainerSecretConfig;
-  readonly storage: ElectricContainerStorageConfig;
 }
 
 export function makeSyncWorkerBindings(input: {
@@ -116,6 +137,7 @@ export function makeSyncWorkerBindings(input: {
 
 export function makeSyncWorkerEnv(input: {
   readonly config: SyncWorkerStageConfig;
+  readonly electricContainer?: ElectricContainerConfig | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly localDev?: boolean | undefined;
@@ -134,7 +156,7 @@ export function makeSyncWorkerEnv(input: {
     .filter((value): value is string => typeof value === "string")
     .join(",");
 
-  return {
+  const baseEnv = {
     AUTH_APP_ORIGIN: authAppOrigin,
     AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
@@ -144,26 +166,60 @@ export function makeSyncWorkerEnv(input: {
     ELECTRIC_SOURCE_SECRET: input.electricSourceSecret,
     NODE_ENV: "production",
   } satisfies SyncWorkerConfiguredEnv & WorkerConfiguredEnv;
+  const electricContainerEnv = makeSyncWorkerElectricContainerEnv(
+    input.electricContainer
+  );
+
+  if (electricContainerEnv === undefined) {
+    return baseEnv;
+  }
+
+  return {
+    ...baseEnv,
+    ...electricContainerEnv,
+  } satisfies SyncWorkerConfiguredEnv & WorkerConfiguredEnv;
 }
 
 export function makeElectricContainerEnv(input: {
-  readonly storage: Pick<
-    ElectricContainerStorageConfig,
-    "accountId" | "bucketName"
-  >;
+  readonly databaseUrl: Input<Redacted.Redacted<string>>;
+  readonly electricSecret: Input<Redacted.Redacted<string>>;
+  readonly storage: ElectricContainerStorageConfig;
 }): ElectricContainerConfiguredEnv {
   return {
+    AWS_ACCESS_KEY_ID: input.storage.accessKeyId,
+    AWS_SECRET_ACCESS_KEY: input.storage.awsSecretAccessKey,
     CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
     CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+    DATABASE_URL: input.databaseUrl,
     ELECTRIC_INSECURE: "false",
     ELECTRIC_LOG_LEVEL: "info",
     ELECTRIC_PERSISTENT_STATE: "file",
     ELECTRIC_PORT: "3000",
+    ELECTRIC_SECRET: input.electricSecret,
     ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
     ELECTRIC_STORAGE: "fast_file",
     ELECTRIC_STORAGE_DIR: "/var/lib/electric",
     R2_ACCOUNT_ID: input.storage.accountId,
     R2_BUCKET_NAME: input.storage.bucketName,
+  };
+}
+
+function makeSyncWorkerElectricContainerEnv(
+  electricContainer: ElectricContainerConfig | undefined
+): SyncWorkerElectricContainerConfiguredEnv | undefined {
+  if (electricContainer === undefined) {
+    return;
+  }
+
+  return {
+    ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
+      electricContainer.env.AWS_ACCESS_KEY_ID,
+    ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
+      electricContainer.env.AWS_SECRET_ACCESS_KEY,
+    ELECTRIC_CONTAINER_DATABASE_URL: electricContainer.env.DATABASE_URL,
+    ELECTRIC_CONTAINER_ELECTRIC_SECRET: electricContainer.env.ELECTRIC_SECRET,
+    ELECTRIC_CONTAINER_R2_ACCOUNT_ID: electricContainer.env.R2_ACCOUNT_ID,
+    ELECTRIC_CONTAINER_R2_BUCKET_NAME: electricContainer.env.R2_BUCKET_NAME,
   };
 }
 
@@ -195,17 +251,9 @@ export const electricContainerDockerfile = [
   "USER 65532:65532",
 ].join("\n");
 
-function containerSecretReference(
-  secret: Input<Redacted.Redacted<string>>
-): Input<string> {
-  return secret as unknown as Input<string>;
-}
-
 export function makeElectricContainerProps(input: {
   readonly config: SyncWorkerStageConfig;
   readonly name: string;
-  readonly secrets: ElectricContainerSecretConfig;
-  readonly storage: ElectricContainerStorageConfig;
 }) {
   return {
     isExternal: true,
@@ -223,36 +271,6 @@ export function makeElectricContainerProps(input: {
       },
     },
     ports: [{ name: "http", port: 3000 }],
-    environmentVariables: Object.entries(
-      makeElectricContainerEnv({
-        storage: input.storage,
-      })
-    ).map(([name, value]) => ({
-      name,
-      value,
-    })),
-    secrets: [
-      {
-        name: "AWS_ACCESS_KEY_ID",
-        secret: containerSecretReference(input.secrets.awsAccessKeyId),
-        type: "env",
-      },
-      {
-        name: "AWS_SECRET_ACCESS_KEY",
-        secret: containerSecretReference(input.secrets.awsSecretAccessKey),
-        type: "env",
-      },
-      {
-        name: "DATABASE_URL",
-        secret: containerSecretReference(input.secrets.databaseUrl),
-        type: "env",
-      },
-      {
-        name: "ELECTRIC_SECRET",
-        secret: containerSecretReference(input.secrets.electricSecret),
-        type: "env",
-      },
-    ],
   } satisfies InputProps<ContainerApplicationProps>;
 }
 
@@ -260,6 +278,7 @@ export function makeSyncWorkerProps(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: SyncWorkerStageConfig;
   readonly domain: DomainWorkerResource;
+  readonly electricContainer?: ElectricContainerConfig | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly hostname: string;
@@ -278,6 +297,7 @@ export function makeSyncWorkerProps(input: {
     env: {
       ...makeSyncWorkerEnv({
         config: input.config,
+        electricContainer: input.electricContainer,
         electricSqlLocationHint: input.electricSqlLocationHint,
         electricSourceSecret: input.electricSourceSecret,
         localDev: input.localDev,
@@ -311,8 +331,6 @@ export function makeSyncWorker(input: {
         makeElectricContainerProps({
           config: input.config,
           name: input.electricContainer.name,
-          secrets: input.electricContainer.secrets,
-          storage: input.electricContainer.storage,
         })
       );
 

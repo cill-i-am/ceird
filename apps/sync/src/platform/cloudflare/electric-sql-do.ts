@@ -31,13 +31,16 @@ export class ElectricSql {
   }
 
   async fetch(request: Request): Promise<Response> {
-    return await Effect.runPromise(handleElectricSqlFetch(request, this.ctx));
+    return await Effect.runPromise(
+      handleElectricSqlFetch(request, this.ctx, this.env)
+    );
   }
 }
 
 export function handleElectricSqlFetch(
   request: Request,
-  state: DurableObjectState
+  state: DurableObjectState,
+  env: SyncWorkerEnv
 ) {
   return Effect.gen(function* () {
     const { container } = state;
@@ -60,7 +63,7 @@ export function handleElectricSqlFetch(
           failureTag: "ReadinessFailed",
           message: "Electric container readiness failed",
         }),
-      try: () => ensureElectricContainerReady(state, container, request),
+      try: () => ensureElectricContainerReady(state, container, env, request),
     }).pipe(
       Effect.as(true),
       Effect.catchTag(ELECTRIC_SQL_CONTAINER_ERROR_TAG, (error) =>
@@ -123,6 +126,7 @@ export function handleElectricSqlFetch(
 function ensureElectricContainerReady(
   state: DurableObjectState,
   container: NonNullable<DurableObjectState["container"]>,
+  env: SyncWorkerEnv,
   request: Request
 ) {
   const existingReadiness = containerReadinessByState.get(state);
@@ -135,7 +139,12 @@ function ensureElectricContainerReady(
     return Promise.resolve();
   }
 
-  const readiness = ensureElectricContainerStarted(state, container, request)
+  const readiness = ensureElectricContainerStarted(
+    state,
+    container,
+    env,
+    request
+  )
     .then(async () => {
       await waitForElectricContainerPort(container);
       readyContainerStates.add(state);
@@ -152,11 +161,15 @@ function ensureElectricContainerReady(
 function ensureElectricContainerStarted(
   state: DurableObjectState,
   container: NonNullable<DurableObjectState["container"]>,
+  env: SyncWorkerEnv,
   request: Request
 ) {
   return state.blockConcurrencyWhile(() => {
     if (!container.running) {
-      container.start();
+      container.start({
+        enableInternet: true,
+        env: makeElectricContainerStartupEnv(env),
+      });
     }
 
     if (!monitoredContainerStates.has(state)) {
@@ -166,6 +179,65 @@ function ensureElectricContainerStarted(
 
     return Promise.resolve();
   });
+}
+
+function makeElectricContainerStartupEnv(env: SyncWorkerEnv) {
+  return {
+    AWS_ACCESS_KEY_ID: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    ),
+    AWS_SECRET_ACCESS_KEY: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    ),
+    CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
+    CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+    DATABASE_URL: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_DATABASE_URL"
+    ),
+    ELECTRIC_INSECURE: "false",
+    ELECTRIC_LOG_LEVEL: "info",
+    ELECTRIC_PERSISTENT_STATE: "file",
+    ELECTRIC_PORT: "3000",
+    ELECTRIC_SECRET: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    ),
+    ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
+    ELECTRIC_STORAGE: "fast_file",
+    ELECTRIC_STORAGE_DIR: "/var/lib/electric",
+    R2_ACCOUNT_ID: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    ),
+    R2_BUCKET_NAME: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+    ),
+  } satisfies Record<string, string>;
+}
+
+function readRequiredElectricContainerEnv(
+  env: SyncWorkerEnv,
+  key:
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+) {
+  const value = env[key]?.trim();
+
+  if (value === undefined || value.length === 0) {
+    throw new Error(
+      `Missing required Electric container startup env var: ${key}`
+    );
+  }
+
+  return value;
 }
 
 async function waitForElectricContainerPort(

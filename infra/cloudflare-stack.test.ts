@@ -83,7 +83,6 @@ import {
   makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
   makeDurableObjectLocationHintForNeonRegion,
-  makeElectricContainerSecretName,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   shouldReconcileTenantRouting,
@@ -278,7 +277,16 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
     | "ELECTRIC_SOURCE_SECRET"
     | "NODE_ENV"
   >
->;
+> &
+  Pick<
+    SyncWorkerConfigEnv,
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+  >;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
   AlchemyInjectedWorkerEnv;
@@ -875,10 +883,24 @@ describe("Cloudflare stack", () => {
       analytics: workerAnalytics,
       domain,
     });
+    const electricContainerEnv = makeElectricContainerEnv({
+      databaseUrl: Redacted.make("postgres://electric.example/db"),
+      electricSecret: electricSourceSecret,
+      storage: {
+        accessKeyId: Redacted.make("r2-access-key-id"),
+        accountId: "cloudflare-account-id",
+        bucketName: "ceird-main-electric-storage",
+        awsSecretAccessKey: Redacted.make("r2-secret-access-key"),
+      },
+    });
     const syncWorkerProps = makeSyncWorkerProps({
       analytics: workerAnalytics,
       config: configWithoutCloudflareBootstrapSecrets,
       domain,
+      electricContainer: {
+        env: electricContainerEnv,
+        name: "ceird-main-electric",
+      },
       electricSqlLocationHint: "weur",
       electricSourceSecret,
       hostname: "sync.example.com",
@@ -887,18 +909,6 @@ describe("Cloudflare stack", () => {
     const electricContainerProps = makeElectricContainerProps({
       config: configWithoutCloudflareBootstrapSecrets,
       name: "ceird-main-electric",
-      secrets: {
-        awsAccessKeyId: Redacted.make("ceird-main-electric-aws-access-key-id"),
-        awsSecretAccessKey: Redacted.make(
-          "ceird-main-electric-aws-secret-access-key"
-        ),
-        databaseUrl: Redacted.make("ceird-main-electric-database-url"),
-        electricSecret: Redacted.make("ceird-main-electric-source-secret"),
-      },
-      storage: {
-        accountId: "cloudflare-account-id",
-        bucketName: "ceird-main-electric-storage",
-      },
     });
     const authEmailBinding = domainBindings.AUTH_EMAIL;
 
@@ -982,6 +992,15 @@ describe("Cloudflare stack", () => {
         AUTH_TRUSTED_ORIGINS:
           "https://app.example.com,https://*--main.example.com",
         CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
+          electricContainerEnv.AWS_ACCESS_KEY_ID,
+        ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
+          electricContainerEnv.AWS_SECRET_ACCESS_KEY,
+        ELECTRIC_CONTAINER_DATABASE_URL: electricContainerEnv.DATABASE_URL,
+        ELECTRIC_CONTAINER_ELECTRIC_SECRET:
+          electricContainerEnv.ELECTRIC_SECRET,
+        ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
+        ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
         ELECTRIC_SQL_LOCATION_HINT: "weur",
         ELECTRIC_SOURCE_SECRET: electricSourceSecret,
         NODE_ENV: "production",
@@ -994,14 +1013,7 @@ describe("Cloudflare stack", () => {
     expect(syncWorkerProps.bindings.ElectricSql).toMatchObject({
       className: "ElectricSql",
     });
-    expect(
-      makeElectricContainerEnv({
-        storage: {
-          accountId: "cloudflare-account-id",
-          bucketName: "ceird-main-electric-storage",
-        },
-      })
-    ).toStrictEqual({
+    expect(electricContainerEnv).toMatchObject({
       CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
       CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
       ELECTRIC_INSECURE: "false",
@@ -1014,6 +1026,26 @@ describe("Cloudflare stack", () => {
       R2_ACCOUNT_ID: "cloudflare-account-id",
       R2_BUCKET_NAME: "ceird-main-electric-storage",
     });
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_ACCESS_KEY_ID as Redacted.Redacted<string>
+      )
+    ).toBe("r2-access-key-id");
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_SECRET_ACCESS_KEY as Redacted.Redacted<string>
+      )
+    ).toBe("r2-secret-access-key");
+    expect(
+      Redacted.value(
+        electricContainerEnv.DATABASE_URL as Redacted.Redacted<string>
+      )
+    ).toBe("postgres://electric.example/db");
+    expect(
+      Redacted.value(
+        electricContainerEnv.ELECTRIC_SECRET as Redacted.Redacted<string>
+      )
+    ).toBe("electric-secret");
     expect(
       makeCloudflareR2BucketResourceKey({
         accountId: "cloudflare-account-id",
@@ -1041,12 +1073,6 @@ describe("Cloudflare stack", () => {
     expect(
       makeDurableObjectLocationHintForNeonRegion("aws-ap-southeast-1")
     ).toBe("apac");
-    expect(
-      makeElectricContainerSecretName(
-        configWithoutCloudflareBootstrapSecrets,
-        "database-url"
-      )
-    ).toBe("ceird-main-electric-database-url");
     expect(electricContainerProps).toMatchObject({
       autoInstallExternals: false,
       isExternal: true,
@@ -1076,53 +1102,8 @@ describe("Cloudflare stack", () => {
     expect(electricContainerDockerfile).not.toContain(
       "github.com/tigrisdata/tigrisfs/releases/download"
     );
-    expect(electricContainerProps.environmentVariables).toStrictEqual([
-      { name: "CEIRD_ELECTRIC_STORAGE_BACKEND", value: "r2" },
-      { name: "CEIRD_ELECTRIC_STORAGE_MOUNT", value: "/var/lib/electric" },
-      { name: "ELECTRIC_INSECURE", value: "false" },
-      { name: "ELECTRIC_LOG_LEVEL", value: "info" },
-      { name: "ELECTRIC_PERSISTENT_STATE", value: "file" },
-      { name: "ELECTRIC_PORT", value: "3000" },
-      { name: "ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", value: "true" },
-      { name: "ELECTRIC_STORAGE", value: "fast_file" },
-      { name: "ELECTRIC_STORAGE_DIR", value: "/var/lib/electric" },
-      { name: "R2_ACCOUNT_ID", value: "cloudflare-account-id" },
-      { name: "R2_BUCKET_NAME", value: "ceird-main-electric-storage" },
-    ]);
-    const electricContainerSecrets = electricContainerProps.secrets.map(
-      ({ name, secret, type }) => {
-        expect(Redacted.isRedacted(secret)).toBeTruthy();
-        return {
-          name,
-          secret: Redacted.value(
-            secret as unknown as Redacted.Redacted<string>
-          ),
-          type,
-        };
-      }
-    );
-    expect(electricContainerSecrets).toStrictEqual([
-      {
-        name: "AWS_ACCESS_KEY_ID",
-        secret: "ceird-main-electric-aws-access-key-id",
-        type: "env",
-      },
-      {
-        name: "AWS_SECRET_ACCESS_KEY",
-        secret: "ceird-main-electric-aws-secret-access-key",
-        type: "env",
-      },
-      {
-        name: "DATABASE_URL",
-        secret: "ceird-main-electric-database-url",
-        type: "env",
-      },
-      {
-        name: "ELECTRIC_SECRET",
-        secret: "ceird-main-electric-source-secret",
-        type: "env",
-      },
-    ]);
+    expect(electricContainerProps).not.toHaveProperty("environmentVariables");
+    expect(electricContainerProps).not.toHaveProperty("secrets");
     expect(Cloudflare.isSendEmail(authEmail)).toBeTruthy();
     expect(authEmail).toMatchObject({
       allowedSenderAddresses: ["no-reply@example.com"],
