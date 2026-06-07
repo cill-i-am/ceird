@@ -214,7 +214,6 @@ export function makeElectricContainerProps(input: {
         kind: "ready",
         name: "electric-tcp",
         port: "3000",
-        retries: 3,
         timeout: "5s",
         type: "tcp",
       },

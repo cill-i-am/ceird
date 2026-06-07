@@ -1049,6 +1049,16 @@ describe("Cloudflare stack", () => {
     expect(electricContainerProps.main).toContain(
       "/apps/sync/src/platform/cloudflare/electric-container-runtime.ts"
     );
+    expect(electricContainerProps.checks).toStrictEqual([
+      {
+        interval: "30s",
+        kind: "ready",
+        name: "electric-tcp",
+        port: "3000",
+        timeout: "5s",
+        type: "tcp",
+      },
+    ]);
     expect(electricContainerDockerfile).toContain(
       "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build"
     );
