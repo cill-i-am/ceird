@@ -19,6 +19,7 @@ import {
 } from "./domains/identity/authentication/auth.js";
 import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
 import { IdentityHttpLive } from "./domains/identity/http.js";
+import { UserPreferencesHttpLive } from "./domains/identity/preferences/http.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
 import type { McpAuthorizedAppCacheOptions } from "./domains/mcp/cache-config.js";
@@ -55,6 +56,7 @@ const makeApiHandlersLive = () =>
         AgentsHttpLive,
         AuthenticationHttpLive,
         IdentityHttpLive,
+        UserPreferencesHttpLive,
         JobsHttpLive,
         LabelsHttpLive,
         ProximityHttpLive,

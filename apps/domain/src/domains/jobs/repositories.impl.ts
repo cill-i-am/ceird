@@ -1109,11 +1109,9 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           [
             listLabelsForWorkItems(organizationId, workItemIds),
             includeSiteLabels
-              ? listSiteLabelsForSites(
-                  sql,
-                  organizationId,
-                  Array.from(new Set(routableSiteIds))
-                )
+              ? listSiteLabelsForSites(sql, organizationId, [
+                  ...new Set(routableSiteIds),
+                ])
               : Effect.succeed(new Map<SiteId, readonly Label[]>()),
           ],
           { concurrency: 2 }
@@ -1149,7 +1147,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           candidateLimitApplied:
             stats.candidate_count > PROXIMITY_CANDIDATE_LIMIT,
           candidates,
-          excluded: Array.from(excluded.entries()).map(([reason, count]) => ({
+          excluded: [...excluded.entries()].map(([reason, count]) => ({
             count,
             reason,
           })),
@@ -2570,7 +2568,7 @@ function mapJobContactOptions(
     }
   }
 
-  return Array.from(contacts.values(), (contact) =>
+  return [...contacts.values()].map((contact) =>
     decodeJobContactOption(contact)
   );
 }

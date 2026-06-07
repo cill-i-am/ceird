@@ -6,6 +6,8 @@ import {
 import {
   ORGANIZATION_SECURITY_ACTIVITY_ACCESS_DENIED_ERROR_TAG,
   OrganizationSecurityActivityAccessDeniedError,
+  USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG,
+  UserPreferencesAccessDeniedError,
 } from "@ceird/identity-core";
 import { JOB_NOT_FOUND_ERROR_TAG, JobNotFoundError } from "@ceird/jobs-core";
 import type {
@@ -139,7 +141,7 @@ const routeSummary = {
 
 const originSummary = {
   computedAt: "2026-06-06T10:00:00.000Z",
-  coordinates: { latitude: 53.349805, longitude: -6.26031 },
+  coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
   displayText: "Current location",
   mode: "current_location",
 } as const;
@@ -372,7 +374,7 @@ describe("app API client", () => {
       .mockResolvedValueOnce(Response.json(siteProximityResponse))
       .mockResolvedValueOnce(Response.json(siteRoutePreviewResponse));
     const origin = {
-      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
       mode: "current_location" as const,
     };
 
@@ -660,6 +662,18 @@ describe("app API client", () => {
     expect(normalizeAppApiError(domainError)).toMatchObject({
       _tag: AGENT_THREAD_NOT_FOUND_ERROR_TAG,
       message: "Agent thread not found",
+    });
+  }, 1000);
+
+  it("preserves identity-core tagged domain errors", () => {
+    const domainError = new UserPreferencesAccessDeniedError({
+      message: "Authentication is required",
+    });
+
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
+      _tag: USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG,
+      message: "Authentication is required",
     });
   }, 1000);
 

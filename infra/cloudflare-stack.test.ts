@@ -95,7 +95,8 @@ import {
   ceirdWorkerObservability,
 } from "./cloudflare-worker-defaults.ts";
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
-import { InfraGoogleMapsApiKey, type InfraStageConfig } from "./stages.ts";
+import { InfraGoogleMapsApiKey } from "./stages.ts";
+import type { InfraStageConfig } from "./stages.ts";
 
 type AssertTrue<Value extends true> = Value;
 type HasSameKeys<Type, Expected> = [

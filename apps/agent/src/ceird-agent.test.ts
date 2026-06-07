@@ -12,13 +12,18 @@ import type * as WorkersAiProviderModule from "workers-ai-provider";
 
 import type { makeCeirdChatRecoveryOptions } from "./ceird-agent-recovery.js";
 import type { CeirdAgent as CeirdAgentType } from "./ceird-agent.js";
-import type { touchAgentThreadActivity } from "./domain-client.js";
+import type {
+  touchAgentThreadActivity,
+  validateAgentCurrentLocationAccess,
+} from "./domain-client.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 import type { createCeirdTools } from "./tools.js";
 
 type CeirdAgentConstructor = typeof CeirdAgentType;
 type MakeCeirdChatRecoveryOptions = typeof makeCeirdChatRecoveryOptions;
 type TouchAgentThreadActivity = typeof touchAgentThreadActivity;
+type ValidateAgentCurrentLocationAccess =
+  typeof validateAgentCurrentLocationAccess;
 type CreateCeirdTools = typeof createCeirdTools;
 
 const {
@@ -30,6 +35,7 @@ const {
   mockedStreamText,
   mockedToUIMessageStreamResponse,
   mockedTouchAgentThreadActivity,
+  mockedValidateAgentCurrentLocationAccess,
   mockedWorkersModel,
 } = vi.hoisted(() => {
   class MockAIChatAgentBase {
@@ -92,6 +98,8 @@ const {
         },
       } as Awaited<ReturnType<TouchAgentThreadActivity>>)
     ),
+    mockedValidateAgentCurrentLocationAccess:
+      vi.fn<ValidateAgentCurrentLocationAccess>(() => Promise.resolve()),
     mockedWorkersModel:
       vi.fn<
         (
@@ -121,6 +129,7 @@ vi.mock(import("./ceird-agent-recovery.js"), () => ({
 
 vi.mock(import("./domain-client.js"), () => ({
   touchAgentThreadActivity: mockedTouchAgentThreadActivity,
+  validateAgentCurrentLocationAccess: mockedValidateAgentCurrentLocationAccess,
 }));
 
 vi.mock(import("./tools.js"), () => ({
@@ -156,6 +165,8 @@ describe("CeirdAgent", () => {
     } as unknown as ReturnType<typeof AiModule.streamText>);
     mockedToUIMessageStreamResponse.mockClear();
     mockedTouchAgentThreadActivity.mockClear();
+    mockedValidateAgentCurrentLocationAccess.mockReset();
+    mockedValidateAgentCurrentLocationAccess.mockResolvedValue();
     mockedWorkersModel.mockReset();
     mockedWorkersModel.mockReturnValue({ model: "workers-ai-model" });
   });
@@ -209,7 +220,7 @@ describe("CeirdAgent", () => {
     const agent = makeRunnableAgent(CeirdAgent);
     const contextId = "agent-origin-11111111-1111-4111-8111-111111111111";
 
-    agent.onMessage(
+    await agent.onMessage(
       {} as never,
       JSON.stringify(
         makeAgentProximityOriginContextFrame(contextId, {
@@ -237,6 +248,10 @@ describe("CeirdAgent", () => {
     expect(streamTextInput?.system).toContain(
       "Rank by traffic-aware driving time, not straight-line distance"
     );
+    expect(mockedValidateAgentCurrentLocationAccess).toHaveBeenCalledWith(
+      agent.env,
+      "11111111-1111-4111-8111-111111111111"
+    );
 
     mockedStreamText.mockClear();
 
@@ -252,13 +267,47 @@ describe("CeirdAgent", () => {
     );
   });
 
+  it("drops request-scoped proximity origins when current-location access validation fails", async () => {
+    const agent = makeRunnableAgent(CeirdAgent);
+    const contextId = "agent-origin-55555555-5555-4555-8555-555555555555";
+    mockedValidateAgentCurrentLocationAccess.mockRejectedValueOnce(
+      new Error("Current location access is disabled for this user.")
+    );
+
+    await agent.onMessage(
+      {} as never,
+      JSON.stringify(
+        makeAgentProximityOriginContextFrame(contextId, {
+          accuracyMeters: 12,
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          mode: "current_location",
+        })
+      )
+    );
+
+    await agent.onChatMessage(vi.fn(), {
+      body: makeAgentProximityOriginContextBody(contextId),
+      requestId: "request-1",
+    });
+
+    expect(mockedValidateAgentCurrentLocationAccess).toHaveBeenCalledWith(
+      agent.env,
+      "11111111-1111-4111-8111-111111111111"
+    );
+    expect(mockedStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.not.stringContaining("Request origin data JSON"),
+      })
+    );
+  });
+
   it("ignores expired request-scoped proximity origins", async () => {
     const agent = makeRunnableAgent(CeirdAgent);
     const contextId = "agent-origin-22222222-2222-4222-8222-222222222222";
     const dateNow = vi.spyOn(Date, "now").mockReturnValue(1000);
 
     try {
-      agent.onMessage(
+      await agent.onMessage(
         {} as never,
         JSON.stringify(
           makeAgentProximityOriginContextFrame(contextId, {
@@ -286,7 +335,7 @@ describe("CeirdAgent", () => {
     }
   });
 
-  it("strips unsupported chat request body fields before the AI chat runtime handles them", () => {
+  it("strips unsupported chat request body fields before the AI chat runtime handles them", async () => {
     const agent = makeRunnableAgent(CeirdAgent);
     const request = {
       id: "request-1",
@@ -306,7 +355,7 @@ describe("CeirdAgent", () => {
       type: "cf_agent_use_chat_request",
     };
 
-    agent.onMessage({} as never, JSON.stringify(request));
+    await agent.onMessage({} as never, JSON.stringify(request));
 
     const forwarded = JSON.parse(
       (agent as unknown as { readonly lastBaseMessage: string }).lastBaseMessage
@@ -320,7 +369,7 @@ describe("CeirdAgent", () => {
     expect(forwarded.init.body).not.toContain("53.349805");
   });
 
-  it("drops invalid proximity context ids from chat request bodies before persistence", () => {
+  it("drops invalid proximity context ids from chat request bodies before persistence", async () => {
     const agent = makeRunnableAgent(CeirdAgent);
     const request = {
       id: "request-1",
@@ -335,7 +384,7 @@ describe("CeirdAgent", () => {
       type: "cf_agent_use_chat_request",
     };
 
-    agent.onMessage({} as never, JSON.stringify(request));
+    await agent.onMessage({} as never, JSON.stringify(request));
 
     const forwarded = JSON.parse(
       (agent as unknown as { readonly lastBaseMessage: string }).lastBaseMessage
@@ -413,7 +462,7 @@ describe("CeirdAgent", () => {
       }[];
     };
 
-    agent.onMessage(
+    await agent.onMessage(
       {} as never,
       JSON.stringify(
         makeAgentProximityOriginContextFrame(contextId, {

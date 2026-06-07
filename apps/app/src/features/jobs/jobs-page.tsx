@@ -238,6 +238,7 @@ export function JobsPage({
   onRouteLimitChange,
   onViewModeChange,
   routeLimit: controlledRouteLimit,
+  routeProximityLocationEnabled = false,
   viewMode: controlledViewMode,
   viewer,
 }: {
@@ -247,6 +248,7 @@ export function JobsPage({
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
   readonly routeLimit?: ProximityLimit | undefined;
+  readonly routeProximityLocationEnabled?: boolean | undefined;
   readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
@@ -505,6 +507,7 @@ export function JobsPage({
           currentLocationRequestKey={currentLocationRequestKey}
           filters={filters}
           limit={routeLimit}
+          routeProximityLocationEnabled={routeProximityLocationEnabled}
           viewMode={visibleViewMode}
           onActiveChange={setNearMeEnabled}
           onClearFilters={clearFilters}

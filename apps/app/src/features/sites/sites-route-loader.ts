@@ -11,6 +11,7 @@ import {
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { loadRouteProximityLocationPreferenceEnabled } from "#/features/settings/route-proximity-location-preference";
 
 import { createSitesListSeed } from "./sites-data-plane";
 
@@ -29,6 +30,7 @@ export async function loadSitesRouteData(
     return {
       dataPlaneSeeds: [],
       options: EMPTY_SITE_OPTIONS,
+      routeProximityLocationEnabled: false,
       viewer: {
         role: "member",
         userId: decodeOrganizationViewerUserId(
@@ -43,7 +45,11 @@ export async function loadSitesRouteData(
   assertOrganizationInternalRole({ role: activeRole });
 
   const sitesRequestStartedAt = Date.now();
+  const routeProximityLocationPreferencePromise =
+    loadRouteProximityLocationPreferenceEnabled();
   const sites = await listAllCurrentServerSites();
+  const routeProximityLocationEnabled =
+    await routeProximityLocationPreferencePromise;
   const siteOptions = {
     sites: sites.items,
   } satisfies SitesOptionsResponse;
@@ -73,6 +79,7 @@ export async function loadSitesRouteData(
         ...siteOptions,
         sites: seededSites,
       },
+      routeProximityLocationEnabled,
       viewer,
     };
   }
@@ -80,6 +87,7 @@ export async function loadSitesRouteData(
   return {
     dataPlaneSeeds: [sitesSeed],
     options: siteOptions,
+    routeProximityLocationEnabled,
     viewer,
   };
 }

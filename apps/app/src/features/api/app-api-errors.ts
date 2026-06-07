@@ -4,7 +4,7 @@ import type {
   AgentStorageError,
   AgentThreadNotFoundError,
 } from "@ceird/agents-core";
-import type { IdentityError } from "@ceird/identity-core";
+import type { IdentityError as IdentityDomainError } from "@ceird/identity-core";
 import type { JobsError } from "@ceird/jobs-core";
 import type { LabelsError } from "@ceird/labels-core";
 import type { ProximityError } from "@ceird/proximity-core";
@@ -47,7 +47,7 @@ type AgentsError =
   | AgentThreadNotFoundError;
 type AppApiDomainError =
   | AgentsError
-  | IdentityError
+  | IdentityDomainError
   | JobsError
   | LabelsError
   | ProximityError

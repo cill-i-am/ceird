@@ -1,5 +1,6 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
+  ProximityAccessDeniedError,
   ProximityCostGuardError,
   ProximityProviderError,
   ProximityRouteUnavailableError,
@@ -110,6 +111,7 @@ const sitesGroup = HttpApiGroup.make("sites")
       success: SiteProximityResponseSchema,
       error: [
         SiteAccessDeniedError,
+        ProximityAccessDeniedError,
         ProximityCostGuardError,
         ProximityProviderError,
         ProximityRouteUnavailableError,
@@ -128,6 +130,7 @@ const sitesGroup = HttpApiGroup.make("sites")
         error: [
           SiteAccessDeniedError,
           SiteNotFoundError,
+          ProximityAccessDeniedError,
           ProximityCostGuardError,
           ProximityProviderError,
           ProximityRouteUnavailableError,

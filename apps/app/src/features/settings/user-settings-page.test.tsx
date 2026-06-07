@@ -101,6 +101,7 @@ const {
   mockedRevokeSession,
   mockedRouterInvalidate,
   mockedUseBlocker,
+  mockedUpdateUserPreferences,
   mockedUpdateUser,
   mockedVerifyTotp,
 } = vi.hoisted(() => ({
@@ -137,6 +138,14 @@ const {
   mockedRevokeSession: vi.fn<RevokeSessionMock>(),
   mockedRouterInvalidate: vi.fn<() => Promise<void>>(),
   mockedUseBlocker: vi.fn<(options: unknown) => void>(),
+  mockedUpdateUserPreferences: vi.fn<
+    (input: { routeProximityLocationEnabled: boolean }) => Promise<{
+      preferences: {
+        routeProximityLocationEnabled: boolean;
+        updatedAt: string;
+      };
+    }>
+  >(),
   mockedUpdateUser: vi.fn<
     (input: { image: string | null; name: string }) => Promise<{
       data: { ok: true } | null;
@@ -148,6 +157,14 @@ const {
     }>
   >(),
   mockedVerifyTotp: vi.fn<VerifyTotpMock>(),
+}));
+
+vi.mock(import("./user-preferences-api"), () => ({
+  DEFAULT_USER_PREFERENCES: {
+    routeProximityLocationEnabled: false,
+    updatedAt: "1970-01-01T00:00:00.000Z",
+  },
+  updateCurrentUserPreferences: mockedUpdateUserPreferences,
 }));
 
 vi.mock(import("#/lib/auth-client"), async () => {
@@ -269,6 +286,12 @@ describe("user settings page", () => {
       error: null,
     });
     mockedRouterInvalidate.mockResolvedValue();
+    mockedUpdateUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    });
     mockedUpdateUser.mockResolvedValue({
       data: { ok: true },
       error: null,
@@ -287,6 +310,10 @@ describe("user settings page", () => {
     name: "Email" | "Password" | "Profile" | "Security"
   ) {
     await userEvent.click(screen.getByRole("tab", { name }));
+  }
+
+  async function selectLocationTab() {
+    await userEvent.click(screen.getByRole("tab", { name: "Location" }));
   }
 
   it("frames account settings with direct form tabs", async () => {
@@ -327,6 +354,9 @@ describe("user settings page", () => {
       within(sectionTabs).getByRole("tab", { name: "Security" })
     ).toBeVisible();
     expect(
+      within(sectionTabs).getByRole("tab", { name: "Location" })
+    ).toBeVisible();
+    expect(
       within(sectionTabs).getByRole("tab", { name: "Email" })
     ).toBeVisible();
     expect(
@@ -336,7 +366,13 @@ describe("user settings page", () => {
       [...sectionTabs.querySelectorAll('[role="tab"]')].map((tab) =>
         tab.textContent?.trim()
       )
-    ).toStrictEqual(["Profile", "Security", "Email", "Password"]);
+    ).toStrictEqual([
+      "Profile",
+      "Security",
+      "Location",
+      "Email",
+      "Password",
+    ]);
 
     await selectTab("Profile");
     expect(screen.getByRole("heading", { name: "Profile" })).toBeVisible();
@@ -365,6 +401,105 @@ describe("user settings page", () => {
       screen.findByText("Profile updated.")
     ).resolves.toHaveAttribute("role", "status");
     expect(mockedRouterInvalidate).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  it("updates the global route proximity location preference", async () => {
+    const interaction = userEvent.setup();
+
+    render(
+      <UserSettingsPage
+        user={user}
+        preferences={{
+          routeProximityLocationEnabled: false,
+          updatedAt: "2026-06-06T10:00:00.000Z",
+        }}
+      />
+    );
+
+    await selectLocationTab();
+
+    expect(
+      screen.getByRole("heading", { name: "Location access" })
+    ).toBeVisible();
+    expect(screen.getByText("Disabled")).toBeVisible();
+
+    await interaction.click(
+      screen.getByRole("button", { name: "Enable location access" })
+    );
+
+    await waitFor(() => {
+      expect(mockedUpdateUserPreferences).toHaveBeenCalledWith({
+        routeProximityLocationEnabled: true,
+      });
+    });
+    expect(screen.getByText("Enabled")).toBeVisible();
+    expect(
+      screen.getByText(/Ceird will ask this browser for fresh location/i)
+    ).toBeVisible();
+    expect(navigator.geolocation?.getCurrentPosition).toBeUndefined();
+  }, 10_000);
+
+  it("disables the global route proximity location preference", async () => {
+    const interaction = userEvent.setup();
+
+    mockedUpdateUserPreferences.mockResolvedValueOnce({
+      preferences: {
+        routeProximityLocationEnabled: false,
+        updatedAt: "2026-06-06T10:02:00.000Z",
+      },
+    });
+
+    render(
+      <UserSettingsPage
+        user={user}
+        preferences={{
+          routeProximityLocationEnabled: true,
+          updatedAt: "2026-06-06T10:00:00.000Z",
+        }}
+      />
+    );
+
+    await selectLocationTab();
+
+    expect(screen.getByText("Enabled")).toBeVisible();
+
+    await interaction.click(
+      screen.getByRole("button", { name: "Disable location access" })
+    );
+
+    await waitFor(() => {
+      expect(mockedUpdateUserPreferences).toHaveBeenCalledWith({
+        routeProximityLocationEnabled: false,
+      });
+    });
+    expect(screen.getByText("Disabled")).toBeVisible();
+    expect(
+      screen.getByText(/Ceird will ask before using current location again/i)
+    ).toBeVisible();
+  }, 10_000);
+
+  it("does not update location preference from an unavailable loader state", async () => {
+    render(
+      <UserSettingsPage
+        user={user}
+        preferencesUnavailable
+        preferences={{
+          routeProximityLocationEnabled: false,
+          updatedAt: "1970-01-01T00:00:00.000Z",
+        }}
+      />
+    );
+
+    await selectLocationTab();
+
+    expect(screen.getByText("Unavailable")).toBeVisible();
+    expect(
+      screen.getByText("Location preference could not be loaded.")
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Enable location access" })
+    ).toBeDisabled();
+    expect(mockedUpdateUserPreferences).not.toHaveBeenCalled();
   }, 10_000);
 
   it("disables unchanged profile saves", async () => {

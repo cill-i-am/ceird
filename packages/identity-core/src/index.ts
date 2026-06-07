@@ -1,6 +1,10 @@
 /* oxlint-disable eslint/max-classes-per-file */
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import {
+  HttpApi,
+  HttpApiEndpoint,
+  HttpApiGroup,
+} from "effect/unstable/httpapi";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_MAX_LENGTH = 40;
@@ -238,6 +242,75 @@ export const UpdateOrganizationInputSchema = Schema.Struct({
   parseOptions: { onExcessProperty: "error" },
 });
 
+export const UserPreferencesSchema = Schema.Struct({
+  routeProximityLocationEnabled: Schema.Boolean,
+  updatedAt: IsoDateTimeString,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export type UserPreferences = Schema.Schema.Type<typeof UserPreferencesSchema>;
+
+export const UserPreferencesResponseSchema = Schema.Struct({
+  preferences: UserPreferencesSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export type UserPreferencesResponse = Schema.Schema.Type<
+  typeof UserPreferencesResponseSchema
+>;
+
+export const UpdateUserPreferencesInputSchema = Schema.Struct({
+  routeProximityLocationEnabled: Schema.Boolean,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export type UpdateUserPreferencesInput = Schema.Schema.Type<
+  typeof UpdateUserPreferencesInputSchema
+>;
+
+export const USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG =
+  "@ceird/identity-core/UserPreferencesAccessDeniedError" as const;
+export class UserPreferencesAccessDeniedError extends Schema.TaggedErrorClass<UserPreferencesAccessDeniedError>()(
+  USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG,
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 }
+) {}
+
+export const USER_PREFERENCES_STORAGE_ERROR_TAG =
+  "@ceird/identity-core/UserPreferencesStorageError" as const;
+export class UserPreferencesStorageError extends Schema.TaggedErrorClass<UserPreferencesStorageError>()(
+  USER_PREFERENCES_STORAGE_ERROR_TAG,
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  },
+  { httpApiStatus: 503 }
+) {}
+
+export const UserPreferencesApiGroup = HttpApiGroup.make("userPreferences")
+  .add(
+    HttpApiEndpoint.get("getUserPreferences", "/user/preferences", {
+      success: UserPreferencesResponseSchema,
+      error: [UserPreferencesAccessDeniedError, UserPreferencesStorageError],
+    })
+  )
+  .add(
+    HttpApiEndpoint.patch("updateUserPreferences", "/user/preferences", {
+      payload: UpdateUserPreferencesInputSchema,
+      success: UserPreferencesResponseSchema,
+      error: [UserPreferencesAccessDeniedError, UserPreferencesStorageError],
+    })
+  );
+
+export const UserPreferencesApi = HttpApi.make("UserPreferencesApi").add(
+  UserPreferencesApiGroup
+);
+
 export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
 >;
@@ -425,7 +498,9 @@ export class OrganizationSecurityActivityStorageError extends Schema.TaggedError
 export type IdentityError =
   | OrganizationSecurityActivityAccessDeniedError
   | OrganizationSecurityActivityCursorInvalidError
-  | OrganizationSecurityActivityStorageError;
+  | OrganizationSecurityActivityStorageError
+  | UserPreferencesAccessDeniedError
+  | UserPreferencesStorageError;
 
 export const IdentityApiGroup = HttpApiGroup.make("identity").add(
   HttpApiEndpoint.get(
@@ -459,6 +534,16 @@ export function decodeUpdateOrganizationInput(
   input: unknown
 ): UpdateOrganizationInput {
   return Schema.decodeUnknownSync(UpdateOrganizationInputSchema)(input);
+}
+
+export function decodeUserPreferences(input: unknown): UserPreferences {
+  return Schema.decodeUnknownSync(UserPreferencesSchema)(input);
+}
+
+export function decodeUpdateUserPreferencesInput(
+  input: unknown
+): UpdateUserPreferencesInput {
+  return Schema.decodeUnknownSync(UpdateUserPreferencesInputSchema)(input);
 }
 
 export function decodePublicInvitationPreview(

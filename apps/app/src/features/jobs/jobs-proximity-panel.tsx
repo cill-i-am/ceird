@@ -78,7 +78,7 @@ type OriginRunState =
   | { readonly status: "requesting" }
   | { readonly origin: ProximityOriginInput; readonly status: "ready" }
   | {
-      readonly reason: "current_location_failed";
+      readonly reason: "current_location_disabled" | "current_location_failed";
       readonly status: "needs_origin";
     };
 
@@ -255,6 +255,7 @@ export interface JobsProximityPanelProps {
   readonly onActiveChange: (active: boolean) => void;
   readonly onClearFilters: () => void;
   readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
+  readonly routeProximityLocationEnabled: boolean;
   readonly viewMode: JobsViewMode;
 }
 
@@ -267,6 +268,7 @@ export function JobsProximityPanel({
   onActiveChange,
   onClearFilters,
   onLimitChange,
+  routeProximityLocationEnabled,
   viewMode,
 }: JobsProximityPanelProps) {
   const {
@@ -295,6 +297,7 @@ export function JobsProximityPanel({
     filters,
     limit,
     onActiveChange,
+    routeProximityLocationEnabled,
     viewMode,
   });
   const hasCurrentRouteResults = hasCurrentJobsProximityRouteResults({
@@ -335,6 +338,7 @@ export function JobsProximityPanel({
             requestCurrentOrigin={requestCurrentOrigin}
             requestState={request}
             retryRanking={retryRanking}
+            routeProximityLocationEnabled={routeProximityLocationEnabled}
             selectedJobId={selectedJobId}
             onOriginDialogOpen={handleOriginDialogOpen}
             onSelectedJobIdChange={handleSelectedJobIdChange}
@@ -366,6 +370,7 @@ function useJobsProximityPanelController({
   filters,
   limit,
   onActiveChange,
+  routeProximityLocationEnabled,
   viewMode,
 }: {
   readonly active: boolean;
@@ -373,6 +378,7 @@ function useJobsProximityPanelController({
   readonly filters: JobsListFilters;
   readonly limit: ProximityLimit;
   readonly onActiveChange: (active: boolean) => void;
+  readonly routeProximityLocationEnabled: boolean;
   readonly viewMode: JobsViewMode;
 }) {
   const [state, dispatch] = React.useReducer(
@@ -464,10 +470,56 @@ function useJobsProximityPanelController({
     [cancelCurrentOriginRequest, cancelTypedOriginRequest]
   );
 
+  React.useEffect(() => {
+    if (routeProximityLocationEnabled || !active) {
+      return;
+    }
+
+    const shouldClearCurrentLocationOrigin =
+      origin.status === "requesting" ||
+      (origin.status === "ready" && origin.origin.mode === "current_location");
+
+    if (!shouldClearCurrentLocationOrigin) {
+      return;
+    }
+
+    originRequestIdRef.current += 1;
+    rankRequestIdRef.current += 1;
+    pendingActivationRef.current = false;
+    cancelCurrentOriginRequest();
+    dispatch({
+      origin: {
+        reason: "current_location_disabled",
+        status: "needs_origin",
+      },
+      type: "origin",
+    });
+    dispatch({ open: true, type: "origin_dialog_open" });
+  }, [
+    active,
+    cancelCurrentOriginRequest,
+    origin,
+    routeProximityLocationEnabled,
+  ]);
+
   const requestCurrentOrigin = React.useCallback(() => {
     cancelCurrentOriginRequest();
     const requestId = originRequestIdRef.current + 1;
     originRequestIdRef.current = requestId;
+
+    if (!routeProximityLocationEnabled) {
+      pendingActivationRef.current = false;
+      dispatch({
+        origin: {
+          reason: "current_location_disabled",
+          status: "needs_origin",
+        },
+        type: "origin",
+      });
+      dispatch({ open: true, type: "origin_dialog_open" });
+      return;
+    }
+
     dispatch({ origin: { status: "requesting" }, type: "origin" });
 
     const originFiber = Effect.runFork(requestCurrentLocationOrigin());
@@ -500,7 +552,7 @@ function useJobsProximityPanelController({
         type: "origin",
       });
     });
-  }, [cancelCurrentOriginRequest]);
+  }, [cancelCurrentOriginRequest, routeProximityLocationEnabled]);
 
   React.useEffect(() => {
     if (!active || rankingInput === null || rankingInputKey === null) {
@@ -900,6 +952,7 @@ function JobsProximityContent({
   requestCurrentOrigin,
   requestState,
   retryRanking,
+  routeProximityLocationEnabled,
   selectedJobId,
   onOriginDialogOpen,
   onSelectedJobIdChange,
@@ -911,25 +964,31 @@ function JobsProximityContent({
   readonly requestCurrentOrigin: () => void;
   readonly requestState: ProximityRequestState;
   readonly retryRanking: () => void;
+  readonly routeProximityLocationEnabled: boolean;
   readonly selectedJobId: string | null;
   readonly onOriginDialogOpen: (open: boolean) => void;
   readonly onSelectedJobIdChange: (jobId: string) => void;
   readonly viewMode: JobsViewMode;
 }) {
   if (originState.status === "idle") {
+    const currentLocationDisabled = !routeProximityLocationEnabled;
+
     return (
       <ProximityStatusPanel
         state={{
-          description:
-            "Use current location or choose an origin before calculating traffic-aware driving routes.",
+          description: currentLocationDisabled
+            ? "Current location access is off. Choose an origin before calculating traffic-aware driving routes."
+            : "Use current location or choose an origin before calculating traffic-aware driving routes.",
           kind: "origin_required",
           title: "Choose where routes start",
         }}
         action={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={requestCurrentOrigin}>
-              Use current location
-            </Button>
+            {currentLocationDisabled ? null : (
+              <Button type="button" size="sm" onClick={requestCurrentOrigin}>
+                Use current location
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
@@ -953,13 +1012,19 @@ function JobsProximityContent({
   }
 
   if (originState.status === "needs_origin") {
+    const currentLocationDisabled =
+      originState.reason === "current_location_disabled";
+
     return (
       <ProximityStatusPanel
         state={{
-          description:
-            "Ceird could not get your current location. Choose an origin to calculate driving routes without sharing current location.",
+          description: currentLocationDisabled
+            ? "Current location access is off. Choose an origin to calculate driving routes without sharing current location."
+            : "Ceird could not get your current location. Choose an origin to calculate driving routes without sharing current location.",
           kind: "location_blocked",
-          title: "Current location unavailable",
+          title: currentLocationDisabled
+            ? "Current location access is off"
+            : "Current location unavailable",
         }}
         action={
           <Button

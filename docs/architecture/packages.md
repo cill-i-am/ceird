@@ -68,6 +68,8 @@ Exports shared identity and organization primitives:
 - organization summary schemas
 - create/update organization input schemas
 - public invitation preview schema
+- user preference DTOs and `UserPreferencesApiGroup`, including the global
+  route-proximity location opt-in
 - decode helpers for untrusted payloads
 
 Use this package when app, API adapter, MCP adapter, and domain code need the same organization or membership

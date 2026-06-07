@@ -11,6 +11,7 @@ import {
   AGENT_EXECUTABLE_ACTION_MANIFEST,
   AGENT_EXECUTABLE_ACTION_NAMES,
   AGENT_INTERNAL_ACTIONS_PATH,
+  AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH,
   AGENT_PROXIMITY_ORIGIN_CONTEXT_ID_BODY_KEY,
   AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE,
   AgentThreadId,
@@ -25,6 +26,7 @@ import {
   isAgentInternalPath,
   makeAgentProximityOriginContextBody,
   makeAgentProximityOriginContextFrame,
+  makeAgentInternalCurrentLocationAccessPath,
   makeAgentInternalThreadActivityPath,
   parseAgentInstanceName,
   readAgentProximityOriginContextFrame,
@@ -311,6 +313,12 @@ describe("@ceird/agents-core", () => {
     );
 
     expect(AGENT_INTERNAL_ACTIONS_PATH).toBe("/agent/internal/actions");
+    expect(AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH).toBe(
+      "/agent/internal/threads/:threadId/current-location-access"
+    );
+    expect(makeAgentInternalCurrentLocationAccessPath(threadId)).toBe(
+      "/agent/internal/threads/11111111-1111-4111-8111-111111111111/current-location-access"
+    );
     expect(makeAgentInternalThreadActivityPath(threadId)).toBe(
       "/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity"
     );
@@ -318,6 +326,11 @@ describe("@ceird/agents-core", () => {
     expect(
       isAgentInternalPath(
         "/agent/internal/threads/11111111-1111-4111-8111-111111111111/activity"
+      )
+    ).toBeTruthy();
+    expect(
+      isAgentInternalPath(
+        "/agent/internal/threads/11111111-1111-4111-8111-111111111111/current-location-access"
       )
     ).toBeTruthy();
     expect(isAgentInternalPath("/agent/internal")).toBeFalsy();

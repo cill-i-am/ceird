@@ -110,16 +110,17 @@ the domain/app HTTP API group layer.
 
 The domain Worker owns the durable product side of agents:
 
-| Method | Path                                         | Purpose                                                                                          |
-| ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET`  | `/agent/actions`                             | Return presentation-safe shared action manifest metadata for authenticated organization clients. |
-| `POST` | `/agent/session/prepare`                     | Idempotently prepare the current chat session with thread, action manifest, and connect token.   |
-| `GET`  | `/agent/threads`                             | List a user's threads in the active org.                                                         |
-| `POST` | `/agent/threads`                             | Create or reopen an org/user/thread record.                                                      |
-| `POST` | `/agent/threads/:threadId/archive`           | Archive a thread for the active user.                                                            |
-| `POST` | `/agent/threads/:threadId/authorize`         | Issue a short-lived Agent connect token.                                                         |
-| `POST` | `/agent/internal/threads/:threadId/activity` | Touch `lastMessageAt` from trusted Agent chat traffic.                                           |
-| `POST` | `/agent/internal/actions`                    | Execute a domain-owned action for the Agent.                                                     |
+| Method | Path                                                        | Purpose                                                                                          |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET`  | `/agent/actions`                                            | Return presentation-safe shared action manifest metadata for authenticated organization clients. |
+| `POST` | `/agent/session/prepare`                                    | Idempotently prepare the current chat session with thread, action manifest, and connect token.   |
+| `GET`  | `/agent/threads`                                            | List a user's threads in the active org.                                                         |
+| `POST` | `/agent/threads`                                            | Create or reopen an org/user/thread record.                                                      |
+| `POST` | `/agent/threads/:threadId/archive`                          | Archive a thread for the active user.                                                            |
+| `POST` | `/agent/threads/:threadId/authorize`                        | Issue a short-lived Agent connect token.                                                         |
+| `POST` | `/agent/internal/threads/:threadId/activity`                | Touch `lastMessageAt` from trusted Agent chat traffic.                                           |
+| `POST` | `/agent/internal/threads/:threadId/current-location-access` | Validate that the thread owner can use current-location proximity origins.                       |
+| `POST` | `/agent/internal/actions`                                   | Execute a domain-owned action for the Agent.                                                     |
 
 Public agent chat traffic goes to:
 
@@ -143,12 +144,16 @@ coordinates must not travel through that body path. The Agent Worker sanitizes
 incoming AI chat request bodies before the AI chat runtime handles them:
 `messages`, `trigger`, and a valid `agent-origin-<uuid>`
 `ceirdProximityOriginContextId` are preserved, while other custom/request body
-fields are dropped. `CeirdAgent` resolves the id against its in-memory sideband
-cache, prunes entries after a short TTL, deletes the entry as the turn starts,
-and adds turn-scoped system guidance so nearby and route-preview tools use that
-explicit origin instead of asking the user to type one. If the Durable Object is
-evicted between the sideband frame and the chat turn, the id is harmless and the
-Agent behaves as if no current location was supplied.
+fields are dropped. Before storing a sideband current-location frame,
+`CeirdAgent` calls the internal current-location access endpoint for the thread.
+Disabled or unverifiable preference state is fail-closed: the frame is consumed
+and the Agent behaves as if no current location was supplied. Valid frames are
+resolved against the in-memory sideband cache, pruned after a short TTL, deleted
+as the turn starts, and added to turn-scoped system guidance so nearby and
+route-preview tools use that explicit origin instead of asking the user to type
+one. If the Durable Object is evicted between the sideband frame and the chat
+turn, the id is harmless and the Agent behaves as if no current location was
+supplied.
 Because AI chat messages and resumable stream chunks are also persisted,
 `CeirdAgent` redacts proximity tool `origin` payloads, route display lines, and
 exact current-location coordinate strings before those records are stored; live
@@ -251,12 +256,16 @@ Google Places provider behind proximity-native DTOs and errors. Origin
 autocomplete and place-details calls are guarded separately from Routes work
 with warm-isolate actor and organization limits because they spend Google Places
 quota before route ranking begins. Route ranking/preview handlers perform auth
-and target existence checks, apply the selected filters first, cap routing work
-to the first 100 route-eligible candidates, and then call the route provider.
-Job proximity defaults to active jobs; site proximity ranks mapped sites and
-includes active-job summary fields for the returned rows. When more than 100
-route-eligible records match, response metadata marks the candidate cap so
-clients can explain that the route ranking was limited.
+and target existence checks. They then reject `current_location` origins unless
+the actor's `routeProximityLocationEnabled` preference is enabled; if preference
+state cannot be read, the request fails closed before route-provider work.
+`typed_origin` requests are not gated by this preference. Handlers apply the
+selected filters first, cap routing work to the first 100 route-eligible
+candidates, and then call the route provider. Job proximity defaults to active
+jobs; site proximity ranks mapped sites and includes active-job summary fields
+for the returned rows. When more than 100 route-eligible records match, response
+metadata marks the candidate cap so clients can explain that the route ranking
+was limited.
 Agent proximity list tools deliberately omit route display lines to avoid route
 geometry cost in ranked lists. Specific job/site route-preview tools can request
 route geometry so the app can render an inline map indication and maps handoff
@@ -447,6 +456,25 @@ MCP currently exposes list/detail/options/comment/label tools only. Its domain
 tool layer provides an explicit unavailable route-proximity service so existing
 MCP tools do not initialize Google Routes configuration or provider cache until
 route-aware MCP tools are intentionally added.
+
+## Identity Preferences
+
+User preferences are exposed through `@ceird/identity-core` and implemented in
+`apps/domain/src/domains/identity/preferences`.
+
+| Endpoint            | Method  | Purpose                                                     |
+| ------------------- | ------- | ----------------------------------------------------------- |
+| `/user/preferences` | `GET`   | Return the current authenticated user's global preferences. |
+| `/user/preferences` | `PATCH` | Update supported user preference fields.                    |
+
+The first preference is `routeProximityLocationEnabled`, a global opt-in that
+lets the app ask the current browser/device for live location when running
+route-aware Jobs, Sites, or Agent proximity flows. The preference table stores
+only this boolean and timestamps. Current coordinates remain request-time
+payloads for proximity operations and must not be written to `user_preferences`.
+The app uses this flag before prompting for browser geolocation; the domain also
+enforces it for jobs/sites current-location route endpoints and Agent sideband
+current-location frames.
 
 ## Jobs Domain
 
@@ -657,12 +685,13 @@ The domain Worker uses Drizzle with Postgres.
 | Alchemy deltas        | `drizzle-alchemy/*/migration.sql`, generated snapshots when available |
 | Drizzle CLI config    | `drizzle.config.ts`                                                   |
 
-`databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges authentication, comments, labels, sites, and jobs
-tables. Keep schema changes in the domain that owns the tables, then export
-through the schema barrel. The Alchemy stack also loads this barrel through
-`Drizzle.Schema`. The parent native Neon branch applies `apps/domain/drizzle`, so
-historical SQL files remain the bootstrap path. Forked local and preview branches
-apply `drizzle-alchemy` only, so Alchemy-generated deltas can run after the fork
+`databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges
+authentication, identity preferences, comments, labels, sites, and jobs tables.
+Keep schema changes in the domain that owns the tables, then export through the
+schema barrel. The Alchemy stack also loads this barrel through `Drizzle.Schema`.
+The parent native Neon branch applies `apps/domain/drizzle`, so historical SQL
+files remain the bootstrap path. Forked local and preview branches apply
+`drizzle-alchemy` only, so Alchemy-generated deltas can run after the fork
 without replaying the bootstrap tree. In infra this is modeled as separate
 generated and applied migration directories.
 
@@ -681,6 +710,13 @@ were added manually because `drizzle-kit generate` is currently blocked by an
 unrelated pre-existing non-commutative migration conflict in the historical
 `sites` check-constraint migrations; rerun generation once that branch conflict
 is resolved to refresh snapshots.
+User preferences are stored in `user_preferences`, keyed by `user_id` with a
+cascading foreign key to Better Auth's `user` table. The table stores
+timezone-aware `created_at` and `updated_at` timestamps, the route-proximity
+location opt-in boolean, and no coordinate columns. Migration
+`apps/domain/drizzle/20260607043800_user_preferences/migration.sql` and the
+matching `drizzle-alchemy` migration add the table manually for the same
+generation-blocking reason described above.
 
 ## Errors And Runtime Schemas
 

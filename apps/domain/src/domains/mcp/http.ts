@@ -7,6 +7,7 @@ import { SqlClient } from "effect/unstable/sql";
 
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { JobsRepositoriesLive } from "../jobs/repositories.js";
@@ -739,6 +740,7 @@ function makeMcpToolLayer<ERuntime>(
         CommentsRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
+        UserPreferencesRepository.Default,
         makeCurrentOrganizationActorFromMcpSessionLayer(session)
       )
     )

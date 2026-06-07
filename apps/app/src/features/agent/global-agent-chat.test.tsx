@@ -149,6 +149,7 @@ const {
   mockedAddToolApprovalResponse,
   mockedAgentSend,
   mockedEnsureCurrentAgentThread,
+  mockedGetCurrentUserPreferences,
   mockedPrepareCurrentAgentSession,
   mockedResolveAgentHost,
   mockedSendMessage,
@@ -164,6 +165,14 @@ const {
   mockedAgentSend: vi.fn<(data: string) => void>(),
   mockedEnsureCurrentAgentThread:
     vi.fn<typeof AgentClientModule.ensureCurrentAgentThread>(),
+  mockedGetCurrentUserPreferences: vi.fn<
+    () => Promise<{
+      preferences: {
+        routeProximityLocationEnabled: boolean;
+        updatedAt: string;
+      };
+    }>
+  >(),
   mockedPrepareCurrentAgentSession:
     vi.fn<typeof AgentClientModule.prepareCurrentAgentSession>(),
   mockedResolveAgentHost: vi.fn<typeof AgentOriginModule.resolveAgentHost>(),
@@ -181,6 +190,10 @@ vi.mock(import("./agent-client"), () => ({
 
 vi.mock(import("#/lib/agent-origin"), () => ({
   resolveAgentHost: mockedResolveAgentHost,
+}));
+
+vi.mock(import("#/features/settings/user-preferences-api"), () => ({
+  getCurrentUserPreferences: mockedGetCurrentUserPreferences,
 }));
 
 vi.mock(import("agents/react"), () => ({
@@ -281,6 +294,12 @@ describe("global agent chat", () => {
       token: "agent-connect-token",
     });
     mockedEnsureCurrentAgentThread.mockResolvedValue(thread);
+    mockedGetCurrentUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
+    });
     mockedPrepareCurrentAgentSession.mockResolvedValue(preparedSession);
     mockedResolveAgentHost.mockReturnValue("agent.example.com");
     mockedSendMessage.mockImplementation(async () => {});
@@ -643,6 +662,43 @@ describe("global agent chat", () => {
     expect(textbox).toHaveValue("nearest sites");
   });
 
+  it("blocks near-me prompts before geolocation when location preference is disabled", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    mockedGetCurrentUserPreferences.mockResolvedValueOnce({
+      preferences: {
+        routeProximityLocationEnabled: false,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    const textbox = within(drawer).getByRole("textbox", {
+      name: /message ask ceird/i,
+    });
+    await user.type(textbox, "nearest jobs to me");
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await expect(
+      within(drawer).findByText(/location access is off/i)
+    ).resolves.toBeVisible();
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+    expect(textbox).toHaveValue("nearest jobs to me");
+  });
+
   it("does not send stale near-me prompts after the chat unmounts during geolocation", async () => {
     const user = userEvent.setup();
     const geolocation = mockGeolocationDeferredSuccess({
@@ -676,6 +732,54 @@ describe("global agent chat", () => {
       expect(mockedSendMessage).not.toHaveBeenCalled();
     });
     expect(mockedAgentSend).not.toHaveBeenCalled();
+  });
+
+  it("does not request geolocation after the chat unmounts during preference lookup", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    const preferenceLookup =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof mockedGetCurrentUserPreferences>>
+      >();
+    mockedGetCurrentUserPreferences.mockImplementationOnce(
+      () => preferenceLookup.promise
+    );
+    const { rerender } = render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await user.type(
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i }),
+      "nearest jobs to me"
+    );
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockedGetCurrentUserPreferences).toHaveBeenCalledOnce();
+    });
+    rerender(<GlobalAgentChat activeOrganizationId={null} />);
+
+    act(() => {
+      preferenceLookup.resolve({
+        preferences: {
+          routeProximityLocationEnabled: true,
+          updatedAt: "2026-06-06T10:00:00.000Z",
+        },
+      });
+    });
+
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
   });
 
   it("sends non-proximity prompts without requesting location metadata", async () => {

@@ -15,12 +15,12 @@ import {
   SITE_LOCATION_PROVIDER_ERROR_TAG,
   SITE_LOCATION_RESOLUTION_ERROR_TAG,
   SiteCountrySchema,
-  SiteLocationProviderError,
-  SiteLocationResolutionError,
 } from "@ceird/sites-core";
 import type {
   SiteLocationAutocompleteInput,
   SiteLocationPlaceDetailsInput,
+  SiteLocationProviderError,
+  SiteLocationResolutionError,
 } from "@ceird/sites-core";
 import { Effect, Layer, Schema } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -40,7 +40,7 @@ import { SiteLocationProvider } from "../sites/location-provider.js";
 
 const ORIGIN_LOOKUP_COST_GUARD_WINDOW_MS = 60_000;
 const ORIGIN_LOOKUP_COST_GUARD_ACTOR_LIMIT = 120;
-const ORIGIN_LOOKUP_COST_GUARD_ORGANIZATION_LIMIT = 2_000;
+const ORIGIN_LOOKUP_COST_GUARD_ORGANIZATION_LIMIT = 2000;
 const originLookupCostGuardCounters = new Map<string, OriginLookupCounter>();
 
 interface OriginLookupCounter {
@@ -234,7 +234,7 @@ function reserveOriginLookup(actor: OrganizationActor) {
         message: "Origin lookup cost guard limit reached",
         retryAfterSeconds: Math.max(
           1,
-          Math.ceil((blockedScope.counter.resetAtMillis - now) / 1_000)
+          Math.ceil((blockedScope.counter.resetAtMillis - now) / 1000)
         ),
         scope: blockedScope.scope,
       });
@@ -246,8 +246,6 @@ function reserveOriginLookup(actor: OrganizationActor) {
         used: scope.counter.used + 1,
       });
     }
-
-    return undefined;
   }).pipe(
     Effect.flatMap((error) =>
       error === undefined ? Effect.void : Effect.fail(error)

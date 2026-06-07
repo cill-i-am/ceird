@@ -133,6 +133,7 @@ describe("sites proximity panel", () => {
         limit={10}
         mapFilter="all"
         query=""
+        routeProximityLocationEnabled
         onActiveChange={vi.fn<(active: boolean) => void>()}
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -153,6 +154,7 @@ describe("sites proximity panel", () => {
         limit={10}
         mapFilter="all"
         query=""
+        routeProximityLocationEnabled
         onActiveChange={vi.fn<(active: boolean) => void>()}
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -205,6 +207,72 @@ describe("sites proximity panel", () => {
       screen.findByRole("heading", { name: "Dublin Estate" })
     ).resolves.toBeVisible();
     expect(screen.getByText("14 min")).toBeVisible();
+  });
+
+  it("uses typed-origin fallback without geolocation when location preference is disabled", async () => {
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        routeProximityLocationEnabled={false}
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await expect(
+      screen.findByText("Current location access is off")
+    ).resolves.toBeVisible();
+    await expect(
+      screen.findByRole("heading", { name: "Choose route origin" })
+    ).resolves.toBeVisible();
+    expect(mockedRequestCurrentLocationOrigin).not.toHaveBeenCalled();
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
+  });
+
+  it("clears current-location results when location preference is disabled while active", async () => {
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+    const { rerender } = render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        routeProximityLocationEnabled
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+    await screen.findByRole("heading", { name: "Dublin Estate" });
+
+    rerender(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        routeProximityLocationEnabled={false}
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await expect(
+      screen.findByText("Current location access is off")
+    ).resolves.toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Dublin Estate" })
+    ).not.toBeInTheDocument();
   });
 
   it("keeps ordinary site controls visible after route ranking succeeds", async () => {
@@ -454,6 +522,7 @@ describe("sites proximity panel", () => {
         limit={10}
         mapFilter="all"
         query=""
+        routeProximityLocationEnabled
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -485,6 +554,7 @@ describe("sites proximity panel", () => {
         limit={10}
         mapFilter="all"
         query=""
+        routeProximityLocationEnabled
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -629,15 +699,25 @@ type SitesProximityPanelComponent =
 function ControlledSitesProximityPanel({
   children,
   Component,
+  routeProximityLocationEnabled = true,
   ...props
-}: Omit<SitesProximityPanelProps, "active" | "onActiveChange"> & {
+}: Omit<
+  SitesProximityPanelProps,
+  "active" | "onActiveChange" | "routeProximityLocationEnabled"
+> & {
   readonly children?: React.ReactNode;
   readonly Component: SitesProximityPanelComponent;
+  readonly routeProximityLocationEnabled?: boolean | undefined;
 }) {
   const [active, setActive] = React.useState(false);
 
   return (
-    <Component {...props} active={active} onActiveChange={setActive}>
+    <Component
+      {...props}
+      active={active}
+      routeProximityLocationEnabled={routeProximityLocationEnabled}
+      onActiveChange={setActive}
+    >
       {children}
     </Component>
   );

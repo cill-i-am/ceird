@@ -46,9 +46,11 @@ import { ProximityRouteUnavailableError } from "@ceird/proximity-core";
 import type { SiteIdType as SiteId } from "@ceird/sites-core";
 import { Layer, Context, Effect, Option } from "effect";
 
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { ensureCurrentLocationOriginAllowed } from "../proximity/current-location-access.js";
 import {
   makeCurrentRouteCostContext,
   RouteProximityService,
@@ -105,6 +107,7 @@ export class JobsService extends Context.Service<JobsService>()(
       const routeProximityService = yield* RouteProximityService;
       const siteLocationProvider = yield* SiteLocationProvider;
       const sitesRepository = yield* SitesRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("JobsService.loadActor")(function* (
         workItemId?: WorkItemId
@@ -202,6 +205,11 @@ export class JobsService extends Context.Service<JobsService>()(
           "includeRouteLines",
           input.includeRouteLines === true
         );
+        yield* ensureCurrentLocationOriginAllowed({
+          origin: input.origin,
+          userId: actor.userId,
+          userPreferencesRepository,
+        });
 
         const candidateSet = yield* jobsRepository
           .listProximityCandidates(
@@ -260,6 +268,11 @@ export class JobsService extends Context.Service<JobsService>()(
             jobsRepository
           );
           yield* authorization.ensureCanViewJobDetail(actor, workItemId, grant);
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
           const detail = yield* loadJobDetailOrFail(
             actor.organizationId,
             workItemId,
@@ -1040,7 +1053,8 @@ export class JobsService extends Context.Service<JobsService>()(
         JobsRepositoriesLive,
         LabelsRepository.Default,
         RouteProximityService.Default,
-        SitesRepository.Default
+        SitesRepository.Default,
+        UserPreferencesRepository.Default
       )
     )
   );

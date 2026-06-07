@@ -68,7 +68,7 @@ describe("RouteProximityService", () => {
                       destinationId: "site-a",
                       routeSummary: {
                         computedAt: "2026-06-06T10:00:00.000Z",
-                        distanceMeters: 2_000,
+                        distanceMeters: 2000,
                         durationSeconds: 400,
                         provider: "google_routes",
                         providerRequestKind: "matrix",
@@ -80,7 +80,7 @@ describe("RouteProximityService", () => {
                       destinationId: "site-b",
                       routeSummary: {
                         computedAt: "2026-06-06T10:00:00.000Z",
-                        distanceMeters: 2_500,
+                        distanceMeters: 2500,
                         durationSeconds: 500,
                         provider: "google_routes",
                         providerRequestKind: "matrix",
@@ -99,12 +99,12 @@ describe("RouteProximityService", () => {
 
     expect(result.rows.map((row) => row.routeSummary)).toMatchObject([
       {
-        distanceMeters: 2_000,
+        distanceMeters: 2000,
         durationSeconds: 400,
         providerRequestKind: "matrix",
       },
       {
-        distanceMeters: 2_500,
+        distanceMeters: 2500,
         durationSeconds: 500,
         providerRequestKind: "matrix",
       },
@@ -179,7 +179,7 @@ describe("RouteProximityService", () => {
                       destinationId: "site-a",
                       routeSummary: {
                         computedAt: "2026-06-06T10:00:00.000Z",
-                        distanceMeters: 2_000,
+                        distanceMeters: 2000,
                         durationSeconds: 400,
                         provider: "google_routes",
                         providerRequestKind: "matrix",
@@ -191,7 +191,7 @@ describe("RouteProximityService", () => {
                       destinationId: "site-b",
                       routeSummary: {
                         computedAt: "2026-06-06T10:00:00.000Z",
-                        distanceMeters: 2_500,
+                        distanceMeters: 2500,
                         durationSeconds: 500,
                         provider: "google_routes",
                         providerRequestKind: "matrix",

@@ -24,6 +24,7 @@ import {
 import { Layer, Context, Effect, Option } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
   isExternalOrganizationActor,
@@ -35,6 +36,7 @@ import {
   ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
 } from "../organizations/errors.js";
+import { ensureCurrentLocationOriginAllowed } from "../proximity/current-location-access.js";
 import {
   makeCurrentRouteCostContext,
   RouteProximityService,
@@ -67,6 +69,7 @@ export class SitesService extends Context.Service<SitesService>()(
       const siteLocationProvider = yield* SiteLocationProvider;
       const routeProximityService = yield* RouteProximityService;
       const sitesRepository = yield* SitesRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
         return yield* currentOrganizationActor
@@ -275,6 +278,11 @@ export class SitesService extends Context.Service<SitesService>()(
             "includeRouteLines",
             input.includeRouteLines === true
           );
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
 
           const candidateSet = yield* sitesRepository
             .listProximityCandidates(actor.organizationId, input.filters ?? {})
@@ -326,6 +334,11 @@ export class SitesService extends Context.Service<SitesService>()(
         function* (siteId: SiteId, input: SiteRoutePreviewInput) {
           const actor = yield* loadActor();
           yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
           const site = yield* loadSiteDetailOrFail(
             actor.organizationId,
             siteId,
@@ -611,7 +624,8 @@ export class SitesService extends Context.Service<SitesService>()(
         OrganizationAuthorization.Default,
         RouteProximityService.Default,
         SiteLabelAssignmentsRepository.Default,
-        SitesRepository.Default
+        SitesRepository.Default,
+        UserPreferencesRepository.Default
       )
     )
   );

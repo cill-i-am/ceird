@@ -1,10 +1,10 @@
 import type { CurrentLocationOrigin } from "@ceird/proximity-core";
 import { Effect } from "effect";
 
-import {
-  requestBrowserGeolocation,
-  type BrowserGeolocationCoordinates,
-  type BrowserGeolocationError,
+import { requestBrowserGeolocation } from "#/lib/browser-geolocation";
+import type {
+  BrowserGeolocationCoordinates,
+  BrowserGeolocationError,
 } from "#/lib/browser-geolocation";
 
 export type BrowserGeolocationRequest = () => Effect.Effect<

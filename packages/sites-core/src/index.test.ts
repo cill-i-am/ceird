@@ -289,7 +289,7 @@ describe("sites-core", () => {
 
   it("decodes route-aware site proximity contracts", () => {
     const origin = {
-      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
       displayText: "Grand Canal Dock, Dublin, Ireland",
       mode: "typed_origin",
       placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
@@ -327,7 +327,7 @@ describe("sites-core", () => {
       },
       origin: {
         computedAt: "2026-06-06T10:00:00.000Z",
-        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         displayText: "Grand Canal Dock, Dublin, Ireland",
         mode: "typed_origin",
       },
@@ -337,8 +337,8 @@ describe("sites-core", () => {
           highestActiveJobPriority: "urgent",
           routeLine: {
             coordinates: [
-              { latitude: 53.349805, longitude: -6.26031 },
-              { latitude: 53.342886, longitude: -6.267428 },
+              { latitude: 53.349_805, longitude: -6.260_31 },
+              { latitude: 53.342_886, longitude: -6.267_428 },
             ],
             format: "geojson_linestring",
           },
@@ -357,11 +357,11 @@ describe("sites-core", () => {
             hasUsableCoordinates: true,
             id: "22222222-2222-4222-8222-222222222222",
             labels: [],
-            latitude: 53.342886,
+            latitude: 53.342_886,
             locationProvider: "google_places",
             locationResolvedAt: "2026-06-06T09:00:00.000Z",
             locationStatus: "google_resolved",
-            longitude: -6.267428,
+            longitude: -6.267_428,
             name: "Dublin Boiler Room",
           },
         },

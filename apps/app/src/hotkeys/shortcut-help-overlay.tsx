@@ -159,12 +159,10 @@ function ShortcutHelpContent({
   readonly activeScopes: readonly HotkeyScope[];
 }) {
   const registeredShortcutIds = React.useMemo(() => {
-    const hotkeys = Array.from(
-      getHotkeyManager().registrations.state.values()
-    ).map(toHotkeyRegistrationView);
-    const sequences = Array.from(
-      getSequenceManager().registrations.state.values()
+    const hotkeys = [...getHotkeyManager().registrations.state.values()].map(
+      toHotkeyRegistrationView
     );
+    const sequences = [...getSequenceManager().registrations.state.values()];
     const idSet = new Set<HotkeyId>();
 
     for (const registration of hotkeys) {

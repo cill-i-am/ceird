@@ -377,7 +377,7 @@ function Map({
 
 type MapRouteLineCoordinate = readonly [longitude: number, latitude: number];
 
-type MapRouteLineProps = {
+interface MapRouteLineProps {
   /** Stable ID used for the underlying MapLibre source and layer. */
   id: string;
   /** Route coordinates in GeoJSON order: [longitude, latitude]. */
@@ -392,11 +392,11 @@ type MapRouteLineProps = {
   opacity?: number;
   /** Optional MapLibre dash pattern for alternate route states. */
   dashArray?: readonly number[];
-};
+}
 
-type RouteLineSource = {
+interface RouteLineSource {
   readonly setData: (data: GeoJSON.Feature<GeoJSON.LineString>) => void;
-};
+}
 
 const DEFAULT_ROUTE_LINE_COLOR = "#2563eb";
 const DEFAULT_ROUTE_LINE_OPACITY = 0.9;
@@ -463,9 +463,7 @@ function MapRouteLine({
   const dashArrayKey = dashArray?.join(",") ?? "";
   const dashPattern = useMemo(
     () =>
-      dashArrayKey.length > 0
-        ? dashArrayKey.split(",").map((value) => Number(value))
-        : undefined,
+      dashArrayKey.length > 0 ? dashArrayKey.split(",").map(Number) : undefined,
     [dashArrayKey]
   );
 

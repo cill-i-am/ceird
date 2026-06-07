@@ -19,7 +19,8 @@ export const Route = createFileRoute("/_app/_org/sites")({
 
 function SitesRoute() {
   const { activeOrganizationId, queryClient } = Route.useRouteContext();
-  const { dataPlaneSeeds, options, viewer } = Route.useLoaderData();
+  const { dataPlaneSeeds, options, routeProximityLocationEnabled, viewer } =
+    Route.useLoaderData();
   const navigate = useNavigate({ from: "/sites" });
   const search = Route.useSearch();
   const stack = search.sheets ?? [];
@@ -53,6 +54,7 @@ function SitesRoute() {
       options={options}
       queryClient={queryClient}
       routeLimit={search.routeLimit ?? 10}
+      routeProximityLocationEnabled={routeProximityLocationEnabled}
       stack={stack}
       viewer={viewer}
     />

@@ -19,12 +19,12 @@ describe("proximity-core", () => {
     expect(
       decodeOrigin({
         accuracyMeters: 12,
-        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         mode: "current_location",
       })
     ).toStrictEqual({
       accuracyMeters: 12,
-      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
       mode: "current_location",
     });
 
@@ -39,7 +39,7 @@ describe("proximity-core", () => {
 
     expect(() =>
       decodeOrigin({
-        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         displayText: "Dublin",
         mode: "current_location",
       })
@@ -47,7 +47,7 @@ describe("proximity-core", () => {
 
     expect(() =>
       decodeOrigin({
-        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         mode: "typed_origin",
         placeId: "ChIJL6wn6oAOZ0gRoHExl6nHAAo",
       })

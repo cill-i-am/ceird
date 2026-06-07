@@ -1,20 +1,24 @@
+/* oxlint-disable max-classes-per-file */
+
 import type { OrganizationId, UserId } from "@ceird/identity-core";
+import type {
+  ProximityCoordinates,
+  ProximityCostGuardError,
+  ProximityExcludedCount,
+  ProximityOriginInput,
+  ProximityOriginSummary,
+  ProximityProviderError,
+  ProximityResultMetadata,
+  ProximityRouteUnavailableError,
+  RouteDisplayLine,
+  RouteSummary,
+} from "@ceird/proximity-core";
 import {
   IsoDateTimeString,
   PROXIMITY_PROVIDER_ERROR_TAG,
   PROXIMITY_ROUTE_UNAVAILABLE_ERROR_TAG,
   ProximityOriginSummarySchema,
   ProximityResultMetadataSchema,
-  ProximityCostGuardError,
-  type ProximityCoordinates,
-  type ProximityExcludedCount,
-  type ProximityOriginInput,
-  type ProximityOriginSummary,
-  ProximityProviderError,
-  ProximityRouteUnavailableError,
-  type ProximityResultMetadata,
-  type RouteDisplayLine,
-  type RouteSummary,
 } from "@ceird/proximity-core";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 
@@ -356,7 +360,7 @@ function mergeExcludedCounts(
     counts.set(item.reason, (counts.get(item.reason) ?? 0) + item.count);
   }
 
-  return Array.from(counts.entries()).map(([reason, count]) => ({
+  return [...counts.entries()].map(([reason, count]) => ({
     count,
     reason,
   }));

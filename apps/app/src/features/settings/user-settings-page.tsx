@@ -1,4 +1,7 @@
-import type { OrganizationRole } from "@ceird/identity-core";
+import type {
+  OrganizationRole,
+  UserPreferences,
+} from "@ceird/identity-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
@@ -23,7 +26,12 @@ import { authClient, buildEmailChangeRedirectTo } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
+import { LocationPreferencePanel } from "./location-preference-panel";
 import { UserSecuritySessionsPanel } from "./user-security-sessions-panel";
+import {
+  DEFAULT_USER_PREFERENCES,
+  updateCurrentUserPreferences,
+} from "./user-preferences-api";
 import {
   changeEmailSchema,
   changePasswordSchema,
@@ -44,7 +52,12 @@ export interface UserSettingsAccount {
   readonly twoFactorEnabled: boolean;
 }
 
-type AccountSettingsTab = "email" | "password" | "profile" | "security";
+type AccountSettingsTab =
+  | "email"
+  | "location"
+  | "password"
+  | "profile"
+  | "security";
 
 interface UserSettingsState {
   readonly activeTab: AccountSettingsTab;
@@ -159,10 +172,14 @@ export function UserSettingsPage({
   currentOrganizationRole,
   user,
   emailChangeStatus,
+  preferences = DEFAULT_USER_PREFERENCES,
+  preferencesUnavailable = false,
 }: {
   readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly user: UserSettingsAccount;
   readonly emailChangeStatus?: EmailChangeStatus | undefined;
+  readonly preferences?: UserPreferences | undefined;
+  readonly preferencesUnavailable?: boolean | undefined;
 }) {
   const router = useRouter();
   const isHydrated = useIsHydrated();
@@ -178,6 +195,9 @@ export function UserSettingsPage({
     passwordMessage,
     profileMessage,
   } = settingsState;
+  const [updatedPreferences, setUpdatedPreferences] =
+    React.useState<UserPreferences | null>(null);
+  const currentPreferences = updatedPreferences ?? preferences;
   const emailStatusMessage = React.useMemo(
     () => getEmailChangeStatusMessage(emailChangeStatus),
     [emailChangeStatus]
@@ -385,6 +405,7 @@ export function UserSettingsPage({
           >
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="location">Location</TabsTrigger>
             <TabsTrigger value="email">Email</TabsTrigger>
             <TabsTrigger value="password">Password</TabsTrigger>
           </TabsList>
@@ -515,6 +536,26 @@ export function UserSettingsPage({
             />
             {activeTab === "security" ? <UserSecuritySessionsPanel /> : null}
           </div>
+        </TabsContent>
+
+        <TabsContent value="location" keepMounted>
+          <AppUtilityPanel
+            title="Location"
+            description="Control whether Ceird may request this device's current location for route-aware nearby work."
+          >
+            <LocationPreferencePanel
+              preferences={currentPreferences}
+              unavailable={preferencesUnavailable}
+              onPreferenceChange={async (routeProximityLocationEnabled) => {
+                const response = await updateCurrentUserPreferences({
+                  routeProximityLocationEnabled,
+                });
+                setUpdatedPreferences(response.preferences);
+                void invalidateSettingsRouteAfterPreferenceUpdate(router);
+                return response.preferences;
+              }}
+            />
+          </AppUtilityPanel>
         </TabsContent>
 
         <TabsContent value="email" keepMounted>
@@ -764,11 +805,23 @@ export function UserSettingsPage({
   );
 }
 
+async function invalidateSettingsRouteAfterPreferenceUpdate(
+  router: ReturnType<typeof useRouter>
+) {
+  try {
+    await router.invalidate();
+  } catch {
+    // The preference update has already succeeded; a later route refresh
+    // failure should not be reported as a failed save.
+  }
+}
+
 function isAccountSettingsTab(
   value: string | null
 ): value is AccountSettingsTab {
   return (
     value === "email" ||
+    value === "location" ||
     value === "password" ||
     value === "profile" ||
     value === "security"

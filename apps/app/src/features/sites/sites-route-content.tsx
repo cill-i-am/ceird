@@ -24,6 +24,7 @@ export function SitesRouteContent({
   options,
   queryClient,
   routeLimit,
+  routeProximityLocationEnabled,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
   viewer,
 }: {
@@ -35,6 +36,7 @@ export function SitesRouteContent({
   readonly options: SitesOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
   readonly routeLimit?: ProximityLimit | undefined;
+  readonly routeProximityLocationEnabled?: boolean | undefined;
   readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly viewer: OrganizationViewer;
 }) {
@@ -53,6 +55,7 @@ export function SitesRouteContent({
         nearMeEnabled={nearMeEnabled}
         routeHotkeysEnabled={stack.length === 0}
         routeLimit={routeLimit}
+        routeProximityLocationEnabled={routeProximityLocationEnabled}
         viewer={viewer}
         onNearMeChange={onNearMeChange}
         onRouteLimitChange={onRouteLimitChange}

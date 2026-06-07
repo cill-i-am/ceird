@@ -1,5 +1,8 @@
 import { AgentActionsApiGroup, AgentThreadsApiGroup } from "@ceird/agents-core";
-import { IdentityApiGroup } from "@ceird/identity-core";
+import {
+  IdentityApiGroup,
+  UserPreferencesApiGroup,
+} from "@ceird/identity-core";
 import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
 import { ProximityApiGroup } from "@ceird/proximity-core";
@@ -26,6 +29,7 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(AgentActionsApiGroup)
   .add(IdentityApiGroup)
   .add(JobsApiGroup)
+  .add(UserPreferencesApiGroup)
   .add(LabelsApiGroup)
   .add(ProximityApiGroup)
   .add(SitesApiGroup);

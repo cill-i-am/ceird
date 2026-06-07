@@ -12,7 +12,12 @@ import {
   verifyAgentConnectToken,
 } from "@ceird/agents-core";
 import type { AgentThread } from "@ceird/agents-core";
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import {
+  decodeUserPreferences,
+  OrganizationId,
+  UserId,
+  UserPreferencesStorageError,
+} from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
@@ -22,6 +27,7 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -621,6 +627,79 @@ describe("agent threads service", () => {
     });
   });
 
+  it("validates internal current-location access for an enabled thread owner", async () => {
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.validateCurrentLocationAccess(threadId);
+        })
+      )
+    );
+
+    expect(response).toStrictEqual({ allowed: true });
+  });
+
+  it("denies internal current-location access when the thread owner preference is disabled", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .validateCurrentLocationAccess(threadId)
+            .pipe(Effect.flip);
+        }),
+        {
+          userPreferencesRepository: {
+            get: () =>
+              Effect.succeed(
+                decodeUserPreferences({
+                  routeProximityLocationEnabled: false,
+                  updatedAt: "2026-05-20T10:00:00.000Z",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(error.message).toBe(
+      "Current location access is disabled for this user."
+    );
+  });
+
+  it("fails closed when current-location access cannot be verified", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .validateCurrentLocationAccess(threadId)
+            .pipe(Effect.flip);
+        }),
+        {
+          userPreferencesRepository: {
+            get: () =>
+              Effect.fail(
+                new UserPreferencesStorageError({
+                  message: "Preferences unavailable",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(error.message).toBe(
+      "Current location access could not be verified."
+    );
+  });
+
   it("prepares an idempotent agent session with the current thread, token, and action manifest", async () => {
     let getOrCreateCurrentCalls = 0;
     const response = await Effect.runPromise(
@@ -818,6 +897,20 @@ function makeAgentThreadsServiceTestLayer(
         ensureCanViewOrganizationData: () => Effect.void,
         ...options.organizationAuthorization,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
+    ),
+    Layer.succeed(
+      UserPreferencesRepository,
+      UserPreferencesRepository.of({
+        get: () =>
+          Effect.succeed(
+            decodeUserPreferences({
+              routeProximityLocationEnabled: true,
+              updatedAt: "2026-05-20T10:00:00.000Z",
+            })
+          ),
+        update: () => Effect.die("Unexpected UserPreferencesRepository.update"),
+        ...options.userPreferencesRepository,
+      } as unknown as ContextService<typeof UserPreferencesRepository>)
     )
   );
 }
@@ -832,6 +925,9 @@ interface AgentThreadsServiceTestOptions {
   >;
   readonly organizationAuthorization?: Partial<
     ContextService<typeof OrganizationAuthorization>
+  >;
+  readonly userPreferencesRepository?: Partial<
+    ContextService<typeof UserPreferencesRepository>
   >;
 }
 

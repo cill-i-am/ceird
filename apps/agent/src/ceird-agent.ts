@@ -20,7 +20,10 @@ import { Option, Schema } from "effect";
 import { createWorkersAI } from "workers-ai-provider";
 
 import { makeCeirdChatRecoveryOptions } from "./ceird-agent-recovery.js";
-import { touchAgentThreadActivity } from "./domain-client.js";
+import {
+  touchAgentThreadActivity,
+  validateAgentCurrentLocationAccess,
+} from "./domain-client.js";
 import { extractAgentThreadId } from "./instance.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 import { readAgentAiGatewayId } from "./platform/cloudflare/env.js";
@@ -81,8 +84,8 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
     super(ctx, env);
 
     const aiChatOnMessage = this.onMessage.bind(this);
-    this.onMessage = (connection, message) => {
-      if (this.consumeProximityOriginFrame(message)) {
+    this.onMessage = async (connection, message) => {
+      if (await this.consumeProximityOriginFrame(message)) {
         return;
       }
 
@@ -116,11 +119,11 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
     };
   }
 
-  override onMessage(
+  override async onMessage(
     connection: Connection,
     message: string | ArrayBuffer | ArrayBufferView
-  ): void | Promise<void> {
-    if (this.consumeProximityOriginFrame(message)) {
+  ): Promise<void> {
+    if (await this.consumeProximityOriginFrame(message)) {
       return;
     }
 
@@ -222,15 +225,24 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
     return super.onChatResponse(result);
   }
 
-  private consumeProximityOriginFrame(
+  private async consumeProximityOriginFrame(
     message: string | ArrayBuffer | ArrayBufferView
-  ) {
+  ): Promise<boolean> {
     const frame = readAgentProximityOriginContextFrame(
       parseJsonMessage(message)
     );
 
     if (Option.isNone(frame)) {
       return false;
+    }
+
+    try {
+      const agentInstanceName = decodeAgentInstanceName(this.name);
+      const threadId = extractAgentThreadId(agentInstanceName);
+
+      await validateAgentCurrentLocationAccess(this.env, threadId);
+    } catch {
+      return true;
     }
 
     const receivedAt = Date.now();

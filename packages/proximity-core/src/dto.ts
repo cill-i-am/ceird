@@ -4,13 +4,13 @@ import {
   GooglePlaceId,
   GooglePlacesSessionToken,
   IsoDateTimeString,
-  type ProximityCoordinates,
   ProximityCoordinatesSchema,
   ProximityLimitSchema,
   ProximityCountrySchema,
   ProximityProviderRequestKindSchema,
   ProximityProviderSchema,
 } from "./domain.js";
+import type { ProximityCoordinates } from "./domain.js";
 
 const NonEmptyTrimmedString = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
@@ -96,7 +96,7 @@ const EncodedPolylineRouteDisplayLineSchema = Schema.Struct({
 const GeoJsonRouteDisplayLineSchema = Schema.Struct({
   coordinates: Schema.Array(ProximityCoordinatesSchema).pipe(
     Schema.refine(
-      (coordinates): coordinates is ReadonlyArray<ProximityCoordinates> =>
+      (coordinates): coordinates is readonly ProximityCoordinates[] =>
         coordinates.length >= 2,
       { message: "Route display line must include at least 2 coordinates" }
     )

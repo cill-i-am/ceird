@@ -291,9 +291,12 @@ the first workspace is created. The client submits only the team name to
 the Better Auth organization slug, forwards auth cookies from the Better Auth
 response, sets the new organization as active for the current session when
 Better Auth accepts the sync, decodes the created organization summary, and
-returns that summary to the client. The same onboarding page then offers an optional invite-members
-step before navigating into the app. Skipping or completing this step enters the
-active workspace; invite creation uses Better Auth's
+returns that summary to the client. The same onboarding page then offers a
+compact location-access preference prompt and an optional invite-members step
+before navigating into the app. The prompt only updates the global
+`routeProximityLocationEnabled` user preference through the typed domain API; it
+does not call browser geolocation or store coordinates. Skipping or completing
+this step enters the active workspace; invite creation uses Better Auth's
 `authClient.organization.inviteMember` with the newly created organization ID.
 
 The `/members` route uses Better Auth organization client methods directly for
@@ -314,6 +317,17 @@ preserve the original browser host/protocol for trusted proxy and cookie logic.
 Runtime payloads that cross the app/API boundary are decoded with shared Effect
 schemas from `@ceird/jobs-core`, `@ceird/sites-core`, `@ceird/labels-core`, and
 `@ceird/identity-core`.
+User settings load the route-proximity location preference through
+`features/settings/user-settings-route-loader.ts` and render it in the Location
+tab. Enabling the setting means Ceird may ask the current browser for a fresh
+device location when the user runs nearby Jobs, Sites, or Agent flows; the
+setting itself stores only a boolean preference.
+Jobs and Sites route loaders read the same preference and fail closed if it is
+disabled or unavailable: Near me stays available, but current-location requests
+are replaced by the typed-origin flow. Agent chat checks the preference only
+when a prompt needs current location; disabled or unavailable preference state
+blocks geolocation and asks the user to enable location access or provide a
+typed origin.
 Feature-local form/search schemas live next to the feature that owns them, for
 example:
 

@@ -81,6 +81,7 @@ export function SitesPage({
   onRouteLimitChange,
   routeHotkeysEnabled = true,
   routeLimit: controlledRouteLimit,
+  routeProximityLocationEnabled = false,
   viewer,
 }: {
   readonly nearMeEnabled?: boolean | undefined;
@@ -88,6 +89,7 @@ export function SitesPage({
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly routeHotkeysEnabled?: boolean;
   readonly routeLimit?: ProximityLimit | undefined;
+  readonly routeProximityLocationEnabled?: boolean | undefined;
   readonly viewer: OrganizationViewer;
 }) {
   const navigate = useNavigate({ from: "/sites" });
@@ -323,6 +325,7 @@ export function SitesPage({
           limit={routeLimit}
           mapFilter={mapFilter}
           query={query}
+          routeProximityLocationEnabled={routeProximityLocationEnabled}
           onActiveChange={setNearMeEnabled}
           onClearFilters={clearFilters}
           onLimitChange={setRouteLimit}

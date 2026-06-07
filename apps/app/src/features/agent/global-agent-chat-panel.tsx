@@ -59,6 +59,8 @@ import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
 import { requestCurrentLocationOrigin } from "#/features/proximity/proximity-location-access";
+import { loadRouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
+import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import { activeElementIsInside } from "#/hotkeys/focus";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -534,6 +536,38 @@ function AgentConversation({
 
       const requestId = activeLocationRequestRef.current + 1;
       activeLocationRequestRef.current = requestId;
+
+      if (
+        !mountedRef.current ||
+        activeLocationRequestRef.current !== requestId
+      ) {
+        return false;
+      }
+
+      const locationPreferenceStatus =
+        await loadRouteProximityLocationPreferenceStatus();
+      const requestWasCancelled =
+        !mountedRef.current || activeLocationRequestRef.current !== requestId;
+
+      if (locationPreferenceStatus !== "enabled") {
+        if (requestWasCancelled) {
+          return false;
+        }
+
+        setLocationNotice({
+          message: getAgentLocationPreferenceBlockedMessage(
+            locationPreferenceStatus
+          ),
+          status: "blocked",
+        });
+
+        return false;
+      }
+
+      if (requestWasCancelled) {
+        return false;
+      }
+
       setLocationNotice({ status: "requesting" });
       const originExit = await Effect.runPromiseExit(
         requestCurrentLocationOrigin()
@@ -1257,6 +1291,14 @@ function hashKey(value: unknown) {
   }
 
   return Math.abs(hash).toString(36);
+}
+
+function getAgentLocationPreferenceBlockedMessage(
+  status: Exclude<RouteProximityLocationPreferenceStatus, "enabled">
+) {
+  return status === "disabled"
+    ? "Location access is off. Enable location access in Settings or ask with a typed origin."
+    : "Ceird could not check location access. Try again, or ask with a typed origin.";
 }
 
 function resolveBrowserAgentHost() {

@@ -69,7 +69,7 @@ type OriginRunState =
   | { readonly status: "requesting" }
   | { readonly origin: ProximityOriginInput; readonly status: "ready" }
   | {
-      readonly reason: "current_location_failed";
+      readonly reason: "current_location_disabled" | "current_location_failed";
       readonly status: "needs_origin";
     };
 
@@ -238,6 +238,7 @@ export interface SitesProximityPanelProps {
   readonly onClearFilters: () => void;
   readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
   readonly query: string;
+  readonly routeProximityLocationEnabled: boolean;
 }
 
 export function SitesProximityPanel({
@@ -250,6 +251,7 @@ export function SitesProximityPanel({
   onClearFilters,
   onLimitChange,
   query,
+  routeProximityLocationEnabled,
 }: SitesProximityPanelProps) {
   const {
     confirmTypedOrigin,
@@ -278,6 +280,7 @@ export function SitesProximityPanel({
     mapFilter,
     onActiveChange,
     query,
+    routeProximityLocationEnabled,
   });
   return (
     <>
@@ -310,6 +313,7 @@ export function SitesProximityPanel({
             requestCurrentOrigin={requestCurrentOrigin}
             requestState={request}
             retryRanking={retryRanking}
+            routeProximityLocationEnabled={routeProximityLocationEnabled}
             selectedSiteId={selectedSiteId}
             onClearFilters={onClearFilters}
             onOriginDialogOpen={handleOriginDialogOpen}
@@ -342,6 +346,7 @@ function useSitesProximityPanelController({
   mapFilter,
   onActiveChange,
   query,
+  routeProximityLocationEnabled,
 }: {
   readonly active: boolean;
   readonly currentLocationRequestKey: number;
@@ -349,6 +354,7 @@ function useSitesProximityPanelController({
   readonly mapFilter: SitesMapFilter;
   readonly onActiveChange: (active: boolean) => void;
   readonly query: string;
+  readonly routeProximityLocationEnabled: boolean;
 }) {
   const [state, dispatch] = React.useReducer(
     sitesProximityPanelReducer,
@@ -431,10 +437,56 @@ function useSitesProximityPanelController({
     [cancelCurrentOriginRequest, cancelTypedOriginRequest]
   );
 
+  React.useEffect(() => {
+    if (routeProximityLocationEnabled || !active) {
+      return;
+    }
+
+    const shouldClearCurrentLocationOrigin =
+      origin.status === "requesting" ||
+      (origin.status === "ready" && origin.origin.mode === "current_location");
+
+    if (!shouldClearCurrentLocationOrigin) {
+      return;
+    }
+
+    originRequestIdRef.current += 1;
+    rankRequestIdRef.current += 1;
+    pendingActivationRef.current = false;
+    cancelCurrentOriginRequest();
+    dispatch({
+      origin: {
+        reason: "current_location_disabled",
+        status: "needs_origin",
+      },
+      type: "origin",
+    });
+    dispatch({ open: true, type: "origin_dialog_open" });
+  }, [
+    active,
+    cancelCurrentOriginRequest,
+    origin,
+    routeProximityLocationEnabled,
+  ]);
+
   const requestCurrentOrigin = React.useCallback(() => {
     cancelCurrentOriginRequest();
     const requestId = originRequestIdRef.current + 1;
     originRequestIdRef.current = requestId;
+
+    if (!routeProximityLocationEnabled) {
+      pendingActivationRef.current = false;
+      dispatch({
+        origin: {
+          reason: "current_location_disabled",
+          status: "needs_origin",
+        },
+        type: "origin",
+      });
+      dispatch({ open: true, type: "origin_dialog_open" });
+      return;
+    }
+
     dispatch({ origin: { status: "requesting" }, type: "origin" });
 
     const originFiber = Effect.runFork(requestCurrentLocationOrigin());
@@ -467,7 +519,7 @@ function useSitesProximityPanelController({
         type: "origin",
       });
     });
-  }, [cancelCurrentOriginRequest]);
+  }, [cancelCurrentOriginRequest, routeProximityLocationEnabled]);
 
   React.useEffect(() => {
     if (!active || rankingInput === null || rankingInputKey === null) {
@@ -843,6 +895,7 @@ function SitesProximityContent({
   requestCurrentOrigin,
   requestState,
   retryRanking,
+  routeProximityLocationEnabled,
   selectedSiteId,
   onClearFilters,
   onOriginDialogOpen,
@@ -854,25 +907,31 @@ function SitesProximityContent({
   readonly requestCurrentOrigin: () => void;
   readonly requestState: ProximityRequestState;
   readonly retryRanking: () => void;
+  readonly routeProximityLocationEnabled: boolean;
   readonly selectedSiteId: string | null;
   readonly onClearFilters: () => void;
   readonly onOriginDialogOpen: (open: boolean) => void;
   readonly onSelectedSiteIdChange: (siteId: string) => void;
 }) {
   if (originState.status === "idle") {
+    const currentLocationDisabled = !routeProximityLocationEnabled;
+
     return (
       <ProximityStatusPanel
         state={{
-          description:
-            "Use current location or choose an origin before calculating traffic-aware driving routes.",
+          description: currentLocationDisabled
+            ? "Current location access is off. Choose an origin before calculating traffic-aware driving routes."
+            : "Use current location or choose an origin before calculating traffic-aware driving routes.",
           kind: "origin_required",
           title: "Choose where routes start",
         }}
         action={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={requestCurrentOrigin}>
-              Use current location
-            </Button>
+            {currentLocationDisabled ? null : (
+              <Button type="button" size="sm" onClick={requestCurrentOrigin}>
+                Use current location
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
@@ -896,13 +955,19 @@ function SitesProximityContent({
   }
 
   if (originState.status === "needs_origin") {
+    const currentLocationDisabled =
+      originState.reason === "current_location_disabled";
+
     return (
       <ProximityStatusPanel
         state={{
-          description:
-            "Ceird could not get your current location. Choose an origin to calculate driving routes without sharing current location.",
+          description: currentLocationDisabled
+            ? "Current location access is off. Choose an origin to calculate driving routes without sharing current location."
+            : "Ceird could not get your current location. Choose an origin to calculate driving routes without sharing current location.",
           kind: "location_blocked",
-          title: "Current location unavailable",
+          title: currentLocationDisabled
+            ? "Current location access is off"
+            : "Current location unavailable",
         }}
         action={
           <Button

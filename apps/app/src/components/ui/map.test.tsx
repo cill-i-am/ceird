@@ -71,9 +71,9 @@ function MockPopup() {
 
 vi.mock(import("maplibre-gl"), () => {
   type MockEventHandler = () => void;
-  type MockSource = {
+  interface MockSource {
     readonly setData: (data: unknown) => void;
-  };
+  }
 
   class MockMap {
     private bearing = 0;
@@ -212,9 +212,13 @@ vi.mock(import("maplibre-gl"), () => {
     }
 
     setStyle() {
-      this.eventHandlers
-        .get("styledata")
-        ?.forEach((handler) => queueMicrotask(handler));
+      const handlers = this.eventHandlers.get("styledata");
+
+      if (handlers !== undefined) {
+        for (const handler of handlers) {
+          queueMicrotask(handler);
+        }
+      }
     }
 
     zoomTo(nextZoom: number, options: { duration: number }) {
@@ -289,7 +293,7 @@ describe("map controls hotkeys", () => {
     const user = userEvent.setup();
     const consoleErrorSpy = vi
       .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+      .mockImplementation(() => {});
 
     const { rerender } = render(
       <HotkeysProvider>

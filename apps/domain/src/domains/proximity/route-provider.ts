@@ -1,18 +1,16 @@
-import {
-  decodeOrganizationId,
-  decodeUserId,
-  type OrganizationId,
-  type UserId,
-} from "@ceird/identity-core";
+import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
+import type { OrganizationId, UserId } from "@ceird/identity-core";
 import {
   IsoDateTimeString,
   ProximityCostGuardError,
   ProximityProviderError,
   ProximityRouteUnavailableError,
-  type ProximityCoordinates,
-  type RouteDisplayLine,
-  type RouteDisplayLineResponse,
-  type RouteSummary,
+} from "@ceird/proximity-core";
+import type {
+  ProximityCoordinates,
+  RouteDisplayLine,
+  RouteDisplayLineResponse,
+  RouteSummary,
 } from "@ceird/proximity-core";
 import {
   Cache,
@@ -43,7 +41,7 @@ const DEFAULT_ROUTE_PROVIDER_CACHE_FAILURE_TTL = Duration.seconds(3);
 const DEFAULT_ROUTE_COST_GUARD_WINDOW = Duration.seconds(60);
 const DEFAULT_ROUTE_COST_GUARD_ACTOR_LIMIT = 500;
 const DEFAULT_ROUTE_COST_GUARD_AGENT_THREAD_LIMIT = 200;
-const DEFAULT_ROUTE_COST_GUARD_ORGANIZATION_LIMIT = 5_000;
+const DEFAULT_ROUTE_COST_GUARD_ORGANIZATION_LIMIT = 5000;
 const GOOGLE_ROUTES_PROVIDER_FAILED_MESSAGE = "Google Routes provider failed";
 const GOOGLE_ROUTES_PROVIDER_CONFIGURATION_FAILED_MESSAGE =
   "Google Routes provider is not configured";
@@ -284,11 +282,11 @@ export function makeInMemoryRouteCostGuard(options?: {
             limit: organizationLimit,
             scope: "organization",
           },
-        ] satisfies ReadonlyArray<{
+        ] satisfies readonly {
           readonly id: string;
           readonly limit: number;
           readonly scope: RouteCostGuardScope;
-        }>;
+        }[];
         const nextCounters = scopes.map((scope) => {
           const key = `${scope.scope}:${scope.id}`;
           const current = counters.get(key);
@@ -316,7 +314,7 @@ export function makeInMemoryRouteCostGuard(options?: {
             message: "Route provider cost guard limit reached",
             retryAfterSeconds: Math.max(
               1,
-              Math.ceil((blockedScope.counter.resetAtMillis - now) / 1_000)
+              Math.ceil((blockedScope.counter.resetAtMillis - now) / 1000)
             ),
             scope: blockedScope.scope,
           });
@@ -328,8 +326,6 @@ export function makeInMemoryRouteCostGuard(options?: {
             used: scope.counter.used + units,
           });
         }
-
-        return undefined;
       }).pipe(
         Effect.flatMap((error) =>
           error === undefined ? Effect.void : Effect.fail(error)
@@ -601,7 +597,7 @@ function executeRankRoutes(options: {
         (left, right) =>
           left.routeSummary.durationSeconds - right.routeSummary.durationSeconds
       ),
-      unavailableDestinationIds: Array.from(unavailableDestinationIds),
+      unavailableDestinationIds: [...unavailableDestinationIds],
     } satisfies RankRoutesResult;
   }).pipe(
     Effect.withSpan("RouteProvider.Google.rankRoutes", {
@@ -951,7 +947,7 @@ function routeWaypoint(coordinates: ProximityCoordinates) {
 function parseGoogleDurationSeconds(value: string) {
   const match = /^(\d+(?:\.\d+)?)s$/.exec(value);
   if (match === null) {
-    return undefined;
+    return;
   }
 
   const durationSeconds = Number(match[1]);

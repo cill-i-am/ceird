@@ -1,23 +1,33 @@
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import {
+  decodeUserPreferences,
+  OrganizationId,
+  UserId,
+  UserPreferencesStorageError,
+} from "@ceird/identity-core";
+import {
+  GooglePlaceId,
+  ProximityAccessDeniedError,
+} from "@ceird/proximity-core";
 import type {
   GooglePlaceIdType,
   GooglePlacesSessionTokenType,
   IsoDateTimeStringType,
   SiteLatitude,
   SiteLongitude,
+  SiteProximityFilters,
 } from "@ceird/sites-core";
 import {
   CreateSiteInputSchema,
   SiteId,
   SiteOptionSchema,
-  type SiteProximityFilters,
   SitesOptionsResponseSchema,
 } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
 import { CommentsRepository } from "../comments/repository.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -41,6 +51,7 @@ type ContextService<Service> = Service extends {
   : never;
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -875,6 +886,149 @@ describe("SitesService contracts", () => {
     expect(result.routeSummary.providerRequestKind).toBe("route_preview");
   });
 
+  it("rejects current-location site ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+    let routeCalls = 0;
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "SitesRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () => {
+              routeCalls += 1;
+              return Effect.die(
+                "RouteProvider.rankRoutes should not be called"
+              );
+            },
+            routeProximityLocationEnabled: false,
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access is disabled for this user.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
+    expect(routeCalls).toBe(0);
+  });
+
+  it("allows typed-origin site ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            displayText: "Heuston Station",
+            mode: "typed_origin",
+            placeId: decodeGooglePlaceId("google-place-origin"),
+          },
+        })
+      ),
+      {
+        listProximityCandidates: () => {
+          candidateCalls += 1;
+          return Effect.succeed({
+            candidateCount: 0,
+            candidateLimitApplied: false,
+            candidates: [],
+            excluded: [],
+          });
+        },
+        previewRoute: () =>
+          Effect.die("RouteProvider.previewRoute should not be called"),
+        rankRoutes: (input) =>
+          Effect.succeed({
+            rows: input.destinations.map((destination) => ({
+              destinationId: destination.destinationId,
+              routeSummary: makeRouteSummary(120, 1000),
+            })),
+            unavailableDestinationIds: [],
+          }),
+        routeProximityLocationEnabled: false,
+      }
+    );
+
+    expect(candidateCalls).toBe(1);
+    expect(result.origin).toMatchObject({
+      displayText: "Heuston Station",
+      mode: "typed_origin",
+    });
+  });
+
+  it("rejects current-location site route previews before loading the site when location preference is unavailable", async () => {
+    let getOptionCalls = 0;
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111402");
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.getSiteRoutePreview(siteId, {
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            getOptionById: () => {
+              getOptionCalls += 1;
+              return Effect.die(
+                "SitesRepository.getOptionById should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            userPreferencesGet: () =>
+              Effect.fail(
+                new UserPreferencesStorageError({
+                  message: "User preferences storage operation failed",
+                })
+              ),
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access could not be verified.",
+      });
+    }
+    expect(getOptionCalls).toBe(0);
+  });
+
   it("reports how many routeable sites were omitted by the 100-candidate cap", async () => {
     const mappedSites = Array.from({ length: 100 }, (_, index) => {
       const suffix = String(index + 1).padStart(12, "0");
@@ -914,7 +1068,7 @@ describe("SitesService contracts", () => {
           Effect.succeed({
             rows: input.destinations.slice(0, 10).map((destination, index) => ({
               destinationId: destination.destinationId,
-              routeSummary: makeRouteSummary(180 + index, 1_500 + index),
+              routeSummary: makeRouteSummary(180 + index, 1500 + index),
             })),
             unavailableDestinationIds: [],
           }),
@@ -937,7 +1091,8 @@ type TestSitesServiceRequirements =
   | RouteProximityService
   | SiteLabelAssignmentsRepository
   | SiteLocationProvider
-  | SitesRepository;
+  | SitesRepository
+  | UserPreferencesRepository;
 
 function sitesServiceCall<
   Value,
@@ -989,10 +1144,14 @@ interface TestSitesDependencies {
     input: RoutePreviewInput
   ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
   readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
+  readonly routeProximityLocationEnabled: boolean;
   readonly resolvePlace: ContextService<
     typeof SiteLocationProvider
   >["resolvePlace"];
   readonly update: ContextService<typeof SitesRepository>["update"];
+  readonly userPreferencesGet: ContextService<
+    typeof UserPreferencesRepository
+  >["get"];
 }
 
 function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
@@ -1018,6 +1177,10 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         ensureCanViewOrganizationData: () => Effect.void,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
     ),
+    makeUserPreferencesRepositoryLayer({
+      get: options.userPreferencesGet,
+      routeProximityLocationEnabled: options.routeProximityLocationEnabled,
+    }),
     Layer.succeed(
       SiteLocationProvider,
       SiteLocationProvider.of({
@@ -1079,6 +1242,32 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         ) => effect,
       } as unknown as ContextService<typeof SitesRepository>)
     )
+  );
+}
+
+function makeUserPreferencesRepositoryLayer(
+  options: {
+    readonly get?:
+      | ContextService<typeof UserPreferencesRepository>["get"]
+      | undefined;
+    readonly routeProximityLocationEnabled?: boolean | undefined;
+  } = {}
+) {
+  return Layer.succeed(
+    UserPreferencesRepository,
+    UserPreferencesRepository.of({
+      get:
+        options.get ??
+        (() =>
+          Effect.succeed(
+            decodeUserPreferences({
+              routeProximityLocationEnabled:
+                options.routeProximityLocationEnabled ?? true,
+              updatedAt: "2026-05-20T09:00:00.000Z",
+            })
+          )),
+      update: () => Effect.die("UserPreferencesRepository.update not stubbed"),
+    })
   );
 }
 

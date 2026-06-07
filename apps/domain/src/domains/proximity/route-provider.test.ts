@@ -2,8 +2,8 @@ import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
 import {
   ProximityCostGuardError,
   ProximityProviderError,
-  type ProximityCoordinates,
 } from "@ceird/proximity-core";
+import type { ProximityCoordinates } from "@ceird/proximity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect } from "effect";
 
@@ -69,7 +69,7 @@ describe("Google Routes provider", () => {
               {
                 condition: "ROUTE_EXISTS",
                 destinationIndex: 1,
-                distanceMeters: 1_100,
+                distanceMeters: 1100,
                 duration: "80s",
                 originIndex: 0,
                 status: {},
@@ -77,7 +77,7 @@ describe("Google Routes provider", () => {
               {
                 condition: "ROUTE_EXISTS",
                 destinationIndex: 0,
-                distanceMeters: 2_200,
+                distanceMeters: 2200,
                 duration: "120s",
                 originIndex: 0,
                 status: {},
@@ -104,7 +104,7 @@ describe("Google Routes provider", () => {
       "job-a",
     ]);
     expect(firstResult.rows[0]?.routeSummary).toMatchObject({
-      distanceMeters: 1_100,
+      distanceMeters: 1100,
       durationSeconds: 80,
       provider: "google_routes",
       providerRequestKind: "matrix",
@@ -173,7 +173,7 @@ describe("Google Routes provider", () => {
             responseWithJson({
               routes: [
                 {
-                  distanceMeters: 4_200,
+                  distanceMeters: 4200,
                   duration: "840s",
                   polyline: { encodedPolyline: "encoded-route-line" },
                 },
@@ -195,7 +195,7 @@ describe("Google Routes provider", () => {
     );
 
     expect(result.routeSummary).toMatchObject({
-      distanceMeters: 4_200,
+      distanceMeters: 4200,
       durationSeconds: 840,
       provider: "google_routes",
       providerRequestKind: "route_preview",
@@ -249,7 +249,7 @@ describe("Google Routes provider", () => {
             responseWithJson({
               routes: [
                 {
-                  distanceMeters: 1_000,
+                  distanceMeters: 1000,
                   duration: "300s",
                   polyline: { encodedPolyline: "encoded-route-line" },
                 },
@@ -294,7 +294,7 @@ describe("Google Routes provider", () => {
             responseWithJson({
               routes: [
                 {
-                  distanceMeters: 1_000,
+                  distanceMeters: 1000,
                   duration: "300s",
                   polyline: { encodedPolyline: "encoded-route-line" },
                 },
@@ -380,7 +380,7 @@ describe("Google Routes provider", () => {
       provider.rankRoutes(input).pipe(effectEither)
     );
     shouldFail = false;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await Effect.runPromise(Effect.sleep(Duration.millis(10)));
     const thirdResult = await Effect.runPromise(
       provider.rankRoutes(input).pipe(effectEither)
     );
@@ -449,7 +449,7 @@ describe("Google Routes provider", () => {
             responseWithJson({
               routes: [
                 {
-                  distanceMeters: 1_000,
+                  distanceMeters: 1000,
                   duration: "300s",
                   polyline: { encodedPolyline: "encoded-route-line" },
                 },

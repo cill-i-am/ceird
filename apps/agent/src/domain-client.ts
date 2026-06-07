@@ -1,6 +1,8 @@
 import {
   AGENT_INTERNAL_ACTIONS_PATH,
+  AgentCurrentLocationAccessResponseSchema,
   AgentThreadResponseSchema,
+  makeAgentInternalCurrentLocationAccessPath,
   makeAgentInternalThreadActivityPath,
   RunAgentActionResponseSchema,
 } from "@ceird/agents-core/runtime";
@@ -15,6 +17,7 @@ import { makeDomainServiceClient } from "@ceird/domain-core";
 import { Schema } from "effect";
 
 import { DomainActionError } from "./domain-action-error.js";
+import { DomainCurrentLocationAccessError } from "./domain-current-location-access-error.js";
 import { DomainThreadActivityError } from "./domain-thread-activity-error.js";
 import type { AgentWorkerEnv } from "./platform/cloudflare/env.js";
 
@@ -23,6 +26,9 @@ const decodeRunAgentActionResponse = Schema.decodeUnknownSync(
 );
 const decodeAgentThreadResponse = Schema.decodeUnknownSync(
   AgentThreadResponseSchema
+);
+const decodeAgentCurrentLocationAccessResponse = Schema.decodeUnknownSync(
+  AgentCurrentLocationAccessResponseSchema
 );
 const AGENT_INTERNAL_ORIGIN = "https://agent.ceird.internal";
 
@@ -67,6 +73,42 @@ export async function touchAgentThreadActivity(
   }
 
   return decodeAgentThreadResponse(body);
+}
+
+export async function validateAgentCurrentLocationAccess(
+  env: AgentWorkerEnv,
+  threadId: AgentThreadId
+): Promise<void> {
+  const domain = makeDomainServiceClient(env.DOMAIN);
+  const response = await domain.request(
+    new Request(
+      new URL(
+        makeAgentInternalCurrentLocationAccessPath(threadId),
+        AGENT_INTERNAL_ORIGIN
+      ).toString(),
+      {
+        headers: {
+          authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
+        },
+        method: "POST",
+      }
+    )
+  );
+  const body = await readJson(
+    response,
+    (status) =>
+      new DomainCurrentLocationAccessError(
+        `Domain current-location access returned invalid JSON with HTTP ${status}`
+      )
+  );
+
+  if (!response.ok) {
+    throw new DomainCurrentLocationAccessError(
+      formatDomainError(body, response.status)
+    );
+  }
+
+  decodeAgentCurrentLocationAccessResponse(body);
 }
 
 export async function runDomainAction(

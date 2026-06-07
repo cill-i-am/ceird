@@ -6,9 +6,9 @@ import { Select } from "#/components/ui/select";
 
 import {
   PROXIMITY_RESULT_LIMIT_OPTIONS,
-  type ProximityResultLimitOption,
   normalizeProximityResultLimit,
 } from "./proximity-state";
+import type { ProximityResultLimitOption } from "./proximity-state";
 
 export function ProximityLimitSelect({
   disabled,

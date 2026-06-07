@@ -178,6 +178,13 @@ export type AgentThreadResponse = Schema.Schema.Type<
   typeof AgentThreadResponseSchema
 >;
 
+export const AgentCurrentLocationAccessResponseSchema = Schema.Struct({
+  allowed: Schema.Literal(true),
+});
+export type AgentCurrentLocationAccessResponse = Schema.Schema.Type<
+  typeof AgentCurrentLocationAccessResponseSchema
+>;
+
 export const AgentConnectAuthorizationSchema = Schema.Struct({
   agentInstanceName: AgentInstanceName,
   token: Schema.String,
@@ -228,6 +235,7 @@ export const AGENT_STORAGE_OPERATIONS = [
   "thread.create",
   "thread.archive",
   "thread.authorizeConnect",
+  "thread.currentLocationAccess",
   "thread.touchActivity",
   "session.prepare",
   "action.manifest",
@@ -245,11 +253,19 @@ export const AGENT_INTERNAL_ACTIONS_PATH =
   `${AGENT_INTERNAL_PATH_PREFIX}/actions` as const;
 export const AGENT_INTERNAL_THREAD_ACTIVITY_PATH =
   `${AGENT_INTERNAL_PATH_PREFIX}/threads/:threadId/activity` as const;
+export const AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH =
+  `${AGENT_INTERNAL_PATH_PREFIX}/threads/:threadId/current-location-access` as const;
 
 export function makeAgentInternalThreadActivityPath(
   threadId: AgentThreadId
 ): string {
   return `${AGENT_INTERNAL_PATH_PREFIX}/threads/${threadId}/activity`;
+}
+
+export function makeAgentInternalCurrentLocationAccessPath(
+  threadId: AgentThreadId
+): string {
+  return `${AGENT_INTERNAL_PATH_PREFIX}/threads/${threadId}/current-location-access`;
 }
 
 export function isAgentInternalPath(pathname: string): boolean {
@@ -366,6 +382,21 @@ export const AgentInternalApiGroup = HttpApiGroup.make("agentInternal")
       {
         params: { threadId: AgentThreadId },
         success: AgentThreadResponseSchema,
+        error: [
+          AgentAccessDeniedError,
+          AgentThreadNotFoundError,
+          AgentStorageError,
+        ],
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "validateCurrentLocationAccess",
+      AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH,
+      {
+        params: { threadId: AgentThreadId },
+        success: AgentCurrentLocationAccessResponseSchema,
         error: [
           AgentAccessDeniedError,
           AgentThreadNotFoundError,

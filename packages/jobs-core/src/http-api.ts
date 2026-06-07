@@ -1,5 +1,6 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
+  ProximityAccessDeniedError,
   ProximityCostGuardError,
   ProximityProviderError,
   ProximityRouteUnavailableError,
@@ -124,6 +125,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       success: JobProximityResponseSchema,
       error: [
         JobAccessDeniedError,
+        ProximityAccessDeniedError,
         ProximityCostGuardError,
         ProximityProviderError,
         ProximityRouteUnavailableError,
@@ -149,6 +151,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
         error: [
           JobNotFoundError,
           JobAccessDeniedError,
+          ProximityAccessDeniedError,
           ProximityCostGuardError,
           ProximityProviderError,
           ProximityRouteUnavailableError,

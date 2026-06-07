@@ -26,6 +26,7 @@ export function JobsRouteContent({
   options,
   queryClient,
   routeLimit,
+  routeProximityLocationEnabled,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
   viewMode,
   viewer,
@@ -47,6 +48,9 @@ export function JobsRouteContent({
   readonly options: JobOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
   readonly routeLimit?: ComponentProps<typeof JobsPage>["routeLimit"];
+  readonly routeProximityLocationEnabled?: ComponentProps<
+    typeof JobsPage
+  >["routeProximityLocationEnabled"];
   readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
@@ -70,6 +74,7 @@ export function JobsRouteContent({
         onRouteLimitChange={onRouteLimitChange}
         onViewModeChange={onViewModeChange}
         routeLimit={routeLimit}
+        routeProximityLocationEnabled={routeProximityLocationEnabled}
         viewMode={viewMode}
         viewer={viewer}
       />

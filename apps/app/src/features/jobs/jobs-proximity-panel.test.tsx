@@ -144,6 +144,7 @@ describe("jobs proximity panel", () => {
         active={false}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationEnabled
         viewMode="list"
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
@@ -164,6 +165,7 @@ describe("jobs proximity panel", () => {
         active
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationEnabled
         viewMode="list"
         onActiveChange={vi.fn<(active: boolean) => void>()}
         onClearFilters={vi.fn<() => void>()}
@@ -231,6 +233,70 @@ describe("jobs proximity panel", () => {
       screen.findByText("Replace boiler pump")
     ).resolves.toBeVisible();
     expect(screen.getByText("14 min")).toBeVisible();
+  });
+
+  it("uses typed-origin fallback without geolocation when location preference is disabled", async () => {
+    const user = userEvent.setup();
+    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+
+    render(
+      <ControlledJobsProximityPanel
+        Component={JobsProximityPanel}
+        filters={defaultFilters}
+        limit={10}
+        routeProximityLocationEnabled={false}
+        viewMode="list"
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await expect(
+      screen.findByText("Current location access is off")
+    ).resolves.toBeVisible();
+    await expect(
+      screen.findByRole("heading", { name: "Choose route origin" })
+    ).resolves.toBeVisible();
+    expect(mockedRequestCurrentLocationOrigin).not.toHaveBeenCalled();
+    expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
+  });
+
+  it("clears current-location results when location preference is disabled while active", async () => {
+    const user = userEvent.setup();
+    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { rerender } = render(
+      <ControlledJobsProximityPanel
+        Component={JobsProximityPanel}
+        filters={defaultFilters}
+        limit={10}
+        routeProximityLocationEnabled
+        viewMode="list"
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+    await screen.findByText("Replace boiler pump");
+
+    rerender(
+      <ControlledJobsProximityPanel
+        Component={JobsProximityPanel}
+        filters={defaultFilters}
+        limit={10}
+        routeProximityLocationEnabled={false}
+        viewMode="list"
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await expect(
+      screen.findByText("Current location access is off")
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Replace boiler pump")).not.toBeInTheDocument();
   });
 
   it("requests route lines when the Jobs page is in map mode", async () => {
@@ -558,6 +624,7 @@ describe("jobs proximity panel", () => {
         active
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationEnabled
         viewMode="list"
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
@@ -589,6 +656,7 @@ describe("jobs proximity panel", () => {
         active={false}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationEnabled
         viewMode="list"
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
@@ -681,13 +749,25 @@ type JobsProximityPanelComponent = React.ComponentType<JobsProximityPanelProps>;
 
 function ControlledJobsProximityPanel({
   Component,
+  routeProximityLocationEnabled = true,
   ...props
-}: Omit<JobsProximityPanelProps, "active" | "onActiveChange"> & {
+}: Omit<
+  JobsProximityPanelProps,
+  "active" | "onActiveChange" | "routeProximityLocationEnabled"
+> & {
   readonly Component: JobsProximityPanelComponent;
+  readonly routeProximityLocationEnabled?: boolean | undefined;
 }) {
   const [active, setActive] = React.useState(false);
 
-  return <Component {...props} active={active} onActiveChange={setActive} />;
+  return (
+    <Component
+      {...props}
+      active={active}
+      routeProximityLocationEnabled={routeProximityLocationEnabled}
+      onActiveChange={setActive}
+    />
+  );
 }
 
 const userId = "user_123" as UserIdType;

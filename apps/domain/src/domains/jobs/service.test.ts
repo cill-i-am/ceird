@@ -1,4 +1,9 @@
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import {
+  decodeUserPreferences,
+  OrganizationId,
+  UserId,
+  UserPreferencesStorageError,
+} from "@ceird/identity-core";
 import {
   CreateJobInputSchema,
   JobCollaboratorSchema,
@@ -9,11 +14,16 @@ import {
   JobSchema,
 } from "@ceird/jobs-core";
 import type { JobCollaborator, JobProximityFilters } from "@ceird/jobs-core";
+import {
+  GooglePlaceId,
+  ProximityAccessDeniedError,
+} from "@ceird/proximity-core";
 import { SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -45,6 +55,7 @@ const decodeJobCollaborator = Schema.decodeUnknownSync(JobCollaboratorSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
+const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -399,6 +410,158 @@ describe("JobsService contracts", () => {
     expect(result.routeSummary.providerRequestKind).toBe("route_preview");
   });
 
+  it("rejects current-location job ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+    let routeCalls = 0;
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.rankNearbyJobs({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsProximityTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "JobsRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () => {
+              routeCalls += 1;
+              return Effect.die(
+                "RouteProvider.rankRoutes should not be called"
+              );
+            },
+            routeProximityLocationEnabled: false,
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access is disabled for this user.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
+    expect(routeCalls).toBe(0);
+  });
+
+  it("allows typed-origin job ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.rankNearbyJobs({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            displayText: "Heuston Station",
+            mode: "typed_origin",
+            placeId: decodeGooglePlaceId("google-place-origin"),
+          },
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsProximityTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.succeed({
+                candidateCount: 0,
+                candidateLimitApplied: false,
+                candidates: [],
+                excluded: [],
+              });
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: (input) =>
+              Effect.succeed({
+                rows: input.destinations.map((destination) => ({
+                  destinationId: destination.destinationId,
+                  routeSummary: makeRouteSummary(120, 1000),
+                })),
+                unavailableDestinationIds: [],
+              }),
+            routeProximityLocationEnabled: false,
+          })
+        )
+      )
+    );
+
+    expect(candidateCalls).toBe(1);
+    expect(result.origin).toMatchObject({
+      displayText: "Heuston Station",
+      mode: "typed_origin",
+    });
+  });
+
+  it("rejects current-location job route previews before loading job detail when location preference is unavailable", async () => {
+    let getDetailCalls = 0;
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getJobRoutePreview(workItemId, {
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsRoutePreviewTestLayer({
+            getDetail: () => {
+              getDetailCalls += 1;
+              return Effect.die(
+                "JobsRepository.getDetail should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            userPreferencesGet: () =>
+              Effect.fail(
+                new UserPreferencesStorageError({
+                  message: "User preferences storage operation failed",
+                })
+              ),
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access could not be verified.",
+      });
+    }
+    expect(getDetailCalls).toBe(0);
+  });
+
   it("reports how many routeable jobs were omitted by the 100-candidate cap", async () => {
     const mappedJobs = Array.from({ length: 100 }, (_, index) => {
       const suffix = String(index + 1).padStart(12, "0");
@@ -449,7 +612,7 @@ describe("JobsService contracts", () => {
                   .slice(0, 10)
                   .map((destination, index) => ({
                     destinationId: destination.destinationId,
-                    routeSummary: makeRouteSummary(120 + index, 1_000 + index),
+                    routeSummary: makeRouteSummary(120 + index, 1000 + index),
                   })),
                 unavailableDestinationIds: [],
               }),
@@ -542,6 +705,7 @@ function makeJobsServiceTestLayer(options: {
       LabelsRepository,
       LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
     ),
+    makeUserPreferencesRepositoryLayer(),
     Layer.succeed(
       RouteProximityService,
       RouteProximityService.of(
@@ -567,6 +731,10 @@ function makeJobsProximityTestLayer(options: {
     input: RoutePreviewInput
   ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
   readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
+  readonly routeProximityLocationEnabled?: boolean | undefined;
+  readonly userPreferencesGet?:
+    | ContextService<typeof UserPreferencesRepository>["get"]
+    | undefined;
 }) {
   return Layer.mergeAll(
     Layer.succeed(
@@ -604,6 +772,10 @@ function makeJobsProximityTestLayer(options: {
       LabelsRepository,
       LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
     ),
+    makeUserPreferencesRepositoryLayer({
+      get: options.userPreferencesGet,
+      routeProximityLocationEnabled: options.routeProximityLocationEnabled,
+    }),
     RouteProximityService.DefaultWithoutDependencies.pipe(
       Layer.provide(
         Layer.succeed(
@@ -632,6 +804,10 @@ function makeJobsRoutePreviewTestLayer(options: {
     input: RoutePreviewInput
   ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
   readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
+  readonly routeProximityLocationEnabled?: boolean | undefined;
+  readonly userPreferencesGet?:
+    | ContextService<typeof UserPreferencesRepository>["get"]
+    | undefined;
 }) {
   return Layer.mergeAll(
     Layer.succeed(
@@ -669,6 +845,10 @@ function makeJobsRoutePreviewTestLayer(options: {
       LabelsRepository,
       LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
     ),
+    makeUserPreferencesRepositoryLayer({
+      get: options.userPreferencesGet,
+      routeProximityLocationEnabled: options.routeProximityLocationEnabled,
+    }),
     RouteProximityService.DefaultWithoutDependencies.pipe(
       Layer.provide(
         Layer.succeed(
@@ -688,6 +868,32 @@ function makeJobsRoutePreviewTestLayer(options: {
       SitesRepository,
       SitesRepository.of({} as ContextService<typeof SitesRepository>)
     )
+  );
+}
+
+function makeUserPreferencesRepositoryLayer(
+  options: {
+    readonly get?:
+      | ContextService<typeof UserPreferencesRepository>["get"]
+      | undefined;
+    readonly routeProximityLocationEnabled?: boolean | undefined;
+  } = {}
+) {
+  return Layer.succeed(
+    UserPreferencesRepository,
+    UserPreferencesRepository.of({
+      get:
+        options.get ??
+        (() =>
+          Effect.succeed(
+            decodeUserPreferences({
+              routeProximityLocationEnabled:
+                options.routeProximityLocationEnabled ?? true,
+              updatedAt: "2026-05-20T09:00:00.000Z",
+            })
+          )),
+      update: () => Effect.die("UserPreferencesRepository.update not stubbed"),
+    })
   );
 }
 

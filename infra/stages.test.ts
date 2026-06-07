@@ -185,10 +185,13 @@ describe("Alchemy stage identity", () => {
       )
     );
 
-    expect(config.googleMapsRoutesApiKey).toBeDefined();
-    expect(Redacted.value(config.googleMapsRoutesApiKey!)).toBe(
-      "google-routes-key"
-    );
+    const { googleMapsRoutesApiKey } = config;
+
+    expect(googleMapsRoutesApiKey).toBeDefined();
+    if (googleMapsRoutesApiKey === undefined) {
+      throw new Error("Expected Google Maps Routes API key to be configured");
+    }
+    expect(Redacted.value(googleMapsRoutesApiKey)).toBe("google-routes-key");
   });
 
   it("defaults the parent stage to stage-scoped app/API hostnames", () => {

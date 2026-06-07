@@ -409,7 +409,7 @@ describe("jobs-core", () => {
 
   it("decodes route-aware job proximity contracts", () => {
     const origin = {
-      coordinates: { latitude: 53.349805, longitude: -6.26031 },
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
       mode: "current_location",
     };
     const decodedInput = Schema.decodeUnknownSync(JobProximityInputSchema)({
@@ -453,7 +453,7 @@ describe("jobs-core", () => {
       },
       origin: {
         computedAt: "2026-06-06T10:00:00.000Z",
-        coordinates: { latitude: 53.349805, longitude: -6.26031 },
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         displayText: "Current location",
         mode: "current_location",
       },
@@ -485,11 +485,11 @@ describe("jobs-core", () => {
             hasUsableCoordinates: true,
             id: "22222222-2222-4222-8222-222222222222",
             labels: [],
-            latitude: 53.342886,
+            latitude: 53.342_886,
             locationProvider: "google_places",
             locationResolvedAt: "2026-06-06T09:00:00.000Z",
             locationStatus: "google_resolved",
-            longitude: -6.267428,
+            longitude: -6.267_428,
             name: "Dublin Boiler Room",
           },
         },

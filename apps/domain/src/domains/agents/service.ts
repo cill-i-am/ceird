@@ -40,6 +40,7 @@ import {
 } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -88,6 +89,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
       const authorization = yield* OrganizationAuthorization;
       const config = yield* AgentRuntimeConfig;
       const threadsRepository = yield* AgentThreadsRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("AgentThreadsService.loadActor")(function* (
         operation: AgentStorageOperation
@@ -311,6 +313,53 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         }
       );
 
+      const validateCurrentLocationAccess = Effect.fn(
+        "AgentThreadsService.validateCurrentLocationAccess"
+      )(function* (threadId: AgentThreadId) {
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
+        yield* ensureInternalRequest(config.internalSecret);
+
+        const threadActor = yield* threadsRepository
+          .resolveActiveThreadActor(threadId)
+          .pipe(
+            Effect.catchTag(
+              "SqlError",
+              failStorage("thread.currentLocationAccess")
+            ),
+            Effect.map(Option.getOrUndefined)
+          );
+
+        if (threadActor === undefined) {
+          return yield* Effect.fail(
+            new AgentThreadNotFoundError({
+              message: "Agent thread does not exist",
+              threadId,
+            })
+          );
+        }
+
+        const preferences = yield* userPreferencesRepository
+          .get(threadActor.actor.userId)
+          .pipe(
+            Effect.mapError(
+              () =>
+                new AgentAccessDeniedError({
+                  message: "Current location access could not be verified.",
+                })
+            )
+          );
+
+        if (!preferences.routeProximityLocationEnabled) {
+          return yield* Effect.fail(
+            new AgentAccessDeniedError({
+              message: "Current location access is disabled for this user.",
+            })
+          );
+        }
+
+        return { allowed: true } as const;
+      });
+
       const runAction = Effect.fn("AgentThreadsService.runAction")(function* (
         input: RunAgentActionInput
       ) {
@@ -454,6 +503,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         prepareSession,
         runAction,
         touchActivity,
+        validateCurrentLocationAccess,
       };
     }),
   }
@@ -498,6 +548,16 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
       Context.Service.Shape<typeof AgentThreadsService>["touchActivity"]
     >
   ) => AgentThreadsService.use((service) => service.touchActivity(...args));
+  static readonly validateCurrentLocationAccess = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AgentThreadsService
+      >["validateCurrentLocationAccess"]
+    >
+  ) =>
+    AgentThreadsService.use((service) =>
+      service.validateCurrentLocationAccess(...args)
+    );
   static readonly DefaultWithoutDependencies = Layer.effect(
     AgentThreadsService,
     AgentThreadsService.make
@@ -509,7 +569,8 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         AgentActionRunsRepository.Default,
         AgentThreadsRepository.Default,
         CurrentOrganizationActor.Default,
-        OrganizationAuthorization.Default
+        OrganizationAuthorization.Default,
+        UserPreferencesRepository.Default
       )
     )
   );

@@ -27,6 +27,7 @@ import {
   LABEL_NOT_FOUND_ERROR_TAG,
 } from "@ceird/labels-core";
 import {
+  PROXIMITY_ACCESS_DENIED_ERROR_TAG,
   PROXIMITY_COST_GUARD_ERROR_TAG,
   PROXIMITY_PROVIDER_ERROR_TAG,
   PROXIMITY_ROUTE_UNAVAILABLE_ERROR_TAG,
@@ -43,6 +44,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 
 import { CommentsRepository } from "../comments/repository.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG } from "../jobs/errors.js";
@@ -73,6 +75,7 @@ import { getDomainAgentActionHandler } from "./action-registry.js";
 const ACCESS_DENIED_ERROR_TAGS = [
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
   JOB_ACCESS_DENIED_ERROR_TAG,
+  PROXIMITY_ACCESS_DENIED_ERROR_TAG,
   SITE_ACCESS_DENIED_ERROR_TAG,
 ] as const;
 const STORAGE_ERROR_TAGS = [
@@ -122,6 +125,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
       const sitesRepository = yield* SitesRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const execute = Effect.fn("AgentActions.execute")(function* (
         actor: OrganizationActor,
@@ -155,6 +159,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   siteLocationProvider,
                   siteLabelAssignmentsRepository,
                   sitesRepository,
+                  userPreferencesRepository,
                 }
               );
 
@@ -186,7 +191,8 @@ export class AgentActions extends Context.Service<AgentActions>()(
         LabelsRepository.Default,
         OrganizationAuthorization.Default,
         SiteLabelAssignmentsRepository.Default,
-        SitesRepository.Default
+        SitesRepository.Default,
+        UserPreferencesRepository.Default
       )
     )
   );
@@ -205,6 +211,9 @@ interface SitesServiceLayerDependencies {
     typeof SiteLabelAssignmentsRepository
   >;
   readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
+  readonly userPreferencesRepository: Context.Service.Shape<
+    typeof UserPreferencesRepository
+  >;
 }
 
 interface JobsServiceLayerDependencies {
@@ -223,6 +232,9 @@ interface JobsServiceLayerDependencies {
   >;
   readonly siteLocationProvider: SiteLocationProviderImplementation;
   readonly sitesRepository: Context.Service.Shape<typeof SitesRepository>;
+  readonly userPreferencesRepository: Context.Service.Shape<
+    typeof UserPreferencesRepository
+  >;
 }
 
 interface AgentActionExecutionContext {
@@ -275,9 +287,11 @@ function provideRouteInvocationContext(
   return action.pipe(
     Effect.provideService(
       RouteInvocationContext,
-      RouteInvocationContext.of((context?.threadId === undefined
+      RouteInvocationContext.of(
+        context?.threadId === undefined
           ? {}
-          : { agentThreadId: context.threadId }))
+          : { agentThreadId: context.threadId }
+      )
     )
   );
 }
@@ -360,7 +374,11 @@ function makeJobsServiceLayer(
       Layer.succeed(LabelsRepository, dependencies.labelsRepository),
       makeRouteProximityServiceLayer(dependencies.routeProximityService),
       Layer.succeed(SiteLocationProvider, dependencies.siteLocationProvider),
-      Layer.succeed(SitesRepository, dependencies.sitesRepository)
+      Layer.succeed(SitesRepository, dependencies.sitesRepository),
+      Layer.succeed(
+        UserPreferencesRepository,
+        dependencies.userPreferencesRepository
+      )
     )
   );
 }
@@ -389,7 +407,11 @@ function makeSitesServiceLayer(
         SiteLabelAssignmentsRepository,
         dependencies.siteLabelAssignmentsRepository
       ),
-      Layer.succeed(SitesRepository, dependencies.sitesRepository)
+      Layer.succeed(SitesRepository, dependencies.sitesRepository),
+      Layer.succeed(
+        UserPreferencesRepository,
+        dependencies.userPreferencesRepository
+      )
     )
   );
 }
