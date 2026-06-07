@@ -381,6 +381,22 @@ test("state audit flags legacy migration state and validates expected managed re
     analyzeAlchemyStateResources({
       resources: {
         ...healthyResources,
+        ElectricSql: undefined,
+        ElectricStorageBucket: undefined,
+        TenantWorkerRoute: {
+          resourceType: "Ceird.CloudflareTenantWorkerRoute",
+          attr: { pattern: "*--pr-104.ceird.app/*" },
+        },
+      },
+      stage: "pr-104",
+      tenantRoutingRequired: true,
+    }).ok,
+    false
+  );
+  assert.equal(
+    analyzeAlchemyStateResources({
+      resources: {
+        ...healthyResources,
         PostgresBranch: {
           resourceType: "Neon.Branch",
           attr: {

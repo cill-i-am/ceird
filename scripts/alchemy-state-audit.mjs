@@ -278,35 +278,37 @@ function workerBindingCheck(
 function electricSyncStorageChecks(input) {
   const productionStage = input.productionStage ?? defaultProductionStage;
 
-  if (input.stage !== productionStage) {
+  if (input.stage !== productionStage && input.tenantRoutingRequired !== true) {
     return [];
   }
 
   const electricContainer = input.resources.ElectricSql;
   const electricStorageBucket = input.resources.ElectricStorageBucket;
+  const stageDescription =
+    input.stage === productionStage ? "production sync" : "audited cloud sync";
 
   return [
     resourceType(electricStorageBucket) === "Cloudflare.R2Bucket"
       ? check(
           "electric_storage_bucket",
           "pass",
-          "Electric storage R2 bucket exists for production sync."
+          `Electric storage R2 bucket exists for ${stageDescription}.`
         )
       : check(
           "electric_storage_bucket",
           "fail",
-          "Electric storage R2 bucket is required for production sync."
+          `Electric storage R2 bucket is required for ${stageDescription}.`
         ),
     resourceType(electricContainer) === "Cloudflare.Container"
       ? check(
           "electric_container",
           "pass",
-          "Electric container application exists for production sync."
+          `Electric container application exists for ${stageDescription}.`
         )
       : check(
           "electric_container",
           "fail",
-          "Electric container application is required for production sync."
+          `Electric container application is required for ${stageDescription}.`
         ),
   ];
 }
@@ -434,6 +436,7 @@ export function analyzeAlchemyStateResources(input) {
       productionStage,
       resources,
       stage,
+      tenantRoutingRequired,
     }),
   ];
 

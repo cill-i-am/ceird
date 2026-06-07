@@ -787,10 +787,21 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     ciDeployJob,
     /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
   );
-  assert.doesNotMatch(
-    ciDeployJob + ciE2eJob + ciDestroyJob,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID|CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY/,
-    "ephemeral CI stages should not receive shared Electric storage credentials"
+  assert.match(
+    ciDeployJob,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    ciDeployJob,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
+  assert.match(
+    ciDestroyJob,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    ciDestroyJob,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
   );
   assert.match(
     buildWorkflow,
@@ -832,6 +843,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(
     cloudflareCiGuide,
     /cloud E2E path uses `preview-deploy` with an\s+ephemeral `ci-<run-number>-<attempt>` stage/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /Cloud E2E and preview deploys pass\s+Electric storage credentials/
   );
   assert.match(
     developmentGuide,
@@ -886,6 +901,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
   );
+  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
 
   assert.match(previewWorkflow, /^name: Preview$/m);
   assert.match(previewWorkflow, /pull_request:/);
@@ -995,10 +1011,13 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /Preview environment is ready/);
   assert.match(previewWorkflow, /Agent \|/);
   assert.match(previewWorkflow, /Sync \|/);
-  assert.doesNotMatch(
-    previewWorkflow,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID|CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY/,
-    "preview stages should not receive shared Electric storage credentials"
+  assert.match(
+    previewDeployJob,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    previewDeployJob,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
   );
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
@@ -1008,10 +1027,19 @@ test("preview workflow destroys PR stages from the default branch on close", () 
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
   );
+  const previewCleanupJob = getWorkflowJob(previewWorkflow, "cleanup");
 
   assert.match(previewWorkflow, /github\.event\.action == 'closed'/);
   assert.match(previewWorkflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(previewWorkflow, /environment: preview-cleanup/);
+  assert.match(
+    previewCleanupJob,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    previewCleanupJob,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
   assert.match(
     previewWorkflow,
     /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/

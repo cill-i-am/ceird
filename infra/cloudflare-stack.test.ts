@@ -625,7 +625,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps local Electric storage, skips preview storage, and fails closed for production credentials", () => {
+  it("bootstraps local Electric storage and fails closed for deployed stage credentials", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -647,15 +647,15 @@ describe("Cloudflare stack", () => {
           localDev: false,
         })
       )
-    ).toBe(false);
-    expect(
+    ).toBe(true);
+    expect(() =>
       Effect.runSync(
         shouldProvisionElectricStorage({
           config: previewTenantConfig,
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toThrow(/required outside local Alchemy dev/);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -665,12 +665,11 @@ describe("Cloudflare stack", () => {
             electricStorageSecretAccessKey: Redacted.make(
               "electric-secret-access-key"
             ),
-            stage: "ci-517-1",
           },
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(() =>
       Effect.runSync(
         shouldProvisionElectricStorage({

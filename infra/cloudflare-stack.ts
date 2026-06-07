@@ -29,11 +29,7 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import {
-  makeAlchemyStageIdentity,
-  makeInfraConfigSourceError,
-  resourceName,
-} from "./stages.ts";
+import { makeInfraConfigSourceError, resourceName } from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -507,24 +503,12 @@ function makeLocalElectricStorageCredentials(input: {
 export function shouldProvisionElectricStorage(input: {
   readonly config: Pick<
     InfraStageConfig,
-    | "appName"
-    | "electricStorageAccessKeyId"
-    | "electricStorageSecretAccessKey"
-    | "stage"
+    "electricStorageAccessKeyId" | "electricStorageSecretAccessKey"
   >;
   readonly localDev: boolean;
 }) {
   if (input.localDev) {
     return Effect.succeed(true);
-  }
-
-  const identity = makeAlchemyStageIdentity({
-    appName: input.config.appName,
-    stage: input.config.stage,
-  });
-
-  if (identity.isPullRequestPreview || identity.isEphemeralCi) {
-    return Effect.succeed(false);
   }
 
   const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;

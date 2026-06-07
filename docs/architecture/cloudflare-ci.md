@@ -129,6 +129,8 @@ Secrets:
 
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
+- `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID`
+- `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
@@ -142,8 +144,9 @@ Variables:
 The `main` environment is used by `.github/workflows/deploy-main.yml` only after
 the `Build` workflow has succeeded on `main`, or during an explicit manual main
 deploy. The `Build` workflow's cloud E2E path uses `preview-deploy` with an
-ephemeral `ci-<run-number>-<attempt>` stage, so production deploy secrets are not
-exposed to pull-request code or reused for temporary validation environments.
+ephemeral `ci-<run-number>-<attempt>` stage, so the main deployment environment
+is not exposed to pull-request code or reused for temporary validation
+environments.
 
 For both `preview-deploy` and `preview-cleanup`, add:
 
@@ -151,6 +154,8 @@ Secrets:
 
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
+- `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID`
+- `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
@@ -196,13 +201,12 @@ The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
 `AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
 missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
 env, missing Sync Worker domain/analytics/Durable Object bindings, missing sync
-source configuration, missing production Electric container or R2 storage,
-missing Domain Worker Smart Placement, and stage tenant-route or wildcard-DNS
-drift while allowing the known legacy Drizzle tombstone until it has been
-inspected and intentionally removed. Preview and ephemeral cloud E2E stages
-intentionally skip shared Electric storage credentials, so the audit requires
-the Sync Worker there but only requires Electric container storage for the
-production stage. Plain
+source configuration, missing Electric container or R2 storage for audited cloud
+stages, missing Domain Worker Smart Placement, and stage tenant-route or
+wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
+has been inspected and intentionally removed. Cloud E2E and preview deploys pass
+Electric storage credentials so Alchemy reconciles the stage-scoped bucket and
+Electric Container before tests run. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
