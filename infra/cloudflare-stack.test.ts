@@ -1053,7 +1053,10 @@ describe("Cloudflare stack", () => {
       "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build"
     );
     expect(electricContainerDockerfile).toContain(
-      "go install github.com/tigrisdata/tigrisfs@v"
+      "git clone --depth=1 --branch v${TIGRISFS_VERSION} https://github.com/tigrisdata/tigrisfs.git"
+    );
+    expect(electricContainerDockerfile).toContain(
+      "GOBIN=/out /usr/local/go/bin/go install ."
     );
     expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
     expect(electricContainerDockerfile).not.toContain("curl");
