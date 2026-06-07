@@ -379,13 +379,13 @@ jobs:
             for attempt in {1..120}; do
               local suffix
               local cookie_jar
+              local password
               local signup_payload
-              local organization_payload
 
               suffix="$(date +%s)-$RANDOM-$attempt"
               cookie_jar="$(mktemp)"
-              signup_payload=$(printf '{"email":"ci-health-%s@example.com","password":"password123","name":"CI Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
-              organization_payload=$(printf '{"name":"CI Health %s","slug":"ci-health-%s"}' "$suffix" "$suffix")
+              password="CeirdCIHealth-${suffix}!"
+              signup_payload=$(printf '{"email":"ci-health-%s@example.com","password":"%s","name":"CI Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$password" "$PLAYWRIGHT_BASE_URL")
 
               if curl --fail --silent --show-error --max-time 10 \
                 -c "$cookie_jar" \
@@ -401,9 +401,8 @@ jobs:
                 && curl --fail --silent --show-error --max-time 10 \
                   -b "$cookie_jar" \
                   -H "origin: $PLAYWRIGHT_BASE_URL" \
-                  -H "content-type: application/json" \
-                  --data "$organization_payload" \
-                  "$PLAYWRIGHT_API_URL/api/auth/organization/create" >/dev/null; then
+                  -H "accept: application/json" \
+                  "$PLAYWRIGHT_API_URL/api/auth/organization/list" >/dev/null; then
                 rm -f "$cookie_jar"
                 echo "$label is healthy"
                 return 0
@@ -427,13 +426,15 @@ jobs:
             for attempt in {1..120}; do
               local suffix
               local cookie_jar
+              local password
               local signup_payload
               local headers_file
 
               suffix="$(date +%s)-$RANDOM-$attempt"
               cookie_jar="$(mktemp)"
               headers_file="$(mktemp)"
-              signup_payload=$(printf '{"email":"ci-app-health-%s@example.com","password":"password123","name":"CI App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$PLAYWRIGHT_BASE_URL")
+              password="CeirdCIAppHealth-${suffix}!"
+              signup_payload=$(printf '{"email":"ci-app-health-%s@example.com","password":"%s","name":"CI App Health","callbackURL":"%s/verify-email?status=success"}' "$suffix" "$password" "$PLAYWRIGHT_BASE_URL")
 
               if curl --fail --silent --show-error --max-time 10 \
                 -c "$cookie_jar" \

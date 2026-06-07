@@ -5,6 +5,7 @@ import { appendOrganizationSlugSuffix } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
+import { createTestPassword } from "./helpers/test-account";
 import { MembersPage } from "./pages/members-page";
 import { SignupPage } from "./pages/signup-page";
 import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
@@ -511,8 +512,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
     const invitedEmail = createTestEmail("invitee-signup");
+    const invitedPassword = createTestPassword("CeirdInviteeSignup");
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
@@ -546,7 +548,7 @@ test.describe("organization invitations", () => {
       );
       await invitedSignupPage.name.fill("Invited Example");
       await invitedSignupPage.email.fill(invitedEmail);
-      await invitedSignupPage.password.fill("password1234");
+      await invitedSignupPage.password.fill(invitedPassword);
       await invitedSignupPage.submit.click();
 
       await expect(invitedPage).toHaveURL(
@@ -558,7 +560,7 @@ test.describe("organization invitations", () => {
         request,
         invitedPage,
         invitedEmail,
-        "password1234"
+        invitedPassword
       );
       await acceptInvitationWithCurrentSession(
         request,
@@ -579,9 +581,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-existing");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
     const invitedEmail = createTestEmail("invitee-login");
-    const invitedPassword = "password1234";
+    const invitedPassword = createTestPassword("CeirdInviteeLogin");
 
     await createExistingUser(request, invitedEmail, invitedPassword);
 
@@ -628,9 +630,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-member-access");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
     const invitedEmail = createTestEmail("invitee-member-access");
-    const invitedPassword = "password1234";
+    const invitedPassword = createTestPassword("CeirdInviteeMember");
 
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
@@ -678,9 +680,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-forgot-password");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
     const invitedEmail = createTestEmail("invitee-forgot-password");
-    const invitedPassword = "password1234";
+    const invitedPassword = createTestPassword("CeirdInviteeForgot");
 
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
@@ -731,11 +733,11 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-wrong-account");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
     const invitedEmail = createTestEmail("invitee-wrong-account");
-    const invitedPassword = "password1234";
+    const invitedPassword = createTestPassword("CeirdInviteeWrong");
     const wrongAccountEmail = createTestEmail("wrong-account");
-    const wrongAccountPassword = "password1234";
+    const wrongAccountPassword = createTestPassword("CeirdWrongAccount");
 
     await createExistingUser(
       request,
@@ -793,7 +795,7 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-load-error");
-    const ownerPassword = "password1234";
+    const ownerPassword = createTestPassword("CeirdInviteOwner");
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
     await page.route(

@@ -8,6 +8,7 @@ import {
   markUserEmailUnverified,
   markUserEmailVerified,
 } from "./helpers/email-verification";
+import { createTestPassword } from "./helpers/test-account";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
@@ -119,7 +120,7 @@ async function signUpAndCreateOrganization(
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
   const email = options?.email ?? createTestEmail("signup");
-  const password = options?.password ?? "password1234";
+  const password = options?.password ?? createTestPassword();
 
   await signupPage.goto();
   await signupPage.name.fill(options?.name ?? "Taylor Example");
@@ -279,7 +280,7 @@ test.describe("auth pages", () => {
     request,
   }) => {
     const email = createTestEmail("login");
-    const password = "password1234";
+    const password = createTestPassword();
     const loginPage = new LoginPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(
@@ -318,7 +319,7 @@ test.describe("auth pages", () => {
     test.setTimeout(60_000);
 
     const email = createTestEmail("existing-org-login");
-    const password = "password1234";
+    const password = createTestPassword();
     const signupPage = new SignupPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const loginPage = new LoginPage(page);
@@ -354,8 +355,8 @@ test.describe("auth pages", () => {
     test.setTimeout(60_000);
 
     const email = createTestEmail("password-reset");
-    const oldPassword = "password1234";
-    const newPassword = "new-password-123";
+    const oldPassword = createTestPassword("CeirdOldPassword");
+    const newPassword = createTestPassword("CeirdNewPassword");
     const loginPage = new LoginPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(

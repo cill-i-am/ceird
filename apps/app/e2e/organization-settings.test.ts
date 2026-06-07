@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { markUserEmailVerified } from "./helpers/email-verification";
+import { createTestPassword } from "./helpers/test-account";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { SignupPage } from "./pages/signup-page";
 import { waitForLocatorHydration } from "./pages/wait-for-submit-hydration";
@@ -63,7 +64,7 @@ async function signUpAndCreateOrganization(
 ) {
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
-  const password = "password1234";
+  const password = createTestPassword();
   const email = createTestEmail(emailPrefix);
 
   await signupPage.goto();
